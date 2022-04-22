@@ -388,7 +388,7 @@ impl XNetPayloadBuilderImpl {
             .registry
             .get_subnet_ids(validation_context.registry_version)
             .map_err(Error::RegistryGetSubnetsFailed)?
-            .unwrap_or_else(Vec::new);
+            .unwrap_or_default();
 
         let expected_indices = subnet_ids
             .into_iter()

@@ -999,8 +999,7 @@ Average length of the values: {} (desired: {})",
             average(
                 changes
                     .iter()
-                    .map(|delta| delta.values.iter())
-                    .flatten()
+                    .flat_map(|delta| delta.values.iter())
                     .map(|registry_value| registry_value.value.len())
             ),
             mean_value_length

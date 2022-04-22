@@ -630,8 +630,7 @@ fn bytes_to_cbor(bytes: Vec<u8>) -> Result<CBOR, String> {
                 bytes
                     .iter()
                     .copied()
-                    .map(std::ascii::escape_default)
-                    .flatten()
+                    .flat_map(std::ascii::escape_default)
                     .collect()
             )
             .expect("ASCII is legal utf8"),

@@ -273,8 +273,8 @@ async fn main() -> Result<()> {
     } else {
         None
     };
-    let routes = read_file_data(&ROUTES_DIR.flag.to_path_buf(), ROUTES);
-    let wallets = read_file_data(&WALLETS_DIR.flag.to_path_buf(), WALLETS);
+    let routes = read_file_data(ROUTES_DIR.flag, ROUTES);
+    let wallets = read_file_data(WALLETS_DIR.flag, WALLETS);
     let routes: Routes = match routes {
         Ok(routes_data) => serde_json::from_value(routes_data).unwrap(),
         Err(_) => {
@@ -288,7 +288,7 @@ async fn main() -> Result<()> {
             panic!("Could not load wallets data");
         }
     };
-    let canisters = read_file_data(&WALLETS_DIR.flag.to_path_buf(), CANISTER);
+    let canisters = read_file_data(WALLETS_DIR.flag, CANISTER);
     let canisters: Canisters = match canisters {
         Ok(canisters) => serde_json::from_value(canisters).unwrap(),
         Err(_) => {

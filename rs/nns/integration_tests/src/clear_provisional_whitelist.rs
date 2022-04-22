@@ -36,7 +36,7 @@ fn test_submit_and_accept_clear_provisional_whitelist_proposal() {
             .with_test_neurons()
             .with_initial_mutations(vec![RegistryAtomicMutateRequest {
                 mutations: vec![insert(
-                    key.as_bytes().to_vec(),
+                    key.as_bytes(),
                     encode_or_panic(&initial_provisional_whitelist),
                 )],
                 preconditions: vec![],

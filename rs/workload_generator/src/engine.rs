@@ -640,7 +640,7 @@ impl Engine {
 
         tx.send(CallResult {
             fact: Fact::record(
-                ContentLength::new(resp.unwrap_or_else(Vec::new).len() as u64),
+                ContentLength::new(resp.unwrap_or_default().len() as u64),
                 200_u16,
                 time_query_start,
                 time_query_end,

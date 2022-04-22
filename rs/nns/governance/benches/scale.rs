@@ -220,8 +220,8 @@ fn fixture_for_scale(num_neurons: u32, linear_following: bool) -> GovernanceProt
             ),
             //
             followees: [(Topic::Unspecified as i32, neuron::Followees { followees })]
-                .to_vec()
-                .into_iter()
+                .iter()
+                .cloned()
                 .collect(),
             ..Default::default()
         };

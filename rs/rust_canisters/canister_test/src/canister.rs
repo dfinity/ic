@@ -56,7 +56,7 @@ impl Wasm {
             format!("_{}", features.join("_"))
         };
         format!("{}{}_WASM_PATH", bin_name, features_part)
-            .replace("-", "_")
+            .replace('-', "_")
             .to_uppercase()
     }
 
@@ -121,7 +121,7 @@ impl Wasm {
     }
 
     pub fn from_bytes<B: Into<Vec<u8>>>(bytes: B) -> Self {
-        Self { 0: bytes.into() }
+        Self(bytes.into())
     }
 
     /// Strip the debug info out of the wasm binaries.

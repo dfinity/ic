@@ -238,6 +238,7 @@ pub(crate) trait DownloadAttemptTracker {
     /// Returns true if the download attempt "round" has concluded. Signifies
     /// that peers that advertised the chunk have been requested once for
     /// the chunk.
+    #[allow(clippy::wrong_self_convention)]
     fn is_attempts_round_complete(&mut self, chunk_id: ChunkId) -> bool;
 
     /// Reset attempt history for a chunk after the attempt round is completed.
@@ -258,6 +259,7 @@ pub(crate) trait DownloadAttemptTracker {
     fn unset_in_progress(&mut self, chunk_id: ChunkId);
 
     /// Returns the value of the `in_progress` flag for a chunk
+    #[allow(clippy::wrong_self_convention)]
     fn is_in_progress(&mut self, chunk_id: ChunkId) -> bool;
 }
 

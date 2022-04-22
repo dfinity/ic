@@ -856,8 +856,7 @@ impl UnpackedStreamSlice {
         let (_subnet_id, stream) =
             first_sub_witness(streams).ok_or(CertifiedSliceError::InvalidWitness(MissingStream))?;
         sub_witness(stream, &Label::from(LABEL_MESSAGES))
-            .map(first_sub_witness)
-            .flatten()
+            .and_then(first_sub_witness)
             .map(|first_message| {
                 to_stream_index(first_message.0).map_err(CertifiedSliceError::InvalidWitness)
             })

@@ -293,7 +293,9 @@ fn shares_to_vector<H: Signable>(
         let index = index_for_node_id(transcript_data, node_id, dkg_id)?;
         let usize_index = <usize>::try_from(index).expect("usize overflow");
         let csp_sig = CspSignature::try_from(&share)?;
-        *signatures.get_mut(usize_index).unwrap() = Some(csp_sig);
+        *signatures
+            .get_mut(usize_index)
+            .expect("Index unexpectedly out of range") = Some(csp_sig);
     }
     Ok(signatures)
 }

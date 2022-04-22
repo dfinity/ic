@@ -993,7 +993,7 @@ impl DownloadManagerImpl {
                 .registry_client
                 .get_subnet_transport_infos(self.subnet_id, version)
                 .unwrap_or(None)
-                .unwrap_or_else(Vec::new);
+                .unwrap_or_default();
             for node in node_records {
                 subnet_nodes.insert(node.0, node.1);
             }
@@ -1868,7 +1868,7 @@ pub mod tests {
         let node_records = registry_client
             .get_subnet_transport_infos(subnet_test_id(P2P_SUBNET_ID_DEFAULT), registry_version)
             .unwrap_or(None)
-            .unwrap_or_else(Vec::new);
+            .unwrap_or_default();
         assert_eq!((num_replicas - 1) as usize, node_records.len());
 
         // Get removed node

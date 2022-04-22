@@ -74,31 +74,25 @@ impl Registry {
 
         // 5. Update registry with the new subnet data
         let add_node_entry = insert(
-            make_node_record_key(node_id).as_bytes().to_vec(),
+            make_node_record_key(node_id).as_bytes(),
             encode_or_panic(&node_record),
         );
 
         // 6. Add the crypto keys
         let add_committee_signing_key = insert(
-            make_crypto_node_key(node_id, KeyPurpose::CommitteeSigning)
-                .as_bytes()
-                .to_vec(),
+            make_crypto_node_key(node_id, KeyPurpose::CommitteeSigning).as_bytes(),
             encode_or_panic(valid_pks.committee_signing_key()),
         );
         let add_node_signing_key = insert(
-            make_crypto_node_key(node_id, KeyPurpose::NodeSigning)
-                .as_bytes()
-                .to_vec(),
+            make_crypto_node_key(node_id, KeyPurpose::NodeSigning).as_bytes(),
             encode_or_panic(valid_pks.node_signing_key()),
         );
         let add_dkg_dealing_key = insert(
-            make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption)
-                .as_bytes()
-                .to_vec(),
+            make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
             encode_or_panic(valid_pks.dkg_dealing_encryption_key()),
         );
         let add_tls_certificate = insert(
-            make_crypto_tls_cert_key(node_id).as_bytes().to_vec(),
+            make_crypto_tls_cert_key(node_id).as_bytes(),
             encode_or_panic(valid_pks.tls_certificate()),
         );
 
@@ -108,7 +102,7 @@ impl Registry {
 
         let node_operator_key = make_node_operator_record_key(caller);
         let update_node_operator_record = update(
-            node_operator_key.as_bytes().to_vec(),
+            node_operator_key.as_bytes(),
             encode_or_panic(&node_operator_record),
         );
 
@@ -124,9 +118,7 @@ impl Registry {
         // TODO(NNS1-1197): Refactor this when nodes are provisioned for threshold ECDSA subnets
         if let Some(idkg_dealing_encryption_key) = valid_pks.idkg_dealing_encryption_key() {
             mutations.push(insert(
-                make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption)
-                    .as_bytes()
-                    .to_vec(),
+                make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
                 encode_or_panic(idkg_dealing_encryption_key),
             ));
         }

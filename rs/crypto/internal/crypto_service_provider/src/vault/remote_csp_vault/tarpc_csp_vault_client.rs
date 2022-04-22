@@ -323,7 +323,7 @@ impl NiDkgCspVault for RemoteCspVault {
             context_with_timeout(self.rpc_timeout),
             active_key_ids,
         ))
-        .unwrap_or_else(|_| {});
+        .unwrap_or(());
     }
 }
 

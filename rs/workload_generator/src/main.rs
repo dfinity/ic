@@ -254,7 +254,7 @@ async fn main() {
             .arg("ulimit -n")
             .output()
             .expect("failed to execute process");
-        let output = String::from_utf8_lossy(&output.stdout).replace("\n", "");
+        let output = String::from_utf8_lossy(&output.stdout).replace('\n', "");
         if let Ok(num) = output.parse::<usize>() {
             // This is a somewhat arbitrary limit :-)
             if num < 4096 {
@@ -310,16 +310,10 @@ async fn main() {
 
     let periodic_output = matches.is_present("periodic-output");
 
-    let call_payload_size = Byte::from_str(
-        matches
-            .value_of("payload-size")
-            .unwrap_or("0")
-            .trim()
-            .to_string(),
-    )
-    .expect("Could not parse the value of --payload-size");
+    let call_payload_size = Byte::from_str(matches.value_of("payload-size").unwrap_or("0").trim())
+        .expect("Could not parse the value of --payload-size");
 
-    let call_payload = hex::decode(matches.value_of("payload").unwrap_or("").to_string())
+    let call_payload = hex::decode(matches.value_of("payload").unwrap_or(""))
         .expect("Payload must be in hex format");
 
     if call_payload_size.get_bytes() > 0 && !call_payload.is_empty() {

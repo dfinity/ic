@@ -86,9 +86,7 @@ impl Registry {
                 deletion_marker: _,
             } = self
                 .get(
-                    &make_crypto_threshold_signing_pubkey_key(subnet_id)
-                        .as_bytes()
-                        .to_vec(),
+                    make_crypto_threshold_signing_pubkey_key(subnet_id).as_bytes(),
                     pre_call_registry_version,
                 )
                 .unwrap_or_else(|| {

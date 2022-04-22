@@ -30,6 +30,7 @@ pub enum Module {
 
 impl Module {
     /// Render a complete WAT module for a system call executing in a loop, with params and result.
+    #[allow(clippy::wrong_self_convention)]
     pub fn from_ic0<N, P>(&self, name: N, params: P, result: Result) -> String
     where
         N: std::fmt::Display,
@@ -48,6 +49,7 @@ impl Module {
     }
 
     /// Render a complete WAT module from imports and body.
+    #[allow(clippy::wrong_self_convention)]
     pub fn from_sections<I, B>(&self, (imports, body): (I, B)) -> String
     where
         I: core::fmt::Display,

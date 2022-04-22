@@ -395,8 +395,8 @@ pub fn verify_chunking(
             let c_ij_s: Vec<ECP> = instance
                 .ciphertext_chunks
                 .iter()
-                .cloned()
                 .flatten()
+                .cloned()
                 .collect();
             let e_ijk_s: Vec<BIG> = e
                 .iter()

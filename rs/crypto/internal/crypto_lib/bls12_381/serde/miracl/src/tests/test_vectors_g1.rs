@@ -195,7 +195,7 @@ fn miracl_g1_from_bytes_checks_subgroup_order() {
     );
     let checked = miracl_g1_from_bytes(bad_g1.as_bytes());
     assert!(
-        !checked.is_ok(),
+        checked.is_err(),
         "Deserializing a point outside subgroup should fail"
     );
 }

@@ -102,7 +102,7 @@ pub async fn get_subnet_id(
             .get_subnet_ids(registry_version)
             .ok()
             .flatten()
-            .unwrap_or_else(Vec::new);
+            .unwrap_or_default();
         info!(logger, "Found subnets {:?}", subnet_ids);
 
         for subnet_id in subnet_ids {
@@ -110,7 +110,7 @@ pub async fn get_subnet_id(
                 .get_node_ids_on_subnet(subnet_id, registry_version)
                 .ok()
                 .flatten()
-                .unwrap_or_else(Vec::new);
+                .unwrap_or_default();
 
             info!(
                 logger,

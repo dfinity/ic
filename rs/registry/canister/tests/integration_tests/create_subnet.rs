@@ -60,14 +60,10 @@ fn prepare_registry(nodes: u64) -> (RegistryAtomicMutateRequest, Vec<NodeId>) {
 
             let node_key = make_node_record_key(node_id);
             mutations.push(insert(
-                &node_key.as_bytes().to_vec(),
+                node_key.as_bytes(),
                 encode_or_panic(&NodeRecord {
-                    xnet: Some(connection_endpoint_from_string(
-                        &("128.0.0.1:1234".to_string()),
-                    )),
-                    http: Some(connection_endpoint_from_string(
-                        &("128.0.0.1:1234".to_string()),
-                    )),
+                    xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
+                    http: Some(connection_endpoint_from_string("128.0.0.1:1234")),
                     p2p_flow_endpoints: vec!["123,128.0.0.1:10000"]
                         .iter()
                         .map(|x| flow_endpoint_from_string(x))

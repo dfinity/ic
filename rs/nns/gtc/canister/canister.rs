@@ -78,13 +78,12 @@ fn canister_post_upgrade() {
 
     let serialized = stable::get();
     let gtc = gtc_mut();
-    match gtc.merge(&serialized[..]) {
-        Err(err) => panic!(
+    if let Err(err) = gtc.merge(&serialized[..]) {
+        panic!(
             "Error deserializing canister state post-upgrade. \
              CANISTER MIGHT HAVE BROKEN STATE!!!!. Error: {:?}",
             err
-        ),
-        Ok(()) => (),
+        )
     }
 
     // If the set of whitelisted accounts is empty (like it would

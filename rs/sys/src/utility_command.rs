@@ -149,7 +149,7 @@ impl UtilityCommand {
                 // Once we finish migration to the Ubuntu-based IC-OS and the Vsock-based HSM
                 // sharing, we'll want to know whether and why the command failed.
                 if StdCommand::new(VSOCK_AGENT_PATH)
-                    .arg("--attach-hsm".to_string())
+                    .arg("--attach-hsm")
                     .status()
                     .is_ok()
                 {
@@ -169,7 +169,7 @@ impl UtilityCommand {
                 // Once we finish migration to the Ubuntu-based IC-OS and the Vsock-based HSM
                 // sharing, we'll want to know if this command failed.
                 let _ = StdCommand::new(VSOCK_AGENT_PATH)
-                    .arg("--detach-hsm".to_string())
+                    .arg("--detach-hsm")
                     .status();
             }
         }
@@ -185,7 +185,7 @@ impl UtilityCommand {
                 // Once we finish migration to the Ubuntu-based IC-OS and the Vsock-based HSM
                 // sharing, we'll want to know if this command failed.
                 let _ = StdCommand::new(VSOCK_AGENT_PATH)
-                    .arg("--join-success".to_string())
+                    .arg("--join-success")
                     .status();
             }
         }

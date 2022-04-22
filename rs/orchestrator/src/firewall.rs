@@ -149,7 +149,7 @@ impl Firewall {
     fn sanitize_prefixes(prefixes: &[String]) -> Vec<String> {
         prefixes
             .iter()
-            .map(|prefix| prefix.replace(",", "").replace("\n", ""))
+            .map(|prefix| prefix.replace(',', "").replace('\n', ""))
             .collect()
     }
 

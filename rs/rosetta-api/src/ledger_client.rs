@@ -1393,8 +1393,7 @@ impl CanisterAccess {
             Some(entry) => (
                 entry
                     .canister_id
-                    .map(|pid| CanisterId::try_from(pid).ok())
-                    .flatten()
+                    .and_then(|pid| CanisterId::try_from(pid).ok())
                     .unwrap_or(self.canister_id),
                 entry.height_to + 1,
             ),

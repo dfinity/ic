@@ -210,7 +210,7 @@ where
         // returning the iterator directly isn't trusted due to the use of `self` in the
         // closure
         #[allow(clippy::needless_collect)]
-        let vec: Vec<T> = heights.map(|h| self.get_by_height(*h)).flatten().collect();
+        let vec: Vec<T> = heights.flat_map(|h| self.get_by_height(*h)).collect();
         Box::new(vec.into_iter())
     }
 

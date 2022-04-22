@@ -89,8 +89,8 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<Tes
 
     let pot_path = path.join(&pot.name);
     let group_name = format!("{}-{}", pot_path.url_string(), ctx.job_id)
-        .replace(":", "_")
-        .replace(".", "_");
+        .replace(':', "_")
+        .replace('.', "_");
 
     let pot_working_dir = ctx.working_dir.join(&pot.name);
     let pot_env = ctx.env.fork(ctx.logger.clone(), pot_working_dir)?;

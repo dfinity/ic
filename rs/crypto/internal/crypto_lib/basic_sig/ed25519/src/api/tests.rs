@@ -116,8 +116,8 @@ mod ed25519_cr_yp_to {
             assert_eq!(
                 sm,
                 hex::encode(
-                    s.0.to_vec()
-                        .into_iter()
+                    s.0.iter()
+                        .copied()
                         .chain(m.into_iter())
                         .collect::<Vec<u8>>()
                 ),

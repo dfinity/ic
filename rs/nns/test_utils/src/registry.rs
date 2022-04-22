@@ -165,26 +165,24 @@ pub fn invariant_compliant_mutation() -> Vec<RegistryMutation> {
 
     vec![
         insert(
-            make_subnet_list_record_key().as_bytes().to_vec(),
+            make_subnet_list_record_key().as_bytes(),
             encode_or_panic(&subnet_list),
         ),
         insert(
-            make_subnet_record_key(subnet_pid).as_bytes().to_vec(),
+            make_subnet_record_key(subnet_pid).as_bytes(),
             encode_or_panic(&system_subnet),
         ),
         routing_table_mutation(&RoutingTable::default()),
         insert(
-            make_node_record_key(node_pid).as_bytes().to_vec(),
+            make_node_record_key(node_pid).as_bytes(),
             encode_or_panic(&node),
         ),
         insert(
-            make_replica_version_key(VERSION_REPLICA_ID)
-                .as_bytes()
-                .to_vec(),
+            make_replica_version_key(VERSION_REPLICA_ID).as_bytes(),
             encode_or_panic(&replica_version),
         ),
         insert(
-            make_blessed_replica_version_key().as_bytes().to_vec(),
+            make_blessed_replica_version_key().as_bytes(),
             encode_or_panic(&blessed_replica_version),
         ),
     ]
@@ -281,25 +279,23 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
 
     let mut mutations = vec![
         insert(
-            make_subnet_list_record_key().as_bytes().to_vec(),
+            make_subnet_list_record_key().as_bytes(),
             encode_or_panic(&subnet_list),
         ),
         insert(
-            make_subnet_record_key(nns_subnet_id).as_bytes().to_vec(),
+            make_subnet_record_key(nns_subnet_id).as_bytes(),
             encode_or_panic(&system_subnet),
         ),
         insert(
-            make_routing_table_record_key().as_bytes().to_vec(),
+            make_routing_table_record_key().as_bytes(),
             encode_or_panic(&RoutingTablePB::try_from(routing_table).unwrap()),
         ),
         insert(
-            make_replica_version_key(VERSION_REPLICA_ID)
-                .as_bytes()
-                .to_vec(),
+            make_replica_version_key(VERSION_REPLICA_ID).as_bytes(),
             encode_or_panic(&replica_version),
         ),
         insert(
-            make_blessed_replica_version_key().as_bytes().to_vec(),
+            make_blessed_replica_version_key().as_bytes(),
             encode_or_panic(&blessed_replica_version),
         ),
     ];
@@ -309,8 +305,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
             make_node_operator_record_key(
                 PrincipalId::try_from(&nor.node_operator_principal_id).unwrap(),
             )
-            .as_bytes()
-            .to_vec(),
+            .as_bytes(),
             encode_or_panic(nor),
         ));
     }
@@ -325,7 +320,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         (nr7_pid, nr7),
     ] {
         mutations.push(insert(
-            make_node_record_key(*pid).as_bytes().to_vec(),
+            make_node_record_key(*pid).as_bytes(),
             encode_or_panic(nr),
         ));
     }
@@ -415,14 +410,8 @@ pub fn prepare_registry_with_two_node_sets(
                 node_operator_id: PrincipalId::new_user_test_id(999).to_vec(),
                 ..Default::default()
             };
-            mutations.push(insert(
-                &node_key.as_bytes().to_vec(),
-                encode_or_panic(&node_record),
-            ));
-            node_mutations.push(insert(
-                &node_key.as_bytes().to_vec(),
-                encode_or_panic(&node_record),
-            ));
+            mutations.push(insert(node_key.as_bytes(), encode_or_panic(&node_record)));
+            node_mutations.push(insert(node_key.as_bytes(), encode_or_panic(&node_record)));
             node_id
         })
         .collect();
@@ -432,7 +421,7 @@ pub fn prepare_registry_with_two_node_sets(
     let replica_version = ReplicaVersion::default();
     let replica_version_record = ReplicaVersionRecord::default();
     mutations.push(insert(
-        &make_replica_version_key(&replica_version.to_string()),
+        &make_replica_version_key(&replica_version),
         encode_or_panic(&replica_version_record),
     ));
 
@@ -454,9 +443,7 @@ pub fn prepare_registry_with_two_node_sets(
     ));
 
     mutations.push(insert(
-        make_crypto_threshold_signing_pubkey_key(subnet_id)
-            .as_bytes()
-            .to_vec(),
+        make_crypto_threshold_signing_pubkey_key(subnet_id).as_bytes(),
         encode_or_panic(&vec![]),
     ));
 
@@ -483,9 +470,7 @@ pub fn prepare_registry_with_two_node_sets(
         ));
 
         mutations.push(insert(
-            make_crypto_threshold_signing_pubkey_key(subnet2_id)
-                .as_bytes()
-                .to_vec(),
+            make_crypto_threshold_signing_pubkey_key(subnet2_id).as_bytes(),
             encode_or_panic(&vec![]),
         ));
 

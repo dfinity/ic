@@ -43,12 +43,9 @@ impl GovernanceCanisterInitPayloadBuilder {
     // the following graph on initialization that doesn't rely on ids.
     #[cfg(target_arch = "x86_64")]
     pub fn new_neuron_id(&mut self) -> NeuronId {
-        let neuron_id;
-
         let random_id = self.rng.next_u64();
-        neuron_id = NeuronId(random_id);
 
-        neuron_id
+        NeuronId(random_id)
     }
 
     #[cfg(not(target_arch = "x86_64"))]
@@ -251,14 +248,13 @@ impl GovernanceCanisterInitPayloadBuilder {
 
             let neuron_id = NeuronIdProto::from(neuron_id);
 
-            let not_for_profit;
-            if record.len() < 8 {
-                not_for_profit = false;
+            let not_for_profit = if record.len() < 8 {
+                false
             } else {
-                not_for_profit = record[7]
+                record[7]
                     .parse::<bool>()
-                    .expect("couldn't read the neuron's not-for-profit flag");
-            }
+                    .expect("couldn't read the neuron's not-for-profit flag")
+            };
 
             let neuron = Neuron {
                 id: Some(neuron_id.clone()),
@@ -273,8 +269,8 @@ impl GovernanceCanisterInitPayloadBuilder {
                     duration_to_dissolution_ns / (1_000_000_000),
                 )), // to sec
                 followees: [(Topic::Unspecified as i32, Followees { followees })]
-                    .to_vec()
-                    .into_iter()
+                    .iter()
+                    .cloned()
                     .collect(),
                 ..Default::default()
             };

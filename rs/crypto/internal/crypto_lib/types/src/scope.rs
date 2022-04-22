@@ -62,7 +62,7 @@ impl std::str::FromStr for Scope {
     type Err = ::strum::ParseError;
     fn from_str(s: &str) -> ::std::result::Result<Scope, Self::Err> {
         // This is the equivalent of `split_once(':')` in nightly.
-        let boundary = s.find(':').unwrap_or_else(|| s.len());
+        let boundary = s.find(':').unwrap_or(s.len());
         let scheme = ScopeSchemeNames::from_str(&s[0..boundary])?;
         match scheme {
             ScopeSchemeNames::Const => Ok(Scope::Const(ConstScope::from_str(&s[boundary + 1..])?)),

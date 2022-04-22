@@ -80,6 +80,7 @@ fn enumerate_leaves(t: &LabeledTree<Vec<u8>>, mut f: impl FnMut(LabeledTree<Vec<
         match t {
             LabeledTree::Leaf(_) => {
                 let mut subtree = t.clone();
+                #[allow(clippy::unnecessary_to_owned)]
                 for label in path.iter().rev().cloned() {
                     subtree = LabeledTree::SubTree(flatmap! {
                         label.clone() => subtree,

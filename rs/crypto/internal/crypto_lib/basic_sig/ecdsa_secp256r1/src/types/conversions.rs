@@ -60,7 +60,7 @@ impl TryFrom<Vec<u8>> for SignatureBytes {
 
 impl From<SignatureBytes> for String {
     fn from(val: SignatureBytes) -> Self {
-        base64::encode(&val.0.to_vec())
+        base64::encode(&val.0)
     }
 }
 

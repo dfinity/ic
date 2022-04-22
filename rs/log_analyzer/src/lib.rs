@@ -125,7 +125,7 @@ impl<'fml, A> Ltl<'fml, A> {
             Ltl::Top => 1,
             Ltl::Bottom(_) => 1,
             Ltl::Abort(_) => 1,
-            Ltl::Examine(f) => 1 + (&mut *f.borrow_mut())(element).borrow_mut().size(element),
+            Ltl::Examine(f) => 1 + (*f.borrow_mut())(element).borrow_mut().size(element),
             Ltl::And(p, q) => 1 + p.borrow_mut().size(element) + q.borrow_mut().size(element),
             Ltl::Or(p, q) => 1 + p.borrow_mut().size(element) + q.borrow_mut().size(element),
             Ltl::Next(p) => 1 + p.borrow_mut().size(element),
@@ -167,7 +167,7 @@ pub fn not<A: 'static>(p: Formula<'_, A>) -> Formula<'_, A> {
         Ltl::Abort(s) => fail(s),
         Ltl::Examine(f) => examine({
             let f = f.clone();
-            move |x| not((&mut *f.borrow_mut())(x))
+            move |x| not((*f.borrow_mut())(x))
         }),
         Ltl::And(p, q) => or(not(p.clone()), not(q.clone())),
         Ltl::Or(p, q) => and(not(p.clone()), not(q.clone())),
@@ -453,7 +453,7 @@ fn eval<'fml, A>(l: Formula<'fml, A>, mx: Option<&A>, weak: Weakness) -> Partial
                     failure("attempt to examine at end of stream")
                 }
             }
-            Some(x) => eval((&mut *v.borrow_mut())(x), mx, weak),
+            Some(x) => eval((*v.borrow_mut())(x), mx, weak),
         },
 
         Ltl::And(p, q) => eval_and(Rc::clone(p), Rc::clone(q), mx, weak),

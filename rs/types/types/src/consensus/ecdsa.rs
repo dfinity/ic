@@ -138,8 +138,7 @@ impl EcdsaPayload {
         Box::new(
             self.quadruples_in_creation
                 .iter()
-                .map(|(_, quadruple)| quadruple.iter_transcript_configs_in_creation())
-                .flatten()
+                .flat_map(|(_, quadruple)| quadruple.iter_transcript_configs_in_creation())
                 .chain(iter),
         )
     }
