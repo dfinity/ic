@@ -3518,6 +3518,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-btc-adapter-client"
+version = "0.1.0"
+dependencies = [
+ "bitcoin",
+ "ic-btc-service",
+ "ic-btc-types-internal",
+ "ic-interfaces-bitcoin-adapter-client",
+ "ic-logger",
+ "serde",
+ "serde_bytes",
+ "slog",
+ "tokio",
+ "tonic",
+ "tower",
+]
+
+[[package]]
 name = "ic-btc-canister"
 version = "0.1.0"
 dependencies = [
@@ -6121,15 +6138,13 @@ version = "0.8.0"
 dependencies = [
  "assert_cmd",
  "base64 0.11.0",
- "bitcoin",
  "canister-test",
  "clap 3.1.9",
  "criterion",
  "hex",
  "ic-async-utils",
+ "ic-btc-adapter-client",
  "ic-btc-consensus",
- "ic-btc-service",
- "ic-btc-types-internal",
  "ic-config",
  "ic-consensus",
  "ic-consensus-message",
@@ -6186,7 +6201,6 @@ dependencies = [
  "tempfile",
  "thread_profiler",
  "tokio",
- "tonic",
  "tower",
  "tracing",
  "wabt",

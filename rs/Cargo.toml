@@ -5,6 +5,7 @@ members = [
   "artifact_pool",
   "async_utils",
   "bitcoin/adapter",
+  "bitcoin/client",
   "bitcoin/service",
   "bitcoin/canister",
   "bitcoin/consensus",
