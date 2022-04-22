@@ -29,6 +29,9 @@ tokio-socks = "0.5.1"
 tonic = "0.6.2"
 tower = { version = "0.4.11", features = ["util"], optional = true }
 
+[dev-dependencies]
+tempfile = "3.3.0"
+
 [[bin]]
 name = "adapter-stress-test"
 path = "src/stress_test.rs"
