@@ -2,12 +2,15 @@
  * Implement the HttpRequest to Canisters Proposal.
  *
  */
-import { Actor, HttpAgent } from '@dfinity/agent';
+import { Actor, ActorSubclass, HttpAgent } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 import { validateBody } from './validation';
 import * as base64Arraybuffer from 'base64-arraybuffer';
 import * as pako from 'pako';
-import { HttpResponse } from '../http-interface/canister_http_interface_types';
+import {
+  _SERVICE,
+  HttpResponse,
+} from '../http-interface/canister_http_interface_types';
 import { idlFactory } from '../http-interface/canister_http_interface';
 import { streamContent } from './streaming';
 
@@ -191,6 +194,23 @@ function decodeBody(body: Uint8Array, encoding: string): Uint8Array {
   }
 }
 
+async function createAgentAndActor(
+  url: string,
+  canisterId: Principal,
+  fetchRootKey: boolean
+): Promise<[HttpAgent, ActorSubclass<_SERVICE>]> {
+  const replicaUrl = new URL(url);
+  const agent = new HttpAgent({ host: replicaUrl.toString() });
+  if (fetchRootKey) {
+    await agent.fetchRootKey();
+  }
+  const actor = Actor.createActor<_SERVICE>(idlFactory, {
+    agent,
+    canisterId: canisterId,
+  });
+  return [agent, actor];
+}
+
 /**
  * Box a request, send it to the canister, and handle its response, creating a Response
  * object.
@@ -234,12 +254,11 @@ export async function handleRequest(request: Request): Promise<Response> {
   );
   if (maybeCanisterId) {
     try {
-      const replicaUrl = new URL(url.origin);
-      const agent = new HttpAgent({ host: replicaUrl.toString() });
-      const actor = Actor.createActor(idlFactory, {
-        agent,
-        canisterId: maybeCanisterId,
-      });
+      const [agent, actor] = await createAgentAndActor(
+        url.origin,
+        maybeCanisterId,
+        shouldFetchRootKey
+      );
       const requestHeaders: [string, string][] = [];
       request.headers.forEach((value, key) =>
         requestHeaders.push([key, value])
@@ -257,9 +276,19 @@ export async function handleRequest(request: Request): Promise<Response> {
         body: [...new Uint8Array(await request.arrayBuffer())],
       };
 
-      const httpResponse: HttpResponse = (await actor.http_request(
+      let upgradeCall = false;
+      let httpResponse: HttpResponse = (await actor.http_request(
         httpRequest
       )) as HttpResponse;
+
+      if (httpResponse.upgrade.length === 1 && httpResponse.upgrade[0]) {
+        // repeat the request as an update call
+        httpResponse = (await actor.http_request_update(
+          httpRequest
+        )) as HttpResponse;
+        upgradeCall = true;
+      }
+
       const headers = new Headers();
 
       let certificate: ArrayBuffer | undefined;
@@ -306,8 +335,10 @@ export async function handleRequest(request: Request): Promise<Response> {
       const body = new Uint8Array(buffer);
       const identity = decodeBody(body, encoding);
 
-      let bodyValid = false;
-      if (certificate && tree) {
+      // when an update call is used, the response certification is checked by
+      // agent-js
+      let bodyValid = upgradeCall;
+      if (!upgradeCall && certificate && tree) {
         // Try to validate the body as is.
         bodyValid = await validateBody(
           maybeCanisterId,
@@ -329,7 +360,7 @@ export async function handleRequest(request: Request): Promise<Response> {
             certificate,
             tree,
             agent,
-            isLocal
+            shouldFetchRootKey
           );
         }
       }

@@ -15,9 +15,9 @@
     "directory": "typescript/service-worker"
   },
   "dependencies": {
-    "@dfinity/agent": "^0.11.0",
-    "@dfinity/candid": "^0.11.0",
-    "@dfinity/principal": "^0.11.0",
+    "@dfinity/agent": "^0.11.1",
+    "@dfinity/candid": "^0.11.1",
+    "@dfinity/principal": "^0.11.1",
     "base64-arraybuffer": "^1.0.2",
     "pako": "^2.0.3"
   },
@@ -54,7 +54,8 @@
     "clean": "rm -fr dist dist-dev dist-prod coverage",
     "build": "rm -fr dist dist-prod && NODE_OPTIONS=--openssl-legacy-provider webpack && mv dist dist-prod",
     "build-dev": "rm -fr dist dist-dev && NODE_OPTIONS=--openssl-legacy-provider FORCE_FETCH_ROOT_KEY=1 webpack --mode development && mv dist dist-dev",
-    "start": "NODE_OPTIONS=--openssl-legacy-provider npm run build-dev && http-server dist-dev --proxy https://identity.dfinity.network/",
+    "start": "npm run build-dev && http-server dist-dev --proxy https://ic0.app/",
+    "start-testnet": "npm run build-dev && http-server dist-dev --proxy https://identity.dfinity.network/",
     "lint": "npx eslint src",
     "lint:fix": "npx eslint --fix src",
     "test:coverage": "jest --verbose --collectCoverage",
