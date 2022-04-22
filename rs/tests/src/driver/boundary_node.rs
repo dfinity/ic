@@ -137,6 +137,8 @@ pub fn create_and_upload_config_disk_image(
     let journalbeat_hosts: Vec<String> = ic_setup.journalbeat_hosts;
 
     cmd.arg(img_path.clone())
+        .arg("--hostname")
+        .arg(boundary_node.name.clone())
         .arg("--accounts_ssh_authorized_keys")
         .arg(ssh_authorized_pub_keys_dir)
         .arg("--journalbeat_tags")
