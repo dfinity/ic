@@ -166,7 +166,7 @@ impl BitcoinAdapterClient for BrokenConnectionBitcoinClient {
     }
 }
 
-pub fn setup_bitcoin_client(
+pub fn setup_bitcoin_adapter_client(
     log: ReplicaLogger,
     rt_handle: tokio::runtime::Handle,
     uds_path: Option<PathBuf>,

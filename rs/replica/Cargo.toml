@@ -6,12 +6,10 @@ edition = "2018"
 
 [dependencies]
 base64 = "0.11.0"
-bitcoin = "0.27.1"
 clap = { version = "3.1.6", features = ["derive"] }
 hex = "0.4.2"
-ic-btc-service = { path = "../bitcoin/service" }
-ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-async-utils = { path = "../async_utils" }
+ic-btc-adapter-client = { path = "../bitcoin/client" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
@@ -65,7 +63,6 @@ static_assertions = "0.3.4"
 tempfile = "3.1.0"
 thread_profiler = { version = "0.3", optional = true }
 tokio = { version = "1.15.0", features = ["full"] }
-tonic = "0.6.2"
 tracing = "0.1.13"
 tower = { version = "0.4.11", features = ["util"] }
 
