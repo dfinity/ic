@@ -6,7 +6,7 @@ Goal:: Ensure that at a moderate rate of requests per second, workload sends upd
 Update calls increments canisters counter. Query calls (with non-existing methods) on canisters are expected to fail.
 
 Runbook::
-0. Set up an application subnet with N nodes.
+0. Set up an IC with an application subnet.
 1. Install X counter canisters on this subnet.
 2. Instantiate and start the workload.
    Workload sends update/query requests to counter canisters in a round-robin fashion:
@@ -16,18 +16,22 @@ Runbook::
        query[canister_id_0, "non_existing_method_b"], // should fail
        update[canister_id_1, "write"], // should be successful
     ].
-   These requests are equally distributed between nodes of the subnet.
+   These requests are sent to a random node of an application subnet.
 3. Assert the expected number of failed query calls on each canister.
 4. Assert the expected number of successful update calls on each canister.
 
 end::catalog[] */
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::util::{assert_create_agent, delay};
-use crate::util::{assert_endpoints_reachability, EndpointsStatus};
+use crate::driver::ic::{InternetComputer, Subnet, VmAllocationStrategy};
+use crate::nns::NnsExt;
+use crate::util::{
+    assert_create_agent, assert_endpoints_reachability, block_on, delay,
+    get_random_application_node_endpoint, EndpointsStatus,
+};
 use crate::workload::{CallSpec, Request, RoundRobinPlan, Workload};
 use ic_agent::{export::Principal, Agent};
 use ic_fondue::ic_manager::IcHandle;
+use ic_prep_lib::subnet_configuration::constants;
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
 use slog::{debug, info};
@@ -35,132 +39,166 @@ use std::convert::TryInto;
 use std::time::Duration;
 
 const NODES_COUNT: usize = 3;
-const CANISTERS_COUNT: usize = 2;
-const RPS: usize = 60;
-const DURATION: Duration = Duration::from_secs(30);
 const NON_EXISTING_METHOD_A: &str = "non_existing_method_a";
 const NON_EXISTING_METHOD_B: &str = "non_existing_method_b";
 const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
 
+/// Default configuration for this test
 pub fn config() -> InternetComputer {
     InternetComputer::new().add_subnet(Subnet::new(SubnetType::Application).add_nodes(NODES_COUNT))
 }
 
-// This macro is an experimental/temporary approach for writing tests.
-// Usually we have sync test() function and call block_on on async methods within the tests.
-#[tokio::main]
-pub async fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
-    let mut rng = ctx.rng.clone();
-    let endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
-    assert_endpoints_reachability(endpoints.as_slice(), EndpointsStatus::AllReachable).await;
-    info!(ctx.logger, "All nodes are reachable, IC setup succeeded.");
-    // Step 1: Install X counter canisters on the subnet.
-    let mut agents = Vec::new();
-    let mut canisters = Vec::new();
-    for ep in endpoints.iter() {
-        agents.push(assert_create_agent(ep.url.as_str()).await);
-    }
-    info!(ctx.logger, "Installing canisters...");
-    let install_agent = agents[0].clone();
-    for _ in 0..CANISTERS_COUNT {
-        canisters.push(install_counter_canister(&install_agent).await);
-    }
-    info!(
-        ctx.logger,
-        "{} canisters installed successfully.",
-        canisters.len()
-    );
-    assert_eq!(
-        canisters.len(),
-        CANISTERS_COUNT,
-        "Not all canisters deployed successfully, installed {:?} expected {:?}",
-        canisters.len(),
-        CANISTERS_COUNT
-    );
-    // Step 2: Instantiate and start the workload.
-    let payload: Vec<u8> = vec![0; 12];
-    let plan = RoundRobinPlan::new(vec![
-        Request::Update(CallSpec::new(canisters[0], "write", payload.clone())),
-        Request::Query(CallSpec::new(
-            canisters[1],
-            NON_EXISTING_METHOD_A,
-            payload.clone(),
-        )),
-        Request::Query(CallSpec::new(
-            canisters[0],
-            NON_EXISTING_METHOD_B,
-            payload.clone(),
-        )),
-        Request::Update(CallSpec::new(canisters[1], "write", payload.clone())),
-    ]);
-    let workload = Workload::new(agents, RPS, DURATION, plan, ctx.logger.clone());
-    let metrics = workload
-        .execute()
-        .await
-        .expect("Workload execution has failed.");
-    // Step 3: Assert the expected number of failed query calls on each canister.
-    info!(ctx.logger, "Asserting metrics are correct...");
-    let requests_count = RPS * DURATION.as_secs() as usize;
-    // 1/2 requests are query (failure) and 1/2 are update (success).
-    let expected_failure_calls = requests_count / 2;
-    let expected_success_calls = requests_count / 2;
-    let errors = metrics.errors();
-    assert_eq!(errors.len(), 2, "More errors than expected: {:?}", errors);
-    // Error messages should contain the name of failed method call.
-    assert!(
-        errors.keys().any(|k| k.contains(NON_EXISTING_METHOD_A)),
-        "Missing error key {}",
-        NON_EXISTING_METHOD_A
-    );
-    assert!(
-        errors.keys().any(|k| k.contains(NON_EXISTING_METHOD_B)),
-        "Missing error key {}",
-        NON_EXISTING_METHOD_B
-    );
-    assert!(
-        errors
-            .values()
-            .all(|k| *k == expected_failure_calls / CANISTERS_COUNT),
-        "Observed number of failure calls is not {}",
-        expected_failure_calls / CANISTERS_COUNT
-    );
-    assert_eq!(
-        metrics.failure_calls(),
-        expected_failure_calls,
-        "Observed failure calls {}, expected failure calls {}",
-        metrics.failure_calls(),
-        expected_failure_calls
-    );
-    assert_eq!(
-        metrics.success_calls(),
-        expected_success_calls,
-        "Observed success calls {}, expected success calls {}",
-        metrics.success_calls(),
-        expected_success_calls
-    );
-    assert_eq!(
-        requests_count,
-        metrics.total_calls(),
-        "Sent requests {}, recorded number of total calls {}",
-        requests_count,
-        metrics.total_calls()
-    );
-    // Step 4: Assert the expected number of update calls on each canister.
-    let expected_canister_counter = expected_success_calls / CANISTERS_COUNT;
-    for canister in canisters.iter() {
-        assert_canister_counter_with_retries(
-            &ctx.logger,
-            &install_agent,
-            canister,
-            payload.clone(),
-            expected_canister_counter,
-            MAX_RETRIES,
-            RETRY_WAIT,
+/// SLO test configuration with a NNS subnet and an app subnet with the same number of nodes as used on mainnet
+pub fn two_third_latency_config() -> InternetComputer {
+    InternetComputer::new()
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(40))
+        .add_subnet(
+            Subnet::new(SubnetType::Application).add_nodes(constants::SMALL_APP_SUBNET_MAX_SIZE),
         )
-        .await;
-    }
+        .with_allocation_strategy(VmAllocationStrategy::DistributeAcrossDcs)
+}
+
+/// Default test installing two canisters and sending 60 requests per second for 30 seconds
+/// This test is run for every MR.
+pub fn short_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+    let canister_count: usize = 2;
+    let rps: usize = 60;
+    let duration: Duration = Duration::from_secs(30);
+    test(handle, ctx, canister_count, rps, duration);
+}
+
+/// SLO test installing two canisters and sending 200 requests per second for 500 seconds.
+/// This test is run nightly.
+pub fn two_third_latency_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+    // Install NNS canisters
+    ctx.install_nns_canisters(&handle, true);
+    let canister_count: usize = 2;
+    let rps: usize = 200;
+    let duration: Duration = Duration::from_secs(500);
+    test(handle, ctx, canister_count, rps, duration);
+}
+
+fn test(
+    handle: IcHandle,
+    ctx: &ic_fondue::pot::Context,
+    canister_count: usize,
+    rps: usize,
+    duration: Duration,
+) {
+    let mut rng = ctx.rng.clone();
+    let app_endpoint = get_random_application_node_endpoint(&handle, &mut rng);
+    // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
+    let endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
+    block_on(async move {
+        assert_endpoints_reachability(endpoints.as_slice(), EndpointsStatus::AllReachable).await;
+        info!(ctx.logger, "All nodes are reachable, IC setup succeeded.");
+
+        // Step 1: Install X counter canisters on the subnet.
+        let mut agents = Vec::new();
+        let mut canisters = Vec::new();
+
+        agents.push(assert_create_agent(app_endpoint.url.as_str()).await);
+        info!(ctx.logger, "Installing canisters...");
+        let install_agent = agents[0].clone();
+        for _ in 0..canister_count {
+            canisters.push(install_counter_canister(&install_agent).await);
+        }
+        info!(
+            ctx.logger,
+            "{} canisters installed successfully.",
+            canisters.len()
+        );
+        assert_eq!(
+            canisters.len(),
+            canister_count,
+            "Not all canisters deployed successfully, installed {:?} expected {:?}",
+            canisters.len(),
+            canister_count
+        );
+        // Step 2: Instantiate and start the workload.
+        let payload: Vec<u8> = vec![0; 12];
+        let plan = RoundRobinPlan::new(vec![
+            Request::Update(CallSpec::new(canisters[0], "write", payload.clone())),
+            Request::Query(CallSpec::new(
+                canisters[1],
+                NON_EXISTING_METHOD_A,
+                payload.clone(),
+            )),
+            Request::Query(CallSpec::new(
+                canisters[0],
+                NON_EXISTING_METHOD_B,
+                payload.clone(),
+            )),
+            Request::Update(CallSpec::new(canisters[1], "write", payload.clone())),
+        ]);
+        let workload = Workload::new(agents, rps, duration, plan, ctx.logger.clone());
+        let metrics = workload
+            .execute()
+            .await
+            .expect("Workload execution has failed.");
+        // Step 3: Assert the expected number of failed query calls on each canister.
+        info!(ctx.logger, "Asserting metrics are correct...");
+        let requests_count = rps * duration.as_secs() as usize;
+        // 1/2 requests are query (failure) and 1/2 are update (success).
+        let expected_failure_calls = requests_count / 2;
+        let expected_success_calls = requests_count / 2;
+        let errors = metrics.errors();
+        assert_eq!(errors.len(), 2, "More errors than expected: {:?}", errors);
+        // Error messages should contain the name of failed method call.
+        assert!(
+            errors.keys().any(|k| k.contains(NON_EXISTING_METHOD_A)),
+            "Missing error key {}",
+            NON_EXISTING_METHOD_A
+        );
+        assert!(
+            errors.keys().any(|k| k.contains(NON_EXISTING_METHOD_B)),
+            "Missing error key {}",
+            NON_EXISTING_METHOD_B
+        );
+        assert!(
+            errors
+                .values()
+                .all(|k| *k == expected_failure_calls / canister_count),
+            "Observed number of failure calls is not {}",
+            expected_failure_calls / canister_count
+        );
+        assert_eq!(
+            metrics.failure_calls(),
+            expected_failure_calls,
+            "Observed failure calls {}, expected failure calls {}",
+            metrics.failure_calls(),
+            expected_failure_calls
+        );
+        assert_eq!(
+            metrics.success_calls(),
+            expected_success_calls,
+            "Observed success calls {}, expected success calls {}",
+            metrics.success_calls(),
+            expected_success_calls
+        );
+        assert_eq!(
+            requests_count,
+            metrics.total_calls(),
+            "Sent requests {}, recorded number of total calls {}",
+            requests_count,
+            metrics.total_calls()
+        );
+        // Step 4: Assert the expected number of update calls on each canister.
+        let expected_canister_counter = expected_success_calls / canister_count;
+        for canister in canisters.iter() {
+            assert_canister_counter_with_retries(
+                &ctx.logger,
+                &install_agent,
+                canister,
+                payload.clone(),
+                expected_canister_counter,
+                MAX_RETRIES,
+                RETRY_WAIT,
+            )
+            .await;
+        }
+    });
 }
 
 pub async fn install_counter_canister(agent: &Agent) -> Principal {

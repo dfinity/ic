@@ -134,7 +134,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     workload_counter_canister_test::config(),
                     par(vec![t(
                         "workload_counter_canister_test",
-                        workload_counter_canister_test::test,
+                        workload_counter_canister_test::short_test,
                     )]),
                 ),
                 pot_with_setup(
@@ -388,6 +388,15 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )]),
             )
             .with_ttl(Duration::from_secs(50 * 60)),
+            pot(
+                "two_third_latency_pot",
+                workload_counter_canister_test::two_third_latency_config(),
+                par(vec![t(
+                    "workload_counter_canister_test",
+                    workload_counter_canister_test::two_third_latency_test,
+                )]),
+            )
+            .with_ttl(Duration::from_secs(900)),
         ],
     ));
 
