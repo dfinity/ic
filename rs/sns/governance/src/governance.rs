@@ -2541,27 +2541,21 @@ impl Governance {
         Ok(nid)
     }
 
-    /// Claim a new neuron, unless the account doesn't have enough to stake a
-    /// neuron or we've reached the maximum number of neurons, in which case
-    /// we return an error.
-    ///
-    /// We can't return the funds without more information about the
-    /// source account, so as a workaround for insufficient stake we can ask the
-    /// user to transfer however much is missing to stake a neuron and they can
-    /// then disburse if they so choose. We need to do something more involved
-    /// if we've reached the max, TODO.
+    /// Attempts to claim a new neuron. If successful, returns the neuron id and
+    /// otherwise an error.
     ///
     /// Preconditions:
-    /// - The new neuron won't take us above the `max_number_of_neurons`.
-    /// - The amount transferred was greater than or equal to
-    ///   `self.nervous_system_parameters.neuron_minimum_stake_e8s`.
+    /// - adding the new neuron won't exceed the `max_number_of_neurons`
+    /// - the (newly created) neuron is not already in the list of neurons with ongoing
+    ///   operations
+    /// - The neuron's balance on the ledger canister is at least neuron_minimum_stake_e8s
+    ///   as defined in the nervous system parameters
     ///
-    /// Note that we need to create the neuron before checking the balance
-    /// so that we record the neuron and avoid a race where a user calls
-    /// this method a second time before the first time responds. If we store
-    /// the neuron and lock it before we make the call, we know that any
-    /// concurrent call to mutate the same neuron will need to wait for this
-    /// one to finish before proceeding.
+    /// In the error cases, we can't return the funds without more information
+    /// about the source account. So as a workaround for insufficient stake we can
+    /// ask the user to transfer however much is missing to stake a neuron and they
+    /// can then disburse if they so choose. We need to do something more involved
+    /// if we've reached the max, TODO.
     async fn claim_neuron(
         &mut self,
         nid: NeuronId,
@@ -2570,6 +2564,12 @@ impl Governance {
     ) -> Result<NeuronId, GovernanceError> {
         let now = self.env.now();
 
+        // We need to create the neuron before checking the balance so that we record
+        // the neuron and add it to the set of neurons with ongoing operations. This
+        // avoids a race where a user calls this method a second time before the first
+        // time responds. If we store the neuron and lock it before we make the call,
+        // we know that any concurrent call to mutate the same neuron will need to wait
+        // for this one to finish before proceeding.
         let neuron = Neuron {
             id: Some(nid.clone()),
             permissions: vec![NeuronPermission::new(
@@ -2638,7 +2638,7 @@ impl Governance {
                 panic!(
                     "When attempting to stake a neuron with ID {} and stake {:?},\
                      the neuron disappeared while the operation was in flight.\
-                     Please try again: {}",
+                     The returned error was: {}",
                     nid,
                     balance.get_e8s(),
                     err
@@ -2656,12 +2656,12 @@ impl Governance {
     /// Preconditions:
     /// - the caller has the permission to change a neuron's access control
     ///   (permission `ManagePrincipals`)
-    /// - the permissions provided in the request are a subset of
-    ///   `NervousSystemParameters::neuron_grantable_permissions`. To see what the current
-    ///   parameters are for an SNS see `get_nervous_system_parameters`.
+    /// - the permissions provided in the request are a subset of neuron_grantable_permissions
+    ///   as defined in the nervous system paramters. To see what the current parameters are
+    ///   for an SNS see `get_nervous_system_parameters`.
     /// - adding the new permissions for the principal does not exceed the limit of principals
-    ///   that a neuron can have in its access control list
-    ///   (set in `NervousSystemParameters::max_number_of_principals_per_neuron`).
+    ///   that a neuron can have in its access control list, which is defined by the nervous
+    ///   system parameter max_number_of_principals_per_neuron
     fn add_neuron_permissions(
         &mut self,
         neuron_id: &NeuronId,
@@ -2682,7 +2682,7 @@ impl Governance {
                 )
             })?;
 
-        // A simple check to prevent DOS attack with large number of permission changes.
+        // A simple check to prevent DoS attack with large number of permission changes.
         if permissions_to_add.permissions.len() > NeuronPermissionType::all().len() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
@@ -2740,8 +2740,7 @@ impl Governance {
     /// Removes a set of permissions for a PrincipalId on an existing Neuron.
     ///
     /// If all the permissions are removed from the Neuron i.e. by removing all permissions for
-    /// all PrincipalIds, the Neuron is not deleted but will no longer be able to modify the
-    /// neuron state, such as disbursing the neuron. This is a dangerous operation as it is
+    /// all PrincipalIds, the Neuron is not deleted. This is a dangerous operation as it is
     /// possible to remove all permissions for a neuron and no longer be able to modify its
     /// state, i.e. disbursing the neuron back into the governance token.
     ///
@@ -2770,7 +2769,7 @@ impl Governance {
                 )
             })?;
 
-        // A simple check to prevent DOS attack with large number of permission changes.
+        // A simple check to prevent DoS attack with large number of permission changes.
         if permissions_to_remove.permissions.len() > NeuronPermissionType::all().len() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
@@ -2806,6 +2805,7 @@ impl Governance {
         Ok(())
     }
 
+    /// Calls manage_neuron_internal and unwraps the result in a ManageNeuronResponse.
     pub async fn manage_neuron(
         &mut self,
         mgmt: &ManageNeuron,
@@ -2816,6 +2816,8 @@ impl Governance {
             .unwrap_or_else(ManageNeuronResponse::error)
     }
 
+    /// Parses manage neuron commands coming from a given caller and calls the
+    /// corresponding internal method to perform the neuron command.
     pub async fn manage_neuron_internal(
         &mut self,
         caller: &PrincipalId,
@@ -2824,7 +2826,7 @@ impl Governance {
         // We run claim or refresh before we check whether a neuron exists because it
         // may not in the case of the neuron being claimed
         if let Some(manage_neuron::Command::ClaimOrRefresh(claim_or_refresh)) = &mgmt.command {
-            // Note that we return here, so none of the rest of this method is executed
+            // Note that we return here, so the rest of this method is not executed
             // in this case.
             return match &claim_or_refresh.by {
                 Some(By::MemoAndController(memo_and_controller)) => self
@@ -2901,7 +2903,7 @@ impl Governance {
     /// Returns true if GC was run and false otherwise.
     pub fn maybe_gc(&mut self) -> bool {
         let now_seconds = self.env.now();
-        // Run GC if either (a) more than 24 hours has passed since it
+        // Run GC if either (a) more than 24 hours have passed since it
         // was run last, or (b) more than 100 proposals have been
         // added since it was run last.
         if !(now_seconds > self.latest_gc_timestamp_seconds + 60 * 60 * 24
@@ -2926,7 +2928,8 @@ impl Governance {
         //
         // Proposals are stored in order based on ProposalId, where ProposalIds are assigned in
         // order of creation in the governance canister (i.e. chronologically). The following
-        // data structure maintains the same chronological order for proposals in each action's vector.
+        // data structure maintains the same chronological order for proposals in each action's
+        // vector.
         let action_to_proposals: HashMap<u64, Vec<u64>> = {
             let mut tmp: HashMap<u64, Vec<u64>> = HashMap::new();
             for (proposal_id, proposal) in self.proto.proposals.iter() {
@@ -2966,20 +2969,18 @@ impl Governance {
         true
     }
 
-    /// Runs periodic tasks that needed and are not directly triggered by user
-    /// input.
+    /// Runs periodic tasks that are not directly triggered by user input.
     pub async fn run_periodic_tasks(&mut self) {
         self.process_proposals();
 
         // Getting the total governance token supply from the ledger is expensive enough
         // that we don't want to do it on every call to `run_periodic_tasks`. So
         // we only fetch it when it's needed, which is when rewards should be
-        // distributed.
+        // distributed
         if self.should_distribute_rewards() {
             match self.ledger.total_supply().await {
                 Ok(supply) => {
-                    // Distribute rewards if enough time has passed since the last reward
-                    // event.
+                    // Distribute rewards
                     self.distribute_rewards(supply);
                 }
                 Err(e) => println!(
@@ -2993,7 +2994,8 @@ impl Governance {
         self.maybe_gc();
     }
 
-    /// Return `true` if rewards should be distributed, `false` otherwise
+    /// Returns `true` if rewards should be distributed (which is the case if
+    /// enough time has passed since the last reward event) and `false` otherwise
     fn should_distribute_rewards(&self) -> bool {
         let reward_distribution_period_seconds = self
             .nervous_system_parameters()
@@ -3006,14 +3008,14 @@ impl Governance {
                     * reward_distribution_period_seconds
     }
 
-    /// Create a reward event.
+    /// Creates a reward event.
     ///
     /// This method:
     /// * collects all proposals in state ReadyToSettle, that is, proposals that
     /// can no longer accept votes for the purpose of rewards and that have
-    /// not yet been considered in a reward event.
-    /// * Associate those proposals to the new reward event
-    ///
+    /// not yet been considered in a reward event
+    /// * associates those proposals to the new reward event and cleans their ballots
+    /// * currently, does not actually pay out rewards
     /// TODO NNS1-925 - Generic Voting Rewards. Re-enable modifying the neuron to distribute the
     ///                 reward. All other effects of distributing rewards are still in place.
     fn distribute_rewards(&mut self, supply: Tokens) {
@@ -3100,15 +3102,8 @@ impl Governance {
         for (neuron_id, used_voting_rights) in voters_to_used_voting_right {
             match self.get_neuron_result_mut(&neuron_id) {
                 Ok(mut _neuron) => {
-                    // Note that "as" rounds toward zero; this is the desired
-                    // behavior here. Also note that `total_voting_rights` has
-                    // to be positive because (1) voters_to_used_voting_right
-                    // is non-empty (otherwise we wouldn't be here in the
-                    // first place) and (2) the voting power of all ballots is
-                    // positive (non-zero).
-
                     // TODO NNS1-925 - Generic Voting Rewards. Uncomment the following lines to
-                    //                 re-enable rewards for a neuron
+                    //                 re-enable rewards for a neuron.
                     // let reward = (used_voting_rights * _distributed_e8s_equivalent_float
                     //     / _total_voting_rights) as u64;
                     // neuron.maturity_e8s_equivalent += reward;
@@ -3167,6 +3162,7 @@ impl Governance {
         })
     }
 
+    /// Checks whether the heap can grow.
     fn check_heap_can_grow(&self) -> Result<(), GovernanceError> {
         match self.env.heap_growth_potential() {
             HeapGrowthPotential::NoIssue => Ok(()),
@@ -3177,11 +3173,13 @@ impl Governance {
         }
     }
 
+    /// Checks whether new neurons can be added or whether the maximum number of neurons,
+    /// as defined in the nervous system parameters, has already been reached.
     fn check_neuron_population_can_grow(&self) -> Result<(), GovernanceError> {
         let max_number_of_neurons = self
             .nervous_system_parameters()
             .max_number_of_neurons
-            .expect("NervousSystemParameters must have wait_for_quiet_threshold_seconds")
+            .expect("NervousSystemParameters must have max_number_of_neurons")
             as usize;
 
         if self.proto.neurons.len() + 1 > max_number_of_neurons {
@@ -3199,10 +3197,13 @@ impl Governance {
         self.proto.proposals.get(&pid.into().id)
     }
 
+    // Gets the raw proposal data as a mut
     fn get_proposal_data_mut(&mut self, pid: impl Into<ProposalId>) -> Option<&mut ProposalData> {
         self.proto.proposals.get_mut(&pid.into().id)
     }
 
+    /// Attempts to get a neuron given a neuron ID and returns the neuron on success
+    /// and an error otherwise.
     fn get_neuron_result(&self, nid: &NeuronId) -> Result<&Neuron, GovernanceError> {
         self.proto
             .neurons
@@ -3210,6 +3211,8 @@ impl Governance {
             .ok_or_else(|| Self::neuron_not_found_error(nid))
     }
 
+    /// Attempts to get a neuron as a mut, given a neuron ID and returns the neuron on success
+    /// and an error otherwise.
     fn get_neuron_result_mut(&mut self, nid: &NeuronId) -> Result<&mut Neuron, GovernanceError> {
         self.proto
             .neurons
