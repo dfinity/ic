@@ -6482,6 +6482,7 @@ dependencies = [
  "dfn_protobuf",
  "hex",
  "ic-base-types",
+ "ic-crypto-sha",
  "ic-nervous-system-common",
  "ic-protobuf",
  "ic-sns-governance",

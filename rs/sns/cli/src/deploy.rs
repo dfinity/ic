@@ -300,10 +300,12 @@ impl SnsDeployer {
             parameters.reject_cost_e8s = Some(proposal_reject_cost_e8s);
         }
 
+        governance.neurons = self.args.get_initial_neurons(parameters);
+
         governance
     }
 
-    /// Constuct the params used to initialize a SNS Ledger canister.
+    /// Construct the params used to initialize a SNS Ledger canister.
     fn ledger_init_args(&self) -> LedgerCanisterInitPayload {
         let root_canister_id = CanisterId::new(self.sns_canisters.root).unwrap();
 
@@ -326,7 +328,9 @@ impl SnsDeployer {
             .unwrap();
 
         payload.transfer_fee = self.args.transaction_fee_e8s.map(Tokens::from_e8s);
-        payload.initial_values = self.args.get_initial_accounts();
+        payload.initial_values = self
+            .args
+            .get_initial_accounts(self.sns_canisters.governance);
 
         let governance_canister_id = CanisterId::new(self.sns_canisters.governance).unwrap();
         let ledger_canister_id = CanisterId::new(self.sns_canisters.ledger).unwrap();
