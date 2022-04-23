@@ -72,7 +72,13 @@ pub async fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         "{} canisters installed successfully.",
         canisters.len()
     );
-    assert_eq!(canisters.len(), CANISTERS_COUNT);
+    assert_eq!(
+        canisters.len(),
+        CANISTERS_COUNT,
+        "Not all canisters deployed successfully, installed {:?} expected {:?}",
+        canisters.len(),
+        CANISTERS_COUNT
+    );
     // Step 2: Instantiate and start the workload.
     let payload: Vec<u8> = vec![0; 12];
     let plan = RoundRobinPlan::new(vec![
@@ -101,16 +107,46 @@ pub async fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let expected_failure_calls = requests_count / 2;
     let expected_success_calls = requests_count / 2;
     let errors = metrics.errors();
-    assert_eq!(errors.len(), 2);
+    assert_eq!(errors.len(), 2, "More errors than expected: {:?}", errors);
     // Error messages should contain the name of failed method call.
-    assert!(errors.keys().any(|k| k.contains(NON_EXISTING_METHOD_A)));
-    assert!(errors.keys().any(|k| k.contains(NON_EXISTING_METHOD_B)));
-    assert!(errors
-        .values()
-        .all(|k| *k == expected_failure_calls / CANISTERS_COUNT));
-    assert_eq!(expected_failure_calls, metrics.failure_calls());
-    assert_eq!(expected_success_calls, metrics.success_calls());
-    assert_eq!(requests_count, metrics.total_calls());
+    assert!(
+        errors.keys().any(|k| k.contains(NON_EXISTING_METHOD_A)),
+        "Missing error key {}",
+        NON_EXISTING_METHOD_A
+    );
+    assert!(
+        errors.keys().any(|k| k.contains(NON_EXISTING_METHOD_B)),
+        "Missing error key {}",
+        NON_EXISTING_METHOD_B
+    );
+    assert!(
+        errors
+            .values()
+            .all(|k| *k == expected_failure_calls / CANISTERS_COUNT),
+        "Observed number of failure calls is not {}",
+        expected_failure_calls / CANISTERS_COUNT
+    );
+    assert_eq!(
+        metrics.failure_calls(),
+        expected_failure_calls,
+        "Observed failure calls {}, expected failure calls {}",
+        metrics.failure_calls(),
+        expected_failure_calls
+    );
+    assert_eq!(
+        metrics.success_calls(),
+        expected_success_calls,
+        "Observed success calls {}, expected success calls {}",
+        metrics.success_calls(),
+        expected_success_calls
+    );
+    assert_eq!(
+        requests_count,
+        metrics.total_calls(),
+        "Sent requests {}, recorded number of total calls {}",
+        requests_count,
+        metrics.total_calls()
+    );
     // Step 4: Assert the expected number of update calls on each canister.
     let expected_canister_counter = expected_success_calls / CANISTERS_COUNT;
     for canister in canisters.iter() {
