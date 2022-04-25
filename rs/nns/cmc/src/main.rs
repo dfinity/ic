@@ -1220,21 +1220,7 @@ fn post_upgrade() {
             bytes.len(),
         ));
 
-        // Upgrade STATE by populating new fields. From now on, these fields will always be Some
         *STATE.write().unwrap() = State::decode(&bytes).unwrap();
-        if STATE.read().unwrap().blocks_notified.is_none() {
-            STATE.write().unwrap().blocks_notified = Some(BTreeMap::new());
-        }
-        let last_purged_notification = match STATE.read().unwrap().last_purged_notification {
-            // Stage 1 release: set the last purged notification to zero and fill in the cache.
-            None => Some(0),
-            // Stage 2 release: set the last_purged notification to the block observed right
-            // after the Stage 1 release.
-            Some(0) => Some(3_152_000),
-            // Post stage 2: keep the current block index.
-            Some(block_index) => Some(block_index),
-        };
-        STATE.write().unwrap().last_purged_notification = last_purged_notification;
     })
 }
 
