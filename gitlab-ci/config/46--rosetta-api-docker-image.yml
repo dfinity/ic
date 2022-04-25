@@ -31,9 +31,11 @@ rosetta-api-docker-image:
 
       docker tag dfinity/rosetta-api:"$CI_COMMIT_SHA" dfinity/rosetta-api:"$ROSETTA_API_DATE"
       docker tag dfinity/rosetta-api:"$CI_COMMIT_SHA" dfinity/rosetta-api:v"$ROSETTA_API_VERSION"
+      docker tag dfinity/rosetta-api:"$CI_COMMIT_SHA" dfinity/rosetta-api:latest
 
       docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
 
       docker push dfinity/rosetta-api:"$CI_COMMIT_SHA"
       docker push dfinity/rosetta-api:"$ROSETTA_API_DATE"
       docker push dfinity/rosetta-api:v"$ROSETTA_API_VERSION"
+      docker push dfinity/rosetta-api:latest
