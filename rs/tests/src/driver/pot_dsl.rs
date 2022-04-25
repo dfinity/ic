@@ -241,15 +241,17 @@ mod tests {
     fn config_can_be_lazily_evaluated() {
         let mut config_state = ConfigState::Function(Box::new(|_| {}));
         let logger = Logger::root(slog::Discard, o!());
-        config_state.evaluate(&TestEnv::new(PathBuf::new(), logger));
+        let tempdir = tempfile::tempdir().unwrap();
+        config_state.evaluate(&TestEnv::new(tempdir.path(), logger).unwrap());
     }
 
     #[test]
     fn failing_config_evaluation_can_be_caught() {
+        let tempdir = tempfile::tempdir().unwrap();
         let mut config_state = ConfigState::Function(Box::new(|_| panic!("magic error!")));
         let logger = Logger::root(slog::Discard, o!());
         let e = config_state
-            .evaluate(&TestEnv::new(PathBuf::new(), logger))
+            .evaluate(&TestEnv::new(tempdir.path(), logger).unwrap())
             .as_ref()
             .unwrap_err();
         if let Some(s) = e.downcast_ref::<&str>() {

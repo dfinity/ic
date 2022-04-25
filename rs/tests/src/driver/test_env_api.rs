@@ -974,7 +974,7 @@ where
         let env = self.test_env();
         let pot_setup = PotSetup::read_attribute(&env);
         let ic_setup = IcSetup::read_attribute(&env);
-        let farm = Farm::new(ic_setup.farm_base_url, env.logger.clone());
+        let farm = Farm::new(ic_setup.farm_base_url, env.logger());
         Box::new(FarmHostedVm {
             farm,
             group_name: pot_setup.farm_group_name,
