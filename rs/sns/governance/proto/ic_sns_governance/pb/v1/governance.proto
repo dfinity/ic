@@ -1171,9 +1171,8 @@ message GetProposalResponse {
 // have the highest ids. ListProposals reverses the list and paginates backwards
 // using `before_proposal`, so the first element returned is the latest proposal.
 message ListProposals {
-  // The number of proposals for which the ProposalData is returned (in each page).
-  // If no value is specified or if a value greater than 100 is specified,
-  // 100 will be used.
+  // Limit the number of Proposals returned in each page, from 1 to 100.
+  // If a value outside of this range is provided, 100 will be used.
   uint32 limit = 1;
 
   // The proposal ID specifying which proposals to return.
@@ -1217,9 +1216,8 @@ message ListProposalsResponse {
 // Listing of all neurons can be accomplished using `limit` and `start_page_at`.
 // To only list neurons associated with a given principal, use `of_principal`.
 message ListNeurons {
-  // Limit the number of Neurons returned in each page. If no value is
-  // specified, or if a value greater than 100 is specified, 100
-  // will be used.
+  // Limit the number of Neurons returned in each page, from 1 to 100.
+  // If a value outside of this range is provided, 100 will be used.
   uint32 limit = 1;
 
   // Used to indicate where the next page of Neurons should start. Should be
