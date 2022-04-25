@@ -2,28 +2,53 @@ use anyhow::{Context, Result};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use slog::Logger;
+use slog::{o, Drain, Logger};
+use slog_async::OverflowStrategy;
 use std::fs::{self, File};
+use std::os::unix::prelude::AsRawFd;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use utils::fs::{sync_path, write_atomically};
 
 use super::pot_dsl::TestPath;
 
+const ASYNC_CHAN_SIZE: usize = 8192;
+
 /// A TestEnv represents a directory storing all state related to a test.
 ///
 /// It has operations for reading and writing objects as JSON from paths relative to the directory.
+///
+/// A clone of a test environment.
 #[derive(Clone, Debug)]
 pub struct TestEnv {
+    inner: Arc<TestEnvInner>,
+}
+
+/// A TestEnv represents a directory storing all state related to a test.
+///
+/// It has operations for reading and writing objects as JSON from paths relative to the directory.
+#[derive(Debug)]
+pub struct TestEnvInner {
     base_path: PathBuf,
-    pub logger: Logger,
+    logger: Logger,
 }
 
 impl TestEnv {
-    pub fn new<P: AsRef<Path>>(path: P, logger: Logger) -> TestEnv {
-        Self {
-            base_path: PathBuf::from(path.as_ref()),
-            logger,
-        }
+    pub fn new<P: AsRef<Path>>(path: P, logger: Logger) -> Result<TestEnv> {
+        let base_path = PathBuf::from(path.as_ref());
+        let log_file = append_and_lock_exclusive(base_path.join("log"))?;
+        let file_drain = slog_term::FullFormat::new(slog_term::PlainSyncDecorator::new(log_file))
+            .build()
+            .fuse();
+        let file_drain = slog_async::Async::new(file_drain)
+            .chan_size(ASYNC_CHAN_SIZE)
+            .overflow_strategy(OverflowStrategy::Block)
+            .build()
+            .fuse();
+        let logger = slog::Logger::root(slog::Duplicate(logger, file_drain).fuse(), o!());
+        Ok(Self {
+            inner: Arc::new(TestEnvInner { base_path, logger }),
+        })
     }
 
     pub fn read_object<T: DeserializeOwned, P: AsRef<Path>>(&self, p: P) -> Result<T> {
@@ -45,15 +70,15 @@ impl TestEnv {
     }
 
     pub fn get_path<P: AsRef<Path>>(&self, p: P) -> PathBuf {
-        self.base_path.join(p)
+        self.inner.base_path.join(p)
     }
 
     pub fn base_path(&self) -> PathBuf {
-        self.base_path.clone()
+        self.inner.base_path.clone()
     }
 
     pub fn logger(&self) -> Logger {
-        self.logger.clone()
+        self.inner.logger.clone()
     }
 
     pub fn fork<P: AsRef<Path>>(&self, logger: Logger, dir: P) -> Result<TestEnv> {
@@ -62,7 +87,7 @@ impl TestEnv {
         options.content_only = true;
         fs_extra::dir::copy(self.base_path(), &dir, &options)?;
         sync_path(&dir)?;
-        Ok(TestEnv::new(dir, logger))
+        TestEnv::new(dir, logger)
     }
 }
 
@@ -180,4 +205,14 @@ fn ic_prep_path(base_path: PathBuf, name: &str) -> PathBuf {
         format!("ic_prep_{}", name)
     };
     base_path.join(dir_name)
+}
+
+fn append_and_lock_exclusive<P: AsRef<Path>>(p: P) -> Result<File> {
+    let f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(p)?;
+    let fd = f.as_raw_fd();
+    nix::fcntl::flock(fd, nix::fcntl::FlockArg::LockExclusiveNonblock)?;
+    Ok(f)
 }
