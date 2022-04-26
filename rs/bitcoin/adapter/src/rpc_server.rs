@@ -1,6 +1,7 @@
 use crate::{
+    config::{Config, IncomingSource},
     get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
-    AdapterState, Config, GetSuccessorsHandler, IncomingSource, TransactionManagerRequest,
+    AdapterState, GetSuccessorsHandler, TransactionManagerRequest,
 };
 use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
 use ic_async_utils::{
@@ -12,13 +13,13 @@ use ic_btc_service::{
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
 use std::convert::{TryFrom, TryInto};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 use tonic::{transport::Server, Request, Response, Status};
 
 struct BtcServiceImpl {
     adapter_state: AdapterState,
     get_successors_handler: GetSuccessorsHandler,
-    transaction_manager_tx: UnboundedSender<TransactionManagerRequest>,
+    transaction_manager_tx: Sender<TransactionManagerRequest>,
 }
 
 impl TryFrom<BtcServiceGetSuccessorsRequest> for GetSuccessorsRequest {
@@ -92,6 +93,7 @@ impl BtcService for BtcServiceImpl {
         let transaction = request.into_inner().transaction;
         self.transaction_manager_tx
             .send(TransactionManagerRequest::SendTransaction(transaction))
+            .await
             .expect(
                 "Sending should not fail because we never close the receiving part of the channel.",
             );
@@ -104,7 +106,7 @@ pub fn spawn_grpc_server(
     config: Config,
     adapter_state: AdapterState,
     get_successors_handler: GetSuccessorsHandler,
-    transaction_manager_tx: UnboundedSender<TransactionManagerRequest>,
+    transaction_manager_tx: Sender<TransactionManagerRequest>,
 ) {
     // make sure we receive only one socket from systemd
     if config.incoming_source == IncomingSource::Systemd {

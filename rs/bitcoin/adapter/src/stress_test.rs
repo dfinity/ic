@@ -13,7 +13,7 @@ use tokio::{
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
 
-use ic_btc_adapter::{Cli, IncomingSource};
+use ic_btc_adapter::{cli::Cli, config::IncomingSource};
 
 async fn setup_channel(uds_path: PathBuf) -> Channel {
     Endpoint::try_from("http://[::]:50051")

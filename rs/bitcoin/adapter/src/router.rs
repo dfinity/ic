@@ -1,11 +1,11 @@
 //! The module is responsible for awaiting messages from bitcoin peers and dispaching them
 //! to the correct component.
 use crate::{
-    blockchainmanager::BlockchainManager, common::DEFAULT_CHANNEL_BUFFER_SIZE,
+    blockchainmanager::BlockchainManager, common::DEFAULT_CHANNEL_BUFFER_SIZE, config::Config,
     connectionmanager::ConnectionManager, stream::handle_stream,
     transaction_manager::TransactionManager, AdapterState, BlockchainManagerRequest,
-    BlockchainState, Config, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError,
-    ProcessEvent, TransactionManagerRequest,
+    BlockchainState, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError, ProcessEvent,
+    TransactionManagerRequest,
 };
 use bitcoin::network::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
@@ -14,11 +14,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::{
     sync::{
-        mpsc::UnboundedReceiver,
         mpsc::{channel, Receiver},
         Mutex,
     },
-    task::JoinHandle,
     time::{interval, sleep},
 };
 
@@ -31,10 +29,10 @@ pub fn start_router(
     config: &Config,
     logger: ReplicaLogger,
     blockchain_state: Arc<Mutex<BlockchainState>>,
-    mut transaction_manager_rx: UnboundedReceiver<TransactionManagerRequest>,
+    mut transaction_manager_rx: Receiver<TransactionManagerRequest>,
     adapter_state: AdapterState,
     mut blockchain_manager_rx: Receiver<BlockchainManagerRequest>,
-) -> JoinHandle<()> {
+) {
     let (network_message_sender, mut network_message_receiver) =
         channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
@@ -105,5 +103,5 @@ pub fn start_router(
                 }
             };
         }
-    })
+    });
 }

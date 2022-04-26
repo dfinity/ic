@@ -25,9 +25,10 @@ use crate::{
     },
     common::DEFAULT_CHANNEL_BUFFER_SIZE,
     common::*,
+    config::Config,
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
     stream::{StreamConfig, StreamEvent, StreamEventKind},
-    Channel, ChannelError, Command, Config, ProcessBitcoinNetworkMessage,
+    Channel, ChannelError, Command, ProcessBitcoinNetworkMessage,
     ProcessBitcoinNetworkMessageError, ProcessEvent,
 };
 
