@@ -288,7 +288,12 @@ def main():
 
     # Build the docker image.
     build_args.append("--pull")
-    if os.environ.get("CI_JOB_NAME", "").startswith("docker-build-ic"):
+    if any(
+        [
+            os.environ.get("CI_JOB_NAME", "").startswith("docker-build-ic"),
+            os.environ.get("CI_COMMIT_REF_PROTECTED", "false") == "true",
+        ]
+    ):
         build_args.append("--no-cache")
     image_hash = docker_build(build_args)
 

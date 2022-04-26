@@ -7,6 +7,8 @@ if [ "$(uname)" != "Linux" ]; then
     exit 1
 fi
 
+export CI_JOB_NAME="${CI_JOB_NAME:-docker-build-ic}"
+
 REPO_ROOT=$(git rev-parse --show-toplevel)
 TAG=$(openssl rand -hex 4)
 DOCKER_IMG_VERSION=$(cat "$REPO_ROOT/gitlab-ci/docker/TAG")
@@ -22,6 +24,13 @@ if ! docker pull dfinity/ic-build:"$DOCKER_IMG_VERSION"; then
     unset DOCKER_BUILD_ARGS
 fi
 
+if [ -e /.dockerenv ]; then
+    ARTIFACTS_VOLUME="ic-artifacts${CI_JOB_ID:-}"
+else
+    ARTIFACTS_VOLUME="ic-artifacts${USER:-$(whoami)}"
+    docker volume rm -f "$ARTIFACTS_VOLUME" 2>/dev/null || true
+fi
+
 docker image build -t ic-build-bd:$TAG -f- . <<EOF
 FROM dfinity/ic-build:$DOCKER_IMG_VERSION
 COPY --chown=ubuntu:ubuntu . /ic
@@ -31,14 +40,14 @@ EOF
 export IMAGE=ic-build-bd:$TAG
 "$REPO_ROOT"/gitlab-ci/tools/docker-run /ic/gitlab-ci/tools/build-ic "${1:--a=b,c,i}"
 
-if docker volume inspect "ic-artifacts${CI_JOB_ID:-}" 2>/dev/null; then
+if docker volume inspect "$ARTIFACTS_VOLUME" 2>/dev/null; then
     mkdir -p artifacts
     cd artifacts
 
     # docker doesn't seem to provide means of getting data from the volume directly
     # we need to run a container with that volume and copy the data from the container
-    DID=$(docker run --rm -it -d -v "ic-artifacts${CI_JOB_ID:-}":/artifacts $IMAGE sleep 300)
+    DID=$(docker run --rm -it -d -v "$ARTIFACTS_VOLUME":/artifacts $IMAGE sleep 300)
     docker cp $DID:/artifacts docker-build-ic
     docker rm -f $DID
-    docker volume rm -f "ic-artifacts${CI_JOB_ID:-}"
+    docker volume rm -f "$ARTIFACTS_VOLUME" 2>/dev/null
 fi
