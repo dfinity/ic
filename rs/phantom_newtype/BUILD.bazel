@@ -1,0 +1,28 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "phantom_newtype",
+    srcs = glob(["src/**"]),
+    deps = [
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+    ],
+)
+
+# TODO(https://github.com/bazelbuild/rules_rust/pull/1286): enable doc tests
+#rust_doc_test(
+#    name = "phantom_newtype_doctest",
+#    crate = ":phantom_newtype",
+#    deps = ["@crate_index//:serde_json"],
+#)

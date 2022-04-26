@@ -12,5 +12,9 @@ filegroup(
             "**/gen/**/*.rs",
             "nervous_system/common/bazel-out/**",
         ],
-    ),
+    ) + [
+        "//rs/crypto/internal/crypto_lib/sha2:sources",
+        "//rs/crypto/sha:sources",
+        "//rs/phantom_newtype:sources",
+    ],
 )

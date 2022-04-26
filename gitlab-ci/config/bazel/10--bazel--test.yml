@@ -17,6 +17,7 @@ bazel-build-all:
   stage: test
   script:
     - bazel build --config ci :all
+    - bazel test --config ci //rs/...
 
 bazel-build-guestos:
   extends:
