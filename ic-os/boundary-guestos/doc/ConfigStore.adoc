@@ -60,4 +60,4 @@ The following keys are recognized:
 
 Must be a text file consisting of key/value pairs (one per line). The following keys are recognized:
 
-- `nns_url`: The URL (http) of the NNS node(s). If multiple are given, they need to be separated by whitespace.
+- `nns_url`: The URL (http) of the NNS node(s). If multiple are given, they need to be separated by a comma.
