@@ -1,5 +1,5 @@
 use crate::message_routing::LatencyMetrics;
-use ic_base_types::{CanisterId, NumBytes};
+use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_error_types::RejectCode;
 use ic_logger::{debug, error, fatal, trace, ReplicaLogger};
@@ -735,15 +735,18 @@ impl StreamHandlerImpl {
             // `actual_subnet_id` is the expected host according to the routing table.
             Some(expected_subnet_id) if expected_subnet_id == actual_subnet_id => true,
 
-            // `actual_subnet_id` and `expected_subnet_id` (in this order) are on the path
+            // `actual_subnet_id` and `expected_subnet_id` are both on the path
             // of a canister migration that includes `msg.sender()`.
             Some(expected_subnet_id)
-                if is_migration_in_progress(
-                    msg.sender(),
-                    actual_subnet_id,
-                    expected_subnet_id,
-                    state,
-                ) =>
+                if state
+                    .metadata
+                    .network_topology
+                    .canister_migrations
+                    .lookup(msg.sender())
+                    .map(|trace| {
+                        trace.contains(&actual_subnet_id) && trace.contains(&expected_subnet_id)
+                    })
+                    .unwrap_or(false) =>
             {
                 true
             }
@@ -757,9 +760,9 @@ impl StreamHandlerImpl {
     /// `self.subnet_id` should be rejected (as opposed to silently dropped).
     ///
     /// Reject signals are only produced for `Responses` addressed to a canister
-    /// known to be hosted by a different subnet according to the routing table; but previously
-    /// one of the subnets on the path of a canister migration including
-    /// `msg.sender()`).
+    /// known to be hosted by a different subnet according to the routing table;
+    /// but previously hosted by `self.subnet_id` according to the
+    /// `canister_migrations` map.
     fn should_reroute_message_to(
         &self,
         msg: &RequestOrResponse,
@@ -776,12 +779,18 @@ impl StreamHandlerImpl {
         );
 
         // Reroute if `msg.receiver()` is being migrated from `self.subnet_id` to `actual_receiver_subnet` (possibly with extra steps).
-        is_migration_in_progress(
-            msg.receiver(),
-            self.subnet_id,
-            actual_receiver_subnet,
-            state,
-        )
+        state
+            .metadata
+            .network_topology
+            .canister_migrations
+            .lookup(msg.receiver())
+            .and_then(|trace| {
+                let self_index = trace.iter().position(|s| *s == self.subnet_id)?;
+                let actual_subnet_index =
+                    trace.iter().rposition(|s| *s == actual_receiver_subnet)?;
+                Some(self_index < actual_subnet_index)
+            })
+            .unwrap_or(false)
     }
 
     /// Observes "time in backlog" (since learning about their existence from
@@ -841,27 +850,6 @@ fn generate_reject_response(msg: RequestOrResponse, context: RejectContext) -> R
     } else {
         unreachable!("Can't have a response to a response: {:?}", msg)
     }
-}
-
-/// Checks whether `canister_id` is part of an in-progress canister migration
-/// with a trace that includes `from_subnet` before `to_subnet`.
-fn is_migration_in_progress(
-    canister_id: CanisterId,
-    from_subnet: SubnetId,
-    to_subnet: SubnetId,
-    state: &ReplicatedState,
-) -> bool {
-    state
-        .metadata
-        .network_topology
-        .canister_migrations
-        .lookup(canister_id)
-        .and_then(|trace| {
-            let from_index = trace.iter().position(|s| *s == from_subnet)?;
-            let to_index = trace.iter().rposition(|s| *s == to_subnet)?;
-            Some(from_index < to_index)
-        })
-        .unwrap_or(false)
 }
 
 /// Maps a `StateError` resulting from a failed induction to a `RejectCode`.
