@@ -1,0 +1,24 @@
+type CanisterStatusResultV2 = record {
+  controller : principal;
+  status : CanisterStatusType_1;
+  freezing_threshold : nat;
+  balance : vec record { vec nat8; nat };
+  memory_size : nat;
+  cycles : nat;
+  settings : DefiniteCanisterSettingsArgs;
+  module_hash : opt vec nat8;
+};
+type CanisterStatusType_1 = variant { stopped; stopping; running };
+type DefiniteCanisterSettingsArgs = record {
+  controller : principal;
+  freezing_threshold : nat;
+  controllers : vec principal;
+  memory_allocation : nat;
+  compute_allocation : nat;
+};
+
+service : {
+    get_sns_canisters_summary : (vec principal) -> (
+        vec record { text; principal; CanisterStatusResultV2 },
+    );
+}

@@ -343,6 +343,7 @@ impl SnsDeployer {
     fn root_init_args(&self) -> SnsRootCanister {
         SnsRootCanister {
             governance_canister_id: Some(self.sns_canisters.governance),
+            ledger_canister_id: Some(self.sns_canisters.ledger),
         }
     }
 

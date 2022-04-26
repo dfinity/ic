@@ -237,6 +237,7 @@ impl SnsCanisters<'_> {
         // Root canister_init args.
         if init_payloads.root.governance_canister_id.is_none() {
             init_payloads.root.governance_canister_id = Some(governance_canister_id.into());
+            init_payloads.root.ledger_canister_id = Some(ledger_canister_id.into());
         }
 
         // Set initial neurons

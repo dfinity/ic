@@ -15,5 +15,8 @@ message SnsRootCanister {
   // The SNS root canister is supposed to be able to control this canister.  The
   // governance canister sends the SNS root canister change_governance_canister
   // update method calls (and possibly other things).
-  optional ic_base_types.pb.v1.PrincipalId governance_canister_id = 1;
+  ic_base_types.pb.v1.PrincipalId governance_canister_id = 1;
+
+  // The SNS Ledger canister ID
+  ic_base_types.pb.v1.PrincipalId ledger_canister_id = 2;
 }
