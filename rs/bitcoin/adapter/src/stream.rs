@@ -13,7 +13,7 @@ use tokio::{
         TcpStream,
     },
     sync::mpsc::{Sender, UnboundedReceiver},
-    time::timeout,
+    time::{sleep, timeout},
 };
 use tokio_socks::{tcp::Socks5Stream, Error as SocksError};
 
@@ -242,24 +242,16 @@ impl Stream {
         if let Ok(network_message) = self.network_message_receiver.try_recv() {
             self.write_message(network_message).await?;
         }
-        match self.read_message() {
-            Ok(raw_message) => {
-                let result = self
-                    .network_message_sender
-                    .send((self.address, raw_message.payload))
-                    .await;
-                if result.is_err() {
-                    return Err(StreamError::UnableToReceiveMessages);
-                }
-            }
-            Err(err) => match err {
-                StreamError::Io(io_err) => match io_err.kind() {
-                    io::ErrorKind::WouldBlock => {}
-                    _ => return Err(StreamError::Io(io_err)),
-                },
-                _ => return Err(err),
-            },
-        };
+
+        let raw_message = self.read_message()?;
+        let result = self
+            .network_message_sender
+            .send((self.address, raw_message.payload))
+            .await;
+        if result.is_err() {
+            return Err(StreamError::UnableToReceiveMessages);
+        }
+
         Ok(())
     }
 }
@@ -272,7 +264,6 @@ pub fn handle_stream(config: StreamConfig) -> tokio::task::JoinHandle<()> {
         let logger = config.logger.clone();
         // Clone the sender here to handle errors that the Stream may return.
         let stream_event_sender = config.stream_event_sender.clone();
-        debug!(logger, "Connecting to {}", address);
         let stream_result = Stream::connect(config).await;
         let mut stream = match stream_result {
             Ok(stream) => {
@@ -309,18 +300,29 @@ pub fn handle_stream(config: StreamConfig) -> tokio::task::JoinHandle<()> {
         };
 
         loop {
-            if stream.tick().await.is_err() {
-                stream_event_sender
-                    .send(StreamEvent {
-                        address,
-                        kind: StreamEventKind::Disconnected,
-                    })
-                    .await
-                    .ok();
-                return;
-            };
+            let result = stream.tick().await;
+            if let Err(err) = result {
+                let disconnect = match err {
+                    StreamError::Io(io_err) => match io_err.kind() {
+                        io::ErrorKind::WouldBlock => {
+                            sleep(Duration::from_millis(100)).await;
+                            false
+                        }
+                        _ => true,
+                    },
+                    _ => true,
+                };
 
-            tokio::time::sleep(Duration::from_millis(250)).await;
+                if disconnect {
+                    stream_event_sender
+                        .send(StreamEvent {
+                            address,
+                            kind: StreamEventKind::Disconnected,
+                        })
+                        .await
+                        .ok();
+                }
+            }
         }
     })
 }
