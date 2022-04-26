@@ -2442,7 +2442,7 @@ name = "fe-derive"
 version = "0.1.0"
 dependencies = [
  "hex",
- "num-bigint-dig 0.7.0",
+ "num-bigint-dig 0.8.1",
  "num-traits",
  "proc-macro2 1.0.36",
  "quote 1.0.17",
@@ -8549,9 +8549,25 @@ dependencies = [
  "num-iter",
  "num-traits",
  "rand 0.8.4",
- "serde",
  "smallvec",
  "zeroize",
+]
+
+[[package]]
+name = "num-bigint-dig"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "566d173b2f9406afbc5510a90925d5a2cd80cae4605631f1212303df265de011"
+dependencies = [
+ "byteorder",
+ "lazy_static",
+ "libm",
+ "num-integer",
+ "num-iter",
+ "num-traits",
+ "rand 0.8.4",
+ "serde",
+ "smallvec",
 ]
 
 [[package]]
