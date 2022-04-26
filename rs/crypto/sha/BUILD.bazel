@@ -1,0 +1,41 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "sha",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_sha",
+    deps = ["//rs/crypto/internal/crypto_lib/sha2"],
+)
+
+rust_doc_test(
+    name = "sha_doc_test",
+    crate = ":sha",
+)
+
+rust_test(
+    name = "sha224_test",
+    srcs = ["tests/sha224.rs"],
+    deps = [
+        ":sha",
+        "@crate_index//:openssl",
+    ],
+)
+
+rust_test(
+    name = "sha256_test",
+    srcs = ["tests/sha256.rs"],
+    deps = [
+        ":sha",
+        "@crate_index//:openssl",
+    ],
+)

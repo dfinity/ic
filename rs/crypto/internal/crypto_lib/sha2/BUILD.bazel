@@ -1,0 +1,46 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "sha2",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_internal_sha2",
+    edition = "2018",
+    visibility = ["//rs/crypto/sha:__pkg__"],
+    deps = select({
+        "@rules_rust//rust/platform:wasm32-unknown-unknown": ["@crate_index//:sha2"],
+        "//conditions:default": ["@crate_index//:openssl"],
+    }),
+)
+
+rust_test(
+    name = "sha224_test",
+    srcs = ["tests/sha224.rs"],
+    deps = [
+        ":sha2",
+        "@crate_index//:openssl",
+    ],
+)
+
+rust_test(
+    name = "sha256_test",
+    srcs = ["tests/sha256.rs"],
+    deps = [
+        ":sha2",
+        "@crate_index//:openssl",
+    ],
+)
+
+rust_test(
+    name = "sha512_test",
+    srcs = ["tests/sha512.rs"],
+    deps = [
+        ":sha2",
+        "@crate_index//:openssl",
+    ],
+)

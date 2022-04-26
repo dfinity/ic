@@ -2,15 +2,38 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
     name = "rules_rust",
-    sha256 = "7453856d239a004c9e29cde2e45903a068446e4a69501ee7393faf08e1a30403",
+    sha256 = "b58c63a6d8221f408f8852b4f74f81bc8c7aac9273f3899a74e32e6168a2c624",
     urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_rust/releases/download/0.1.0/rules_rust-v0.1.0.tar.gz",
-        "https://github.com/bazelbuild/rules_rust/releases/download/0.1.0/rules_rust-v0.1.0.tar.gz",
+        "https://mirror.bazel.build/github.com/bazelbuild/rules_rust/releases/download/0.2.1/rules_rust-v0.2.1.tar.gz",
+        "https://github.com/bazelbuild/rules_rust/releases/download/0.2.1/rules_rust-v0.2.1.tar.gz",
     ],
 )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
 
 rules_rust_dependencies()
-rust_register_toolchains(version = "1.58.1")
+rust_register_toolchains(version = "1.60.0")
 
+load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "splicing_config")
+
+crates_repository(
+    name = "crate_index",
+    lockfile = "//:Cargo.Bazel.lock",
+    packages = {
+        "candid": crate.spec(version = "0.7.13"),
+        "candid_derive": crate.spec(version = "0.4.5"),
+        "serde": crate.spec(version = "1.0.136"),
+        "slog": crate.spec(version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"]),
+        "serde_json": crate.spec(version = "1.0.40"),
+        "serde_derive": crate.spec(version = "1.0.136"),
+        "openssl": crate.spec(version = "0.10.29"),
+        "sha2": crate.spec(version = "0.9.1"),
+    },
+    splicing_config = splicing_config(
+        resolver_version = "2",
+    ),
+)
+
+load("@crate_index//:defs.bzl", "crate_repositories")
+
+crate_repositories()
