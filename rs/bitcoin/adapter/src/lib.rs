@@ -22,11 +22,13 @@ mod addressbook;
 mod blockchainmanager;
 /// This module contains the data structure for storing the current state of the Bitcoin ledger
 mod blockchainstate;
+/// This module contains command line arguments parser.
+pub mod cli;
 /// This module contains constants and types that are shared by many modules.
 mod common;
 /// This module contains the basic configuration struct used to start up an
 /// adapter instance.
-mod config;
+pub mod config;
 /// This module contains code that is used to manage a single connection to a
 /// BTC node.
 mod connection;
@@ -42,14 +44,11 @@ mod rpc_server;
 mod stream;
 mod transaction_manager;
 
-mod cli;
 mod get_successors_handler;
 
 pub use blockchainmanager::BlockchainManager;
 pub use blockchainstate::BlockchainState;
-pub use cli::Cli;
 use common::BlockHeight;
-pub use config::{Config, IncomingSource};
 pub use get_successors_handler::GetSuccessorsHandler;
 pub use router::start_router;
 pub use rpc_server::spawn_grpc_server;

@@ -58,7 +58,7 @@ fn default_idle_seconds() -> u64 {
 
 impl Config {
     /// This function returns the port to use based on the Bitcoin network provided.
-    pub fn port(&self) -> u16 {
+    pub fn network_port(&self) -> u16 {
         match self.network {
             Network::Bitcoin => 8333,
             Network::Testnet => 18333,
@@ -74,7 +74,7 @@ impl Default for Config {
             network: Network::Bitcoin,
             socks_proxy: Default::default(),
             nodes: vec![],
-            idle_seconds: 5,
+            idle_seconds: default_idle_seconds(),
             ipv6_only: false,
             logger: LoggerConfig::default(),
             incoming_source: Default::default(),
@@ -87,6 +87,7 @@ pub mod test {
 
     use super::*;
 
+    #[derive(Default)]
     pub struct ConfigBuilder {
         config: Config,
     }

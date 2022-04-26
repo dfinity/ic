@@ -1,15 +1,12 @@
 use clap::Parser;
+use ic_async_utils::shutdown_signal;
 use ic_btc_adapter::{
-    spawn_grpc_server, start_router, AdapterState, BlockchainManagerRequest, BlockchainState, Cli,
-    GetSuccessorsHandler,
+    cli::Cli, spawn_grpc_server, start_router, AdapterState, BlockchainState, GetSuccessorsHandler,
 };
 use ic_logger::{info, new_replica_logger_from_config};
 use serde_json::to_string_pretty;
 use std::sync::Arc;
-use tokio::sync::{
-    mpsc::{channel, unbounded_channel},
-    Mutex,
-};
+use tokio::sync::{mpsc::channel, Mutex};
 
 #[tokio::main]
 pub async fn main() {
@@ -29,7 +26,7 @@ pub async fn main() {
     );
 
     // TODO: establish what the buffer size should be
-    let (blockchain_manager_tx, blockchain_manager_rx) = channel::<BlockchainManagerRequest>(10);
+    let (blockchain_manager_tx, blockchain_manager_rx) = channel(10);
 
     let adapter_state = AdapterState::new(config.idle_seconds);
     let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config)));
@@ -41,7 +38,7 @@ pub async fn main() {
     );
 
     // TODO: we should NOT have an unbounded channel for buffering TransactionManagerRequests.
-    let (transaction_manager_tx, transaction_manager_rx) = unbounded_channel();
+    let (transaction_manager_tx, transaction_manager_rx) = channel(10);
 
     spawn_grpc_server(
         config.clone(),
@@ -52,12 +49,11 @@ pub async fn main() {
 
     start_router(
         &config,
-        logger,
+        logger.clone(),
         blockchain_state,
         transaction_manager_rx,
         adapter_state,
         blockchain_manager_rx,
-    )
-    .await
-    .unwrap();
+    );
+    shutdown_signal(logger.inner_logger.root.clone()).await;
 }

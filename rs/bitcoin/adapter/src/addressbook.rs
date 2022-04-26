@@ -1,4 +1,4 @@
-use crate::Config;
+use crate::config::Config;
 use bitcoin::{
     network::{constants::ServiceFlags, Address},
     Network,
@@ -107,7 +107,7 @@ impl AddressBook {
         Self {
             dns_seeds: config.dns_seeds.clone(),
             ipv6_only: config.ipv6_only,
-            port: config.port(),
+            port: config.network_port(),
             active_addresses: HashSet::new(),
             known_addresses,
             logger,

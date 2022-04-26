@@ -7,7 +7,7 @@ use bitcoin::{Block, BlockHash, BlockHeader, Network};
 use ic_logger::{error, ReplicaLogger};
 use tokio::sync::{mpsc::Sender, Mutex};
 
-use crate::{common::BlockHeight, BlockchainManagerRequest, BlockchainState, Config};
+use crate::{common::BlockHeight, config::Config, BlockchainManagerRequest, BlockchainState};
 
 const ONE_MB: usize = 1_024 * 1_024;
 

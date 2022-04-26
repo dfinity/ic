@@ -4,6 +4,7 @@ use clap::Parser;
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
 
+#[allow(missing_docs)]
 #[derive(Debug, Error)]
 pub enum CliError {
     #[error("{0}")]
@@ -31,7 +32,7 @@ impl Cli {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::IncomingSource;
+    use crate::config::IncomingSource;
     use bitcoin::Network;
     use std::io::Write;
     use std::path::PathBuf;
