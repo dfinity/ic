@@ -21,7 +21,7 @@ gflags.DEFINE_integer("iter_duration", 300, "Duration in seconds for which to ex
 gflags.DEFINE_integer("rps", 10, "Requests per second the workload generator should execute.")
 gflags.DEFINE_integer("initial_response_size_kb", 250, "Initial response payload size in kb.")
 gflags.DEFINE_integer("response_size_increment_kb", 250, "Increment of response payload size in kb per iteration.")
-gflags.DEFINE_integer("max_size_increment_kb", 2 * 1024 * 1024, "Maximum response payload size to test.")
+gflags.DEFINE_integer("max_size_increment_kb", 2 * 1024, "Maximum response payload size to test.")
 
 
 class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
