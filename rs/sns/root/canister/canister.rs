@@ -1,8 +1,9 @@
 use std::cell::RefCell;
 
 use candid::candid_method;
-use dfn_candid::{candid, CandidOne};
-use dfn_core::{api::PrincipalId, over, over_async, over_init};
+use dfn_candid::{candid, candid_one, CandidOne};
+use dfn_core::{over, over_async, over_init};
+use ic_base_types::PrincipalId;
 
 #[macro_use]
 extern crate ic_nervous_system_common;
@@ -14,6 +15,7 @@ use ic_sns_root::pb::v1::SnsRootCanister;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use ic_ic00_types::CanisterStatusResultV2;
 
 thread_local! {
     static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
@@ -53,6 +55,20 @@ expose_build_metadata! {}
 fn canister_status() {
     println!("{}canister_status", LOG_PREFIX);
     over_async(candid, ic_nervous_system_root::canister_status)
+}
+
+#[export_name = "canister_update get_sns_canisters_summary"]
+fn get_sns_canisters_summary() {
+    println!("{}get_sns_canisters_summary", LOG_PREFIX);
+    over_async(candid_one, get_sns_canisters_summary_)
+}
+
+#[candid_method(update, rename = "get_sns_canisters_summary")]
+async fn get_sns_canisters_summary_(
+    dapp_canisters: Vec<PrincipalId>,
+) -> Vec<(String, PrincipalId, CanisterStatusResultV2)> {
+    let root = STATE.with(|service| service.borrow().clone());
+    root.get_sns_canisters_summary(dapp_canisters).await
 }
 
 #[export_name = "canister_update change_canister"]

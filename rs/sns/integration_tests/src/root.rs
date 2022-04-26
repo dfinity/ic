@@ -13,6 +13,7 @@ fn test_get_status() {
             &runtime,
             SnsRootCanister {
                 governance_canister_id: Some(PrincipalId::new_user_test_id(42)),
+                ledger_canister_id: Some(PrincipalId::new_user_test_id(43)),
             },
         )
         .await;
