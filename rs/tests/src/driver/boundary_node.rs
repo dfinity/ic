@@ -144,7 +144,9 @@ pub fn create_and_upload_config_disk_image(
         .arg("--journalbeat_tags")
         .arg(format!("system_test {}", group_name))
         .arg("--deployment-type")
-        .arg("dev");
+        .arg("dev")
+        .arg("--name_servers")
+        .arg("2606:4700:4700::1111 2606:4700:4700::1001");
 
     if !boundary_node.nns_node_urls.is_empty() {
         cmd.arg("--nns_url").arg({
@@ -153,7 +155,7 @@ pub fn create_and_upload_config_disk_image(
                 .iter()
                 .map(|url| url.as_str())
                 .collect();
-            urls.join(" ")
+            urls.join(",")
         });
     }
 

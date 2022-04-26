@@ -52,7 +52,7 @@ options may be specified:
 
   --nns_url url
     URL of NNS nodes for sign up or registry access. Can be multiple nodes
-    separated by spaces (make sure to quote the argument string in that
+    separated by commas (make sure to quote the argument string in that
     case).
 
   --nns_public_key path

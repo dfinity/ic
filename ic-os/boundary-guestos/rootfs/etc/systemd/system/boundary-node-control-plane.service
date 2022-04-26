@@ -1,6 +1,8 @@
 [Unit]
 Description=Boundary Node Control Plane
 After=syslog.target
+After=bootstrap-ic-node.service
+Requires=bootstrap-ic-node.service
 
 [Service]
 User=root
