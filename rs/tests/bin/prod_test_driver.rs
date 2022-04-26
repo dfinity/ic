@@ -130,14 +130,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
         suite(
             "pre_master",
             vec![
-                pot(
-                    "workload_counter_canister_pot",
-                    workload_counter_canister_test::config(),
-                    par(vec![t(
-                        "workload_counter_canister_test",
-                        workload_counter_canister_test::short_test,
-                    )]),
-                ),
                 pot_with_setup(
                     "api_test",
                     api_test::setup_two_ics,
@@ -509,6 +501,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 par(vec![t("nns_backup_test", orchestrator::nns_backup::test)]),
             )
             .with_ttl(Duration::from_secs(7200)),
+            pot(
+                "workload_counter_canister_pot",
+                workload_counter_canister_test::config(),
+                par(vec![t(
+                    "workload_counter_canister_test",
+                    workload_counter_canister_test::short_test,
+                )]),
+            ),
         ],
     ));
 
