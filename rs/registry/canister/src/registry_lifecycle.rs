@@ -41,31 +41,9 @@ pub fn canister_post_upgrade(registry: &mut Registry, stable_storage: &[u8]) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::mutations::common::encode_or_panic;
+    use crate::common::test_helpers::{empty_mutation, invariant_compliant_registry};
     use crate::registry::{EncodedVersion, Version};
     use crate::registry_lifecycle::Registry;
-    use ic_nns_test_utils::registry::invariant_compliant_mutation;
-    use ic_registry_transport::pb::v1::registry_mutation::Type;
-    use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-    use ic_registry_transport::pb::v1::RegistryMutation;
-
-    fn empty_mutation() -> Vec<u8> {
-        encode_or_panic(&RegistryAtomicMutateRequest {
-            mutations: vec![RegistryMutation {
-                mutation_type: Type::Upsert as i32,
-                key: "_".into(),
-                value: "".into(),
-            }],
-            preconditions: vec![],
-        })
-    }
-
-    fn invariant_compliant_registry() -> Registry {
-        let mut registry = Registry::new();
-        let mutations = invariant_compliant_mutation();
-        registry.maybe_apply_mutation_internal(mutations);
-        registry
-    }
 
     fn stable_storage_from_registry(
         registry: &Registry,
