@@ -2,13 +2,17 @@ import { handleRequest } from './http_request';
 import fetch from 'jest-fetch-mock';
 import * as Agent from '@dfinity/agent';
 import {
+  CallRequest,
+  QueryRequest,
   QueryResponse,
   QueryResponseStatus,
   ReadStateResponse,
+  UnSigned,
 } from '@dfinity/agent';
 import { IDL } from '@dfinity/candid';
 import { fromHex } from '@dfinity/agent/lib/cjs/utils/buffer';
 import { Principal } from '@dfinity/principal';
+import { HttpRequest } from '../http-interface/canister_http_interface_types';
 
 const CANISTER_ID = 'rdmx6-jaaaa-aaaaa-aaadq-cai';
 const TEST_DATA = {
@@ -26,6 +30,14 @@ const TEST_DATA = {
       'd9d9f7a2647472656583024e726571756573745f7374617475738302582007bf53acde2967b1ddc8f06814fb8a0d037e5ef19ba597e92b9d1febe726698983018302457265706c79820358354449444c046d7b6c02007101716d016c03a2f5ed880400c6a4a19806029aa1b2f90c7a01030c68656c6c6f20776f726c642100c8008302467374617475738203477265706c696564697369676e61747572655830971e62f35e9c288ea9b4c446b8febfc2bf040172a539753bed5349ed671bda6d80b4c7ae641ce9df0fc779deb61511e6',
   },
 };
+
+const HeaderFieldType = IDL.Tuple(IDL.Text, IDL.Text);
+const HttpRequestType = IDL.Record({
+  url: IDL.Text,
+  method: IDL.Text,
+  body: IDL.Vec(IDL.Nat8),
+  headers: IDL.Vec(HeaderFieldType),
+});
 
 beforeEach(() => {
   fetch.resetMocks();
@@ -88,10 +100,19 @@ it('should accept valid certification without callbacks', async () => {
   expect(fetch.mock.calls[1][0]).toEqual(
     `https://ic0.app/api/v2/canister/${CANISTER_ID}/query`
   );
+
+  let [queryCall, req] = decodeContent<HttpRequest>(
+    fetch.mock.calls[1],
+    HttpRequestType
+  );
+  expect(queryCall.method_name).toEqual('http_request');
+  expect(req.url).toEqual('/');
+  expect(req.method).toEqual('GET');
 });
 
 it('should accept valid certification using callbacks with primitive tokens', async () => {
-  const [httpResponseType, CallbackResponseType] = getResponseTypes(IDL.Text);
+  const tokenType = IDL.Text;
+  const [httpResponseType, CallbackResponseType] = getResponseTypes(tokenType);
   const queryHttpPayload = createHttpQueryResponsePayload(
     'hello',
     httpResponseType,
@@ -130,6 +151,21 @@ it('should accept valid certification using callbacks with primitive tokens', as
         `https://ic0.app/api/v2/canister/${CANISTER_ID}/query`
       )
     );
+
+  let [queryCall, req] = decodeContent<HttpRequest>(
+    fetch.mock.calls[1],
+    HttpRequestType
+  );
+  expect(queryCall.method_name).toEqual('http_request');
+  expect(req.url).toEqual('/');
+  expect(req.method).toEqual('GET');
+
+  let [callbackQuery, token] = decodeContent<string>(
+    fetch.mock.calls[2],
+    tokenType
+  );
+  expect(callbackQuery.method_name).toEqual('some_callback_method');
+  expect(token).toEqual('text token');
 });
 
 it('should accept valid certification using multiple callbacks with structured tokens', async () => {
@@ -210,15 +246,45 @@ it('should do update call on upgrade flag', async () => {
   expect(fetch.mock.calls[1][0]).toEqual(
     `https://ic0.app/api/v2/canister/${CANISTER_ID}/query`
   );
+
+  let [queryCall, queryReq] = decodeContent<HttpRequest>(
+    fetch.mock.calls[1],
+    HttpRequestType
+  );
+  expect(queryCall.method_name).toEqual('http_request');
+  expect(queryCall.request_type).toEqual('query');
+  expect(queryReq.url).toEqual('/');
+  expect(queryReq.method).toEqual('GET');
+
   // the update call
   expect(fetch.mock.calls[2][0]).toEqual(
     `https://ic0.app/api/v2/canister/${CANISTER_ID}/call`
   );
+  let [updateCall, updateReq] = decodeContent<HttpRequest>(
+    fetch.mock.calls[2],
+    HttpRequestType
+  );
+  expect(updateCall.method_name).toEqual('http_request_update');
+  expect(updateCall.request_type).toEqual('call');
+  expect(updateReq).toEqual(queryReq);
+
   // retrieve the result of the update call
   expect(fetch.mock.calls[3][0]).toEqual(
     `https://ic0.app/api/v2/canister/${CANISTER_ID}/read_state`
   );
 });
+
+function decodeContent<T>(
+  [_, request]: [unknown, RequestInit],
+  argType: IDL.Type
+): [QueryRequest | CallRequest, T] {
+  let decodedRequest = Agent.Cbor.decode<UnSigned<QueryRequest | CallRequest>>(
+    request.body as ArrayBuffer
+  );
+  // @ts-ignore
+  let decodedArg = IDL.decode([argType], decodedRequest.content.arg)[0] as T;
+  return [decodedRequest.content, decodedArg];
+}
 
 export type StreamingStrategy = {
   Callback: { token: any; callback: [Principal, string] };
@@ -239,10 +305,9 @@ function getResponseTypes(tokenType: IDL.Type): [IDL.Type, IDL.Type] {
       ),
     }),
   });
-  const HeaderField = IDL.Tuple(IDL.Text, IDL.Text);
   const HttpResponse = IDL.Record({
     body: IDL.Vec(IDL.Nat8),
-    headers: IDL.Vec(HeaderField),
+    headers: IDL.Vec(HeaderFieldType),
     streaming_strategy: IDL.Opt(StreamingStrategy),
     status_code: IDL.Nat16,
     upgrade: IDL.Opt(IDL.Bool),
