@@ -1810,21 +1810,125 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
     });
 }
 
-/// Tests that stream slices containing messages from a migrated canister results
-/// can also be inducted when the canister migration trace is set.
+/// Tests the induction of stream slices containing messages from a canister
+/// that is known to be in the process of migration but not yet known to have
+/// been migrated.
+#[test]
+fn induct_stream_slices_with_messages_from_migrating_canister() {
+    with_test_replica_logger(|log| {
+        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
+        stream_handler.testing_flag_generate_reject_signals = true;
+
+        // Canister with a reservation for one incoming response.
+        let mut initial_canister_state = new_canister_state(
+            *LOCAL_CANISTER,
+            user_test_id(24).get(),
+            *INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        make_input_queue_reservations(&mut initial_canister_state, 1, *REMOTE_CANISTER);
+        initial_state.put_canister_state(initial_canister_state);
+
+        // `REMOTE_CANISTER` is migrating from `REMOTE_SUBNET` to `CANISTER_MIGRATION_SUBNET`.
+        initial_state = prepare_canister_migration(
+            initial_state,
+            *REMOTE_CANISTER,
+            REMOTE_SUBNET,
+            CANISTER_MIGRATION_SUBNET,
+        );
+
+        let mut expected_state = initial_state.clone();
+
+        let outgoing_stream = generate_outgoing_stream(StreamConfig {
+            messages_begin: 21,
+            message_count: 1,
+            signals_end: 43,
+            reject_signals: None,
+        });
+        initial_state.with_streams(btreemap![CANISTER_MIGRATION_SUBNET => outgoing_stream]);
+
+        // Slice consisting of one incoming request...
+        let mut stream_slice = generate_stream_slice(StreamSliceConfig {
+            header_begin: 42,
+            header_end: None,
+            messages_begin: 43,
+            message_count: 1,
+            signals_end: 21,
+            reject_signals: None,
+        });
+        // ...and one incoming response.
+        stream_slice.push_message(test_response(*REMOTE_CANISTER, *LOCAL_CANISTER).into());
+
+        // The expected canister state must contain the 2 inducted messages...
+        if let Some(messages) = stream_slice.messages() {
+            push_inputs(&mut expected_state, messages.iter());
+        }
+        // ...and `signals_end` incremented for the 2 inducted messages in the stream.
+        let expected_outgoing_stream = generate_outgoing_stream(StreamConfig {
+            messages_begin: 21,
+            message_count: 1,
+            signals_end: 45,
+            reject_signals: None,
+        });
+
+        expected_state
+            .with_streams(btreemap![CANISTER_MIGRATION_SUBNET => expected_outgoing_stream]);
+
+        let inducted_state = stream_handler.induct_stream_slices(
+            initial_state,
+            btreemap![CANISTER_MIGRATION_SUBNET => stream_slice],
+        );
+
+        // Assert
+        assert_eq!(
+            expected_state.system_metadata(),
+            inducted_state.system_metadata(),
+        );
+
+        assert_eq!(expected_state, inducted_state);
+
+        assert_inducted_xnet_messages_eq(
+            metric_vec(&[
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                        (LABEL_STATUS, LABEL_VALUE_SUCCESS),
+                    ],
+                    1,
+                ),
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_RESPONSE),
+                        (LABEL_STATUS, LABEL_VALUE_SUCCESS),
+                    ],
+                    1,
+                ),
+            ]),
+            &metrics_registry,
+        );
+        assert_eq!(
+            2,
+            fetch_inducted_payload_sizes_stats(&metrics_registry).count
+        );
+    });
+}
+
+/// Tests the induction of stream slices containing messages from a canister
+/// known to have been be migrated.
 #[test]
 fn induct_stream_slices_with_messages_from_migrated_canister() {
     with_test_replica_logger(|log| {
         let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
         stream_handler.testing_flag_generate_reject_signals = true;
 
-        // The initial state consists of a blank CanisterState...
-        let initial_canister_state = new_canister_state(
+        // Canister with a reservation for one incoming response.
+        let mut initial_canister_state = new_canister_state(
             *LOCAL_CANISTER,
             user_test_id(24).get(),
             *INITIAL_CYCLES,
             NumSeconds::from(100_000),
         );
+        make_input_queue_reservations(&mut initial_canister_state, 1, *REMOTE_CANISTER);
         initial_state.put_canister_state(initial_canister_state);
 
         // `REMOTE_CANISTER` was hosted by the `REMOTE_SUBNET` but then migrated.
@@ -1845,7 +1949,7 @@ fn induct_stream_slices_with_messages_from_migrated_canister() {
         });
         initial_state.with_streams(btreemap![REMOTE_SUBNET => outgoing_stream]);
 
-        // one incoming request...
+        // Slice consisting of one incoming request...
         let mut stream_slice = generate_stream_slice(StreamSliceConfig {
             header_begin: 42,
             header_end: None,
@@ -1855,8 +1959,7 @@ fn induct_stream_slices_with_messages_from_migrated_canister() {
             reject_signals: None,
         });
         // ...and one incoming response.
-        let request: RequestOrResponse = test_request(*REMOTE_CANISTER, *LOCAL_CANISTER).into();
-        stream_slice.push_message(request);
+        stream_slice.push_message(test_response(*REMOTE_CANISTER, *LOCAL_CANISTER).into());
 
         // The expected canister state must contain the 2 inducted messages...
         if let Some(messages) = stream_slice.messages() {
@@ -1884,13 +1987,22 @@ fn induct_stream_slices_with_messages_from_migrated_canister() {
         assert_eq!(expected_state, inducted_state);
 
         assert_inducted_xnet_messages_eq(
-            metric_vec(&[(
-                &[
-                    (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
-                    (LABEL_STATUS, LABEL_VALUE_SUCCESS),
-                ],
-                2,
-            )]),
+            metric_vec(&[
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                        (LABEL_STATUS, LABEL_VALUE_SUCCESS),
+                    ],
+                    1,
+                ),
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_RESPONSE),
+                        (LABEL_STATUS, LABEL_VALUE_SUCCESS),
+                    ],
+                    1,
+                ),
+            ]),
             &metrics_registry,
         );
         assert_eq!(
