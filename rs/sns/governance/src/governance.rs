@@ -470,12 +470,6 @@ impl Governance {
         gov
     }
 
-    /// Returns the status of the SNS root canister (that is controlled by the governance canister)
-    pub async fn get_root_canister_status(&self) -> ic_nervous_system_root::CanisterStatusResult {
-        ic_nervous_system_root::canister_status((self.proto.root_canister_id_or_panic().into(),))
-            .await
-    }
-
     /// Initializes the indices.
     /// Must be called after the state has been externally changed (e.g. by
     /// setting a new proto).

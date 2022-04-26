@@ -1,11 +1,12 @@
 use candid::{CandidType, Deserialize};
-use dfn_core::api::CanisterId;
+use dfn_core::api::{call, CanisterId};
 use serde::Serialize;
 
 use std::fmt;
 use std::fmt::Formatter;
 
 use ic_base_types::PrincipalId;
+use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2, IC_00};
 
 pub mod export_build_metadata_via_candid;
 pub mod ledger;
@@ -65,4 +66,18 @@ pub enum AuthzChangeOp {
     /// 'canister' must remove 'principal' from the authorized list of
     /// 'method_name'. 'principal' must always be Some.
     Deauthorize,
+}
+
+/// Return the status of the given canister. The caller must control the given canister.
+pub async fn get_canister_status(canister_id: PrincipalId) -> CanisterStatusResultV2 {
+    let canister_id_record: CanisterIdRecord = CanisterId::new(canister_id).unwrap().into();
+
+    call(
+        IC_00,
+        "canister_status",
+        dfn_candid::candid,
+        (canister_id_record,),
+    )
+    .await
+    .unwrap()
 }

@@ -17,7 +17,8 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ic-base-types = { path = "../../types/base_types" }
-ic-crypto-sha = {path = "../../crypto/sha" }
+ic-crypto-sha = { path = "../../crypto/sha" }
+ic-ic00-types = { path = "../../types/ic00_types" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 serde = { version = "1.0", features = ["derive"] }
 

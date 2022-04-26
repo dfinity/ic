@@ -27,7 +27,8 @@ use dfn_core::{
 };
 
 use ic_base_types::CanisterId;
-use ic_nervous_system_common::ledger::LedgerCanister;
+use ic_ic00_types::CanisterStatusResultV2;
+use ic_nervous_system_common::{get_canister_status, ledger::LedgerCanister};
 use ic_sns_governance::governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto};
 use ic_sns_governance::pb::v1::{
     GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse, Governance as GovernanceProto,
@@ -421,8 +422,14 @@ fn get_root_canister_status() {
 
 /// Internal method for calling get_root_canister_status.
 #[candid_method(update, rename = "get_root_canister_status")]
-async fn get_root_canister_status_(_: ()) -> ic_nervous_system_root::CanisterStatusResult {
-    governance().get_root_canister_status().await
+async fn get_root_canister_status_(_: ()) -> CanisterStatusResultV2 {
+    get_canister_status(
+        governance()
+            .proto
+            .root_canister_id
+            .expect("Root canister ID not set"),
+    )
+    .await
 }
 
 /// The canister's heartbeat.
