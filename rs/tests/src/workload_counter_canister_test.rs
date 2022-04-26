@@ -60,7 +60,7 @@ pub fn two_third_latency_config() -> InternetComputer {
 }
 
 /// Default test installing two canisters and sending 60 requests per second for 30 seconds
-/// This test is run for every MR.
+/// This test is run in hourly jobs.
 pub fn short_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let canister_count: usize = 2;
     let rps: usize = 60;
