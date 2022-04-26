@@ -77,9 +77,10 @@
 /rs/artifact_manager/                   @dfinity-lab/teams/consensus-owners
 /rs/artifact_pool/                      @dfinity-lab/teams/consensus-owners
 /rs/bitcoin/adapter/                    @dfinity-lab/teams/networking-team
-/rs/bitcoin/adapter_service/            @dfinity-lab/teams/networking-team
 /rs/bitcoin/canister/                   @dfinity-lab/teams/execution-owners
+/rs/bitcoin/client/                     @dfinity-lab/teams/networking-team
 /rs/bitcoin/consensus/                  @dfinity-lab/teams/execution-owners
+/rs/bitcoin/service/                    @dfinity-lab/teams/networking-team
 /rs/bitcoin/types                       @dfinity-lab/teams/execution-owners
 /rs/canister_client/                    @dfinity-lab/teams/networking-team
 /rs/canister_http/                      @dfinity-lab/teams/networking-team
@@ -102,7 +103,7 @@
 /rs/ingress_manager/                    @dfinity-lab/teams/consensus-owners
 /rs/interfaces/                         @dfinity-lab/teams/interface-owners
 /rs/interfaces/bitcoin_adapter_client/  @dfinity-lab/teams/networking-team
-/rs/interfaces/canister_http_adapter_facade/    @dfinity-lab/teams/networking-team
+/rs/interfaces/canister_http_adapter_client/    @dfinity-lab/teams/networking-team
 /rs/interfaces/p2p/                     @dfinity-lab/teams/networking-team
 /rs/interfaces/transport/               @dfinity-lab/teams/networking-team
 /rs/interfaces/src/artifact_pool.rs     @dfinity-lab/teams/consensus-owners
@@ -122,9 +123,9 @@
 /rs/nns/                                @dfinity-lab/teams/nns-team @granstrom1
 /rs/orchestrator/                       @dfinity-lab/teams/orchestrator-owners
 /rs/p2p/                                @dfinity-lab/teams/networking-team
-/rs/protobuf/def/canister_http          @dfinity-lab/teams/networking-team
+/rs/protobuf/def/bitcoin                @dfinity-lab/teams/execution-team
+/rs/protobuf/def/canister_http          @dfinity-lab/teams/consensus-owners
 /rs/protobuf/def/crypto                 @dfinity-lab/teams/crypto-owners
-/rs/protobuf/def/bitcoin                @dfinity-lab/teams/networking-team
 /rs/protobuf/def/messaging              @dfinity-lab/teams/message-routing-owners
 /rs/protobuf/def/p2p                    @dfinity-lab/teams/networking-team
 /rs/protobuf/def/registry               @dfinity-lab/teams/nns-team
@@ -174,7 +175,7 @@
 /rs/tests/src/networking                @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /rs/tests/src/orchestrator/             @dfinity-lab/teams/orchestrator-owners @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/rosetta_test.rs           @dfinity-lab/teams/financial-integrations @dfinity-lab/teams/ic-testing-verification
-/rs/tests/src/tecsda/                  @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/ic-testing-verification
+/rs/tests/src/tecsda/                   @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/ic-testing-verification
 /rs/transport/                          @dfinity-lab/teams/networking-team
 /rs/transport_test_client/              @dfinity-lab/teams/networking-team
 /rs/tree_deserializer/                  @dfinity-lab/teams/message-routing-owners
