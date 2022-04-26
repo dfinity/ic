@@ -687,7 +687,9 @@ impl CanisterManager {
             Err(err) => {
                 // the install / upgrade failed. Refund the left over cycles to
                 // the old canister and leave it in the state.
-                old_canister.scheduler_state.install_code_debit += instructions_consumed;
+                if self.config.rate_limiting_of_instructions == FlagStatus::Enabled {
+                    old_canister.scheduler_state.install_code_debit += instructions_consumed;
+                }
                 self.cycles_account_manager.refund_execution_cycles(
                     &mut old_canister.system_state,
                     instructions_left,
