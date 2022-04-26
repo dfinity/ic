@@ -26,6 +26,7 @@ Once the image is built, start Rosetta API server with
 docker run \
     --interactive \
     --tty \
+    --user $(id -u) \
     --publish 8080:8080 \
     --rm \
     dfinity/rosetta-api

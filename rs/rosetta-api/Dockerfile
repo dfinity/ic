@@ -16,7 +16,8 @@ RUN \
     /var/tmp/* && \
   useradd -m rosetta && \
   mkdir /data && \
-  chown rosetta:rosetta /data
+  chown rosetta:rosetta /data && \
+  chmod -R a+rw /home/rosetta
 
 COPY ic-rosetta-api /usr/local/bin/ic-rosetta-api
 
