@@ -25,7 +25,6 @@ use std::time::Duration;
 #[derive(Clone, Debug, Default)]
 pub struct InternetComputer {
     pub initial_version: Option<NodeSoftwareVersion>,
-    pub vm_allocation: Option<VmAllocationStrategy>,
     pub default_vm_resources: VmResources,
     pub subnets: Vec<Subnet>,
     pub node_operator: Option<PrincipalId>,
@@ -107,11 +106,6 @@ impl InternetComputer {
             self.unassigned_nodes
                 .push(Node::new_with_vm_resources(self.default_vm_resources));
         }
-        self
-    }
-
-    pub fn with_allocation_strategy(mut self, strategy: VmAllocationStrategy) -> Self {
-        self.vm_allocation = Some(strategy);
         self
     }
 

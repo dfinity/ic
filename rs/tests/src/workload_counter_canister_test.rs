@@ -22,7 +22,7 @@ Runbook::
 
 end::catalog[] */
 
-use crate::driver::ic::{InternetComputer, Subnet, VmAllocationStrategy};
+use crate::driver::ic::{InternetComputer, Subnet};
 use crate::nns::NnsExt;
 use crate::util::{
     assert_create_agent, assert_endpoints_reachability, block_on, delay,
@@ -56,7 +56,6 @@ pub fn two_third_latency_config() -> InternetComputer {
         .add_subnet(
             Subnet::new(SubnetType::Application).add_nodes(constants::SMALL_APP_SUBNET_MAX_SIZE),
         )
-        .with_allocation_strategy(VmAllocationStrategy::DistributeAcrossDcs)
 }
 
 /// Default test installing two canisters and sending 60 requests per second for 30 seconds

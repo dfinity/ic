@@ -3,6 +3,7 @@ use ic_fondue::pot::execution::TestResult;
 use ic_tests::driver::cli::CliArgs;
 use ic_tests::driver::driver_setup::{create_driver_context_from_cli, initialize_env, mk_logger};
 use ic_tests::driver::evaluation::evaluate;
+use ic_tests::driver::ic::VmAllocationStrategy;
 use ic_tests::driver::pot_dsl::*;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::{
@@ -396,7 +397,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     workload_counter_canister_test::two_third_latency_test,
                 )]),
             )
-            .with_ttl(Duration::from_secs(900)),
+            .with_ttl(Duration::from_secs(900))
+            .with_vm_allocation(VmAllocationStrategy::DistributeAcrossDcs),
         ],
     ));
 

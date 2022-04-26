@@ -34,8 +34,8 @@ end::catalog[] */
 use std::time::Duration;
 
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::*;
-use crate::driver::{ic::VmAllocationStrategy, test_env::TestEnv};
 use crate::util::*; // to use the universal canister
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
@@ -46,13 +46,6 @@ pub fn config_single_host(env: TestEnv) {
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(4))
         .setup_and_start(&env)
         .expect("failed to setup IC under test")
-}
-
-pub fn config_multiple_hosts() -> InternetComputer {
-    InternetComputer::new()
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
-        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(4))
-        .with_allocation_strategy(VmAllocationStrategy::DistributeAcrossDcs)
 }
 
 const MSG: &[u8] = b"this beautiful prose should be persisted for future generations";
