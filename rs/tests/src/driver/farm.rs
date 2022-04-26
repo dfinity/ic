@@ -60,7 +60,10 @@ impl Farm {
         let resp = self.retry_until_success(rb)?;
         let created_vm = resp.json::<VMCreateResponse>()?;
         let ipv6 = created_vm.ipv6;
-        info!(self.logger, "VM({}) IPv6: {}", &vm.name, &ipv6);
+        info!(
+            self.logger,
+            "VM({}) Host: {} IPv6: {}", &vm.name, created_vm.hostname, &ipv6,
+        );
         Ok(created_vm)
     }
 
