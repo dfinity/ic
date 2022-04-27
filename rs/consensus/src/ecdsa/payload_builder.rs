@@ -580,10 +580,89 @@ fn make_new_quadruples_if_needed(
     Ok(())
 }
 
-/// Return the set of new signing requests by assigning them a RequestId.
-/// A new request id is created by associating it with the min of the
-/// available quadruples. It also means if there is no available quadruples
-/// we will not be assigning request ids, and an empty set will be returned.
+/// Return the set of new signing requests by assigning them a RequestId.  The
+/// logic enforces the requirements set forth in Section A.5 of the ECDSA
+/// design doc. Suppose we have signing requests SR_1, SR_2, ...  and
+/// quadruples Q_1, Q_2, ... .
+///
+/// The SR_i's are ordered in the order the requests were made by execution,
+/// which is determined by the corresponding callback_id, which is defined in
+/// the SubnetCallContextManager struct (see
+/// rs/replicated_state/src/metadata_state/subnet_call_context_manager.rs).
+/// callback_id's are obtained from a counter that gets incremented as requests
+/// get made.  
+///
+/// The Q_i's are ordered in the order in which their construction was
+/// initiated, which is determined by QuadrupleId.  QuadrupleId's are obtained
+/// from a counter that gets incremented as new quadruples are initiated.
+///
+/// The basic idea is that SR_i gets paired with Q_i. These pairings are
+/// reflected in the RequestId struct, which consists of a QuadrupleId and a
+/// the pseudo_random_id of the signing request.  A pseudo_random_id is the
+/// random string generated from the random tape when the signing request is
+/// made, as per Section A.5 of the ECDSA design doc. While pseudo_random_id
+/// is ultimately used in the crypto layer as the nonce from which the
+/// re-randomization value delta is derived, it is also used in consensus as an
+/// ID for signing requests.
+///
+/// The logic here works as follows.
+///
+/// 1. let known_random_ids = the pseudo_random_id's of all signing requests
+/// that are either ongoing or agreed upon.
+///
+/// 2. let unassigned_quadruple_ids be the list of all QuadrupleIds for
+/// quadruples that are currently (a) either in creation or available, but (b)
+/// are not paired with any signing requests that are either ongoing or agreed
+/// upon.
+///
+/// 3. Now we build the list of RequestId's by iterating through the signing
+/// request contexts in order of callback_id. This is done implicitly by virtue
+/// of the fact that sign_with_ecdsa_contexts is a BTreeMap mapping CallBackId
+/// to SignWithEcdsaContext and the semantics of the BTreeMap.values method.
+/// So for each context considered in the given order, we ignore it if it
+/// corresponds to an ongoing or agreed upon signing request (using  the value
+/// known_random_ids), and otherwise take the next unassigned quadruple from
+/// unassigned_quadruple_ids and pair that with this signing request.
+///
+/// The main caller of this function is create_data_payload, who uses the
+/// result to determine which signing-request/quadruple pairs will be moved to
+/// the ongoing signatures state.  This is done via the function
+/// update_ongoing_signatures, which moves such a pair to  ongoing signatures
+/// if the quadruple is available.
+///
+/// For example, say in one round we could have SR_1, SR_2, SR_3, SR_4 in the
+/// signing request contexts, none of which are yet ongoing, and Q_1, Q_2, Q_3
+/// in the unassigned_quadruple_ids list.  So the return value of the function
+/// would be ((SR_1,Q_1), (SR_2,Q_2), (SR_3,Q_3)).  In this same round, the
+/// calling function, create_data_payload, could move, say, (SR_2,Q_2) to the
+/// ongoing signatures state if Q2 were available.  In the next round, we have
+/// SR_1, SR_3, SR_4 in the signing requests contexts, with SR_2 now removed
+/// because it is in the ongoing signatures state.  We would also have
+/// unassigned_quadruple_ids Q_1, Q_3, Q_4.  The return value of the function
+/// would be ((SR_1,Q_1), (SR_3,Q_3)).  In this same round, we could move, say,
+/// (SR_1,Q_1) to the ongoing signatures state if Q1 were available.
+///
+/// The above logic ensures that the pairing of SR_i with Q_i is deterministic,
+/// and cannot be manipulated by the adversary, as discussed in Section A.5 of
+/// the ECDSA design doc. However, as discussed in Section A.5.1 of the ECDSA
+/// design doc, it is allowed to essentially dispose of Q_i and replace it with
+/// a fresh quadruple Q'_i.  In the implementation, this may happen at a
+/// summary block.  The logic in create_summary_payload will ensure that all
+/// quadruples that are either in creation or available or disposed of
+/// (currently, if a key reshare occurs) or retained (currently, if a key
+/// reshare does not occur).  This logic of either either disposing of or
+/// retaining all quadruples that are either in creation or available
+/// guarantees that the invariants in Section A.5.1 of the ECDSA design doc are
+/// maintained.  However, the following logic would also be acceptable: if we
+/// dispose of a quadruple Q_i that is in creation or available, then we must
+/// dispose of all quadruples Q_j for j > i that are in creation or available.
+/// This logic may be useful if and when we implement pro-active resharing of
+/// the signing key without subnet membership changes.  In this case, in
+/// creat_summary_payload, if Q_i is the first quadruple that is in creation,
+/// we can retain Q_1, ..., Q_{i-1} and dispose of all quadruples Q_j for j >=
+/// i that are in creation or available.  This logic will allow us to continue
+/// using at least some (and typically most) of the quadruples that were
+/// already available when we pro-actively reshare the signing key.
 fn get_signing_requests<'a>(
     ecdsa_payload: &ecdsa::EcdsaPayload,
     sign_with_ecdsa_contexts: &'a BTreeMap<CallbackId, SignWithEcdsaContext>,
