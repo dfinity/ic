@@ -13,6 +13,12 @@ guest-os-updateimg-build:
     - |
       set -xeuo pipefail
 
+      # TODO: remove this here and in docker-build-ic
+      # once we are sure that build reproducibility is not affected by permissions
+      # !! has to match as used in docker-build-ic file !!
+      find . -not -path "./artifacts" -type d -exec chmod 775 {} \;
+      find . -not -path "./artifacts" -type f -exec chmod 764 {} \;
+
       gitlab-ci/src/job_scripts/lib/guest-os-updateimg.sh
 
   artifacts:
