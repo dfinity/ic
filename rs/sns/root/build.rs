@@ -4,7 +4,6 @@ fn main() {
 
 fn compile_protos() {
     let mut config = prost_build::Config::new();
-    config.out_dir("gen");
     config.protoc_arg("--experimental_allow_proto3_optional");
 
     // Make all PB types also Candid types.

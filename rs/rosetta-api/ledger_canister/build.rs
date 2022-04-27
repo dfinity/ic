@@ -13,7 +13,6 @@ fn main() {
 
     let mut config = Config::new();
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
-    config.out_dir("gen");
 
     config.type_attribute(
         "ic_ledger.pb.v1.AccountIdentifier",

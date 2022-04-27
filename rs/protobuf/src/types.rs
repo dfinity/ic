@@ -4,7 +4,7 @@ pub mod v1 {
     use std::io::Read;
     use std::path::Path;
 
-    include!(std::concat!("../gen/types/types.v1.rs"));
+    include!(concat!(env!("OUT_DIR"), "/types/types.v1.rs"));
 
     impl CatchUpPackage {
         /// Read and deserialize a protobuf CatchUpPackage from the provided

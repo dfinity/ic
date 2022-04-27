@@ -2,7 +2,8 @@
 //! This crate is NOT part of the lifeline canister itself: it only exposes it
 //! into rust.
 
-pub const LIFELINE_CANISTER_WASM: &[u8] = include_bytes!("../gen/lifeline.wasm");
+pub const LIFELINE_CANISTER_WASM: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/lifeline.wasm"));
 
 #[cfg(test)]
 mod test {

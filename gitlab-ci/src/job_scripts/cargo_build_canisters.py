@@ -4,6 +4,7 @@ import shutil
 from os import environ
 from os import getenv
 from os import path
+from tempfile import NamedTemporaryFile
 from typing import Optional
 
 from ci import cwd
@@ -163,8 +164,9 @@ def run(artifacts_dir=default_artifacts_dir):
         )
 
     with cwd("rs/nns/handlers/lifeline"):
-        sh("cargo", "build", "--target", "wasm32-unknown-unknown")
-        sh("ic-cdk-optimizer", "-o", f"{artifacts_dir}/lifeline.wasm", "gen/lifeline.wasm")
+        with NamedTemporaryFile() as tmp:
+            sh("cargo", "run", "--bin", "lifeline", "--", tmp.name)
+            sh("ic-cdk-optimizer", "-o", f"{artifacts_dir}/lifeline.wasm", tmp.name)
 
     logging.info("Building of Wasm canisters finished")
 

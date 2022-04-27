@@ -1,3 +1,4 @@
-#[path = "../../gen/ic_nns_gtc.pb.v1.rs"]
 #[rustfmt::skip]
-pub mod v1;
+pub mod v1 {
+    include!(concat!(env!("OUT_DIR"), "/ic_nns_gtc.pb.v1.rs"));
+}

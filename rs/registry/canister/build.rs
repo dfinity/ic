@@ -32,7 +32,6 @@ fn main() {
         "::ic-registry-transport::pb::v1",
     );
     config.extern_path(".ic_nns_common.pb.v1", "::ic-nns-common::pb::v1");
-    config.out_dir("gen");
 
     config.type_attribute(
         "ic_registry_canister.pb.v1.NodeProvidersMonthlyXdrRewards",
