@@ -78,12 +78,12 @@ impl Service<InternalQuery> for AnonymousQueryHandler {
                             reply: InternalQueryResponseReply { arg: Blob(vec) },
                         },
                         WasmResult::Reject(message) => InternalQueryResponse::Rejected {
-                            reject_code: RejectCode::CanisterReject as u64,
+                            reject_code: RejectCode::CanisterReject,
                             reject_message: message,
                         },
                     },
                     Err(user_error) => InternalQueryResponse::Rejected {
-                        reject_code: user_error.reject_code() as u64,
+                        reject_code: user_error.reject_code(),
                         reject_message: user_error.to_string(),
                     },
                 };

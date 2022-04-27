@@ -6,6 +6,7 @@ use crate::{
     },
     CanisterId, PrincipalId, UserId,
 };
+use ic_error_types::RejectCode;
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -88,7 +89,7 @@ pub enum InternalQueryResponse {
         reply: InternalQueryResponseReply,
     },
     Rejected {
-        reject_code: u64,
+        reject_code: RejectCode,
         reject_message: String,
     },
 }
