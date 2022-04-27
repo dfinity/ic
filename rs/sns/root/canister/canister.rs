@@ -11,11 +11,16 @@ extern crate ic_nervous_system_common;
 use ic_nervous_system_common::MethodAuthzChange;
 
 use ic_nervous_system_root::{ChangeCanisterProposal, LOG_PREFIX};
+use ic_nns_governance::stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter};
 use ic_sns_root::pb::v1::SnsRootCanister;
+
+use prost::Message;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_ic00_types::CanisterStatusResultV2;
+
+const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
 thread_local! {
     static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
@@ -43,9 +48,36 @@ fn canister_init_(init_payload: SnsRootCanister) {
     println!("{}canister_init: Done!", LOG_PREFIX);
 }
 
+#[export_name = "canister_pre_upgrade"]
+fn canister_pre_upgrade() {
+    dfn_core::printer::hook();
+    println!("{}canister_pre_upgrade: Begin...", LOG_PREFIX);
+
+    STATE.with(move |state| {
+        let mut writer = BufferedStableMemWriter::new(STABLE_MEM_BUFFER_SIZE);
+        let state = state.borrow();
+        state
+            .encode(&mut writer)
+            .expect("Error. Couldn't serialize canister pre-upgrade.");
+        writer.flush();
+    });
+
+    println!("{}canister_pre_upgrade: Done!", LOG_PREFIX);
+}
+
 #[export_name = "canister_post_upgrade"]
 fn canister_post_upgrade() {
     dfn_core::printer::hook();
+    println!("{}canister_POST_upgrade: Begin...", LOG_PREFIX);
+
+    let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
+
+    let state = SnsRootCanister::decode(reader).expect(
+        "Couldn't upgrade canister, due to state deserialization \
+         failure during post-upgrade.",
+    );
+    canister_init_(state);
+
     println!("{}canister_post_upgrade: Done!", LOG_PREFIX);
 }
 

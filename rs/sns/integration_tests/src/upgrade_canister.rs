@@ -1,6 +1,8 @@
 use canister_test::Project;
 use dfn_candid::candid_one;
+use ic_base_types::PrincipalId;
 use ic_canister_client::Sender;
+use ic_ic00_types::CanisterStatusResultV2;
 use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, CanisterStatusType};
 use ic_nns_test_keys::TEST_USER1_KEYPAIR;
 use ic_sns_governance::pb::v1::{
@@ -12,6 +14,8 @@ use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder,
 };
 use ledger_canister::Tokens;
+use maplit::btreeset;
+use std::collections::BTreeSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, Duration};
 
@@ -575,6 +579,29 @@ fn test_upgrade_root_success() {
                 new_root_wasm_hash[..],
                 "original_root_wasm_hash: {:?}",
                 original_root_wasm_hash
+            );
+
+            let summary: Vec<(String, PrincipalId, CanisterStatusResultV2)> = sns_canisters
+                .root
+                .update_(
+                    "get_sns_canisters_summary",
+                    candid_one,
+                    Vec::<PrincipalId>::new(), // dapp_canisters
+                )
+                .await
+                .expect("Could not get SNS summary");
+
+            let summary = summary
+                .iter()
+                .map(|(name, principal_id, _)| (name.clone(), *principal_id))
+                .collect::<BTreeSet<_>>();
+
+            assert_eq!(
+                summary,
+                btreeset! {
+                    ("governance".to_string(), sns_canisters.governance.canister_id().get()),
+                    ("ledger".to_string(), sns_canisters.ledger.canister_id().get())
+                }
             );
 
             Ok(())
