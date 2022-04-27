@@ -14,6 +14,7 @@ use ic_nns_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
     TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
+use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use ic_protobuf::{
     crypto::v1::NodePublicKeys,
     registry::{
@@ -26,9 +27,9 @@ use ic_protobuf::{
 };
 use ic_registry_keys::{
     make_blessed_replica_version_key, make_catch_up_package_contents_key, make_crypto_node_key,
-    make_crypto_threshold_signing_pubkey_key, make_node_operator_record_key, make_node_record_key,
-    make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
-    make_subnet_record_key,
+    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
+    make_node_operator_record_key, make_node_record_key, make_replica_version_key,
+    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -81,6 +82,63 @@ pub async fn get_value<T: Message + Default>(registry: &Canister<'_>, key: &[u8]
     )
     .map(|(encoded_value, _version)| T::decode(encoded_value.as_slice()).unwrap())
     .unwrap_or_else(|_| T::default())
+}
+
+pub async fn get_node_record(registry: &Canister<'_>, node_id: NodeId) -> NodeRecord {
+    get_value::<NodeRecord>(registry, make_node_record_key(node_id).as_bytes()).await
+}
+
+pub async fn get_committee_signing_key(registry: &Canister<'_>, node_id: NodeId) -> PublicKey {
+    get_value::<PublicKey>(
+        registry,
+        make_crypto_node_key(node_id, KeyPurpose::CommitteeSigning).as_bytes(),
+    )
+    .await
+}
+
+pub async fn get_node_signing_key(registry: &Canister<'_>, node_id: NodeId) -> PublicKey {
+    get_value::<PublicKey>(
+        registry,
+        make_crypto_node_key(node_id, KeyPurpose::NodeSigning).as_bytes(),
+    )
+    .await
+}
+
+pub async fn get_dkg_dealing_key(registry: &Canister<'_>, node_id: NodeId) -> PublicKey {
+    get_value::<PublicKey>(
+        registry,
+        make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
+    )
+    .await
+}
+
+pub async fn get_transport_tls_certificate(
+    registry: &Canister<'_>,
+    node_id: NodeId,
+) -> X509PublicKeyCert {
+    get_value::<X509PublicKeyCert>(registry, make_crypto_tls_cert_key(node_id).as_bytes()).await
+}
+
+pub async fn get_idkg_dealing_encryption_key(
+    registry: &Canister<'_>,
+    node_id: NodeId,
+) -> PublicKey {
+    get_value::<PublicKey>(
+        registry,
+        make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
+    )
+    .await
+}
+
+pub async fn get_node_operator_record(
+    registry: &Canister<'_>,
+    principal_id: PrincipalId,
+) -> NodeOperatorRecord {
+    get_value::<NodeOperatorRecord>(
+        registry,
+        make_node_operator_record_key(principal_id).as_bytes(),
+    )
+    .await
 }
 
 /// Inserts a value into the registry.

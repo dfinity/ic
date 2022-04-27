@@ -1,15 +1,19 @@
+use crate::mutations::common::encode_or_panic;
 use crate::{common::LOG_PREFIX, mutations::common::decode_registry_value, registry::Registry};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     node_operator::v1::NodeOperatorRecord,
     subnet::v1::{SubnetListRecord, SubnetRecord},
 };
 use ic_registry_keys::{
-    make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
-    make_subnet_record_key,
+    make_crypto_node_key, make_crypto_tls_cert_key, make_node_operator_record_key,
+    make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
 };
-use ic_registry_transport::pb::v1::RegistryValue;
+use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue};
+use ic_registry_transport::{delete, insert, update};
+use ic_types::crypto::KeyPurpose;
 use std::convert::TryFrom;
 
 pub fn find_subnet_for_node(
@@ -110,4 +114,102 @@ pub fn get_node_operator_record(
                 Ok(decoded)
             },
         )
+}
+
+pub fn make_update_node_operator_mutation(
+    node_operator_id: PrincipalId,
+    node_operator_record: &NodeOperatorRecord,
+) -> RegistryMutation {
+    let node_operator_key = make_node_operator_record_key(node_operator_id);
+    update(
+        node_operator_key.as_bytes(),
+        encode_or_panic(node_operator_record),
+    )
+}
+
+pub fn make_add_node_registry_mutations(
+    node_id: NodeId,
+    node_record: NodeRecord,
+    valid_node_pks: ValidNodePublicKeys,
+) -> Vec<RegistryMutation> {
+    // Update registry with the new node data
+    let add_node_entry = insert(
+        make_node_record_key(node_id).as_bytes(),
+        encode_or_panic(&node_record),
+    );
+
+    // Add the crypto keys
+    let add_committee_signing_key = insert(
+        make_crypto_node_key(node_id, KeyPurpose::CommitteeSigning).as_bytes(),
+        encode_or_panic(valid_node_pks.committee_signing_key()),
+    );
+    let add_node_signing_key = insert(
+        make_crypto_node_key(node_id, KeyPurpose::NodeSigning).as_bytes(),
+        encode_or_panic(valid_node_pks.node_signing_key()),
+    );
+    let add_dkg_dealing_key = insert(
+        make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
+        encode_or_panic(valid_node_pks.dkg_dealing_encryption_key()),
+    );
+    let add_tls_certificate = insert(
+        make_crypto_tls_cert_key(node_id).as_bytes(),
+        encode_or_panic(valid_node_pks.tls_certificate()),
+    );
+
+    let mut mutations = vec![
+        add_node_entry,
+        add_committee_signing_key,
+        add_node_signing_key,
+        add_dkg_dealing_key,
+        add_tls_certificate,
+    ];
+    // TODO(NNS1-1197): Refactor this when nodes are provisioned for threshold ECDSA subnets
+    if let Some(idkg_dealing_encryption_key) = valid_node_pks.idkg_dealing_encryption_key() {
+        mutations.push(insert(
+            make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
+            encode_or_panic(idkg_dealing_encryption_key),
+        ));
+    }
+
+    mutations
+}
+
+/// Generate a list of mutations to remove a node and associated data
+///
+/// This will only generate a mutation if the key is present
+pub fn make_remove_node_registry_mutations(
+    registry: &Registry,
+    node_id: NodeId,
+) -> Vec<RegistryMutation> {
+    let node_key = make_node_record_key(node_id);
+    let committee_signing_key = make_crypto_node_key(node_id, KeyPurpose::CommitteeSigning);
+    let node_signing_key = make_crypto_node_key(node_id, KeyPurpose::NodeSigning);
+    let dkg_dealing_key = make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption);
+    let tls_cert_key = make_crypto_tls_cert_key(node_id);
+    let idkg_dealing_key = make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption);
+
+    let keys_to_maybe_remove = vec![
+        node_key,
+        committee_signing_key,
+        node_signing_key,
+        dkg_dealing_key,
+        tls_cert_key,
+        idkg_dealing_key,
+    ];
+
+    let latest_version = registry.latest_version();
+    let mutations = keys_to_maybe_remove
+        .iter()
+        .flat_map(|key| {
+            // It is possible, for example, that IDkgMEGaEncryption key is not present
+            // or that other keys are not present.  When we have enabled the invariants
+            // for the keys being all present for each node_id and removed with the node_id,
+            // we can simply return the list of mutations without filtering
+            registry
+                .get(key.as_bytes(), latest_version)
+                .map(|_| delete(key))
+        })
+        .collect::<Vec<_>>();
+
+    mutations
 }

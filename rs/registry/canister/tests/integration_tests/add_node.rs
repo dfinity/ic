@@ -6,23 +6,20 @@ use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
 };
+use ic_nns_test_utils::registry::{
+    get_committee_signing_key, get_dkg_dealing_key, get_node_operator_record, get_node_record,
+    get_node_signing_key, get_transport_tls_certificate,
+};
 use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
-    registry::{get_value, invariant_compliant_mutation_as_atomic_req, prepare_add_node_payload},
+    registry::{invariant_compliant_mutation_as_atomic_req, prepare_add_node_payload},
 };
-use ic_protobuf::registry::{
-    crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::NodeRecord,
-    node_operator::v1::NodeOperatorRecord,
-};
-use ic_registry_keys::{
-    make_crypto_node_key, make_crypto_tls_cert_key, make_node_operator_record_key,
-    make_node_record_key,
-};
+use ic_protobuf::registry::{node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord};
+use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::pb::v1::{
     registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
 };
-use ic_types::{crypto::KeyPurpose, NodeId};
+use ic_types::NodeId;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 
 #[test]
@@ -42,8 +39,7 @@ fn node_is_created_on_receiving_the_request() {
         let (payload, node_pks, node_id) = prepare_add_node_payload();
 
         // Then, ensure there is no value for the node
-        let node_record =
-            get_value::<NodeRecord>(&registry, make_node_record_key(node_id).as_bytes()).await;
+        let node_record = get_node_record(&registry, node_id).await;
         assert_eq!(node_record, NodeRecord::default());
 
         let response: Result<NodeId, String> = registry
@@ -57,57 +53,40 @@ fn node_is_created_on_receiving_the_request() {
         assert!(response.is_ok());
 
         // Now let's check directly in the registry that the mutation actually happened
-        let node_record =
-            get_value::<NodeRecord>(&registry, make_node_record_key(node_id).as_bytes()).await;
+        let node_record = get_node_record(&registry, node_id).await;
         // Check if some fields are present
         assert!(node_record.http.is_some());
         assert_eq!(node_record.p2p_flow_endpoints.len(), 1);
 
         // Check that other fields are present
-        let node_signing_pubkey_record = get_value::<PublicKey>(
-            &registry,
-            make_crypto_node_key(node_id, KeyPurpose::NodeSigning).as_bytes(),
-        )
-        .await;
+        let node_signing_pubkey_record = get_node_signing_key(&registry, node_id).await;
         assert_eq!(
             node_signing_pubkey_record,
             node_pks.node_signing_pk.unwrap()
         );
 
-        let committee_signing_pubkey_record = get_value::<PublicKey>(
-            &registry,
-            make_crypto_node_key(node_id, KeyPurpose::CommitteeSigning).as_bytes(),
-        )
-        .await;
+        let committee_signing_pubkey_record = get_committee_signing_key(&registry, node_id).await;
         assert_eq!(
             committee_signing_pubkey_record,
             node_pks.committee_signing_pk.unwrap()
         );
 
-        let ni_dkg_dealing_encryption_pubkey_record = get_value::<PublicKey>(
-            &registry,
-            make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
-        )
-        .await;
+        let ni_dkg_dealing_encryption_pubkey_record = get_dkg_dealing_key(&registry, node_id).await;
         assert_eq!(
             ni_dkg_dealing_encryption_pubkey_record,
             node_pks.dkg_dealing_encryption_pk.unwrap()
         );
 
         let transport_tls_certificate_record =
-            get_value::<X509PublicKeyCert>(&registry, make_crypto_tls_cert_key(node_id).as_bytes())
-                .await;
+            get_transport_tls_certificate(&registry, node_id).await;
         assert_eq!(
             transport_tls_certificate_record,
             node_pks.tls_certificate.unwrap()
         );
 
         // Check that node allowance has decreased
-        let node_operator_record = get_value::<NodeOperatorRecord>(
-            &registry,
-            make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL).as_bytes(),
-        )
-        .await;
+        let node_operator_record =
+            get_node_operator_record(&registry, *TEST_NEURON_1_OWNER_PRINCIPAL).await;
         assert_eq!(node_operator_record.node_allowance, 99);
 
         Ok(())
@@ -131,8 +110,7 @@ fn node_is_not_created_on_wrong_principal() {
         let (payload, _node_pks, node_id) = prepare_add_node_payload();
 
         // Then, ensure there is no value for the node
-        let node_record =
-            get_value::<NodeRecord>(&registry, make_node_record_key(node_id).as_bytes()).await;
+        let node_record = get_node_record(&registry, node_id).await;
         assert_eq!(node_record, NodeRecord::default());
 
         // Issue a request with an unauthorized sender, which should fail.
@@ -147,8 +125,7 @@ fn node_is_not_created_on_wrong_principal() {
         assert!(response.is_err());
 
         // The record should still not be there
-        let node_record =
-            get_value::<NodeRecord>(&registry, make_node_record_key(node_id).as_bytes()).await;
+        let node_record = get_node_record(&registry, node_id).await;
         assert_eq!(node_record, NodeRecord::default());
 
         Ok(())
@@ -171,8 +148,7 @@ fn node_is_not_created_when_above_capacity() {
         let (payload, _node_pks, node_id) = prepare_add_node_payload();
 
         // Then, ensure there is no value for the node
-        let node_record =
-            get_value::<NodeRecord>(&registry, make_node_record_key(node_id).as_bytes()).await;
+        let node_record = get_node_record(&registry, node_id).await;
         assert_eq!(node_record, NodeRecord::default());
 
         // This should succeed
@@ -190,8 +166,7 @@ fn node_is_not_created_when_above_capacity() {
         let (payload, _node_pks, node_id) = prepare_add_node_payload();
 
         // Ensure there is no value for this new node
-        let node_record =
-            get_value::<NodeRecord>(&registry, make_node_record_key(node_id).as_bytes()).await;
+        let node_record = get_node_record(&registry, node_id).await;
         assert_eq!(node_record, NodeRecord::default());
 
         // This should now be rejected
@@ -206,8 +181,7 @@ fn node_is_not_created_when_above_capacity() {
         assert!(response.is_err());
 
         // The record should not be there
-        let node_record =
-            get_value::<NodeRecord>(&registry, make_node_record_key(node_id).as_bytes()).await;
+        let node_record = get_node_record(&registry, node_id).await;
         assert_eq!(node_record, NodeRecord::default());
 
         Ok(())
