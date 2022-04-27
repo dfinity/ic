@@ -9,6 +9,7 @@ DFX_BINS=(
     replica
     ic-starter
     ic-btc-adapter
+    ic-canister-http-adapter
     canister_sandbox
     sandbox_launcher
 )
