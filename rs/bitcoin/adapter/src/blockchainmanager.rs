@@ -11,18 +11,21 @@ use bitcoin::{
     Block, BlockHash, BlockHeader,
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
-use ic_logger::{debug, error, info, warn, ReplicaLogger};
+use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
 use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::Arc,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant},
 };
 use thiserror::Error;
 use tokio::sync::Mutex;
 
 /// This constant is the maximum number of seconds to wait until we get response to the getdata request sent by us.
 const GETDATA_REQUEST_TIMEOUT_SECS: u64 = 30;
+
+/// This constant is the maximum number of seconds to wait until we get response to the getdata request sent by us.
+const GETHEADERS_REQUEST_TIMEOUT_SECS: u64 = 30;
 
 /// This constant represents the maximum size of `headers` messages.
 /// https://developer.bitcoin.org/reference/p2p_networking.html#headers
@@ -45,15 +48,6 @@ const BLOCK_CACHE_THRESHOLD_BYTES: usize = 10 * ONE_MB;
 
 /// Block locators. Consists of starting hashes and a stop hash.
 type Locators = (Vec<BlockHash>, BlockHash);
-
-/// The enum stores what to do if a timeout for a peer is received.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum OnTimeout {
-    /// Disconnect the peer on timeout.
-    Disconnect,
-    /// Do nothing on timeout.
-    Ignore,
-}
 
 /// The possible errors the `BlockchainManager::received_headers_message(...)` may produce.
 #[derive(Debug, Error)]
@@ -98,24 +92,39 @@ pub enum ReceivedBlockMessageError {
 /// This information is useful to keep track of the commands that have been sent to the peer,
 /// and how much blockchain state has already been synced with the peer.
 #[derive(Debug)]
-pub struct PeerInfo {
+struct PeerInfo {
     /// This field stores the socket address of the Bitcoin node (peer)
     socket: SocketAddr,
     /// This field stores the height of the last headers/data message received from the peer.
     height: BlockHeight,
     /// This field stores the block hash of the tip header received from the peer.
     tip: BlockHash,
-    /// Locators sent in the last `getheaders` or `getdata` request
-    last_asked: Option<Locators>,
-    /// Time at which the request was sent.
-    sent_at: Option<SystemTime>,
-    /// What to do if this request times out.
-    on_timeout: OnTimeout,
+}
+
+#[derive(Debug)]
+struct GetHeadersRequest {
+    /// The locator hashes sent to the BTC node to assess what headers should be returned by the node.
+    locators: Locators,
+    /// Contains the time as which the `getheaders` request was sent.
+    sent_at: Instant,
+}
+
+impl GetHeadersRequest {
+    fn with_locators(locators: Locators) -> Self {
+        Self {
+            locators,
+            sent_at: Instant::now(),
+        }
+    }
+
+    fn has_timed_out(&self) -> bool {
+        self.sent_at.elapsed().as_secs() >= GETHEADERS_REQUEST_TIMEOUT_SECS
+    }
 }
 
 /// This struct stores the information related to a "getdata" request sent by the BlockChainManager.
 #[derive(Debug)]
-pub struct GetDataRequestInfo {
+struct GetDataRequestInfo {
     /// This field stores the socket address of the Bitcoin node to which the request was sent.
     socket: SocketAddr,
     /// This field contains the time at which the getdata request was sent.  
@@ -135,6 +144,8 @@ pub struct BlockchainManager {
     /// sent by the BlockChainManager. An entry is removed from this hashmap when
     /// the corresponding "Block" response is received.
     getdata_request_info: LinkedHashMap<BlockHash, GetDataRequestInfo>,
+
+    getheaders_requests: HashMap<SocketAddr, GetHeadersRequest>,
 
     /// This queue stores the set of block hashes belonging to blocks that have yet to be synced by the BlockChainManager
     /// and stored into the block cache.
@@ -162,6 +173,7 @@ impl BlockchainManager {
             blockchain,
             peer_info,
             getdata_request_info,
+            getheaders_requests: HashMap::new(),
             block_sync_queue: LinkedHashSet::new(),
             logger,
         }
@@ -185,33 +197,27 @@ impl BlockchainManager {
         channel: &mut impl Channel,
         addr: &SocketAddr,
         locators: Locators,
-        on_timeout: OnTimeout,
     ) {
-        // TODO: ER-1394: Timeouts must for getheaders calls must be handled.
         //If the peer address is not stored in peer_info, then return;
-        if let Some(peer_info) = self.peer_info.get_mut(addr) {
-            info!(
-                self.logger,
-                "Sending getheaders to {} : Locator hashes {:?}, Stop hash {}",
-                addr,
-                locators.0,
-                locators.1
-            );
-            let command = Command {
-                address: Some(*addr),
-                message: NetworkMessage::GetHeaders(GetHeadersMessage {
-                    locator_hashes: locators.0.clone(),
-                    stop_hash: locators.1,
-                    version: MINIMUM_VERSION_NUMBER,
-                }),
-            };
-            //If sending the command is successful, then update the peer_info with the new details.
-            channel.send(command).ok();
-            // Caveat: Updating peer_info even if the command hasn't been set yet.
-            peer_info.last_asked = Some(locators);
-            peer_info.sent_at = Some(SystemTime::now());
-            peer_info.on_timeout = on_timeout;
+        if self.peer_info.get(addr).is_none() {
+            return;
         }
+
+        let request = GetHeadersRequest::with_locators(locators);
+
+        trace!(self.logger, "Sending getheaders to {}: {:?}", addr, request);
+        let command = Command {
+            address: Some(*addr),
+            message: NetworkMessage::GetHeaders(GetHeadersMessage {
+                locator_hashes: request.locators.0.clone(),
+                stop_hash: request.locators.1,
+                version: MINIMUM_VERSION_NUMBER,
+            }),
+        };
+
+        channel.send(command).ok();
+
+        self.getheaders_requests.insert(*addr, request);
     }
 
     /// This function processes "inv" messages received from Bitcoin nodes.
@@ -258,7 +264,7 @@ impl BlockchainManager {
 
         if let Some(locators) = maybe_locators {
             // Send `getheaders` request to fetch the headers corresponding to inv message.
-            self.send_getheaders(channel, addr, locators, OnTimeout::Ignore);
+            self.send_getheaders(channel, addr, locators);
         }
 
         Ok(())
@@ -282,7 +288,7 @@ impl BlockchainManager {
         );
         // If no `getheaders` request was sent to the peer, the `headers` message is unsolicited.
         // Don't accept more than a few headers in that case.
-        if headers.len() > MAX_UNSOLICITED_HEADERS && peer.last_asked.is_none() {
+        if headers.len() > MAX_UNSOLICITED_HEADERS && !self.getheaders_requests.contains_key(addr) {
             return Err(ReceivedHeadersMessageError::ReceivedTooManyUnsolicitedHeaders);
         }
 
@@ -305,11 +311,11 @@ impl BlockchainManager {
             let active_tip = blockchain_state.get_active_chain_tip();
             if prev_tip_height < active_tip.height {
                 info!(
-                self.logger,
-                "Added headers in the headers message. State Changed. Height = {}, Active chain's tip = {}",
-                active_tip.height,
-                active_tip.header.block_hash()
-            );
+                    self.logger,
+                    "Added headers in the headers message. State Changed. Height = {}, Active chain's tip = {}",
+                    active_tip.height,
+                    active_tip.header.block_hash()
+                );
             }
 
             // Update the peer's tip and height to the last
@@ -359,11 +365,9 @@ impl BlockchainManager {
         };
 
         if let Some(locators) = maybe_locators {
-            self.send_getheaders(channel, addr, locators, OnTimeout::Ignore);
+            self.send_getheaders(channel, addr, locators);
         } else {
-            // If the adapter is not going to ask for more headers, the peer's last_asked should
-            // be reset.
-            peer.last_asked = None;
+            self.getheaders_requests.remove(addr);
         }
 
         Ok(())
@@ -441,19 +445,16 @@ impl BlockchainManager {
                 socket: *addr,
                 height: 0,
                 tip: initial_hash,
-                last_asked: None,
-                sent_at: None,
-                on_timeout: OnTimeout::Ignore,
             },
         );
         let locators = (locator_hashes, BlockHash::default());
-        self.send_getheaders(channel, addr, locators, OnTimeout::Disconnect);
+        self.send_getheaders(channel, addr, locators);
     }
 
     /// This function adds a new peer to `peer_info`
     /// and initiates sync with the peer by sending `getheaders` message.
     fn remove_peer(&mut self, addr: &SocketAddr) {
-        info!(self.logger, "Removing peer_info with addr : {} ", addr);
+        trace!(self.logger, "Removing peer_info with addr : {} ", addr);
         self.peer_info.remove(addr);
         // Removing all the `getdata` requests that have been sent to the peer before.
         for request in self.getdata_request_info.values_mut() {
@@ -461,6 +462,31 @@ impl BlockchainManager {
                 request.sent_at =
                     Instant::now() - Duration::from_secs(2 * GETDATA_REQUEST_TIMEOUT_SECS);
             }
+        }
+
+        // Remove getheaders request sent to peer.
+        self.getheaders_requests.remove(addr);
+    }
+
+    /// Cleans up `getheaders` requests that have timed out and disconnects from the
+    /// BTC node as it is likely responding too slowly.
+    fn handle_getheaders_timeouts(&mut self, channel: &mut impl Channel) {
+        let expired_getheaders_requests = self
+            .getheaders_requests
+            .iter()
+            .filter_map(|(addr, request)| {
+                if request.has_timed_out() {
+                    Some(addr)
+                } else {
+                    None
+                }
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        for addr in expired_getheaders_requests {
+            self.getheaders_requests.remove(&addr);
+            channel.discard(&addr);
         }
     }
 
@@ -631,6 +657,7 @@ impl BlockchainManager {
         }
 
         self.sync_blocks(channel).await;
+        self.handle_getheaders_timeouts(channel);
     }
 
     /// Add block hashes to the sync queue that are not already being synced, planned to be synced,
@@ -742,7 +769,10 @@ pub mod test {
         assert_eq!(channel.command_count(), 1);
 
         let locators = (vec![genesis_hash], BlockHash::default());
-        blockchain_manager.send_getheaders(&mut channel, &addr, locators, OnTimeout::Disconnect);
+        blockchain_manager.send_getheaders(&mut channel, &addr, locators.clone());
+        assert!(blockchain_manager.getheaders_requests.contains_key(&addr));
+        let request = blockchain_manager.getheaders_requests.get(&addr).unwrap();
+        assert_eq!(request.locators, locators);
 
         let command = channel.pop_front().expect("command not found");
         assert!(matches!(command.address, Some(address) if address == addr));
@@ -757,17 +787,18 @@ pub mod test {
         );
 
         // Check peer info to ensure it has been updated.
-        let peer_info = blockchain_manager
-            .peer_info
+        let getheaders_request = blockchain_manager
+            .getheaders_requests
             .get(&addr)
             .expect("peer missing");
-        let locators = peer_info
-            .last_asked
-            .clone()
-            .expect("last asked should contain locators");
-        assert_eq!(locators.0.len(), 1);
+        assert_eq!(getheaders_request.locators.0.len(), 1);
         assert_eq!(
-            *locators.0.first().expect("there should be 1 locator"),
+            getheaders_request
+                .locators
+                .0
+                .first()
+                .cloned()
+                .expect("there should be 1 locator"),
             genesis_hash
         );
     }
@@ -1633,5 +1664,37 @@ pub mod test {
         assert!(matches!(result, Some(block_hash) if block_hash == first_hash));
         assert_eq!(sync_queue.len(), 0);
         assert_eq!(retry_queue.len(), 0);
+    }
+
+    /// Tests that the `handle_getheaders_timeouts(...)` method removes timed out `getheaders` requests
+    /// and triggers the discard of the connection.
+    #[tokio::test]
+    async fn test_handle_getheaders_timeouts() {
+        let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+        let addr2 = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
+        let mut channel = TestChannel::new(vec![addr, addr2]);
+        let config = ConfigBuilder::new().build();
+        let blockchain_state = BlockchainState::new(&config);
+        let mut blockchain_manager =
+            BlockchainManager::new(Arc::new(Mutex::new(blockchain_state)), no_op_logger());
+
+        blockchain_manager.add_peer(&mut channel, &addr).await;
+        blockchain_manager.add_peer(&mut channel, &addr2).await;
+
+        assert_eq!(blockchain_manager.getheaders_requests.len(), 2);
+        {
+            let request = blockchain_manager
+                .getheaders_requests
+                .get_mut(&addr)
+                .unwrap_or_else(|| panic!("{} should have a request", addr));
+            request.sent_at =
+                Instant::now() - Duration::from_secs(2 * GETHEADERS_REQUEST_TIMEOUT_SECS);
+        }
+
+        blockchain_manager.handle_getheaders_timeouts(&mut channel);
+
+        assert_eq!(blockchain_manager.getheaders_requests.len(), 1);
+        assert!(channel.has_discarded_address(&addr));
+        assert!(!channel.has_discarded_address(&addr2));
     }
 }

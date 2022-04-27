@@ -82,7 +82,7 @@ pub enum ChannelError {
     NotAvailable,
 }
 
-/// This trait is to provide an interface so that ti
+/// This trait is to provide an interface so that managers can communicate to BTC nodes.
 pub trait Channel {
     /// This method is used to send a message to a specific connection
     /// or to all connections based on the [Command](Command)'s fields.
@@ -91,6 +91,9 @@ pub trait Channel {
     /// This method is used to retrieve a list of available connections
     /// that have completed the version handshake.
     fn available_connections(&self) -> Vec<SocketAddr>;
+
+    /// Used to disconnect from nodes that are misbehaving.
+    fn discard(&mut self, addr: &SocketAddr);
 }
 
 /// This trait provides an interface to anything that may need to react to a
