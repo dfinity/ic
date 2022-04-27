@@ -186,9 +186,9 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
             )
 
             print(f"🚀  ... maximum capacity so far is {rps_max}")
-            return (failure_rate, t_median, t_average, t_max, t_min, total_requests, num_success, num_failure, rps_max)
 
-        exp.end_experiment()
+        self.end_experiment()
+        return (failure_rate, t_median, t_average, t_max, t_min, total_requests, num_success, num_failure, rps_max)
 
 
 if __name__ == "__main__":
