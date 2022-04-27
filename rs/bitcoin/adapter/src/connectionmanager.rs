@@ -93,7 +93,7 @@ pub struct ConnectionManager {
     connections: HashMap<SocketAddr, Connection>,
     /// This field determines whether or not we will be using a SOCKS proxy to communicate with
     /// the BTC network.
-    socks_proxy: Option<SocketAddr>,
+    socks_proxy: Option<String>,
     /// This field is used to receive stream events from the active connection streams.
     stream_event_receiver: Receiver<StreamEvent>,
     /// This field is used to allow new streams to send events back to the connection manager.
@@ -126,7 +126,7 @@ impl ConnectionManager {
             current_height: 0,
             connections: HashMap::with_capacity(max_connections),
             rng: StdRng::from_entropy(),
-            socks_proxy: config.socks_proxy,
+            socks_proxy: config.socks_proxy.clone(),
             stream_event_sender,
             network_message_sender,
             stream_event_receiver,
@@ -300,7 +300,6 @@ impl ConnectionManager {
         if self.connections.contains_key(&address) {
             return Err(ConnectionManagerError::AlreadyConnected(address));
         }
-        let socks_proxy = self.socks_proxy;
         let (writer, network_message_receiver) = unbounded_channel();
         let stream_event_sender = self.stream_event_sender.clone();
         let network_message_sender = self.network_message_sender.clone();
@@ -310,7 +309,7 @@ impl ConnectionManager {
             logger: self.logger.clone(),
             magic: self.magic,
             network_message_receiver,
-            socks_proxy,
+            socks_proxy: self.socks_proxy.clone(),
             stream_event_sender,
             network_message_sender,
         };

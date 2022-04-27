@@ -67,7 +67,7 @@ pub struct StreamConfig {
     pub network_message_receiver: UnboundedReceiver<NetworkMessage>,
     /// This field represents the address that the stream may use to proxy
     /// requests to the address field.
-    pub socks_proxy: Option<SocketAddr>,
+    pub socks_proxy: Option<String>,
     /// This field is used to send events from the stream back to the network and connection structs.
     pub stream_event_sender: Sender<StreamEvent>,
     pub network_message_sender: Sender<(SocketAddr, NetworkMessage)>,
@@ -134,22 +134,17 @@ impl Stream {
         let data = vec![0u8; STREAM_BUFFER_SIZE];
         let unparsed = vec![];
         let inner = match socks_proxy {
-            Some(socks_proxy) => {
-                let proxy_result = timeout(timeout_duration, TcpStream::connect(socks_proxy))
-                    .await
-                    .map_err(|_| StreamError::Timeout)?;
-                let proxy = proxy_result.map_err(StreamError::Io)?;
-                proxy.set_nodelay(true).map_err(StreamError::Io)?;
-
-                let socks_timeout = timeout(
+            Some(socks_proxy_addr) => {
+                let socks_stream = timeout(
                     timeout_duration,
-                    Socks5Stream::connect_with_socket(proxy, address),
+                    Socks5Stream::connect(socks_proxy_addr.as_str(), address),
                 )
                 .await
-                .map_err(|_| StreamError::Timeout)?;
-
-                let socks_stream = socks_timeout.map_err(StreamError::Socks)?;
-                socks_stream.into_inner()
+                .map_err(|_| StreamError::Timeout)?
+                .map_err(StreamError::Socks)?
+                .into_inner();
+                socks_stream.set_nodelay(true).map_err(StreamError::Io)?;
+                socks_stream
             }
             None => {
                 let connect_result = timeout(timeout_duration, TcpStream::connect(&address))
