@@ -95,8 +95,7 @@ endif::[]
 To see what dependencies the Docker image pulls in, check https://github.com/dfinity/ic/blob/master/gitlab-ci/docker/Dockerfile[Dockerfile].
 
 ----
-$ ./gitlab-ci/docker/docker-build-local-image.sh
-$ ./gitlab-ci/tools/docker-run ./gitlab-ci/tools/build-ic
+$ ./gitlab-ci/tools/docker-build-ic
 ----
 
 This builds:
@@ -107,7 +106,7 @@ This builds:
 
 In order to build only the binaries or the canisters, add the following flag on the `build-ic` script:
 ----
-$ ./gitlab-ci/tools/docker-run ./gitlab-ci/tools/build-ic --artifacts="binaries,canisters"
+$ ./gitlab-ci/tools/docker-build-ic --artifacts="binaries,canisters"
 ----
 Specify the disk or canisters directory by using respectively `--disk-dir="dir"` and `--canisters-dir="dir"`. 
 Find more information by using `-h` or `--help`.
