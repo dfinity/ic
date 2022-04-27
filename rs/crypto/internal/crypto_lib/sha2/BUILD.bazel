@@ -21,6 +21,7 @@ rust_library(
 rust_test(
     name = "sha224_test",
     srcs = ["tests/sha224.rs"],
+    edition = "2018",
     deps = [
         ":sha2",
         "@crate_index//:openssl",
@@ -30,6 +31,7 @@ rust_test(
 rust_test(
     name = "sha256_test",
     srcs = ["tests/sha256.rs"],
+    edition = "2018",
     deps = [
         ":sha2",
         "@crate_index//:openssl",
@@ -39,6 +41,7 @@ rust_test(
 rust_test(
     name = "sha512_test",
     srcs = ["tests/sha512.rs"],
+    edition = "2018",
     deps = [
         ":sha2",
         "@crate_index//:openssl",
