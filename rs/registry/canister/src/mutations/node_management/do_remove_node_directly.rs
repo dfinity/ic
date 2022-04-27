@@ -1,17 +1,14 @@
 use crate::mutations::node_management::common::{
     find_subnet_for_node, get_node_operator_id_for_node, get_node_operator_record,
-    get_subnet_list_record,
+    get_subnet_list_record, make_remove_node_registry_mutations,
+    make_update_node_operator_mutation,
 };
 use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::NodeId;
-use ic_nns_common::registry::encode_or_panic;
-use ic_registry_keys::{
-    make_node_operator_record_key, make_node_record_key, make_subnet_record_key,
-};
-use ic_registry_transport::{delete, update};
+use ic_registry_keys::make_subnet_record_key;
 
 impl Registry {
     /// Removes an existing node from the registry.
@@ -65,16 +62,14 @@ impl Registry {
 
         // 5. Finally, generate the following mutations:
         //   * Delete the node
+        //   * Delete entries for node encryption keys
         //   * Increment NO's allowance by 1
-        let node_key = make_node_record_key(payload.node_id);
-        let node_operator_key = make_node_operator_record_key(node_operator_id);
-        let mutations = vec![
-            delete(node_key),
-            update(
-                node_operator_key,
-                encode_or_panic(&new_node_operator_record),
-            ),
-        ];
+        let mut mutations = make_remove_node_registry_mutations(self, payload.node_id);
+        // mutation to update node operator value
+        mutations.push(make_update_node_operator_mutation(
+            node_operator_id,
+            &new_node_operator_record,
+        ));
 
         // 6. Apply mutations after checking invariants
         self.maybe_apply_mutation_internal(mutations);

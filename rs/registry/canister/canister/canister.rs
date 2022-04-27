@@ -47,7 +47,8 @@ use registry_canister::{
         do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
         node_management::{
-            do_remove_node_directly::RemoveNodeDirectlyPayload, do_remove_nodes::RemoveNodesPayload,
+            do_add_node::AddNodePayload, do_remove_node_directly::RemoveNodeDirectlyPayload,
+            do_remove_nodes::RemoveNodesPayload,
         },
         reroute_canister_range::RerouteCanisterRangePayload,
     },
@@ -62,7 +63,6 @@ use dfn_core::println;
 
 use ic_protobuf::registry::node_operator::v1::RemoveNodeOperatorsPayload;
 use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
-use registry_canister::mutations::node_management::do_add_node::AddNodePayload;
 
 // Makes expose_build_metadata! available.
 #[macro_use]
