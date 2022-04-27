@@ -150,6 +150,17 @@ rosetta-pre-master:
       . "${CI_PROJECT_DIR}/rs/tests/prepare-rosetta-deps.sh"
     - *run-farm-based-test
 
+subnet-recovery-pre-master:
+  extends: .system-tests
+  variables:
+    SUITE_NAME: "subnet_recovery"
+  script:
+    - |
+      # Set the hash-commit of the broken blockmaker branch
+      BROKEN_BLOCKMAKER_GIT_REVISION=$("${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/broken-blockmaker)
+      export BROKEN_BLOCKMAKER_GIT_REVISION
+    - *run-farm-based-test
+
 upgrade-compatibility-pre-master:
   extends: .system-tests
   needs:

@@ -29,6 +29,7 @@ ic-base-types = { path = "../types/base_types" }
 hex = "0.4.2"
 ic-canister-client = { path = "../canister_client" }
 ic-certified-vars = { path = "../certified_vars" }
+ic-cup-explorer = { path = "../cup_explorer" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
@@ -49,6 +50,7 @@ ic-nns-test-keys = { path = "../nns/test_keys" }
 ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
+ic-recovery = { path = "../recovery" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-common = { path = "../registry/common" }

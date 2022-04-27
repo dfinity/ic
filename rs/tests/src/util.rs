@@ -75,6 +75,10 @@ impl<'a> UniversalCanister<'a> {
             .expect("Could not create universal canister.")
     }
 
+    pub async fn try_new(agent: &'a Agent) -> Result<UniversalCanister<'a>, String> {
+        Self::new_with_comp_alloc(agent, None, None).await
+    }
+
     pub async fn new_with_comp_alloc(
         agent: &'a Agent,
         compute_allocation: Option<u64>,

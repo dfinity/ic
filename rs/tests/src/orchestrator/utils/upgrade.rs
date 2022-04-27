@@ -107,7 +107,11 @@ pub(crate) fn assert_assigned_replica_version(
     logger: &Logger,
 ) {
     for i in 1..=50 {
-        let fetched_version = get_assigned_replica_version(endpoint).ok();
+        let res = get_assigned_replica_version(endpoint);
+        if res.is_err() {
+            info!(logger, "{:?}", res);
+        }
+        let fetched_version = res.ok();
         info!(logger, "Try: {}. replica version: {:?}", i, fetched_version);
         if Some(expected_version.to_string()) == fetched_version {
             return;
