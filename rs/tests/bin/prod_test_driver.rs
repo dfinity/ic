@@ -525,6 +525,30 @@ fn get_test_suites() -> HashMap<String, Suite> {
     ));
 
     m.add_suite(suite(
+        "subnet_recovery",
+        vec![
+            pot_with_setup(
+                "subnet_recovery_app_same_nodes",
+                orchestrator::subnet_recovery_app_subnet::setup_same_nodes,
+                par(vec![sys_t(
+                    "subnet_recovery_app_same_nodes",
+                    orchestrator::subnet_recovery_app_subnet::test,
+                )]),
+            )
+            .with_ttl(Duration::from_secs(1800)),
+            pot_with_setup(
+                "subnet_recovery_app_failover_nodes",
+                orchestrator::subnet_recovery_app_subnet::setup_failover_nodes,
+                par(vec![sys_t(
+                    "subnet_recovery_app_failover_nodes",
+                    orchestrator::subnet_recovery_app_subnet::test,
+                )]),
+            )
+            .with_ttl(Duration::from_secs(1800)),
+        ],
+    ));
+
+    m.add_suite(suite(
         "upgrade_compatibility",
         vec![
             pot(
