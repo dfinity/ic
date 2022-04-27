@@ -9,18 +9,24 @@ use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[test]
-fn should_create_quadruples_successfully() {
+fn should_create_quadruples_correctly() {
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda) =
         transcripts_for_quadruple(common_receivers);
 
-    let quadruple = PreSignatureQuadruple::new(
-        kappa_unmasked,
-        lambda_masked,
-        kappa_times_lambda,
-        key_times_lambda,
+    let result = PreSignatureQuadruple::new(
+        kappa_unmasked.clone(),
+        lambda_masked.clone(),
+        kappa_times_lambda.clone(),
+        key_times_lambda.clone(),
     );
-    assert!(quadruple.is_ok());
+    assert!(result.is_ok());
+
+    let quadruple = result.unwrap();
+    assert_eq!(quadruple.kappa_unmasked(), &kappa_unmasked);
+    assert_eq!(quadruple.lambda_masked(), &lambda_masked);
+    assert_eq!(quadruple.kappa_times_lambda(), &kappa_times_lambda);
+    assert_eq!(quadruple.key_times_lambda(), &key_times_lambda);
 }
 
 #[test]
@@ -226,7 +232,7 @@ fn should_not_create_quadruples_for_key_times_lambda_with_wrong_type() {
 }
 
 #[test]
-fn should_create_ecdsa_inputs_successfully() {
+fn should_create_ecdsa_inputs_correctly() {
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
         transcripts_for_ecdsa_inputs(common_receivers);
@@ -239,15 +245,31 @@ fn should_create_ecdsa_inputs_successfully() {
     );
     assert!(quadruple.is_ok());
 
-    let ecdsa_inputs = ThresholdEcdsaSigInputs::new(
-        &derivation_path(),
-        &hashed_message(),
-        nonce(),
-        quadruple.unwrap(),
-        key_transcript,
+    let derivation_path = derivation_path();
+    let hashed_message = hashed_message();
+    let nonce = nonce();
+    let quadruple = quadruple.unwrap();
+    let result = ThresholdEcdsaSigInputs::new(
+        &derivation_path,
+        &hashed_message,
+        nonce,
+        quadruple.clone(),
+        key_transcript.clone(),
     );
+    assert!(result.is_ok());
 
-    assert!(ecdsa_inputs.is_ok());
+    let ecdsa_inputs = result.unwrap();
+    assert_eq!(ecdsa_inputs.derivation_path(), &derivation_path);
+    assert_eq!(ecdsa_inputs.hashed_message(), &hashed_message);
+    assert_eq!(ecdsa_inputs.nonce(), &nonce);
+    assert_eq!(ecdsa_inputs.presig_quadruple(), &quadruple);
+    assert_eq!(ecdsa_inputs.key_transcript(), &key_transcript);
+    assert_eq!(
+        ecdsa_inputs.reconstruction_threshold(),
+        key_transcript.reconstruction_threshold()
+    );
+    assert_eq!(ecdsa_inputs.receivers(), &key_transcript.receivers);
+    assert_eq!(ecdsa_inputs.algorithm_id(), key_transcript.algorithm_id);
 }
 
 #[test]
@@ -530,7 +552,7 @@ pub fn transcripts_for_ecdsa_inputs(
 fn derivation_path() -> ExtendedDerivationPath {
     ExtendedDerivationPath {
         caller: Default::default(),
-        derivation_path: vec![],
+        derivation_path: vec![b"inner derivation path".to_vec()],
     }
 }
 
@@ -539,5 +561,5 @@ fn nonce() -> Randomness {
 }
 
 fn hashed_message() -> Vec<u8> {
-    vec![0u8; 32]
+    vec![123; 32]
 }
