@@ -34,7 +34,7 @@ pub struct Config {
     /// This field determines whether or not we will be using a SOCKS proxy to communicate with
     /// the BTC network.
     #[serde(default)]
-    pub socks_proxy: Option<SocketAddr>,
+    pub socks_proxy: Option<String>,
     /// The number of seconds that need to pass for the adapter to enter the
     /// `Idle` state.
     #[serde(default = "default_idle_seconds")]
