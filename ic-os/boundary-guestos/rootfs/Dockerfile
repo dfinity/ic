@@ -247,12 +247,12 @@ COPY --from=download /tmp/icx-proxy.deb /tmp/icx-proxy.deb
 RUN dpkg -i /tmp/icx-proxy.deb &&\
     rm /tmp/icx-proxy.deb
 
-# Install ic service worker porduction version from: https://registry.npmjs.org/@dfinity/service-worker/-/
+# Install ic service worker production version from: https://registry.npmjs.org/@dfinity/service-worker/-/
 ARG sw_version
 COPY --from=download /tmp/service-worker-${sw_version}.tgz /tmp/service-worker-${sw_version}.tgz
-RUN cd /tmp && tar xfvz service-worker-${sw_version}.tgz &&\
-    mkdir -p /var/www/html/service_worker &&\
-    cp -rf /tmp/package/dist-prod/* /var/www/html/service_worker/ &&\
+RUN cd /tmp && tar xfvz service-worker-${sw_version}.tgz && \
+    mkdir -p /var/www/html/ &&\
+    cp -rf /tmp/package/dist-prod/* /var/www/html/ &&\
     rm -rf /tmp/package /tmp/service-worker-${sw_version}.tgz
 RUN chown www-data:www-data /var/www/html && \
     chmod 0755 /var/www/html/*
