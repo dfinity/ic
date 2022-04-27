@@ -146,12 +146,12 @@ if [ "$BUILD_CANISTERS" == "true" ]; then
     gitlab-ci/tools/job-driver.py cargo-build-canisters "${CANISTERS_DIR}"
 fi
 if [ "$BUILD_IMAGES" == "true" ]; then
-    if [ "$BUILD_BINARIES" != "true" ]; then
-        echo "Trying to pull binaries from S3"
-        mkdir -p /ic/artifacts/release
-        gitlab-ci/src/artifacts/rclone_download.py --remote-path=release --unpack --mark-executable \
-            --git-rev "${VERSION}" --out /ic/artifacts/release
-    fi
+    #if [ "$BUILD_BINARIES" != "true" ]; then
+    #    echo "Trying to pull binaries from S3"
+    #    mkdir -p /ic/artifacts/release
+    #    gitlab-ci/src/artifacts/rclone_download.py --remote-path=release --unpack --mark-executable \
+    #        --git-rev "${VERSION}" --out /ic/artifacts/release
+    #fi
     echo -e "\n${HEADER_ICOS}\n"
     gitlab-ci/src/job_scripts/lib/guest-os-updateimg.sh "${DISK_DIR}"
     # XXX FIXME: Avoid building host-os update image until artifact limit has been increased.
