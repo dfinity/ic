@@ -5285,6 +5285,7 @@ dependencies = [
  "dfn_protobuf",
  "ic-base-types",
  "ic-crypto-sha",
+ "ic-ic00-types",
  "ledger-canister",
  "serde",
 ]

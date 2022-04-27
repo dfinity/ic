@@ -22,10 +22,14 @@ type By = variant {
   MemoAndController : MemoAndController;
   NeuronId : record {};
 };
-type CanisterStatusResult = record {
+type CanisterStatusResultV2 = record {
   controller : principal;
   status : CanisterStatusType;
+  freezing_threshold : nat;
+  balance : vec record { vec nat8; nat };
   memory_size : nat;
+  cycles : nat;
+  settings : DefiniteCanisterSettingsArgs;
   module_hash : opt vec nat8;
 };
 type CanisterStatusType = variant { stopped; stopping; running };
@@ -69,6 +73,13 @@ type Command_2 = variant {
 };
 type Configure = record { operation : opt Operation };
 type DefaultFollowees = record { followees : vec record { nat64; Followees } };
+type DefiniteCanisterSettingsArgs = record {
+  controller : principal;
+  freezing_threshold : nat;
+  controllers : vec principal;
+  memory_allocation : nat;
+  compute_allocation : nat;
+};
 type Disburse = record {
   to_account : opt AccountIdentifier;
   amount : opt Amount;
@@ -262,7 +273,7 @@ service : (Governance) -> {
   get_nervous_system_parameters : (null) -> (NervousSystemParameters) query;
   get_neuron : (GetNeuron) -> (GetNeuronResponse) query;
   get_proposal : (GetProposal) -> (GetProposalResponse) query;
-  get_root_canister_status : (null) -> (CanisterStatusResult);
+  get_root_canister_status : (null) -> (CanisterStatusResultV2);
   list_nervous_system_functions : () -> (
       ListNervousSystemFunctionsResponse,
     ) query;
