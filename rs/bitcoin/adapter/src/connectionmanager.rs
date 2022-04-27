@@ -134,9 +134,10 @@ impl ConnectionManager {
     }
 
     /// If there is an issue with a misbehaving node, the node is marked as
-    /// disconnected and
-    pub fn discard(&mut self, address: SocketAddr) {
-        if let Ok(conn) = self.get_connection(&address) {
+    /// disconnected and is not added back to the address book when disconnected/discarded
+    /// connections are reaped.
+    fn internal_discard(&mut self, address: &SocketAddr) {
+        if let Ok(conn) = self.get_connection(address) {
             conn.discard();
         }
     }
@@ -553,7 +554,7 @@ impl ConnectionManager {
             command,
             hex::encode(payload),
         );
-        self.discard(*address);
+        self.internal_discard(address);
         Ok(())
     }
 
@@ -598,6 +599,10 @@ impl Channel for ConnectionManager {
             })
             .collect()
     }
+
+    fn discard(&mut self, addr: &SocketAddr) {
+        self.internal_discard(addr);
+    }
 }
 
 impl ProcessEvent for ConnectionManager {
@@ -629,7 +634,7 @@ impl ProcessEvent for ConnectionManager {
                 Ok(())
             }
             StreamEventKind::FailedToConnect => {
-                self.discard(event.address);
+                self.internal_discard(&event.address);
                 Ok(())
             }
         }

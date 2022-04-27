@@ -4,8 +4,8 @@ use crate::{
     blockchainmanager::BlockchainManager, common::DEFAULT_CHANNEL_BUFFER_SIZE, config::Config,
     connectionmanager::ConnectionManager, stream::handle_stream,
     transaction_manager::TransactionManager, AdapterState, BlockchainManagerRequest,
-    BlockchainState, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError, ProcessEvent,
-    TransactionManagerRequest,
+    BlockchainState, Channel, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError,
+    ProcessEvent, TransactionManagerRequest,
 };
 use bitcoin::network::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
@@ -60,21 +60,21 @@ pub fn start_router(
                     if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
                         connection_manager.process_event(&event)
                     {
-                        connection_manager.discard(event.address);
+                        connection_manager.discard(&event.address);
                     }
                 },
                 network_message = network_message_receiver.recv() => {
                     let (address, message) = network_message.unwrap();
                     if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
                         connection_manager.process_bitcoin_network_message(address, &message) {
-                        connection_manager.discard(address);
+                        connection_manager.discard(&address);
                     }
 
                     if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = blockchain_manager.process_bitcoin_network_message(&mut connection_manager, address, &message).await {
-                        connection_manager.discard(address);
+                        connection_manager.discard(&address);
                     }
                     if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
-                        connection_manager.discard(address);
+                        connection_manager.discard(&address);
                     }
                 },
                 result = blockchain_manager_rx.recv() => {
