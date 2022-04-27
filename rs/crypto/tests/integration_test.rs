@@ -297,6 +297,7 @@ fn should_fail_check_keys_with_registry_if_tls_cert_is_malformed() {
         .add_generated_node_signing_key_to_registry()
         .add_generated_committee_signing_key_to_registry()
         .add_generated_dkg_dealing_enc_key_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
@@ -304,7 +305,7 @@ fn should_fail_check_keys_with_registry_if_tls_cert_is_malformed() {
     assert!(matches!(
         result,
         Err(CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Ed25519,
+            algorithm: AlgorithmId::Tls,
             key_bytes: None,
             internal_error
         })

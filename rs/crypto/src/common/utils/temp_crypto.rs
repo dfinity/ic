@@ -359,6 +359,13 @@ impl NodeKeysToGenerate {
             ..Self::none()
         }
     }
+
+    pub fn only_tls_key_and_cert() -> Self {
+        NodeKeysToGenerate {
+            generate_tls_keys_and_certificate: true,
+            ..Self::none()
+        }
+    }
 }
 
 impl TempCryptoComponentGeneric<Csp<ChaChaRng, ProtoSecretKeyStore, VolatileSecretKeyStore>> {
