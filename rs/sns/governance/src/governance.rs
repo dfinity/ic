@@ -1356,15 +1356,22 @@ impl Governance {
     /// Removes some data from a given proposal data and returns it.
     ///
     /// Specifically, remove the ballots in the proposal data and possibly the proposal's payload.
-    /// The payload is removed if the proposal is an ExecuteNervousSystemFunction
-    /// and if the payload is longer than EXECUTE_NERVOUS_SYSTEM_FUNCTION_PAYLOAD_LISTING_BYTES_MAX.
+    /// The payload is removed if the proposal is an ExecuteNervousSystemFunction or if it's
+    /// a UpgradeSnsControlledCanister. The text rendering should include displayable information about
+    /// the payload contents already.
     fn limit_proposal_data(&self, data: &ProposalData) -> ProposalData {
         let mut new_proposal = data.proposal.clone();
         if let Some(proposal) = &mut new_proposal {
-            if let Some(proposal::Action::ExecuteNervousSystemFunction(m)) = &mut proposal.action {
-                if m.payload.len() > EXECUTE_NERVOUS_SYSTEM_FUNCTION_PAYLOAD_LISTING_BYTES_MAX {
+            // We can't understand the payloads of nervous system functions, as well as the wasm
+            // for upgrades, so just omit them when listing proposals.
+            match &mut proposal.action {
+                Some(Action::ExecuteNervousSystemFunction(m)) => {
                     m.payload.clear();
                 }
+                Some(Action::UpgradeSnsControlledCanister(m)) => {
+                    m.new_canister_wasm.clear();
+                }
+                _ => (),
             }
         }
 
