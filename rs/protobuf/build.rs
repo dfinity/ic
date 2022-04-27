@@ -6,15 +6,19 @@ use std::path::PathBuf;
 /// to avoid any risk of non-determinism. Indeed, with Config::new(), the
 /// generated code for proto's "map" fields are HashMaps. use `base_config()` to
 /// eliminate this risk.
-fn base_config() -> Config {
+fn base_config(prefix: &str) -> Config {
     let mut config = Config::new();
+    let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR environment variable not set"));
+    let proto_out = out_dir.join(prefix);
+    std::fs::create_dir_all(&proto_out)
+        .unwrap_or_else(|e| panic!("Failed to create directory {}: {}", proto_out.display(), e));
+    config.out_dir(&proto_out);
     // Use BTreeMap for all proto map fields.
     config.btree_map(&["."]);
     config.file_descriptor_set_path(
         // OUT_DIR is set by cargo
         // https://doc.rust-lang.org/cargo/reference/environment-variables.html
-        PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR environment variable not set"))
-            .join("protoc_file_descriptor_set.bin"),
+        out_dir.join("protoc_file_descriptor_set.bin"),
     );
     config.protoc_arg("--experimental_allow_proto3_optional");
     config
@@ -56,8 +60,7 @@ fn main() {
 
 /// Generates Rust structs from logging Protobuf messages.
 fn build_log_proto() {
-    let mut config = base_config();
-    config.out_dir("gen/log");
+    let mut config = base_config("log");
 
     config.type_attribute(
         "log.log_entry.v1.LogEntry",
@@ -187,8 +190,7 @@ fn build_log_proto() {
 
 /// Generates Rust structs from registry Protobuf messages.
 fn build_registry_proto() {
-    let mut config = base_config();
-    config.out_dir("gen/registry");
+    let mut config = base_config("registry");
 
     config.type_attribute(
         ".registry.crypto",
@@ -275,8 +277,7 @@ fn build_registry_proto() {
 
 /// Generates Rust structs from messaging Protobuf messages.
 fn build_messaging_proto() {
-    let mut config = base_config();
-    config.out_dir("gen/messaging");
+    let mut config = base_config("messaging");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
 
     let messaging_files = [
@@ -292,8 +293,7 @@ fn build_messaging_proto() {
 
 /// Generates Rust structs from state Protobuf messages.
 fn build_state_proto() {
-    let mut config = base_config();
-    config.out_dir("gen/state");
+    let config = base_config("state");
 
     let state_files = [
         "def/state/ingress/v1/ingress.proto",
@@ -309,8 +309,7 @@ fn build_state_proto() {
 
 /// Generates Rust structs from types Protobuf messages.
 fn build_types_proto() {
-    let mut config = base_config();
-    config.out_dir("gen/types");
+    let mut config = base_config("types");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     config.type_attribute(".types.v1.CatchUpPackage", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.SubnetId", "#[derive(Eq, Hash)]");
@@ -327,8 +326,7 @@ fn build_types_proto() {
 
 /// Generates Rust structs from crypto Protobuf messages.
 fn build_crypto_proto() {
-    let mut config = base_config();
-    config.out_dir("gen/crypto");
+    let mut config = base_config("crypto");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     let files = ["def/crypto/v1/crypto.proto"];
     compile_protos(config, &files);
@@ -336,8 +334,7 @@ fn build_crypto_proto() {
 
 /// Generates Rust structs from crypto Protobuf messages.
 fn build_p2p_proto() {
-    let mut config = base_config();
-    config.out_dir("gen/p2p");
+    let mut config = base_config("p2p");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     let files = ["def/p2p/v1/p2p.proto"];
     compile_protos(config, &files);
@@ -345,8 +342,7 @@ fn build_p2p_proto() {
 
 /// Generates Rust structs from Bitcoin adapter Protobuf messages.
 fn build_bitcoin_proto() {
-    let mut config = base_config();
-    config.out_dir("gen/bitcoin");
+    let mut config = base_config("bitcoin");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     let files = ["def/bitcoin/v1/bitcoin.proto"];
     compile_protos(config, &files);
@@ -354,8 +350,7 @@ fn build_bitcoin_proto() {
 
 /// Generates Rust structs from HTTP from canister adapter Protobuf messages.
 fn build_canister_http_proto() {
-    let mut config = base_config();
-    config.out_dir("gen/canister_http");
+    let mut config = base_config("canister_http");
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     let files = ["def/canister_http/v1/canister_http.proto"];
     compile_protos(config, &files);

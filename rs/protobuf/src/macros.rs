@@ -7,7 +7,8 @@ macro_rules! import_mod {
         pub mod $module {
             pub mod $version {
                 include!(concat!(
-                    "../gen/", $prefix, "/", $prefix, ".", $file_part, ".rs"
+                    env!("OUT_DIR"),
+                    "/", $prefix, "/", $prefix, ".", $file_part, ".rs"
                 ));
 
                 pub mod body $body
@@ -19,7 +20,8 @@ macro_rules! import_mod {
         pub mod $module {
             pub mod $version {
                 include!(concat!(
-                    "../gen/", $prefix, "/", $prefix, ".", $file_part, ".rs"
+                    env!("OUT_DIR"),
+                    "/", $prefix, "/", $prefix, ".", $file_part, ".rs"
                 ));
             }
         }

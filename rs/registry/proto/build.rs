@@ -13,6 +13,5 @@ fn main() {
     });
 
     let mut config = Config::new();
-    config.out_dir("gen");
     config.compile_protos(&proto_files, &["proto"]).unwrap();
 }

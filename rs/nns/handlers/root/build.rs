@@ -17,7 +17,6 @@ fn main() {
     };
 
     let mut config = Config::new();
-    config.out_dir("gen");
     config.extern_path(".ic_nns_common.pb.v1", "::ic-nns-common::pb::v1");
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
 

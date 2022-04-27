@@ -50,9 +50,10 @@ fn key_id_from_hex(key_id_hex: &str) -> KeyId {
 
 /// The secret key store protobuf definitions
 // Include the prost-build generated registry protos.
-#[path = "../../gen/ic.crypto.v1.rs"]
 #[rustfmt::skip]
-pub mod pb;
+pub mod pb {
+    include!(concat!(env!("OUT_DIR"), "/ic.crypto.v1.rs"));
+}
 
 type SecretKeys = HashMap<KeyId, (CspSecretKey, Option<Scope>)>;
 

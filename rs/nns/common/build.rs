@@ -14,7 +14,6 @@ fn main() {
     };
 
     let mut config = Config::new();
-    config.out_dir("gen");
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
     config.type_attribute(
         "ic_nns_common.pb.v1.CanisterId",
