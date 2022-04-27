@@ -1,7 +1,7 @@
 
 # Service worker verion and sha256
-ARG sw_version=1.0.0
-ARG sw_sha256=1e4d288888c493318970fa0134090a8b2539963c2f6e67a4d04b3a0546f3788e
+ARG sw_version=1.1.1
+ARG sw_sha256=026c55badce7fb690e2755e523360860d50fa6b051c4eaab16beddf9ccd97781
 
 # First build stage: download software, build and verify it (such that it
 # does not change under our noses).
