@@ -7,9 +7,9 @@ use ic_tests::driver::ic::VmAllocationStrategy;
 use ic_tests::driver::pot_dsl::*;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::{
-    api_test, basic_health_test, boundary_nodes_integration, btc_integration, consensus, execution,
-    http_from_canister, ledger_tests, message_routing, networking, nns_tests, orchestrator,
-    rosetta_test, spec_compliance, tecdsa, wasm_generator_test, workload_counter_canister_test,
+    api_test, basic_health_test, boundary_nodes_integration, consensus, execution, ledger_tests,
+    message_routing, networking, nns_tests, orchestrator, rosetta_test, spec_compliance, tecdsa,
+    wasm_generator_test, workload_counter_canister_test,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -135,11 +135,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     api_test::setup_two_ics,
                     par(vec![
                         sys_t("ics_have_correct_subnet_count", api_test::ics_have_correct_subnet_count),
-                        sys_t("vm_control", api_test::vm_control),
+                        // sys_t("vm_control", api_test::vm_control), disabled due to flakiness
                         sys_t("upload_file_to_farm", api_test::upload_file_to_farm),
                         sys_t("install_counter_canister", api_test::install_counter_canister),
                     ]),
                 ),
+                /* 
+                Disabled due to flakiness
                 pot_with_setup(
                     "btc_pot",
                     btc_integration::btc::config,
@@ -153,7 +155,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     par(vec![
                         sys_t("basic_http", http_from_canister::basic_http::test),
                     ]),
-                ),
+                ),*/
                 pot_with_setup(
                     "boundary_nodes_pot",
                     boundary_nodes_integration::boundary_nodes::config,
