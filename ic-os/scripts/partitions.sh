@@ -26,7 +26,8 @@ function prepare_disk_image() {
 
 # Clear any existing LVM mounts.
 function clear_lvm_mounts() {
-    local OPEN_LVM=$(losetup -O BACK-FILE,NAME | grep lvm.img | tr -s ' ' | cut -d ' ' -f 2)
+    losetup -l
+    local OPEN_LVM=$(losetup -O BACK-FILE,NAME | grep 'lvm.img\|disk-node0.img' | tr -s ' ' | cut -d ' ' -f 2)
     for LOOP in $OPEN_LVM; do
         losetup -d $LOOP
     done
