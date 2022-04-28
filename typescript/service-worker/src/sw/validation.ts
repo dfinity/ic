@@ -7,6 +7,10 @@ import {
   reconstruct,
 } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
+import { lebDecode } from '@dfinity/candid';
+import { PipeArrayBuffer } from '@dfinity/candid/lib/cjs/utils/buffer';
+
+const MAX_CERT_TIME_OFFSET_IN_MS = 300_000; // 5 min
 
 /**
  * Validate whether a body is properly certified.
@@ -40,6 +44,10 @@ export async function validateBody(
 
   // Make sure the certificate is valid.
   if (!(await cert.verify())) {
+    return false;
+  }
+  // check certificate time
+  if (!validateCertificateTime(cert)) {
     return false;
   }
 
@@ -84,6 +92,25 @@ export async function validateBody(
   }
 
   return !!treeSha && equal(sha, treeSha);
+}
+
+function validateCertificateTime(cert: Certificate): boolean {
+  const decodedTime = lebDecode(new PipeArrayBuffer(cert.lookup(['time'])));
+  const certTime = Number(decodedTime / BigInt(1_000_000)); // convert from nanos to millis
+  const now = Date.now();
+  if (certTime - MAX_CERT_TIME_OFFSET_IN_MS > now) {
+    console.error(
+      `Invalid certificate: time ${certTime} is too far in the future (current time: ${now})`
+    );
+    return false;
+  }
+  if (certTime + MAX_CERT_TIME_OFFSET_IN_MS < now) {
+    console.error(
+      `Invalid certificate: time ${certTime} is too far in the past (current time: ${now})`
+    );
+    return false;
+  }
+  return true;
 }
 
 function equal(buf1: ArrayBuffer, buf2: ArrayBuffer): boolean {
