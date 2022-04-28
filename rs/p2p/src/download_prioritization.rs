@@ -148,12 +148,9 @@ use ic_types::{
 use ic_interfaces::artifact_manager::ArtifactManager;
 use ic_types::crypto::CryptoHash;
 
-// Priority function (defaults)
-/// Internal representation of a priority function
-type InternalPriorityFn = Arc<ArtifactPriorityFn>;
 /// Function type that returns a corresponding priority function
 type GetPriorityFn =
-    Arc<dyn Fn(&dyn ArtifactManager, ArtifactTag) -> InternalPriorityFn + Send + Sync + 'static>;
+    Arc<dyn Fn(&dyn ArtifactManager, ArtifactTag) -> ArtifactPriorityFn + Send + Sync + 'static>;
 
 /// Returns a default priority value
 fn priority_fn_default(_: &ArtifactId, _: &ArtifactAttribute) -> Priority {
@@ -161,18 +158,18 @@ fn priority_fn_default(_: &ArtifactId, _: &ArtifactAttribute) -> Priority {
 }
 
 /// Returns the default priority using the internal representation
-fn get_priority_fn_default(_: &dyn ArtifactManager, _: ArtifactTag) -> InternalPriorityFn {
-    Arc::new(Box::new(priority_fn_default))
+fn get_priority_fn_default(_: &dyn ArtifactManager, _: ArtifactTag) -> ArtifactPriorityFn {
+    Box::new(priority_fn_default)
 }
 
 /// Gets priority function from artifact manager
 fn get_priority_fn_from_manager(
     artifact_manager: &dyn ArtifactManager,
     tag: ArtifactTag,
-) -> InternalPriorityFn {
+) -> ArtifactPriorityFn {
     match artifact_manager.get_priority_function(tag) {
-        Some(function) => Arc::new(function),
-        None => Arc::new(Box::new(priority_fn_default)),
+        Some(function) => function,
+        None => Box::new(priority_fn_default),
     }
 }
 
@@ -383,7 +380,7 @@ struct ClientAdvertMap {
 struct ClientAdvertMapInt {
     advert_map: AdvertTrackerAliasedMap,
     get_priority_fn: GetPriorityFn,
-    priority_fn: InternalPriorityFn,
+    priority_fn: ArtifactPriorityFn,
 }
 
 impl Default for ClientAdvertMapInt {
@@ -391,7 +388,7 @@ impl Default for ClientAdvertMapInt {
         ClientAdvertMapInt {
             advert_map: Default::default(),
             get_priority_fn: Arc::new(get_priority_fn_default),
-            priority_fn: Arc::new(Box::new(priority_fn_default)),
+            priority_fn: Box::new(priority_fn_default),
         }
     }
 }
@@ -676,7 +673,7 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
         let mut guard = self.replica_map.write().unwrap();
         let (client_advert_map, peer_map) = guard.deref_mut();
         priority_fns.into_iter().for_each(|(id, priority_fn)| {
-            client_advert_map[*id].priority_fn = priority_fn.clone();
+            client_advert_map[*id].priority_fn = priority_fn;
         });
 
         // Atomically(under lock) update all references from peers queues as per new
@@ -1010,8 +1007,8 @@ pub(crate) mod test {
     }
 
     /// Returns a boxed reference to the function `priority_fn_dynamic`
-    fn get_priority_dynamic_fn(_: &dyn ArtifactManager, _: ArtifactTag) -> InternalPriorityFn {
-        Arc::new(Box::new(priority_fn_dynamic))
+    fn get_priority_dynamic_fn(_: &dyn ArtifactManager, _: ArtifactTag) -> ArtifactPriorityFn {
+        Box::new(priority_fn_dynamic)
     }
 
     /// Returns `Drop` priority
@@ -1020,8 +1017,8 @@ pub(crate) mod test {
     }
 
     /// Returns a boxed reference to the function that returns `Drop` priority
-    fn get_priority_fn_drop_all(_: &dyn ArtifactManager, _: ArtifactTag) -> InternalPriorityFn {
-        Arc::new(Box::new(priority_fn_drop_all))
+    fn get_priority_fn_drop_all(_: &dyn ArtifactManager, _: ArtifactTag) -> ArtifactPriorityFn {
+        Box::new(priority_fn_drop_all)
     }
 
     /// Returns `Stash` priority
@@ -1030,8 +1027,8 @@ pub(crate) mod test {
     }
 
     /// Returns a boxed reference to the function that returns `Stash` priority
-    fn get_priority_fn_stash_all(_: &dyn ArtifactManager, _: ArtifactTag) -> InternalPriorityFn {
-        Arc::new(Box::new(priority_fn_stash_all))
+    fn get_priority_fn_stash_all(_: &dyn ArtifactManager, _: ArtifactTag) -> ArtifactPriorityFn {
+        Box::new(priority_fn_stash_all)
     }
 
     /// Returns `Stash` priority after a short delay
@@ -1042,8 +1039,8 @@ pub(crate) mod test {
 
     /// Returns a boxed reference to the function that returns a delayed `Stash`
     /// priority
-    fn get_priority_fn_with_delay(_: &dyn ArtifactManager, _: ArtifactTag) -> InternalPriorityFn {
-        Arc::new(Box::new(priority_fn_with_delay))
+    fn get_priority_fn_with_delay(_: &dyn ArtifactManager, _: ArtifactTag) -> ArtifactPriorityFn {
+        Box::new(priority_fn_with_delay)
     }
 
     /// Returns `FetchNow` priority
@@ -1056,8 +1053,8 @@ pub(crate) mod test {
     fn get_priority_fn_fetch_now_all(
         _: &dyn ArtifactManager,
         _: ArtifactTag,
-    ) -> InternalPriorityFn {
-        Arc::new(Box::new(priority_fn_fetch_now_all))
+    ) -> ArtifactPriorityFn {
+        Box::new(priority_fn_fetch_now_all)
     }
 
     /// Returns an advert with the given ID
