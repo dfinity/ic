@@ -13,7 +13,7 @@ FLAGS = gflags.FLAGS
 # Flags for query mode
 gflags.DEFINE_integer("query_initial_rps", 100, "Start rps and increment in query mode.")
 gflags.DEFINE_integer("max_query_load", 40000, "Maximum query load in queries per second to issue.")
-gflags.DEFINE_integer("target_query_load", 4000, "Target query load in queries per second to issue.")
+gflags.DEFINE_integer("target_query_load", 4400, "Target query load in queries per second to issue.")
 gflags.DEFINE_integer("query_rps_increment", 50, "Increment of requests per second per round for queries.")
 
 # Flags for update mode

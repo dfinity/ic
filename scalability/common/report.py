@@ -4,7 +4,7 @@ from common.misc import mean_or_minus_one
 from termcolor import colored
 
 
-def convert_duration(data: dict):
+def convert_duration(data: [dict]):
     """
     Convert the given duration.
 
@@ -144,7 +144,9 @@ def evaluate_summaries(summaries):
         total_number += number
         print(colored("{} - {} - {}".format(code, is_success(code), number), "green" if is_success(code) else "red"))
 
-    percentiles = [mean_or_minus_one([x[p] if p in x else 0 for x in t_percentile]) for p in range(0, 100)]
+    percentiles = [
+        mean_or_minus_one([x[p] if p < len(x) else float("NaN") for x in t_percentile]) for p in range(0, 100)
+    ]
 
     sum_requests = success[True] + success[False]
     failure_rate = success[False] / sum_requests if sum_requests != 0 else 1.0
