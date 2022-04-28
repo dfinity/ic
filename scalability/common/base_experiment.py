@@ -315,6 +315,10 @@ class BaseExperiment:
         subnet_info = [info for (_, info) in topo["topology"]["subnets"].items()]
         return subnet_info[subnet_index]["records"][0]["value"]["membership"]
 
+    def get_mainnet_nns_url():
+        """Get NNS url for mainnet."""
+        return "2001:920:401a:1708:5000:4fff:fe92:48f1"
+
     def _get_nns_url(self):
         """
         Get the testnets NNS url.
@@ -325,7 +329,7 @@ class BaseExperiment:
         if len(FLAGS.nns_url) > 0:
             return FLAGS.nns_url
         ip = (
-            "2001:920:401a:1708:5000:4fff:fe92:48f1"
+            BaseExperiment.get_mainnet_nns_url()
             if FLAGS.testnet == "mercury"
             else ansible.get_ansible_hostnames_for_subnet(FLAGS.testnet, NNS_SUBNET_INDEX, sort=False)[0]
         )

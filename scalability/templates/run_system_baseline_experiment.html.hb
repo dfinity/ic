@@ -56,10 +56,4 @@ The system is considered healthy iff:
     (achieved in iteration with {{experiment_details.rps_max_in}} requests per second)
   </div>
   
-  
-  <div class="w3-panel w3-leftbar w3-border-orange w3-sand">
-    This is determined by the number of successful request the workload generator has recorded divided by the length
-    of the iteration run. The latter might be longer than what is given as argument to the workload generator (-n), since
-    some request might take long before they time out.
-  </div>
 </div>

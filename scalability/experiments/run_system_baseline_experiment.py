@@ -191,6 +191,8 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
                     "duration": duration,
                     "target_duration": iter_duration,
                     "target_load": load_total,
+                    "allowable_failure_rate": FLAGS.allowable_failure_rate if len(datapoints) > 1 else "n.a.",
+                    "allowable_t_median": FLAGS.allowable_t_median if len(datapoints) > 1 else "n.a.",
                 },
                 rps,
                 "requests / s",
