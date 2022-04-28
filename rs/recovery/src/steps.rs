@@ -222,7 +222,7 @@ impl Step for ReplayStep {
             .filter_map(|e| {
                 e.path()
                     .file_name()
-                    .and_then(|n| n.to_str().map(|s| String::from(s)))
+                    .and_then(|n| n.to_str().map(String::from))
             })
             .collect::<Vec<String>>();
 

@@ -492,7 +492,7 @@ impl Request {
                 ..
             }) => Ok(RequestType::NeuronInfo {
                 neuron_index: *neuron_index,
-                controller: controller.map(|pid| PublicKeyOrPrincipal::Principal(pid)),
+                controller: controller.map(PublicKeyOrPrincipal::Principal),
             }),
             Request::Follow(Follow {
                 neuron_index,
@@ -500,7 +500,7 @@ impl Request {
                 ..
             }) => Ok(RequestType::Follow {
                 neuron_index: *neuron_index,
-                controller: controller.map(|pid| PublicKeyOrPrincipal::Principal(pid)),
+                controller: controller.map(PublicKeyOrPrincipal::Principal),
             }),
         }
     }
@@ -745,7 +745,7 @@ impl TryFrom<&models::Request> for Request {
             } => {
                 match controller
                     .clone()
-                    .map(|pkp| principal_id_from_public_key_or_principal(pkp))
+                    .map(principal_id_from_public_key_or_principal)
                 {
                     None => Ok(Request::NeuronInfo(NeuronInfo {
                         account,
@@ -770,7 +770,7 @@ impl TryFrom<&models::Request> for Request {
                     let ids = followees.iter().map(|n| n.id).collect();
                     match controller
                         .clone()
-                        .map(|pkp| principal_id_from_public_key_or_principal(pkp))
+                        .map(principal_id_from_public_key_or_principal)
                     {
                         None => Ok(Request::Follow(Follow {
                             account,
