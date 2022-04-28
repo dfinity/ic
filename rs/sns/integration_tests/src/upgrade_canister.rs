@@ -600,7 +600,8 @@ fn test_upgrade_root_success() {
                 summary,
                 btreeset! {
                     ("governance".to_string(), sns_canisters.governance.canister_id().get()),
-                    ("ledger".to_string(), sns_canisters.ledger.canister_id().get())
+                    ("ledger".to_string(), sns_canisters.ledger.canister_id().get()),
+                    ("root".to_string(), sns_canisters.root.canister_id().get())
                 }
             );
 
