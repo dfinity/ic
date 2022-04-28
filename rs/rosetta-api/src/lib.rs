@@ -761,7 +761,7 @@ impl RosettaRequestHandler {
 
                     match controller
                         .clone()
-                        .map(|pkp| principal_id_from_public_key_or_principal(pkp))
+                        .map(principal_id_from_public_key_or_principal)
                     {
                         None => {
                             requests.push(Request::NeuronInfo(NeuronInfo {
@@ -798,7 +798,7 @@ impl RosettaRequestHandler {
                         let ids = followees.iter().map(|x| x.id).collect();
                         match controller
                             .clone()
-                            .map(|pkp| principal_id_from_public_key_or_principal(pkp))
+                            .map(principal_id_from_public_key_or_principal)
                         {
                             None => {
                                 requests.push(Request::Follow(Follow {
@@ -1070,7 +1070,7 @@ impl RosettaRequestHandler {
                     updates.push((
                         RequestType::NeuronInfo {
                             neuron_index,
-                            controller: controller.map(|pid| PublicKeyOrPrincipal::Principal(pid)),
+                            controller: controller.map(PublicKeyOrPrincipal::Principal),
                         },
                         update,
                     ));
@@ -1362,7 +1362,7 @@ impl RosettaRequestHandler {
                     add_neuron_management_payload(
                         RequestType::Follow {
                             neuron_index,
-                            controller: controller.map(|pid| PublicKeyOrPrincipal::Principal(pid)),
+                            controller: controller.map(PublicKeyOrPrincipal::Principal),
                         },
                         account,
                         controller,
