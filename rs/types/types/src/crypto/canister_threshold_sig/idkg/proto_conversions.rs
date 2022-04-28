@@ -145,7 +145,8 @@ impl TryFrom<ExtendedDerivationPathProto> for ExtendedDerivationPath {
 fn idkg_transcript_id_proto(idkg_transcript_id: &IDkgTranscriptId) -> IDkgTranscriptIdProto {
     IDkgTranscriptIdProto {
         id: idkg_transcript_id.id() as u64,
-        subnet_id: Some(subnet_id_into_protobuf(*idkg_transcript_id.subnet())),
+        subnet_id: Some(subnet_id_into_protobuf(*idkg_transcript_id.source_subnet())),
+        source_height: idkg_transcript_id.source_height().get(),
     }
 }
 
@@ -168,7 +169,11 @@ fn idkg_transcript_id_struct(
             error: format!("Failure parsing subnet id in IDkgTranscriptId: {:?}", e),
         }
     })?;
-    Ok(IDkgTranscriptId::new(subnet_id, proto.id as usize))
+    Ok(IDkgTranscriptId::new(
+        subnet_id,
+        proto.id,
+        Height::from(proto.source_height),
+    ))
 }
 
 fn idkg_transcript_params_proto(params: &IDkgTranscriptParams) -> IDkgTranscriptParamsProto {

@@ -98,7 +98,7 @@ fn multi_signed_dealing(dealer_id: NodeId) -> IDkgMultiSignedDealing {
 }
 
 fn dummy_transcript_id() -> IDkgTranscriptId {
-    IDkgTranscriptId::new(subnet_id(0), 0)
+    IDkgTranscriptId::new(subnet_id(0), 0, Height::new(0))
 }
 
 fn dummy_dealings() -> std::collections::BTreeMap<crate::NodeIndex, IDkgMultiSignedDealing> {

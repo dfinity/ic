@@ -17,6 +17,7 @@ use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
+use ic_types::crypto::canister_threshold_sig::error::IDkgTranscriptIdError;
 use ic_types::{
     batch::ValidationContext,
     consensus::{ecdsa, ecdsa::EcdsaBlockReader, Block, HasHeight},
@@ -47,6 +48,7 @@ pub enum EcdsaPayloadError {
     StateManagerError(StateManagerError),
     PreSignatureError(PresignatureQuadrupleCreationError),
     IDkgParamsValidationError(IDkgParamsValidationError),
+    IDkgTranscriptIdError(IDkgTranscriptIdError),
     DkgSummaryBlockNotFound(Height),
     SubnetWithNoNodes(RegistryVersion),
     EcdsaConfigNotFound(RegistryVersion),
@@ -76,6 +78,12 @@ impl From<PresignatureQuadrupleCreationError> for EcdsaPayloadError {
 impl From<IDkgParamsValidationError> for EcdsaPayloadError {
     fn from(err: IDkgParamsValidationError) -> Self {
         EcdsaPayloadError::IDkgParamsValidationError(err)
+    }
+}
+
+impl From<IDkgTranscriptIdError> for EcdsaPayloadError {
+    fn from(err: IDkgTranscriptIdError) -> Self {
+        EcdsaPayloadError::IDkgTranscriptIdError(err)
     }
 }
 
@@ -365,7 +373,7 @@ pub(crate) fn create_data_payload(
                     ongoing_signatures: BTreeMap::new(),
                     available_quadruples: BTreeMap::new(),
                     quadruples_in_creation: BTreeMap::new(),
-                    uid_generator: ecdsa::EcdsaUIDGenerator::new(subnet_id),
+                    uid_generator: ecdsa::EcdsaUIDGenerator::new(subnet_id, height),
                     idkg_transcripts: BTreeMap::new(),
                     ongoing_xnet_reshares: BTreeMap::new(),
                     xnet_reshare_agreements: BTreeMap::new(),
@@ -374,6 +382,7 @@ pub(crate) fn create_data_payload(
             }
             Some(ecdsa_summary) => {
                 ecdsa_payload = ecdsa_summary.ecdsa_payload.clone();
+                ecdsa_payload.uid_generator.update_height(height)?;
                 // If subnet node membership is going to change in the next summary block,
                 // we need to start producing a new next_key_transcript
                 next_key_transcript_creation = if is_subnet_membership_changing(
@@ -397,6 +406,7 @@ pub(crate) fn create_data_payload(
             None => return Ok(None),
             Some(prev_payload) => {
                 ecdsa_payload = prev_payload.ecdsa_payload.clone();
+                ecdsa_payload.uid_generator.update_height(height)?;
                 next_key_transcript_creation = prev_payload.next_key_transcript_creation.clone();
             }
         }
@@ -1291,7 +1301,7 @@ mod tests {
             ongoing_signatures: BTreeMap::new(),
             available_quadruples: BTreeMap::new(),
             quadruples_in_creation: BTreeMap::new(),
-            uid_generator: ecdsa::EcdsaUIDGenerator::new(subnet_id),
+            uid_generator: ecdsa::EcdsaUIDGenerator::new(subnet_id, Height::new(0)),
             idkg_transcripts: BTreeMap::new(),
             ongoing_xnet_reshares: BTreeMap::new(),
             xnet_reshare_agreements: BTreeMap::new(),
@@ -1396,9 +1406,12 @@ mod tests {
     #[test]
     fn test_ecdsa_make_new_quadruples_if_needed() {
         let subnet_id = subnet_test_id(1);
+        let cur_height = Height::new(1);
         let subnet_nodes = (0..10).map(node_test_id).collect::<Vec<_>>();
         let summary_registry_version = RegistryVersion::new(10);
         let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+        let update_res = ecdsa_payload.uid_generator.update_height(cur_height);
+        assert!(update_res.is_ok());
         let quadruples_to_create_in_advance = 5;
         let ecdsa_config = EcdsaConfig {
             quadruples_to_create_in_advance,
@@ -2017,6 +2030,8 @@ mod tests {
             );
             // 0. No action case
             let cur_height = Height::new(1000);
+            let update_res = payload.uid_generator.update_height(cur_height);
+            assert!(update_res.is_ok());
             let result = update_quadruples_in_creation(
                 Some(&key_transcript_ref),
                 &mut payload,
@@ -2051,6 +2066,8 @@ mod tests {
             transcript_builder
                 .add_transcript(kappa_config_ref.as_ref().transcript_id, kappa_transcript);
             let cur_height = Height::new(2000);
+            let update_res = payload.uid_generator.update_height(cur_height);
+            assert!(update_res.is_ok());
             let result = update_quadruples_in_creation(
                 Some(&key_transcript_ref),
                 &mut payload,
@@ -2068,7 +2085,7 @@ mod tests {
             }
             // check if new config is made
             assert!(payload.available_quadruples.is_empty());
-            let kappa_unmasked_config_id = IDkgTranscriptId::new(subnet_id, 2);
+            let kappa_unmasked_config_id = IDkgTranscriptId::new(subnet_id, 2, cur_height);
             assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 3);
             assert_eq!(config_ids(&payload), [1, 2]);
 
@@ -2083,6 +2100,8 @@ mod tests {
             transcript_builder
                 .add_transcript(lambda_config_ref.as_ref().transcript_id, lambda_transcript);
             let cur_height = Height::new(3000);
+            let update_res = payload.uid_generator.update_height(cur_height);
+            assert!(update_res.is_ok());
             let result = update_quadruples_in_creation(
                 Some(&key_transcript_ref),
                 &mut payload,
@@ -2101,7 +2120,7 @@ mod tests {
             // check if new config is made
             assert!(payload.available_quadruples.is_empty());
             assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 4);
-            let key_times_lambda_config_id = IDkgTranscriptId::new(subnet_id, 3);
+            let key_times_lambda_config_id = IDkgTranscriptId::new(subnet_id, 3, cur_height);
             assert_eq!(config_ids(&payload), [2, 3]);
 
             // 3. When kappa_unmasked and lambda_masked is ready, expect kappa_times_lambda
@@ -2119,6 +2138,8 @@ mod tests {
             };
             transcript_builder.add_transcript(kappa_unmasked_config_id, kappa_unmasked_transcript);
             let cur_height = Height::new(4000);
+            let update_res = payload.uid_generator.update_height(cur_height);
+            assert!(update_res.is_ok());
             let result = update_quadruples_in_creation(
                 Some(&key_transcript_ref),
                 &mut payload,
@@ -2137,7 +2158,7 @@ mod tests {
             // check if new config is made
             assert!(payload.available_quadruples.is_empty());
             assert_eq!(payload.uid_generator.clone().next_transcript_id().id(), 5);
-            let kappa_times_lambda_config_id = IDkgTranscriptId::new(subnet_id, 4);
+            let kappa_times_lambda_config_id = IDkgTranscriptId::new(subnet_id, 4, cur_height);
             assert_eq!(config_ids(&payload), [3, 4]);
 
             // 4. When both kappa_times_lambda and key_times_lambda are ready, quadruple is
@@ -2169,6 +2190,8 @@ mod tests {
             transcript_builder
                 .add_transcript(key_times_lambda_config_id, key_times_lambda_transcript);
             let cur_height = Height::new(5000);
+            let update_res = payload.uid_generator.update_height(cur_height);
+            assert!(update_res.is_ok());
             let result = update_quadruples_in_creation(
                 Some(&key_transcript_ref),
                 &mut payload,
@@ -2193,7 +2216,6 @@ mod tests {
         let mut payload = empty_ecdsa_payload(subnet_id);
         let subnet_nodes = env.receivers().into_iter().collect::<Vec<_>>();
         let algorithm = AlgorithmId::ThresholdEcdsaSecp256k1;
-
         let req_1 = create_reshare_request(1, 1);
         let req_2 = create_reshare_request(2, 2);
         let mut reshare_requests = BTreeSet::new();

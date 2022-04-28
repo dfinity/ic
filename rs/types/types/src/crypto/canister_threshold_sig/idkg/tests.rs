@@ -6,4 +6,5 @@ mod params;
 mod proto_conversions;
 mod receivers;
 mod test_utils;
+mod transcript_id;
 mod verify_transcript_params;

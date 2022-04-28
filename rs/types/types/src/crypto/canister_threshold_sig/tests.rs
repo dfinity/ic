@@ -3,7 +3,7 @@ use crate::crypto::canister_threshold_sig::error::{
     PresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
 };
 use crate::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
-use ic_base_types::{NodeId, RegistryVersion, SubnetId};
+use crate::{Height, NodeId, RegistryVersion, SubnetId};
 use ic_crypto_test_utils_canister_threshold_sigs::set_of_nodes;
 use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
@@ -442,13 +442,12 @@ fn should_not_create_ecdsa_inputs_for_quadruple_with_wrong_origin() {
 
 // A randomized way to get non-repeating IDs.
 pub fn random_transcript_id() -> IDkgTranscriptId {
-    const SUBNET_ID: u64 = 314159;
-
     let rng = &mut rand::thread_rng();
     let id = rng.gen();
-    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(SUBNET_ID));
+    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
+    let height = Height::from(rng.gen::<u64>());
 
-    IDkgTranscriptId::new(subnet, id)
+    IDkgTranscriptId::new(subnet, id, height)
 }
 
 pub fn transcript(

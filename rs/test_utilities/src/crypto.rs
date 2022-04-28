@@ -163,14 +163,19 @@ pub fn empty_ni_dkg_transcripts() -> std::collections::BTreeMap<NiDkgTag, NiDkgT
     empty_ni_dkg_transcripts_with_committee(vec![node_test_id(0)], 0)
 }
 
-pub fn dummy_idkg_transcript_id_for_tests(id: usize) -> IDkgTranscriptId {
+pub fn dummy_idkg_transcript_id_for_tests(id: u64) -> IDkgTranscriptId {
     let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(314159));
-    IDkgTranscriptId::new(subnet, id)
+    let height = Height::new(42);
+    IDkgTranscriptId::new(subnet, id, height)
 }
 
 pub fn dummy_idkg_dealing_for_tests() -> IDkgDealing {
     IDkgDealing {
-        transcript_id: IDkgTranscriptId::new(SubnetId::from(PrincipalId::new_subnet_test_id(1)), 1),
+        transcript_id: IDkgTranscriptId::new(
+            SubnetId::from(PrincipalId::new_subnet_test_id(1)),
+            1,
+            Height::new(1),
+        ),
         dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
         internal_dealing_raw: vec![],
     }
@@ -178,7 +183,11 @@ pub fn dummy_idkg_dealing_for_tests() -> IDkgDealing {
 
 pub fn dummy_idkg_complaint_for_tests() -> IDkgComplaint {
     IDkgComplaint {
-        transcript_id: IDkgTranscriptId::new(SubnetId::from(PrincipalId::new_subnet_test_id(1)), 1),
+        transcript_id: IDkgTranscriptId::new(
+            SubnetId::from(PrincipalId::new_subnet_test_id(1)),
+            1,
+            Height::new(1),
+        ),
         dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
         internal_complaint_raw: vec![],
     }

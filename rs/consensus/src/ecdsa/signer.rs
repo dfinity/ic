@@ -611,7 +611,7 @@ mod tests {
     // Tests the Action logic
     #[test]
     fn test_ecdsa_signer_action() {
-        let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
+        let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let (id_1, id_2, id_3, id_4) = (
             create_request_id(&mut uid_generator),
             create_request_id(&mut uid_generator),
@@ -683,7 +683,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
-                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let (id_1, id_2, id_3, id_4, id_5) = (
                     create_request_id(&mut uid_generator),
                     create_request_id(&mut uid_generator),
@@ -742,7 +742,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
-                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let (id_1, id_2, id_3) = (
                     create_request_id(&mut uid_generator),
                     create_request_id(&mut uid_generator),
@@ -786,7 +786,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
-                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3, id_4) = (
                     create_request_id(&mut uid_generator),
@@ -861,7 +861,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
-                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let time_source = FastForwardTimeSource::new();
                 let id_2 = create_request_id(&mut uid_generator);
 
@@ -902,7 +902,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
-                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let time_source = FastForwardTimeSource::new();
                 let id_2 = create_request_id(&mut uid_generator);
 
@@ -956,7 +956,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
-                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3) = (
                     create_request_id(&mut uid_generator),
@@ -1015,7 +1015,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
-                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1));
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let (id_1, id_2, id_3) = (
                     create_request_id(&mut uid_generator),
                     create_request_id(&mut uid_generator),

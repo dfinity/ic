@@ -2,10 +2,10 @@
 use crate::consensus::ecdsa::EcdsaDealing;
 use crate::consensus::get_faults_tolerated;
 use crate::crypto::canister_threshold_sig::error::{
-    IDkgParamsValidationError, InitialIDkgDealingsValidationError,
+    IDkgParamsValidationError, IDkgTranscriptIdError, InitialIDkgDealingsValidationError,
 };
 use crate::crypto::{AlgorithmId, CombinedMultiSigOf};
-use crate::{NodeId, NumberOfNodes, RegistryVersion};
+use crate::{Height, NodeId, NumberOfNodes, RegistryVersion};
 use ic_base_types::SubnetId;
 use ic_crypto_internal_types::NodeIndex;
 use serde::{Deserialize, Serialize};
@@ -23,29 +23,60 @@ mod tests;
 /// Unique identifier for an IDkg transcript.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct IDkgTranscriptId {
-    id: usize,
-    subnet: SubnetId,
+    id: u64,
+    /// Specifies which subnet generates the dealings for this instance of the IDKG protocol.
+    source_subnet: SubnetId,
+    /// Finalized block height in the `source_subnet` which specifies
+    /// the beginning of this instance of the IDKG protocol.
+    source_height: Height,
 }
 
 impl IDkgTranscriptId {
-    pub fn new(subnet: SubnetId, id: usize) -> Self {
-        Self { id, subnet }
+    pub fn new(subnet: SubnetId, id: u64, height: Height) -> Self {
+        Self {
+            id,
+            source_subnet: subnet,
+            source_height: height,
+        }
     }
 
-    pub fn id(&self) -> usize {
+    pub fn id(&self) -> u64 {
         self.id
     }
 
-    pub fn subnet(&self) -> &SubnetId {
-        &self.subnet
+    pub fn source_subnet(&self) -> &SubnetId {
+        &self.source_subnet
     }
 
-    /// Return the next value of this id.
+    pub fn source_height(&self) -> Height {
+        self.source_height
+    }
+
+    /// Returns the next Transcript ID.
     pub fn increment(self) -> Self {
         Self {
             id: self.id + 1,
-            subnet: self.subnet,
+            source_subnet: self.source_subnet,
+            source_height: self.source_height,
         }
+    }
+
+    /// Updates the `height` of the Transcript ID.
+    ///
+    /// # Errors:
+    /// * If the `height` is smaller than `self.source_height` the error `DecreasedBlockHeight` is returned.
+    pub(crate) fn update_height(self, height: Height) -> Result<Self, IDkgTranscriptIdError> {
+        if height < self.source_height {
+            return Err(IDkgTranscriptIdError::DecreasedBlockHeight {
+                existing_height: self.source_height,
+                updated_height: height,
+            });
+        }
+        Ok(Self {
+            id: self.id,
+            source_subnet: self.source_subnet,
+            source_height: height,
+        })
     }
 }
 
@@ -800,22 +831,29 @@ fn number_of_nodes_from_usize(number: usize) -> Result<NumberOfNodes, ()> {
 
 /// Contextual data needed for the creation of a dealing.
 ///
-/// Returns a byte vector consisting of:
+/// Returns a byte vector consisting of the concatenation of the following:
+/// The transcript ID, serialized as the concatenation of the following byte vectors:
 /// - IDkgTranscriptId::SubnetId, as a byte-string (prefixed with its
 ///   64-bit-big-endian-integer length)
 /// - IDkgTranscriptId::id, as a big-endian 64-bit integer
-/// - RegistryVersion, as a big-endian 64-bit integer
-/// - AlgorithmId, as an 8-bit integer value
+/// - IDkgTranscriptId::source_subnet, as a big-endian 64-bit integer
+/// The registry version, as a big-endian 64-bit integer
+/// The Algorithm ID, as an 8-bit integer value
 fn context_data(
     transcript_id: &IDkgTranscriptId,
     registry_version: RegistryVersion,
     algorithm_id: AlgorithmId,
 ) -> Vec<u8> {
-    let mut ret = Vec::with_capacity(8 + transcript_id.subnet().get().as_slice().len() + 8 + 8 + 1);
+    let mut ret = Vec::with_capacity(
+        8 + transcript_id.source_subnet().get().as_slice().len() + 8 + 8 + 8 + 1,
+    );
 
-    ret.extend_from_slice(&(transcript_id.subnet().get().as_slice().len() as u64).to_be_bytes());
-    ret.extend_from_slice(transcript_id.subnet().get().as_slice());
+    ret.extend_from_slice(
+        &(transcript_id.source_subnet().get().as_slice().len() as u64).to_be_bytes(),
+    );
+    ret.extend_from_slice(transcript_id.source_subnet().get().as_slice());
     ret.extend_from_slice(&(transcript_id.id() as u64).to_be_bytes());
+    ret.extend_from_slice(&(transcript_id.source_height().get()).to_be_bytes());
     ret.extend_from_slice(&(registry_version.get() as u64).to_be_bytes());
     ret.push(algorithm_id as u8);
 

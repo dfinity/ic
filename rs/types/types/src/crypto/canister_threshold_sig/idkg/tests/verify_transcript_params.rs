@@ -1,4 +1,5 @@
 use crate::consensus::ecdsa::EcdsaDealing;
+use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::random_transcript_id;
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealers, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgMultiSignedDealing, IDkgReceivers,
     IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
@@ -23,6 +24,7 @@ fn should_succeed_on_correct_transcript() {
 #[test]
 fn should_fail_on_mismatching_transcript_ids() {
     let (mut transcript, params) = valid_transcript_and_params();
+
     transcript.transcript_id = transcript.transcript_id.increment();
     assert_ne!(transcript.transcript_id, params.transcript_id());
 
@@ -211,7 +213,7 @@ fn should_fail_on_ineligible_signer() {
 }
 
 fn valid_transcript_and_params() -> (IDkgTranscript, IDkgTranscriptParams) {
-    let transcript_id = transcript_id(12, 34);
+    let transcript_id = random_transcript_id();
     let dealers = dealers(btreeset! {node_id(42), node_id(43), node_id(44)});
     let receivers = receivers(btreeset! {node_id(45), node_id(46)});
     let registry_version = RegistryVersion::from(234);
@@ -278,11 +280,7 @@ fn dummy_transcript() -> IDkgTranscript {
 }
 
 fn dummy_transcript_id() -> IDkgTranscriptId {
-    IDkgTranscriptId::new(subnet_id(0), 0)
-}
-
-fn transcript_id(subnet: u64, id: usize) -> IDkgTranscriptId {
-    IDkgTranscriptId::new(subnet_id(subnet), id)
+    IDkgTranscriptId::new(subnet_id(0), 0, Height::new(0))
 }
 
 fn dummy_receivers() -> IDkgReceivers {

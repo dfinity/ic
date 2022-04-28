@@ -4,7 +4,7 @@ use crate::crypto::canister_threshold_sig::idkg::{
     IDkgUnmaskedTranscriptOrigin,
 };
 use crate::crypto::AlgorithmId;
-use crate::{NodeId, PrincipalId, RegistryVersion, SubnetId};
+use crate::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_test_utils_canister_threshold_sigs::node_id;
 use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
@@ -14,7 +14,7 @@ pub fn create_params_for_dealers(
     operation: IDkgTranscriptOperation,
 ) -> IDkgTranscriptParams {
     IDkgTranscriptParams::new(
-        transcript_id_generator(),
+        random_transcript_id(),
         dealer_set.clone(),
         dealer_set.clone(),
         RegistryVersion::from(0),
@@ -25,19 +25,19 @@ pub fn create_params_for_dealers(
 }
 
 // A randomized way to get non-repeating IDs.
-pub fn transcript_id_generator() -> IDkgTranscriptId {
-    const SUBNET_ID: u64 = 314159;
-
+pub fn random_transcript_id() -> IDkgTranscriptId {
     let rng = &mut rand::thread_rng();
-    let id = rng.gen();
-    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(SUBNET_ID));
 
-    IDkgTranscriptId::new(subnet, id)
+    let id = rng.gen();
+    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
+    let height = Height::from(rng.gen::<u64>());
+
+    IDkgTranscriptId::new(subnet, id, height)
 }
 
 pub fn mock_unmasked_transcript_type() -> IDkgTranscriptType {
     IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
-        transcript_id_generator(),
+        random_transcript_id(),
     ))
 }
 
@@ -61,7 +61,7 @@ pub fn mock_transcript(
     };
 
     IDkgTranscript {
-        transcript_id: transcript_id_generator(),
+        transcript_id: random_transcript_id(),
         receivers: IDkgReceivers::new(receivers).unwrap(),
         registry_version: RegistryVersion::from(314),
         verified_dealings: BTreeMap::new(),

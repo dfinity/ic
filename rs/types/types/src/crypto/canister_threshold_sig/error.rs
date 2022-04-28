@@ -2,7 +2,7 @@
 //! signatures.
 use crate::crypto::{AlgorithmId, CryptoError, KeyId};
 use crate::registry::RegistryClientError;
-use crate::{NodeId, RegistryVersion};
+use crate::{Height, NodeId, RegistryVersion};
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +15,15 @@ macro_rules! impl_display_using_debug {
         }
     };
 }
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IDkgTranscriptIdError {
+    DecreasedBlockHeight {
+        existing_height: Height,
+        updated_height: Height,
+    },
+}
+impl_display_using_debug!(IDkgTranscriptIdError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PresignatureQuadrupleCreationError {
