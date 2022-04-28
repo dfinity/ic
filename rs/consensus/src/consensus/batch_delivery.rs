@@ -252,6 +252,16 @@ pub fn generate_responses_to_subnet_calls(
                 sign_with_ecdsa_contexts,
                 &payload.ecdsa_payload,
             ));
+
+            let ecdsa_dealings_contexts = &state
+                .get_ref()
+                .metadata
+                .subnet_call_context_manager
+                .ecdsa_dealings_contexts;
+            consensus_responses.append(&mut generate_responses_to_initial_dealings_calls(
+                ecdsa_dealings_contexts,
+                &payload.ecdsa_payload,
+            ));
         }
     }
     consensus_responses
@@ -376,6 +386,41 @@ pub fn generate_responses_to_sign_with_ecdsa_calls(
                 response_payload: messages::Payload::Data(
                     SignWithECDSAReply {
                         signature: response.signature.clone(),
+                    }
+                    .encode(),
+                ),
+            });
+        }
+    }
+    consensus_responses
+}
+
+/// Creates responses to `ComputeInitialEcdsaDealingsArgs` system calls with the initial
+/// dealings.
+fn generate_responses_to_initial_dealings_calls(
+    contexts: &BTreeMap<CallbackId, EcdsaDealingsContext>,
+    ecdsa_payload: &ecdsa::EcdsaPayload,
+) -> Vec<Response> {
+    use ic_ic00_types::ComputeInitialEcdsaDealingsResponse;
+    let mut consensus_responses = Vec::<Response>::new();
+    for (callback_id, context) in contexts.iter() {
+        let request = ecdsa::EcdsaReshareRequest {
+            key_id: context.key_id.clone(),
+            receiving_node_ids: context.nodes.iter().cloned().collect(),
+            registry_version: context.registry_version,
+        };
+
+        if let Some(ecdsa::CompletedReshareRequest::Unreported(initial_dealings)) =
+            ecdsa_payload.xnet_reshare_agreements.get(&request)
+        {
+            consensus_responses.push(Response {
+                originator: context.request.sender,
+                respondent: CanisterId::ic_00(),
+                originator_reply_callback: *callback_id,
+                refund: context.request.payment,
+                response_payload: messages::Payload::Data(
+                    ComputeInitialEcdsaDealingsResponse {
+                        initial_dkg_dealings: (initial_dealings.as_ref()).into(),
                     }
                     .encode(),
                 ),

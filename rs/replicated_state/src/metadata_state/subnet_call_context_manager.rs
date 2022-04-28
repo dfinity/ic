@@ -82,6 +82,19 @@ impl SubnetCallContextManager {
                     })
             })
             .or_else(|| {
+                self.ecdsa_dealings_contexts
+                    .remove(&callback_id)
+                    .map(|context| {
+                        info!(
+                            logger,
+                            "Received the response for ComputeInitialEcdsaDealings request with key_id {:?} from {:?}",
+                            context.key_id,
+                            context.request.sender
+                        );
+                        context.request
+                    })
+            })
+            .or_else(|| {
                 self.canister_http_request_contexts
                     .remove(&callback_id)
                     .map(|context| {

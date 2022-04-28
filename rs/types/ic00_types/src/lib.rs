@@ -6,7 +6,7 @@ use candid::{CandidType, Decode, Deserialize, Encode};
 use ic_base_types::{CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SubnetId};
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
+use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
 use ic_protobuf::{proxy::ProxyDecodeError, registry::crypto::v1 as pb_registry_crypto};
 use num_traits::cast::ToPrimitive;
 use serde::Serialize;
@@ -663,7 +663,7 @@ impl SetupInitialDKGResponse {
 /// (variant { secp256k1; })
 /// ```
 #[derive(
-    CandidType, Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize,
+    CandidType, Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash,
 )]
 pub enum EcdsaCurve {
     #[serde(rename = "secp256k1")]
@@ -725,7 +725,9 @@ fn ecdsa_curve_round_trip() {
 /// ```text
 /// (record { curve: ecdsa_curve; name: text})
 /// ```
-#[derive(CandidType, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    CandidType, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash,
+)]
 pub struct EcdsaKeyId {
     pub curve: EcdsaCurve,
     pub name: String,
@@ -892,3 +894,39 @@ impl ComputeInitialEcdsaDealingsArgs {
 }
 
 impl Payload<'_> for ComputeInitialEcdsaDealingsArgs {}
+
+/// Struct used to return the xnet initial dealings.
+#[derive(Debug)]
+pub struct ComputeInitialEcdsaDealingsResponse {
+    pub initial_dkg_dealings: InitialIDkgDealings,
+}
+
+impl ComputeInitialEcdsaDealingsResponse {
+    pub fn encode(&self) -> Vec<u8> {
+        let serde_encoded_transcript_records = self.encode_with_serde_cbor();
+        Encode!(&serde_encoded_transcript_records).unwrap()
+    }
+
+    fn encode_with_serde_cbor(&self) -> Vec<u8> {
+        let transcript_records = (&self.initial_dkg_dealings,);
+        serde_cbor::to_vec(&transcript_records).unwrap()
+    }
+
+    pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
+        let serde_encoded_transcript_records = Decode!(blob, Vec<u8>).map_err(|err| {
+            UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!("Error decoding candid: {}", err),
+            )
+        })?;
+        match serde_cbor::from_slice::<(InitialIDkgDealings,)>(&serde_encoded_transcript_records) {
+            Err(err) => Err(UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!("Payload deserialization error: '{}'", err),
+            )),
+            Ok((initial_dkg_dealings,)) => Ok(Self {
+                initial_dkg_dealings,
+            }),
+        }
+    }
+}

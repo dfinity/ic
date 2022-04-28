@@ -39,8 +39,10 @@ message OngoingXnetReshare {
 }
 
 message XnetReshareAgreement {
+  reserved 2;
+  reserved "response";
   EcdsaReshareRequest request = 1;
-  EcdsaReshareResponse response = 2;
+  registry.subnet.v1.InitialIDkgDealings initial_dealings = 3;
 }
 
 message RequestId {
@@ -130,13 +132,9 @@ message CompletedSignature {
 }
 
 message EcdsaReshareRequest {
-  bytes key_id = 1;
+  reserved 1;
   repeated types.v1.NodeId receiving_node_ids = 2;
   uint64 registry_version = 3;
-}
-
-message EcdsaReshareResponse {
-  ReshareOfUnmaskedParams transcript = 1;
-  repeated registry.subnet.v1.IDkgDealingTuple tuples = 2;
+  registry.crypto.v1.EcdsaKeyId key_id = 4;
 }
 

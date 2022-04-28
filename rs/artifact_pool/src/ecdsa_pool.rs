@@ -20,9 +20,13 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
-    EcdsaComplaint, EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash, EcdsaMessageType,
-    EcdsaOpening, EcdsaSigShare, EcdsaSignedDealing,
+    EcdsaComplaint, EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash,
+    EcdsaMessageType, EcdsaOpening, EcdsaSigShare, EcdsaSignedDealing,
 };
+use ic_types::crypto::canister_threshold_sig::idkg::InitialIDkgDealings;
+use ic_types::crypto::{BasicSig, BasicSigOf};
+use ic_types::signature::BasicSignature;
+use ic_types::Height;
 
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -231,6 +235,32 @@ impl EcdsaPoolImpl {
             )),
             log,
         }
+    }
+
+    // Populates the validated pool with the initial dealings.
+    pub fn add_initial_dealings(&mut self, initial_dealings: InitialIDkgDealings) {
+        let mut change_set = Vec::new();
+        for dealing in initial_dealings.dealings().values() {
+            let ecdsa_dealing = EcdsaDealing {
+                requested_height: Height::new(0),
+                idkg_dealing: dealing.clone(),
+            };
+            let signed_dealing = EcdsaSignedDealing {
+                // Fake the basic signature. This should be fine as we
+                // are adding to the validated pool, which happens after
+                // the signature validation. The signature won't be validated
+                // again.
+                signature: BasicSignature {
+                    signature: BasicSigOf::new(BasicSig(vec![])),
+                    signer: dealing.dealer_id,
+                },
+                content: ecdsa_dealing,
+            };
+            change_set.push(EcdsaChangeAction::AddToValidated(
+                EcdsaMessage::EcdsaSignedDealing(signed_dealing),
+            ));
+        }
+        self.apply_changes(change_set);
     }
 }
 

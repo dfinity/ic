@@ -184,7 +184,7 @@ use ic_types::{
     artifact::{EcdsaMessageAttribute, EcdsaMessageId, Priority, PriorityFn},
     consensus::ecdsa::EcdsaBlockReader,
     malicious_flags::MaliciousFlags,
-    Height, NodeId,
+    Height, NodeId, SubnetId,
 };
 
 use std::sync::Arc;
@@ -195,6 +195,7 @@ pub(crate) mod pre_signer;
 pub(crate) mod signer;
 pub(crate) mod utils;
 
+pub use payload_builder::get_initial_dealings;
 pub(crate) use payload_builder::{create_data_payload, create_summary_payload};
 
 /// Similar to consensus, we don't fetch artifacts too far ahead in future.
@@ -215,6 +216,7 @@ impl EcdsaImpl {
     /// Builds a new threshold ECDSA component
     pub fn new(
         node_id: NodeId,
+        subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
         metrics_registry: MetricsRegistry,
@@ -223,6 +225,7 @@ impl EcdsaImpl {
     ) -> Self {
         let pre_signer = Box::new(EcdsaPreSignerImpl::new(
             node_id,
+            subnet_id,
             consensus_block_cache.clone(),
             crypto.clone(),
             metrics_registry.clone(),

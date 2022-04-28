@@ -22,8 +22,8 @@ use std::convert::TryFrom;
 #[test]
 fn should_correctly_serialize_and_deserialize_initial_dealings() {
     let initial_dealings = initial_dealings();
-    let proto = InitialIDkgDealingsProto::from(initial_dealings.clone());
-    let parsing_result = InitialIDkgDealings::try_from(proto);
+    let proto = InitialIDkgDealingsProto::from(&initial_dealings);
+    let parsing_result = InitialIDkgDealings::try_from(&proto);
     assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
     let parsed = parsing_result.unwrap();
     assert_eq!(initial_dealings, parsed);
