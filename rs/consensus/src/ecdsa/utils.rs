@@ -5,8 +5,8 @@ use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_types::consensus::ecdsa::{EcdsaBlockReader, TranscriptRef};
 use ic_types::consensus::ecdsa::{
-    EcdsaDataPayload, EcdsaMessage, IDkgTranscriptParamsRef, RequestId, ThresholdEcdsaSigInputsRef,
-    TranscriptLookupError,
+    EcdsaDataPayload, EcdsaMessage, IDkgTranscriptParamsRef, KeyTranscriptCreation, RequestId,
+    ThresholdEcdsaSigInputsRef, TranscriptLookupError,
 };
 use ic_types::consensus::{Block, BlockPayload, HasHeight};
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
@@ -41,11 +41,32 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
         self.tip.height()
     }
 
+    fn xnet_reshare_in_progress(&self) -> bool {
+        if !self.tip.payload.is_summary() {
+            let tip_ecdsa_payload = &self.tip.payload.as_ref().as_data().ecdsa;
+            if let Some(payload) = tip_ecdsa_payload {
+                return matches!(
+                    payload.next_key_transcript_creation,
+                    KeyTranscriptCreation::XnetReshareOfUnmaskedParams(_)
+                );
+            }
+        }
+        false
+    }
+
     fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
         self.tip_ecdsa_payload
             .as_ref()
             .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
                 ecdsa_payload.iter_transcript_configs_in_creation()
+            })
+    }
+
+    fn xnet_reshare_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
+        self.tip_ecdsa_payload
+            .as_ref()
+            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
+                ecdsa_payload.iter_xnet_reshare_transcript_configs()
             })
     }
 
@@ -177,8 +198,9 @@ pub(crate) mod test_utils {
         UnmaskedTranscript,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{
-        IDkgComplaint, IDkgMaskedTranscriptOrigin, IDkgOpening, IDkgReceivers, IDkgTranscript,
-        IDkgTranscriptId, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
+        IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgOpening, IDkgReceivers,
+        IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+        IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
     };
     use ic_types::crypto::canister_threshold_sig::{
         ExtendedDerivationPath, ThresholdEcdsaSigShare,
@@ -292,8 +314,18 @@ pub(crate) mod test_utils {
             self.height
         }
 
+        fn xnet_reshare_in_progress(&self) -> bool {
+            false
+        }
+
         fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
             Box::new(self.requested_transcripts.iter())
+        }
+
+        fn xnet_reshare_transcripts(
+            &self,
+        ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
+            Box::new(std::iter::empty())
         }
 
         fn requested_signatures(
@@ -377,12 +409,14 @@ pub(crate) mod test_utils {
 
     pub(crate) struct TestEcdsaTranscriptBuilder {
         transcripts: Mutex<BTreeMap<IDkgTranscriptId, IDkgTranscript>>,
+        dealings: Mutex<BTreeMap<IDkgTranscriptId, BTreeMap<NodeId, IDkgDealing>>>,
     }
 
     impl TestEcdsaTranscriptBuilder {
         pub(crate) fn new() -> Self {
             Self {
                 transcripts: Mutex::new(BTreeMap::new()),
+                dealings: Mutex::new(BTreeMap::new()),
             }
         }
 
@@ -395,6 +429,17 @@ pub(crate) mod test_utils {
                 .lock()
                 .unwrap()
                 .insert(transcript_id, transcript);
+        }
+
+        pub(crate) fn add_dealings(
+            &self,
+            transcript_id: IDkgTranscriptId,
+            dealings: BTreeMap<NodeId, IDkgDealing>,
+        ) {
+            self.dealings
+                .lock()
+                .unwrap()
+                .insert(transcript_id, dealings);
         }
     }
 
@@ -409,6 +454,19 @@ pub(crate) mod test_utils {
                 .unwrap()
                 .get(&transcript_id)
                 .cloned()
+        }
+
+        fn get_validated_dealings(
+            &self,
+            transcript_id: IDkgTranscriptId,
+            _ecdsa_pool: &dyn EcdsaPool,
+        ) -> BTreeMap<NodeId, IDkgDealing> {
+            self.dealings
+                .lock()
+                .unwrap()
+                .get(&transcript_id)
+                .cloned()
+                .unwrap_or_default()
         }
     }
 
@@ -427,8 +485,11 @@ pub(crate) mod test_utils {
             ..
         } = dependencies(pool_config.clone(), 1);
 
+        // need to make sure subnet matches the transcript
+        let dummy_id = create_transcript_id(0);
         let pre_signer = EcdsaPreSignerImpl::new(
             NODE_1,
+            *dummy_id.source_subnet(),
             pool.get_block_cache(),
             crypto,
             metrics_registry.clone(),
@@ -556,6 +617,30 @@ pub(crate) mod test_utils {
             idkg_transcripts,
             transcript_params_ref: transcript_params_ref.as_ref().clone(),
         }
+    }
+
+    // Creates a ReshareUnmasked transcript params to reshare the given transcript
+    pub(crate) fn create_reshare_unmasked_transcript_param(
+        unmasked_transcript: &IDkgTranscript,
+        receiver_list: &[NodeId],
+        registry_version: RegistryVersion,
+    ) -> IDkgTranscriptParams {
+        let reshare_unmasked_id = unmasked_transcript.transcript_id.increment();
+        let dealers = unmasked_transcript.receivers.get().clone();
+        let receivers = receiver_list.iter().fold(BTreeSet::new(), |mut acc, node| {
+            acc.insert(*node);
+            acc
+        });
+
+        IDkgTranscriptParams::new(
+            reshare_unmasked_id,
+            dealers,
+            receivers,
+            registry_version,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript.clone()),
+        )
+        .unwrap()
     }
 
     // Creates a test dealing

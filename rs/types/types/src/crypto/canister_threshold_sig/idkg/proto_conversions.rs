@@ -16,6 +16,7 @@ use ic_protobuf::registry::subnet::v1::DealerTuple as DealerTupleProto;
 use ic_protobuf::registry::subnet::v1::ExtendedDerivationPath as ExtendedDerivationPathProto;
 use ic_protobuf::registry::subnet::v1::IDkgDealing as IDkgDealingProto;
 use ic_protobuf::registry::subnet::v1::IDkgDealingTuple as IDkgDealingTupleProto;
+use ic_protobuf::registry::subnet::v1::IDkgSignedDealingTuple as IDkgSignedDealingTupleProto;
 use ic_protobuf::registry::subnet::v1::IDkgTranscript as IDkgTranscriptProto;
 use ic_protobuf::registry::subnet::v1::IDkgTranscriptId as IDkgTranscriptIdProto;
 use ic_protobuf::registry::subnet::v1::IDkgTranscriptOperation as IDkgTranscriptOperationProto;
@@ -82,33 +83,40 @@ impl TryFrom<&IDkgDealingTupleProto> for IDkgDealing {
     }
 }
 
-impl From<InitialIDkgDealings> for InitialIDkgDealingsProto {
-    fn from(initial_dealings: InitialIDkgDealings) -> Self {
-        let dealings = initial_dealings
+impl From<&InitialIDkgDealings> for InitialIDkgDealingsProto {
+    fn from(initial_dealings: &InitialIDkgDealings) -> Self {
+        let signed_dealings = initial_dealings
             .dealings()
             .iter()
-            .map(|(dealer_id, idkg_dealing)| idkg_dealing_tuple_proto(dealer_id, idkg_dealing))
+            .map(|(dealer_id, idkg_dealing)| {
+                // TODO: change to use signed dealings.
+                let unsigned_proto = idkg_dealing_tuple_proto(dealer_id, idkg_dealing);
+                IDkgSignedDealingTupleProto {
+                    dealer: unsigned_proto.dealer,
+                    dealing: unsigned_proto.dealing,
+                    signature: vec![], // Dummy signature
+                }
+            })
             .collect();
         InitialIDkgDealingsProto {
             version: CURRENT_INITIAL_IDKG_DEALINGS_VERSION,
             params: Some(idkg_transcript_params_proto(&initial_dealings.params())),
-            dealings,
+            signed_dealings,
         }
     }
 }
 
-impl TryFrom<InitialIDkgDealingsProto> for InitialIDkgDealings {
+impl TryFrom<&InitialIDkgDealingsProto> for InitialIDkgDealings {
     type Error = InitialIDkgDealingsValidationError;
 
-    fn try_from(proto: InitialIDkgDealingsProto) -> Result<Self, Self::Error> {
-        let params_proto =
-            proto
-                .params
-                .ok_or(InitialIDkgDealingsValidationError::DeserializationError {
-                    error: "Missing IDkgTranscriptParams.".to_string(),
-                })?;
-        let params = idkg_transcript_params_struct(&params_proto)?;
-        let dealings = initial_dealings_map(&proto.dealings)?;
+    fn try_from(proto: &InitialIDkgDealingsProto) -> Result<Self, Self::Error> {
+        let params_proto = proto.params.as_ref().ok_or(
+            InitialIDkgDealingsValidationError::DeserializationError {
+                error: "Missing IDkgTranscriptParams.".to_string(),
+            },
+        )?;
+        let params = idkg_transcript_params_struct(params_proto)?;
+        let dealings = initial_dealings_map(&proto.signed_dealings)?;
         InitialIDkgDealings::new(params, dealings)
     }
 }
@@ -485,11 +493,16 @@ fn verified_dealings_map(
 }
 
 fn initial_dealings_map(
-    dealing_tuple_protos: &[IDkgDealingTupleProto],
+    dealing_tuple_protos: &[IDkgSignedDealingTupleProto],
 ) -> Result<BTreeMap<NodeId, IDkgDealing>, InitialIDkgDealingsValidationError> {
     let mut result = BTreeMap::new();
     for proto in dealing_tuple_protos.iter() {
-        let dealing = idkg_dealing_struct(&Some(proto.clone()))?;
+        // TODO: change to use signed dealings.
+        let unsigned_proto = IDkgDealingTupleProto {
+            dealer: proto.dealer.clone(),
+            dealing: proto.dealing.clone(),
+        };
+        let dealing = idkg_dealing_struct(&Some(unsigned_proto))?;
         result.insert(dealing.dealer_id, dealing);
     }
     Ok(result)

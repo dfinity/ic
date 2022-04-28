@@ -18,15 +18,12 @@ use ic_types::consensus::ecdsa::{
     EcdsaVerifiedDealing,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgMultiSignedDealing, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
+    IDkgDealing, IDkgMultiSignedDealing, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
     IDkgTranscriptParams,
 };
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::signature::MultiSignature;
-use ic_types::{Height, NodeId};
-
-#[cfg(feature = "malicious_code")]
-use ic_types::crypto::canister_threshold_sig::idkg::IDkgDealing;
+use ic_types::{Height, NodeId, SubnetId};
 
 use prometheus::IntCounterVec;
 use std::collections::{BTreeMap, BTreeSet};
@@ -44,6 +41,7 @@ pub(crate) trait EcdsaPreSigner: Send {
 
 pub(crate) struct EcdsaPreSignerImpl {
     node_id: NodeId,
+    subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
     schedule: RoundRobin,
@@ -55,6 +53,7 @@ pub(crate) struct EcdsaPreSignerImpl {
 impl EcdsaPreSignerImpl {
     pub(crate) fn new(
         node_id: NodeId,
+        subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
         metrics_registry: MetricsRegistry,
@@ -63,6 +62,7 @@ impl EcdsaPreSignerImpl {
     ) -> Self {
         Self {
             node_id,
+            subnet_id,
             consensus_block_cache,
             crypto,
             schedule: RoundRobin::default(),
@@ -218,6 +218,11 @@ impl EcdsaPreSignerImpl {
             trancript_param_map.insert(transcript_params.transcript_id(), transcript_params);
         }
 
+        let mut xnet_reshare_transcripts = BTreeSet::new();
+        for transcript_params_ref in block_reader.xnet_reshare_transcripts() {
+            xnet_reshare_transcripts.insert(transcript_params_ref.transcript_id);
+        }
+
         ecdsa_pool
             .validated()
             .signed_dealings()
@@ -252,6 +257,16 @@ impl EcdsaPreSignerImpl {
                 }
             })
             .flat_map(|(id, transcript_params, signed_dealing)| {
+                let dealing = signed_dealing.get();
+                if xnet_reshare_transcripts.contains(&dealing.idkg_dealing.transcript_id) {
+                    self.metrics
+                        .pre_sign_errors_inc("create_support_for_xnet_transcript");
+                    warn!(
+                        self.log,
+                        "Dealing support creation: unexpected support for xnet dealing: {}",
+                        signed_dealing,
+                    );
+                }
                 self.crypto_create_dealing_support(&id, transcript_params, signed_dealing.get())
             })
             .collect()
@@ -279,6 +294,11 @@ impl EcdsaPreSignerImpl {
                 dealing.idkg_dealing.dealer_id,
             );
             valid_dealings.insert(dealing_key);
+        }
+
+        let mut xnet_reshare_transcripts = BTreeSet::new();
+        for transcript_params_ref in block_reader.xnet_reshare_transcripts() {
+            xnet_reshare_transcripts.insert(transcript_params_ref.transcript_id);
         }
 
         // Pass 1: collection of <TranscriptId, DealerId, SignerId>
@@ -316,6 +336,16 @@ impl EcdsaPreSignerImpl {
                 ret.push(EcdsaChangeAction::HandleInvalid(
                     id,
                     format!("Duplicate support in unvalidated batch: {}", support),
+                ));
+                continue;
+            }
+
+            // Drop shares for xnet reshare transcripts
+            if xnet_reshare_transcripts.contains(&dealing.idkg_dealing.transcript_id) {
+                self.metrics.pre_sign_errors_inc("xnet_reshare_support");
+                ret.push(EcdsaChangeAction::HandleInvalid(
+                    id,
+                    format!("Support for xnet reshare transcript: {}", support),
                 ));
                 continue;
             }
@@ -388,13 +418,19 @@ impl EcdsaPreSignerImpl {
 
         let mut ret = Vec::new();
         let current_height = block_reader.tip_height();
+        let xnet_reshare_in_progress = block_reader.xnet_reshare_in_progress();
 
         // Unvalidated dealings.
         let mut action = ecdsa_pool
             .unvalidated()
             .signed_dealings()
             .filter(|(_, signed_dealing)| {
-                self.should_purge(signed_dealing.get(), current_height, &in_progress)
+                self.should_purge(
+                    signed_dealing.get(),
+                    current_height,
+                    &in_progress,
+                    xnet_reshare_in_progress,
+                )
             })
             .map(|(id, _)| EcdsaChangeAction::RemoveUnvalidated(id))
             .collect();
@@ -405,7 +441,12 @@ impl EcdsaPreSignerImpl {
             .validated()
             .signed_dealings()
             .filter(|(_, signed_dealing)| {
-                self.should_purge(signed_dealing.get(), current_height, &in_progress)
+                self.should_purge(
+                    signed_dealing.get(),
+                    current_height,
+                    &in_progress,
+                    xnet_reshare_in_progress,
+                )
             })
             .map(|(id, _)| EcdsaChangeAction::RemoveValidated(id))
             .collect();
@@ -416,7 +457,12 @@ impl EcdsaPreSignerImpl {
             .unvalidated()
             .dealing_support()
             .filter(|(_, support)| {
-                self.should_purge(&support.content, current_height, &in_progress)
+                self.should_purge(
+                    &support.content,
+                    current_height,
+                    &in_progress,
+                    xnet_reshare_in_progress,
+                )
             })
             .map(|(id, _)| EcdsaChangeAction::RemoveUnvalidated(id))
             .collect();
@@ -427,7 +473,12 @@ impl EcdsaPreSignerImpl {
             .validated()
             .dealing_support()
             .filter(|(_, support)| {
-                self.should_purge(&support.content, current_height, &in_progress)
+                self.should_purge(
+                    &support.content,
+                    current_height,
+                    &in_progress,
+                    xnet_reshare_in_progress,
+                )
             })
             .map(|(id, _)| EcdsaChangeAction::RemoveValidated(id))
             .collect();
@@ -794,7 +845,16 @@ impl EcdsaPreSignerImpl {
         dealing: &EcdsaDealing,
         current_height: Height,
         in_progress: &BTreeSet<IDkgTranscriptId>,
+        xnet_reshare_in_progress: bool,
     ) -> bool {
+        // It is possible the ECDSA component runs and tries to purge the initial
+        // dealings before the finalized tip has the next_key_transcript_creation
+        // set up. Avoid this by keeping the initial dealings until the initial
+        // resharing completes.
+        if *dealing.idkg_dealing.transcript_id.source_subnet() != self.subnet_id {
+            return !xnet_reshare_in_progress;
+        }
+
         dealing.requested_height <= current_height
             && !in_progress.contains(&dealing.idkg_dealing.transcript_id)
     }
@@ -864,6 +924,14 @@ pub(crate) trait EcdsaTranscriptBuilder: Send {
         transcript_id: IDkgTranscriptId,
         ecdsa_pool: &dyn EcdsaPool,
     ) -> Option<IDkgTranscript>;
+
+    /// Returns the validated dealings for the given transcript Id from
+    /// the ECDSA pool
+    fn get_validated_dealings(
+        &self,
+        transcript_id: IDkgTranscriptId,
+        ecdsa_pool: &dyn EcdsaPool,
+    ) -> BTreeMap<NodeId, IDkgDealing>;
 }
 
 pub(crate) struct EcdsaTranscriptBuilderImpl<'a> {
@@ -1059,6 +1127,22 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
                 },
             )
     }
+
+    /// Helper to get the validated dealings.
+    fn get_validated_dealings(
+        &self,
+        transcript_id: IDkgTranscriptId,
+        ecdsa_pool: &dyn EcdsaPool,
+    ) -> BTreeMap<NodeId, IDkgDealing> {
+        let mut ret = BTreeMap::new();
+        for (_, signed_dealing) in ecdsa_pool.validated().signed_dealings() {
+            let dealing = signed_dealing.get();
+            if dealing.idkg_dealing.transcript_id == transcript_id {
+                ret.insert(dealing.idkg_dealing.dealer_id, dealing.idkg_dealing.clone());
+            }
+        }
+        ret
+    }
 }
 
 impl<'a> EcdsaTranscriptBuilder for EcdsaTranscriptBuilderImpl<'a> {
@@ -1070,6 +1154,18 @@ impl<'a> EcdsaTranscriptBuilder for EcdsaTranscriptBuilderImpl<'a> {
         timed_call(
             "get_completed_transcript",
             || self.build_transcript(transcript_id, ecdsa_pool),
+            &self.metrics.transcript_builder_duration,
+        )
+    }
+
+    fn get_validated_dealings(
+        &self,
+        transcript_id: IDkgTranscriptId,
+        ecdsa_pool: &dyn EcdsaPool,
+    ) -> BTreeMap<NodeId, IDkgDealing> {
+        timed_call(
+            "get_validated_dealings",
+            || self.get_validated_dealings(transcript_id, ecdsa_pool),
             &self.metrics.transcript_builder_duration,
         )
     }

@@ -91,6 +91,11 @@ message SubnetRecord {
   EcdsaConfig ecdsa_config = 27;
 }
 
+message EcdsaInitialization {
+  registry.crypto.v1.EcdsaKeyId key_id = 1;
+  InitialIDkgDealings dealings = 2;
+}
+
 // Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
 // a CUP with no dependencies on previous CUPs or blocks). Such CUP materials can be used to
 // construct the genesis CUP or a recovery CUP in the event of a subnet stall.
@@ -112,6 +117,9 @@ message CatchUpPackageContents {
 
   // A uri from which data to replace the registry local store should be downloaded
   RegistryStoreUri registry_store_uri = 6;
+
+  /// The initial ECDSA dealings for boot strapping target subnets.
+  repeated EcdsaInitialization ecdsa_initializations = 7;
 }
 
 message RegistryStoreUri {
@@ -199,10 +207,19 @@ message IDkgDealingTuple {
   IDkgDealing dealing = 2;
 }
 
+message IDkgSignedDealingTuple {
+  types.v1.NodeId dealer = 1;
+  IDkgDealing dealing = 2;
+  bytes signature = 3;
+}
+
 message InitialIDkgDealings {
-    uint32 version = 1;
-    IDkgTranscriptParams params = 2;
-    repeated IDkgDealingTuple dealings = 3;
+  reserved 3;
+  reserved "dealings";
+
+  uint32 version = 1;
+  IDkgTranscriptParams params = 2;
+  repeated IDkgSignedDealingTuple signed_dealings = 4;
 }
 
 message ExtendedDerivationPath {

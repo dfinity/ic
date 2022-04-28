@@ -23,7 +23,6 @@ mod share_aggregator;
 pub mod utils;
 mod validator;
 
-pub use batch_delivery::generate_responses_to_subnet_calls;
 pub use crypto::ConsensusCrypto;
 pub use membership::Membership;
 

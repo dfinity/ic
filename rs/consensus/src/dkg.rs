@@ -3662,6 +3662,7 @@ mod tests {
                         time: 1,
                         state_hash: vec![1, 2, 3, 4, 5],
                         registry_store_uri: None,
+                        ecdsa_initializations: vec![],
                     };
 
                 // Encode the cup to protobuf

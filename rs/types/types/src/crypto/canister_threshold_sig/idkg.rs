@@ -524,8 +524,9 @@ impl IDkgTranscriptParams {
 }
 
 /// Initial params and dealings for a set of receivers assigned to a different subnet.
-/// Only dealings indended for resharing an unmasked transcript can be included in InitialIDkgDealings.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Only dealings intended for resharing an unmasked transcript can be included in InitialIDkgDealings.
+/// TODO: change this this to signed dealings: https://dfinity.atlassian.net/browse/CON-782.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct InitialIDkgDealings {
     params: IDkgTranscriptParams,
     dealings: BTreeMap<NodeId, IDkgDealing>,

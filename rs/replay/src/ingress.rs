@@ -248,6 +248,7 @@ pub fn cmd_set_recovery_cup(
             hash: cmd.registry_store_sha256.clone().unwrap_or_default(),
             registry_version: player.get_latest_registry_version(context_time)?.get(),
         }),
+        ecdsa_initializations: vec![],
     };
 
     update_catch_up_package_contents(agent, player.subnet_id, cup_contents, context_time)

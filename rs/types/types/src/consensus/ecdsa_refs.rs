@@ -347,6 +347,37 @@ impl ReshareOfUnmaskedParams {
     }
 }
 
+pub fn unpack_reshare_of_unmasked_params(
+    height: Height,
+    params: &IDkgTranscriptParams,
+) -> Option<(ReshareOfUnmaskedParams, IDkgTranscript)> {
+    let transcript_id = params.transcript_id();
+    let dealers = params.dealers().get().clone();
+    let receivers = params.receivers().get().clone();
+    let registry_version = params.registry_version();
+    let algorithm_id = params.algorithm_id();
+    let transcript =
+        if let IDkgTranscriptOperation::ReshareOfUnmasked(transcript) = params.operation_type() {
+            transcript.clone()
+        } else {
+            return None;
+        };
+    let transcript_ref = TranscriptRef::new(height, transcript.transcript_id);
+    let operation_type_ref =
+        IDkgTranscriptOperationRef::ReshareOfUnmasked(UnmaskedTranscript(transcript_ref));
+    Some((
+        ReshareOfUnmaskedParams(IDkgTranscriptParamsRef {
+            transcript_id,
+            dealers,
+            receivers,
+            registry_version,
+            algorithm_id,
+            operation_type_ref,
+        }),
+        transcript,
+    ))
+}
+
 impl AsRef<IDkgTranscriptParamsRef> for ReshareOfUnmaskedParams {
     fn as_ref(&self) -> &IDkgTranscriptParamsRef {
         &self.0
@@ -739,8 +770,14 @@ pub trait EcdsaBlockReader {
     /// Returns the height of the tip
     fn tip_height(&self) -> Height;
 
+    /// Returns true if xnet reshare is in progress.
+    fn xnet_reshare_in_progress(&self) -> bool;
+
     /// Returns the transcripts requested by the tip.
     fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
+
+    /// Returns the ongoing xnet reshare transcripts requested by the tip.
+    fn xnet_reshare_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
 
     /// Returns the signatures requested by the tip.
     fn requested_signatures(

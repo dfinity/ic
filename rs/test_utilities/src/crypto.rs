@@ -9,6 +9,9 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     ni_dkg_groth20_bls12_381, CspNiDkgDealing, CspNiDkgTranscript,
 };
+use ic_crypto_test_utils_canister_threshold_sigs::{
+    create_params_for_dealers, mock_transcript, mock_unmasked_transcript_type, set_of_nodes,
+};
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier, IDkgProtocol,
     KeyManager, LoadTranscriptResult, NiDkgAlgorithm, PublicKeyRegistrationStatus,
@@ -181,6 +184,25 @@ pub fn dummy_idkg_dealing_for_tests() -> IDkgDealing {
     }
 }
 
+pub fn dummy_initial_idkg_dealing_for_tests() -> InitialIDkgDealings {
+    let previous_receivers = set_of_nodes(&[35, 36, 37, 38]);
+    let previous_transcript =
+        mock_transcript(Some(previous_receivers), mock_unmasked_transcript_type());
+    let dealers = set_of_nodes(&[35, 36, 38]);
+
+    // For a Resharing Unmasked transcript, the dealer set should be a subset of the previous receiver set.
+    assert!(dealers.is_subset(previous_transcript.receivers.get()));
+
+    let params = create_params_for_dealers(
+        &dealers,
+        IDkgTranscriptOperation::ReshareOfUnmasked(previous_transcript),
+    );
+    let dealings = mock_dealings(params.transcript_id(), &dealers);
+
+    InitialIDkgDealings::new(params, dealings)
+        .expect("Failed creating IDkgInitialDealings for testing")
+}
+
 pub fn dummy_idkg_complaint_for_tests() -> IDkgComplaint {
     IDkgComplaint {
         transcript_id: IDkgTranscriptId::new(
@@ -292,6 +314,22 @@ pub fn dummy_sig_inputs_for_tests(caller: PrincipalId) -> ThresholdEcdsaSigInput
         fake_key,
     )
     .expect("failed to create signature inputs")
+}
+
+pub fn mock_dealings(
+    transcript_id: IDkgTranscriptId,
+    dealers: &BTreeSet<NodeId>,
+) -> BTreeMap<NodeId, IDkgDealing> {
+    let mut dealings = BTreeMap::new();
+    for node_id in dealers {
+        let dealing = IDkgDealing {
+            transcript_id,
+            dealer_id: *node_id,
+            internal_dealing_raw: format!("Dummy raw dealing for dealer {}", node_id).into_bytes(),
+        };
+        dealings.insert(*node_id, dealing);
+    }
+    dealings
 }
 
 #[derive(Default)]

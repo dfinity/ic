@@ -7,23 +7,25 @@ use std::fmt::{self, Display, Formatter};
 use strum_macros::EnumIter;
 
 pub use crate::consensus::ecdsa_refs::{
-    EcdsaBlockReader, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, MaskedTranscript,
-    PreSignatureQuadrupleRef, QuadrupleId, QuadrupleInCreation, RandomTranscriptParams, RequestId,
-    ReshareOfMaskedParams, ReshareOfUnmaskedParams, ThresholdEcdsaSigInputsRef,
-    TranscriptCastError, TranscriptLookupError, TranscriptRef, UnmaskedTimesMaskedParams,
-    UnmaskedTranscript,
+    unpack_reshare_of_unmasked_params, EcdsaBlockReader, IDkgTranscriptOperationRef,
+    IDkgTranscriptParamsRef, MaskedTranscript, PreSignatureQuadrupleRef, QuadrupleId,
+    QuadrupleInCreation, RandomTranscriptParams, RequestId, ReshareOfMaskedParams,
+    ReshareOfUnmaskedParams, ThresholdEcdsaSigInputsRef, TranscriptCastError,
+    TranscriptLookupError, TranscriptRef, UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
 use crate::consensus::{BasicSignature, MultiSignature, MultiSignatureShare};
 use crate::crypto::canister_threshold_sig::error::IDkgTranscriptIdError;
 use crate::crypto::{
     canister_threshold_sig::idkg::{
         IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
+        InitialIDkgDealings,
     },
     canister_threshold_sig::{ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigShare},
     CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
 };
 use crate::{node_id_into_protobuf, node_id_try_from_protobuf};
 use crate::{Height, NodeId, RegistryVersion, SubnetId};
+use ic_ic00_types::EcdsaKeyId;
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
 
@@ -77,9 +79,10 @@ pub struct EcdsaDataPayload {
     pub next_key_transcript_creation: KeyTranscriptCreation,
 }
 
-/// The creation of an ecdsa key transcript goes through one of the two paths below:
+/// The creation of an ecdsa key transcript goes through one of the three paths below:
 /// 1. RandomTranscript -> ReshareOfMasked -> Created
 /// 2. ReshareOfUnmasked -> Created
+/// 3. XnetReshareOfUnmaskedParams -> Created (xnet bootstrapping from initial dealings)
 ///
 /// The initial bootstrap will start with an empty 'EcdsaSummaryPayload', and then
 /// we'll go through the first path to create the key transcript.
@@ -100,6 +103,8 @@ pub enum KeyTranscriptCreation {
     ReshareOfMaskedParams(ReshareOfMaskedParams),
     // Configuration to create next key transcript by resharing the current key transcript.
     ReshareOfUnmaskedParams(ReshareOfUnmaskedParams),
+    // Bootstrapping from xnet initial dealings.
+    XnetReshareOfUnmaskedParams(ReshareOfUnmaskedParams),
     // Created
     Created(UnmaskedTranscript),
 }
@@ -107,7 +112,7 @@ pub enum KeyTranscriptCreation {
 impl KeyTranscriptCreation {
     pub fn get_refs(&self) -> Vec<TranscriptRef> {
         match self {
-            Self::Begin => vec![],
+            Self::Begin | Self::XnetReshareOfUnmaskedParams(_) => vec![],
             Self::RandomTranscriptParams(params) => params.as_ref().get_refs(),
             Self::ReshareOfMaskedParams(params) => params.as_ref().get_refs(),
             Self::ReshareOfUnmaskedParams(params) => params.as_ref().get_refs(),
@@ -117,7 +122,7 @@ impl KeyTranscriptCreation {
 
     fn update(&mut self, height: Height) {
         match self {
-            Self::Begin => (),
+            Self::Begin | Self::XnetReshareOfUnmaskedParams(_) => (),
             Self::RandomTranscriptParams(params) => params.as_mut().update(height),
             Self::ReshareOfMaskedParams(params) => params.as_mut().update(height),
             Self::ReshareOfUnmaskedParams(params) => params.as_mut().update(height),
@@ -186,11 +191,6 @@ impl EcdsaPayload {
         for obj in self.ongoing_xnet_reshares.values() {
             active_refs.append(&mut obj.as_ref().get_refs());
         }
-        for obj in self.xnet_reshare_agreements.values() {
-            if let CompletedReshareRequest::Unreported(response) = obj {
-                active_refs.append(&mut response.reshare_param.as_ref().get_refs());
-            }
-        }
 
         active_refs
     }
@@ -209,11 +209,6 @@ impl EcdsaPayload {
         for obj in self.ongoing_xnet_reshares.values_mut() {
             obj.as_mut().update(height);
         }
-        for obj in self.xnet_reshare_agreements.values_mut() {
-            if let CompletedReshareRequest::Unreported(response) = obj {
-                response.reshare_param.as_mut().update(height);
-            }
-        }
     }
 }
 
@@ -227,6 +222,7 @@ impl EcdsaDataPayload {
             KeyTranscriptCreation::RandomTranscriptParams(x) => Some(x.as_ref()),
             KeyTranscriptCreation::ReshareOfMaskedParams(x) => Some(x.as_ref()),
             KeyTranscriptCreation::ReshareOfUnmaskedParams(x) => Some(x.as_ref()),
+            KeyTranscriptCreation::XnetReshareOfUnmaskedParams(x) => Some(x.as_ref()),
             KeyTranscriptCreation::Begin => None,
             KeyTranscriptCreation::Created(_) => None,
         }
@@ -235,6 +231,18 @@ impl EcdsaDataPayload {
             self.ecdsa_payload
                 .iter_transcript_configs_in_creation()
                 .chain(iter),
+        )
+    }
+
+    /// Return an iterator of the ongoing xnet reshare transcripts.
+    pub fn iter_xnet_reshare_transcript_configs(
+        &self,
+    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
+        Box::new(
+            self.ecdsa_payload
+                .ongoing_xnet_reshares
+                .values()
+                .map(|reshare_param| reshare_param.as_ref()),
         )
     }
 
@@ -313,7 +321,7 @@ impl EcdsaSummaryPayload {
 /// Internal format of the resharing request from execution.
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct EcdsaReshareRequest {
-    pub key_id: Vec<u8>,
+    pub key_id: EcdsaKeyId,
     pub receiving_node_ids: Vec<NodeId>,
     pub registry_version: RegistryVersion,
 }
@@ -325,7 +333,7 @@ impl From<&EcdsaReshareRequest> for pb::EcdsaReshareRequest {
             receiving_node_ids.push(node_id_into_protobuf(*node));
         }
         Self {
-            key_id: request.key_id.clone(),
+            key_id: Some((&request.key_id).into()),
             receiving_node_ids,
             registry_version: request.registry_version.get(),
         }
@@ -345,64 +353,17 @@ impl TryFrom<&pb::EcdsaReshareRequest> for EcdsaReshareRequest {
             })?;
             receiving_node_ids.push(node_id);
         }
-
-        Ok(Self {
-            key_id: request.key_id.clone(),
-            receiving_node_ids,
-            registry_version: RegistryVersion::new(request.registry_version),
-        })
-    }
-}
-
-/// Internal format of the completed response.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub struct EcdsaReshareResponse {
-    /// The transcript param ref used to create the transcript/dealings.
-    /// The references will be resolved to build the IDkgTranscriptParams
-    /// before returning to execution.
-    pub reshare_param: ReshareOfUnmaskedParams,
-
-    /// The verified dealings in the created transcript.
-    pub dealings: Vec<IDkgDealing>,
-}
-
-impl From<&EcdsaReshareResponse> for pb::EcdsaReshareResponse {
-    fn from(response: &EcdsaReshareResponse) -> Self {
-        let mut tuples = Vec::new();
-        for dealing in &response.dealings {
-            tuples.push(dealing.into());
-        }
-
-        Self {
-            transcript: Some((&response.reshare_param).into()),
-            tuples,
-        }
-    }
-}
-
-impl TryFrom<&pb::EcdsaReshareResponse> for EcdsaReshareResponse {
-    type Error = String;
-    fn try_from(response: &pb::EcdsaReshareResponse) -> Result<Self, Self::Error> {
-        let proto = response
-            .transcript
-            .as_ref()
-            .ok_or("pb::EcdsaReshareResponse:: Missing reshare transcript")?;
-        let reshare_param: ReshareOfUnmaskedParams = proto.try_into()?;
-
-        let mut dealings = Vec::new();
-        for tuple in &response.tuples {
-            let dealing = tuple.try_into().map_err(|err| {
+        let key_id = EcdsaKeyId::try_from(request.key_id.clone().expect("Missing key_id"))
+            .map_err(|err| {
                 format!(
-                    "pb::EcdsaReshareResponse:: Failed to convert tuple: {:?}",
+                    "pb::EcdsaReshareRequest:: Failed to convert key_id: {:?}",
                     err
                 )
             })?;
-            dealings.push(dealing);
-        }
-
         Ok(Self {
-            reshare_param,
-            dealings,
+            key_id,
+            receiving_node_ids,
+            registry_version: RegistryVersion::new(request.registry_version),
         })
     }
 }
@@ -410,7 +371,7 @@ impl TryFrom<&pb::EcdsaReshareResponse> for EcdsaReshareResponse {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CompletedReshareRequest {
     ReportedToExecution,
-    Unreported(Box<EcdsaReshareResponse>),
+    Unreported(Box<InitialIDkgDealings>),
 }
 
 /// To make sure all ids used in ECDSA payload are uniquely generated,
@@ -869,14 +830,16 @@ impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
         // xnet_reshare_agreements
         let mut xnet_reshare_agreements = Vec::new();
         for (request, completed) in &summary.ecdsa_payload.xnet_reshare_agreements {
-            let response = match completed {
-                CompletedReshareRequest::Unreported(response) => Some(response.as_ref().into()),
+            let initial_dealings = match completed {
+                CompletedReshareRequest::Unreported(initial_dealings) => {
+                    Some(initial_dealings.as_ref().into())
+                }
                 CompletedReshareRequest::ReportedToExecution => None,
             };
 
             xnet_reshare_agreements.push(pb::XnetReshareAgreement {
                 request: Some(request.into()),
-                response,
+                initial_dealings,
             });
         }
 
@@ -1015,9 +978,14 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaSummaryPayload {
                 .ok_or("pb::EcdsaSummaryPayload:: Missing agreement reshare request")?;
             let request: EcdsaReshareRequest = proto.try_into()?;
 
-            let completed = match &agreement.response {
-                Some(rsp) => {
-                    let unreported = rsp.try_into()?;
+            let completed = match &agreement.initial_dealings {
+                Some(initial_dealings_proto) => {
+                    let unreported = initial_dealings_proto.try_into().map_err(|err| {
+                        format!(
+                            "pb::EcdsaSummaryPayload:: failed to convert initial dealing: {:?}",
+                            err
+                        )
+                    })?;
                     CompletedReshareRequest::Unreported(Box::new(unreported))
                 }
                 None => CompletedReshareRequest::ReportedToExecution,
