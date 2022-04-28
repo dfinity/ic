@@ -32,13 +32,13 @@ fn remove_spent_txs(utxo_set: &mut UtxoSet, tx: &Transaction) {
     for input in &tx.input {
         // Remove the input from the UTXOs. The input *must* exist in the UTXO set.
         match utxo_set.utxos.remove(&input.previous_output) {
-            Some((txout, _)) => {
+            Some((txout, height)) => {
                 if let Some(address) = Address::from_script(&txout.script_pubkey, utxo_set.network)
                 {
                     let address = address.to_string();
                     let found = utxo_set
                         .address_to_outpoints
-                        .remove(&(address, input.previous_output).to_bytes());
+                        .remove(&(address, height, input.previous_output).to_bytes());
 
                     assert!(
                         found.is_some(),
@@ -95,7 +95,7 @@ pub(crate) fn insert_utxo(
         // Add the address to the index if we can parse it.
         utxo_set
             .address_to_outpoints
-            .insert((address.to_string(), outpoint).to_bytes(), vec![])
+            .insert((address.to_string(), height, outpoint).to_bytes(), vec![])
             .expect("insertion must succeed");
     }
 
@@ -105,7 +105,7 @@ pub(crate) fn insert_utxo(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test_builder::TransactionBuilder;
+    use crate::{test_builder::TransactionBuilder, types::Address as AddressStr};
     use bitcoin::blockdata::{opcodes::all::OP_RETURN, script::Builder};
     use bitcoin::secp256k1::rand::rngs::OsRng;
     use bitcoin::secp256k1::Secp256k1;
@@ -213,10 +213,10 @@ mod test {
             assert_eq!(
                 utxo.address_to_outpoints
                     .iter()
-                    .map(|(k, _)| <(String, OutPoint)>::from_bytes(k))
+                    .map(|(k, _)| <(String, Height, OutPoint)>::from_bytes(k))
                     .collect::<BTreeSet<_>>(),
                 maplit::btreeset! {
-                    (address_1.to_string(), OutPoint {
+                    (address_1.to_string(), 0, OutPoint {
                         txid: coinbase_tx.txid(),
                         vout: 0
                     })
@@ -244,15 +244,50 @@ mod test {
             assert_eq!(
                 utxo.address_to_outpoints
                     .iter()
-                    .map(|(k, _)| <(String, OutPoint)>::from_bytes(k))
+                    .map(|(k, _)| <(String, Height, OutPoint)>::from_bytes(k))
                     .collect::<BTreeSet<_>>(),
                 maplit::btreeset! {
-                    (address_2.to_string(), OutPoint {
+                    (address_2.to_string(), 1, OutPoint {
                         txid: tx.txid(),
                         vout: 0
                     })
                 }
             );
         }
+    }
+
+    #[test]
+    fn utxos_are_sorted_by_height() {
+        let secp = Secp256k1::new();
+        let mut rng = OsRng::new().unwrap();
+        let address = Address::p2pkh(
+            &PublicKey::new(secp.generate_keypair(&mut rng).1),
+            Network::Testnet,
+        )
+        .to_string();
+
+        let mut utxo = UtxoSet::new(Network::Testnet);
+
+        // Insert some entries into the map with different heights in some random order.
+        for height in [17u32, 0, 31, 4, 2].iter() {
+            utxo.address_to_outpoints
+                .insert(
+                    (address.clone(), *height, OutPoint::null()).to_bytes(),
+                    vec![],
+                )
+                .unwrap();
+        }
+
+        // Verify that the entries returned are sorted in descending height.
+        assert_eq!(
+            utxo.address_to_outpoints
+                .range(address.to_bytes())
+                .map(|(k, _)| {
+                    let (_, height, _) = <(AddressStr, Height, OutPoint)>::from_bytes(k);
+                    height
+                })
+                .collect::<Vec<_>>(),
+            vec![31, 17, 4, 2, 0]
+        );
     }
 }

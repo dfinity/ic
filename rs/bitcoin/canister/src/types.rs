@@ -74,20 +74,37 @@ impl Storable for Address {
     }
 }
 
-impl Storable for (Address, OutPoint) {
+impl Storable for (Address, Height, OutPoint) {
     fn to_bytes(&self) -> Vec<u8> {
-        vec![Address::to_bytes(&self.0), OutPoint::to_bytes(&self.1)]
-            .into_iter()
-            .flatten()
-            .collect()
+        vec![
+            Address::to_bytes(&self.0),
+            // The height is represented as an XOR'ed big endian byte array
+            // so that outpoints of an address are sorted by height in descending order.
+            self.1.to_be_bytes().iter().map(|byte| byte ^ 255).collect(),
+            OutPoint::to_bytes(&self.2),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
     }
 
     fn from_bytes(mut bytes: Vec<u8>) -> Self {
         let address_len = bytes[0] as usize;
-        let outpoint_offset = address_len + 1;
+        let height_offset = address_len + 1;
+        let outpoint_offset = address_len + 5;
         let outpoint_bytes = bytes.split_off(outpoint_offset);
+        let height_bytes = bytes.split_off(height_offset);
+
         (
             Address::from_bytes(bytes),
+            u32::from_be_bytes(
+                height_bytes
+                    .into_iter()
+                    .map(|byte| byte ^ 255)
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .expect("height_bytes must of length 4"),
+            ),
             OutPoint::from_bytes(outpoint_bytes),
         )
     }

@@ -102,7 +102,7 @@ impl<'a> AddressUtxoSet<'a> {
             .address_to_outpoints
             .range(self.address.to_bytes())
             .map(|(k, _)| {
-                let (_, outpoint) = <(AddressStr, OutPoint)>::from_bytes(k);
+                let (_, _, outpoint) = <(AddressStr, Height, OutPoint)>::from_bytes(k);
                 let (txout, height) = self
                     .full_utxo_set
                     .utxos
