@@ -1,9 +1,8 @@
 Response Payload Canister Quick Start
 ================================
 
-This canister is a simple test for response payload sizes. A call to `query` triggers a response
-with payload sized according to the `response_size` argument to the query call.
-The response will be all 0s.
+A canister that generates responses (consisting of all 0s) whose size
+is specified in the request (using the response_size field).
 
 Build
 -----

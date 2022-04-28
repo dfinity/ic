@@ -154,6 +154,7 @@
 /rs/rosetta-api/                        @dfinity-lab/teams/financial-integrations
 /rs/rust_canisters/                     @dfinity-lab/teams/nns-team
 /rs/rust_canisters/memory_test/         @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
+/rs/rust_canisters/response_payload_test/       @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/networking-team
 /rs/scenario_tests/                     @dfinity-lab/teams/ic-testing-verification
 /rs/sns/                                @dfinity-lab/teams/nns-team
 /rs/state_layout/                       @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
