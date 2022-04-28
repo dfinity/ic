@@ -144,6 +144,7 @@ message InitialNiDkgTranscriptRecord {
 message IDkgTranscriptId {
   uint64 id = 1;
   types.v1.SubnetId subnet_id = 2;
+  uint64 source_height = 3;
 }
 
 message VerifiedIDkgDealing {

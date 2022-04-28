@@ -495,7 +495,7 @@ pub(crate) mod test_utils {
     }
 
     // Creates a TranscriptID for tests
-    pub(crate) fn create_transcript_id(id: usize) -> IDkgTranscriptId {
+    pub(crate) fn create_transcript_id(id: u64) -> IDkgTranscriptId {
         dummy_idkg_transcript_id_for_tests(id)
     }
 
@@ -595,7 +595,7 @@ pub(crate) mod test_utils {
     // Creates a test signature input
     pub(crate) fn create_sig_inputs_with_height(caller: u8, height: Height) -> TestSigInputs {
         let transcript_id = |offset| {
-            let val = caller as usize;
+            let val = caller as u64;
             create_transcript_id(val * 214365 + offset)
         };
 

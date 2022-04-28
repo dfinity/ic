@@ -27,7 +27,7 @@ fn should_call_csp_with_correct_arguments() {
     let internal_complaint_raw = valid_internal_complaint_raw();
     let internal_dealing_raw = valid_internal_dealing_raw();
     let dealer_index = 2;
-    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27);
+    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(
         dealer_index,
@@ -82,8 +82,8 @@ fn should_call_csp_with_correct_arguments() {
 
 #[test]
 fn should_fail_on_transcript_id_mismatch() {
-    let transcript_id_1 = IDkgTranscriptId::new(SUBNET_42, 27);
-    let transcript_id_2 = IDkgTranscriptId::new(SUBNET_42, 28);
+    let transcript_id_1 = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
+    let transcript_id_2 = transcript_id_1.increment();
     assert_ne!(transcript_id_1, transcript_id_2);
 
     let transcript = IDkgTranscript {
@@ -116,7 +116,7 @@ fn should_fail_if_dealing_missing_in_transcript() {
     const COMPLAINT_DEALER_ID: NodeId = NODE_2;
     let verified_dealings_missing_complaint_dealer_id = BTreeMap::new();
 
-    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27);
+    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let transcript = IDkgTranscript {
         transcript_id,
         receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
@@ -152,7 +152,7 @@ fn should_fail_if_complainer_missing_in_transcript() {
         .get()
         .contains(&COMPLAINER_ID));
 
-    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27);
+    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(0, multi_signed_dealing_with_invalid_internal(NODE_1));
     let transcript = IDkgTranscript {
@@ -185,7 +185,7 @@ fn should_fail_if_complainer_missing_in_transcript() {
 fn should_fail_if_deserializing_complaint_fails() {
     let invalid_internal_complaint_raw = b"invalid complaint".to_vec();
 
-    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27);
+    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(0, multi_signed_dealing(NODE_1));
     let transcript = IDkgTranscript {
@@ -219,7 +219,7 @@ fn should_fail_if_deserializing_dealing_fails() {
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(0, multi_signed_dealing_with_invalid_internal(NODE_1));
 
-    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27);
+    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let transcript = IDkgTranscript {
         transcript_id,
         receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
@@ -250,7 +250,7 @@ fn should_fail_if_deserializing_dealing_fails() {
 fn should_fail_if_complainer_mega_pubkey_not_in_registry() {
     let registry_missing_complainer_pubkey = registry_returning_none();
 
-    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27);
+    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(0, multi_signed_dealing(NODE_1));
     let transcript = IDkgTranscript {
@@ -288,7 +288,7 @@ fn should_fail_if_complainer_mega_pubkey_is_malformed() {
     let registry_with_malformed_complainer_pubkey =
         registry_with(malformed_mega_encryption_pk_record(NODE_1, REG_V1));
 
-    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27);
+    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(0, multi_signed_dealing(NODE_1));
     let transcript = IDkgTranscript {
@@ -327,7 +327,7 @@ fn should_fail_if_complainer_mega_pubkey_algorithm_is_unsupported() {
         mega_encryption_pk_record_with_unsupported_algorithm(NODE_1, REG_V1),
     );
 
-    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27);
+    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(0, multi_signed_dealing(NODE_1));
     let transcript = IDkgTranscript {
@@ -364,7 +364,7 @@ fn should_fail_if_registry_client_returns_error() {
     let registry_error = RegistryClientError::PollingLatestVersionFailed { retries: 3 };
     let registry_returning_error = registry_returning(registry_error.clone());
 
-    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27);
+    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(0, multi_signed_dealing(NODE_1));
     let transcript = IDkgTranscript {
@@ -398,7 +398,7 @@ fn should_fail_if_registry_client_returns_error() {
 
 #[test]
 fn should_return_ok_if_csp_returns_ok() {
-    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27);
+    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(0, multi_signed_dealing(NODE_1));
     let transcript = IDkgTranscript {
@@ -425,7 +425,7 @@ fn should_return_ok_if_csp_returns_ok() {
 
 #[test]
 fn should_return_error_if_csp_returns_error() {
-    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27);
+    let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(0, multi_signed_dealing(NODE_1));
     let transcript = IDkgTranscript {
@@ -467,7 +467,7 @@ fn multi_signed_dealing_with(
     let ecdsa_dealing = EcdsaDealing {
         requested_height: Height::new(123),
         idkg_dealing: IDkgDealing {
-            transcript_id: IDkgTranscriptId::new(SUBNET_42, 1234),
+            transcript_id: IDkgTranscriptId::new(SUBNET_42, 1234, Height::new(123)),
             dealer_id,
             internal_dealing_raw,
         },
@@ -484,7 +484,7 @@ fn multi_signed_dealing_with_invalid_internal(dealer_id: NodeId) -> IDkgMultiSig
     let ecdsa_dealing = EcdsaDealing {
         requested_height: Height::new(123),
         idkg_dealing: IDkgDealing {
-            transcript_id: IDkgTranscriptId::new(SUBNET_42, 1234),
+            transcript_id: IDkgTranscriptId::new(SUBNET_42, 1234, Height::new(123)),
             dealer_id,
             internal_dealing_raw: vec![],
         },

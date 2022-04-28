@@ -14,6 +14,7 @@ pub use crate::consensus::ecdsa_refs::{
     UnmaskedTranscript,
 };
 use crate::consensus::{BasicSignature, MultiSignature, MultiSignatureShare};
+use crate::crypto::canister_threshold_sig::error::IDkgTranscriptIdError;
 use crate::crypto::{
     canister_threshold_sig::idkg::{
         IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
@@ -421,11 +422,16 @@ pub struct EcdsaUIDGenerator {
 }
 
 impl EcdsaUIDGenerator {
-    pub fn new(subnet_id: SubnetId) -> Self {
+    pub fn new(subnet_id: SubnetId, height: Height) -> Self {
         Self {
-            next_unused_transcript_id: IDkgTranscriptId::new(subnet_id, 0),
+            next_unused_transcript_id: IDkgTranscriptId::new(subnet_id, 0, height),
             next_unused_quadruple_id: QuadrupleId(0),
         }
+    }
+    pub fn update_height(&mut self, height: Height) -> Result<(), IDkgTranscriptIdError> {
+        let updated_id = self.next_unused_transcript_id.update_height(height)?;
+        self.next_unused_transcript_id = updated_id;
+        Ok(())
     }
 
     pub fn next_transcript_id(&mut self) -> IDkgTranscriptId {

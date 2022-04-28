@@ -1,7 +1,7 @@
 use crate::crypto::canister_threshold_sig::error::InitialIDkgDealingsValidationError;
 use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::{
     create_params_for_dealers, mock_masked_transcript_type, mock_transcript,
-    mock_unmasked_transcript_type, transcript_id_generator,
+    mock_unmasked_transcript_type, random_transcript_id,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgTranscriptId, IDkgTranscriptOperation, InitialIDkgDealings,
@@ -166,7 +166,7 @@ fn should_not_create_initial_dealings_with_mismatching_transcript_id() {
     // `sufficient_dealers` should be no less than the initial dealings collection threshold
     assert!(sufficient_len >= collection_threshold as usize);
 
-    let wrong_transcript_id = transcript_id_generator();
+    let wrong_transcript_id = random_transcript_id();
 
     assert_ne!(params.transcript_id, wrong_transcript_id);
 
