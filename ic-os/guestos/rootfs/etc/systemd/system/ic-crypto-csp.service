@@ -5,6 +5,7 @@ Description=IC Crypto Service Provider
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
 Requires=ic-crypto-csp.socket
+StartLimitIntervalSec=0
 
 [Service]
 User=ic-replica
@@ -17,6 +18,12 @@ ExecStartPre=+sudo /opt/ic/bin/setup-permissions.sh
 ExecStartPre=+/opt/ic/bin/generate-replica-config.sh -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/ic-crypto-csp.json5
 ExecStart=/opt/ic/bin/ic-crypto-csp --replica-config-file /run/ic-node/config/ic-crypto-csp.json5
 NotifyAccess=main
+Restart=always
+RestartSec=10
+# The timeout was increased because the setup-permissions.sh may take very long
+# time to finish. It can be decreased again once the setup-permissions.sh is
+# moved to standalone service
+TimeoutStartSec=900
 
 [Install]
 RequiredBy=ic-replica.service
