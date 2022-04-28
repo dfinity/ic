@@ -302,6 +302,10 @@ struct CliArgs {
     /// Unix Domain Socket for Bitcoin testnet
     #[clap(long = "bitcoin-testnet-uds-path")]
     bitcoin_testnet_uds_path: Option<PathBuf>,
+
+    /// Unix Domain Socket for canister http adapter
+    #[clap(long = "canister-http-uds-path")]
+    canister_http_uds_path: Option<PathBuf>,
 }
 
 impl CliArgs {
@@ -490,6 +494,7 @@ impl CliArgs {
             subnet_features: to_subnet_features(&self.subnet_features),
             subnet_type,
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path,
+            canister_http_uds_path: self.canister_http_uds_path,
         })
     }
 }
@@ -535,6 +540,7 @@ struct ValidatedConfig {
     subnet_features: SubnetFeatures,
     subnet_type: SubnetType,
     bitcoin_testnet_uds_path: Option<PathBuf>,
+    canister_http_uds_path: Option<PathBuf>,
 
     // Not intended to ever be read: role is to keep the temp dir from being deleted.
     _state_dir_holder: Option<TempDir>,
@@ -601,6 +607,7 @@ impl ValidatedConfig {
 
         let adapters_config = Some(AdaptersConfig {
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path.clone(),
+            canister_http_uds_path: self.canister_http_uds_path.clone(),
             ..AdaptersConfig::default()
         });
 
