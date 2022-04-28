@@ -58,25 +58,20 @@ use crate::{
     utils::FlowMapper,
     P2PError, P2PErrorCode, P2PResult,
 };
-use ic_artifact_manager::artifact::IngressArtifact;
 use ic_interfaces::artifact_manager::ArtifactManager;
 use ic_interfaces::registry::RegistryClient;
-use ic_interfaces_p2p::IngressError;
-use ic_interfaces_transport::{
-    FlowTag, Transport, TransportError, TransportNotification, TransportStateChange,
-};
-use ic_logger::{info, replica_logger::ReplicaLogger, warn};
+use ic_interfaces_transport::{FlowTag, Transport, TransportError, TransportStateChange};
+use ic_logger::{replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::p2p::v1 as pb;
 use ic_protobuf::p2p::v1::gossip_chunk::Response;
 use ic_protobuf::p2p::v1::gossip_message::Body;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError, ProxyDecodeError::*};
 use ic_types::{
-    artifact::{Artifact, ArtifactFilter, ArtifactId, ArtifactKind},
+    artifact::{ArtifactFilter, ArtifactId},
     chunkable::{ArtifactChunk, ArtifactChunkData, ChunkId},
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
-    messages::SignedIngress,
     p2p::GossipAdvert,
     NodeId, SubnetId,
 };
@@ -95,12 +90,12 @@ pub trait Gossip {
     type GossipChunkRequest;
     /// The *Gossip* chunk type.
     type GossipChunk;
+    /// The *Gossip* retranmision request type.
+    type GossipRetransmissionRequest;
+    /// The *Gossip* advert send request type.
+    type GossipAdvertSendRequest;
     /// The node ID type.
     type NodeId;
-    /// The *Transport* notification type.
-    type TransportNotification;
-    /// The ingress message type.
-    type Ingress;
 
     /// The method handles the given advert received from the peer
     /// with the given node ID.
@@ -108,7 +103,7 @@ pub trait Gossip {
 
     /// The method handles the given chunk request received from the
     /// peer with the given node ID.
-    fn on_chunk_request(&self, gossip_request: GossipChunkRequest, node_id: NodeId);
+    fn on_chunk_request(&self, gossip_request: Self::GossipChunkRequest, node_id: Self::NodeId);
 
     /// The method adds the given chunk to the corresponding artifact
     /// under construction.
@@ -117,21 +112,14 @@ pub trait Gossip {
     /// the artifact manager.
     fn on_chunk(&self, gossip_chunk: Self::GossipChunk, peer_id: Self::NodeId);
 
-    /// The method handles the received user ingress message.
-    fn on_user_ingress(
-        &self,
-        ingress: Self::Ingress,
-        peer_id: Self::NodeId,
-    ) -> Result<(), IngressError>;
-
     /// The method broadcasts the given advert to other peers.
-    fn broadcast_advert(&self, advert_request: GossipAdvertSendRequest);
+    fn broadcast_advert(&self, advert_request: Self::GossipAdvertSendRequest);
 
     /// The method reacts to a retransmission request from another peer.
     fn on_retransmission_request(
         &self,
-        gossip_request: GossipRetransmissionRequest,
-        node_id: NodeId,
+        gossip_request: Self::GossipRetransmissionRequest,
+        node_id: Self::NodeId,
     );
 
     /// The method reacts to a *Transport* state change message due to
@@ -371,9 +359,9 @@ impl Gossip for GossipImpl {
     type GossipAdvert = GossipAdvert;
     type GossipChunkRequest = GossipChunkRequest;
     type GossipChunk = GossipChunk;
+    type GossipRetransmissionRequest = GossipRetransmissionRequest;
+    type GossipAdvertSendRequest = GossipAdvertSendRequest;
     type NodeId = NodeId;
-    type TransportNotification = TransportNotification;
-    type Ingress = SignedIngress;
 
     /// The method is called when a new advert is received from the
     /// peer with the given node ID.
@@ -425,25 +413,6 @@ impl Gossip for GossipImpl {
     fn on_chunk(&self, gossip_chunk: GossipChunk, peer_id: NodeId) {
         self.download_manager.on_chunk(gossip_chunk, peer_id);
         let _ = self.download_manager.download_next(peer_id);
-    }
-
-    /// The method handles the received user ingress message.
-    fn on_user_ingress(
-        &self,
-        ingress: Self::Ingress,
-        peer_id: Self::NodeId,
-    ) -> Result<(), IngressError> {
-        let advert = IngressArtifact::message_to_advert(&ingress);
-        self.artifact_manager
-            .on_artifact(
-                Artifact::IngressMessage(ingress.into()),
-                advert.into(),
-                &peer_id,
-            )
-            .map_err(|e| {
-                info!(self.log, "Artifact not inserted {:?}", e);
-                IngressError::Overloaded
-            })
     }
 
     /// The method broadcasts the given advert to other peers.

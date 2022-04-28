@@ -69,20 +69,29 @@
 //! ```
 use crate::{
     advert_utils::AdvertRequestBuilder,
-    gossip_protocol::{Gossip, GossipChunk, GossipChunkRequest, GossipMessage},
+    gossip_protocol::{
+        Gossip, GossipAdvertSendRequest, GossipChunk, GossipChunkRequest, GossipMessage,
+        GossipRetransmissionRequest,
+    },
     metrics::FlowWorkerMetrics,
 };
 use async_trait::async_trait;
-use ic_interfaces::ingress_pool::IngressPoolThrottler;
+use ic_artifact_manager::artifact::IngressArtifact;
+use ic_interfaces::{artifact_manager::ArtifactManager, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_p2p::IngressError;
 use ic_interfaces_transport::{
     AsyncTransportEventHandler, FlowId, SendError, TransportError, TransportErrorCode,
-    TransportNotification, TransportPayload, TransportStateChange,
+    TransportPayload, TransportStateChange,
 };
 use ic_logger::{debug, info, replica_logger::ReplicaLogger, trace};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::subnet::v1::GossipConfig};
-use ic_types::{artifact::AdvertClass, messages::SignedIngress, p2p::GossipAdvert, NodeId};
+use ic_types::{
+    artifact::{AdvertClass, Artifact, ArtifactKind},
+    messages::SignedIngress,
+    p2p::GossipAdvert,
+    NodeId,
+};
 use parking_lot::RwLock;
 use std::{
     cmp::max,
@@ -116,9 +125,9 @@ type GossipArc = Arc<
             GossipAdvert = GossipAdvert,
             GossipChunkRequest = GossipChunkRequest,
             GossipChunk = GossipChunk,
+            GossipRetransmissionRequest = GossipRetransmissionRequest,
+            GossipAdvertSendRequest = GossipAdvertSendRequest,
             NodeId = NodeId,
-            TransportNotification = TransportNotification,
-            Ingress = SignedIngress,
         > + Send
         + Sync,
 >;
@@ -417,11 +426,11 @@ impl AsyncTransportEventHandler for AsyncTransportEventHandlerImpl {
 pub type IngressThrottler = Arc<std::sync::RwLock<dyn IngressPoolThrottler + Send + Sync>>;
 
 pub(crate) struct IngressEventHandler {
+    log: ReplicaLogger,
     threadpool: ThreadPool,
     /// The ingress throttler.
     ingress_throttler: IngressThrottler,
-    /// The shared *Gossip* instance (using automatic reference counting).
-    gossip: GossipArc,
+    artifact_manager: Arc<dyn ArtifactManager>,
     /// The node ID.
     node_id: NodeId,
 }
@@ -429,8 +438,9 @@ pub(crate) struct IngressEventHandler {
 impl IngressEventHandler {
     /// The function creates an `IngressEventHandler` instance.
     pub(crate) fn new(
+        log: ReplicaLogger,
         ingress_throttler: IngressThrottler,
-        gossip: GossipArc,
+        artifact_manager: Arc<dyn ArtifactManager>,
         node_id: NodeId,
     ) -> Self {
         let threadpool = threadpool::Builder::new()
@@ -439,9 +449,10 @@ impl IngressEventHandler {
             .build();
 
         Self {
+            log,
             threadpool,
             ingress_throttler,
-            gossip,
+            artifact_manager,
             node_id,
         }
     }
@@ -460,7 +471,8 @@ impl Service<SignedIngress> for IngressEventHandler {
 
     /// The method is called when an ingress message is received.
     fn call(&mut self, signed_ingress: SignedIngress) -> Self::Future {
-        let gossip = Arc::clone(&self.gossip);
+        let artifact_manager = Arc::clone(&self.artifact_manager);
+        let log = self.log.clone();
         let throttler = Arc::clone(&self.ingress_throttler);
         let node_id = self.node_id;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -470,7 +482,17 @@ impl Service<SignedIngress> for IngressEventHandler {
             let _ = tx.send(if throttler.read().unwrap().exceeds_threshold() {
                 Err(IngressError::Overloaded)
             } else {
-                gossip.on_user_ingress(signed_ingress, node_id)
+                let advert = IngressArtifact::message_to_advert(&signed_ingress);
+                artifact_manager
+                    .on_artifact(
+                        Artifact::IngressMessage(signed_ingress.into()),
+                        advert.into(),
+                        &node_id,
+                    )
+                    .map_err(|e| {
+                        info!(log, "Artifact not inserted {:?}", e);
+                        IngressError::Overloaded
+                    })
             });
         });
         Box::pin(async move { Ok(rx.await.expect("Ingress ingestion task MUST NOT panic.")) })
@@ -680,9 +702,9 @@ pub mod tests {
         type GossipAdvert = GossipAdvert;
         type GossipChunkRequest = GossipChunkRequest;
         type GossipChunk = GossipChunk;
+        type GossipRetransmissionRequest = GossipRetransmissionRequest;
+        type GossipAdvertSendRequest = GossipAdvertSendRequest;
         type NodeId = NodeId;
-        type TransportNotification = TransportNotification;
-        type Ingress = SignedIngress;
 
         /// The method is called when an advert is received.
         fn on_advert(&self, _gossip_advert: Self::GossipAdvert, peer_id: Self::NodeId) {
@@ -698,16 +720,6 @@ pub mod tests {
         /// The method is called when a chunk is received.
         fn on_chunk(&self, _gossip_artifact: Self::GossipChunk, peer_id: Self::NodeId) {
             TestGossip::increment_or_set(&self.num_chunks, peer_id);
-        }
-
-        /// The method is called when a user ingress message is received.
-        fn on_user_ingress(
-            &self,
-            _ingress: Self::Ingress,
-            peer_id: Self::NodeId,
-        ) -> Result<(), IngressError> {
-            TestGossip::increment_or_set(&self.num_ingress, peer_id);
-            Ok(())
         }
 
         /// The method broadcasts the given advert.

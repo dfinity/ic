@@ -214,11 +214,12 @@ pub fn start_p2p(
     event_handler.start(gossip.clone());
     advert_subscriber.start(gossip.clone());
 
-    let p2p_thread_joiner = P2PThreadJoiner::new(log, gossip.clone());
+    let p2p_thread_joiner = P2PThreadJoiner::new(log.clone(), gossip);
 
     let ingress_event_handler = BoxService::new(event_handler::IngressEventHandler::new(
+        log,
         ingress_throttler,
-        gossip,
+        artifact_manager.clone(),
         node_id,
     ));
 
