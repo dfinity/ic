@@ -1014,6 +1014,14 @@ impl SystemApiImpl {
         max_amount: Cycles,
     ) -> HypervisorResult<Cycles> {
         match &mut self.api_type {
+            ApiType::ReplyCallback {
+                response_status: ResponseStatus::AlreadyReplied,
+                ..
+            }
+            | ApiType::RejectCallback {
+                response_status: ResponseStatus::AlreadyReplied,
+                ..
+            } => Ok(Cycles::new(0)),
             ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::Heartbeat { .. }

@@ -100,6 +100,7 @@ impl CallContext {
 
     /// Mark the call context as responded.
     pub fn mark_responded(&mut self) {
+        self.available_cycles = Cycles::new(0);
         self.responded = true;
     }
 
@@ -442,11 +443,9 @@ impl CallContextManager {
                 CallContextAction::Reply { payload, refund }
             }
             (Ok(Some(WasmResult::Reply(payload))), Responded::No, OutstandingCalls::Yes) => {
-                context.responded = true;
-                CallContextAction::Reply {
-                    payload,
-                    refund: context.available_cycles,
-                }
+                let refund = context.available_cycles;
+                context.mark_responded();
+                CallContextAction::Reply { payload, refund }
             }
 
             (Ok(Some(WasmResult::Reject(payload))), Responded::No, OutstandingCalls::No) => {
@@ -455,11 +454,9 @@ impl CallContextManager {
                 CallContextAction::Reject { payload, refund }
             }
             (Ok(Some(WasmResult::Reject(payload))), Responded::No, OutstandingCalls::Yes) => {
-                context.responded = true;
-                CallContextAction::Reject {
-                    payload,
-                    refund: context.available_cycles,
-                }
+                let refund = context.available_cycles;
+                context.mark_responded();
+                CallContextAction::Reject { payload, refund }
             }
 
             (Err(error), Responded::No, OutstandingCalls::No) => {
