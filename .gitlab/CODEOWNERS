@@ -156,10 +156,10 @@
 /rs/rust_canisters/memory_test/         @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/scenario_tests/                     @dfinity-lab/teams/ic-testing-verification
 /rs/sns/                                @dfinity-lab/teams/nns-team
-/rs/state_layout/                       @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
+/rs/state_layout/                       @dfinity-lab/teams/message-routing-owners
 /rs/state_machine_tests/                @dfinity-lab/teams/message-routing-owners
-/rs/state_manager/                      @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
-/rs/state_tool/                         @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
+/rs/state_manager/                      @dfinity-lab/teams/message-routing-owners
+/rs/state_tool/                         @dfinity-lab/teams/message-routing-owners
 /rs/system_api/                         @dfinity-lab/teams/execution-owners
 /rs/test_utilities/src/crypto.rs        @dfinity-lab/teams/crypto-owners
 /rs/test_utilities/src/crypto/          @dfinity-lab/teams/crypto-owners
