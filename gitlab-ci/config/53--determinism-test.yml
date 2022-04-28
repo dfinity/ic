@@ -111,3 +111,42 @@ build-determinism-update-img:
           echo "Difference indicates that Build Determinism is broken IC-OS guest image!"
       fi
       diff -u update-img/SHAS update-img-determinism/SHAS
+
+build-determinism-host-update-img:
+  extends:
+    - .ubuntu-nix-docker-pinned-dc
+    - .rules-parent-pipeline
+  stage: build-determinism-test
+  needs:
+    - job: artifacts-upload-to-s3
+    - job: host-os-updateimg
+      artifacts: false
+    - job: host-os-updateimg-determinism
+      artifacts: false
+  allow_failure: true
+  script:
+    - |
+      set -eux
+      VERSION=$(cat VERSION)
+      export VERSION
+
+      for IMG in update-img update-img-determinism
+      do
+        # TODO: just fetch SHA file?
+        "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+            --git-rev="${VERSION}" --remote-path="hostos/${IMG}" --out="${IMG}"
+        (cd "${IMG}"; sha256sum update-img.tar.gz | tee SHAS)
+      done
+
+      if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
+          set +x
+          echo "Build determinism check compares two IC-OS host update images built on a separate CI jobs:"
+          echo " - host-os-updateimg"
+          echo " - host-os-updateimg-determinism"
+          echo "Difference indicates that this MR introduced changes that break Build Determinism for IC-OS host image."
+          echo -e "If this job fails, please identify the cause of breaking Build Determinism and fix it. \xF0\x9F\x99\x8F"
+          set -x
+      else
+          echo "Difference indicates that Build Determinism is broken IC-OS host image!"
+      fi
+      diff -u update-img/SHAS update-img-determinism/SHAS
