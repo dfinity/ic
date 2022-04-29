@@ -25,17 +25,14 @@
 //!    expiry-instant. Note: This index may contain multiple downloads
 //!    expiring at a given expiry-instant.
 
-use core::ops::Deref;
 use ic_interfaces::artifact_manager::ArtifactManager;
-use ic_logger::replica_logger::ReplicaLogger;
-use ic_logger::warn;
+use ic_logger::{replica_logger::ReplicaLogger, warn};
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_types::{
     artifact::ArtifactId, chunkable::Chunkable, crypto::CryptoHash, p2p::GossipAdvert, NodeId,
 };
-use linked_hash_map::LinkedHashMap;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     time::{Duration, Instant},
 };
 
@@ -112,25 +109,14 @@ pub(crate) struct ArtifactTracker {
 
 /// The implementation of the `ArtifactDownloadList` trait.
 pub(crate) struct ArtifactDownloadListImpl {
-    // A LinkedHashmap is used for the artifacts because it ensures fairness by ordering items by
-    // their download initiation time while providing constant lookup time complexity using the
-    // integrity hash.
+    /// A Hashmap is used for the artifacts because it provides constant lookup time complexity
+    /// using the integrity hash.
     /// Artifacts to be downloaded with their corresponding trackers.
-    artifacts: LinkedHashMap<CryptoHash, ArtifactTracker>,
+    artifacts: HashMap<CryptoHash, ArtifactTracker>,
     /// Expiry indices.
     expiry_index: BTreeMap<Instant, Vec<CryptoHash>>,
     /// The logger instance.
     log: ReplicaLogger,
-}
-
-/// The `Deref` trait is implemented to hide indexing complexities and allow the
-/// list to be manipulated using standard container APIs.
-impl Deref for ArtifactDownloadListImpl {
-    type Target = LinkedHashMap<CryptoHash, ArtifactTracker>;
-    /// The method returns the artifacts to be downloaded.
-    fn deref(&self) -> &Self::Target {
-        &self.artifacts
-    }
 }
 
 impl ArtifactDownloadListImpl {
@@ -280,7 +266,7 @@ mod tests {
         num_adverts: i32,
         gossip_config: &GossipConfig,
         artifact_manager: &dyn ArtifactManager,
-        artifact_download_list: &mut ArtifactDownloadListImpl,
+        artifact_download_list: &mut dyn ArtifactDownloadList,
     ) -> std::time::Instant {
         // Insert and remove artifacts.
         let mut max_expiry = std::time::Instant::now();
@@ -338,12 +324,12 @@ mod tests {
 
         let expired = artifact_download_list.prune_expired_downloads();
         assert_eq!(expired.len(), num_adverts as usize);
-        assert_eq!(artifact_download_list.len(), 0);
+        assert_eq!(artifact_download_list.artifacts.len(), 0);
 
         // Check that the expired artifact list is empty.
         let expired = artifact_download_list.prune_expired_downloads();
         assert_eq!(expired.len(), 0);
-        assert_eq!(artifact_download_list.len(), 0);
+        assert_eq!(artifact_download_list.artifacts.len(), 0);
     }
 
     /// The function tests that artifact trackers can be removed from the
@@ -372,6 +358,6 @@ mod tests {
             artifact_download_list.get_tracker(&integrity_hash).unwrap();
             artifact_download_list.remove_tracker(&integrity_hash);
         }
-        assert_eq!(artifact_download_list.len(), 0);
+        assert_eq!(artifact_download_list.artifacts.len(), 0);
     }
 }

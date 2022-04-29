@@ -2053,11 +2053,12 @@ pub mod tests {
             new_test_download_manager(num_replicas, &logger, tokio::runtime::Handle::current());
         download_manager.gossip_config.max_artifact_streams_per_peer = 1;
         download_manager.gossip_config.max_chunk_wait_ms = 1000;
+        let advert_range = 1..num_replicas as u32;
         // Node 1 and 2 both advertise advert 1 and 2.
         for i in 1..num_replicas {
             test_add_adverts(
                 &download_manager,
-                1..num_replicas as u32,
+                advert_range.clone(),
                 node_test_id(i as u64),
             )
         }
@@ -2092,11 +2093,16 @@ pub mod tests {
         // Test that artifacts also have timed out.
         download_manager.process_timed_out_artifacts();
         {
-            let artifacts_under_construction = download_manager
+            let mut artifacts_under_construction = download_manager
                 .artifacts_under_construction
-                .read()
+                .write()
                 .unwrap();
-            assert_eq!(artifacts_under_construction.len(), 0);
+
+            for i in advert_range {
+                assert!(artifacts_under_construction
+                    .get_tracker(&CryptoHash(Vec::from(i.to_be_bytes())))
+                    .is_none());
+            }
         }
 
         // After advert 1 and 2 have timed out, the download manager must start
@@ -2112,18 +2118,21 @@ pub mod tests {
         }
 
         {
-            let artifacts_under_construction = download_manager
+            let mut artifacts_under_construction = download_manager
                 .artifacts_under_construction
-                .read()
+                .write()
                 .unwrap();
-            // Advert 1 and 2 timed out, so we start from advert 3.
-            let mut counter: u32 = 3;
-            for (_, (id, _)) in artifacts_under_construction.iter().enumerate() {
-                assert_eq!(*id, CryptoHash(Vec::from(counter.to_be_bytes())));
-                counter += 1;
+            // Advert 1 and 2 timed out, so check adverts starting from 3 exists.
+            for counter in 1u32..3 {
+                assert!(artifacts_under_construction
+                    .get_tracker(&CryptoHash(Vec::from(counter.to_be_bytes())))
+                    .is_none());
             }
-            // Assert counter matches total number of adverts
-            assert_eq!(counter, 5)
+            for counter in 3u32..5 {
+                assert!(artifacts_under_construction
+                    .get_tracker(&CryptoHash(Vec::from(counter.to_be_bytes())))
+                    .is_some());
+            }
         }
     }
 
