@@ -34,6 +34,30 @@ const TEST_DATA = {
       'd9d9f7a2647472656583024e726571756573745f7374617475738302582007bf53acde2967b1ddc8f06814fb8a0d037e5ef19ba597e92b9d1febe726698983018302457265706c79820358354449444c046d7b6c02007101716d016c03a2f5ed880400c6a4a19806029aa1b2f90c7a01030c68656c6c6f20776f726c642100c8008302467374617475738203477265706c696564697369676e61747572655830971e62f35e9c288ea9b4c446b8febfc2bf040172a539753bed5349ed671bda6d80b4c7ae641ce9df0fc779deb61511e6',
     request_time: 1650551764352,
   },
+  wrongCanisterId: {
+    root_key:
+      '308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c0503020103610086d6f09aa8ba5a3fe67dd3fcba6b75266c2f96961fb1d35f7f4f34a6af5e99cc01386e703fa517e16f4006aef5513f460a809cfdadf60a32ac6930550d9473d6e792786253f6fd6b0d08189482ce9a07cc6f68821bc655c59ce24a21174e393f',
+    certificate:
+      'certificate=:2dn3omR0cmVlgwGDAkhjYW5pc3RlcoMCSgAAAAAAMAAZAQGDAk5jZXJ0aWZpZWRfZGF0YYIDWCBb1aIcc2xftgJaN6877pAf6qk3k8NHiyRKu4Hn3ft+/4MCRHRpbWWCA0mnm/H8zaOC9RZpc2lnbmF0dXJlWDCYu3oVZ8ckpUkz715Pcf4TtLwRVF42BBg9BcC2wj2g3BH9cdIk6D6PoUVWiVXkL4I=:, tree=:2dn3gwJLaHR0cF9hc3NldHODAkEvggNYIHUJ5b2gx2LSusf5DXWLWyJj+gHMvFQqtePfFjvgjmyp:',
+    body: 'hello world!',
+    certificate_time: 1651142233000,
+  },
+  invalidWitness: {
+    root_key:
+      '308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c05030201036100974dbc96e64a3651e2ddd5ee083834777a6cee28854eb125017fc3da329e1b651cad89b01f28ef453f10ada8c8c915d0065daa5330ef09500e0eee24483a6fe4ccbf1fa6e4b2d15f4211304a812811a03289f87eb46c3d9868f37cb36846aed5',
+    certificate:
+      'certificate=:2dn3omR0cmVlgwGDAkhjYW5pc3RlcoMCSgAAAAAAAAAHAQGDAk5jZXJ0aWZpZWRfZGF0YYIDWCD9vaIGJzGndcAVzeIv5atRB2VKT+F1SLMwfmidEXTaP4MCRHRpbWWCA0mnm/H8zaOC9RZpc2lnbmF0dXJlWDCYtUjT5AcZyvqnsqETmCL8X+ndP4h7URgjr6YJshGOraoPOBSiaQqk0TUDxoReBWk=:, tree=:2dn3gwJLaHR0cF9hc3NldHODAkEvggNYIHUJ5b2gx2LSusf5DXWLWyJj+gHMvFQqtePfFjvgjmyp:',
+    body: 'hello world!',
+    certificate_time: 1651142233000,
+  },
+  fallbackToIndexHtml: {
+    root_key:
+      '308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c0503020103610095864d503c4d238b03fe480ddd2ebde6b29bb911dd2d394329c4bd17f868d7d2e260848b47cd4cd1b5f5d6ea691ed906103e5c3226e7ed3c7de0a0dcf8efa6adab96a5ce07757427e9de7be270177df67a2761f3e0b821adf97ae89747e0f6c2',
+    certificate:
+      'certificate=:2dn3omR0cmVlgwGDAkhjYW5pc3RlcoMCSgAAAAAAAAAHAQGDAk5jZXJ0aWZpZWRfZGF0YYIDWCCTYiq9Z2R97ckZGkWaapIku/HPaP1nllHaYnSbPIr8JoMCRHRpbWWCA0mnm/H8zaOC9RZpc2lnbmF0dXJlWDCFYbCbcUPBbVVASJfnqklL6jR4pdW/hYFVMs5SRG5SqoUr9ZCIyaOfQ8OKIL8r1PQ=:, tree=:2dn3gwJLaHR0cF9hc3NldHODAksvaW5kZXguaHRtbIIDWCB1CeW9oMdi0rrH+Q11i1siY/oBzLxUKrXj3xY74I5sqQ==:',
+    body: 'hello world!',
+    certificate_time: 1651142233000,
+  },
 };
 const HeaderFieldType = IDL.Tuple(IDL.Text, IDL.Text);
 const HttpRequestType = IDL.Record({
@@ -136,6 +160,24 @@ it('should accept valid certification without callbacks', async () => {
   expect(req.method).toEqual('GET');
 });
 
+it('should accept valid certification for index.html fallback', async () => {
+  jest.setSystemTime(TEST_DATA.fallbackToIndexHtml.certificate_time);
+  const queryHttpPayload = createHttpQueryResponsePayload(
+    TEST_DATA.fallbackToIndexHtml.body,
+    getResponseTypes(IDL.Text)[0],
+    TEST_DATA.fallbackToIndexHtml.certificate
+  );
+  mockFetchResponses(TEST_DATA.fallbackToIndexHtml.root_key, {
+    query: queryHttpPayload,
+  });
+
+  const response = await handleRequest(
+    new Request(`https://${CANISTER_ID}.ic0.app/`)
+  );
+
+  expect(response.status).toEqual(200);
+});
+
 it('should accept almost (but not yet) expired certificate', async () => {
   jest.setSystemTime(
     TEST_DATA.queryData.certificate_time + CERT_MAX_TIME_OFFSET
@@ -167,6 +209,60 @@ it('should reject expired certificate', async () => {
 
   const response = await handleRequest(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
+  );
+
+  expect(response.status).toEqual(500);
+});
+
+it('should reject certificate for other canister', async () => {
+  jest.setSystemTime(TEST_DATA.wrongCanisterId.certificate_time);
+  const queryHttpPayload = createHttpQueryResponsePayload(
+    TEST_DATA.wrongCanisterId.body,
+    getResponseTypes(IDL.Text)[0],
+    TEST_DATA.wrongCanisterId.certificate
+  );
+  mockFetchResponses(TEST_DATA.wrongCanisterId.root_key, {
+    query: queryHttpPayload,
+  });
+
+  const response = await handleRequest(
+    new Request(`https://${CANISTER_ID}.ic0.app/`)
+  );
+
+  expect(response.status).toEqual(500);
+});
+
+it('should reject certificate with invalid witness', async () => {
+  jest.setSystemTime(TEST_DATA.invalidWitness.certificate_time);
+  const queryHttpPayload = createHttpQueryResponsePayload(
+    TEST_DATA.invalidWitness.body,
+    getResponseTypes(IDL.Text)[0],
+    TEST_DATA.invalidWitness.certificate
+  );
+  mockFetchResponses(TEST_DATA.invalidWitness.root_key, {
+    query: queryHttpPayload,
+  });
+
+  const response = await handleRequest(
+    new Request(`https://${CANISTER_ID}.ic0.app/`)
+  );
+
+  expect(response.status).toEqual(500);
+});
+
+it('should reject certificate for different asset', async () => {
+  jest.setSystemTime(TEST_DATA.queryData.certificate_time);
+  const queryHttpPayload = createHttpQueryResponsePayload(
+    TEST_DATA.queryData.body,
+    getResponseTypes(IDL.Text)[0],
+    TEST_DATA.queryData.certificate
+  );
+  mockFetchResponses(TEST_DATA.queryData.root_key, {
+    query: queryHttpPayload,
+  });
+
+  const response = await handleRequest(
+    new Request(`https://${CANISTER_ID}.ic0.app/not-found`)
   );
 
   expect(response.status).toEqual(500);
