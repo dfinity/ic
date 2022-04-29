@@ -38,11 +38,11 @@ ic-registry-subnet-features = { path = "../subnet_features" }
 ic-registry-subnet-type = { path = "../subnet_type" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
+ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
+ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance = { path = "../../nns/governance" }
-ic-nns-test-keys = { path = "../../nns/test_keys" }
-ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-handler-root = { path = "../../nns/handlers/root" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-registry-routing-table = { path = "../routing_table" }

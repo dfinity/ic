@@ -1,6 +1,9 @@
 use dfn_candid::{candid, candid_one};
 
 use ic_canister_client::Sender;
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
+};
 use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_common::types::ProposalId;
@@ -11,7 +14,6 @@ use ic_nns_governance::pb::v1::{
     NnsFunction, ProposalStatus, Vote,
 };
 use ic_nns_governance::proposal_submission::create_external_update_proposal_candid;
-use ic_nns_test_keys::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR};
 use ic_nns_test_utils::ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID};
 use ic_nns_test_utils::{
     governance::{get_pending_proposals, wait_for_final_state, UpgradeRootProposal},

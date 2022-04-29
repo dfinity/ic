@@ -7,6 +7,9 @@ use canister_test::{Canister, Project, Wasm};
 use dfn_candid::candid_one;
 use ic_canister_client::Sender;
 use ic_ic00_types::CanisterInstallMode;
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL,
+};
 use ic_nns_common::{
     pb::v1::MethodAuthzInfo, types::NeuronId, types::UpdateIcpXdrConversionRatePayload,
 };
@@ -17,7 +20,6 @@ use ic_nns_gtc::{
     pb::v1::{AccountState, Gtc as GtcProto},
     test_constants::{TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4},
 };
-use ic_nns_test_keys::{TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL};
 use ic_nns_test_utils::{
     governance::{
         append_inert, get_pending_proposals, reinstall_nns_canister_by_proposal,

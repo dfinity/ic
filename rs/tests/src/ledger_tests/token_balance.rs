@@ -42,9 +42,11 @@ use canister_test::Canister;
 use dfn_candid::candid_one;
 use futures::future::join_all;
 use ic_canister_client::Sender;
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
+};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID};
 use ic_nns_governance::pb::v1::{governance_error::ErrorType, GovernanceError, Neuron};
-use ic_nns_test_keys::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR};
 use ic_nns_test_utils::ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::CanisterId;

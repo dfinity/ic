@@ -124,8 +124,8 @@ mod tests {
     use crate::registry::EncodedVersion;
 
     use super::*;
+    use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_common::registry::encode_or_panic;
-    use ic_nns_test_keys::TEST_USER1_PRINCIPAL;
     use ic_protobuf::registry::{
         node_operator::v1::NodeOperatorRecord, routing_table::v1::RoutingTable,
     };

@@ -1,10 +1,10 @@
 use dfn_candid::candid;
 use ic_canister_client::Sender;
-use ic_nns_common::registry::encode_or_panic;
-use ic_nns_test_keys::{
+use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR,
     TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
 };
+use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
     registry::{get_value, invariant_compliant_mutation_as_atomic_req},

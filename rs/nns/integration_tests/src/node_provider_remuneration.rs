@@ -1,4 +1,8 @@
 use ic_canister_client::Sender;
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
+    TEST_USER4_PRINCIPAL, TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
+};
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_governance::pb::v1::{
     manage_neuron::{Command, NeuronIdOrSubaccount},
@@ -6,10 +10,6 @@ use ic_nns_governance::pb::v1::{
     proposal::Action,
     GovernanceError, ManageNeuron, ManageNeuronResponse, NnsFunction, NodeProvider, Proposal,
     ProposalStatus, RewardNodeProvider, RewardNodeProviders,
-};
-use ic_nns_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
-    TEST_USER4_PRINCIPAL, TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
 use ic_nns_test_utils::governance::{add_node_provider, submit_external_update_proposal};
 use ic_nns_test_utils::{

@@ -3279,13 +3279,13 @@ dependencies = [
  "ic-http-utils",
  "ic-ic00-types",
  "ic-interfaces",
+ "ic-nervous-system-common-test-keys",
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
  "ic-nns-handler-root",
  "ic-nns-init",
- "ic-nns-test-keys",
  "ic-nns-test-utils",
  "ic-prep",
  "ic-protobuf",
@@ -5312,6 +5312,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-common-test-keys"
+version = "0.8.0"
+dependencies = [
+ "ed25519-dalek",
+ "ic-base-types",
+ "ic-types 0.8.0",
+ "lazy_static",
+ "rand_chacha 0.2.2",
+ "rand_core 0.5.1",
+]
+
+[[package]]
 name = "ic-nervous-system-root"
 version = "0.1.0"
 dependencies = [
@@ -5382,9 +5394,9 @@ dependencies = [
  "ic-crypto-sha",
  "ic-metrics-encoder",
  "ic-nervous-system-common",
+ "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-test-keys",
  "ic-protobuf",
  "ic-types 0.8.0",
  "ledger-canister",
@@ -5545,13 +5557,13 @@ dependencies = [
  "ic-error-types",
  "ic-ic00-types",
  "ic-nervous-system-common",
+ "ic-nervous-system-common-test-keys",
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
  "ic-nns-gtc",
  "ic-nns-handler-root",
- "ic-nns-test-keys",
  "ic-nns-test-utils",
  "ic-nns-test-utils-macros",
  "ic-protobuf",
@@ -5582,18 +5594,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-nns-test-keys"
-version = "0.8.0"
-dependencies = [
- "ed25519-dalek",
- "ic-base-types",
- "ic-types 0.8.0",
- "lazy_static",
- "rand_chacha 0.2.2",
- "rand_core 0.5.1",
-]
-
-[[package]]
 name = "ic-nns-test-utils"
 version = "0.8.0"
 dependencies = [
@@ -5611,6 +5611,7 @@ dependencies = [
  "ic-crypto",
  "ic-crypto-sha",
  "ic-ic00-types",
+ "ic-nervous-system-common-test-keys",
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
@@ -5618,7 +5619,6 @@ dependencies = [
  "ic-nns-gtc",
  "ic-nns-gtc-accounts",
  "ic-nns-handler-root",
- "ic-nns-test-keys",
  "ic-protobuf",
  "ic-registry-keys",
  "ic-registry-routing-table",
@@ -6573,8 +6573,8 @@ dependencies = [
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-nervous-system-common",
+ "ic-nervous-system-common-test-keys",
  "ic-nervous-system-root",
- "ic-nns-test-keys",
  "ic-sns-governance",
  "ic-sns-root",
  "ic-sns-test-utils",
@@ -10073,9 +10073,9 @@ dependencies = [
  "ic-ic00-types",
  "ic-interfaces",
  "ic-nervous-system-common",
+ "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-test-keys",
  "ic-nns-test-utils",
  "ic-nns-test-utils-macros",
  "ic-protobuf",
@@ -11638,13 +11638,13 @@ dependencies = [
  "ic-ic00-types",
  "ic-interfaces",
  "ic-nervous-system-common",
+ "ic-nervous-system-common-test-keys",
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
  "ic-nns-handler-root",
  "ic-nns-init",
- "ic-nns-test-keys",
  "ic-nns-test-utils",
  "ic-prep",
  "ic-protobuf",

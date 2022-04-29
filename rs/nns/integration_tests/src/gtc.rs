@@ -2,6 +2,10 @@ use dfn_candid::{candid, candid_one};
 use dfn_protobuf::protobuf;
 use ed25519_dalek::Keypair;
 use ic_canister_client::Sender;
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR,
+    TEST_NEURON_2_OWNER_PRINCIPAL,
+};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::{GovernanceError, Neuron, NeuronInfo};
@@ -9,10 +13,6 @@ use ic_nns_gtc::der_encode;
 use ic_nns_gtc::pb::v1::AccountState;
 use ic_nns_gtc::test_constants::{
     TestIdentity, TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4,
-};
-use ic_nns_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR,
-    TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_test_utils::itest_helpers::{
     local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder,

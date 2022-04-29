@@ -9,8 +9,8 @@ candid = "0.7.4"
 canister-test = { path = "../../rust_canisters/canister_test" }
 cycles-minting-canister = {path = "../../nns/cmc"}
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-dfn_json = { path = "../../rust_canisters/dfn_json" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
+dfn_json = { path = "../../rust_canisters/dfn_json" }
 futures = "0.3.8"
 ic-base-types = { path = "../../types/base_types"}
 ic-canister-client = { path = "../../canister_client" }
@@ -18,18 +18,18 @@ ic-config = { path = "../../config" }
 ic-crypto = {path = "../../crypto"}
 ic-crypto-sha = {path = "../../crypto/sha"}
 ic-ic00-types = { path = "../../types/ic00_types"}
+ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
+ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-governance = { path = "../governance" }
 ic-nns-gtc = { path = "../gtc" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }
-ic-nns-test-keys = { path = "../test_keys" }
-ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-handler-root = { path = "../handlers/root" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-keys = { path = "../../registry/keys" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-transport = { path = "../../registry/transport" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }

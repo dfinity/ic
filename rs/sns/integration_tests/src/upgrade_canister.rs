@@ -3,8 +3,8 @@ use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_canister_client::Sender;
 use ic_ic00_types::CanisterStatusResultV2;
+use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, CanisterStatusType};
-use ic_nns_test_keys::TEST_USER1_KEYPAIR;
 use ic_sns_governance::pb::v1::{
     governance_error::ErrorType, proposal::Action, NervousSystemParameters, NeuronPermissionList,
     NeuronPermissionType, Proposal, ProposalData, UpgradeSnsControlledCanister,

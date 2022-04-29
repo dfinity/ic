@@ -3,8 +3,10 @@ use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client::Sender;
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
+};
 use ic_nns_common::registry::encode_or_panic;
-use ic_nns_test_keys::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_test_utils::registry::{
     get_committee_signing_key, get_dkg_dealing_key, get_idkg_dealing_encryption_key,
     get_node_record, get_node_signing_key, get_transport_tls_certificate,

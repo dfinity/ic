@@ -1,8 +1,10 @@
 use assert_matches::assert_matches;
 use ic_canister_client::Sender;
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
+};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_governance::pb::v1::{GovernanceError, NnsFunction, ProposalStatus};
-use ic_nns_test_keys::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR};
 use ic_nns_test_utils::governance::{
     submit_external_update_proposal, submit_external_update_proposal_allowing_error,
 };

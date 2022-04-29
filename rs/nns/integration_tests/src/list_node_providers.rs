@@ -1,5 +1,7 @@
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
+};
 use ic_nns_governance::pb::v1::NodeProvider;
-use ic_nns_test_keys::{TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL};
 use ic_nns_test_utils::governance::{add_node_provider, list_node_providers};
 use ic_nns_test_utils::itest_helpers::{
     local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder,

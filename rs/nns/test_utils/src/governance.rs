@@ -12,6 +12,7 @@ use canister_test::{Canister, Wasm};
 use dfn_candid::{candid, candid_one};
 use ic_canister_client::Sender;
 use ic_ic00_types::CanisterInstallMode;
+use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nervous_system_root::{
     CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running, ChangeCanisterProposal,
 };
@@ -26,7 +27,6 @@ use ic_nns_governance::pb::v1::{
     ListNodeProvidersResponse, ManageNeuron, ManageNeuronResponse, NnsFunction, NodeProvider,
     Proposal, ProposalInfo, ProposalStatus,
 };
-use ic_nns_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 
 /// Thin-wrapper around submit_proposal to handle
 /// serialization/deserialization

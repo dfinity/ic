@@ -32,6 +32,7 @@ use ic_base_types::CanisterId;
 use ic_canister_client::Sender;
 use ic_config::{subnet_config::SubnetConfig, Config};
 use ic_ic00_types::CanisterInstallMode;
+use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nervous_system_root::{
     CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running, ChangeCanisterProposal,
 };
@@ -47,7 +48,6 @@ use ic_nns_governance::{
 use ic_nns_gtc::{init::GenesisTokenCanisterInitPayloadBuilder, pb::v1::Gtc};
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
 use ic_nns_handler_root::init::{RootCanisterInitPayload, RootCanisterInitPayloadBuilder};
-use ic_nns_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,

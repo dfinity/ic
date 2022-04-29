@@ -1,5 +1,6 @@
 use dfn_candid::{candid, candid_one};
 use ic_canister_client::Sender;
+use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_governance::pb::v1::{
     manage_neuron::{Command, NeuronIdOrSubaccount},
@@ -8,7 +9,6 @@ use ic_nns_governance::pb::v1::{
     GovernanceError, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, ManageNeuron,
     ManageNeuronResponse, NeuronInfo, Proposal, ProposalStatus,
 };
-use ic_nns_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_test_utils::{
     governance::wait_for_final_state,
     ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_ID},
