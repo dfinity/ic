@@ -2,10 +2,10 @@ use std::collections::BTreeMap;
 
 use dfn_candid::candid;
 use ic_canister_client::Sender;
-use ic_nns_common::registry::encode_or_panic;
-use ic_nns_test_keys::{
+use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
 };
+use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::registry::{
     get_committee_signing_key, get_dkg_dealing_key, get_node_operator_record, get_node_record,
     get_node_signing_key, get_transport_tls_certificate,

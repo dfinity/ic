@@ -1,8 +1,10 @@
 use dfn_candid::candid;
 use ic_canister_client::Sender;
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
+};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_governance::pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote};
-use ic_nns_test_keys::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_nns_test_utils::ids::TEST_NEURON_2_ID;
 use ic_nns_test_utils::registry::get_value;

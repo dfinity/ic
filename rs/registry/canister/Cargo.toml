@@ -10,17 +10,17 @@ path = "canister/canister.rs"
 [dependencies]
 candid = "0.7.4"
 cycles-minting-canister = {path = "../../nns/cmc"}
-dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+dfn_core = { path = "../../rust_canisters/dfn_core" }
 ic-base-types = { path = "../../types/base_types/" }
 ic-certified-map = { git = "https://github.com/dfinity/cdk-rs", rev = "2112e912e156b271389a51777680de542bb43980" }
 ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
-ic-nns-test-keys = { path = "../../nns/test_keys" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
@@ -41,7 +41,6 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 ic-canister-client = { path = "../../canister_client" }
 ic-crypto = { path = "../../crypto" }
 ic-interfaces = { path = "../../interfaces" }
-ic-nns-test-keys = { path = "../../nns/test_keys" }
 ic-registry-common = { path = "../common" }
 ic-registry-client-fake = { path = "../fake" }
 ic-registry-proto-data-provider = { path = "../proto_data_provider"}

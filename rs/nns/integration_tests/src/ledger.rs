@@ -9,6 +9,7 @@ use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client::Sender;
 use ic_nervous_system_common::ledger;
+use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID,
@@ -24,7 +25,6 @@ use ic_nns_governance::pb::v1::{
     ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse, GovernanceError,
     ManageNeuron, ManageNeuronResponse, Neuron,
 };
-use ic_nns_test_keys::TEST_USER1_KEYPAIR;
 use ic_nns_test_utils::itest_helpers::{
     local_test_on_nns_subnet, maybe_upgrade_root_controlled_canister_to_self, NnsCanisters,
     NnsInitPayloadsBuilder, UpgradeTestingScenario,

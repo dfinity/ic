@@ -1,4 +1,4 @@
-//! Tests `ic_nns_integration_tests::stable_mem_utils` using a canister
+//! Tests `ic_nervous_system_common::stable_mem_utils` using a canister
 
 use canister_test::{local_test_with_config_e, Canister};
 use dfn_candid::candid;

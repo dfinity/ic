@@ -1,7 +1,9 @@
 use dfn_candid::candid_one;
 use ic_canister_client::Sender;
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
+};
 use ic_nns_governance::pb::v1::{GovernanceError, NodeProvider, UpdateNodeProvider};
-use ic_nns_test_keys::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL};
 use ic_nns_test_utils::governance::add_node_provider;
 use ic_nns_test_utils::itest_helpers::{
     local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder,

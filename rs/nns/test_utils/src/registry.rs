@@ -9,11 +9,11 @@ use prost::Message;
 use canister_test::Canister;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
-use ic_nns_common::registry::encode_or_panic;
-use ic_nns_test_keys::{
+use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
     TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
+use ic_nns_common::registry::encode_or_panic;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use ic_protobuf::{
     crypto::v1::NodePublicKeys,

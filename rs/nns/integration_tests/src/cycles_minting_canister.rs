@@ -3,10 +3,12 @@ use cycles_minting_canister::{IcpXdrConversionRateCertifiedResponse, MEMO_TOP_UP
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
+};
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID};
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
-use ic_nns_test_keys::{TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_nns_test_utils::{
     governance::wait_for_final_state,

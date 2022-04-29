@@ -8,13 +8,13 @@ use canister_test::local_test_e;
 use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_canister_client::Sender;
+use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_governance::init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
 use ic_nns_governance::pb::v1::manage_neuron::RemoveHotKey;
 use ic_nns_governance::pb::v1::manage_neuron::{configure, Command, Configure};
 use ic_nns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse};
-use ic_nns_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_nns_test_utils::itest_helpers::set_up_governance_canister;
 

@@ -21,7 +21,7 @@ end::catalog[] */
 use std::convert::TryFrom;
 use std::time::Duration;
 
-use ic_nns_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 
 use crate::driver::ic::{InternetComputer, Subnet};
 use ic_base_types::SubnetId;

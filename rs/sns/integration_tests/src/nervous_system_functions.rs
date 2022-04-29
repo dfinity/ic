@@ -1,6 +1,6 @@
 use candid::Encode;
 use ic_canister_client::Sender;
-use ic_nns_test_keys::TEST_USER1_KEYPAIR;
+use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_sns_governance::governance::NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER;
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_sns_governance::pb::v1::{

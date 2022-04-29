@@ -1,12 +1,12 @@
 [package]
-name = "ic-nns-test-keys"
+name = "ic-nervous-system-common-test-keys"
 version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-ic-base-types = { path = "../../types/base_types"}
-ic-types = { path = "../../types/types" }
 ed25519-dalek = "1.0.1"
+ic-base-types = { path = "../../../types/base_types"}
+ic-types = { path = "../../../types/types" }
 lazy_static = "1.4.0"
 rand_chacha = "0.2.2"
 rand_core = "0.5.1"

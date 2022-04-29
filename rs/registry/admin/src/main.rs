@@ -21,6 +21,11 @@ extern crate ic_admin_derive;
 use ic_consensus::dkg::make_registry_cup;
 use ic_ic00_types::{CanisterIdRecord, CanisterInstallMode, EcdsaKeyId};
 use ic_interfaces::registry::RegistryClient;
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
+    TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER3_PRINCIPAL, TEST_USER4_KEYPAIR,
+    TEST_USER4_PRINCIPAL,
+};
 use ic_nervous_system_root::{
     AddCanisterProposal, CanisterAction, CanisterStatusResult, ChangeCanisterProposal,
     StopOrStartCanisterProposal,
@@ -41,11 +46,6 @@ use ic_nns_governance::{
 };
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
-use ic_nns_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
-    TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER3_PRINCIPAL, TEST_USER4_KEYPAIR,
-    TEST_USER4_PRINCIPAL,
-};
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_protobuf::registry::firewall::v1::FirewallConfig;
 use ic_protobuf::registry::node_rewards::v2::{

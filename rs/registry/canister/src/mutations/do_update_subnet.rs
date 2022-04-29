@@ -345,7 +345,7 @@ mod tests {
     use crate::mutations::do_create_subnet::CreateSubnetPayload;
     use ic_base_types::NodeId;
     use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
-    use ic_nns_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
+    use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{GossipAdvertConfig, GossipConfig, SubnetRecord};
     use ic_registry_subnet_type::SubnetType;
     use ic_types::p2p::{

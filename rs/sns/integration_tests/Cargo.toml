@@ -21,19 +21,19 @@ maplit = "1.0.2"
 
 # Dependencies required to compile the tests.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { version = "1.17.0", features = ["time"] }
 assert_matches = "1.3.0"
 canister-test = { path = "../../rust_canisters/canister_test" }
-ic-canister-client = { path = "../../canister_client" }
 ic-base-types={path="../../types/base_types"}
+ic-canister-client = { path = "../../canister_client" }
 ic-crypto = { path = "../../crypto" }
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
-ic-nns-test-keys = { path = "../../nns/test_keys" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-root = { path = "../root" }
 ic-sns-test-utils = { path = "../test_utils" }
 ic-types = { path = "../../types/types" }
 on_wire = { path = "../../rust_canisters/on_wire" }
+tokio = { version = "1.17.0", features = ["time"] }
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
