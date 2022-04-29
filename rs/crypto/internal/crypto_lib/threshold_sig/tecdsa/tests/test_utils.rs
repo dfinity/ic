@@ -483,7 +483,7 @@ impl ProtocolRound {
                 Err(ThresholdEcdsaError::InsufficientDealings)
             }
             Err(IDkgCreateTranscriptInternalError::InconsistentCommitments) => {
-                Err(ThresholdEcdsaError::InconsistentCommitments)
+                Err(ThresholdEcdsaError::InvalidCommitment)
             }
             Err(_) => panic!("Unexpected error from create_transcript"),
         }

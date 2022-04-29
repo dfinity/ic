@@ -1354,7 +1354,7 @@ fn should_fail_open_transcript_with_invalid_share() {
         Err(IDkgOpenTranscriptError::InternalError { .. })
     ));
     assert!(
-        format!("{:?}", result).contains("InconsistentCommitment"),
+        format!("{:?}", result).contains("InvalidCommitment"),
         "result: {:?}",
         result
     );

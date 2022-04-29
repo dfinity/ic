@@ -74,7 +74,7 @@ fn check_shares(
 }
 
 #[test]
-fn verify_serialization_remains_unchanged_over_time() -> Result<(), ThresholdEcdsaError> {
+fn verify_protocol_output_remains_unchanged_over_time() -> Result<(), ThresholdEcdsaError> {
     let nodes = 5;
     let threshold = 2;
 
@@ -186,6 +186,64 @@ fn verify_serialization_remains_unchanged_over_time() -> Result<(), ThresholdEcd
         "1aac78183716fd7c",
         &sig.serialize(),
     );
+
+    Ok(())
+}
+
+#[test]
+fn verify_fixed_serialization_continues_to_be_accepted() -> Result<(), ThresholdEcdsaError> {
+    let dealing_bits = [
+        include_str!("data/dealing_random.hex"),
+        include_str!("data/dealing_reshare_of_masked.hex"),
+        include_str!("data/dealing_reshare_of_unmasked.hex"),
+        include_str!("data/dealing_multiply.hex"),
+    ];
+
+    for dealing_encoding in dealing_bits {
+        let dealing_encoding = hex::decode(dealing_encoding).expect("Invalid hex");
+        let _dealing = IDkgDealingInternal::deserialize(&dealing_encoding)
+            .expect("Was unable to deserialize a fixed dealing encoding");
+    }
+
+    let transcript_bits = [
+        include_str!("data/transcript_random.hex"),
+        include_str!("data/transcript_reshare_of_masked.hex"),
+        include_str!("data/transcript_reshare_of_unmasked.hex"),
+        include_str!("data/transcript_multiply.hex"),
+    ];
+
+    for transcript_encoding in transcript_bits {
+        let transcript_encoding = hex::decode(transcript_encoding).expect("Invalid hex");
+        let _transcript = IDkgTranscriptInternal::deserialize(&transcript_encoding)
+            .expect("Was unable to deserialize a fixed transcript encoding");
+    }
+
+    let opening_bits = [
+        include_str!("data/opening_simple.hex"),
+        include_str!("data/opening_pedersen.hex"),
+    ];
+
+    for opening_encoding in opening_bits {
+        let opening_encoding = hex::decode(opening_encoding).expect("Invalid hex");
+        let _opening = CommitmentOpening::deserialize(&opening_encoding)
+            .expect("Was unable to deserialize a fixed opening encoding");
+    }
+
+    let complaint_bits = [include_str!("data/complaint.hex")];
+
+    for complaint_encoding in complaint_bits {
+        let complaint_encoding = hex::decode(complaint_encoding).expect("Invalid hex");
+        let _complaint = IDkgComplaintInternal::deserialize(&complaint_encoding)
+            .expect("Was unable to deserialize a fixed complaint encoding");
+    }
+
+    let sig_share_bits = [include_str!("data/sig_share.hex")];
+
+    for sig_share_encoding in sig_share_bits {
+        let sig_share_encoding = hex::decode(sig_share_encoding).expect("Invalid hex");
+        let _sig_share = ThresholdEcdsaSigShareInternal::deserialize(&sig_share_encoding)
+            .expect("Was unable to deserialize a fixed sig_share encoding");
+    }
 
     Ok(())
 }

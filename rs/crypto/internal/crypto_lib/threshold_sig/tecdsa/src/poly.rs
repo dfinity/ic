@@ -577,7 +577,7 @@ impl PolynomialCommitment {
         if self.check_opening(index, opening)? {
             Ok(opening.clone())
         } else {
-            Err(ThresholdEcdsaError::InconsistentCommitments)
+            Err(ThresholdEcdsaError::InvalidCommitment)
         }
     }
 
@@ -591,7 +591,7 @@ impl PolynomialCommitment {
         }
 
         if self.ctype() != ctype {
-            return Err(ThresholdEcdsaError::InconsistentCommitments);
+            return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
         }
 
         Ok(())

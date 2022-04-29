@@ -245,7 +245,7 @@ impl MEGaCiphertext {
         if commitment.check_opening(receiver_index, &opening)? {
             Ok(opening)
         } else {
-            Err(ThresholdEcdsaError::InconsistentCommitments)
+            Err(ThresholdEcdsaError::InvalidCommitment)
         }
     }
 }

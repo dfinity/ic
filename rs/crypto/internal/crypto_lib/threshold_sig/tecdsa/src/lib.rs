@@ -220,23 +220,26 @@ pub use ic_types::NodeIndex;
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaError {
     CurveMismatch,
-    InvalidRandomOracleInput,
     InconsistentCiphertext,
-    InconsistentCommitments,
     InsufficientDealings,
     InsufficientOpenings,
     InterpolationError,
     InvalidArguments(String),
-    InvalidFieldElement,
+    InvalidCommitment,
     InvalidComplaint,
+    InvalidFieldElement,
     InvalidOpening,
     InvalidPoint,
     InvalidProof,
+    InvalidRandomOracleInput,
     InvalidRecipients,
     InvalidScalar,
     InvalidSecretShare,
+    InvalidSignature,
+    InvalidSignatureShare,
     InvalidThreshold(usize, usize),
     SerializationError(String),
+    UnexpectedCommitmentType,
 }
 
 pub type ThresholdEcdsaResult<T> = std::result::Result<T, ThresholdEcdsaError>;
@@ -347,7 +350,7 @@ impl From<ThresholdEcdsaError> for IDkgCreateTranscriptInternalError {
     fn from(e: ThresholdEcdsaError) -> Self {
         match e {
             ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InconsistentCommitments => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
             ThresholdEcdsaError::InsufficientDealings => Self::InsufficientDealings,
             x => Self::InternalError(format!("{:?}", x)),
         }
@@ -434,7 +437,7 @@ impl From<ThresholdEcdsaError> for IDkgComputeSecretSharesInternalError {
     fn from(e: ThresholdEcdsaError) -> Self {
         match e {
             ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InconsistentCommitments => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -513,7 +516,7 @@ impl From<ThresholdEcdsaError> for IDkgVerifyDealingInternalError {
     fn from(e: ThresholdEcdsaError) -> Self {
         match e {
             ThresholdEcdsaError::InvalidProof => Self::InvalidProof,
-            ThresholdEcdsaError::InconsistentCommitments => Self::InvalidCommitment,
+            ThresholdEcdsaError::InvalidCommitment => Self::InvalidCommitment,
             ThresholdEcdsaError::InvalidRecipients => Self::InvalidRecipients,
             x => Self::InternalError(format!("{:?}", x)),
         }
@@ -635,7 +638,7 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaGenerateSigShareInternalError {
     fn from(e: ThresholdEcdsaError) -> Self {
         match e {
             ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InconsistentCommitments => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -710,7 +713,8 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaVerifySigShareInternalError {
     fn from(e: ThresholdEcdsaError) -> Self {
         match e {
             ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InconsistentCommitments => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InvalidSignatureShare => Self::InvalidSignatureShare,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -741,24 +745,20 @@ pub fn verify_signature_share(
         return Err(ThresholdEcdsaVerifySigShareInternalError::UnsupportedAlgorithm);
     }
 
-    let accept = sig_share.verify(
-        derivation_path,
-        hashed_message,
-        randomness,
-        signer_index,
-        key_transcript,
-        presig_transcript,
-        lambda,
-        kappa_times_lambda,
-        key_times_lambda,
-        curve_type,
-    )?;
-
-    if !accept {
-        return Err(ThresholdEcdsaVerifySigShareInternalError::InvalidSignatureShare);
-    }
-
-    Ok(())
+    sig_share
+        .verify(
+            derivation_path,
+            hashed_message,
+            randomness,
+            signer_index,
+            key_transcript,
+            presig_transcript,
+            lambda,
+            kappa_times_lambda,
+            key_times_lambda,
+            curve_type,
+        )
+        .map_err(|e| e.into())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -773,7 +773,7 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaCombineSigSharesInternalError {
     fn from(e: ThresholdEcdsaError) -> Self {
         match e {
             ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InconsistentCommitments => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
             ThresholdEcdsaError::InsufficientDealings => Self::InsufficientShares,
             x => Self::InternalError(format!("{:?}", x)),
         }
@@ -825,7 +825,8 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaVerifySignatureInternalError {
     fn from(e: ThresholdEcdsaError) -> Self {
         match e {
             ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InconsistentCommitments => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InvalidSignature => Self::InvalidSignature,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -854,20 +855,16 @@ pub fn verify_threshold_signature(
         return Err(ThresholdEcdsaVerifySignatureInternalError::UnsupportedAlgorithm);
     }
 
-    let accept = signature.verify(
-        derivation_path,
-        hashed_message,
-        randomness,
-        presig_transcript,
-        key_transcript,
-        curve_type,
-    )?;
-
-    if !accept {
-        return Err(ThresholdEcdsaVerifySignatureInternalError::InvalidSignature);
-    }
-
-    Ok(())
+    signature
+        .verify(
+            derivation_path,
+            hashed_message,
+            randomness,
+            presig_transcript,
+            key_transcript,
+            curve_type,
+        )
+        .map_err(|e| e.into())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -882,21 +879,24 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaDerivePublicKeyError {
             ThresholdEcdsaError::InvalidArguments(s) => Self::InvalidArgument(s),
             ThresholdEcdsaError::CurveMismatch
             | ThresholdEcdsaError::InconsistentCiphertext
-            | ThresholdEcdsaError::InconsistentCommitments
             | ThresholdEcdsaError::InsufficientDealings
             | ThresholdEcdsaError::InsufficientOpenings
             | ThresholdEcdsaError::InterpolationError
+            | ThresholdEcdsaError::InvalidCommitment
             | ThresholdEcdsaError::InvalidComplaint
             | ThresholdEcdsaError::InvalidFieldElement
             | ThresholdEcdsaError::InvalidOpening
             | ThresholdEcdsaError::InvalidPoint
             | ThresholdEcdsaError::InvalidProof
+            | ThresholdEcdsaError::InvalidRandomOracleInput
             | ThresholdEcdsaError::InvalidRecipients
             | ThresholdEcdsaError::InvalidScalar
             | ThresholdEcdsaError::InvalidSecretShare
-            | ThresholdEcdsaError::InvalidRandomOracleInput
+            | ThresholdEcdsaError::InvalidSignature
+            | ThresholdEcdsaError::InvalidSignatureShare
             | ThresholdEcdsaError::InvalidThreshold(_, _)
-            | ThresholdEcdsaError::SerializationError(_) => Self::InternalError(e),
+            | ThresholdEcdsaError::SerializationError(_)
+            | ThresholdEcdsaError::UnexpectedCommitmentType => Self::InternalError(e),
         }
     }
 }
@@ -1069,7 +1069,7 @@ pub enum ThresholdVerifyOpeningInternalError {
 impl From<ThresholdEcdsaError> for ThresholdVerifyOpeningInternalError {
     fn from(e: ThresholdEcdsaError) -> Self {
         match e {
-            ThresholdEcdsaError::InconsistentCommitments => Self::InconsistentCommitments,
+            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }

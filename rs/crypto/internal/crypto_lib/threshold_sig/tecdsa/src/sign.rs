@@ -38,11 +38,11 @@ fn derive_rho(
 ) -> ThresholdEcdsaResult<(EccScalar, EccScalar, EccScalar, EccPoint)> {
     let pre_sig = match &presig_transcript.combined_commitment {
         CombinedCommitment::ByInterpolation(PolynomialCommitment::Simple(c)) => c.constant_term(),
-        _ => return Err(ThresholdEcdsaError::InconsistentCommitments),
+        _ => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
     };
 
     if pre_sig.curve_type() != curve_type {
-        return Err(ThresholdEcdsaError::InconsistentCommitments);
+        return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
     }
 
     let (key_tweak, _chain_key) = derivation_path.derive_tweak(&key_transcript.constant_term())?;
@@ -99,7 +99,7 @@ impl ThresholdEcdsaSigShareInternal {
 
         let (lambda_value, lambda_mask) = match lambda {
             CommitmentOpening::Pedersen(lambda_value, lambda_mask) => (lambda_value, lambda_mask),
-            _ => return Err(ThresholdEcdsaError::InconsistentCommitments),
+            _ => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
         };
 
         // Compute shares of sigma's numerator, i.e. openings of
@@ -110,7 +110,7 @@ impl ThresholdEcdsaSigShareInternal {
                 let nu_mask = theta.mul(lambda_mask)?.add(&rho.mul(mask)?)?;
                 CommitmentOpening::Pedersen(nu_value, nu_mask)
             }
-            _ => return Err(ThresholdEcdsaError::InconsistentCommitments),
+            _ => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
         };
 
         // Compute shares of sigma's denominator, i.e. openings of
@@ -121,7 +121,7 @@ impl ThresholdEcdsaSigShareInternal {
                 let mu_mask = randomizer.mul(lambda_mask)?.add(mask)?;
                 CommitmentOpening::Pedersen(mu_value, mu_mask)
             }
-            _ => return Err(ThresholdEcdsaError::InconsistentCommitments),
+            _ => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
         };
 
         Ok(Self {
@@ -150,7 +150,7 @@ impl ThresholdEcdsaSigShareInternal {
         kappa_times_lambda: &IDkgTranscriptInternal,
         key_times_lambda: &IDkgTranscriptInternal,
         curve_type: EccCurveType,
-    ) -> ThresholdEcdsaResult<bool> {
+    ) -> ThresholdEcdsaResult<()> {
         // Compute rho and tweak
         let (rho, key_tweak, randomizer, _presig) = derive_rho(
             curve_type,
@@ -182,22 +182,22 @@ impl ThresholdEcdsaSigShareInternal {
         match self.sigma_numerator {
             CommitmentOpening::Pedersen(v, m) => {
                 if sigma_num != EccPoint::pedersen(&v, &m)? {
-                    return Ok(false);
+                    return Err(ThresholdEcdsaError::InvalidCommitment);
                 }
             }
-            _ => return Err(ThresholdEcdsaError::InconsistentCommitments),
+            _ => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
         }
 
         match self.sigma_denominator {
             CommitmentOpening::Pedersen(v, m) => {
                 if sigma_den != EccPoint::pedersen(&v, &m)? {
-                    return Ok(false);
+                    return Err(ThresholdEcdsaError::InvalidCommitment);
                 }
             }
-            _ => return Err(ThresholdEcdsaError::InconsistentCommitments),
+            _ => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
         }
 
-        Ok(true)
+        Ok(())
     }
 }
 
@@ -284,13 +284,13 @@ impl ThresholdEcdsaCombinedSigInternal {
             if let CommitmentOpening::Pedersen(c, _) = sig_share.sigma_numerator {
                 numerator_samples.push(c);
             } else {
-                return Err(ThresholdEcdsaError::InconsistentCommitments);
+                return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
             }
 
             if let CommitmentOpening::Pedersen(c, _) = sig_share.sigma_denominator {
                 denominator_samples.push(c);
             } else {
-                return Err(ThresholdEcdsaError::InconsistentCommitments);
+                return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
             }
         }
 
@@ -334,9 +334,9 @@ impl ThresholdEcdsaCombinedSigInternal {
         presig_transcript: &IDkgTranscriptInternal,
         key_transcript: &IDkgTranscriptInternal,
         curve_type: EccCurveType,
-    ) -> ThresholdEcdsaResult<bool> {
+    ) -> ThresholdEcdsaResult<()> {
         if self.r.is_zero() || self.s.is_zero() {
-            return Ok(false);
+            return Err(ThresholdEcdsaError::InvalidSignature);
         }
 
         let msg = convert_hash_to_integer(hashed_message, curve_type)?;
@@ -351,12 +351,12 @@ impl ThresholdEcdsaCombinedSigInternal {
         )?;
 
         if self.r != rho {
-            return Ok(false);
+            return Err(ThresholdEcdsaError::InvalidSignature);
         }
 
         // We require s normalization for all curves
         if self.s.is_high() {
-            return Ok(false);
+            return Err(ThresholdEcdsaError::InvalidSignature);
         }
 
         let master_public_key = key_transcript.constant_term();
@@ -371,7 +371,7 @@ impl ThresholdEcdsaCombinedSigInternal {
         let rp = EccPoint::mul_points(&EccPoint::generator_g(curve_type)?, &u1, &public_key, &u2)?;
 
         if rp.is_infinity()? {
-            return Ok(false);
+            return Err(ThresholdEcdsaError::InvalidSignature);
         }
 
         /*
@@ -390,7 +390,12 @@ impl ThresholdEcdsaCombinedSigInternal {
         we only check the x coordinate.
         */
 
-        Ok(rp.affine_x()? == pre_sig.affine_x()?)
+        if rp.affine_x()? != pre_sig.affine_x()? {
+            return Err(ThresholdEcdsaError::InvalidSignature);
+        }
+
+        // accept:
+        Ok(())
     }
 }
 

@@ -328,7 +328,7 @@ impl IDkgDealingInternal {
         associated_data: &[u8],
     ) -> ThresholdEcdsaResult<()> {
         if self.commitment.len() != reconstruction_threshold.get() as usize {
-            return Err(ThresholdEcdsaError::InconsistentCommitments);
+            return Err(ThresholdEcdsaError::InvalidCommitment);
         }
 
         if self.commitment.curve_type() != curve_type {
@@ -381,13 +381,13 @@ impl IDkgDealingInternal {
 
                 match previous_commitment {
                     PolynomialCommitment::Pedersen(_) => {
-                        return Err(ThresholdEcdsaError::InconsistentCommitments)
+                        return Err(ThresholdEcdsaError::UnexpectedCommitmentType)
                     }
                     PolynomialCommitment::Simple(c) => {
                         let constant_term = self.commitment.constant_term();
 
                         if c.evaluate_at(dealer_index)? != constant_term {
-                            return Err(ThresholdEcdsaError::InconsistentCommitments);
+                            return Err(ThresholdEcdsaError::InvalidCommitment);
                         }
                     }
                 }
