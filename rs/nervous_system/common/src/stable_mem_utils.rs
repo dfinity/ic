@@ -257,7 +257,7 @@ impl Buf for BufferedStableMemReader {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::pb::v1::{Governance, NetworkEconomics, Neuron};
+    use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
     use prost::Message;
 
     fn allocate_governance(num_neurons: u64) -> Governance {

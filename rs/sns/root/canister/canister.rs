@@ -10,8 +10,10 @@ extern crate ic_nervous_system_common;
 #[cfg(test)]
 use ic_nervous_system_common::MethodAuthzChange;
 
+use ic_nervous_system_common::stable_mem_utils::{
+    BufferedStableMemReader, BufferedStableMemWriter,
+};
 use ic_nervous_system_root::{ChangeCanisterProposal, LOG_PREFIX};
-use ic_nns_governance::stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter};
 use ic_sns_root::pb::v1::SnsRootCanister;
 
 use prost::Message;

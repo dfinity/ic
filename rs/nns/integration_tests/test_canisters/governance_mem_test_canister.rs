@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use strum::IntoEnumIterator;
 
 use ic_base_types::PrincipalId;
+use ic_nervous_system_common::stable_mem_utils::BufferedStableMemWriter;
 use ic_nns_common::pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto};
 use ic_nns_governance::governance::{
     HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES, MAX_NUMBER_OF_NEURONS,
@@ -19,7 +20,6 @@ use ic_nns_governance::governance::{
 };
 use ic_nns_governance::pb::v1::proposal::Action;
 use ic_nns_governance::pb::v1::*;
-use ic_nns_governance::stable_mem_utils::BufferedStableMemWriter;
 use ic_nns_governance::{
     governance::{MAX_FOLLOWEES_PER_TOPIC, MAX_NEURON_RECENT_BALLOTS},
     pb::v1::{

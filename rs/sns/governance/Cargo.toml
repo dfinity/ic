@@ -26,9 +26,6 @@ ic-ic00-types = { path = "../../types/ic00_types" }
 ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
 ic-nervous-system-common = {path = "../../nervous_system/common"}
 ic-nervous-system-root = {path = "../../nervous_system/root"}
-ic-nns-common = { path = "../../nns/common" }
-ic-nns-constants = { path = "../../nns/constants" }
-ic-nns-governance = { path = "../../nns/governance" }
 ic-protobuf = { path = "../../protobuf" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 on_wire = { path = "../../rust_canisters/on_wire" }
@@ -60,7 +57,6 @@ ic-config = { path = "../../config" }
 proptest = "1.0"
 pretty_assertions = "1.0"
 ic-base-types = { path = "../../types/base_types", features = ["test"] }
-ic-nns-common = { path = "../../nns/common", features = ["test"] }
 ledger-canister = { path = "../../rosetta-api/ledger_canister", features = ["test"] }
 ic-sns-governance = { path = ".", features = ["test"] }
 futures = "0.3.13"

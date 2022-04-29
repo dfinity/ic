@@ -10,6 +10,7 @@ use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2, IC_00};
 
 pub mod export_build_metadata_via_candid;
 pub mod ledger;
+pub mod stable_mem_utils;
 
 /// A general purpose error indicating something went wrong.
 #[derive(Default)]

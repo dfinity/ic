@@ -1,6 +1,4 @@
 use dfn_core::api::{call, call_with_funds, CanisterId, Funds};
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use ic_ic00_types::{CanisterInstallMode::Install, InstallCodeArgs};
 use ic_nervous_system_root::{
     start_canister, stop_canister, AddCanisterProposal, CanisterAction, CanisterIdRecord,

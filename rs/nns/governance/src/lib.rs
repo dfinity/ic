@@ -134,4 +134,3 @@ pub mod init;
 pub mod pb;
 pub mod proposal_submission;
 mod reward;
-pub mod stable_mem_utils;
