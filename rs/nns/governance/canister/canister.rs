@@ -40,11 +40,13 @@ use ic_nns_common::{
 #[macro_use]
 extern crate ic_nervous_system_common;
 
+use ic_nervous_system_common::stable_mem_utils::{
+    BufferedStableMemReader, BufferedStableMemWriter,
+};
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::pb::v1::{
     ListNodeProvidersResponse, NodeProvider, RewardEvent, UpdateNodeProvider,
 };
-use ic_nns_governance::stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter};
 use ic_nns_governance::{
     governance::{Environment, Governance},
     pb::v1::{

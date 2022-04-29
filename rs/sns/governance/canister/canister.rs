@@ -10,7 +10,9 @@
 // the did definition of the method.
 
 use async_trait::async_trait;
-use ic_nns_governance::stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter};
+use ic_nervous_system_common::stable_mem_utils::{
+    BufferedStableMemReader, BufferedStableMemWriter,
+};
 use rand::rngs::StdRng;
 use rand_core::{RngCore, SeedableRng};
 use std::boxed::Box;

@@ -30,7 +30,6 @@ ic-crypto = { path = "../../crypto" }
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
-ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-test-keys = { path = "../../nns/test_keys" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-root = { path = "../root" }
