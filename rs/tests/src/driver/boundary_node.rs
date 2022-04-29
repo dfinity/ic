@@ -225,7 +225,7 @@ impl BoundaryNodeVm for TestEnv {
 
     fn write_boundary_node_vm(&self, name: &str, vm: &VMCreateResponse) -> Result<()> {
         let vm_path: PathBuf = [BOUNDARY_NODE_VMS_DIR, name].iter().collect();
-        self.write_object(vm_path.join(BOUNDARY_NODE_VM_PATH), &vm)
+        self.write_json_object(vm_path.join(BOUNDARY_NODE_VM_PATH), &vm)
     }
 }
 
@@ -249,7 +249,8 @@ impl HasVmName for DeployedBoundaryNode {
 impl DeployedBoundaryNode {
     pub fn get_vm(&self) -> Result<VMCreateResponse> {
         let vm_path: PathBuf = [BOUNDARY_NODE_VMS_DIR, &self.name].iter().collect();
-        self.env.read_object(vm_path.join(BOUNDARY_NODE_VM_PATH))
+        self.env
+            .read_json_object(vm_path.join(BOUNDARY_NODE_VM_PATH))
     }
 }
 

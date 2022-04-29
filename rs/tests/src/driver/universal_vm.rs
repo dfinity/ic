@@ -80,7 +80,7 @@ impl UniversalVm {
             .expect("Expected {self.name} to be allocated!");
 
         let univm_path: PathBuf = [UNIVERSAL_VMS_DIR, &self.name].iter().collect();
-        env.write_object(univm_path.join("vm.json"), vm)?;
+        env.write_json_object(univm_path.join("vm.json"), vm)?;
 
         if let Some(config_dir) = self.config_dir.clone() {
             let universal_vm_dir = env.get_path(univm_path);
@@ -197,7 +197,7 @@ impl HasVmName for DeployedUniversalVm {
 impl DeployedUniversalVm {
     pub fn get_vm(&self) -> Result<AllocatedVm> {
         let p: PathBuf = [UNIVERSAL_VMS_DIR, &self.name].iter().collect();
-        self.env.read_object(p.join("vm.json"))
+        self.env.read_json_object(p.join("vm.json"))
     }
 }
 

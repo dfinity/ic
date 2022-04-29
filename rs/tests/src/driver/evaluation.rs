@@ -92,7 +92,7 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<Tes
         .replace(':', "_")
         .replace('.', "_");
 
-    let pot_working_dir = ctx.working_dir.join(&pot.name);
+    let pot_working_dir = ctx.working_dir.join(&pot.name).join("setup");
     let pot_env = ctx.env.fork(ctx.logger.clone(), pot_working_dir)?;
 
     pot_env
@@ -108,7 +108,7 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<Tes
 
     create_group_for_pot(&pot_env, &pot, &ctx.logger)?;
 
-    if let Err(e) = pot.setup.evaluate(&pot_env) {
+    if let Err(e) = pot.setup.evaluate(pot_env.clone()) {
         if let Some(s) = e.downcast_ref::<String>() {
             bail!("Could not evaluate pot config: {}", s);
         } else if let Some(s) = e.downcast_ref::<&str>() {
@@ -143,7 +143,7 @@ fn evaluate_pot_with_group(
     ctx: &DriverContext,
     pot: Pot,
     pot_path: TestPath,
-    env: &TestEnv,
+    pot_env: &TestEnv,
     group_name: &str,
 ) -> Result<TestResultNode> {
     let started_at = Instant::now();
@@ -165,18 +165,22 @@ fn evaluate_pot_with_group(
         let s = sender.clone();
         let join_handle = std::thread::spawn({
             let t_path = pot_path.clone();
-            let t_test_env = env.clone();
+            let t_pot_env = pot_env.clone();
             let t_ctx = ctx.clone();
             move || {
                 for t in chunk {
-                    // in the long run, these directories are retained (!). For
-                    // now, we just use the test env as a way to pass
-                    // information
-                    let tempdir = tempfile::tempdir().unwrap();
-                    let test_env = t_test_env
-                        .fork(t_ctx.logger.clone(), tempdir.path())
+                    // the pot env is in <pot>/setup. Hence, we take the parent,
+                    // to create the path <pot>/tests/<test>
+                    let t_env_dir = t_pot_env
+                        .base_path()
+                        .parent()
+                        .expect("parent not set")
+                        .to_owned()
+                        .join("tests")
+                        .join(&t.name);
+                    let test_env = t_pot_env
+                        .fork(t_ctx.logger.clone(), t_env_dir)
                         .expect("Could not create test env.");
-                    let t_path = t_path.clone();
                     evaluate_test(&t_ctx, test_env, s.clone(), t, t_path.clone());
                 }
             }

@@ -28,11 +28,11 @@ pub fn setup_two_ics(test_env: TestEnv) {
     // `.with_name(name: &str)`. If more than one Internet Computer is started,
     // their names must be different. Not providing a name is equivalent to
     // calling `.with_name()` with an empty string.
-    let mut ic2 = InternetComputer::new()
+    InternetComputer::new()
         .with_name("two_subnets")
         .add_fast_single_node_subnet(SubnetType::System)
-        .add_fast_single_node_subnet(SubnetType::Application);
-    ic2.setup_and_start(&test_env)
+        .add_fast_single_node_subnet(SubnetType::Application)
+        .setup_and_start(&test_env)
         .expect("Could not start second IC");
 }
 
@@ -56,18 +56,19 @@ pub fn ics_have_correct_subnet_count(test_env: TestEnv) {
 /// referenced via HTTP in governance proposals.
 pub fn upload_file_to_farm(test_env: TestEnv) {
     test_env
-        .write_object("uploaded", &String::from("magic"))
+        .write_json_object("uploaded", &String::from("magic"))
         .expect("failed to write to env");
     let fm = test_env.http_file_store();
     let fh = fm
-        .upload(test_env.get_path("uploaded"))
+        .upload(test_env.get_json_path("uploaded"))
         .expect("failed to upload file to farm");
-    let sink = File::create(test_env.get_path("downloaded")).expect("cannot create output file");
+    let sink =
+        File::create(test_env.get_json_path("downloaded")).expect("cannot create output file");
     fh.download(Box::new(sink))
         .expect("failed to download file from farm");
 
-    let uploaded: String = test_env.read_object("uploaded").unwrap();
-    let downloaded: String = test_env.read_object("downloaded").unwrap();
+    let uploaded: String = test_env.read_json_object("uploaded").unwrap();
+    let downloaded: String = test_env.read_json_object("downloaded").unwrap();
     assert_eq!(uploaded, downloaded);
 }
 
@@ -94,7 +95,6 @@ pub fn vm_control(test_env: TestEnv) {
     nodes.iter().for_each(|n| {
         info!(logger, "Killing the node {:?} ...", n.node_id);
         n.vm().kill();
-
         info!(logger, "Node killed, assert health status is error ...");
         assert!(n.status_is_healthy().is_err());
         info!(logger, "Starting the node ...");
@@ -105,7 +105,6 @@ pub fn vm_control(test_env: TestEnv) {
         );
         n.await_status_is_healthy()
             .expect("Node did not report healthy status");
-        assert!(n.status_is_healthy().unwrap(), "{}", true);
         info!(logger, "Rebooting the node ...");
         n.vm().reboot();
         info!(
@@ -114,7 +113,6 @@ pub fn vm_control(test_env: TestEnv) {
         );
         n.await_status_is_healthy()
             .expect("Node did not report healthy status");
-        assert!(n.status_is_healthy().unwrap(), "{}", true);
     });
 }
 

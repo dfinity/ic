@@ -1,7 +1,7 @@
 use super::bootstrap::{init_ic, setup_and_start_vms};
 use super::resource::{allocate_resources, get_resource_request, ResourceGroup};
 use super::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::driver_setup::{mk_logger, IcSetup};
+use crate::driver::driver_setup::IcSetup;
 use crate::driver::farm::Farm;
 use crate::driver::test_setup::PotSetup;
 use anyhow::Result;
@@ -133,7 +133,7 @@ impl InternetComputer {
         let tempdir = tempfile::tempdir()?;
         self.create_secret_key_stores(tempdir.path())?;
 
-        let logger = mk_logger();
+        let logger = env.logger();
         let ic_setup = IcSetup::read_attribute(env);
         let pot_setup = PotSetup::read_attribute(env);
         let farm = Farm::new(ic_setup.farm_base_url, logger.clone());
