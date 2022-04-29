@@ -272,7 +272,7 @@ mod test {
         );
     }
     #[test]
-    #[should_panic(expected = "[Registry Canister] Record for some_key not found in registry")]
+    #[should_panic(expected = "[Registry] Record for some_key not found in registry")]
     fn panic_if_value_changed_across_versions_record_not_found() {
         let mut registry = invariant_compliant_registry();
         let mutation = upsert("foo", "Bar");

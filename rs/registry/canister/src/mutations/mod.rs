@@ -1,4 +1,3 @@
-mod catch_up_package;
 pub mod common;
 mod dkg;
 pub mod do_add_node_operator;
