@@ -49,7 +49,7 @@ pub fn init_ic(
     let working_dir = test_env.create_prep_dir(&ic_name)?;
 
     if let Some(bitcoind_addr) = ic.bitcoind_addr {
-        test_env.write_object(BITCOIND_ADDR_PATH, &bitcoind_addr)?;
+        test_env.write_json_object(BITCOIND_ADDR_PATH, &bitcoind_addr)?;
     }
 
     // In production, this dummy hash is not actually checked and exists
@@ -184,6 +184,9 @@ pub fn setup_and_start_vms(
         join_handles.push(thread::spawn(move || {
             create_config_disk_image(&ic_name, &node, &t_env, &group_name)?;
             let image_id = upload_config_disk_image(&node, &t_farm)?;
+            // delete uncompressed file
+            let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
+            std::fs::remove_file(conf_img_path)?;
             t_farm.attach_disk_image(&group_name, &vm_name, "usb-storage", image_id)?;
             t_farm.start_vm(&group_name, &vm_name)?;
             Ok(())
@@ -264,7 +267,7 @@ pub fn create_config_disk_image(
 
     let bitcoind_addr_path = test_env.get_path(BITCOIND_ADDR_PATH);
     if bitcoind_addr_path.exists() {
-        let bitcoind_addr: IpAddr = test_env.read_object(BITCOIND_ADDR_PATH)?;
+        let bitcoind_addr: IpAddr = test_env.read_json_object(BITCOIND_ADDR_PATH)?;
         cmd.arg("--bitcoind_addr").arg(bitcoind_addr.to_string());
     }
 

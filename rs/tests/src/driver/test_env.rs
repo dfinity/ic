@@ -36,7 +36,7 @@ pub struct TestEnvInner {
 impl TestEnv {
     pub fn new<P: AsRef<Path>>(path: P, logger: Logger) -> Result<TestEnv> {
         let base_path = PathBuf::from(path.as_ref());
-        let log_file = append_and_lock_exclusive(base_path.join("log"))?;
+        let log_file = append_and_lock_exclusive(base_path.join("test.log"))?;
         let file_drain = slog_term::FullFormat::new(slog_term::PlainSyncDecorator::new(log_file))
             .build()
             .fuse();
@@ -51,14 +51,18 @@ impl TestEnv {
         })
     }
 
-    pub fn read_object<T: DeserializeOwned, P: AsRef<Path>>(&self, p: P) -> Result<T> {
-        let path = self.get_path(&p);
+    pub fn read_json_object<T: DeserializeOwned, P: AsRef<Path>>(&self, p: P) -> Result<T> {
+        let path = self.get_json_path(&p);
         let file = File::open(&path).with_context(|| format!("Could not open: {:?}", path))?;
         serde_json::from_reader(file).with_context(|| format!("{:?}: Could not read json.", path))
     }
 
-    pub fn write_object<T: Serialize, P: AsRef<Path>>(&self, p: P, t: &T) -> Result<()> {
-        let path = self.get_path(&p);
+    pub fn write_json_object<T: Serialize, P: AsRef<Path>>(&self, p: P, t: &T) -> Result<()> {
+        let mut path = self.get_json_path(&p);
+        if let Some("json") = path.extension().and_then(|x| x.to_str()) {
+        } else {
+            path.set_extension("json");
+        }
         if let Some(parent_dir) = path.parent() {
             fs::create_dir_all(parent_dir)?;
         }
@@ -89,6 +93,17 @@ impl TestEnv {
         sync_path(&dir)?;
         TestEnv::new(dir, logger)
     }
+
+    pub fn get_json_path<P: AsRef<Path>>(&self, p: P) -> PathBuf {
+        let mut path = self.get_path(&p);
+        let new_ext = match path.extension().and_then(|x| x.to_str()) {
+            Some("json") => return path,
+            Some(x) => format!("{}.json", x),
+            _ => "json".to_string(),
+        };
+        path.set_extension(new_ext);
+        path
+    }
 }
 
 /// Types implementing this trait can be written to (read from) TestEnv in a type-safe manner.
@@ -101,13 +116,14 @@ where
     /// An attribute name is used as a name of a file where the attribute is stored.
     fn attribute_name() -> String;
     fn write_attribute(self, env: &TestEnv) {
-        env.write_object(Self::attribute_name(), &self)
+        env.write_json_object(Self::attribute_name(), &self)
             .unwrap_or_else(|e| panic!("cannot write {} to TestEnv: {}", Self::attribute_name(), e))
     }
     fn read_attribute(env: &TestEnv) -> Self {
-        env.read_object(Self::attribute_name()).unwrap_or_else(|e| {
-            panic!("cannot read {} from TestEnv: {}", Self::attribute_name(), e)
-        })
+        env.read_json_object(Self::attribute_name())
+            .unwrap_or_else(|e| {
+                panic!("cannot read {} from TestEnv: {}", Self::attribute_name(), e)
+            })
     }
 }
 
@@ -123,11 +139,11 @@ pub trait HasBaseLogDir {
 
 impl HasBaseLogDir for TestEnv {
     fn base_log_dir(&self) -> Option<PathBuf> {
-        self.read_object(BASE_LOG_DIR_PATH).ok()
+        self.read_json_object(BASE_LOG_DIR_PATH).ok()
     }
 
     fn write_base_log_dir<P: AsRef<Path>>(&self, p: P) -> Result<()> {
-        self.write_object(BASE_LOG_DIR_PATH, &p.as_ref())
+        self.write_json_object(BASE_LOG_DIR_PATH, &p.as_ref())
     }
 }
 
@@ -144,11 +160,11 @@ pub trait HasTestPath {
 
 impl HasTestPath for TestEnv {
     fn write_test_path(&self, test_path: &TestPath) -> Result<()> {
-        self.write_object(TEST_PATH, test_path)
+        self.write_json_object(TEST_PATH, test_path)
     }
 
     fn test_path(&self) -> TestPath {
-        self.read_object(TEST_PATH).unwrap()
+        self.read_json_object(TEST_PATH).unwrap()
     }
 }
 

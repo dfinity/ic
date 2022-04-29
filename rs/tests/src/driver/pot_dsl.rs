@@ -98,15 +98,14 @@ pub enum ConfigState {
 }
 
 impl ConfigState {
-    pub fn evaluate(&mut self, test_env: &TestEnv) -> &std::thread::Result<()> {
+    pub fn evaluate(&mut self, test_env: TestEnv) -> &std::thread::Result<()> {
         fn dummy(_: TestEnv) {
             unimplemented!()
         }
         let mut tmp = Self::Function(Box::new(dummy));
         std::mem::swap(&mut tmp, self);
-        let env = test_env.clone();
         tmp = match tmp {
-            ConfigState::Function(f) => ConfigState::Evaluated(catch_unwind(move || f(env))),
+            ConfigState::Function(f) => ConfigState::Evaluated(catch_unwind(move || f(test_env))),
             r @ ConfigState::Evaluated(_) => r,
         };
         std::mem::swap(&mut tmp, self);
@@ -242,7 +241,7 @@ mod tests {
         let mut config_state = ConfigState::Function(Box::new(|_| {}));
         let logger = Logger::root(slog::Discard, o!());
         let tempdir = tempfile::tempdir().unwrap();
-        config_state.evaluate(&TestEnv::new(tempdir.path(), logger).unwrap());
+        config_state.evaluate(TestEnv::new(tempdir.path(), logger).unwrap());
     }
 
     #[test]
@@ -251,7 +250,7 @@ mod tests {
         let mut config_state = ConfigState::Function(Box::new(|_| panic!("magic error!")));
         let logger = Logger::root(slog::Discard, o!());
         let e = config_state
-            .evaluate(&TestEnv::new(tempdir.path(), logger).unwrap())
+            .evaluate(TestEnv::new(tempdir.path(), logger).unwrap())
             .as_ref()
             .unwrap_err();
         if let Some(s) = e.downcast_ref::<&str>() {

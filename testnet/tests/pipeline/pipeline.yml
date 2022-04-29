@@ -497,7 +497,7 @@ icos-continuous-upgrade-nightly:
           --is_upgrade_test
 
 .run-farm-based-test: &run-farm-based-test |
-  BASE_DIR="${CI_PROJECT_DIR}/logs/$(date +%Y%m%d_%H%M%S)"
+  BASE_DIR="${CI_PROJECT_DIR}/working_dir/$(date +%Y%m%d_%H%M%S)"
   mkdir -p "$BASE_DIR"
   IC_VERSION_ID=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
   export IC_VERSION_ID
@@ -514,7 +514,7 @@ icos-continuous-upgrade-nightly:
 
   $SHELL_WRAPPER "${CI_PROJECT_DIR}/rs/tests/run-system-tests.py" \
     --suite="${SUITE_NAME}" \
-    --log-base-dir="${BASE_DIR}" \
+    --working-dir="${BASE_DIR}" \
     "${LOG_DEBUG_OVERRIDES_OPTS[@]}" \
   | tee "${BASE_DIR}/unstructured-logs.log" \
   | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
@@ -525,7 +525,7 @@ icos-continuous-upgrade-nightly:
   artifacts:
     when: always
     paths:
-      - "$CI_PROJECT_DIR/logs/"
+      - "$CI_PROJECT_DIR/working_dir/"
       - "$CI_PROJECT_DIR/test-results.json"
   allow_failure: true
 

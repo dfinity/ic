@@ -101,7 +101,7 @@ e2e-workload-test:
   "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
       --git-rev="${IC_VERSION_ID}" --remote-path="guest-os/disk-img" \
       --out="ic-os/guestos/build-out/disk-img"
-  BASE_DIR="${CI_PROJECT_DIR}/logs/$(date +%Y%m%d_%H%M%S)"
+  BASE_DIR="${CI_PROJECT_DIR}/working_dir/$(date +%Y%m%d_%H%M%S)"
   mkdir -p "$BASE_DIR"
   # Logs produced during execution of the system tests are stored away in a structured way, i.e. one file per test.
   # Unstructured logs, i.e. those which bypassed the logger and were outputed directly to stdout/stderr,
@@ -111,7 +111,7 @@ e2e-workload-test:
   $SHELL_WRAPPER capsule -v -t "${IC_VERSION_ID}" -t "${SUITE_NAME}" -i 'ic-os/guestos/build-out/**/*.gz' -- \
   "${CI_PROJECT_DIR}/rs/tests/run-system-tests.py" \
     --suite="${SUITE_NAME}" \
-    --log-base-dir="${BASE_DIR}" \
+    --working-dir="${BASE_DIR}" \
   | tee "${BASE_DIR}/unstructured-logs.log" \
   | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
 
@@ -130,7 +130,7 @@ e2e-workload-test:
     when: always
     paths:
       - "test-results.json"
-      - "logs/"
+      - "working_dir/"
   script:
     - *run-farm-based-test
 
@@ -172,7 +172,7 @@ upgrade-compatibility-pre-master:
   artifacts:
     paths:
     - "test-results.json"
-    - "logs/"
+    - "working_dir/"
   variables:
     SUITE_NAME: "upgrade_compatibility"
   script:

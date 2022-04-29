@@ -71,10 +71,6 @@ pub fn general_execution_pot() -> Pot {
                 execution::canister_lifecycle::create_canister_with_too_many_controllers_fails
             ),
             t(
-                "create_canister_with_empty_settings",
-                execution::canister_lifecycle::create_canister_with_empty_settings
-            ),
-            t(
                 "create_canister_with_none_settings_field",
                 execution::canister_lifecycle::create_canister_with_none_settings_field
             ),
