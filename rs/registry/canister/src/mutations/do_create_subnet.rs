@@ -191,7 +191,7 @@ impl Registry {
 /// See /rs/protobuf/def/registry/subnet/v1/subnet.proto
 /// for the explanation of the fields for the SubnetRecord. All the fields
 /// will be used by the subnet canister to create SubnetRecord.
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
 pub struct CreateSubnetPayload {
     /// The list of node IDs that will be part of the new subnet.
     pub node_ids: Vec<NodeId>,

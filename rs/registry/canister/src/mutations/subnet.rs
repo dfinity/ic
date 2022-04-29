@@ -4,11 +4,18 @@ use crate::{
     registry::Registry,
 };
 
+use std::collections::HashMap;
+use std::convert::TryInto;
 use std::{collections::HashSet, convert::TryFrom};
 
+use crate::mutations::common::get_subnet_ids_from_subnet_list;
+use crate::registry::Version;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
-use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
-use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+use ic_ic00_types::EcdsaKeyId;
+use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord};
+use ic_registry_keys::{
+    make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
+};
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 
 impl Registry {
@@ -103,5 +110,53 @@ impl Registry {
         }
 
         update_subnet_record
+    }
+
+    pub fn get_subnet_catch_up_package(
+        &self,
+        subnet_id: SubnetId,
+        version: Option<Version>,
+    ) -> Result<CatchUpPackageContents, String> {
+        let cup_contents_key = make_catch_up_package_contents_key(subnet_id);
+
+        match self.get(
+            &cup_contents_key.into_bytes(),
+            version.unwrap_or_else(|| self.latest_version()),
+        ) {
+            Some(cup) => Ok(decode_registry_value::<CatchUpPackageContents>(
+                cup.value.clone(),
+            )),
+            None => Err(format!(
+                "{}CatchUpPackage not found for subnet: {}",
+                LOG_PREFIX, subnet_id
+            )),
+        }
+    }
+
+    pub fn get_ecdsa_keys_to_subnets_map(&self) -> HashMap<EcdsaKeyId, Vec<SubnetId>> {
+        let mut key_map: HashMap<EcdsaKeyId, Vec<SubnetId>> = HashMap::new();
+
+        get_subnet_ids_from_subnet_list(self.get_subnet_list_record())
+            .iter()
+            .for_each(|subnet_id| {
+                let subnet_record = self.get_subnet_or_panic(*subnet_id);
+                if let Some(ref ecdsa_conf) = subnet_record.ecdsa_config {
+                    let key_ids: Vec<EcdsaKeyId> = ecdsa_conf
+                        .key_ids
+                        .clone()
+                        .into_iter()
+                        .map(|x| x.try_into().unwrap())
+                        .collect::<Vec<_>>();
+                    key_ids.iter().for_each(|key_id| {
+                        if !key_map.contains_key(key_id) {
+                            key_map.insert(key_id.clone(), vec![]);
+                        }
+                        let subnet_ids = key_map.get_mut(key_id).unwrap();
+                        subnet_ids.push(*subnet_id);
+                    })
+                }
+            });
+
+        key_map
     }
 }
