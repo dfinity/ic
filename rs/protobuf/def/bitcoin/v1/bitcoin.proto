@@ -113,9 +113,21 @@ message AdapterQueues {
   uint32 requests_queue_capacity = 4;
 }
 
+message UnstableBlocks {
+  uint32 stability_threshold = 1;
+  BlockTree tree = 2;
+}
+
+message BlockTree {
+  Block root = 1;
+  repeated BlockTree children = 2;
+}
+
 // Represents the Bitcoin state that isn't stored in PageMaps.
 message BitcoinStateBits {
   // The queues that maintain the requests to and responses from the Bitcoin
   // Adapter.
   AdapterQueues adapter_queues = 1;
+
+  UnstableBlocks unstable_blocks = 2;
 }
