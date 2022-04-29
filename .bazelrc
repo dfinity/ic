@@ -1,3 +1,5 @@
+build --strategy_regexp=ic-os/guestos/.*=local
+
 build:remote --remote_cache=buildfarm.dfinity.systems
 
 build:log --execution_log_json_file=bazel-build-log.json

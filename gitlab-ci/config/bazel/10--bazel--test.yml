@@ -24,4 +24,4 @@ bazel-build-guestos:
     - .bazel-run
   stage: test
   script:
-    - bazel build --config ci --spawn_strategy=standalone //ic-os/guestos:disk.img.tar
+    - bazel build --config ci //ic-os/guestos:disk.img.tar
