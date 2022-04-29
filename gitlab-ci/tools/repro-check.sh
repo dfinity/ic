@@ -66,13 +66,15 @@ fi
 echo "images will be saved in $OUT"
 
 cwd=$(pwd)
+# fetch the commit from upstream here while in the users IC directory
+# otherwise we would have to configure git remotes in the temp dir.
+git fetch --quiet origin "$git_hash"
 
 tmp=$(mktemp -d)
 trap "rm -fr $tmp" EXIT
 
 pushd "$tmp"
 git clone --quiet "$cwd" .
-git fetch --quiet origin "$git_hash"
 git checkout --quiet "$git_hash"
 
 if [ "$build_dev" -eq "1" ]; then
