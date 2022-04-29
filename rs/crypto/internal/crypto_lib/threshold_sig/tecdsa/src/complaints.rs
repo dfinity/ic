@@ -170,7 +170,7 @@ impl IDkgComplaintInternal {
 
                 CommitmentOpening::Pedersen(opening.0, opening.1)
             }
-            (_, _) => return Err(ThresholdEcdsaError::InconsistentCommitments),
+            (_, _) => return Err(ThresholdEcdsaError::UnexpectedCommitmentType),
         };
 
         // Verify that the decrypted opening does *not* match the

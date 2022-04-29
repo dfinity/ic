@@ -120,7 +120,7 @@ fn combine_commitments_via_interpolation(
     // First verify the dealings are of the expected type
     for dealing in verified_dealings.values() {
         if dealing.commitment.ctype() != commitment_type {
-            return Err(ThresholdEcdsaError::InconsistentCommitments);
+            return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
         }
     }
 
@@ -161,12 +161,12 @@ impl IDkgTranscriptInternal {
         // Check all dealings have correct length and are on the same curve
         for dealing in verified_dealings.values() {
             if dealing.commitment.points().len() != reconstruction_threshold {
-                return Err(ThresholdEcdsaError::InconsistentCommitments);
+                return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
             }
 
             for point in dealing.commitment.points() {
                 if point.curve_type() != curve {
-                    return Err(ThresholdEcdsaError::InconsistentCommitments);
+                    return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
                 }
             }
         }
@@ -179,7 +179,7 @@ impl IDkgTranscriptInternal {
 
                 for dealing in verified_dealings.values() {
                     if dealing.commitment.ctype() != PolynomialCommitmentType::Pedersen {
-                        return Err(ThresholdEcdsaError::InconsistentCommitments);
+                        return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
                     }
 
                     let c = dealing.commitment.points();
@@ -194,7 +194,7 @@ impl IDkgTranscriptInternal {
             IDkgTranscriptOperationInternal::ReshareOfMasked(reshared_commitment) => {
                 // Verify that the old commitment is actually masked
                 if reshared_commitment.ctype() != PolynomialCommitmentType::Pedersen {
-                    return Err(ThresholdEcdsaError::InconsistentCommitments);
+                    return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
                 }
                 // Check the number of dealings is not smaller than the number of coefficients
                 // of the opening of the `reshared_commitment`. This ensures that the
@@ -214,7 +214,7 @@ impl IDkgTranscriptInternal {
             IDkgTranscriptOperationInternal::ReshareOfUnmasked(reshared_commitment) => {
                 // Verify that the old commitment is Unmasked
                 if reshared_commitment.ctype() != PolynomialCommitmentType::Simple {
-                    return Err(ThresholdEcdsaError::InconsistentCommitments);
+                    return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
                 }
                 // Check the number of dealings is not smaller than the number of coefficients
                 // of the opening of the `reshared_commitment`. This ensures that the
@@ -233,7 +233,7 @@ impl IDkgTranscriptInternal {
                 // Check the constant term of the combined commitment is
                 // consistent with the reshared commitment
                 if reshared_commitment.points()[0] != combined_commitment.commitment().points()[0] {
-                    return Err(ThresholdEcdsaError::InconsistentCommitments);
+                    return Err(ThresholdEcdsaError::InvalidCommitment);
                 }
 
                 combined_commitment
@@ -245,7 +245,7 @@ impl IDkgTranscriptInternal {
                 if left_commitment.ctype() != PolynomialCommitmentType::Simple
                     || right_commitment.ctype() != PolynomialCommitmentType::Pedersen
                 {
-                    return Err(ThresholdEcdsaError::InconsistentCommitments);
+                    return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
                 }
                 // Check the number of dealings is not smaller than the number of coefficients
                 // in the polynomial obtained by multiplying the opening of `left_commitment`
@@ -298,7 +298,7 @@ fn reconstruct_share_from_openings(
                     x_values.push(*receiver_index);
                     values.push(*value);
                 } else {
-                    return Err(ThresholdEcdsaError::InconsistentCommitments);
+                    return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
                 }
             }
 
@@ -321,7 +321,7 @@ fn reconstruct_share_from_openings(
                     values.push(*value);
                     masks.push(*mask);
                 } else {
-                    return Err(ThresholdEcdsaError::InconsistentCommitments);
+                    return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
                 }
             }
 
@@ -350,7 +350,7 @@ impl CommitmentOpening {
     /// # Errors
     /// * `InsufficientOpenings` if we require openings for a corrupted dealing but
     ///   do not have sufficiently many openings for that dealing.
-    /// * `InconsistentCommitments` if the commitments are inconsistent. This
+    /// * `InvalidCommitment` if the commitments are inconsistent. This
     ///   indicates that there is a corrupted dealing for which we have no openings
     ///   at all.
     pub(crate) fn from_dealings_and_openings(
@@ -396,7 +396,7 @@ impl CommitmentOpening {
     /// * The dealings must have already been verified
     ///
     /// # Errors
-    /// * `InconsistentCommitments` if the commitments are inconsistent. This
+    /// * `InvalidCommitment` if the commitments are inconsistent. This
     ///   indicates we should issue a complaint and collect openings.
     pub(crate) fn from_dealings(
         verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
@@ -448,7 +448,7 @@ impl CommitmentOpening {
                         combined_value = combined_value.add(value)?;
                         combined_mask = combined_mask.add(mask)?;
                     } else {
-                        return Err(ThresholdEcdsaError::InconsistentCommitments);
+                        return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
                     }
                 }
 
@@ -469,7 +469,7 @@ impl CommitmentOpening {
                         values.push(*value);
                         masks.push(*mask);
                     } else {
-                        return Err(ThresholdEcdsaError::InconsistentCommitments);
+                        return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
                     }
                 }
 
@@ -482,7 +482,7 @@ impl CommitmentOpening {
                 if commitment.check_opening(receiver_index, &combined_value, &combined_mask)? {
                     Ok(Self::Pedersen(combined_value, combined_mask))
                 } else {
-                    Err(ThresholdEcdsaError::InconsistentCommitments)
+                    Err(ThresholdEcdsaError::InvalidCommitment)
                 }
             }
 
@@ -495,7 +495,7 @@ impl CommitmentOpening {
                         x_values.push(*dealer_index);
                         values.push(*value);
                     } else {
-                        return Err(ThresholdEcdsaError::InconsistentCommitments);
+                        return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
                     }
                 }
 
@@ -507,7 +507,7 @@ impl CommitmentOpening {
                 if commitment.check_opening(receiver_index, &combined_value)? {
                     Ok(Self::Simple(combined_value))
                 } else {
-                    Err(ThresholdEcdsaError::InconsistentCommitments)
+                    Err(ThresholdEcdsaError::InvalidCommitment)
                 }
             }
         }

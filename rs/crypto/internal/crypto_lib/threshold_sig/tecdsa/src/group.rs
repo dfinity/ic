@@ -254,6 +254,7 @@ impl EccScalar {
         loop {
             rng.fill_bytes(&mut buf);
             if let Ok(scalar) = Self::deserialize(curve, &buf) {
+                buf.zeroize();
                 return Ok(scalar);
             }
         }
