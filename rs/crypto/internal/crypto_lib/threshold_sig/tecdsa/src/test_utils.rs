@@ -1,18 +1,19 @@
 use crate::*;
-use rand_core::{CryptoRng, RngCore};
 
 /// Corrupts this dealing by modifying the ciphertext intended for
 /// recipient(s) indicated with `corruption_targets`.
 ///
 /// This is only intended for testing and should not be called in
 /// production code.
-pub fn corrupt_dealing<R: CryptoRng + RngCore>(
+pub fn corrupt_dealing(
     dealing: &IDkgDealingInternal,
     corruption_targets: &[NodeIndex],
-    rng: &mut R,
+    randomness: ic_types::Randomness,
 ) -> ThresholdEcdsaResult<IDkgDealingInternal> {
     let curve_type = dealing.commitment.curve_type();
-    let randomizer = EccScalar::random(curve_type, rng)?;
+
+    let mut rng = Seed::from_randomness(&randomness).into_rng();
+    let randomizer = EccScalar::random(curve_type, &mut rng)?;
 
     let ciphertext = match &dealing.ciphertext {
         MEGaCiphertext::Single(c) => {
@@ -60,10 +61,10 @@ pub fn corrupt_dealing<R: CryptoRng + RngCore>(
 ///
 /// This is only intended for testing and should not be called in
 /// production code.
-pub fn corrupt_dealing_for_all_recipients<R: CryptoRng + RngCore>(
+pub fn corrupt_dealing_for_all_recipients(
     dealing: &IDkgDealingInternal,
-    rng: &mut R,
+    randomness: ic_types::Randomness,
 ) -> ThresholdEcdsaResult<IDkgDealingInternal> {
     let all_recipients = (0..dealing.ciphertext.recipients() as NodeIndex).collect::<Vec<_>>();
-    corrupt_dealing(dealing, &all_recipients, rng)
+    corrupt_dealing(dealing, &all_recipients, randomness)
 }

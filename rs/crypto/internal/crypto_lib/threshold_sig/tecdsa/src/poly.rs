@@ -1,7 +1,7 @@
 use crate::*;
 use core::fmt::{self, Debug};
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgOpening;
-use rand_core::{CryptoRng, RngCore};
+use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use zeroize::Zeroize;

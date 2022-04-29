@@ -2,7 +2,7 @@ use crate::*;
 use fe::EccFieldElement;
 use hex_literal::hex;
 use ic_types::NodeIndex;
-use rand_core::{CryptoRng, RngCore};
+use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::{TryFrom, TryInto};
 use std::fmt;

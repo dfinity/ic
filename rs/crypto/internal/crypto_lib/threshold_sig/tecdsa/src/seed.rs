@@ -1,6 +1,6 @@
 use crate::expand_message_xmd;
 use core::fmt::{self, Debug};
-use rand_core::{CryptoRng, RngCore, SeedableRng};
+use rand::{CryptoRng, RngCore, SeedableRng};
 use std::convert::TryInto;
 
 /// The internal length of a Seed
