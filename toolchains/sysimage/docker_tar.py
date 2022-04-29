@@ -153,6 +153,10 @@ class FS:
 
         self._lookup(dirname).entries[basename] = RegInode(mode, uid, gid, uid_name, gid_name, content)
 
+    def chmod(self, path, mode):
+        inode = self._lookup(path)
+        inode.mode = mode
+
     def _lookup(self, path):
         current = self.root
         for part in path.split("/"):
@@ -222,6 +226,13 @@ def docker_extract_fs(image_hash):
     fs = FS()
     for layer in layers:
         _process_layer(layer, fs)
+
+    # These files are not properly controlled inside docker: they are
+    # bind-mounted, and docker build cannot set their permissions. Fix this
+    # up on extracting the docker save file here.
+    fs.chmod("etc/hosts", 0o644)
+    fs.chmod("etc/hostname", 0o644)
+    fs.chmod("etc/resolv.conf", 0o644)
 
     return fs
 
