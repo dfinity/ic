@@ -72,6 +72,8 @@ options may be specified:
     change required for enabling a development mode. The default deployment type
     is 'prod'.
 
+  --nginx-domainname
+    domain name hosted by nginx ic0.dev or ic0.app
 EOF
 }
 
@@ -133,6 +135,9 @@ function build_ic_bootstrap_tar() {
                     exit 1
                 fi
                 ;;
+            --nginx-domainname)
+                NGINX_DOMAIN_NAME="$2"
+                ;;
             *)
                 echo "Unrecognized option: $1"
                 usage
@@ -147,6 +152,22 @@ function build_ic_bootstrap_tar() {
         echo "Invalid hostname: '$HOSTNAME'" >&2
         exit 1
     }
+
+    NGINX_DOMAIN_NAME="${NGINX_DOMAIN_NAME:="ic0.app"}"
+
+    if ! echo $NGINX_DOMAIN_NAME | grep -q ".*\..*"; then
+        echo "malformed domain name $NGINX_DOMAIN_NAME"
+        NGINX_DOMAIN_NAME="ic0.app"
+    fi
+
+    echo "Using domain name $NGINX_DOMAIN_NAME"
+    NGINX_DOMAIN=${NGINX_DOMAIN_NAME%.*}
+    NGINX_TLD=${NGINX_DOMAIN_NAME#*.}
+    if [[ $NGINX_DOMAIN == "" ]] || [[ $NGINX_TLD == "" ]]; then
+        echo "Malformed nginx domain $NGINX_DOMAIN_NAME using defaults"
+        NGINX_DOMAIN="${NGINX_DOMAIN:="ic0"}"
+        NGINX_TLD="${NGINX_TLD:="app"}"
+    fi
 
     local BOOTSTRAP_TMPDIR=$(mktemp -d)
 
@@ -174,6 +195,9 @@ EOF
         cp -r "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" "${BOOTSTRAP_TMPDIR}/accounts_ssh_authorized_keys"
     fi
     echo ${DEPLOYMENT_TYPE:="prod"} >"${BOOTSTRAP_TMPDIR}/deployment_type"
+
+    echo DOMAIN=${NGINX_DOMAIN} >"${BOOTSTRAP_TMPDIR}/nginxdomain.conf"
+    echo TLD=${NGINX_TLD} >>"${BOOTSTRAP_TMPDIR}/nginxdomain.conf"
 
     tar cf "${OUT_FILE}" -C "${BOOTSTRAP_TMPDIR}" .
     rm -rf "${BOOTSTRAP_TMPDIR}"
