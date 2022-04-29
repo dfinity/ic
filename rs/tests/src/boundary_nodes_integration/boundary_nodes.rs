@@ -2,19 +2,23 @@
 Title:: Boundary nodes integration test
 end::catalog[] */
 
-use crate::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
-use crate::driver::test_env::{HasIcPrepDir, TestEnv};
-use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, RetrieveIpv4Addr,
-    SshSession, ADMIN,
+use crate::{
+    driver::{
+        boundary_node::{BoundaryNode, BoundaryNodeVm},
+        ic::{InternetComputer, Subnet},
+        pot_dsl::get_ic_handle_and_ctx,
+        test_env::{HasIcPrepDir, TestEnv},
+        test_env_api::{
+            retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+            RetrieveIpv4Addr, SshSession, ADMIN, RETRY_BACKOFF, RETRY_TIMEOUT,
+        },
+    },
+    util::{assert_create_agent, create_agent_mapping},
+    workload_counter_canister_test::install_counter_canister,
 };
-use std::io::Read;
-use std::net::Ipv4Addr;
-
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
+use std::{io::Read, net::Ipv4Addr};
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
@@ -78,6 +82,7 @@ pub fn test(env: TestEnv) {
     );
 
     info!(&logger, "Checking readiness of all nodes...");
+    let mut install_url = None;
     for subnet in env.topology_snapshot().subnets() {
         for node in subnet.nodes() {
             node.await_status_is_healthy().unwrap();
@@ -94,9 +99,33 @@ pub fn test(env: TestEnv) {
                 node.node_id,
                 hostname.trim()
             );
+            install_url = Some(node.get_public_url());
             channel.wait_close().unwrap();
         }
     }
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    rt.block_on(async move {
+        info!(&logger, "Creating replica agent...");
+        let agent = assert_create_agent(install_url.unwrap().as_str()).await;
+        info!(&logger, "Installing counter canister...");
+        let canister_id = install_counter_canister(&agent).await;
+
+        info!(&logger, "Creating BN agent...");
+        let agent = create_agent_mapping("https://ic0.app/", boundary_node_vm.ipv6.into())
+            .await
+            .unwrap_or_else(|err| panic!("Failed to create agent for https://ic0.app/: {:?}", err));
+
+        // We must retry the first request to a canister.
+        // This is because a new canister might take a few seconds to show up in the BN's routing tables
+        let read_result = retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+            Ok(agent.query(&canister_id, "read").call().await?)
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(read_result, [0; 4]);
+    });
 }
 
 /* tag::catalog[]

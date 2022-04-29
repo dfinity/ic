@@ -1,9 +1,7 @@
 use crate::types::*;
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
-use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, Agent, AgentError, Identity, RequestId,
-};
+use ic_agent::{Agent, AgentError, Identity, RequestId};
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
 use ic_ic00_types::{CanisterStatusResult, EmptyBlob};
@@ -17,8 +15,9 @@ use ic_nns_test_utils::governance::upgrade_nns_canister_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
 use ic_types::{CanisterId, Cycles, PrincipalId};
-use ic_universal_canister::wasm as universal_canister_argument_builder;
-use ic_universal_canister::{call_args, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{
+    call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
+};
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
 use ledger_canister::{
@@ -26,9 +25,13 @@ use ledger_canister::{
 };
 use on_wire::FromWire;
 use rand_chacha::ChaCha8Rng;
-use std::convert::TryFrom;
-use std::future::Future;
-use std::time::{Duration, Instant};
+use std::{
+    convert::TryFrom,
+    future::Future,
+    net::IpAddr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::runtime::Runtime as TRuntime;
 use url::Url;
 
@@ -359,13 +362,91 @@ pub async fn assert_create_agent(url: &str) -> Agent {
 pub async fn create_agent(url: &str) -> Result<Agent, AgentError> {
     agent_with_identity(url, get_identity()).await
 }
+pub async fn create_agent_mapping(url: &str, addr_mapping: IpAddr) -> Result<Agent, AgentError> {
+    agent_with_identity_mapping(url, Some(addr_mapping), get_identity()).await
+}
 
 pub async fn agent_with_identity(
     url: &str,
     identity: impl Identity + 'static,
 ) -> Result<Agent, AgentError> {
+    agent_with_identity_mapping(url, None, identity).await
+}
+
+pub async fn agent_with_identity_mapping(
+    url: &str,
+    addr_mapping: Option<IpAddr>,
+    identity: impl Identity + 'static,
+) -> Result<Agent, AgentError> {
+    let builder = rustls::ClientConfig::builder().with_safe_defaults();
+    use rustls::client::HandshakeSignatureValid;
+    use rustls::client::ServerCertVerified;
+    use rustls::client::ServerCertVerifier;
+    use rustls::client::ServerName;
+    use rustls::internal::msgs::handshake::DigitallySignedStruct;
+
+    struct NoVerifier;
+    impl ServerCertVerifier for NoVerifier {
+        fn verify_server_cert(
+            &self,
+            _end_entity: &rustls::Certificate,
+            _intermediates: &[rustls::Certificate],
+            _server_name: &ServerName,
+            _scts: &mut dyn Iterator<Item = &[u8]>,
+            _ocsp_response: &[u8],
+            _now: std::time::SystemTime,
+        ) -> Result<ServerCertVerified, rustls::Error> {
+            Ok(ServerCertVerified::assertion())
+        }
+
+        fn verify_tls12_signature(
+            &self,
+            _message: &[u8],
+            _cert: &rustls::Certificate,
+            _dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            Ok(HandshakeSignatureValid::assertion())
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            _message: &[u8],
+            _cert: &rustls::Certificate,
+            _dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            Ok(HandshakeSignatureValid::assertion())
+        }
+    }
+    let mut tls_config = builder
+        .with_custom_certificate_verifier(Arc::new(NoVerifier))
+        .with_no_client_auth();
+
+    // Advertise support for HTTP/2
+    tls_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+
+    let builder = reqwest::Client::builder().use_preconfigured_tls(tls_config);
+    let builder = match (
+        addr_mapping,
+        reqwest::Url::parse(url).as_ref().map(|u| u.domain()),
+    ) {
+        (Some(addr_mapping), Ok(Some(domain))) => builder.resolve(domain, (addr_mapping, 0).into()),
+        _ => builder,
+    };
+    let client = builder
+        .build()
+        .map_err(|err| AgentError::TransportError(Box::new(err)))?;
+    agent_with_client_identity(url, client, identity).await
+}
+
+pub async fn agent_with_client_identity(
+    url: &str,
+    client: reqwest::Client,
+    identity: impl Identity + 'static,
+) -> Result<Agent, AgentError> {
     let a = Agent::builder()
-        .with_transport(ReqwestHttpReplicaV2Transport::create(url).unwrap())
+        .with_transport(ReqwestHttpReplicaV2Transport::create_with_client(
+            url, client,
+        )?)
         .with_identity(identity)
         // Ingresses are created with the system time but are checked against the consensus time.
         // Consensus time is the time that is in the last finalized block. Consensus time might lag
@@ -835,4 +916,268 @@ pub(crate) fn escape_for_wat(id: &Principal) -> String {
         res.push_str(&format!("\\{:02x}", b));
         res
     })
+}
+
+// TODO: remove in favor of dfinity/agent-rs/pull/337
+use http_transport::ReqwestHttpReplicaV2Transport;
+#[allow(dead_code)]
+mod http_transport {
+    use hyper_rustls::ConfigBuilderExt;
+    use ic_agent::{
+        agent::{
+            agent_error::HttpErrorPayload, http_transport::PasswordManager, ReplicaV2Transport,
+        },
+        ic_types::Principal,
+        AgentError, RequestId,
+    };
+    use reqwest::Method;
+    use std::{future::Future, pin::Pin, sync::Arc};
+
+    /// A [ReplicaV2Transport] using Reqwest to make HTTP calls to the internet computer.
+    pub struct ReqwestHttpReplicaV2Transport {
+        url: reqwest::Url,
+        client: reqwest::Client,
+        password_manager: Option<Arc<dyn PasswordManager>>,
+    }
+
+    const IC0_DOMAIN: &str = "ic0.app";
+    const IC0_SUB_DOMAIN: &str = ".ic0.app";
+
+    impl ReqwestHttpReplicaV2Transport {
+        /// Creates a replica transport from a HTTP URL.
+        pub fn create<U: Into<String>>(url: U) -> Result<Self, AgentError> {
+            let mut tls_config = rustls::ClientConfig::builder()
+                .with_safe_defaults()
+                .with_webpki_roots()
+                .with_no_client_auth();
+
+            // Advertise support for HTTP/2
+            tls_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+
+            Self::create_with_client(
+                url,
+                reqwest::Client::builder()
+                    .use_preconfigured_tls(tls_config)
+                    .build()
+                    .expect("Could not create HTTP client."),
+            )
+        }
+
+        /// Creates a replica transport from a HTTP URL and a [`reqwest::Client`].
+        pub fn create_with_client<U: Into<String>>(
+            url: U,
+            client: reqwest::Client,
+        ) -> Result<Self, AgentError> {
+            let url = url.into();
+            Ok(Self {
+                url: reqwest::Url::parse(&url)
+                    .and_then(|mut url| {
+                        // rewrite *.ic0.app to ic0.app
+                        if let Some(domain) = url.domain() {
+                            if domain.ends_with(IC0_SUB_DOMAIN) {
+                                url.set_host(Some(IC0_DOMAIN))?;
+                            }
+                        }
+                        url.join("api/v2/")
+                    })
+                    .map_err(|_| AgentError::InvalidReplicaUrl(url.clone()))?,
+                client,
+                password_manager: None,
+            })
+        }
+
+        /// Sets a password manager to use with HTTP authentication.
+        pub fn with_password_manager<P: 'static + PasswordManager>(
+            self,
+            password_manager: P,
+        ) -> Self {
+            ReqwestHttpReplicaV2Transport {
+                password_manager: Some(Arc::new(password_manager)),
+                url: self.url,
+                client: self.client,
+            }
+        }
+
+        /// Same as [`with_password_manager`], but providing the Arc so one does not have to be created.
+        pub fn with_arc_password_manager(self, password_manager: Arc<dyn PasswordManager>) -> Self {
+            ReqwestHttpReplicaV2Transport {
+                password_manager: Some(password_manager),
+                url: self.url,
+                client: self.client,
+            }
+        }
+
+        /// Gets the set password manager, if one exists. Otherwise returns None.
+        pub fn password_manager(&self) -> Option<&dyn PasswordManager> {
+            self.password_manager.as_deref()
+        }
+
+        fn maybe_add_authorization(
+            &self,
+            http_request: &mut reqwest::Request,
+            cached: bool,
+        ) -> Result<(), AgentError> {
+            if let Some(pm) = &self.password_manager {
+                let maybe_user_pass = if cached {
+                    pm.cached(http_request.url().as_str())
+                } else {
+                    pm.required(http_request.url().as_str()).map(Some)
+                };
+
+                if let Some((u, p)) = maybe_user_pass.map_err(AgentError::AuthenticationError)? {
+                    let auth = base64::encode(&format!("{}:{}", u, p));
+                    http_request.headers_mut().insert(
+                        reqwest::header::AUTHORIZATION,
+                        format!("Basic {}", auth).parse().unwrap(),
+                    );
+                }
+            }
+            Ok(())
+        }
+
+        async fn request(
+            &self,
+            http_request: reqwest::Request,
+        ) -> Result<(reqwest::StatusCode, reqwest::header::HeaderMap, Vec<u8>), AgentError>
+        {
+            let response = self
+                .client
+                .execute(
+                    http_request
+                        .try_clone()
+                        .expect("Could not clone a request."),
+                )
+                .await
+                .map_err(|x| AgentError::TransportError(Box::new(x)))?;
+
+            let http_status = response.status();
+            let response_headers = response.headers().clone();
+            let bytes = response
+                .bytes()
+                .await
+                .map_err(|x| AgentError::TransportError(Box::new(x)))?
+                .to_vec();
+
+            Ok((http_status, response_headers, bytes))
+        }
+
+        async fn execute(
+            &self,
+            method: Method,
+            endpoint: &str,
+            body: Option<Vec<u8>>,
+        ) -> Result<Vec<u8>, AgentError> {
+            let url = self.url.join(endpoint)?;
+            let mut http_request = reqwest::Request::new(method, url);
+            http_request.headers_mut().insert(
+                reqwest::header::CONTENT_TYPE,
+                "application/cbor".parse().unwrap(),
+            );
+
+            self.maybe_add_authorization(&mut http_request, true)?;
+
+            *http_request.body_mut() = body.map(reqwest::Body::from);
+
+            let mut status;
+            let mut headers;
+            let mut body;
+            loop {
+                let request_result = self.request(http_request.try_clone().unwrap()).await?;
+                status = request_result.0;
+                headers = request_result.1;
+                body = request_result.2;
+
+                // If the server returned UNAUTHORIZED, and it is the first time we replay the call,
+                // check if we can get the username/password for the HTTP Auth.
+                if status == reqwest::StatusCode::UNAUTHORIZED {
+                    if self.url.scheme() == "https" || self.url.host_str() == Some("localhost") {
+                        // If there is a password manager, get the username and password from it.
+                        self.maybe_add_authorization(&mut http_request, false)?;
+                    } else {
+                        return Err(AgentError::CannotUseAuthenticationOnNonSecureUrl());
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            if status.is_client_error() || status.is_server_error() {
+                Err(AgentError::HttpError(HttpErrorPayload {
+                    status: status.into(),
+                    content_type: headers
+                        .get(reqwest::header::CONTENT_TYPE)
+                        .and_then(|value| value.to_str().ok())
+                        .map(|x| x.to_string()),
+                    content: body,
+                }))
+            } else {
+                Ok(body)
+            }
+        }
+    }
+
+    impl ReplicaV2Transport for ReqwestHttpReplicaV2Transport {
+        fn call<'a>(
+            &'a self,
+            effective_canister_id: Principal,
+            envelope: Vec<u8>,
+            _request_id: RequestId,
+        ) -> Pin<Box<dyn Future<Output = Result<(), AgentError>> + Send + 'a>> {
+            async fn run(
+                s: &ReqwestHttpReplicaV2Transport,
+                effective_canister_id: Principal,
+                envelope: Vec<u8>,
+            ) -> Result<(), AgentError> {
+                let endpoint = format!("canister/{}/call", effective_canister_id.to_text());
+                s.execute(Method::POST, &endpoint, Some(envelope)).await?;
+                Ok(())
+            }
+
+            Box::pin(run(self, effective_canister_id, envelope))
+        }
+
+        fn read_state<'a>(
+            &'a self,
+            effective_canister_id: Principal,
+            envelope: Vec<u8>,
+        ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, AgentError>> + Send + 'a>> {
+            async fn run(
+                s: &ReqwestHttpReplicaV2Transport,
+                effective_canister_id: Principal,
+                envelope: Vec<u8>,
+            ) -> Result<Vec<u8>, AgentError> {
+                let endpoint = format!("canister/{}/read_state", effective_canister_id.to_text());
+                s.execute(Method::POST, &endpoint, Some(envelope)).await
+            }
+
+            Box::pin(run(self, effective_canister_id, envelope))
+        }
+
+        fn query<'a>(
+            &'a self,
+            effective_canister_id: Principal,
+            envelope: Vec<u8>,
+        ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, AgentError>> + Send + 'a>> {
+            async fn run(
+                s: &ReqwestHttpReplicaV2Transport,
+                effective_canister_id: Principal,
+                envelope: Vec<u8>,
+            ) -> Result<Vec<u8>, AgentError> {
+                let endpoint = format!("canister/{}/query", effective_canister_id.to_text());
+                s.execute(Method::POST, &endpoint, Some(envelope)).await
+            }
+
+            Box::pin(run(self, effective_canister_id, envelope))
+        }
+
+        fn status<'a>(
+            &'a self,
+        ) -> Pin<Box<dyn Future<Output = Result<Vec<u8>, AgentError>> + Send + 'a>> {
+            async fn run(s: &ReqwestHttpReplicaV2Transport) -> Result<Vec<u8>, AgentError> {
+                s.execute(Method::GET, "status", None).await
+            }
+
+            Box::pin(run(self))
+        }
+    }
 }
