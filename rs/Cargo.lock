@@ -3199,7 +3199,7 @@ dependencies = [
  "http",
  "hyper",
  "log",
- "rustls 0.20.2",
+ "rustls 0.20.4",
  "rustls-native-certs",
  "tokio",
  "tokio-rustls 0.23.2",
@@ -3378,7 +3378,7 @@ dependencies = [
  "rand 0.8.4",
  "reqwest",
  "ring",
- "rustls 0.20.2",
+ "rustls 0.20.4",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -10137,7 +10137,7 @@ dependencies = [
  "native-tls",
  "percent-encoding",
  "pin-project-lite",
- "rustls 0.20.2",
+ "rustls 0.20.4",
  "rustls-pemfile",
  "serde",
  "serde_json",
@@ -10409,9 +10409,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.20.2"
+version = "0.20.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d37e5e2290f3e040b594b1a9e04377c2c671f1a1cfd9bfdef82106ac1c113f84"
+checksum = "4fbfeb8d0ddb84706bc597a5574ab8912817c52a397f819e5b614e2265206921"
 dependencies = [
  "log",
  "ring",
@@ -11622,6 +11622,7 @@ dependencies = [
  "hex",
  "humantime 2.0.1",
  "hyper",
+ "hyper-rustls",
  "ic-agent 0.11.1",
  "ic-base-types",
  "ic-canister-client",
@@ -11691,6 +11692,7 @@ dependencies = [
  "registry-canister",
  "reqwest",
  "ring",
+ "rustls 0.20.4",
  "secp256k1",
  "serde",
  "serde_bytes",
@@ -11970,7 +11972,7 @@ version = "0.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a27d5f2b839802bd8267fa19b0530f5a08b9c08cd417976be2a65d130fe1c11b"
 dependencies = [
- "rustls 0.20.2",
+ "rustls 0.20.4",
  "tokio",
  "webpki 0.22.0",
 ]

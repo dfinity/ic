@@ -68,6 +68,7 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 json5 = "0.4.1"
 hyper = "0.14.18"
+hyper-rustls = { version = "0.23.0", features = [ "webpki-roots" ] }
 lazy_static = "1.4.0"
 ledger-canister = { path = "../rosetta-api/ledger_canister" }
 lifeline = { path = "../nns/handlers/lifeline" }
@@ -93,6 +94,7 @@ regex = "1.5.0"
 registry-canister = { path = "../registry/canister" }
 reqwest = { version = "0.11.1", features = ["blocking", "multipart", "stream"] }
 ring = { version = "0.16.11", features = ["std"] }
+rustls = "0.20.4"
 secp256k1 = "0.20.3"
 serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"

@@ -1038,6 +1038,38 @@ where
     }
 }
 
+pub async fn retry_async<F, Fut, R>(
+    log: &slog::Logger,
+    timeout: Duration,
+    backoff: Duration,
+    f: F,
+) -> Result<R>
+where
+    Fut: Future<Output = Result<R>>,
+    F: Fn() -> Fut,
+{
+    let mut attempt = 1;
+    let start = Instant::now();
+    info!(
+        log,
+        "Retrying for a maximum of {:?} with a linear backoff of {:?}", timeout, backoff
+    );
+    loop {
+        match f().await {
+            Ok(v) => break Ok(v),
+            Err(e) => {
+                if start.elapsed() > timeout {
+                    let err_msg = e.to_string();
+                    break Err(e.context(format!("Timed out! Last error: {}", err_msg)));
+                }
+                info!(log, "Attempt {} failed. Error: {:?}", attempt, e);
+                tokio::time::sleep(backoff).await;
+                attempt += 1;
+            }
+        }
+    }
+}
+
 impl<T> RegistryResultHelper<T> for RegistryClientResult<T> {
     fn unwrap_result(self) -> T {
         self.expect("registry error!")
