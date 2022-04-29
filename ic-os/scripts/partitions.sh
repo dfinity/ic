@@ -26,7 +26,6 @@ function prepare_disk_image() {
 
 # Clear any existing LVM mounts.
 function clear_lvm_mounts() {
-    losetup -l
     local OPEN_LVM=$(losetup -O BACK-FILE,NAME | grep 'lvm.img\|disk-node0.img' | tr -s ' ' | cut -d ' ' -f 2)
     for LOOP in $OPEN_LVM; do
         losetup -d $LOOP
@@ -55,9 +54,9 @@ function prepare_lvm_image() {
     LOOP_NAME=$(losetup -P -f --show "$DISK_IMAGE")
     trap "losetup -d $LOOP_NAME" EXIT
 
-    pvcreate -f "$LOOP_NAME" -u "$PV_UUID" --norestorefile
+    lvm pvcreate "$LOOP_NAME" -u "$PV_UUID" --norestorefile --config "devices { filter=[\"a|${LOOP_NAME}|\", \"r|.*|\"] }"
 
-    create_lvm_volumes "$VOLUME_GROUP" "$VG_UUID" "$PV_UUID" "$IMAGE_SIZE_BYTES"
+    create_lvm_volumes "$VOLUME_GROUP" "$VG_UUID" "$PV_UUID" "$IMAGE_SIZE_BYTES" "$LOOP_NAME"
 }
 
 # Write a single partition image into a specific partition of the
@@ -193,6 +192,7 @@ function create_lvm_volumes() {
     local VG_UUID="$2"
     local PV_UUID="$3"
     local SIZE="$4"
+    local LOOP_NAME="$5"
 
     local DEV_SIZE=$(("$SIZE" / 512))
     local PE_COUNT=$((("$DEV_SIZE" / 8192) - 1))
@@ -295,10 +295,10 @@ EOF
 }
 EOF
 
-    faketime "2021-5-7 0" vgcfgrestore -f $out "$VOLUME_GROUP"
+    faketime "2021-5-7 0" lvm vgcfgrestore -f $out "$VOLUME_GROUP" --config "devices { filter=[\"a|${LOOP_NAME}|\", \"r|.*|\"] }"
     rm $out
 
-    vgscan --mknodes
+    lvm vgscan --mknodes --config "devices { filter=[\"a|${LOOP_NAME}|\", \"r|.*|\"] }"
 }
 
 function read_partition_sizes_by_name() {
