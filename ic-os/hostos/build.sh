@@ -50,7 +50,7 @@ $SCRIPTS_DIR/build-docker-save.sh \
 
 IMAGE_ID=$(
     docker build -q -f $BASE_DIR/build/Dockerfile $BASE_DIR/.. 2>&1 \
-        | tee /dev/fd/2 \
+        | tee >(cat 1>&2) \
         | sed -e 's/sha256:\([0-9a-f]\{64\}\)/\1/' -e t -e d
 )
 docker run -h builder --cidfile cid --privileged $IMAGE_ID
