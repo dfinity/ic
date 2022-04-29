@@ -955,6 +955,7 @@ pub struct Follow {
 
 #[derive(Debug, Clone, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
+// Externally tagged by default.
 pub enum PublicKeyOrPrincipal {
     PublicKey(models::PublicKey),
     Principal(PrincipalId),
@@ -1003,7 +1004,6 @@ impl From<SetDissolveTimestampMetadata> for Object {
 
 impl TryFrom<Option<Object>> for SetDissolveTimestampMetadata {
     type Error = ApiError;
-
     fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
@@ -1029,7 +1029,6 @@ pub struct NeuronIdentifierMetadata {
 
 impl TryFrom<Option<Object>> for NeuronIdentifierMetadata {
     type Error = ApiError;
-
     fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
@@ -1102,7 +1101,7 @@ impl TryFrom<Option<Object>> for KeyMetadata {
 
 impl From<KeyMetadata> for Object {
     fn from(m: KeyMetadata) -> Self {
-        match serde_json::to_value(m) {
+        match serde_json::to_value(&m) {
             Ok(Value::Object(o)) => o,
             _ => unreachable!(),
         }
@@ -1201,11 +1200,10 @@ pub struct MergeMaturityMetadata {
 
 impl TryFrom<Option<Object>> for MergeMaturityMetadata {
     type Error = ApiError;
-
     fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse a `neuron_index` from metadata JSON object: {}",
+                "Could not parse MERGE_MATURITY operation metadata from metadata JSON object: {}",
                 e
             ))
         })
@@ -1223,9 +1221,18 @@ impl From<MergeMaturityMetadata> for Object {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct NeuronInfoMetadata {
-    pub controller: Option<PrincipalId>,
+    pub controller: Option<PublicKeyOrPrincipal>,
     #[serde(default)]
     pub neuron_index: u64,
+}
+
+impl From<PublicKeyOrPrincipal> for Object {
+    fn from(p: PublicKeyOrPrincipal) -> Self {
+        match serde_json::to_value(p) {
+            Ok(Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
 }
 
 impl TryFrom<Option<Object>> for NeuronInfoMetadata {
@@ -1233,11 +1240,63 @@ impl TryFrom<Option<Object>> for NeuronInfoMetadata {
     fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse a `neuron_index` from metadata JSON object: {}",
+                "Could not parse NEURON_INFO operation metadata from metadata JSON object: {}",
                 e
             ))
         })
     }
+}
+
+#[test]
+fn test_parse_neuron_info_metadata_public_key() {
+    let m1 = r#"
+            {
+                "controller": {
+                    "public_key": {
+                        "hex_bytes": "ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d",
+                        "curve_type": "edwards25519"
+                     }
+                },
+                "neuron_index": 123456
+            }
+        "#;
+    let m1: NeuronInfoMetadata = serde_json::from_str(m1).unwrap();
+    assert_eq!(
+        m1,
+        NeuronInfoMetadata {
+            neuron_index: 123456,
+            controller: Some(PublicKeyOrPrincipal::PublicKey(models::PublicKey::new(
+                "ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d"
+                    .parse()
+                    .unwrap(),
+                models::CurveType::Edwards25519
+            )))
+        }
+    );
+}
+
+#[test]
+fn test_parse_neuron_info_metadata_principal() {
+    use std::str::FromStr;
+    let m1 = r#"
+            {
+                "controller": {
+                    "principal": "4auul-2ca7l-khhsk-dcyds-qnj57-cc3ko-h3j6b-jcszz-nsjn4-ab2zb-oqe"
+                },
+                "neuron_index": 123456
+            }
+        "#;
+    let m1: NeuronInfoMetadata = serde_json::from_str(m1).unwrap();
+    let pid =
+        PrincipalId::from_str("4auul-2ca7l-khhsk-dcyds-qnj57-cc3ko-h3j6b-jcszz-nsjn4-ab2zb-oqe")
+            .expect("Invalid PrincipalId");
+    assert_eq!(
+        m1,
+        NeuronInfoMetadata {
+            neuron_index: 123456,
+            controller: Some(PublicKeyOrPrincipal::Principal(pid))
+        }
+    );
 }
 
 impl From<NeuronInfoMetadata> for Object {
@@ -1253,7 +1312,7 @@ impl From<NeuronInfoMetadata> for Object {
 pub struct FollowMetadata {
     pub topic: i32,
     pub followees: Vec<u64>,
-    pub controller: Option<PrincipalId>,
+    pub controller: Option<PublicKeyOrPrincipal>,
     #[serde(default)]
     pub neuron_index: u64,
 }
@@ -1263,7 +1322,7 @@ impl TryFrom<Option<Object>> for FollowMetadata {
     fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse a `neuron_index` from metadata JSON object: {}",
+                "Could not parse a FOLLOW operation metadata from metadata JSON object: {}",
                 e
             ))
         })
@@ -1623,7 +1682,7 @@ impl TransactionBuilder {
             coin_change: None,
             metadata: Some(
                 NeuronInfoMetadata {
-                    controller: *controller,
+                    controller: pkp_from_principal(controller),
                     neuron_index: *neuron_index,
                 }
                 .into(),
@@ -1652,11 +1711,16 @@ impl TransactionBuilder {
                 FollowMetadata {
                     topic: *topic,
                     followees: followees.clone(),
-                    controller: *controller,
+                    controller: pkp_from_principal(controller),
                     neuron_index: *neuron_index,
                 }
                 .into(),
             ),
         });
     }
+}
+
+/// Converts an optional PrincipalId to an optional PublicKeyOrPrincipal.
+fn pkp_from_principal(pid: &Option<PrincipalId>) -> Option<PublicKeyOrPrincipal> {
+    pid.as_ref().map(|p| PublicKeyOrPrincipal::Principal(*p))
 }
