@@ -1,13 +1,24 @@
 use crate::page_map::PageMap;
+use bitcoin::{blockdata::constants::genesis_block, Block, Network};
 use ic_btc_types_internal::{
     BitcoinAdapterRequest, BitcoinAdapterRequestWrapper, BitcoinAdapterResponse,
 };
-use ic_protobuf::{bitcoin::v1 as pb_bitcoin, proxy::ProxyDecodeError};
+use ic_protobuf::{
+    bitcoin::v1 as pb_bitcoin,
+    proxy::{try_from_option_field, ProxyDecodeError},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, VecDeque},
     convert::TryFrom,
 };
+
+mod block;
+
+/// A constant to determine whether a block is stable or unstable.
+/// See [UnstableBlocks] for more documentation.
+// This number is set to a small value at the moment until `get_utxos` is optimized.
+const STABILITY_THRESHOLD: u32 = 6;
 
 /// Maximum number of requests to Bitcoin Adapter that can be present in the queue.
 const REQUEST_QUEUE_CAPACITY: u32 = 500;
@@ -92,12 +103,56 @@ pub struct UtxoSet {
     pub address_outpoints: PageMap,
 }
 
+/// A data structure for maintaining all unstable blocks.
+///
+/// A block `b` is considered stable if:
+///   depth(block) ≥ stability_threshold
+///   ∀ b', height(b') = height(b): depth(b) - depth(b’) ≥ stability_threshold
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnstableBlocks {
+    pub stability_threshold: u32,
+    pub tree: BlockTree,
+}
+
+impl UnstableBlocks {
+    pub fn new(stability_threshold: u32, anchor: Block) -> Self {
+        Self {
+            stability_threshold,
+            tree: BlockTree::new(anchor),
+        }
+    }
+}
+
+impl Default for UnstableBlocks {
+    fn default() -> Self {
+        UnstableBlocks::new(STABILITY_THRESHOLD, genesis_block(Network::Testnet))
+    }
+}
+
+/// Maintains a tree of connected blocks.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BlockTree {
+    pub root: Block,
+    pub children: Vec<BlockTree>,
+}
+
+impl BlockTree {
+    /// Creates a new `BlockTree` with the given block as its root.
+    pub fn new(root: Block) -> Self {
+        Self {
+            root,
+            children: vec![],
+        }
+    }
+}
+
 /// Represents the bitcoin state of the subnet.
 /// See `ic_protobuf::bitcoin::v1` for documentation of the fields.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BitcoinState {
     pub adapter_queues: AdapterQueues,
     pub utxo_set: UtxoSet,
+    pub unstable_blocks: UnstableBlocks,
 }
 
 impl Default for BitcoinState {
@@ -111,6 +166,7 @@ impl BitcoinState {
         Self {
             adapter_queues: AdapterQueues::new(requests_queue_capacity),
             utxo_set: UtxoSet::default(),
+            unstable_blocks: UnstableBlocks::default(),
         }
     }
 
@@ -231,6 +287,58 @@ impl TryFrom<pb_bitcoin::AdapterQueues> for AdapterQueues {
             responses,
             requests_queue_capacity: queues.requests_queue_capacity,
             in_flight_get_successors_requests_num,
+        })
+    }
+}
+
+impl From<&BlockTree> for pb_bitcoin::BlockTree {
+    fn from(item: &BlockTree) -> pb_bitcoin::BlockTree {
+        pb_bitcoin::BlockTree {
+            root: Some(block::to_proto(&item.root)),
+            children: item
+                .children
+                .iter()
+                .map(pb_bitcoin::BlockTree::from)
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<pb_bitcoin::BlockTree> for BlockTree {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_bitcoin::BlockTree) -> Result<Self, Self::Error> {
+        let mut children = vec![];
+        for child_res in item.children.into_iter().map(BlockTree::try_from) {
+            children.push(child_res?);
+        }
+
+        Ok(Self {
+            root: block::from_proto(&try_from_option_field(item.root, "BlockTree::root")?),
+            children,
+        })
+    }
+}
+
+impl From<&UnstableBlocks> for pb_bitcoin::UnstableBlocks {
+    fn from(item: &UnstableBlocks) -> pb_bitcoin::UnstableBlocks {
+        pb_bitcoin::UnstableBlocks {
+            stability_threshold: item.stability_threshold,
+            tree: Some(pb_bitcoin::BlockTree::from(&item.tree)),
+        }
+    }
+}
+
+impl TryFrom<pb_bitcoin::UnstableBlocks> for UnstableBlocks {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_bitcoin::UnstableBlocks) -> Result<Self, Self::Error> {
+        Ok(Self {
+            stability_threshold: item.stability_threshold,
+            tree: BlockTree::try_from(try_from_option_field::<_, pb_bitcoin::BlockTree, _>(
+                item.tree,
+                "UnstableBlocks::tree",
+            )?)?,
         })
     }
 }

@@ -26,6 +26,7 @@ name = "build-utxo-set"
 path = "src/examples/build_utxo_set.rs"
 
 [dev-dependencies]
+ic-btc-test-utils = { path = "../test-utils" }
 bitcoin = {version = "0.27.1", features = ["rand"]} # needed for generating secp256k1 keys.
 clap = {version = "3.1.9", features = ["derive"]}
 maplit = "1.0.2"

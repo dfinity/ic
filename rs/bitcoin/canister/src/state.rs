@@ -1,11 +1,11 @@
-use crate::{block, proto, types::Height, PageMapMemory};
+use crate::{proto, types::Height, PageMapMemory};
 use bitcoin::{hashes::Hash, Block, Network, OutPoint, Script, TxOut, Txid};
 use ic_protobuf::bitcoin::v1;
-use ic_replicated_state::page_map::PersistenceError;
+use ic_replicated_state::{bitcoin_state::UnstableBlocks, page_map::PersistenceError};
 use ic_state_layout::{AccessPolicy, ProtoFileWith, RwPolicy};
 use stable_structures::StableBTreeMap;
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::{convert::TryFrom, path::Path};
 
 /// A structure used to maintain the entire state.
 pub struct State {
@@ -25,7 +25,7 @@ impl State {
     /// The `stability_threshold` parameter specifies how many confirmations a
     /// block needs before it is considered stable. Stable blocks are assumed
     /// to be final and are never removed.
-    pub fn new(stability_threshold: u64, network: Network, genesis_block: Block) -> Self {
+    pub fn new(stability_threshold: u32, network: Network, genesis_block: Block) -> Self {
         Self {
             height: 0,
             utxos: UtxoSet::new(network),
@@ -78,7 +78,8 @@ impl State {
                 medium_utxos_memory,
                 address_to_outpoints_memory,
             ),
-            unstable_blocks: UnstableBlocks::from_proto(proto_state.unstable_blocks.unwrap()),
+            unstable_blocks: UnstableBlocks::try_from(proto_state.unstable_blocks.unwrap())
+                .unwrap(),
         })
     }
 }
@@ -88,7 +89,7 @@ impl From<&State> for proto::State {
         proto::State {
             height: state.height,
             utxos: Some(state.utxos.to_proto()),
-            unstable_blocks: Some(state.unstable_blocks.to_proto()),
+            unstable_blocks: Some(v1::UnstableBlocks::from(&state.unstable_blocks)),
         }
     }
 }
@@ -295,79 +296,6 @@ impl UtxoSet {
                 3 => Network::Regtest,
                 _ => panic!("Invalid network ID"),
             },
-        }
-    }
-}
-
-/// A data structure for maintaining all unstable blocks.
-///
-/// A block `b` is considered stable if:
-///   depth(block) ≥ stability_threshold
-///   ∀ b', height(b') = height(b): depth(b) - depth(b’) ≥ stability_threshold
-#[cfg_attr(test, derive(Debug, PartialEq))]
-pub struct UnstableBlocks {
-    pub stability_threshold: u64,
-    pub tree: BlockTree,
-}
-
-impl UnstableBlocks {
-    pub fn new(stability_threshold: u64, anchor: Block) -> Self {
-        Self {
-            stability_threshold,
-            tree: BlockTree::new(anchor),
-        }
-    }
-
-    pub fn to_proto(&self) -> proto::UnstableBlocks {
-        proto::UnstableBlocks {
-            stability_threshold: self.stability_threshold,
-            tree: Some(self.tree.to_proto()),
-        }
-    }
-
-    pub fn from_proto(block_forest_proto: proto::UnstableBlocks) -> Self {
-        Self {
-            stability_threshold: block_forest_proto.stability_threshold,
-            tree: BlockTree::from_proto(
-                block_forest_proto
-                    .tree
-                    .expect("BlockTree must be present in the proto"),
-            ),
-        }
-    }
-}
-
-/// Maintains a tree of connected blocks.
-#[cfg_attr(test, derive(Debug, PartialEq))]
-pub struct BlockTree {
-    pub root: Block,
-    pub children: Vec<BlockTree>,
-}
-
-impl BlockTree {
-    /// Creates a new `BlockTree` with the given block as its root.
-    pub fn new(root: Block) -> Self {
-        Self {
-            root,
-            children: vec![],
-        }
-    }
-
-    pub fn to_proto(&self) -> proto::BlockTree {
-        proto::BlockTree {
-            root: Some(block::to_proto(&self.root)),
-            children: self.children.iter().map(|t| t.to_proto()).collect(),
-        }
-    }
-
-    pub fn from_proto(block_tree_proto: proto::BlockTree) -> Self {
-        Self {
-            root: block::from_proto(&block_tree_proto.root.unwrap()),
-            children: block_tree_proto
-                .children
-                .into_iter()
-                .map(BlockTree::from_proto)
-                .collect(),
         }
     }
 }

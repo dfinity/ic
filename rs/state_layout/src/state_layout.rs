@@ -190,6 +190,7 @@ pub struct CanisterStateBits {
 #[derive(Debug, Default)]
 pub struct BitcoinStateBits {
     pub adapter_queues: bitcoin_state::AdapterQueues,
+    pub unstable_blocks: bitcoin_state::UnstableBlocks,
 }
 
 /// `StateLayout` provides convenience functions to construct correct
@@ -1155,6 +1156,7 @@ impl From<&BitcoinStateBits> for pb_bitcoin::BitcoinStateBits {
     fn from(item: &BitcoinStateBits) -> Self {
         pb_bitcoin::BitcoinStateBits {
             adapter_queues: Some((&item.adapter_queues).into()),
+            unstable_blocks: Some((&item.unstable_blocks).into()),
         }
     }
 }
@@ -1165,7 +1167,13 @@ impl TryFrom<pb_bitcoin::BitcoinStateBits> for BitcoinStateBits {
     fn try_from(value: pb_bitcoin::BitcoinStateBits) -> Result<Self, Self::Error> {
         let adapter_queues: bitcoin_state::AdapterQueues =
             try_from_option_field(value.adapter_queues, "BitcoinStateBits::adapter_queues")?;
-        Ok(BitcoinStateBits { adapter_queues })
+        let unstable_blocks: bitcoin_state::UnstableBlocks =
+            try_from_option_field(value.unstable_blocks, "BitcoinStateBits::unstable_blocks")
+                .unwrap_or_default();
+        Ok(BitcoinStateBits {
+            adapter_queues,
+            unstable_blocks,
+        })
     }
 }
 
