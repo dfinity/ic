@@ -1780,9 +1780,10 @@ fn corrupt_signed_dealing_for_all_receivers(signed_dealing: &mut IDkgMultiSigned
         )
         .expect("failed to deserialize internal dealing");
 
-        let corrupted_dealing =
-            corrupt_dealing_for_all_recipients(&internal_dealing, &mut thread_rng())
-                .expect("Failed to corrupt dealing");
+        let randomness = ic_types::Randomness::from(thread_rng().gen::<[u8; 32]>());
+
+        let corrupted_dealing = corrupt_dealing_for_all_recipients(&internal_dealing, randomness)
+            .expect("Failed to corrupt dealing");
 
         corrupted_dealing
             .serialize()

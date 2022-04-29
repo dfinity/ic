@@ -593,7 +593,9 @@ pub fn corrupt_idkg_dealing<R: CryptoRng + RngCore>(
     let receiver = receivers[rng.gen_range(0, receivers.len())];
     let node_index = transcript_params.receivers().position(*receiver).unwrap();
 
-    let corrupted_dealing = corrupt_dealing(&internal_dealing, &[node_index], rng)
+    let randomness = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
+
+    let corrupted_dealing = corrupt_dealing(&internal_dealing, &[node_index], randomness)
         .map_err(|e| CorruptIDkgDealingError::FailedToCorruptDealing(format!("{:?}", e)))?;
     let internal_dealing_raw = corrupted_dealing
         .serialize()

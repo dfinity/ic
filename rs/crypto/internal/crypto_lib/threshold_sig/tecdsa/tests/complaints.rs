@@ -32,9 +32,11 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
 
     let corruption_target = 0;
 
+    let randomness = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
+
     dealings.insert(
         dealer_index,
-        test_utils::corrupt_dealing(&dealing, &[corruption_target], &mut rng)?,
+        test_utils::corrupt_dealing(&dealing, &[corruption_target], randomness)?,
     );
 
     let complaints = generate_complaints(

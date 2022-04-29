@@ -568,12 +568,16 @@ impl ProtocolRound {
             .choose_multiple(rng, number_of_dealings_corrupted);
 
         for (dealer_index, dealing) in dealings_to_damage {
-            let number_of_corruptions = rng.gen_range(1, setup.threshold.get() as usize + 1);
+            let max_corruptions = setup.threshold.get() as usize;
+            let number_of_corruptions = rng.gen_range(1..=max_corruptions);
 
             let corrupted_recip =
                 (0..setup.receivers as NodeIndex).choose_multiple(rng, number_of_corruptions);
 
-            let bad_dealing = test_utils::corrupt_dealing(dealing, &corrupted_recip, rng).unwrap();
+            let randomness = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
+
+            let bad_dealing =
+                test_utils::corrupt_dealing(dealing, &corrupted_recip, randomness).unwrap();
 
             // Privately invalid iff we were corrupted
             for (private_key, public_key, recipient_index) in setup.receiver_info() {

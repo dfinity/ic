@@ -125,14 +125,14 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                 Ok(BTreeMap::new())
             }
             Err(IDkgComputeSecretSharesInternalError::InconsistentCommitments) => {
-                let seed = Seed::from_rng(&mut *self.csprng.write());
+                let randomness = Randomness::from(self.csprng.write().gen::<[u8; 32]>());
                 let complaints = generate_complaints(
                     dealings,
                     context_data,
                     receiver_index,
                     &private_key,
                     &public_key,
-                    seed,
+                    Seed::from_randomness(&randomness),
                 )?;
                 Ok(complaints)
             }

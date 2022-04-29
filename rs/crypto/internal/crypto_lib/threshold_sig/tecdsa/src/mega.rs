@@ -3,7 +3,7 @@ use crate::seed::Seed;
 use crate::*;
 use core::fmt::{self, Debug};
 use paste::paste;
-use rand_core::{CryptoRng, RngCore};
+use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use zeroize::Zeroize;

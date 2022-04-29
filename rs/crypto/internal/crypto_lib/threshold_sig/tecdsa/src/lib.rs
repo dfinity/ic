@@ -278,7 +278,7 @@ pub fn gen_keypair(
     curve_type: EccCurveType,
     seed: Randomness,
 ) -> Result<(MEGaPublicKey, MEGaPrivateKey), ThresholdEcdsaError> {
-    use rand_core::SeedableRng;
+    use rand::SeedableRng;
 
     let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed.get());
     let private_key = MEGaPrivateKey::generate(curve_type, &mut rng)?;
