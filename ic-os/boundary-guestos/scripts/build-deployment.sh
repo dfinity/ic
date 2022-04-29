@@ -28,6 +28,7 @@ Arguments:
   -s=, --ssh=                           specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
   -c=, --certdir=                       specify directory holding TLS certificates for hosted domain (Default: None i.e. snakeoil/self certified certificate will be used)
   -n=, --nns_urls=                      specify a file that lists on each line a nns url of the form http://[ip]:port this file will override nns urls derived from input json file
+  -d=, --nginx-domainname=              domain name hosted by nginx ic0.dev or ic0.app
        --git-revision=                  git revision for which to prepare the media
        --deployment-type={prod|dev}        production or development deployment type
   -x,  --debug                enable verbose console output
@@ -58,6 +59,9 @@ Arguments:
             GIT_REVISION="${argument#*=}"
             shift
             ;;
+        -d=* | --nginx-domainname=*)
+            NGINX_DOMAIN_NAME="${argument#*=}"
+            ;;
         --deployment-type=*)
             DEPLOYMENT_TYPE="${argument#*=}"
             shift
@@ -81,6 +85,21 @@ SSH="${SSH:=${BASE_DIR}/../../testnet/config/ssh_authorized_keys}"
 CERT_DIR="${CERT_DIR:=""}"
 GIT_REVISION="${GIT_REVISION:=}"
 DEPLOYMENT_TYPE="${DEPLOYMENT_TYPE:="prod"}"
+NGINX_DOMAIN_NAME="${NGINX_DOMAIN_NAME:="ic0.app"}"
+
+if ! echo $NGINX_DOMAIN_NAME | grep -q ".*\..*"; then
+    echo "malformed domain name $NGINX_DOMAIN_NAME"
+    NGINX_DOMAIN_NAME="ic0.app"
+fi
+
+echo "Using domain name $NGINX_DOMAIN_NAME"
+NGINX_DOMAIN=${NGINX_DOMAIN_NAME%.*}
+NGINX_TLD=${NGINX_DOMAIN_NAME#*.}
+if [[ $NGINX_DOMAIN == "" ]] || [[ $NGINX_TLD == "" ]]; then
+    echo "Malformed nginx domain $NGINX_DOMAIN_NAME using defaults"
+    NGINX_DOMAIN="${NGINX_DOMAIN:="ic0"}"
+    NGINX_TLD="${NGINX_TLD:="app"}"
+fi
 
 if [[ -z "$GIT_REVISION" ]]; then
     echo "Please provide the GIT_REVISION as env. variable or the command line with --git-revision=<value>"
@@ -233,6 +252,8 @@ function generate_boundary_node_config() {
             fi
             echo "nns_url=${NNS_URL}" >"${CONFIG_DIR}/$NODE_PREFIX/nns.conf"
             echo ${DEPLOYMENT_TYPE:="prod"} >"${CONFIG_DIR}/$NODE_PREFIX"/deployment_type
+            echo DOMAIN=${NGINX_DOMAIN} >"${CONFIG_DIR}/$NODE_PREFIX"/nginxdomain.conf
+            echo TLD=${NGINX_TLD} >>"${CONFIG_DIR}/$NODE_PREFIX"/nginxdomain.conf
         done
     done
 }

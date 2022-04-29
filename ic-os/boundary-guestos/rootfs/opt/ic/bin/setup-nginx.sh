@@ -30,6 +30,19 @@ function restore_context() {
     restorecon -v /etc/nginx/conf.d/*.conf
 }
 
+function setup_domain_name() {
+    source /boot/config/nginxdomain.conf
+    if [[ -z "$DOMAIN" ]] || [[ -z "$TLD" ]]; then
+        echo "\$DOMAIN or \$TLD variable not set. Nginx won't be configured. " 1>&2
+        exit 1
+    fi
+    pushd /etc/nginx/conf.d
+    for filename in ./001-mainnet-nginx.conf ./002-rosetta-nginx.conf; do
+        sed -i -e "s/{{DOMAIN}}/${DOMAIN}/g" -e "s/{{TLD}}/${TLD}/g" ${filename}
+    done
+    popd
+}
+
 function enable_dev_mode() {
     # The boundary node image is built in prod configuration. Any changes need
     # to enable development mode at runtime should go in here.
@@ -44,5 +57,6 @@ function enable_dev_mode() {
 
 copy_nns_url
 copy_certs
+setup_domain_name
 enable_dev_mode
 restore_context
