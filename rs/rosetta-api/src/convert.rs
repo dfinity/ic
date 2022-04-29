@@ -357,6 +357,7 @@ impl State {
     }
 }
 
+/// Convert from operations to requests.
 pub fn from_operations(
     ops: &[Operation],
     preprocessing: bool,
@@ -505,7 +506,13 @@ pub fn from_operations(
                     neuron_index,
                 } = o.metadata.clone().try_into()?;
                 validate_neuron_management_op()?;
-                state.neuron_info(account, controller, neuron_index)?;
+                // The governance canister expects a principal. If the caller
+                // provided a public key, we compute the corresponding principal.
+                let principal = match controller {
+                    None => None,
+                    Some(p) => Some(principal_id_from_public_key_or_principal(p)?),
+                };
+                state.neuron_info(account, principal, neuron_index)?;
             }
             OperationType::Burn | OperationType::Mint => {
                 let msg = format!("Unsupported operation type: {}", o._type);
@@ -519,7 +526,12 @@ pub fn from_operations(
                     neuron_index,
                 } = o.metadata.clone().try_into()?;
                 validate_neuron_management_op()?;
-                state.follow(account, controller, neuron_index, topic, followees)?;
+                // convert from pkp in operation to principal in request.
+                let pid = match controller {
+                    None => None,
+                    Some(p) => Some(principal_id_from_public_key_or_principal(p)?),
+                };
+                state.follow(account, pid, neuron_index, topic, followees)?;
             }
         }
     }

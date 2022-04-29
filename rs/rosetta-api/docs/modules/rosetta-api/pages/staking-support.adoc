@@ -571,8 +571,10 @@ The topic codes are listed below.
     "followees": [4169717477823915596, 7814871076665269296],
     "neuron_index": 0,
     "controller": {
-      "hex_bytes": "ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d",
-      "curve_type": "edwards25519"
+      "public_key": {
+        "hex_bytes": "ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d",
+        "curve_type": "edwards25519"
+      }
     }
   }
 }
@@ -705,8 +707,10 @@ Either the neuron controller or a hotkey can execute this operation.
   "metadata": {
     "neuron_index": 0,
     "controller": {
-      "hex_bytes": "ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d",
-      "curve_type": "edwards25519"
+      "public_key": {
+        "hex_bytes": "ba5242d02642aede88a5f9fe82482a9fd0b6dc25f38c729253116c6865384a9d",
+        "curve_type": "edwards25519"
+      }
     }
   }
 }
@@ -736,7 +740,9 @@ The Rosetta API returns the state of the neuron as operation metadata in the `/c
           "address": "8af54f1fa09faeca18d294e0787346264f9f1d6189ed20ff14f029a160b787e8"
         },
         "metadata": {
-          "controller": "sp3em-jkiyw-tospm-2huim-jor4p-et4s7-ay35f-q7tnm-hi4k2-pyicb-xae",
+          "controller": {
+            "principal": "sp3em-jkiyw-tospm-2huim-jor4p-et4s7-ay35f-q7tnm-hi4k2-pyicb-xae"
+          },
           "kyc_verified": true,
           "maturity_e8s_equivalent": 1000,
           "neuron_fees_e8s": 0,
