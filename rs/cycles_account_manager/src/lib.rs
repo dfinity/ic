@@ -19,7 +19,7 @@ use ic_ic00_types::{
     CanisterIdRecord, InstallCodeArgs, Method, Payload, SetControllerArgs, UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{error, info, ReplicaLogger};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, SystemState};
@@ -509,16 +509,32 @@ impl CyclesAccountManager {
     /// Refunds the cycles from the response. In particular, adds leftover
     /// cycles from the what was reserved when the corresponding `Request` was
     /// sent earlier.
-    pub fn response_cycles_refund(&self, system_state: &mut SystemState, response: &mut Response) {
+    pub fn response_cycles_refund(
+        &self,
+        log: &ReplicaLogger,
+        system_state: &mut SystemState,
+        response: &mut Response,
+    ) {
         // We originally charged for the maximum number of bytes possible so
         // figure out how many extra bytes we charged for.
-        let some_extra_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
-            .get()
-            .checked_sub(response.payload_size_bytes().get());
-        if let Some(extra_bytes) = some_extra_bytes {
-            let cycles_to_refund =
-                self.config.xnet_byte_transmission_fee * Cycles::from(extra_bytes);
-            self.refund_cycles(system_state, cycles_to_refund);
+        let response_payload_size_bytes = response.payload_size_bytes().get();
+        let max_payload_size_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get();
+        let some_extra_bytes = max_payload_size_bytes.checked_sub(response_payload_size_bytes);
+
+        match some_extra_bytes {
+            None => {
+                error!(
+                    log,
+                    "Unexpected response payload size of {} bytes (max expected {})",
+                    response_payload_size_bytes,
+                    max_payload_size_bytes
+                );
+            }
+            Some(extra_bytes) => {
+                let cycles_to_refund =
+                    self.config.xnet_byte_transmission_fee * Cycles::from(extra_bytes);
+                self.refund_cycles(system_state, cycles_to_refund);
+            }
         }
     }
 
