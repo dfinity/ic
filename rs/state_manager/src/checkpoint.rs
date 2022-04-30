@@ -146,6 +146,13 @@ fn serialize_canister_to_tip(
         }
         None => None,
     };
+    // As the long executions get aborted at the checkpoint, the `priority_credit`
+    // and the `long_execution_progress` must be zeros.
+    assert_eq!(canister_state.scheduler_state.priority_credit, 0.into());
+    assert_eq!(
+        canister_state.scheduler_state.long_execution_progress,
+        0.into()
+    );
     canister_layout
         .canister()
         .serialize(
@@ -378,6 +385,10 @@ pub fn load_canister_state<P: ReadPolicy>(
             last_full_execution_round: canister_state_bits.last_full_execution_round,
             compute_allocation: canister_state_bits.compute_allocation,
             accumulated_priority: canister_state_bits.accumulated_priority,
+            // Longs executions get aborted at the checkpoint,
+            // so both the credit and the execution progress below are zeros.
+            priority_credit: 0.into(),
+            long_execution_progress: 0.into(),
             heap_delta_debit: canister_state_bits.heap_delta_debit,
             install_code_debit: canister_state_bits.install_code_debit,
         },

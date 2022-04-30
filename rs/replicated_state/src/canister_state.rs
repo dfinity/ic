@@ -17,7 +17,7 @@ use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response},
     methods::WasmMethod,
     AccumulatedPriority, CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes,
-    PrincipalId, QueueIndex,
+    NumRounds, PrincipalId, QueueIndex,
 };
 use phantom_newtype::AmountOf;
 pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY, QUEUE_INDEX_NONE};
@@ -47,6 +47,17 @@ pub struct SchedulerState {
     /// in the vector d that corresponds to this canister.
     pub accumulated_priority: AccumulatedPriority,
 
+    /// Keeps the current priority credit of this Canister, accumulated during the
+    /// long execution.
+    ///
+    /// During the long execution, the Canister is temporarily credited with priority
+    /// to slightly boost the long execution priority. Only when the long execution
+    /// is done, then the `accumulated_priority` is decreased by the `priority_credit`.
+    pub priority_credit: AccumulatedPriority,
+
+    /// Tracks the Long Execution progress, i.e. how many rounds the execution lasts.
+    pub long_execution_progress: NumRounds,
+
     /// The amount of heap delta debit. The canister skips execution of update
     /// messages if this value is non-zero.
     pub heap_delta_debit: NumBytes,
@@ -59,11 +70,13 @@ pub struct SchedulerState {
 impl Default for SchedulerState {
     fn default() -> Self {
         Self {
-            last_full_execution_round: ExecutionRound::from(0),
+            last_full_execution_round: 0.into(),
             compute_allocation: ComputeAllocation::default(),
             accumulated_priority: AccumulatedPriority::default(),
-            heap_delta_debit: NumBytes::from(0),
-            install_code_debit: NumInstructions::from(0),
+            priority_credit: 0.into(),
+            long_execution_progress: 0.into(),
+            heap_delta_debit: 0.into(),
+            install_code_debit: 0.into(),
         }
     }
 }
