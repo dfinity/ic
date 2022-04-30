@@ -21,13 +21,13 @@ pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions
 
 // We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes
 // at most 1ms to enter and exit the Wasm engine.
-pub(crate) const INSTRUCTION_OVERHEAD_PER_MESSAGE: NumInstructions = NumInstructions::new(2 * M);
+const INSTRUCTION_OVERHEAD_PER_MESSAGE: NumInstructions = NumInstructions::new(2 * M);
 
 // Metrics show that finalization can take 13ms when there were 5000 canisters
 // in a subnet. This comes out to about 3us per canister which comes out to
 // 6_000 instructions based on the 1 cycles unit ≅ 1 CPU cycle, 2 GHz CPU
 // calculations. Round this up to 12_000 to be on the safe side.
-pub(crate) const INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION: NumInstructions =
+const INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION: NumInstructions =
     NumInstructions::new(12_000);
 
 // If messages are short, then we expect about 2B=(7B - 5B) instructions to run
