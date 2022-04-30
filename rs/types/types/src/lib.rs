@@ -228,6 +228,11 @@ impl From<i64> for AccumulatedPriority {
     }
 }
 
+pub struct NumRoundsTag {}
+/// `NumRounds` is a part of the SchedulerState. The Canisters running
+/// long executions track their progress using `long_execution_progress` filed.
+pub type NumRounds = AmountOf<NumRoundsTag, u32>;
+
 #[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize, Hash)]
 /// Type to track how much budget the IC can spend on executing queries on
 /// canisters.  See `execution_environment/rs/query_handler.rs:Charging for
