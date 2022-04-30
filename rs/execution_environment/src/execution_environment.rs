@@ -1312,8 +1312,11 @@ impl ExecutionEnvironmentImpl {
         // possible response when the request is being sent. Now that we
         // have received the response, we can refund the cycles based on
         // the actual size of the response.
-        self.cycles_account_manager
-            .response_cycles_refund(&mut canister.system_state, &mut resp);
+        self.cycles_account_manager.response_cycles_refund(
+            &self.log,
+            &mut canister.system_state,
+            &mut resp,
+        );
 
         if is_call_context_deleted {
             // If the call context was deleted (e.g. in uninstall), then do not execute

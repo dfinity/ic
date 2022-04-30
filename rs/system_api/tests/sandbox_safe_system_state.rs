@@ -1,5 +1,6 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, SystemApi};
+use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{StateError, SystemState};
@@ -204,7 +205,11 @@ fn correct_charging_source_canister_for_a_request() {
     sandbox_safe_system_state
         .system_state_changes
         .apply_changes(&mut system_state);
-    cycles_account_manager.response_cycles_refund(&mut system_state, &mut response);
+    cycles_account_manager.response_cycles_refund(
+        &no_op_logger(),
+        &mut system_state,
+        &mut response,
+    );
 
     // MAX_NUM_INSTRUCTIONS also gets partially refunded in the real
     // ExecutionEnvironmentImpl::execute_canister_response()
