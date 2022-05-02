@@ -643,9 +643,19 @@ fn dirty_chunks_of_file(
         // instead.
         let base_file_index = base_manifest
             .file_table
-            .binary_search_by(|file_info| file_info.relative_path.as_path().cmp(relative_path))
-            .expect("couldn't find a file in the base manifest");
+            .binary_search_by(|file_info| file_info.relative_path.as_path().cmp(relative_path));
 
+        // This should never happen under normal operation. However, disaster recovery can add
+        // files into checkpoints, so we relax the check in production and return None if the file
+        // is missing in the base manifest. This triggers full re-hashing of the corresponding
+        // file.
+        debug_assert!(
+            base_file_index.is_ok(),
+            "could not find file {} in the base manifest",
+            relative_path.display()
+        );
+
+        let base_file_index = base_file_index.ok()?;
         let base_file_size = base_manifest.file_table[base_file_index].size_bytes;
 
         if base_file_size < size_bytes {
