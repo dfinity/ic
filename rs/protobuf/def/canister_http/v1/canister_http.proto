@@ -22,7 +22,7 @@ message CanisterHttpResponse {
 message CanisterHttpResponseContent {
   oneof status {
     CanisterHttpResponsePayload success = 1;
-    CanisterHttpReject failed = 2;
+    CanisterHttpReject reject = 2;
   }
 }
 
