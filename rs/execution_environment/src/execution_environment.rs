@@ -815,14 +815,15 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                     compute_allocation,
                     instructions_limit,
                 ) {
+                    let user_error = UserError::new(ErrorCode::CanisterOutOfCycles, err);
                     // Canister is out of cycles. Reject the request.
                     return self.reject_request(
                         canister,
                         instructions_limit,
                         request,
                         RejectContext {
-                            code: RejectCode::SysTransient,
-                            message: err.to_string(),
+                            code: user_error.reject_code(),
+                            message: user_error.to_string(),
                         },
                         NumBytes::from(0),
                     );
@@ -1417,13 +1418,20 @@ impl ExecutionEnvironmentImpl {
         if CanisterStatusType::Running != canister.status() {
             // Canister isn't running. Reject the request.
             let canister_id = canister.canister_id();
+            let err_code = match canister.status() {
+                CanisterStatusType::Running => unreachable!(),
+                CanisterStatusType::Stopping => ErrorCode::CanisterStopping,
+                CanisterStatusType::Stopped => ErrorCode::CanisterStopped,
+            };
+            let err_msg = format!("Canister {} is not running", canister_id);
+            let user_error = UserError::new(err_code, err_msg);
             return self.reject_request(
                 canister,
                 cycles,
                 req,
                 RejectContext {
-                    code: RejectCode::SysFatal,
-                    message: format!("Canister {} is not running", canister_id),
+                    code: user_error.reject_code(),
+                    message: user_error.to_string(),
                 },
                 NumBytes::from(0),
             );
@@ -1717,6 +1725,11 @@ impl ExecutionEnvironmentImpl {
         let canister_id = canister.canister_id();
         if CanisterStatusType::Running != canister.status() {
             // Canister isn't running. Reject the request.
+            let err_code = match canister.status() {
+                CanisterStatusType::Running => unreachable!(),
+                CanisterStatusType::Stopping => ErrorCode::CanisterStopping,
+                CanisterStatusType::Stopped => ErrorCode::CanisterStopped,
+            };
             return ExecuteMessageResult {
                 canister,
                 num_instructions_left: num_instructions,
@@ -1726,7 +1739,7 @@ impl ExecutionEnvironmentImpl {
                         receiver: canister_id.get(),
                         user_id: ingress.source,
                         error: UserError::new(
-                            ErrorCode::CanisterStopped,
+                            err_code,
                             format!(
                                 "Canister {} is not running and cannot accept ingress messages.",
                                 canister_id,

@@ -1044,8 +1044,8 @@ fn stopping_canister_rejects_requests() {
                     originator_reply_callback: reply_callback,
                     refund: cycles,
                     response_payload: Payload::Reject(RejectContext {
-                        code: RejectCode::SysFatal,
-                        message: format!("Canister {} is not running", canister_id),
+                        code: RejectCode::CanisterError,
+                        message: format!("IC0509: Canister {} is not running", canister_id),
                     }),
                 })
             );
@@ -1076,7 +1076,7 @@ fn stopping_canister_rejects_ingress() {
                 receiver: canister_test_id(0).get(),
                 user_id: user_test_id(2),
                 error: UserError::new(
-                    ErrorCode::CanisterStopped,
+                    ErrorCode::CanisterStopping,
                     format!(
                         "Canister {} is not running and cannot accept ingress messages.",
                         canister_test_id(0)
@@ -1141,8 +1141,8 @@ fn stopped_canister_rejects_requests() {
                 originator_reply_callback: reply_callback,
                 refund: Cycles::from(cycles),
                 response_payload: Payload::Reject(RejectContext {
-                    code: RejectCode::SysFatal,
-                    message: format!("Canister {} is not running", canister_id),
+                    code: RejectCode::CanisterError,
+                    message: format!("IC0508: Canister {} is not running", canister_id),
                 }),
             })
         );
@@ -2640,9 +2640,9 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
                 originator_reply_callback: reply_callback,
                 refund: Cycles::from(cycles),
                 response_payload: Payload::Reject(RejectContext {
-                    code: RejectCode::SysTransient,
+                    code: RejectCode::CanisterError,
                     message: format!(
-                        "Canister {} is out of cycles: requested {} cycles but the available balance is {} cycles and the freezing threshold {} cycles",
+                        "IC0501: Canister {} is out of cycles: requested {} cycles but the available balance is {} cycles and the freezing threshold {} cycles",
                         canister_id,
                         cycles_account_manager.execution_cost(MAX_NUM_INSTRUCTIONS),
                         available_cycles,
