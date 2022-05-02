@@ -5025,7 +5025,6 @@ dependencies = [
  "proptest 1.0.0",
  "prost",
  "rand 0.8.4",
- "reqwest",
  "serde",
  "serde_cbor",
  "slog",
