@@ -123,6 +123,18 @@ message BlockTree {
   repeated BlockTree children = 2;
 }
 
+message Utxo {
+  OutPoint outpoint = 1;
+  TxOut txout = 2;
+  uint32 height = 3;
+}
+
+enum Network {
+  NETWORK_UNSPECIFIED = 0;
+  NETWORK_TESTNET = 1;
+  NETWORK_MAINNET = 2;
+}
+
 // Represents the Bitcoin state that isn't stored in PageMaps.
 message BitcoinStateBits {
   // The queues that maintain the requests to and responses from the Bitcoin
@@ -130,4 +142,10 @@ message BitcoinStateBits {
   AdapterQueues adapter_queues = 1;
 
   UnstableBlocks unstable_blocks = 2;
+
+  uint32 stable_height = 3;
+
+  Network network = 4;
+
+  repeated Utxo utxos_large = 5;
 }

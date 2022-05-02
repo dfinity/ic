@@ -6653,6 +6653,7 @@ dependencies = [
 name = "ic-state-layout"
 version = "0.8.0"
 dependencies = [
+ "bitcoin",
  "hex",
  "ic-base-types",
  "ic-ic00-types",
