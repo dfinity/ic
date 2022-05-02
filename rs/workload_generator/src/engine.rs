@@ -169,7 +169,6 @@ impl Engine {
             let target_instant =
                 time_origin + START_OFFSET + Duration::from_secs_f64(inter_arrival_time * n as f64);
             sleep_until(tokio::time::Instant::from_std(target_instant)).await;
-            println!("Running {:?}", (Instant::now() - time_origin).as_secs_f64());
             let tx = tx.clone();
             let plan = plan.clone();
             let agent = self.agents[n % self.agents.len()].clone();
