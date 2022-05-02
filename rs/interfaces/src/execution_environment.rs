@@ -12,7 +12,7 @@ use ic_types::{
     ingress::{IngressStatus, WasmResult},
     messages::{
         CertificateDelegation, HttpQueryResponse, InternalQuery, InternalQueryResponse, MessageId,
-        SignedIngressContent, UserQuery,
+        Response, SignedIngressContent, UserQuery,
     },
     ComputeAllocation, Cycles, ExecutionRound, Height, NumInstructions, Randomness, Time,
 };
@@ -208,6 +208,17 @@ pub struct ExecutionParameters {
     pub execution_mode: ExecutionMode,
 }
 
+/// The response of the executed message created by the `ic0.msg_reply()`
+/// or `ic0.msg_reject()` System API functions.
+/// If the execution failed or did not call these System API functions,
+/// then the response is empty.
+#[derive(Debug)]
+pub enum ExecResult {
+    IngressResult((MessageId, IngressStatus)),
+    ResponseResult(Response),
+    Empty,
+}
+
 /// The data structure returned by
 /// `ExecutionEnvironment.execute_canister_message()`.
 pub struct ExecuteMessageResult<CanisterState> {
@@ -217,8 +228,9 @@ pub struct ExecuteMessageResult<CanisterState> {
     /// to the instructions_limit that `execute_canister_message()` was called
     /// with.
     pub num_instructions_left: NumInstructions,
-    /// Optional status for an Ingress message if available.
-    pub ingress_status: Option<(MessageId, IngressStatus)>,
+    /// The response of the executed message. The caller needs to either push it
+    /// to the output queue of the canister or update the ingress status.
+    pub result: ExecResult,
     /// The size of the heap delta the canister produced
     pub heap_delta: NumBytes,
 }

@@ -11,7 +11,7 @@ mod metrics;
 mod query_handler;
 mod scheduler;
 mod types;
-mod util;
+pub mod util;
 
 use crate::internal_query_handler::AnonymousQueryHandler;
 pub use execution_environment::{
