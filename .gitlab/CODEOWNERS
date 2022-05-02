@@ -58,7 +58,6 @@
 # production testnet tests are owned by a team
 /testnet/tests/scripts/subnet_recovery_nns_test.sh         @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
 /testnet/tests/scripts/subnet_recovery_nns_upgrade_test.sh @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
-/testnet/tests/scripts/subnet_recovery_basic_test.sh       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
 /testnet/tests/scripts/generic.sh                          @dfinity-lab/teams/ic-testing-verification
 /testnet/tests/scripts/maximum_capacity_rejoin.sh          @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
 /testnet/tests/scripts/maximum_capacity_subnet_query.sh    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/runtime-owners
