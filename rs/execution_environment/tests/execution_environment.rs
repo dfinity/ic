@@ -4,15 +4,15 @@ use ic_base_types::NumSeconds;
 use ic_config::{execution_environment, subnet_config::CyclesAccountManagerConfig};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::{
-    CanisterHeartbeatError, ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor,
-    IngressHistoryWriterImpl,
+    util::process_response, CanisterHeartbeatError, ExecutionEnvironment, ExecutionEnvironmentImpl,
+    Hypervisor, IngressHistoryWriterImpl,
 };
 use ic_ic00_types::{
     self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, EmptyBlob,
     InstallCodeArgs, Method, Payload as Ic00Payload, IC_00,
 };
 use ic_ic00_types::{CanisterInstallMode, CanisterStatusType, EcdsaCurve, EcdsaKeyId, HttpMethod};
-use ic_interfaces::execution_environment::SubnetAvailableMemory;
+use ic_interfaces::execution_environment::{ExecResult, SubnetAvailableMemory};
 use ic_interfaces::{
     execution_environment::{AvailableMemory, ExecuteMessageResult, ExecutionMode},
     messages::CanisterInputMessage,
@@ -213,6 +213,7 @@ fn test_outgoing_messages(
             network_topology,
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
         );
+        let res = process_response(res);
 
         test(res);
     });
@@ -429,7 +430,10 @@ fn test_ingress_message_side_effects_2() {
                     .output_message_count(),
                 1
             );
-            let (_, status) = execute_message_result.ingress_status.unwrap();
+            let status = match execute_message_result.result {
+                ExecResult::IngressResult((_, status)) => status,
+                _ => panic!("Unexpected result variant"),
+            };
             assert_eq!(
                 status,
                 IngressStatus::Completed {
@@ -466,7 +470,10 @@ fn test_ingress_message_side_effects_3() {
                 .output_message_count(),
             0
         );
-        let (_, status) = execute_message_result.ingress_status.unwrap();
+        let status = match execute_message_result.result {
+            ExecResult::IngressResult((_, status)) => status,
+            _ => panic!("Unexpected result variant"),
+        };
         assert_eq!(
             status,
             IngressStatus::Completed {
@@ -523,6 +530,7 @@ fn test_allocate_memory_for_output_request_system_subnet() {
             network_topology,
             subnet_available_memory.clone(),
         );
+        let execute_message_result = process_response(execute_message_result);
         canister = execute_message_result.canister;
         // There should be one reserved slot in the queues.
         assert_eq!(1, canister.system_state.queues().reserved_slots());
@@ -583,6 +591,7 @@ fn test_allocate_memory_for_output_requests() {
                 network_topology.clone(),
                 subnet_available_memory.clone(),
             );
+            let execute_message_result = process_response(execute_message_result);
             canister = execute_message_result.canister;
             assert_eq!(1 << 30, subnet_available_memory.get_total_memory());
             assert_eq!(1 << 30, subnet_available_memory.get_message_memory());
@@ -606,6 +615,7 @@ fn test_allocate_memory_for_output_requests() {
                 network_topology.clone(),
                 subnet_available_memory.clone(),
             );
+            let execute_message_result = process_response(execute_message_result);
             canister = execute_message_result.canister;
             assert_eq!(13, subnet_available_memory.get_total_memory());
             assert_eq!(1 << 30, subnet_available_memory.get_message_memory());
@@ -629,6 +639,7 @@ fn test_allocate_memory_for_output_requests() {
                 network_topology.clone(),
                 subnet_available_memory.clone(),
             );
+            let execute_message_result = process_response(execute_message_result);
             canister = execute_message_result.canister;
             assert_eq!(1 << 30, subnet_available_memory.get_total_memory());
             assert_eq!(13, subnet_available_memory.get_message_memory());
@@ -653,6 +664,7 @@ fn test_allocate_memory_for_output_requests() {
                 network_topology,
                 subnet_available_memory.clone(),
             );
+            let execute_message_result = process_response(execute_message_result);
             canister = execute_message_result.canister;
             if ENFORCE_MESSAGE_MEMORY_USAGE {
                 // There should be one reserved slot in the queues.
@@ -1022,7 +1034,7 @@ fn stopping_canister_rejects_requests() {
 
             let msg = canister.pop_input().unwrap();
             let canister_id = canister.canister_id();
-            let mut result = exec_env.execute_canister_message(
+            let result = exec_env.execute_canister_message(
                 canister,
                 MAX_NUM_INSTRUCTIONS,
                 msg,
@@ -1030,6 +1042,7 @@ fn stopping_canister_rejects_requests() {
                 routing_table,
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             );
+            let mut result = process_response(result);
             assert_eq!(
                 result
                     .canister
@@ -1059,19 +1072,20 @@ fn stopping_canister_rejects_ingress() {
         let canister = get_stopping_canister(canister_test_id(0));
         let ingress = IngressBuilder::new().build();
 
+        let execute_message_result = exec_env.execute_canister_message(
+            canister,
+            MAX_NUM_INSTRUCTIONS,
+            CanisterInputMessage::Ingress(ingress),
+            mock_time(),
+            routing_table,
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        );
+        let status = match execute_message_result.result {
+            ExecResult::IngressResult((_, status)) => status,
+            _ => panic!("Unexpected result variant"),
+        };
         assert_eq!(
-            exec_env
-                .execute_canister_message(
-                    canister,
-                    MAX_NUM_INSTRUCTIONS,
-                    CanisterInputMessage::Ingress(ingress),
-                    mock_time(),
-                    routing_table,
-                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                )
-                .ingress_status
-                .unwrap()
-                .1,
+            status,
             IngressStatus::Failed {
                 receiver: canister_test_id(0).get(),
                 user_id: user_test_id(2),
@@ -1119,7 +1133,7 @@ fn stopped_canister_rejects_requests() {
 
         let msg = canister.pop_input().unwrap();
         let canister_id = canister.canister_id();
-        let mut result = exec_env.execute_canister_message(
+        let result = exec_env.execute_canister_message(
             canister,
             MAX_NUM_INSTRUCTIONS,
             msg,
@@ -1127,6 +1141,7 @@ fn stopped_canister_rejects_requests() {
             routing_table,
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
         );
+        let mut result = process_response(result);
         assert_eq!(
             result
                 .canister
@@ -1163,8 +1178,12 @@ fn stopped_canister_rejects_ingress() {
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
         );
 
+        let status = match result.result {
+            ExecResult::IngressResult((_, status)) => status,
+            _ => panic!("Unexpected result variant"),
+        };
         assert_eq!(
-            result.ingress_status.unwrap().1,
+            status,
             IngressStatus::Failed {
                 receiver: canister_test_id(0).get(),
                 user_id: user_test_id(2),
@@ -2618,7 +2637,7 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
 
         let msg = canister.pop_input().unwrap();
         let canister_id = canister.canister_id();
-        let mut result = exec_env.execute_canister_message(
+        let result = exec_env.execute_canister_message(
             canister,
             MAX_NUM_INSTRUCTIONS,
             msg,
@@ -2626,6 +2645,7 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
             routing_table,
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
         );
+        let mut result = process_response(result);
         assert_eq!(
             result
                 .canister
@@ -2676,9 +2696,13 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
             routing_table,
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
         );
+        let status = match result.result {
+            ExecResult::IngressResult(status) => status,
+            _ => panic!("Unexpected result variant"),
+        };
         assert_eq!(
-            result.ingress_status,
-            Some((MessageId::from([0; 32]), IngressStatus::Failed {
+            status,
+            (MessageId::from([0; 32]), IngressStatus::Failed {
                 receiver: canister_id.get(),
                 user_id: source,
                 error: UserError::new(
@@ -2692,7 +2716,7 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
                     ),
                 ),
                 time: mock_time(),
-            }))
+            })
         );
         // Verify the canister's cycles balance is still the same.
         assert_eq!(result.canister.system_state.balance(), Cycles::from(1000));
@@ -3048,14 +3072,14 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
         .into();
         canister.system_state.memory_allocation =
             MemoryAllocation::try_from(NumBytes::new(1 << 30)).unwrap();
-        exec_env.execute_canister_message(
+        process_response(exec_env.execute_canister_message(
             canister,
             MAX_NUM_INSTRUCTIONS,
             input_message,
             mock_time(),
             routing_table,
             subnet_available_memory.clone(),
-        );
+        ));
         assert_eq!(
             subnet_available_memory_bytes_num,
             subnet_available_memory.get_total_memory()
@@ -3106,14 +3130,14 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
         .into();
         canister.system_state.memory_allocation =
             MemoryAllocation::try_from(NumBytes::new(1 << 30)).unwrap();
-        exec_env.execute_canister_message(
+        process_response(exec_env.execute_canister_message(
             canister,
             MAX_NUM_INSTRUCTIONS,
             input_message,
             mock_time(),
             routing_table,
             subnet_available_memory.clone(),
-        );
+        ));
         // The canister allocates 10 wasm pages in the heap and 10 wasm pages of stable
         // memory.
         let new_memory_allocated = 20 * WASM_PAGE_SIZE_IN_BYTES as i64;

@@ -23,7 +23,7 @@ use ic_ic00_types::{
     ProvisionalTopUpCanisterArgs, SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs,
     UpdateSettingsArgs, IC_00,
 };
-use ic_interfaces::execution_environment::{AvailableMemory, CanisterOutOfCyclesError};
+use ic_interfaces::execution_environment::{AvailableMemory, CanisterOutOfCyclesError, ExecResult};
 use ic_interfaces::{
     execution_environment::{
         ExecuteMessageResult, ExecutionMode, ExecutionParameters, HypervisorError,
@@ -815,18 +815,21 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                     compute_allocation,
                     instructions_limit,
                 ) {
-                    let user_error = UserError::new(ErrorCode::CanisterOutOfCycles, err);
+                    let user_error = Err(UserError::new(ErrorCode::CanisterOutOfCycles, err));
                     // Canister is out of cycles. Reject the request.
-                    return self.reject_request(
+                    let response = Response {
+                        originator: request.sender,
+                        respondent: canister.canister_id(),
+                        originator_reply_callback: request.sender_reply_callback,
+                        refund: request.payment,
+                        response_payload: Payload::from(user_error),
+                    };
+                    return ExecuteMessageResult {
                         canister,
-                        instructions_limit,
-                        request,
-                        RejectContext {
-                            code: user_error.reject_code(),
-                            message: user_error.to_string(),
-                        },
-                        NumBytes::from(0),
-                    );
+                        num_instructions_left: instructions_limit,
+                        result: ExecResult::ResponseResult(response),
+                        heap_delta: NumBytes::from(0),
+                    };
                 }
                 (
                     true,
@@ -852,21 +855,16 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 ) {
                     // Canister is out of cycles. Reject the request.
                     let canister_id = canister.canister_id();
+                    let status = IngressStatus::Failed {
+                        receiver: canister_id.get(),
+                        user_id: ingress.source,
+                        error: UserError::new(ErrorCode::CanisterOutOfCycles, err.to_string()),
+                        time,
+                    };
                     return ExecuteMessageResult {
                         canister,
                         num_instructions_left: instructions_limit,
-                        ingress_status: Some((
-                            ingress.message_id,
-                            IngressStatus::Failed {
-                                receiver: canister_id.get(),
-                                user_id: ingress.source,
-                                error: UserError::new(
-                                    ErrorCode::CanisterOutOfCycles,
-                                    err.to_string(),
-                                ),
-                                time,
-                            },
-                        )),
+                        result: ExecResult::IngressResult((ingress.message_id, status)),
                         heap_delta: NumBytes::from(0),
                     };
                 }
@@ -1220,7 +1218,7 @@ impl ExecutionEnvironmentImpl {
                     ExecuteMessageResult {
                         canister,
                         num_instructions_left: cycles,
-                        ingress_status: None,
+                        result: ExecResult::Empty,
                         heap_delta: NumBytes::from(0),
                     },
                 );
@@ -1249,7 +1247,7 @@ impl ExecutionEnvironmentImpl {
                     ExecuteMessageResult {
                         canister,
                         num_instructions_left: cycles,
-                        ingress_status: None,
+                        result: ExecResult::Empty,
                         heap_delta: NumBytes::from(0),
                     },
                 );
@@ -1273,7 +1271,7 @@ impl ExecutionEnvironmentImpl {
                     ExecuteMessageResult {
                         canister,
                         num_instructions_left: cycles,
-                        ingress_status: None,
+                        result: ExecResult::Empty,
                         heap_delta: NumBytes::from(0),
                     },
                 );
@@ -1337,7 +1335,7 @@ impl ExecutionEnvironmentImpl {
                 ExecuteMessageResult {
                     canister,
                     num_instructions_left: cycles,
-                    ingress_status: None,
+                    result: ExecResult::Empty,
                     heap_delta: NumBytes::from(0),
                 },
             )
@@ -1367,18 +1365,16 @@ impl ExecutionEnvironmentImpl {
                 .unwrap()
                 .on_canister_result(call_context_id, result);
 
-            let ingress_status = match call_origin {
+            let result = match call_origin {
                 CallOrigin::Ingress(user_id, message_id) => {
-                    self.get_ingress_status(&mut canister, user_id, action, message_id, time)
+                    match self.get_ingress_status(&mut canister, user_id, action, message_id, time)
+                    {
+                        Some((msg_id, status)) => ExecResult::IngressResult((msg_id, status)),
+                        None => ExecResult::Empty,
+                    }
                 }
                 CallOrigin::CanisterUpdate(caller_canister_id, callback_id) => {
-                    produce_inter_canister_response(
-                        &mut canister,
-                        action,
-                        caller_canister_id,
-                        callback_id,
-                    );
-                    None
+                    action_to_result(&canister, action, caller_canister_id, callback_id)
                 }
                 CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => fatal!(
                     log,
@@ -1388,19 +1384,17 @@ impl ExecutionEnvironmentImpl {
                     // Since heartbeat messages are invoked by the system as opposed
                     // to a principal, they cannot respond since there's no one to
                     // respond to. Do nothing.
-                    None
+                    ExecResult::Empty
                 }
             };
 
-            (
-                true,
-                ExecuteMessageResult {
-                    canister,
-                    num_instructions_left: cycles,
-                    ingress_status,
-                    heap_delta,
-                },
-            )
+            let res = ExecuteMessageResult {
+                canister,
+                num_instructions_left: cycles,
+                result,
+                heap_delta,
+            };
+            (true, res)
         }
     }
 
@@ -1424,17 +1418,20 @@ impl ExecutionEnvironmentImpl {
                 CanisterStatusType::Stopped => ErrorCode::CanisterStopped,
             };
             let err_msg = format!("Canister {} is not running", canister_id);
-            let user_error = UserError::new(err_code, err_msg);
-            return self.reject_request(
+            let user_error = Err(UserError::new(err_code, err_msg));
+            let response = Response {
+                originator: req.sender,
+                respondent: canister.canister_id(),
+                originator_reply_callback: req.sender_reply_callback,
+                refund: req.payment,
+                response_payload: Payload::from(user_error),
+            };
+            return ExecuteMessageResult {
                 canister,
-                cycles,
-                req,
-                RejectContext {
-                    code: user_error.reject_code(),
-                    message: user_error.to_string(),
-                },
-                NumBytes::from(0),
-            );
+                num_instructions_left: cycles,
+                result: ExecResult::ResponseResult(response),
+                heap_delta: NumBytes::from(0),
+            };
         }
 
         if canister.exports_query_method(req.method_name.clone()) {
@@ -1448,31 +1445,6 @@ impl ExecutionEnvironmentImpl {
                 network_topology,
                 subnet_available_memory,
             )
-        }
-    }
-
-    // Helper function to produce a reject `Response` for a given `Request`.
-    fn reject_request(
-        &self,
-        mut canister: CanisterState,
-        num_instructions_left: NumInstructions,
-        req: Request,
-        reject_context: RejectContext,
-        heap_delta: NumBytes,
-    ) -> ExecuteMessageResult<CanisterState> {
-        canister.push_output_response(Response {
-            originator: req.sender,
-            respondent: canister.canister_id(),
-            originator_reply_callback: req.sender_reply_callback,
-            refund: req.payment,
-            response_payload: Payload::Reject(reject_context),
-        });
-
-        ExecuteMessageResult {
-            canister,
-            num_instructions_left,
-            ingress_status: None,
-            heap_delta,
         }
     }
 
@@ -1497,19 +1469,18 @@ impl ExecutionEnvironmentImpl {
             ExecutionMode::Replicated,
         );
 
-        let (mut canister, cycles, action, heap_delta) = self.hypervisor.execute_update(
+        let (canister, cycles, action, heap_delta) = self.hypervisor.execute_update(
             canister,
             RequestOrIngress::Request(req),
             time,
             network_topology,
             execution_parameters,
         );
-
-        produce_inter_canister_response(&mut canister, action, sender, reply_callback);
+        let result = action_to_result(&canister, action, sender, reply_callback);
         ExecuteMessageResult {
             canister,
             num_instructions_left: cycles,
-            ingress_status: None,
+            result,
             heap_delta,
         }
     }
@@ -1531,7 +1502,7 @@ impl ExecutionEnvironmentImpl {
             subnet_available_memory,
             ExecutionMode::Replicated,
         );
-        let (mut canister, cycles, result) = self.hypervisor.execute_query(
+        let (canister, cycles, result) = self.hypervisor.execute_query(
             QueryExecutionType::Replicated,
             req.method_name.as_str(),
             req.method_payload.as_slice(),
@@ -1544,19 +1515,18 @@ impl ExecutionEnvironmentImpl {
 
         let result = result
             .map_err(|err| self.log_and_transform_to_user_error(err, &canister.canister_id()));
-        let response_payload = Payload::from(result);
 
-        canister.push_output_response(Response {
+        let response = Response {
             originator: req.sender,
             respondent: canister.canister_id(),
             originator_reply_callback: req.sender_reply_callback,
             refund: Cycles::zero(),
-            response_payload,
-        });
+            response_payload: Payload::from(result),
+        };
         ExecuteMessageResult {
             canister,
             num_instructions_left: cycles,
-            ingress_status: None,
+            result: ExecResult::ResponseResult(response),
             heap_delta: NumBytes::from(0),
         }
     }
@@ -1730,24 +1700,23 @@ impl ExecutionEnvironmentImpl {
                 CanisterStatusType::Stopping => ErrorCode::CanisterStopping,
                 CanisterStatusType::Stopped => ErrorCode::CanisterStopped,
             };
+            let status = IngressStatus::Failed {
+                receiver: canister_id.get(),
+                user_id: ingress.source,
+                error: UserError::new(
+                    err_code,
+                    format!(
+                        "Canister {} is not running and cannot accept ingress messages.",
+                        canister_id,
+                    ),
+                ),
+                time,
+            };
+
             return ExecuteMessageResult {
                 canister,
                 num_instructions_left: num_instructions,
-                ingress_status: Some((
-                    ingress.message_id,
-                    IngressStatus::Failed {
-                        receiver: canister_id.get(),
-                        user_id: ingress.source,
-                        error: UserError::new(
-                            err_code,
-                            format!(
-                                "Canister {} is not running and cannot accept ingress messages.",
-                                canister_id,
-                            ),
-                        ),
-                        time,
-                    },
-                )),
+                result: ExecResult::IngressResult((ingress.message_id, status)),
                 heap_delta: NumBytes::from(0),
             };
         }
@@ -1756,21 +1725,19 @@ impl ExecutionEnvironmentImpl {
         // messages.
         if ingress.expiry_time < time {
             error!(self.log, "[EXC-BUG] Executing expired ingress message.");
+            let status = IngressStatus::Failed {
+                receiver: canister_id.get(),
+                user_id: ingress.source,
+                error: UserError::new(
+                    ErrorCode::IngressMessageTimeout,
+                    "Ingress message timed out waiting to start executing.",
+                ),
+                time,
+            };
             return ExecuteMessageResult {
                 canister,
                 num_instructions_left: num_instructions,
-                ingress_status: Some((
-                    ingress.message_id,
-                    IngressStatus::Failed {
-                        receiver: canister_id.get(),
-                        user_id: ingress.source,
-                        error: UserError::new(
-                            ErrorCode::IngressMessageTimeout,
-                            "Ingress message timed out waiting to start executing.",
-                        ),
-                        time,
-                    },
-                )),
+                result: ExecResult::IngressResult((ingress.message_id, status)),
                 heap_delta: NumBytes::from(0),
             };
         }
@@ -1819,10 +1786,14 @@ impl ExecutionEnvironmentImpl {
 
         let ingress_status =
             self.get_ingress_status(&mut canister, source, action, message_id, time);
+        let result = match ingress_status {
+            Some((msg_id, status)) => ExecResult::IngressResult((msg_id, status)),
+            None => ExecResult::Empty,
+        };
         ExecuteMessageResult {
             canister,
             num_instructions_left: cycles,
-            ingress_status,
+            result,
             heap_delta,
         }
     }
@@ -1888,7 +1859,7 @@ impl ExecutionEnvironmentImpl {
         ExecuteMessageResult {
             canister,
             num_instructions_left: cycles,
-            ingress_status: Some((ingress.message_id, ingress_status)),
+            result: ExecResult::IngressResult((ingress.message_id, ingress_status)),
             heap_delta: NumBytes::from(0),
         }
     }
@@ -2298,12 +2269,12 @@ fn get_canister_mut(
     }
 }
 
-fn produce_inter_canister_response(
-    canister: &mut CanisterState,
+fn action_to_result(
+    canister: &CanisterState,
     action: CallContextAction,
     originator: CanisterId,
     reply_callback_id: CallbackId,
-) {
+) -> ExecResult {
     let response_payload_and_refund = match action {
         CallContextAction::NotYetResponded | CallContextAction::AlreadyResponded => None,
         CallContextAction::NoResponse { refund } => Some((
@@ -2335,13 +2306,16 @@ fn produce_inter_canister_response(
             ))
         }
     };
+
     if let Some((response_payload, refund)) = response_payload_and_refund {
-        canister.push_output_response(Response {
+        ExecResult::ResponseResult(Response {
             originator,
             respondent: canister.canister_id(),
             originator_reply_callback: reply_callback_id,
             refund,
             response_payload,
-        });
+        })
+    } else {
+        ExecResult::Empty
     }
 }

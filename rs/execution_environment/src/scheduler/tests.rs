@@ -777,6 +777,7 @@ fn test_message_limit_from_message_overhead() {
         .expect_execute_canister_message()
         .times(..)
         .returning(move |mut canister, instruction_limit, msg, _, _, _| {
+            let mut exec_result = ExecResult::Empty;
             if let CanisterInputMessage::Request(ic_types::messages::Request {
                 receiver,
                 sender,
@@ -784,7 +785,7 @@ fn test_message_limit_from_message_overhead() {
                 ..
             }) = msg
             {
-                canister.push_output_response(Response {
+                exec_result = ExecResult::ResponseResult(Response {
                     originator: sender,
                     respondent: receiver,
                     originator_reply_callback: sender_reply_callback,
@@ -792,6 +793,7 @@ fn test_message_limit_from_message_overhead() {
                     response_payload: Payload::Data(vec![]),
                 })
             }
+
             match msg {
                 CanisterInputMessage::Response(msg) => {
                     canister
@@ -835,7 +837,7 @@ fn test_message_limit_from_message_overhead() {
             ExecuteMessageResult {
                 canister: canister.clone(),
                 num_instructions_left: instruction_limit,
-                ingress_status: None,
+                result: exec_result,
                 heap_delta: NumBytes::from(0),
             }
         });
@@ -951,7 +953,7 @@ fn test_multiple_iterations_of_inner_loop() {
                     ExecuteMessageResult {
                         canister: canister.clone(),
                         num_instructions_left: NumInstructions::new(0),
-                        ingress_status: Some((
+                        result: ExecResult::IngressResult((
                             msg.message_id,
                             IngressStatus::Processing {
                                 receiver: canister.canister_id().get(),
@@ -968,7 +970,7 @@ fn test_multiple_iterations_of_inner_loop() {
                 ExecuteMessageResult {
                     canister,
                     num_instructions_left: NumInstructions::from(0),
-                    ingress_status: None,
+                    result: ExecResult::Empty,
                     heap_delta: NumBytes::from(1),
                 }
             } else {
@@ -1086,7 +1088,7 @@ fn canister_can_run_for_multiple_iterations() {
             ExecuteMessageResult {
                 canister,
                 num_instructions_left: NumInstructions::from(0),
-                ingress_status: None,
+                result: ExecResult::Empty,
                 heap_delta: NumBytes::from(1),
             }
         });
@@ -2162,7 +2164,7 @@ fn can_record_metrics_single_scheduler_thread() {
             .returning(move |canister, _, _, _, _, _| ExecuteMessageResult {
                 canister,
                 num_instructions_left: NumInstructions::from(0),
-                ingress_status: Some((
+                result: ExecResult::IngressResult((
                     message_test_id(0),
                     IngressStatus::Failed {
                         receiver: canister_id.get(),
@@ -2181,7 +2183,7 @@ fn can_record_metrics_single_scheduler_thread() {
                 .returning(move |canister, _, _, _, _, _| ExecuteMessageResult {
                     canister,
                     num_instructions_left: NumInstructions::from(1),
-                    ingress_status: Some((
+                    result: ExecResult::IngressResult((
                         message_test_id(message_id),
                         IngressStatus::Completed {
                             receiver: canister_id.get(),
@@ -3826,7 +3828,7 @@ fn scheduler_maintains_canister_order() {
                 ExecuteMessageResult {
                     canister: canister.clone(),
                     num_instructions_left,
-                    ingress_status: Some((
+                    result: ExecResult::IngressResult((
                         msg.message_id,
                         IngressStatus::Completed {
                             receiver: canister.canister_id().get(),
@@ -4197,7 +4199,7 @@ fn default_exec_env_mock(
                 ExecuteMessageResult {
                     canister: canister.clone(),
                     num_instructions_left,
-                    ingress_status: Some((
+                    result: ExecResult::IngressResult((
                         msg.message_id,
                         IngressStatus::Completed {
                             receiver: canister.canister_id().get(),

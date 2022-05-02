@@ -2,6 +2,7 @@ use crate::{
     canister_manager::{uninstall_canister, InstallCodeContext},
     execution_environment::ExecutionEnvironment,
     metrics::MeasurementScope,
+    util::process_response,
     util::process_responses,
 };
 use ic_config::flag_status::FlagStatus;
@@ -12,7 +13,7 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     CanisterStatusType, EmptyBlob, InstallCodeArgs, Method as Ic00Method, Payload as _, IC_00,
 };
-use ic_interfaces::execution_environment::AvailableMemory;
+use ic_interfaces::execution_environment::{AvailableMemory, ExecResult};
 use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, Scheduler, SubnetAvailableMemory},
     messages::CanisterInputMessage,
@@ -1331,6 +1332,7 @@ fn execute_canisters_on_thread(
                 Arc::clone(&network_topology),
                 subnet_available_memory.clone(),
             );
+            let result = process_response(result);
             let instructions_consumed = canister_execution_limits.instruction_limit_per_message
                 - result.num_instructions_left;
             measurement_scope.add(instructions_consumed, NumMessages::from(1));
@@ -1342,7 +1344,12 @@ fn execute_canisters_on_thread(
                 canister_execution_limits.instruction_limit_per_message,
             );
             canister = result.canister;
-            ingress_results.extend(result.ingress_status);
+            let ingress_status = if let ExecResult::IngressResult(status) = result.result {
+                Some(status)
+            } else {
+                None
+            };
+            ingress_results.extend(ingress_status);
             total_instructions_executed +=
                 instructions_consumed + canister_execution_limits.instruction_overhead_per_message;
             total_messages_executed.inc_assign();

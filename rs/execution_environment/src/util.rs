@@ -1,7 +1,9 @@
 use crate::types::Response;
-use ic_interfaces::execution_environment::IngressHistoryWriter;
+use ic_interfaces::execution_environment::{
+    ExecResult, ExecuteMessageResult, IngressHistoryWriter,
+};
 use ic_logger::{error, ReplicaLogger};
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{CanisterState, ReplicatedState};
 use ic_types::CanisterId;
 use std::sync::Arc;
 
@@ -33,4 +35,19 @@ pub fn process_responses(
             }
         }
     });
+}
+
+pub fn process_response(
+    mut res: ExecuteMessageResult<CanisterState>,
+) -> ExecuteMessageResult<CanisterState> {
+    if let ExecResult::ResponseResult(response) = res.result {
+        debug_assert_eq!(
+            response.respondent,
+            res.canister.canister_id(),
+            "Respondent mismatch"
+        );
+        res.canister.push_output_response(response);
+        res.result = ExecResult::Empty;
+    }
+    res
 }
