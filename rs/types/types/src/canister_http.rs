@@ -128,14 +128,14 @@ impl CountBytes for CanisterHttpResponse {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CanisterHttpResponseContent {
     Success(CanisterHttpPayload),
-    Failed(CanisterHttpReject),
+    Reject(CanisterHttpReject),
 }
 
 impl CountBytes for CanisterHttpResponseContent {
     fn count_bytes(&self) -> usize {
         match self {
             CanisterHttpResponseContent::Success(payload) => payload.count_bytes(),
-            CanisterHttpResponseContent::Failed(err) => err.count_bytes(),
+            CanisterHttpResponseContent::Reject(err) => err.count_bytes(),
         }
     }
 }

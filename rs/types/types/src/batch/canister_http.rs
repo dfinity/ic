@@ -136,8 +136,8 @@ impl From<&CanisterHttpResponseContent> for canister_http_pb::CanisterHttpRespon
                     },
                 )
             }
-            CanisterHttpResponseContent::Failed(error) => {
-                canister_http_pb::canister_http_response_content::Status::Failed(
+            CanisterHttpResponseContent::Reject(error) => {
+                canister_http_pb::canister_http_response_content::Status::Reject(
                     canister_http_pb::CanisterHttpReject {
                         reject_code: error.reject_code as u32,
                         message: error.message.clone(),
@@ -178,8 +178,8 @@ impl TryFrom<canister_http_pb::CanisterHttpResponseContent> for CanisterHttpResp
                         body: payload.body,
                     })
                 }
-                canister_http_pb::canister_http_response_content::Status::Failed(error) => {
-                    CanisterHttpResponseContent::Failed(CanisterHttpReject {
+                canister_http_pb::canister_http_response_content::Status::Reject(error) => {
+                    CanisterHttpResponseContent::Reject(CanisterHttpReject {
                         reject_code: RejectCode::try_from(error.reject_code as u64)
                             .map_err(|err| format!("{:?}", err))?,
                         message: error.message,
