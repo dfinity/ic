@@ -1473,7 +1473,8 @@ mod tests {
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
                 let replica_1 = node_test_id(1);
-                let dkg_key_manager = new_dkg_key_manager(crypto.clone(), logger.clone());
+                let dkg_key_manager =
+                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
                 let dkg = DkgImpl::new(
                     replica_1,
                     crypto.clone(),
@@ -1539,7 +1540,8 @@ mod tests {
                 // Create another dealer and add his dealings into the unvalidated pool of
                 // replica 1.
                 let replica_2 = node_test_id(2);
-                let dkg_key_manager_2 = new_dkg_key_manager(crypto.clone(), logger.clone());
+                let dkg_key_manager_2 =
+                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
                 let dkg_2 = DkgImpl::new(
                     replica_2,
                     crypto,
@@ -1979,7 +1981,8 @@ mod tests {
                 } = dependencies(pool_config.clone(), 2);
                 let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new());
                 // Let's check that replica 3, who's not a dealer, does not produce dealings.
-                let dkg_key_manager = new_dkg_key_manager(crypto.clone(), logger.clone());
+                let dkg_key_manager =
+                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
                 let dkg = DkgImpl::new(
                     node_test_id(3),
                     crypto.clone(),
@@ -1991,7 +1994,8 @@ mod tests {
                 assert!(dkg.on_state_change(&dkg_pool).is_empty());
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
-                let dkg_key_manager = new_dkg_key_manager(crypto.clone(), logger.clone());
+                let dkg_key_manager =
+                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
                 let dkg = DkgImpl::new(
                     node_test_id(1),
                     crypto,
@@ -2114,7 +2118,8 @@ mod tests {
                 );
 
                 // Now we instantiate the DKG component for node Id = 1, who is a dealer.
-                let dkg_key_manager = new_dkg_key_manager(crypto.clone(), logger.clone());
+                let dkg_key_manager =
+                    new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
                 let dkg = DkgImpl::new(
                     node_test_id(1),
                     crypto,
@@ -2277,7 +2282,11 @@ mod tests {
 
                 with_test_replica_logger(|logger| {
                     // We instantiate the DKG component for node Id = 1 nd Id = 2.
-                    let dkg_key_manager_1 = new_dkg_key_manager(crypto.clone(), logger.clone());
+                    let dkg_key_manager_1 = new_dkg_key_manager(
+                        crypto.clone(),
+                        logger.clone(),
+                        &PoolReader::new(&consensus_pool_1),
+                    );
                     let dkg_1 = DkgImpl::new(
                         node_id_1,
                         crypto.clone(),
@@ -2287,7 +2296,11 @@ mod tests {
                         logger.clone(),
                     );
 
-                    let dkg_key_manager_2 = new_dkg_key_manager(crypto.clone(), logger.clone());
+                    let dkg_key_manager_2 = new_dkg_key_manager(
+                        crypto.clone(),
+                        logger.clone(),
+                        &PoolReader::new(&consensus_pool_2),
+                    );
                     let dkg_2 = DkgImpl::new(
                         node_id_2,
                         crypto.clone(),
@@ -2714,7 +2727,11 @@ mod tests {
                     }
 
                     // Now we instantiate the DKG components. Node Id = 1 is a dealer.
-                    let dgk_key_manager_1 = new_dkg_key_manager(crypto_1.clone(), logger.clone());
+                    let dgk_key_manager_1 = new_dkg_key_manager(
+                        crypto_1.clone(),
+                        logger.clone(),
+                        &PoolReader::new(&pool_1),
+                    );
                     let dkg_1 = DkgImpl::new(
                         node_test_id(1),
                         crypto_1,
@@ -2728,7 +2745,7 @@ mod tests {
                         node_test_id(2),
                         crypto_2.clone(),
                         pool_2.get_cache(),
-                        new_dkg_key_manager(crypto_2, logger.clone()),
+                        new_dkg_key_manager(crypto_2, logger.clone(), &PoolReader::new(&pool_2)),
                         MetricsRegistry::new(),
                         logger,
                     );
@@ -3710,11 +3727,13 @@ mod tests {
     fn new_dkg_key_manager(
         crypto: Arc<dyn ConsensusCrypto>,
         logger: ReplicaLogger,
+        pool_reader: &PoolReader<'_>,
     ) -> Arc<Mutex<DkgKeyManager>> {
         Arc::new(Mutex::new(DkgKeyManager::new(
             MetricsRegistry::new(),
             crypto,
             logger,
+            pool_reader,
         )))
     }
 

@@ -3,6 +3,7 @@ use super::execution::*;
 use super::types::*;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
+use ic_consensus::consensus::pool_reader::PoolReader;
 use ic_consensus::{
     certification::CertifierImpl,
     consensus::{ConsensusImpl, Membership},
@@ -118,6 +119,7 @@ impl<'a> ConsensusRunner<'a> {
         fake_crypto: Arc<CryptoReturningOk>,
         deps: &'a ConsensusDependencies,
         pool_config: ArtifactPoolConfig,
+        pool_reader: &PoolReader<'_>,
     ) {
         let node_id = deps.replica_config.node_id;
 
@@ -130,6 +132,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.metrics_registry.clone(),
             Arc::clone(&fake_crypto) as Arc<_>,
             replica_logger.clone(),
+            pool_reader,
         )));
 
         let consensus = ConsensusImpl::new(
