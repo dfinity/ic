@@ -43,6 +43,7 @@ const NON_EXISTING_METHOD_A: &str = "non_existing_method_a";
 const NON_EXISTING_METHOD_B: &str = "non_existing_method_b";
 const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
+const SUCCESS_THRESHOLD: f32 = 0.95; // If more than 95% of the expected calls are successful the test passes
 
 /// Default configuration for this test
 pub fn config() -> InternetComputer {
@@ -87,18 +88,20 @@ fn test(
 ) {
     let mut rng = ctx.rng.clone();
     let app_endpoint = get_random_application_node_endpoint(&handle, &mut rng);
-    // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
     let endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
     block_on(async move {
+        // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
         assert_endpoints_reachability(endpoints.as_slice(), EndpointsStatus::AllReachable).await;
         info!(ctx.logger, "All nodes are reachable, IC setup succeeded.");
 
-        // Step 1: Install X counter canisters on the subnet.
+        info!(
+            ctx.logger,
+            "Step 1: Install {} canisters on the subnet..", canister_count
+        );
         let mut agents = Vec::new();
         let mut canisters = Vec::new();
 
         agents.push(assert_create_agent(app_endpoint.url.as_str()).await);
-        info!(ctx.logger, "Installing canisters...");
         let install_agent = agents[0].clone();
         for _ in 0..canister_count {
             canisters.push(install_counter_canister(&install_agent).await);
@@ -115,7 +118,7 @@ fn test(
             canisters.len(),
             canister_count
         );
-        // Step 2: Instantiate and start the workload.
+        info!(ctx.logger, "Step 2: Instantiate and start the workload..");
         let payload: Vec<u8> = vec![0; 12];
         let plan = RoundRobinPlan::new(vec![
             Request::Update(CallSpec::new(canisters[0], "write", payload.clone())),
@@ -136,14 +139,16 @@ fn test(
             .execute()
             .await
             .expect("Workload execution has failed.");
-        // Step 3: Assert the expected number of failed query calls on each canister.
-        info!(ctx.logger, "Asserting metrics are correct...");
+        info!(
+            ctx.logger,
+            "Step 3: Assert expected number of failed query calls on each canister.."
+        );
         let requests_count = rps * duration.as_secs() as usize;
         // 1/2 requests are query (failure) and 1/2 are update (success).
         let expected_failure_calls = requests_count / 2;
         let expected_success_calls = requests_count / 2;
         let errors = metrics.errors();
-        assert_eq!(errors.len(), 2, "More errors than expected: {:?}", errors);
+        assert!(errors.len() < 4, "More errors than expected: {:?}", errors);
         // Error messages should contain the name of failed method call.
         assert!(
             errors.keys().any(|k| k.contains(NON_EXISTING_METHOD_A)),
@@ -169,9 +174,9 @@ fn test(
             metrics.failure_calls(),
             expected_failure_calls
         );
-        assert_eq!(
-            metrics.success_calls(),
-            expected_success_calls,
+        assert!(
+            metrics.success_calls()
+                > (SUCCESS_THRESHOLD * (expected_success_calls as f32)) as usize,
             "Observed success calls {}, expected success calls {}",
             metrics.success_calls(),
             expected_success_calls
@@ -183,8 +188,12 @@ fn test(
             requests_count,
             metrics.total_calls()
         );
-        // Step 4: Assert the expected number of update calls on each canister.
-        let expected_canister_counter = expected_success_calls / canister_count;
+        info!(
+            ctx.logger,
+            "Step 4: Assert the expected number of update calls on each canister.."
+        );
+        let expected_canister_counter =
+            (SUCCESS_THRESHOLD * (expected_success_calls as f32)) as usize / canister_count;
         for canister in canisters.iter() {
             assert_canister_counter_with_retries(
                 &ctx.logger,
@@ -249,7 +258,7 @@ async fn assert_canister_counter_with_retries(
                 .expect("slice with incorrect length"),
         ) as usize;
         debug!(log, "Counter value is {}", counter);
-        if counter == expected_count {
+        if counter >= expected_count {
             debug!(
                 log,
                 "Counter value on canister is {}, matches the expectation.", counter
@@ -258,7 +267,7 @@ async fn assert_canister_counter_with_retries(
         } else {
             debug!(
                 log,
-                "Counter value != expected_count, {} != {}", counter, expected_count
+                "Counter value < expected_count, {} < {}", counter, expected_count
             );
             debug!(log, "Retrying in {} secs...", retry_wait.as_secs());
             tokio::time::sleep(retry_wait).await;
