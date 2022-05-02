@@ -54,6 +54,8 @@ pub fn get_ecdsa_key_id_from_signing_subnet_list_key(
         })
 }
 
+pub const ID_GLOBAL_FIREWALL_RULES: &str = "global";
+
 /// Returns the only key whose payload is the list of subnets.
 pub fn make_subnet_list_record_key() -> String {
     SUBNET_LIST_KEY.to_string()
@@ -85,8 +87,13 @@ pub fn make_canister_migrations_record_key() -> String {
     "canister_migrations".to_string()
 }
 
+// TODO: Remove when all subnets are upgraded with IC-1026
 pub fn make_firewall_config_record_key() -> String {
     "firewall_config".to_string()
+}
+
+pub fn make_firewall_rules_record_key(id: &str) -> String {
+    format!("firewall_rules_{}", id)
 }
 
 pub fn make_provisional_whitelist_record_key() -> String {

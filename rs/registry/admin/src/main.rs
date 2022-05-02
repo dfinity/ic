@@ -15,6 +15,7 @@ use ic_crypto_sha::Sha256;
 use ic_crypto_utils_basic_sig::conversions::Ed25519SecretKeyConversions;
 use ic_http_utils::file_downloader::{check_file_hash, extract_tar_gz_into_dir, FileDownloader};
 use ic_prep_lib::subnet_configuration;
+use ic_registry_client_helpers::deserialize_registry_value;
 use ic_types::p2p;
 #[macro_use]
 extern crate ic_admin_derive;
@@ -30,6 +31,7 @@ use ic_nervous_system_root::{
     AddCanisterProposal, CanisterAction, CanisterStatusResult, ChangeCanisterProposal,
     StopOrStartCanisterProposal,
 };
+use ic_nns_common::registry::encode_or_panic;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
@@ -47,7 +49,7 @@ use ic_nns_governance::{
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use ic_protobuf::registry::firewall::v1::FirewallConfig;
+use ic_protobuf::registry::firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet};
 use ic_protobuf::registry::node_rewards::v2::{
     NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
 };
@@ -75,11 +77,11 @@ use ic_registry_common::registry::RegistryCanister;
 use ic_registry_keys::{
     get_node_record_node_id, is_node_record_key, make_blessed_replica_version_key,
     make_crypto_node_key, make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
-    make_data_center_record_key, make_firewall_config_record_key, make_node_operator_record_key,
-    make_node_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
-    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
-    make_unassigned_nodes_config_record_key, NODE_OPERATOR_RECORD_KEY_PREFIX,
-    NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
+    make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
+    make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
+    make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
+    make_subnet_record_key, make_unassigned_nodes_config_record_key,
+    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
@@ -93,6 +95,9 @@ use prost::Message;
 use registry_canister::mutations::common::decode_registry_value;
 use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
 use registry_canister::mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload;
+use registry_canister::mutations::firewall::{
+    AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
+};
 use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;
 use registry_canister::mutations::{
     do_add_node_operator::AddNodeOperatorPayload, do_add_nodes_to_subnet::AddNodesToSubnetPayload,
@@ -107,6 +112,7 @@ use registry_canister::mutations::{
 use serde::Serialize;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Debug;
+use std::fmt::Write as FmtWrite;
 use std::io::Write;
 use std::sync::Arc;
 use std::{
@@ -289,6 +295,18 @@ enum SubCommand {
     GetFirewallConfig,
     /// Propose to set the firewall config
     ProposeToSetFirewallConfig(ProposeToSetFirewallConfigCmd),
+    /// Propose to add firewall rules
+    ProposeToAddFirewallRules(ProposeToAddFirewallRulesCmd),
+    /// Propose to remove firewall rules
+    ProposeToRemoveFirewallRules(ProposeToRemoveFirewallRulesCmd),
+    /// Propose to update firewall rules
+    ProposeToUpdateFirewallRules(ProposeToUpdateFirewallRulesCmd),
+    /// Get the existing firewall rules for a given scope
+    GetFirewallRules(GetFirewallRulesCmd),
+    /// Get the existing firewall rules that apply to a given node
+    GetFirewallRulesForNode(GetFirewallRulesForNodeCmd),
+    /// Compute the SHA-256 hash of a given list of firewall rules
+    GetFirewallRulesetHash(GetFirewallRulesetHashCmd),
     /// Propose to remove a node from the registry via proposal.
     ProposeToRemoveNodes(ProposeToRemoveNodesCmd),
     /// Propose to add or remove a node provider from the governance canister
@@ -2035,6 +2053,219 @@ impl ProposalTitleAndPayload<SetFirewallConfigPayload> for ProposeToSetFirewallC
     }
 }
 
+const FIREWALL_RULE_SCOPE_TYPE_GLOBAL: &str = "global";
+const FIREWALL_RULE_SCOPE_TYPE_SUBNET: &str = "subnet";
+const FIREWALL_RULE_SCOPE_TYPE_NODE: &str = "node";
+
+fn make_firewall_command_scope(
+    scope_type: &str,
+    scope_principal_id: Option<&PrincipalId>,
+) -> String {
+    match scope_type {
+        FIREWALL_RULE_SCOPE_TYPE_GLOBAL => FIREWALL_RULE_SCOPE_TYPE_GLOBAL.to_string(),
+        FIREWALL_RULE_SCOPE_TYPE_SUBNET | FIREWALL_RULE_SCOPE_TYPE_NODE => {
+            format!("{}_{}", scope_type, scope_principal_id.unwrap())
+        }
+        _ => {
+            panic!(
+                "SCOPE_TYPE must be one of \"{}\", \"{}\", or \"{}\".",
+                FIREWALL_RULE_SCOPE_TYPE_GLOBAL,
+                FIREWALL_RULE_SCOPE_TYPE_SUBNET,
+                FIREWALL_RULE_SCOPE_TYPE_NODE
+            )
+        }
+    }
+}
+
+fn check_firewall_scope_type(scope_type: &str) {
+    match scope_type {
+        FIREWALL_RULE_SCOPE_TYPE_GLOBAL
+        | FIREWALL_RULE_SCOPE_TYPE_SUBNET
+        | FIREWALL_RULE_SCOPE_TYPE_NODE => (),
+        _ => {
+            panic!(
+                "SCOPE_TYPE must be one of \"{}\", \"{}\", or \"{}\".",
+                FIREWALL_RULE_SCOPE_TYPE_GLOBAL,
+                FIREWALL_RULE_SCOPE_TYPE_SUBNET,
+                FIREWALL_RULE_SCOPE_TYPE_NODE
+            )
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to add firewall rules.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToAddFirewallRulesCmd {
+    /// Type of scope to apply new rules at (can be "global", "subnet", or "node")
+    pub scope_type: String,
+    /// PrincipalID of the subnet or node in scope
+    pub scope_principal_id: PrincipalId,
+    /// File with the rules in JSON format
+    pub rules_file: PathBuf,
+    /// Comma separated list of indices to insert the rules at within the existing ruleset (0 means top of the list and highest priority, -1 means bottom of the list and lowest priority)
+    pub positions: String,
+    /// Expected SHA-256 of the result ruleset
+    pub expected_ruleset_hash: String,
+    /// Test mode - does not require a hash. Instead of making the proposal, will only return the expected modified ruleset
+    #[clap(long)]
+    pub test: bool,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<AddFirewallRulesPayload> for ProposeToAddFirewallRulesCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => "Add firewall rules".to_string(),
+        }
+    }
+
+    async fn payload(&self, _: Url) -> AddFirewallRulesPayload {
+        let scope = make_firewall_command_scope(&self.scope_type, Some(&self.scope_principal_id));
+        let rule_file = String::from_utf8(read_file_fully(&self.rules_file)).unwrap();
+        let rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
+            .unwrap_or_else(|_| panic!("Failed to parse firewall rules"));
+        let positions: Vec<i32> = self
+            .positions
+            .clone()
+            .split(',')
+            .map(|pos_str| {
+                i32::from_str(pos_str)
+                    .unwrap_or_else(|_| panic!("Invalid input position: {}", pos_str))
+            })
+            .collect();
+        let expected_hash = &self.expected_ruleset_hash;
+        AddFirewallRulesPayload {
+            scope,
+            rules,
+            positions,
+            expected_hash: expected_hash.to_string(),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to remove firewall rules.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToRemoveFirewallRulesCmd {
+    /// Type of scope to remove rules from (can be "global", "subnet", or "node")
+    pub scope_type: String,
+    /// PrincipalID of the subnet or node in scope
+    pub scope_principal_id: PrincipalId,
+    /// Comma separated list of indices to remove from the ruleset
+    pub positions: String,
+    /// Expected SHA-256 of the result ruleset
+    pub expected_ruleset_hash: String,
+    /// Test mode - does not require a hash. Instead of making the proposal, will only return the expected modified ruleset
+    #[clap(long)]
+    pub test: bool,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<RemoveFirewallRulesPayload> for ProposeToRemoveFirewallRulesCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => "Remove firewall rules".to_string(),
+        }
+    }
+
+    async fn payload(&self, _: Url) -> RemoveFirewallRulesPayload {
+        let scope = make_firewall_command_scope(&self.scope_type, Some(&self.scope_principal_id));
+        let positions: Vec<i32> = self
+            .positions
+            .clone()
+            .split(',')
+            .map(|pos_str| {
+                i32::from_str(pos_str)
+                    .unwrap_or_else(|_| panic!("Invalid input position: {}", pos_str))
+            })
+            .collect();
+        let expected_hash = &self.expected_ruleset_hash;
+        RemoveFirewallRulesPayload {
+            scope,
+            positions,
+            expected_hash: expected_hash.to_string(),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to update firewall rules.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToUpdateFirewallRulesCmd {
+    /// Type of scope to apply updates on (can be "global", "subnet", or "node")
+    pub scope_type: String,
+    /// PrincipalID of the subnet or node in scope
+    pub scope_principal_id: PrincipalId,
+    /// File with the updated rules in JSON format
+    pub rules_file: PathBuf,
+    /// Comma separated list of indices to update in the ruleset
+    pub positions: String,
+    /// Expected SHA-256 of the result ruleset
+    pub expected_ruleset_hash: String,
+    /// Test mode - does not require a hash. Instead of making the proposal, will only return the expected modified ruleset
+    #[clap(long)]
+    pub test: bool,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<UpdateFirewallRulesPayload> for ProposeToUpdateFirewallRulesCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => "Update firewall rules".to_string(),
+        }
+    }
+
+    async fn payload(&self, _: Url) -> UpdateFirewallRulesPayload {
+        let scope = make_firewall_command_scope(&self.scope_type, Some(&self.scope_principal_id));
+        let rule_file = String::from_utf8(read_file_fully(&self.rules_file)).unwrap();
+        let rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
+            .unwrap_or_else(|_| panic!("Failed to parse firewall rules"));
+        let positions: Vec<i32> = self
+            .positions
+            .clone()
+            .split(',')
+            .map(|pos_str| {
+                i32::from_str(pos_str)
+                    .unwrap_or_else(|_| panic!("Invalid input position: {}", pos_str))
+            })
+            .collect();
+        let expected_hash = &self.expected_ruleset_hash;
+        UpdateFirewallRulesPayload {
+            scope,
+            rules,
+            positions,
+            expected_hash: expected_hash.to_string(),
+        }
+    }
+}
+
+/// Sub-command to get all firewall rules for a given scope.
+#[derive(Parser)]
+struct GetFirewallRulesCmd {
+    /// Type of scope to apply updates on (can be "global", "subnet", or "node")
+    pub scope_type: String,
+    /// PrincipalID of the subnet or node in scope
+    pub scope_principal_id: PrincipalId,
+}
+
+/// Sub-command to get all firewall rules that apply for a specific node.
+#[derive(Parser)]
+struct GetFirewallRulesForNodeCmd {
+    /// PrincipalID of the node
+    pub node_id: PrincipalId,
+}
+
+/// Sub-command to compute the SHA-256 hash of a given firewall ruleset.
+#[derive(Parser)]
+struct GetFirewallRulesetHashCmd {
+    /// File with the firewall rules in JSON format
+    pub rules_file: PathBuf,
+}
+
 /// Sub-command to submit a proposal to remove nodes.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
@@ -2190,6 +2421,34 @@ impl ProposalTitleAndPayload<RerouteCanisterRangePayload> for ProposeToRerouteCa
     }
 }
 
+async fn get_firewall_rules_from_registry(
+    registry_canister: &RegistryCanister,
+    scope_type: &str,
+    scope_principal_id: Option<&PrincipalId>,
+) -> Vec<FirewallRule> {
+    let registry_answer = registry_canister
+        .get_value(
+            make_firewall_rules_record_key(&make_firewall_command_scope(
+                scope_type,
+                scope_principal_id,
+            ))
+            .into_bytes(),
+            None,
+        )
+        .await;
+
+    if registry_answer.is_ok() {
+        let (bytes, _) = registry_answer.unwrap();
+
+        let ruleset = deserialize_registry_value::<FirewallRuleSet>(Ok(Some(bytes)))
+            .unwrap()
+            .unwrap();
+        ruleset.entries
+    } else {
+        vec![]
+    }
+}
+
 /// `main()` method for the `ic-admin` utility.
 #[tokio::main]
 async fn main() {
@@ -2217,6 +2476,9 @@ async fn main() {
             SubCommand::ProposeToUpdateRecoveryCup(_) => (),
             SubCommand::ProposeToUpdateNodeOperatorConfig(_) => (),
             SubCommand::ProposeToSetFirewallConfig(_) => (),
+            SubCommand::ProposeToAddFirewallRules(_) => (),
+            SubCommand::ProposeToRemoveFirewallRules(_) => (),
+            SubCommand::ProposeToUpdateFirewallRules(_) => (),
             SubCommand::ProposeToSetAuthorizedSubnetworks(_) => (),
             SubCommand::ProposeToAddOrRemoveNodeProvider(_) => (),
             SubCommand::SubmitRootProposalToUpgradeGovernanceCanister(_) => (),
@@ -2679,6 +2941,58 @@ async fn main() {
             )
             .await;
         }
+        SubCommand::ProposeToAddFirewallRules(cmd) => {
+            check_firewall_scope_type(&cmd.scope_type);
+            if cmd.test {
+                test_add_firewall_rules(cmd, &registry_canister).await;
+            } else {
+                propose_external_proposal_from_command(
+                    cmd,
+                    NnsFunction::AddFirewallRules,
+                    opts.nns_url,
+                    sender,
+                )
+                .await;
+            }
+        }
+        SubCommand::ProposeToRemoveFirewallRules(cmd) => {
+            check_firewall_scope_type(&cmd.scope_type);
+            if cmd.test {
+                test_remove_firewall_rules(cmd, &registry_canister).await;
+            } else {
+                propose_external_proposal_from_command(
+                    cmd,
+                    NnsFunction::RemoveFirewallRules,
+                    opts.nns_url,
+                    sender,
+                )
+                .await;
+            }
+        }
+        SubCommand::ProposeToUpdateFirewallRules(cmd) => {
+            check_firewall_scope_type(&cmd.scope_type);
+            if cmd.test {
+                test_update_firewall_rules(cmd, &registry_canister).await;
+            } else {
+                propose_external_proposal_from_command(
+                    cmd,
+                    NnsFunction::UpdateFirewallRules,
+                    opts.nns_url,
+                    sender,
+                )
+                .await;
+            }
+        }
+        SubCommand::GetFirewallRules(cmd) => {
+            check_firewall_scope_type(&cmd.scope_type);
+            get_firewall_rules(cmd, &registry_canister).await;
+        }
+        SubCommand::GetFirewallRulesForNode(cmd) => {
+            get_firewall_rules_for_node(cmd, &registry_canister, opts.nns_url).await;
+        }
+        SubCommand::GetFirewallRulesetHash(cmd) => {
+            get_firewall_ruleset_hash(cmd);
+        }
         SubCommand::ProposeToAddOrRemoveNodeProvider(cmd) => {
             propose_to_add_or_remove_node_provider(cmd, opts.nns_url, sender).await
         }
@@ -2917,6 +3231,206 @@ async fn propose_external_proposal_from_command<
             std::process::exit(1);
         }
     };
+}
+
+async fn test_add_firewall_rules(
+    cmd: ProposeToAddFirewallRulesCmd,
+    registry_canister: &RegistryCanister,
+) {
+    // Fetch existing rules for given scope, add new ones, and return
+    let mut entries = get_firewall_rules_from_registry(
+        registry_canister,
+        &cmd.scope_type,
+        Some(&cmd.scope_principal_id),
+    )
+    .await;
+
+    let rule_file = String::from_utf8(read_file_fully(&cmd.rules_file)).unwrap();
+    let new_rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
+        .unwrap_or_else(|_| panic!("Failed to parse firewall rules"));
+
+    let mut positions: Vec<i32> = cmd
+        .positions
+        .clone()
+        .split(',')
+        .map(|pos_str| {
+            i32::from_str(pos_str).unwrap_or_else(|_| panic!("Invalid input position: {}", pos_str))
+        })
+        .collect();
+
+    if positions.len() != new_rules.len() {
+        panic!(
+            "Number of provided positions differs from number of provided rules. Positions: {:?}, Rules: {:?}.",
+            positions.len(), new_rules.len()
+        );
+    }
+    // Add entries from the back to front to preserve positions
+    positions.sort_unstable();
+    positions.reverse();
+    for (rule_idx, mut pos) in positions.into_iter().enumerate() {
+        if pos < 0 {
+            pos = entries.len() as i32;
+        }
+        if pos > entries.len() as i32 {
+            panic!(
+                "Provided position does not match the size of the existing ruleset. Position: {:?}, ruleset size: {:?}.",
+                pos, entries.len()
+            );
+        }
+        entries.insert(pos as usize, new_rules[rule_idx].clone());
+    }
+
+    println!("{:?}", serde_json::to_string(&entries));
+
+    println!("\nSHA-256: {:?}", compute_firewall_ruleset_hash(&entries));
+}
+
+async fn test_remove_firewall_rules(
+    cmd: ProposeToRemoveFirewallRulesCmd,
+    registry_canister: &RegistryCanister,
+) {
+    // Fetch existing rules for given scope, remove the given ones, and return
+    let mut entries = get_firewall_rules_from_registry(
+        registry_canister,
+        &cmd.scope_type,
+        Some(&cmd.scope_principal_id),
+    )
+    .await;
+
+    let mut positions: Vec<i32> = cmd
+        .positions
+        .clone()
+        .split(',')
+        .map(|pos_str| {
+            i32::from_str(pos_str).unwrap_or_else(|_| panic!("Invalid input position: {}", pos_str))
+        })
+        .collect();
+
+    // Remove entries from the back to front to preserve positions
+    positions.sort_unstable();
+    positions.reverse();
+    for i in positions {
+        entries.remove(i as usize);
+    }
+
+    println!("{:?}", serde_json::to_string(&entries));
+
+    println!("\nSHA-256: {:?}", compute_firewall_ruleset_hash(&entries));
+}
+
+async fn test_update_firewall_rules(
+    cmd: ProposeToUpdateFirewallRulesCmd,
+    registry_canister: &RegistryCanister,
+) {
+    // Fetch existing rules for given scope, update the given ones, and return
+    let mut entries = get_firewall_rules_from_registry(
+        registry_canister,
+        &cmd.scope_type,
+        Some(&cmd.scope_principal_id),
+    )
+    .await;
+
+    let rule_file = String::from_utf8(read_file_fully(&cmd.rules_file)).unwrap();
+    let new_rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
+        .unwrap_or_else(|_| panic!("Failed to parse firewall rules"));
+
+    let positions: Vec<i32> = cmd
+        .positions
+        .clone()
+        .split(',')
+        .map(|pos_str| {
+            i32::from_str(pos_str).unwrap_or_else(|_| panic!("Invalid input position: {}", pos_str))
+        })
+        .collect();
+
+    if positions.len() != new_rules.len() {
+        panic!(
+            "Number of provided positions differs from number of provided rules. Positions: {:?}, Rules: {:?}.",
+            positions.len(), new_rules.len()
+        );
+    }
+
+    // Update the entries
+    for (rule_idx, pos) in positions.into_iter().enumerate() {
+        if pos < 0 || pos >= entries.len() as i32 {
+            panic!(
+                "Provided position is out of bounds for the existing ruleset. Position: {:?}, ruleset size: {:?}.",
+                pos, entries.len()
+            );
+        }
+        entries[pos as usize] = new_rules[rule_idx].clone();
+    }
+
+    println!("{:?}", serde_json::to_string(&entries));
+
+    println!("\nSHA-256: {:?}", compute_firewall_ruleset_hash(&entries));
+}
+
+async fn get_firewall_rules(cmd: GetFirewallRulesCmd, registry_canister: &RegistryCanister) {
+    let rules = get_firewall_rules_from_registry(
+        registry_canister,
+        &cmd.scope_type,
+        Some(&cmd.scope_principal_id),
+    )
+    .await;
+    println!("{:?}", serde_json::to_string(&rules));
+}
+
+async fn get_firewall_rules_for_node(
+    cmd: GetFirewallRulesForNodeCmd,
+    registry_canister: &RegistryCanister,
+    nns_url: Url,
+) {
+    let registry_client = RegistryClientImpl::new(
+        Arc::new(NnsDataProvider::new(RegistryCanister::new(vec![nns_url]))),
+        None,
+    );
+    let subnet_id_result = registry_client.get_listed_subnet_for_node_id(
+        NodeId::from(cmd.node_id),
+        registry_client.get_latest_version(),
+    );
+
+    // Get the node rules
+    let mut rules =
+        get_firewall_rules_from_registry(registry_canister, "node", Some(&cmd.node_id)).await;
+
+    if let Ok(Some((subnet_id, _))) = subnet_id_result {
+        // Get the subnet rules
+        rules.append(
+            &mut get_firewall_rules_from_registry(
+                registry_canister,
+                "subnet",
+                Some(&subnet_id.get()),
+            )
+            .await,
+        );
+    }
+
+    // Get the global rules
+    rules.append(&mut get_firewall_rules_from_registry(registry_canister, "global", None).await);
+
+    println!("{:?}", serde_json::to_string(&rules));
+}
+
+fn compute_firewall_ruleset_hash(rules: &[FirewallRule]) -> String {
+    let mut hasher = Sha256::new();
+    for rule in rules {
+        hasher.write(&encode_or_panic(rule));
+    }
+    let bytes = &hasher.finish();
+    let mut result_hash = String::new();
+    for b in bytes {
+        let _ = write!(result_hash, "{:02X}", b);
+    }
+    result_hash
+}
+
+fn get_firewall_ruleset_hash(cmd: GetFirewallRulesetHashCmd) {
+    let rule_file = String::from_utf8(read_file_fully(&cmd.rules_file)).unwrap();
+    let rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
+        .unwrap_or_else(|_| panic!("Failed to parse firewall rules"));
+
+    println!("{}", compute_firewall_ruleset_hash(&rules));
 }
 
 /// Enpasulates a node/node operator id pair.

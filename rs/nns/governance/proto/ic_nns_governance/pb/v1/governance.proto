@@ -432,7 +432,7 @@ enum NnsFunction {
   // used to set the "default" list of subnetworks that principals
   // without special authorization are allowed to use.
   NNS_FUNCTION_SET_AUTHORIZED_SUBNETWORKS = 14;
-  // Change the Firewall configuration in the registry.
+  // Change the Firewall configuration in the registry. (TODO: Remove when IC-1026 is fully integrated)
   NNS_FUNCTION_SET_FIREWALL_CONFIG = 15;
   // Change a Node Operator's allowance in the registry.
   NNS_FUNCTION_UPDATE_NODE_OPERATOR_CONFIG = 16;
@@ -452,6 +452,12 @@ enum NnsFunction {
   NNS_FUNCTION_REMOVE_NODE_OPERATORS = 23;
   // Update the routing table in the registry.
   NNS_FUNCTION_REROUTE_CANISTER_RANGE = 24;
+  // Add firewall rules in the registry
+  NNS_FUNCTION_ADD_FIREWALL_RULES = 25;
+  // Remove firewall rules in the registry
+  NNS_FUNCTION_REMOVE_FIREWALL_RULES = 26;
+  // Update firewall rules in the registry
+  NNS_FUNCTION_UPDATE_FIREWALL_RULES = 27;
 }
 
 // Payload of a proposal that calls a function on another NNS

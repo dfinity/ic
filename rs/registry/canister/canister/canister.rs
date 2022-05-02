@@ -46,6 +46,9 @@ use registry_canister::{
         do_update_subnet::UpdateSubnetPayload,
         do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
+        firewall::{
+            AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
+        },
         node_management::{
             do_add_node::AddNodePayload, do_remove_node_directly::RemoveNodeDirectlyPayload,
             do_remove_nodes::RemoveNodesPayload,
@@ -587,6 +590,48 @@ fn set_firewall_config() {
 #[candid_method(update, rename = "set_firewall_config")]
 fn set_firewal_config_(payload: SetFirewallConfigPayload) {
     registry_mut().do_set_firewall_config(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update add_firewall_rules"]
+fn add_firewall_rules() {
+    check_caller_is_governance_and_log("add_firewall_rules");
+    over(candid_one, |payload: AddFirewallRulesPayload| {
+        add_firewall_rules_(payload)
+    });
+}
+
+#[candid_method(update, rename = "add_firewall_rules")]
+fn add_firewall_rules_(payload: AddFirewallRulesPayload) {
+    registry_mut().do_add_firewall_rules(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update remove_firewall_rules"]
+fn remove_firewall_rules() {
+    check_caller_is_governance_and_log("remove_firewall_rules");
+    over(candid_one, |payload: RemoveFirewallRulesPayload| {
+        remove_firewall_rules_(payload)
+    });
+}
+
+#[candid_method(update, rename = "remove_firewall_rules")]
+fn remove_firewall_rules_(payload: RemoveFirewallRulesPayload) {
+    registry_mut().do_remove_firewall_rules(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update update_firewall_rules"]
+fn update_firewall_rules() {
+    check_caller_is_governance_and_log("update_firewall_rules");
+    over(candid_one, |payload: UpdateFirewallRulesPayload| {
+        update_firewall_rules_(payload)
+    });
+}
+
+#[candid_method(update, rename = "update_firewall_rules")]
+fn update_firewall_rules_(payload: UpdateFirewallRulesPayload) {
+    registry_mut().do_update_firewall_rules(payload);
     recertify_registry();
 }
 

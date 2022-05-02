@@ -1,3 +1,9 @@
+type AddFirewallRulesPayload = record {
+  expected_hash : text;
+  scope : text;
+  positions : vec int32;
+  rules : vec FirewallRule;
+};
 type AddNodeOperatorPayload = record {
   node_operator_principal_id : opt principal;
   node_allowance : nat64;
@@ -79,6 +85,13 @@ type EcdsaConfig = record {
 };
 type EcdsaCurve = variant { secp256k1 };
 type EcdsaKeyId = record { name : text; curve : EcdsaCurve };
+type FirewallRule = record {
+  ipv4_prefixes : vec text;
+  action : int32;
+  comment : text;
+  ipv6_prefixes : vec text;
+  ports : vec nat32;
+};
 type Gps = record { latitude : float32; longitude : float32 };
 type NodeOperatorRecord = record {
   node_operator_principal_id : vec nat8;
@@ -99,6 +112,11 @@ type RecoverSubnetPayload = record {
   registry_store_uri : opt record { text; text; nat64 };
   state_hash : vec nat8;
   time_ns : nat64;
+};
+type RemoveFirewallRulesPayload = record {
+  expected_hash : text;
+  scope : text;
+  positions : vec int32;
 };
 type RemoveNodeDirectlyPayload = record { node_id : principal };
 type RemoveNodeOperatorsPayload = record {
@@ -187,6 +205,7 @@ type UpdateUnassignedNodesConfigPayload = record {
   ssh_readonly_access : opt vec text;
 };
 service : {
+  add_firewall_rules : (AddFirewallRulesPayload) -> ();
   add_node : (AddNodePayload) -> (Result);
   add_node_operator : (AddNodeOperatorPayload) -> ();
   add_nodes_to_subnet : (AddNodesToSubnetPayload) -> ();
@@ -199,12 +218,14 @@ service : {
   get_node_operators_and_dcs_of_node_provider : (principal) -> (Result_1) query;
   get_node_providers_monthly_xdr_rewards : () -> (Result_2) query;
   recover_subnet : (RecoverSubnetPayload) -> ();
+  remove_firewall_rules : (RemoveFirewallRulesPayload) -> ();
   remove_node_directly : (RemoveNodeDirectlyPayload) -> ();
   remove_node_operators : (RemoveNodeOperatorsPayload) -> ();
   remove_nodes : (RemoveNodesPayload) -> ();
   remove_nodes_from_subnet : (RemoveNodesPayload) -> ();
   reroute_canister_range : (RerouteCanisterRangePayload) -> (Result_3);
   set_firewall_config : (SetFirewallConfigPayload) -> ();
+  update_firewall_rules : (AddFirewallRulesPayload) -> ();
   update_node_directly : (UpdateNodeDirectlyPayload) -> (Result_3);
   update_node_operator_config : (UpdateNodeOperatorConfigPayload) -> ();
   update_node_operator_config_directly : (

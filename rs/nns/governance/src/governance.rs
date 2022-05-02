@@ -451,6 +451,9 @@ impl NnsFunction {
                 (CYCLES_MINTING_CANISTER_ID, "set_authorized_subnetwork_list")
             }
             NnsFunction::SetFirewallConfig => (REGISTRY_CANISTER_ID, "set_firewall_config"),
+            NnsFunction::AddFirewallRules => (REGISTRY_CANISTER_ID, "add_firewall_rules"),
+            NnsFunction::RemoveFirewallRules => (REGISTRY_CANISTER_ID, "remove_firewall_rules"),
+            NnsFunction::UpdateFirewallRules => (REGISTRY_CANISTER_ID, "update_firewall_rules"),
             NnsFunction::StopOrStartNnsCanister => (ROOT_CANISTER_ID, "stop_or_start_nns_canister"),
             NnsFunction::RemoveNodes => (REGISTRY_CANISTER_ID, "remove_nodes"),
             NnsFunction::UninstallCode => (CanisterId::ic_00(), "uninstall_code"),
@@ -1080,6 +1083,9 @@ impl Proposal {
                             NnsFunction::ClearProvisionalWhitelist => Topic::NetworkEconomics,
                             NnsFunction::SetAuthorizedSubnetworks => Topic::SubnetManagement,
                             NnsFunction::SetFirewallConfig => Topic::SubnetManagement,
+                            NnsFunction::AddFirewallRules => Topic::SubnetManagement,
+                            NnsFunction::RemoveFirewallRules => Topic::SubnetManagement,
+                            NnsFunction::UpdateFirewallRules => Topic::SubnetManagement,
                             NnsFunction::UninstallCode => Topic::Governance,
                             NnsFunction::UpdateNodeRewardsTable => Topic::NetworkEconomics,
                             NnsFunction::AddOrRemoveDataCenters => Topic::ParticipantManagement,
