@@ -8,6 +8,8 @@ After=systemd-cryptsetup@vda10\x2dcrypt.service
 WantedBy=local-fs.target
 
 [Service]
+StandardOutput=journal+console
+StandardError=journal+console
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/setup-lvs.sh
