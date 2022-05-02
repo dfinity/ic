@@ -15,9 +15,10 @@ use ic_types::consensus::{CatchUpPackage, HasHeight};
 use ic_types::{Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
 use std::path::PathBuf;
-use std::process::{exit, Command};
+use std::process::exit;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::process::Command;
 
 /// The maximum number of binaries to persist at any given time
 const MAX_RELEASE_PACKAGES_TO_STORE: usize = 5;
@@ -48,7 +49,7 @@ pub(crate) struct Upgrade {
 
 impl Upgrade {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    pub(crate) async fn new(
         registry: Arc<RegistryHelper>,
         replica_process: Arc<Mutex<ReplicaProcess>>,
         cup_provider: Arc<CatchUpPackageProvider>,
@@ -73,7 +74,7 @@ impl Upgrade {
             logger,
             prepared_upgrade_version: None,
         };
-        value.confirm_boot();
+        value.confirm_boot().await;
         value
     }
 
@@ -305,6 +306,7 @@ impl Upgrade {
         let out = c
             .arg("upgrade-commit")
             .output()
+            .await
             .map_err(|e| OrchestratorError::file_command_error(e, &c))?;
 
         if !out.status.success() {
@@ -391,10 +393,11 @@ impl Upgrade {
     // Calls a corresponding script to "confirm" that the base OS could boot
     // successfully. With a confirmation the image will be reverted on the next
     // restart.
-    fn confirm_boot(&self) {
+    async fn confirm_boot(&self) {
         if let Err(err) = Command::new(self.ic_binary_dir.join("manageboot.sh").into_os_string())
             .arg("confirm")
             .output()
+            .await
         {
             error!(self.logger, "Could not confirm the boot: {:?}", err);
         }
@@ -465,6 +468,7 @@ impl Upgrade {
             .arg("upgrade-install")
             .arg(image_path)
             .output()
+            .await
             .map_err(|e| OrchestratorError::file_command_error(e, &c))?;
         if out.status.success() {
             self.prepared_upgrade_version = Some(replica_version);

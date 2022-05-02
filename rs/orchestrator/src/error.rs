@@ -5,7 +5,7 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use tokio::process::Command;
 
 pub type OrchestratorResult<T> = Result<T, OrchestratorError>;
 
