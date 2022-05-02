@@ -568,6 +568,24 @@ pub fn random_dealer_id(params: &IDkgTranscriptParams) -> NodeId {
         .expect("dealers is empty")
 }
 
+pub fn random_dealer_id_excluding(transcript: &IDkgTranscript, exclusion: NodeId) -> NodeId {
+    let mut rng = rand::thread_rng();
+    let excluded_index = transcript
+        .index_for_dealer_id(exclusion)
+        .expect("excluded node not a dealer");
+    let dealer_indexes = transcript
+        .verified_dealings
+        .keys()
+        .cloned()
+        .filter(|x| x != &excluded_index)
+        .collect::<Vec<u32>>();
+
+    let node_index = dealer_indexes.choose(&mut rng).expect("dealing is empty");
+    transcript
+        .dealer_id_for_index(*node_index)
+        .expect("dealer index not in transcript")
+}
+
 /// Corrupts the dealing for a single randomly picked receiver.
 /// node_id is the self Node Id. The shares for the receivers specified
 /// in exclude_receivers won't be corrupted.
