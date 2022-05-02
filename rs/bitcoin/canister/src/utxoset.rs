@@ -105,11 +105,12 @@ pub(crate) fn insert_utxo(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{test_builder::TransactionBuilder, types::Address as AddressStr};
+    use crate::types::Address as AddressStr;
     use bitcoin::blockdata::{opcodes::all::OP_RETURN, script::Builder};
     use bitcoin::secp256k1::rand::rngs::OsRng;
     use bitcoin::secp256k1::Secp256k1;
     use bitcoin::{Address, Network, PublicKey, TxOut};
+    use ic_btc_test_utils::TransactionBuilder;
     use std::collections::BTreeSet;
 
     #[test]
