@@ -3542,8 +3542,12 @@ dependencies = [
  "byteorder",
  "candid",
  "clap 3.1.9",
+ "ic-btc-test-utils",
  "ic-btc-types",
+ "ic-btc-types-internal",
+ "ic-logger",
  "ic-protobuf",
+ "ic-registry-subnet-features",
  "ic-replicated-state",
  "ic-state-layout",
  "lazy_static",
@@ -3551,6 +3555,7 @@ dependencies = [
  "prost",
  "prost-build",
  "serde",
+ "slog",
  "stable-structures",
  "tempfile",
 ]
@@ -3583,6 +3588,13 @@ dependencies = [
  "prost-build",
  "tonic",
  "tonic-build",
+]
+
+[[package]]
+name = "ic-btc-test-utils"
+version = "0.1.0"
+dependencies = [
+ "bitcoin",
 ]
 
 [[package]]
@@ -4867,6 +4879,7 @@ dependencies = [
  "hex",
  "iai",
  "ic-base-types",
+ "ic-btc-canister",
  "ic-canister-sandbox-replica-controller",
  "ic-config",
  "ic-crypto",
@@ -6288,11 +6301,13 @@ dependencies = [
 name = "ic-replicated-state"
 version = "0.8.0"
 dependencies = [
+ "bitcoin",
  "criterion",
  "criterion-time",
  "cvt",
  "debug_stub_derive",
  "ic-base-types",
+ "ic-btc-test-utils",
  "ic-btc-types-internal",
  "ic-certification-version",
  "ic-config",
@@ -6647,6 +6662,7 @@ dependencies = [
 name = "ic-state-layout"
 version = "0.8.0"
 dependencies = [
+ "bitcoin",
  "hex",
  "ic-base-types",
  "ic-ic00-types",
