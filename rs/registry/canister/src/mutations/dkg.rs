@@ -1,8 +1,11 @@
 use candid::{CandidType, Decode, Deserialize};
 
 use ic_base_types::PrincipalId;
-use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
+use ic_ic00_types::EcdsaKeyId;
+use ic_protobuf::{
+    registry::crypto::v1::PublicKey,
+    registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord},
+};
 
 /// The next two types are exactly the same types as the ones defined in
 /// rs/types/src/ic00.rs
@@ -46,6 +49,28 @@ impl SetupInitialDKGResponse {
                 fresh_subnet_id,
                 subnet_threshold_public_key,
             }),
+        }
+    }
+}
+#[derive(CandidType, Deserialize, Debug, Eq, PartialEq)]
+pub struct ComputeInitialEcdsaDealingsArgs {
+    pub key_id: EcdsaKeyId,
+    pub nodes: Vec<PrincipalId>,
+    pub registry_version: u64,
+}
+
+#[derive(Debug)]
+pub struct ComputeInitialEcdsaDealingsResponse {
+    pub initial_dealings: InitialIDkgDealings,
+}
+
+impl ComputeInitialEcdsaDealingsResponse {
+    pub fn decode(blob: &[u8]) -> Result<Self, String> {
+        let serde_encoded_transcript_records =
+            Decode!(blob, Vec<u8>).expect("failed to decode response");
+        match serde_cbor::from_slice::<(InitialIDkgDealings,)>(&serde_encoded_transcript_records) {
+            Err(err) => Err(format!("Payload deserialization error: '{}'", err)),
+            Ok((initial_dealings,)) => Ok(Self { initial_dealings }),
         }
     }
 }

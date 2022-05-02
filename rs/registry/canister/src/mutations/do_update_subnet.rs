@@ -27,7 +27,7 @@ impl Registry {
     pub fn do_update_subnet(&mut self, payload: UpdateSubnetPayload) {
         println!("{}do_update_subnet: {:?}", LOG_PREFIX, payload);
 
-        self.validate_ecdsa_config(&payload);
+        self.validate_update_payload_ecdsa_config(&payload);
 
         let subnet_id = payload.subnet_id;
         let subnet_record = self.get_subnet_or_panic(subnet_id);
@@ -108,7 +108,7 @@ impl Registry {
 
     /// Validates that EcdsaKeyId's are globally unique across all subnets
     /// Panics if they are not
-    fn validate_ecdsa_config(&self, payload: &UpdateSubnetPayload) {
+    fn validate_update_payload_ecdsa_config(&self, payload: &UpdateSubnetPayload) {
         if payload.ecdsa_config.is_none() {
             return;
         }
@@ -340,10 +340,9 @@ fn merge_subnet_record(
 mod tests {
     use super::*;
     use crate::common::test_helpers::{
-        add_fake_subnet, invariant_compliant_registry, prepare_registry_with_nodes,
+        add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
+        prepare_registry_with_nodes,
     };
-    use crate::mutations::do_create_subnet::CreateSubnetPayload;
-    use ic_base_types::NodeId;
     use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{GossipAdvertConfig, GossipConfig, SubnetRecord};
@@ -443,23 +442,6 @@ mod tests {
             ssh_readonly_access: None,
             ssh_backup_access: None,
         }
-    }
-
-    fn get_base_subnet_record(subnet_id: SubnetId, node_ids: Vec<NodeId>) -> SubnetRecord {
-        CreateSubnetPayload {
-            unit_delay_millis: 10,
-            gossip_retransmission_request_ms: 10_000,
-            gossip_registry_poll_period_ms: 2000,
-            gossip_pfn_evaluation_period_ms: 50,
-            gossip_receive_check_cache_size: 1,
-            gossip_max_duplicity: 1,
-            gossip_max_chunk_wait_ms: 200,
-            gossip_max_artifact_streams_per_peer: 1,
-            node_ids,
-            subnet_id_override: Some(subnet_id.get()),
-            ..Default::default()
-        }
-        .into()
     }
 
     #[test]
@@ -1112,7 +1094,7 @@ mod tests {
 
         // Create first subnet that holds the ECDSA key
         let mut subnet_holding_key_record =
-            get_base_subnet_record(subnet_holding_key_id, vec![node_ids.pop().unwrap()]);
+            get_invariant_compliant_subnet_record(vec![node_ids.pop().unwrap()]);
         // This marks the subnet as having the key
         subnet_holding_key_record.ecdsa_config = Some(
             EcdsaConfig {
@@ -1129,8 +1111,7 @@ mod tests {
         ));
 
         // Create second subnet that does not hold the key
-        let subnet_to_update =
-            get_base_subnet_record(subnet_to_update_id, vec![node_ids.pop().unwrap()]);
+        let subnet_to_update = get_invariant_compliant_subnet_record(vec![node_ids.pop().unwrap()]);
 
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_to_update_id,

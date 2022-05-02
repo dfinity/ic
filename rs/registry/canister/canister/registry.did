@@ -55,6 +55,7 @@ type CreateSubnetPayload = record {
   gossip_pfn_evaluation_period_ms : nat32;
   max_ingress_messages_per_block : nat64;
   max_number_of_canisters : nat64;
+  ecdsa_config : opt EcdsaInitialConfig;
   gossip_max_artifact_streams_per_peer : nat32;
   advert_best_effort_percentage : opt nat32;
   replica_version_id : text;
@@ -84,7 +85,15 @@ type EcdsaConfig = record {
   key_ids : vec EcdsaKeyId;
 };
 type EcdsaCurve = variant { secp256k1 };
+type EcdsaInitialConfig = record {
+  quadruples_to_create_in_advance : nat32;
+  keys : vec EcdsaKeyRequest;
+};
 type EcdsaKeyId = record { name : text; curve : EcdsaCurve };
+type EcdsaKeyRequest = record {
+  key_id : EcdsaKeyId;
+  subnet_id : opt principal;
+};
 type FirewallRule = record {
   ipv4_prefixes : vec text;
   action : int32;
