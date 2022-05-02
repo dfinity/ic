@@ -1,4 +1,5 @@
 use crate::mutations::common::encode_or_panic;
+use crate::mutations::do_create_subnet::CreateSubnetPayload;
 use crate::mutations::node_management::do_add_node::{
     connection_endpoint_from_string, flow_endpoint_from_string,
 };
@@ -41,17 +42,16 @@ pub fn add_fake_subnet(
     subnet_list_record: &mut SubnetListRecord,
     subnet_record: SubnetRecord,
 ) -> Vec<RegistryMutation> {
-    let subnet_list_mutation = upsert(
-        make_subnet_list_record_key().into_bytes(),
-        encode_or_panic(subnet_list_record),
-    );
-
     let new_subnet = upsert(
         make_subnet_record_key(subnet_id).into_bytes(),
         encode_or_panic(&subnet_record),
     );
 
     subnet_list_record.subnets.push(subnet_id.get().into_vec());
+    let subnet_list_mutation = upsert(
+        make_subnet_list_record_key().into_bytes(),
+        encode_or_panic(subnet_list_record),
+    );
 
     // remaining mutations are added by do_create_subnet but don't
     // trip invariants in current test setups when left out
@@ -62,6 +62,23 @@ pub fn add_fake_subnet(
         // new_subnet_threshold_signing_pubkey,
         // routing_table_mutation,
     ]
+}
+
+/// Get a SubnetRecord that does not fail invariant checks in Registry
+pub fn get_invariant_compliant_subnet_record(node_ids: Vec<NodeId>) -> SubnetRecord {
+    CreateSubnetPayload {
+        unit_delay_millis: 10,
+        gossip_retransmission_request_ms: 10_000,
+        gossip_registry_poll_period_ms: 2000,
+        gossip_pfn_evaluation_period_ms: 50,
+        gossip_receive_check_cache_size: 1,
+        gossip_max_duplicity: 1,
+        gossip_max_chunk_wait_ms: 200,
+        gossip_max_artifact_streams_per_peer: 1,
+        node_ids,
+        ..Default::default()
+    }
+    .into()
 }
 
 /// Prepare a mutate request to add the desired of nodes, and returned the IDs

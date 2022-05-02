@@ -796,6 +796,7 @@ pub async fn submit_create_application_subnet_proposal(
         max_number_of_canisters: 4,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
+        ecdsa_config: None,
     };
 
     submit_external_proposal_with_test_id(governance, NnsFunction::CreateSubnet, payload).await

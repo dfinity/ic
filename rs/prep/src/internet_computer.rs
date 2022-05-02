@@ -83,6 +83,10 @@ impl TopologyConfig {
         self.subnets.insert(subnet_index, config);
     }
 
+    pub fn get_subnet(&self, subnet_index: SubnetIndex) -> Option<SubnetConfig> {
+        self.subnets.get(&subnet_index).cloned()
+    }
+
     /// Based on the setting of `self.subnets` generate a suitable
     /// `RoutingTable`
     fn get_routing_table(&self, nns_subnet_index: Option<&u64>) -> RoutingTable {
@@ -176,7 +180,7 @@ pub type UnassignedNodes = BTreeMap<NodeIndex, InitializedNode>;
 #[derive(Clone, Debug)]
 pub struct IcConfig {
     target_dir: PathBuf,
-    topology_config: TopologyConfig,
+    pub topology_config: TopologyConfig,
     /// When a node starts up, the orchestrator fetches the replica binary found
     /// at the URL in the blessed version record that carries the version
     /// id referred to in the subnet record that the node belongs to.
