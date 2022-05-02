@@ -18,6 +18,8 @@ use crate::{
     types::Environment,
 };
 
+/// Attempts to return a canister id given a principal id and returns an error if no id or an
+/// invalid id were given.
 pub fn get_canister_id(canister_id: &Option<PrincipalId>) -> Result<CanisterId, GovernanceError> {
     let canister_id = canister_id.ok_or_else(|| {
         GovernanceError::new_with_message(
@@ -34,6 +36,7 @@ pub fn get_canister_id(canister_id: &Option<PrincipalId>) -> Result<CanisterId, 
     })
 }
 
+/// Upgrades a canister controlled by governance.
 pub async fn upgrade_canister_directly(
     env: &dyn Environment,
     canister_id: CanisterId,
@@ -66,6 +69,7 @@ pub async fn upgrade_canister_directly(
     install_result
 }
 
+/// Installs a new wasm to a canister id (target canister must be controlled by governance).
 pub async fn install_code(
     env: &dyn Environment,
     canister_id: CanisterId,
@@ -100,6 +104,7 @@ pub async fn install_code(
     })
 }
 
+/// Starts a canister with a given id (target canister must be controlled by governance).
 pub async fn start_canister(
     env: &dyn Environment,
     canister_id: CanisterId,
@@ -122,6 +127,7 @@ pub async fn start_canister(
     })
 }
 
+/// Stops a canister with a given id (target canister must be controlled by governance).
 pub async fn stop_canister(
     env: &dyn Environment,
     canister_id: CanisterId,
@@ -184,6 +190,7 @@ pub async fn stop_canister(
     }
 }
 
+/// Validates and renders a nervous system function (i.e., a non-native SNS proposal).
 pub async fn perform_execute_nervous_system_function_validate_and_render_call(
     env: &dyn Environment,
     function: NervousSystemFunction,
@@ -222,6 +229,7 @@ pub async fn perform_execute_nervous_system_function_validate_and_render_call(
     }
 }
 
+/// Executes a nervous system function (i.e., a non-native SNS proposal).
 pub async fn perform_execute_nervous_system_function_call(
     env: &dyn Environment,
     function: NervousSystemFunction,

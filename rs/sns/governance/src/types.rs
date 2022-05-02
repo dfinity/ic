@@ -22,17 +22,17 @@ pub const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
 pub const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
 
 #[allow(dead_code)]
-// TODO Use to validate the size of the payload 70 KB (for executing
-// SNS functions that are not canister upgrades)
+/// TODO Use to validate the size of the payload 70 KB (for executing
+/// SNS functions that are not canister upgrades)
 const PROPOSAL_EXECUTE_SNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
 
 /// The number of e8s per governance token;
 pub const E8S_PER_TOKEN: u64 = TOKEN_SUBDIVIDABLE_BY;
 
-// Some constants that define upper bound (ceiling) and lower bounds (floor) for some of
-// the nervous system parameters as well as the default values for the nervous system
-// parameters (until we initialize them). We can't implement Default since it conflicts
-// with PB's.
+/// Some constants that define upper bound (ceiling) and lower bounds (floor) for some of
+/// the nervous system parameters as well as the default values for the nervous system
+/// parameters (until we initialize them). We can't implement Default since it conflicts
+/// with PB's.
 impl NervousSystemParameters {
     /// This is an upper bound for `max_proposals_to_keep_per_action`. Exceeding it
     /// may cause degradation in the governance canister or the subnet hosting the SNS.
