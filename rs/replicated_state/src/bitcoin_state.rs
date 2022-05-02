@@ -87,6 +87,52 @@ impl AdapterQueues {
             in_flight_get_successors_requests_num: 0,
         }
     }
+
+    /// Returns true iff there's at least an in-flight `GetSuccessorsRequest`.
+    pub fn has_in_flight_get_successors_requests(&self) -> bool {
+        self.in_flight_get_successors_requests_num > 0
+    }
+
+    /// Pushes a `BitcoinAdapterRequestWrapper` to the `BitcoinState`.
+    ///
+    /// Returns a `BitcoinStateError` if there's no room left in the queue for new requests.
+    pub fn push_request(
+        &mut self,
+        request: BitcoinAdapterRequestWrapper,
+    ) -> Result<(), BitcoinStateError> {
+        if self.requests.len() as u32 >= self.requests_queue_capacity {
+            return Err(BitcoinStateError::QueueFull {
+                capacity: self.requests_queue_capacity,
+            });
+        }
+
+        if let BitcoinAdapterRequestWrapper::GetSuccessorsRequest(_) = request {
+            self.in_flight_get_successors_requests_num += 1;
+        }
+        self.requests.insert(
+            self.next_callback_id,
+            BitcoinAdapterRequest {
+                request,
+                callback_id: self.next_callback_id,
+            },
+        );
+        self.next_callback_id += 1;
+        Ok(())
+    }
+
+    pub fn pop_response(&mut self) -> Option<BitcoinAdapterResponse> {
+        self.responses.pop_front()
+    }
+
+    /// Returns the number of requests to the Bitcoin Adapter.
+    pub fn num_requests(&self) -> usize {
+        self.requests.len()
+    }
+
+    /// Returns the number of responses from the Bitcoin Adapter.
+    pub fn num_responses(&self) -> usize {
+        self.responses.len()
+    }
 }
 
 /// The Bitcoin network's UTXO set.
@@ -190,39 +236,6 @@ impl BitcoinState {
         }
     }
 
-    /// Pushes a `BitcoinAdapterRequestWrapper` to the `BitcoinState`.
-    ///
-    /// Returns a `BitcoinStateError` if there's no room left in the queue for new requests.
-    pub(crate) fn push_request(
-        &mut self,
-        request: BitcoinAdapterRequestWrapper,
-    ) -> Result<(), BitcoinStateError> {
-        if self.adapter_queues.requests.len() as u32 >= self.adapter_queues.requests_queue_capacity
-        {
-            return Err(BitcoinStateError::QueueFull {
-                capacity: self.adapter_queues.requests_queue_capacity,
-            });
-        }
-
-        if let BitcoinAdapterRequestWrapper::GetSuccessorsRequest(_) = request {
-            self.adapter_queues.in_flight_get_successors_requests_num += 1;
-        }
-        self.adapter_queues.requests.insert(
-            self.adapter_queues.next_callback_id,
-            BitcoinAdapterRequest {
-                request,
-                callback_id: self.adapter_queues.next_callback_id,
-            },
-        );
-        self.adapter_queues.next_callback_id += 1;
-        Ok(())
-    }
-
-    /// Returns true iff there's at least an in-flight `GetSuccessorsRequest`.
-    pub fn has_in_flight_get_successors_requests(&self) -> bool {
-        self.adapter_queues.in_flight_get_successors_requests_num > 0
-    }
-
     /// Returns an iterator over the existing requests to the Bitcoin Adapter.
     pub fn adapter_requests_iter(
         &self,
@@ -251,21 +264,6 @@ impl BitcoinState {
                 Ok(())
             }
         }
-    }
-
-    /// Pops the next `BitcoinAdapterResponse` from the `BitcoinState`.
-    pub fn pop_response(&mut self) -> Option<BitcoinAdapterResponse> {
-        self.adapter_queues.responses.pop_front()
-    }
-
-    /// Returns the number of requests to the Bitcoin Adapter.
-    pub fn num_adapter_requests(&self) -> usize {
-        self.adapter_queues.requests.len()
-    }
-
-    /// Returns the number of responses from the Bitcoin Adapter.
-    pub fn num_adapter_responses(&self) -> usize {
-        self.adapter_queues.responses.len()
     }
 }
 

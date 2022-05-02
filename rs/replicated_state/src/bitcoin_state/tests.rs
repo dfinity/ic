@@ -15,18 +15,18 @@ fn can_push_requests_until_capacity_reached() {
             processed_block_hashes: vec![vec![i; 32]],
             anchor: vec![i; 32],
         });
-        bitcoin_state.push_request(request).unwrap();
+        bitcoin_state.adapter_queues.push_request(request).unwrap();
     }
-    assert_eq!(bitcoin_state.num_adapter_requests(), 3);
+    assert_eq!(bitcoin_state.adapter_queues.num_requests(), 3);
 
     // Attempting to enqueue a fourth request should fail.
     let request = BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequest {
         processed_block_hashes: vec![vec![42; 32]],
         anchor: vec![42; 32],
     });
-    let res = bitcoin_state.push_request(request);
+    let res = bitcoin_state.adapter_queues.push_request(request);
     assert_eq!(res, Err(BitcoinStateError::QueueFull { capacity }));
-    assert_eq!(bitcoin_state.num_adapter_requests(), 3);
+    assert_eq!(bitcoin_state.adapter_queues.num_requests(), 3);
 }
 
 #[test]
@@ -55,9 +55,9 @@ fn can_push_response_successfully() {
         processed_block_hashes: vec![vec![10; 32]],
         anchor: vec![10; 32],
     });
-    bitcoin_state.push_request(request).unwrap();
-    assert_eq!(bitcoin_state.num_adapter_requests(), 1);
-    assert_eq!(bitcoin_state.num_adapter_responses(), 0);
+    bitcoin_state.adapter_queues.push_request(request).unwrap();
+    assert_eq!(bitcoin_state.adapter_queues.num_requests(), 1);
+    assert_eq!(bitcoin_state.adapter_queues.num_responses(), 0);
 
     // Push corresponding response -- should clear the request and enqueue the response.
     bitcoin_state
@@ -68,29 +68,35 @@ fn can_push_response_successfully() {
             callback_id: 0,
         })
         .unwrap();
-    assert_eq!(bitcoin_state.num_adapter_requests(), 0);
-    assert_eq!(bitcoin_state.num_adapter_responses(), 1);
+    assert_eq!(bitcoin_state.adapter_queues.num_requests(), 0);
+    assert_eq!(bitcoin_state.adapter_queues.num_responses(), 1);
 }
 
 #[test]
 fn can_detect_in_flight_get_successors_requests() {
     let mut bitcoin_state = BitcoinState::default();
-    assert!(!bitcoin_state.has_in_flight_get_successors_requests());
+    assert!(!bitcoin_state
+        .adapter_queues
+        .has_in_flight_get_successors_requests());
 
     // Enqueue a `SendTransactionRequest` -- should not affect the in flight `GetSuccessorsRequest`s.
     let request = BitcoinAdapterRequestWrapper::SendTransactionRequest(SendTransactionRequest {
         transaction: vec![5; 32],
     });
-    bitcoin_state.push_request(request).unwrap();
-    assert!(!bitcoin_state.has_in_flight_get_successors_requests());
+    bitcoin_state.adapter_queues.push_request(request).unwrap();
+    assert!(!bitcoin_state
+        .adapter_queues
+        .has_in_flight_get_successors_requests());
 
     // Enqueue a `GetSuccessorsRequest` -- should see the effect on in flight `GetSuccessorRequest`s.
     let request = BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequest {
         processed_block_hashes: vec![vec![10; 32]],
         anchor: vec![10; 32],
     });
-    bitcoin_state.push_request(request).unwrap();
-    assert!(bitcoin_state.has_in_flight_get_successors_requests());
+    bitcoin_state.adapter_queues.push_request(request).unwrap();
+    assert!(bitcoin_state
+        .adapter_queues
+        .has_in_flight_get_successors_requests());
 
     // Clear the `SendTransactionRequest` -- should not affect in flight `GetSuccessorsRequest`s.
     bitcoin_state
@@ -101,7 +107,9 @@ fn can_detect_in_flight_get_successors_requests() {
             callback_id: 0,
         })
         .unwrap();
-    assert!(bitcoin_state.has_in_flight_get_successors_requests());
+    assert!(bitcoin_state
+        .adapter_queues
+        .has_in_flight_get_successors_requests());
 
     // Clear the `GetSuccessorsRequest` -- should affect in flight `GetSuccessorsRequest`s.
     bitcoin_state
@@ -112,7 +120,9 @@ fn can_detect_in_flight_get_successors_requests() {
             callback_id: 1,
         })
         .unwrap();
-    assert!(!bitcoin_state.has_in_flight_get_successors_requests());
+    assert!(!bitcoin_state
+        .adapter_queues
+        .has_in_flight_get_successors_requests());
 }
 
 #[test]
@@ -135,7 +145,7 @@ fn can_pop_responses_in_the_correct_order() {
             processed_block_hashes: vec![vec![i as u8; 32]],
             anchor: vec![i as u8; 32],
         });
-        bitcoin_state.push_request(request).unwrap();
+        bitcoin_state.adapter_queues.push_request(request).unwrap();
         bitcoin_state
             .push_response(responses[i as usize].clone())
             .unwrap();
@@ -143,9 +153,9 @@ fn can_pop_responses_in_the_correct_order() {
 
     for i in 0..num_adapter_responses {
         assert_eq!(
-            bitcoin_state.pop_response(),
+            bitcoin_state.adapter_queues.pop_response(),
             Some(responses[i as usize].clone())
         );
     }
-    assert_eq!(bitcoin_state.pop_response(), None);
+    assert_eq!(bitcoin_state.adapter_queues.pop_response(), None);
 }

@@ -112,9 +112,12 @@ impl BitcoinPayloadBuilder {
                     }
 
                     let timer = Timer::start();
-                    let result = self
-                        .bitcoin_testnet_adapter_client
-                        .send_request(request.request.clone(), Options::default());
+                    let result = self.bitcoin_testnet_adapter_client.send_request(
+                        request.request.clone(),
+                        Options {
+                            timeout: Some(std::time::Duration::from_millis(50)),
+                        },
+                    );
                     match result {
                         Ok(response_wrapper) => {
                             self.metrics.observe_adapter_request_duration(
