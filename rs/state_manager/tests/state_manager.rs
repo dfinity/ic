@@ -552,7 +552,7 @@ fn checkpoints_outlive_state_manager() {
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(1), height(2)]
+            vec![height(0), height(2)]
         );
 
         let checkpointed_state = state_manager.get_latest_state();
@@ -562,7 +562,6 @@ fn checkpoints_outlive_state_manager() {
             canister_ids(checkpointed_state.get_ref()),
             vec![canister_id]
         );
-        assert!(state_manager.get_state_at(height(1)).is_ok());
     });
 }
 
@@ -811,7 +810,7 @@ fn can_keep_last_checkpoint_and_higher_states_after_removal() {
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(6), height(8),],
+            vec![height(0), height(8),],
         );
         assert_eq!(height(8), state_manager.latest_state_height());
         let latest_state = state_manager.get_latest_state();
