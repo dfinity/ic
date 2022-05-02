@@ -14,7 +14,7 @@ use ic_config::{
 };
 use ic_consensus::{
     certification,
-    consensus::{ConsensusCrypto, Membership},
+    consensus::{pool_reader::PoolReader, ConsensusCrypto, Membership},
     dkg, ecdsa,
 };
 use ic_crypto_tls_interfaces::TlsHandshake;
@@ -266,6 +266,7 @@ fn setup_artifact_manager(
             metrics_registry.clone(),
             Arc::clone(&consensus_crypto),
             replica_logger.clone(),
+            &PoolReader::new(&*artifact_pools.consensus_pool.read().unwrap()),
         ),
     ));
 

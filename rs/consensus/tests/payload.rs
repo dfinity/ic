@@ -3,6 +3,7 @@ mod framework;
 use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{canister_http_pool, consensus_pool, dkg_pool, ecdsa_pool};
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
+use ic_consensus::consensus::pool_reader::PoolReader;
 use ic_consensus::{certification::CertifierImpl, consensus::ConsensusImpl, dkg};
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_state_manager::Labeled;
@@ -122,6 +123,7 @@ fn consensus_produces_expected_batches() {
             metrics_registry.clone(),
             Arc::clone(&fake_crypto) as Arc<_>,
             no_op_logger(),
+            &PoolReader::new(&*consensus_pool.read().unwrap()),
         )));
 
         let consensus = ConsensusImpl::new(

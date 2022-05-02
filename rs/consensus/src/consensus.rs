@@ -753,6 +753,7 @@ mod tests {
                 metrics_registry.clone(),
                 crypto,
                 no_op_logger(),
+                &PoolReader::new(&pool),
             ))),
             Arc::new(FakeMessageRouting::new()),
             state_manager,
