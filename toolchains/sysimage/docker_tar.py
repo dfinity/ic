@@ -138,6 +138,12 @@ class FS:
         if basename in parent.entries:
             if type(parent.entries[basename]) is not DirInode:
                 raise RuntimeError("Expected entry is not a directory in base layer: " + path)
+            else:
+                parent.entries[basename].mode = mode
+                parent.entries[basename].uid = uid
+                parent.entries[basename].gid = gid
+                parent.entries[basename].uid_name = uid_name
+                parent.entries[basename].gid_name = gid_name
         else:
             parent.entries[basename] = DirInode(mode, uid, gid, uid_name, gid_name)
 
