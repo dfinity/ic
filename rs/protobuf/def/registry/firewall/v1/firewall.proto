@@ -12,3 +12,22 @@ message FirewallConfig {
   // List of allowed IPv6 prefixes
   repeated string ipv6_prefixes = 3;
 }
+
+// Available actions for firewall rules
+enum FirewallAction {
+  FIREWALL_ACTION_UNSPECIFIED = 0;
+  FIREWALL_ACTION_ALLOW = 1;
+  FIREWALL_ACTION_DENY = 2;
+}
+
+message FirewallRule {
+  repeated string ipv4_prefixes = 1;
+  repeated string ipv6_prefixes = 2;
+  repeated uint32 ports = 3;
+  FirewallAction action = 4;
+  string comment = 5;
+}
+
+message FirewallRuleSet {
+  repeated FirewallRule entries = 1;
+}

@@ -18,6 +18,7 @@ pub mod do_update_node_rewards_table;
 pub mod do_update_subnet;
 pub mod do_update_subnet_replica;
 pub mod do_update_unassigned_nodes_config;
+pub mod firewall;
 pub mod node_management;
 pub mod reroute_canister_range;
 mod routing_table;

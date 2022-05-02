@@ -218,7 +218,7 @@ fn build_registry_proto() {
     );
     config.type_attribute(
         ".registry.firewall",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(candid::CandidType, serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
         ".registry.routing_table",
