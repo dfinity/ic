@@ -33,7 +33,7 @@ use crate::{
     status::StatusService,
     types::*,
 };
-use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
+use hyper::{server::conn::Http, Body, Client, Request, Response, StatusCode};
 use ic_async_utils::ObservableCountingSemaphore;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsHandshake;
@@ -837,7 +837,7 @@ async fn load_root_delegation(
         };
 
         let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-        let http_client = reqwest::blocking::Client::new();
+        let http_client = Client::new();
         let ip_addr = node.ip_address.parse().unwrap();
         // any effective canister id can be used when invoking read_state here
         let address = format!(
@@ -848,20 +848,29 @@ async fn load_root_delegation(
             log,
             "Attempt to fetch delegation from root subnet node with url `{}`", address
         );
-        let raw_response_res = match http_client
-            .post(&address)
+
+        let nns_request = match Request::builder()
+            .method(hyper::Method::POST)
+            .uri(&address)
             .header(hyper::header::CONTENT_TYPE, CONTENT_TYPE_CBOR)
-            .body(body)
-            .send()
+            .body(Body::from(body))
         {
-            Ok(res) => res.bytes(),
+            Ok(r) => r,
             Err(err) => {
                 log_err_and_backoff(log, &err).await;
                 continue;
             }
         };
 
-        match raw_response_res {
+        let raw_response_res = match http_client.request(nns_request).await {
+            Ok(res) => res,
+            Err(err) => {
+                log_err_and_backoff(log, &err).await;
+                continue;
+            }
+        };
+
+        match hyper::body::to_bytes(raw_response_res).await {
             Ok(raw_response) => {
                 debug!(log, "Response from nns subnet: {:?}", raw_response);
 
