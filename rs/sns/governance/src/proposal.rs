@@ -121,6 +121,8 @@ pub async fn validate_and_render_proposal(
     }
 }
 
+/// Validates and renders a proposal by calling the method that implements this logic for a given
+/// proposal action.
 pub async fn validate_and_render_action(
     action: &Option<proposal::Action>,
     env: &dyn Environment,
@@ -156,6 +158,7 @@ pub async fn validate_and_render_action(
     }
 }
 
+/// Validates and renders a proposal with action Motion.
 fn validate_and_render_motion(motion: &Motion) -> Result<String, String> {
     validate_len(
         "motion.motion_text",
@@ -173,6 +176,7 @@ fn validate_and_render_motion(motion: &Motion) -> Result<String, String> {
     ))
 }
 
+/// Validates and renders a proposal with action ManageNervousSystemParameters.
 fn validate_and_render_manage_nervous_system_parameters(
     new_parameters: &NervousSystemParameters,
     current_parameters: &NervousSystemParameters,
@@ -192,6 +196,7 @@ fn validate_and_render_manage_nervous_system_parameters(
     ))
 }
 
+/// Validates and renders a proposal with action UpgradeSnsControlledCanister.
 fn validate_and_render_upgrade_sns_controlled_canister(
     upgrade: &UpgradeSnsControlledCanister,
 ) -> Result<String, String> {
@@ -256,6 +261,8 @@ pub(crate) struct ValidNervousSystemFunction {
     pub validator_method: String,
 }
 
+/// Validates a given canister id and adds a defect to a given list of defects if the there was no
+/// canister id given or if it was invalid.
 fn validate_canister_id(
     field_name: &str,
     canister_id: &Option<PrincipalId>,
@@ -328,6 +335,7 @@ impl TryFrom<&NervousSystemFunction> for ValidNervousSystemFunction {
     }
 }
 
+/// Validates and renders a proposal with action AddNervousSystemFunction.
 pub fn validate_and_render_add_nervous_system_function(
     add: &NervousSystemFunction,
     existing_functions: &BTreeMap<u64, NervousSystemFunction>,
@@ -350,6 +358,7 @@ pub fn validate_and_render_add_nervous_system_function(
     }
 }
 
+/// Validates and renders a proposal with action RemoveNervousSystemFunction.
 pub fn validate_and_render_remove_nervous_system_function(
     remove: u64,
     existing_functions: &BTreeMap<u64, NervousSystemFunction>,
@@ -367,6 +376,8 @@ pub fn validate_and_render_remove_nervous_system_function(
     }
 }
 
+/// Validates and renders a proposal with action ExecuteNervousSystemFunction.
+/// This retrieves the nervous system function's validator method and calls it.
 pub async fn validate_and_render_execute_nervous_system_function(
     env: &dyn Environment,
     execute: &ExecuteNervousSystemFunction,
@@ -921,9 +932,7 @@ mod test {
         assert_validate_upgrade_sns_controlled_canister_is_err(&proposal);
     }
 
-    /// Fun fact: the minimum WASM is 8 bytes long.
-    ///
-    /// A corollary of the above fact is that we must not allow the
+    /// The minimum WASM is 8 bytes long. Therefore, we must not allow the
     /// new_canister_wasm field to be empty.
     #[test]
     fn upgrade_wasm_must_be_non_empty() {
