@@ -18,19 +18,13 @@ message State {
 }
 
 message UtxoSet {
-  repeated Utxo large_utxos = 1;
+  repeated bitcoin.v1.Utxo large_utxos = 1;
   Network network = 3;
 
   reserved 2;
   reserved 4;
   reserved 5;
   reserved 6;
-}
-
-message Utxo {
-  bitcoin.v1.OutPoint outpoint = 1;
-  bitcoin.v1.TxOut txout = 2;
-  uint32 height = 3;
 }
 
 message BlockHeader {

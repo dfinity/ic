@@ -1,9 +1,17 @@
-use crate::{proto, types::Height, PageMapMemory};
+use crate::proto;
+use crate::{types::Height, PageMapMemory};
 use bitcoin::{hashes::Hash, Block, Network, OutPoint, Script, TxOut, Txid};
 use ic_protobuf::bitcoin::v1;
-use ic_replicated_state::{bitcoin_state::UnstableBlocks, page_map::PersistenceError};
+use ic_replicated_state::page_map::PersistenceError;
+use ic_replicated_state::{
+    bitcoin_state::{
+        AdapterQueues, BitcoinState as ReplicatedBitcoinState, UnstableBlocks,
+        UtxoSet as ReplicatedUtxoSet,
+    },
+    page_map::PageMap,
+};
 use ic_state_layout::{AccessPolicy, ProtoFileWith, RwPolicy};
-use stable_structures::StableBTreeMap;
+use stable_structures::{Memory, StableBTreeMap};
 use std::collections::BTreeMap;
 use std::{convert::TryFrom, path::Path};
 
@@ -17,6 +25,9 @@ pub struct State {
 
     // Blocks inserted, but are not considered stable yet.
     pub unstable_blocks: UnstableBlocks,
+
+    // Queues used to communicate with the adapter.
+    pub adapter_queues: AdapterQueues,
 }
 
 impl State {
@@ -30,10 +41,12 @@ impl State {
             height: 0,
             utxos: UtxoSet::new(network),
             unstable_blocks: UnstableBlocks::new(stability_threshold, genesis_block),
+            adapter_queues: AdapterQueues::default(),
         }
     }
 
     /// Serializes the state to disk at the given path.
+    // TODO(EXC-1093): Guard this function with a rust feature. It's only needed in local scripts.
     pub fn serialize(&self, root: &Path) -> Result<(), PersistenceError> {
         // Create the directory if it doesn't exist.
         RwPolicy::check_dir(root).expect("Couldn't create directory.");
@@ -62,6 +75,7 @@ impl State {
             .persist_and_sync_delta(&root.join("medium_utxos.bin"))
     }
 
+    // TODO(EXC-1093): Guard this function with a rust feature. It's only needed in local scripts.
     pub fn load(root: &Path) -> Result<Self, PersistenceError> {
         let small_utxos_memory = PageMapMemory::open(&root.join("small_utxos.bin"))?;
         let medium_utxos_memory = PageMapMemory::open(&root.join("medium_utxos.bin"))?;
@@ -71,6 +85,7 @@ impl State {
         let proto_state = state_file.deserialize_opt().unwrap().unwrap();
 
         Ok(Self {
+            adapter_queues: AdapterQueues::default(),
             height: proto_state.height,
             utxos: UtxoSet::from_proto(
                 proto_state.utxos.unwrap(),
@@ -81,6 +96,78 @@ impl State {
             unstable_blocks: UnstableBlocks::try_from(proto_state.unstable_blocks.unwrap())
                 .unwrap(),
         })
+    }
+}
+
+impl From<ReplicatedBitcoinState> for State {
+    fn from(state: ReplicatedBitcoinState) -> Self {
+        let utxos_small = state.utxo_set.utxos_small;
+        let utxos_medium = state.utxo_set.utxos_medium;
+        let address_outpoints = state.utxo_set.address_outpoints;
+
+        Self {
+            adapter_queues: state.adapter_queues,
+            height: state.stable_height,
+            unstable_blocks: state.unstable_blocks,
+            utxos: UtxoSet {
+                utxos: Utxos {
+                    small_utxos: load_or_initialize_btree(
+                        utxos_small,
+                        UTXO_KEY_SIZE,
+                        UTXO_VALUE_MAX_SIZE_SMALL,
+                    ),
+                    medium_utxos: load_or_initialize_btree(
+                        utxos_medium,
+                        UTXO_KEY_SIZE,
+                        UTXO_VALUE_MAX_SIZE_MEDIUM,
+                    ),
+                    large_utxos: state.utxo_set.utxos_large,
+                },
+                network: state.utxo_set.network,
+                address_to_outpoints: load_or_initialize_btree(
+                    address_outpoints,
+                    MAX_ADDRESS_OUTPOINT_SIZE,
+                    0,
+                ),
+            },
+        }
+    }
+}
+
+fn load_or_initialize_btree(
+    page_map: PageMap,
+    max_key_size: u32,
+    max_value_size: u32,
+) -> StableBTreeMap<PageMapMemory> {
+    let memory = PageMapMemory::new(page_map);
+    let mut dst = vec![0; 3];
+    memory.read(0, &mut dst);
+    if dst == vec![0; 3] {
+        // Uninitialized. Create a new stable btreemap.
+        StableBTreeMap::new(memory, max_key_size, max_value_size)
+    } else {
+        StableBTreeMap::load(memory)
+    }
+}
+
+impl From<State> for ReplicatedBitcoinState {
+    fn from(state: State) -> Self {
+        Self {
+            adapter_queues: state.adapter_queues,
+            stable_height: state.height,
+            unstable_blocks: state.unstable_blocks,
+            utxo_set: ReplicatedUtxoSet {
+                utxos_small: state.utxos.utxos.small_utxos.get_memory().into_page_map(),
+                utxos_medium: state.utxos.utxos.medium_utxos.get_memory().into_page_map(),
+                utxos_large: state.utxos.utxos.large_utxos,
+                address_outpoints: state
+                    .utxos
+                    .address_to_outpoints
+                    .get_memory()
+                    .into_page_map(),
+                network: state.utxos.network,
+            },
+        }
     }
 }
 
@@ -229,7 +316,7 @@ impl UtxoSet {
                 .utxos
                 .large_utxos
                 .iter()
-                .map(|(outpoint, (txout, height))| proto::Utxo {
+                .map(|(outpoint, (txout, height))| v1::Utxo {
                     outpoint: Some(v1::OutPoint {
                         txid: outpoint.txid.to_vec(),
                         vout: outpoint.vout,

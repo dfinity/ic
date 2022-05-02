@@ -1,5 +1,5 @@
 use crate::page_map::PageMap;
-use bitcoin::{blockdata::constants::genesis_block, Block, Network};
+use bitcoin::{blockdata::constants::genesis_block, Block, Network, OutPoint, TxOut};
 use ic_btc_types_internal::{
     BitcoinAdapterRequest, BitcoinAdapterRequestWrapper, BitcoinAdapterResponse,
 };
@@ -91,7 +91,7 @@ impl AdapterQueues {
 
 /// The Bitcoin network's UTXO set.
 /// See `ic_btc_canister::state` for more documentation.
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct UtxoSet {
     /// PageMap storing all the UTXOs that are small in size.
     pub utxos_small: PageMap,
@@ -99,8 +99,26 @@ pub struct UtxoSet {
     /// PageMap storing all the UTXOs that are medium in size.
     pub utxos_medium: PageMap,
 
+    /// UTXOs that are large in size - these are very rare, so a PageMap isn't needed here.
+    pub utxos_large: BTreeMap<OutPoint, (TxOut, u32)>,
+
     /// PageMap storing an index mapping a Bitcoin address to its UTXOs.
     pub address_outpoints: PageMap,
+
+    /// The bitcoin network that this UtxoSet belongs to.
+    pub network: Network,
+}
+
+impl Default for UtxoSet {
+    fn default() -> Self {
+        Self {
+            network: Network::Testnet,
+            utxos_small: PageMap::default(),
+            utxos_medium: PageMap::default(),
+            utxos_large: BTreeMap::default(),
+            address_outpoints: PageMap::default(),
+        }
+    }
 }
 
 /// A data structure for maintaining all unstable blocks.
@@ -153,6 +171,7 @@ pub struct BitcoinState {
     pub adapter_queues: AdapterQueues,
     pub utxo_set: UtxoSet,
     pub unstable_blocks: UnstableBlocks,
+    pub stable_height: u32,
 }
 
 impl Default for BitcoinState {
@@ -167,6 +186,7 @@ impl BitcoinState {
             adapter_queues: AdapterQueues::new(requests_queue_capacity),
             utxo_set: UtxoSet::default(),
             unstable_blocks: UnstableBlocks::default(),
+            stable_height: 0,
         }
     }
 
