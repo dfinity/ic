@@ -139,18 +139,21 @@ impl Orchestrator {
             logger.clone(),
         ));
 
-        let upgrade = Some(Upgrade::new(
-            Arc::clone(&registry),
-            replica_process,
-            cup_provider,
-            replica_version,
-            args.replica_config_file.clone(),
-            node_id,
-            ic_binary_directory,
-            registry_replicator,
-            args.replica_binary_dir.clone(),
-            logger.clone(),
-        ));
+        let upgrade = Some(
+            Upgrade::new(
+                Arc::clone(&registry),
+                replica_process,
+                cup_provider,
+                replica_version,
+                args.replica_config_file.clone(),
+                node_id,
+                ic_binary_directory,
+                registry_replicator,
+                args.replica_binary_dir.clone(),
+                logger.clone(),
+            )
+            .await,
+        );
 
         let (metrics, _metrics_runtime) = Self::get_metrics(
             metrics_addr,
@@ -186,7 +189,7 @@ impl Orchestrator {
         })
     }
 
-    /// Starts two asynchronous tasks:
+    /// Starts three asynchronous tasks:
     ///
     /// 1. One that constantly monitors for a new CUP pointing to a newer
     /// replica version and executes the upgrade to this version if such a
@@ -199,7 +202,7 @@ impl Orchestrator {
     /// configuration allowing access from the IP range specified in the DC
     /// record.
     ///
-    /// 3. Periodicaly try to update the registry with the iDKG key. Eventually
+    /// 3. Third task tries to update the registry with the iDKG key. Eventually
     /// once all replicas are updated this functionality should be removed,
     /// but the plumbing of the adding key mechanism will remain.
     pub fn spawn_tasks(&mut self) {
@@ -209,10 +212,13 @@ impl Orchestrator {
             exit_signal: Arc<RwLock<bool>>,
             log: ReplicaLogger,
         ) {
+            // This timeout is a last resort trying to revive the upgrade monitoring
+            // in case it gets stuck in an unexpected situation for longer than 30 minutes.
+            let timeout = Duration::from_secs(60 * 15);
             while !*exit_signal.read().await {
-                match upgrade.check().await {
-                    Ok(val) => *maybe_subnet_id.write().await = val,
-                    Err(e) => warn!(log, "Check for upgrade failed: {}", e),
+                match tokio::time::timeout(timeout, upgrade.check()).await {
+                    Ok(Ok(val)) => *maybe_subnet_id.write().await = val,
+                    e => warn!(log, "Check for upgrade failed: {:?}", e),
                 };
                 tokio::time::sleep(CHECK_INTERVAL_SECS).await;
             }
@@ -284,6 +290,7 @@ impl Orchestrator {
                     self.logger.clone(),
                 )));
         }
+
         if let Some(registration) = self.registration.take() {
             info!(self.logger, "Spawning the additional key registration loop");
             self.task_handles.push(tokio::spawn(update_keys_in_registry(
