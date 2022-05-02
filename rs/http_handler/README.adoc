@@ -35,6 +35,31 @@ implement client authentication we decided to keep the current solution.
 For each HTTP(s) endpoint there is a module that processes the corresponding requests (`+query.rs+`,
 `+call.rs+`, `+query.rs+`, `+read_state.rs+`, etc.). 
 
+=== Http response status codes
+
+==== Call
+
+According to the https://smartcontracts.org/docs/interface-spec/index.html[IC spec], first steps of the high-level workflow of calling a canister are:
+
+. A user submits a call via the HTTPS Interface. No useful information is returned in the immediate response (as such information cannot be trustworthy anyways).
+. For a certain amount of time, the IC behaves as if it does not know about the call.
+. The IC asks the targeted canister if it is willing to accept this message and be charged for the expense of processing it. This uses the Ingress message inspection API for normal calls. 
+. At some point, the IC may accept the call for processing and set its status to received. This indicates that the IC as a whole has received the call and plans on processing it (although it may still not get processed if the IC is under high load).
+
+In the existing implementation of the IC protocol, if an error occurs within the http handler that prevents a call request from being executed by the IC then a 4xx or 5xx error code is returned.
+When assigning an error code try to answer the following question: "is this something actionable by the caller, the canister owner, the IC operator?". 4xx is for caller and 5xx is for canister owner or IC operator.
+
+Alternatives for http status codes when inspecting a message (canister code) fails:
+
+. *Return only 2xx*. This would require the user to keep polling past the ingress expiry before they could retry. This goes against returning an error when we know a request won't be executed by the IC. For example, if an user sends invalid request, they will have to poll for 5+ minutes before confirming the request is missing from the IC. 
+. *Return only 4xx*. Per the HTTP spec, we simply cannot return a 4xx status code if the client submitted a valid request at the right time (e.g. not trying to stop an already stopped canister).
+. *Return only 502 and/or 504*. Per the HTTP spec those errors are more appropriate for proxies that act on behalf of the user. This option means splitting the 5xx status codes between replica and IC protocol. Unfortunately,
+there is no clean way of splitting 5xx status codes and doing so would hide information (e.g. if you put all IC protocol errors behind a 502 and/or 504). Splitting the 5xx status codes is not necessary because, as it turns out, there really aren't all that many replica errors that may be caused by bugs or deployment issues (it's mostly network errors and such).
+
+==== Query
+
+==== Read state
+
 == tower::Service FAQ
 
 === When implementing a https://docs.rs/tower/0.4.11/tower/trait.Service.html[tower::Service], use https://docs.rs/tower/0.4.11/tower/util/struct.BoxService.html[tower::util::BoxService] as the public interface
