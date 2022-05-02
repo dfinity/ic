@@ -49,6 +49,7 @@ use ic_types::{
 use ic_utils::thread::JoinOnDrop;
 use prometheus::{HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use prost::Message;
+use std::convert::{From, TryFrom};
 use std::fmt;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
@@ -57,10 +58,6 @@ use std::sync::{
     Arc,
 };
 use std::time::Instant;
-use std::{
-    collections::HashSet,
-    convert::{From, TryFrom},
-};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     sync::Mutex,
@@ -77,9 +74,6 @@ const CRITICAL_ERROR_REUSED_CHUNK_HASH: &str =
 
 /// Critical error tracking unexpectedly corrupted chunks.
 const CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS: &str = "state_sync_corrupted_chunks";
-
-/// Critical error tracking checkpoints expected to be on disk but not found.
-const CRITICAL_ERROR_MISSING_CHECKPOINTS: &str = "state_manager_missing_checkpoints";
 
 /// Labels for manifest metrics
 const LABEL_TYPE: &str = "type";
@@ -108,7 +102,6 @@ pub struct StateManagerMetrics {
     state_size: IntGauge,
     checkpoint_metrics: CheckpointMetrics,
     manifest_metrics: ManifestMetrics,
-    missing_checkpoints: IntCounter,
 }
 
 #[derive(Clone)]
@@ -223,9 +216,6 @@ impl StateManagerMetrics {
             "Total size of the state on disk in bytes.",
         );
 
-        let missing_checkpoints =
-            metrics_registry.error_counter(CRITICAL_ERROR_MISSING_CHECKPOINTS);
-
         Self {
             state_manager_error_count,
             checkpoint_op_duration,
@@ -240,7 +230,6 @@ impl StateManagerMetrics {
             state_size,
             checkpoint_metrics: CheckpointMetrics::new(metrics_registry),
             manifest_metrics: ManifestMetrics::new(metrics_registry),
-            missing_checkpoints,
         }
     }
 }
@@ -758,6 +747,15 @@ fn report_last_diverged_checkpoint(
     }
 }
 
+/// Type for the return value of populate_metadata
+#[derive(Default)]
+struct PopulatedMetadata {
+    certifications_metadata: CertificationsMetadata,
+    states_metadata: StatesMetadata,
+    compute_manifest_requests: Vec<ComputeManifestRequest>,
+    maybe_last_snapshot: Option<Snapshot>,
+}
+
 /// An enum describing all possible PageMaps in ReplicatedState
 /// When adding additional PageMaps, add an appropriate entry here
 /// to enable all relevant state manager features, e.g. incremental
@@ -1098,9 +1096,28 @@ impl StateManagerImpl {
                 state_layout
                     .archive_checkpoint(h)
                     .unwrap_or_else(|err| fatal!(&log, "{:?}", err));
-                states_metadata.remove(&h);
             }
         }
+
+        let last_checkpoint = checkpoint_heights.last().map(|h| h.to_owned());
+
+        // Remove checkpoints older than the starting height
+        if let Some(start) = last_checkpoint {
+            for h in checkpoint_heights.into_iter() {
+                debug_assert!(h <= start);
+                if h != start {
+                    info!(
+                        log,
+                        "Removing checkpoint {} (starting checkpoint = {})", h, start
+                    );
+
+                    state_layout
+                        .remove_checkpoint(h)
+                        .unwrap_or_else(|err| fatal!(&log, "{:?}", err));
+                }
+            }
+        }
+
         info!(
             log,
             "Determining starting height took {:?}",
@@ -1121,44 +1138,59 @@ impl StateManagerImpl {
             starting_time.elapsed()
         );
 
-        let starting_time = Instant::now();
-        let (certifications_metadata, compute_manifest_requests) = Self::populate_missing_metadata(
-            &log,
-            &metrics,
-            &state_layout,
-            &mut states_metadata,
-            own_subnet_type,
-        );
-        info!(
-            log,
-            "Populating missing metadata took {:?}",
-            starting_time.elapsed()
-        );
+        let PopulatedMetadata {
+            certifications_metadata,
+            states_metadata,
+            compute_manifest_requests,
+            maybe_last_snapshot,
+        } = match last_checkpoint {
+            Some(height) => {
+                let starting_time = Instant::now();
+
+                let cp_layout = state_layout.checkpoint(height).unwrap_or_else(|err| {
+                    fatal!(
+                        log,
+                        "Failed to create checkpoint layout @{}: {}",
+                        height,
+                        err
+                    )
+                });
+
+                let state = checkpoint::load_checkpoint_parallel(&cp_layout, own_subnet_type)
+                    .unwrap_or_else(|err| {
+                        fatal!(log, "Failed to load checkpoint @{}: {}", height, err)
+                    });
+                info!(log, "Loading checkpoint took {:?}", starting_time.elapsed());
+
+                let checkpoint_metadata = states_metadata.remove(&height);
+
+                let starting_time = Instant::now();
+                let result = Self::populate_metadata(
+                    &log,
+                    &metrics,
+                    &state_layout,
+                    height,
+                    checkpoint_metadata,
+                    state,
+                );
+                info!(
+                    log,
+                    "Populating metadata took {:?}",
+                    starting_time.elapsed()
+                );
+
+                result
+            }
+            None => PopulatedMetadata::default(),
+        };
 
         let latest_state_height = AtomicU64::new(0);
         let latest_certified_height = AtomicU64::new(0);
-        let last_checkpoint = checkpoint_heights.last();
 
         let initial_snapshot = Snapshot {
             height: Self::INITIAL_STATE_HEIGHT,
             state: Arc::new(initial_state(own_subnet_id, own_subnet_type).take()),
         };
-
-        let maybe_last_snapshot = last_checkpoint.map(|height| {
-            let state = load_checkpoint(&state_layout, *height, &metrics, own_subnet_type)
-                .unwrap_or_else(|err| {
-                    fatal!(
-                        log,
-                        "Failed to load the latest checkpoint {} on start: {}",
-                        height,
-                        err
-                    )
-                });
-            Snapshot {
-                height: *height,
-                state: Arc::new(state),
-            }
-        });
 
         #[cfg(debug_assertions)]
         let load_checkpoint_as_tip_guard = Arc::new(Mutex::new(()));
@@ -1178,7 +1210,11 @@ impl StateManagerImpl {
                     own_subnet_type,
                 );
 
-                info!(log, "Loading checkpoint took {:?}", starting_time.elapsed());
+                info!(
+                    log,
+                    "Loading checkpoint as tip took {:?}",
+                    starting_time.elapsed()
+                );
                 (snapshot.height, tip)
             }
             None => (
@@ -1553,68 +1589,52 @@ impl StateManagerImpl {
         }
     }
 
-    fn populate_missing_metadata(
+    /// Populates appropriate CertificationsMetadata and StatesMetadata for a StateManager
+    /// that only contains one checkpoint at height. A StateMetadata for that state can also
+    /// be provided in case it is available.
+    fn populate_metadata(
         log: &ReplicaLogger,
         metrics: &StateManagerMetrics,
         layout: &StateLayout,
-        metadata: &mut StatesMetadata,
-        own_subnet_type: SubnetType,
-    ) -> (CertificationsMetadata, Vec<ComputeManifestRequest>) {
+        height: Height,
+        metadata: Option<StateMetadata>,
+        state: ReplicatedState,
+    ) -> PopulatedMetadata {
         let mut compute_manifest_requests = Vec::<ComputeManifestRequest>::new();
 
-        let heights = match layout.checkpoint_heights() {
-            Ok(heights) => heights,
-            Err(err) => {
-                error!(log, "Failed to load checkpoint heights: {}", err);
-                return (Default::default(), compute_manifest_requests);
-            }
-        };
-
         let mut certifications_metadata = CertificationsMetadata::default();
-        let mut requested_heights = HashSet::new();
+        let mut states_metadata = StatesMetadata::default();
 
-        // Populate the missing metadata from the higher checkpoints to the lower ones.
-        // Then the manifest of the latest checkpoint will be the first one available
-        // for state sync.
-        for height in heights.into_iter().rev() {
-            let cp_layout = layout.checkpoint(height).unwrap_or_else(|err| {
-                fatal!(
-                    log,
-                    "Failed to create checkpoint layout @{}: {}",
-                    height,
-                    err
-                )
-            });
+        certifications_metadata.insert(
+            height,
+            Self::compute_certification_metadata(metrics, log, &state),
+        );
 
-            let state = checkpoint::load_checkpoint_parallel(&cp_layout, own_subnet_type)
-                .unwrap_or_else(|err| {
-                    fatal!(log, "Failed to load checkpoint @{}: {}", height, err)
-                });
+        let checkpoint_ref =
+            CheckpointRef::new(log.clone(), metrics.clone(), layout.clone(), height);
 
-            certifications_metadata.insert(
-                height,
-                Self::compute_certification_metadata(metrics, log, &state),
-            );
+        let root_hash = metadata
+            .as_ref()
+            .and_then(|metadata| metadata.root_hash.clone());
+        let manifest = metadata.and_then(|metadata| metadata.manifest);
 
-            let checkpoint_ref =
-                CheckpointRef::new(log.clone(), metrics.clone(), layout.clone(), height);
-
-            if let Some(state_metadata) = metadata.get_mut(&height) {
-                state_metadata.checkpoint_ref = Some(checkpoint_ref.clone());
-                if state_metadata.manifest.is_some() {
-                    // Do not compute the manifest if it's already present.
-                    continue;
-                }
-            }
-
+        // Root hash and manifest should either be both None or both Some, but we
+        // make no assumptions and need to recompute if either is missing.
+        if root_hash.is_some() && manifest.is_some() {
             compute_manifest_requests.push(ComputeManifestRequest {
                 checkpoint_ref: checkpoint_ref.clone(),
                 manifest_delta: None,
             });
-
-            requested_heights.insert(height);
-
-            metadata.insert(
+            states_metadata.insert(
+                height,
+                StateMetadata {
+                    checkpoint_ref: Some(checkpoint_ref),
+                    manifest,
+                    root_hash,
+                },
+            );
+        } else {
+            states_metadata.insert(
                 height,
                 StateMetadata {
                     checkpoint_ref: Some(checkpoint_ref),
@@ -1624,29 +1644,17 @@ impl StateManagerImpl {
             );
         }
 
-        // Delete any metadata for checkpoints that neither have a manifest nor a
-        // manifest computation
-        // TODO: use drain_filter once that's stable rust
-        // metadata.drain_filter(|k,v| { v.manifest.is_none() &&
-        // !requested_heights.contains(k)});
-        let mut metadata_to_remove = Vec::new();
-        for (&h, item) in &*metadata {
-            if item.manifest.is_none() && !requested_heights.contains(&h) {
-                metadata_to_remove.push(h);
-            }
-        }
-        for h in metadata_to_remove {
-            error!(
-                log,
-                "{}: Missing checkpoint at height {} during startup.",
-                CRITICAL_ERROR_MISSING_CHECKPOINTS,
-                h
-            );
-            metrics.missing_checkpoints.inc();
-            metadata.remove(&h);
-        }
+        let snapshot = Snapshot {
+            height,
+            state: Arc::new(state),
+        };
 
-        (certifications_metadata, compute_manifest_requests)
+        PopulatedMetadata {
+            certifications_metadata,
+            states_metadata,
+            compute_manifest_requests,
+            maybe_last_snapshot: Some(snapshot),
+        }
     }
 
     fn populate_extra_metadata(&self, state: &mut ReplicatedState, height: Height) {
