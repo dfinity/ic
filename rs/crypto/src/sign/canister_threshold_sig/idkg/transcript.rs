@@ -440,12 +440,15 @@ fn internal_dealings_from_signed_dealings(
 /// The indices are such that they allow the previous transcript(s) (if any)
 /// to be properly recombined (i.e. the indices are for the previous sharing,
 /// if this is a resharing or multiplication).
+///
+/// Only the first collection_threshold dealings are returned
 fn dealings_by_index_from_dealings(
     dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
     params: &IDkgTranscriptParams,
 ) -> Result<BTreeMap<NodeIndex, IDkgMultiSignedDealing>, IDkgCreateTranscriptError> {
     dealings
         .iter()
+        .take(params.collection_threshold().get() as usize)
         .map(|(id, d)| {
             let index = params
                 .dealer_index(*id)
