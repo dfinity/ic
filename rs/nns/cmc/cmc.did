@@ -59,6 +59,38 @@ type NotifyCreateCanisterResult = variant {
   Err : NotifyError;
 };
 
+type IcpXdrConversionRate = record {
+  // The time for which the market data was queried, expressed in UNIX epoch
+  // time in seconds.
+  timestamp_seconds : nat64;
+
+  // The number of 10,000ths of IMF SDR (currency code XDR) that corresponds
+  // to 1 ICP. This value reflects the current market price of one ICP token.
+  xdr_permyriad_per_icp : nat64;
+};
+
+
+type IcpXdrConversionRateResponse = record {
+  // The latest ICP/XDR conversion rate.
+  data : IcpXdrConversionRate;
+
+  // CBOR-serialized hash tree as specified in
+  // https://smartcontracts.org/docs/interface-spec/index.html#certification-encoding.
+  // The hash tree is used for certification and hash the following structure:
+  // ```
+  // *
+  // |
+  // +-- ICP_XDR_CONVERSION_RATE -- [ Candid encoded IcpXdrConversionRate ]
+  // |
+  // `-- AVERAGE_ICP_XDR_CONVERSION_RATE -- [ Candid encoded IcpXdrConversionRate ]
+  // ```
+  hash_tree : blob;
+
+  // System certificate as specified in
+  // https://smartcontracts.org/docs/interface-spec/index.html#certification-encoding
+  certificate : blob;
+};
+
 service : {
   // Propmts the cycles minting canister to process a payment by converting ICP
   // into cycles and sending the cycles the specified canister.
@@ -66,4 +98,7 @@ service : {
 
   // Prompts the cycles minting canister to process a payment for canister creation.
   notify_create_canister : (NotifyCreateCanisterArg) -> (NotifyCreateCanisterResult);
+
+  // Returns the ICP/XDR conversion rate.
+  get_icp_xdr_conversion_rate : () -> (IcpXdrConversionRateResponse) query;
 }
