@@ -231,15 +231,24 @@ impl<T: Plan> Workload<T> {
                 .await
                 .unwrap_or_else(|_| panic!("Execution of the request with index={} failed.", idx));
         }
+        let sending_requests_duration = start.elapsed();
+        info!(
+            self.log,
+            "Workload finished sending requests in: {} sec/{} ms/{} μs.",
+            sending_requests_duration.as_secs(),
+            sending_requests_duration.as_millis() % 1000,
+            sending_requests_duration.as_micros() % 1000000,
+        );
         let metrics = collector_handle
             .await
             .expect("Execution of the results collector failed.");
-        let duration = start.elapsed();
+        let additional_resp_collection_duration = start.elapsed() - sending_requests_duration;
         info!(
             self.log,
-            "Workload execution finished in {} secs and {} ms.",
-            duration.as_secs(),
-            duration.as_millis() % 1000
+            "All responses were collected after workload finished within: {} sec/{} ms/{} μs.",
+            additional_resp_collection_duration.as_secs(),
+            additional_resp_collection_duration.as_millis() % 1000,
+            additional_resp_collection_duration.as_micros() % 1000000
         );
         Ok(metrics)
     }
