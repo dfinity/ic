@@ -64,8 +64,6 @@
 /testnet/tests/scripts/maximum_capacity_subnet_update.sh   @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /testnet/tests/scripts/maximum_capacity_xnet_slo.sh        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
 /testnet/tests/scripts/network_reliability_test.sh         @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
-/testnet/tests/scripts/nns-backup.sh                       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
-/testnet/tests/scripts/nns_backup_deprecated.sh            @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
 /testnet/tests/scripts/rejoin_test.sh                      @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
 /testnet/tests/scripts/subnet_query_workload.sh            @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 
