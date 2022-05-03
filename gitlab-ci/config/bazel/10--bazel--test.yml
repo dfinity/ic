@@ -1,4 +1,10 @@
 .bazel-run:
+  # Run in ZH since BuildFarm is in ZH
+  tags:
+    - dfinity
+    - docker
+    - ubuntu
+    - zh
   extends:
     - .ubuntu-nix-docker
     - .rules-parent-pipeline-autorun-on-trigger
