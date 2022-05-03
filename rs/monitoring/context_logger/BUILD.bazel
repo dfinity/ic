@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+  name = "context_logger",
+  srcs = glob(["src/**"]),
+  crate_name = "ic_context_logger",
+  edition = "2018",
+  deps = [
+      "@crate_index//:slog",
+  ]
+)
+
+rust_test(
+    name = "context_logger_test",
+    crate = ":context_logger",
+)
