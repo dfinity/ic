@@ -1,3 +1,9 @@
+mod metrics;
+
+use crate::metrics::{
+    Metrics, LABEL_GET_SUCCESSORS, LABEL_REQUEST_TYPE, LABEL_SEND_TRANSACTION, LABEL_STATUS,
+    OK_LABEL, REQUESTS_LABEL_NAMES, UNKNOWN_LABEL,
+};
 use bitcoin::consensus::Decodable;
 use ic_btc_service::{
     btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
@@ -9,8 +15,10 @@ use ic_btc_types_internal::{
     SendTransactionResponse, Transaction as InternalTransaction, TxIn as InternalTxIn,
     TxOut as InternalTxOut, Txid as InternalTxid,
 };
+use ic_config::adapters::AdaptersConfig;
 use ic_interfaces_bitcoin_adapter_client::{BitcoinAdapterClient, Options, RpcError, RpcResult};
 use ic_logger::{error, ReplicaLogger};
+use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
 use std::{convert::TryFrom, path::PathBuf, sync::Arc};
 use tokio::net::UnixStream;
 use tonic::transport::{Channel, Endpoint, Uri};
@@ -27,12 +35,17 @@ fn convert_tonic_error(status: tonic::Status) -> RpcError {
 struct BitcoinAdapterClientImpl {
     rt_handle: tokio::runtime::Handle,
     client: BtcServiceClient<Channel>,
+    metrics: Metrics,
 }
 
 impl BitcoinAdapterClientImpl {
-    fn new(rt_handle: tokio::runtime::Handle, channel: Channel) -> Self {
+    fn new(metrics: Metrics, rt_handle: tokio::runtime::Handle, channel: Channel) -> Self {
         let client = BtcServiceClient::new(channel);
-        Self { rt_handle, client }
+        Self {
+            rt_handle,
+            client,
+            metrics,
+        }
     }
 }
 
@@ -93,10 +106,16 @@ impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
         request: BitcoinAdapterRequestWrapper,
         opts: Options,
     ) -> RpcResult<BitcoinAdapterResponseWrapper> {
+        let mut request_timer = HistogramVecTimer::start_timer(
+            self.metrics.requests.clone(),
+            &REQUESTS_LABEL_NAMES,
+            [UNKNOWN_LABEL, UNKNOWN_LABEL],
+        );
         let mut client = self.client.clone();
         self.rt_handle.block_on(async move {
-            match request {
+            let response = match request {
                 BitcoinAdapterRequestWrapper::GetSuccessorsRequest(r) => {
+                    request_timer.set_label(LABEL_REQUEST_TYPE, LABEL_GET_SUCCESSORS);
                     let get_successors_request = BtcServiceGetSuccessorsRequest {
                         processed_block_hashes: r.processed_block_hashes,
                         anchor: r.anchor,
@@ -130,6 +149,7 @@ impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
                         .map_err(convert_tonic_error)
                 }
                 BitcoinAdapterRequestWrapper::SendTransactionRequest(r) => {
+                    request_timer.set_label(LABEL_REQUEST_TYPE, LABEL_SEND_TRANSACTION);
                     let send_transaction_request = BtcServiceSendTransactionRequest {
                         transaction: r.transaction,
                     };
@@ -149,30 +169,62 @@ impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
                         })
                         .map_err(convert_tonic_error)
                 }
-            }
+            };
+            let mut timer = request_timer;
+            timer.set_label(
+                LABEL_STATUS,
+                match &response {
+                    Err(err) => err.into(),
+                    Ok(_) => OK_LABEL,
+                },
+            );
+            response
         })
     }
 }
 
-struct BrokenConnectionBitcoinClient();
+struct BrokenConnectionBitcoinClient {
+    metrics: Metrics,
+}
+
+impl BrokenConnectionBitcoinClient {
+    fn new(metrics: Metrics) -> Self {
+        Self { metrics }
+    }
+}
 
 impl BitcoinAdapterClient for BrokenConnectionBitcoinClient {
     fn send_request(
         &self,
-        _request: BitcoinAdapterRequestWrapper,
+        request: BitcoinAdapterRequestWrapper,
         _opts: Options,
     ) -> RpcResult<BitcoinAdapterResponseWrapper> {
+        let mut request_timer = HistogramVecTimer::start_timer(
+            self.metrics.requests.clone(),
+            &REQUESTS_LABEL_NAMES,
+            [UNKNOWN_LABEL, UNKNOWN_LABEL],
+        );
+        match request {
+            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(_) => {
+                request_timer.set_label(LABEL_REQUEST_TYPE, LABEL_GET_SUCCESSORS)
+            }
+            BitcoinAdapterRequestWrapper::SendTransactionRequest(_) => {
+                request_timer.set_label(LABEL_REQUEST_TYPE, LABEL_SEND_TRANSACTION)
+            }
+        }
+        request_timer.set_label(LABEL_STATUS, RpcError::ConnectionBroken.into());
         Err(RpcError::ConnectionBroken)
     }
 }
 
-pub fn setup_bitcoin_adapter_client(
+fn setup_bitcoin_adapter_client(
     log: ReplicaLogger,
+    metrics: Metrics,
     rt_handle: tokio::runtime::Handle,
     uds_path: Option<PathBuf>,
 ) -> Arc<dyn BitcoinAdapterClient> {
     match uds_path {
-        None => Arc::new(BrokenConnectionBitcoinClient()),
+        None => Arc::new(BrokenConnectionBitcoinClient::new(metrics)),
         Some(uds_path) => {
             // We will ignore this uri because uds do not use it
             // if your connector does use the uri it will be provided
@@ -183,18 +235,48 @@ pub fn setup_bitcoin_adapter_client(
                         // Connect to a Uds socket
                         UnixStream::connect(uds_path.clone())
                     })) {
-                        Ok(channel) => Arc::new(BitcoinAdapterClientImpl::new(rt_handle, channel)),
+                        Ok(channel) => {
+                            Arc::new(BitcoinAdapterClientImpl::new(metrics, rt_handle, channel))
+                        }
                         Err(_) => {
                             error!(log, "Could not connect endpoint.");
-                            Arc::new(BrokenConnectionBitcoinClient())
+                            Arc::new(BrokenConnectionBitcoinClient::new(metrics))
                         }
                     }
                 }
                 Err(_) => {
                     error!(log, "Could not create an endpoint.");
-                    Arc::new(BrokenConnectionBitcoinClient())
+                    Arc::new(BrokenConnectionBitcoinClient::new(metrics))
                 }
             }
         }
+    }
+}
+
+pub struct BitcoinAdapterClients {
+    pub btc_testnet_client: Arc<dyn BitcoinAdapterClient>,
+    pub btc_mainnet_client: Arc<dyn BitcoinAdapterClient>,
+}
+
+pub fn setup_bitcoin_adapter_clients(
+    log: ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    rt_handle: tokio::runtime::Handle,
+    adapters_config: AdaptersConfig,
+) -> BitcoinAdapterClients {
+    let metrics = Metrics::new(metrics_registry);
+    BitcoinAdapterClients {
+        btc_testnet_client: setup_bitcoin_adapter_client(
+            log.clone(),
+            metrics.clone(),
+            rt_handle.clone(),
+            adapters_config.bitcoin_testnet_uds_path,
+        ),
+        btc_mainnet_client: setup_bitcoin_adapter_client(
+            log,
+            metrics,
+            rt_handle,
+            adapters_config.bitcoin_mainnet_uds_path,
+        ),
     }
 }

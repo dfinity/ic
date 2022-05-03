@@ -3524,8 +3524,11 @@ dependencies = [
  "bitcoin",
  "ic-btc-service",
  "ic-btc-types-internal",
+ "ic-config",
  "ic-interfaces-bitcoin-adapter-client",
  "ic-logger",
+ "ic-metrics",
+ "prometheus",
  "serde",
  "serde_bytes",
  "slog",
@@ -5180,6 +5183,7 @@ name = "ic-interfaces-bitcoin-adapter-client"
 version = "0.8.0"
 dependencies = [
  "ic-btc-types-internal",
+ "strum 0.24.0",
  "tonic",
 ]
 

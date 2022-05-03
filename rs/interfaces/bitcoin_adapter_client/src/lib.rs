@@ -1,10 +1,11 @@
 use ic_btc_types_internal::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper};
 use std::time::Duration;
+use strum::IntoStaticStr;
 
 /// Describe RPC error -- can be either related to transport (i.e.
 /// failure to transport or parse a message) or to server (i.e. server
 /// responded, but gave us a message indicating an error).
-#[derive(Debug)]
+#[derive(Debug, IntoStaticStr)]
 pub enum RpcError {
     /// Failure at transport.
     ConnectionBroken,
