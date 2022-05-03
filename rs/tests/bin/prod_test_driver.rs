@@ -391,7 +391,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     workload_counter_canister_test::two_third_latency_test,
                 )]),
             )
-            .with_ttl(Duration::from_secs(900))
+            .with_ttl(Duration::from_secs(50 * 60)) //test should last 10min only
             .with_vm_allocation(VmAllocationStrategy::DistributeAcrossDcs),
         ],
     ));
