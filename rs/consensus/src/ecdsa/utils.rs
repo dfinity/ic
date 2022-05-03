@@ -12,6 +12,7 @@ use ic_types::consensus::{Block, BlockPayload, HasHeight};
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation;
 use ic_types::Height;
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 pub(crate) struct EcdsaBlockReaderImpl {
@@ -80,10 +81,10 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             })
     }
 
-    fn active_transcripts(&self) -> Vec<TranscriptRef> {
+    fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
         self.tip_ecdsa_payload
             .as_ref()
-            .map_or(Vec::new(), |payload| payload.active_transcripts())
+            .map_or(BTreeSet::new(), |payload| payload.active_transcripts())
     }
 
     fn transcript(
@@ -192,10 +193,10 @@ pub(crate) mod test_utils {
     use ic_types::artifact::EcdsaMessageId;
     use ic_types::consensus::ecdsa::{
         EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaDealing, EcdsaDealingSupport,
-        EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaSigShare, EcdsaSignedDealing,
-        IDkgTranscriptParamsRef, MaskedTranscript, PreSignatureQuadrupleRef, RequestId,
-        ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef, TranscriptLookupError, TranscriptRef,
-        UnmaskedTranscript,
+        EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaSigShare,
+        EcdsaSignedDealing, EcdsaUIDGenerator, IDkgTranscriptParamsRef, MaskedTranscript,
+        PreSignatureQuadrupleRef, RequestId, ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef,
+        TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{
         IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgOpening, IDkgReceivers,
@@ -208,7 +209,7 @@ pub(crate) mod test_utils {
     use ic_types::crypto::AlgorithmId;
     use ic_types::malicious_behaviour::MaliciousBehaviour;
     use ic_types::signature::*;
-    use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion};
+    use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
     use std::collections::{BTreeMap, BTreeSet};
     use std::convert::TryFrom;
     use std::sync::Mutex;
@@ -342,10 +343,12 @@ pub(crate) mod test_utils {
             &self,
             transcript_ref: &TranscriptRef,
         ) -> Result<IDkgTranscript, TranscriptLookupError> {
-            Ok(self.idkg_transcripts.get(transcript_ref).unwrap().clone())
+            self.idkg_transcripts.get(transcript_ref).cloned().ok_or(
+                TranscriptLookupError::TranscriptNotFound(*transcript_ref, false),
+            )
         }
 
-        fn active_transcripts(&self) -> Vec<TranscriptRef> {
+        fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
             self.idkg_transcripts.keys().cloned().collect()
         }
     }
@@ -1058,5 +1061,18 @@ pub(crate) mod test_utils {
             }
         }
         false
+    }
+
+    pub(crate) fn empty_ecdsa_payload(subnet_id: SubnetId) -> EcdsaPayload {
+        EcdsaPayload {
+            signature_agreements: BTreeMap::new(),
+            ongoing_signatures: BTreeMap::new(),
+            available_quadruples: BTreeMap::new(),
+            quadruples_in_creation: BTreeMap::new(),
+            uid_generator: EcdsaUIDGenerator::new(subnet_id, Height::new(0)),
+            idkg_transcripts: BTreeMap::new(),
+            ongoing_xnet_reshares: BTreeMap::new(),
+            xnet_reshare_agreements: BTreeMap::new(),
+        }
     }
 }

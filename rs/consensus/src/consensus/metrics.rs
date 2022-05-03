@@ -223,6 +223,7 @@ pub struct ValidatorMetrics {
     pub dkg_validator: IntCounterVec,
     // Used to sum the values within a single validator run
     dkg_time_per_validator_run: RwLock<f64>,
+    ecdsa_time_per_validator_run: RwLock<f64>,
 }
 
 impl ValidatorMetrics {
@@ -256,6 +257,7 @@ impl ValidatorMetrics {
                 &["type"],
             ),
             dkg_time_per_validator_run: RwLock::new(0.0),
+            ecdsa_time_per_validator_run: RwLock::new(0.0),
         }
     }
 
@@ -289,6 +291,11 @@ impl ValidatorMetrics {
             .with_label_values(&["DkgPerRun"])
             .observe(*dkg_time);
         *dkg_time = 0.0;
+    }
+
+    pub fn add_to_ecdsa_time_per_validator_run(&self, elapsed_time: f64) {
+        let mut ecdsa_time = self.ecdsa_time_per_validator_run.write().unwrap();
+        *ecdsa_time += elapsed_time;
     }
 }
 

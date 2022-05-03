@@ -14,7 +14,7 @@ use crate::{
         },
         ConsensusMessageId,
     },
-    dkg,
+    dkg, ecdsa,
 };
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces::{
@@ -52,6 +52,7 @@ enum TransientError {
     RegistryClientError(RegistryClientError),
     PayloadValidationError(PayloadTransientError),
     DkgPayloadValidationError(crate::dkg::TransientError),
+    EcdsaPayloadValidationError(crate::ecdsa::TransientError),
     DkgSummaryNotFound(Height),
     RandomBeaconNotFound(Height),
     StateHashError(StateHashError),
@@ -73,6 +74,7 @@ enum PermanentError {
     SignerNotInMultiSigCommittee(NodeId),
     PayloadValidationError(PayloadPermanentError),
     DkgPayloadValidationError(crate::dkg::PermanentError),
+    EcdsaPayloadValidationError(crate::ecdsa::PermanentError),
     InsufficientSignatures,
     CannotVerifyBlockHeightZero,
     NonEmptyPayloadPastUpgradePoint,
@@ -964,6 +966,31 @@ impl Validator {
                     TransientError::PayloadValidationError,
                 )
             })?;
+
+        let timer = self
+            .metrics
+            .validation_duration
+            .with_label_values(&["ecdsa"])
+            .start_timer();
+        let ret = ecdsa::validate_payload(
+            self.replica_config.subnet_id,
+            self.registry_client.as_ref(),
+            self.crypto.as_ref(),
+            pool_reader,
+            self.state_manager.as_ref(),
+            &proposal.context,
+            &parent,
+            proposal.payload.as_ref(),
+        )
+        .map_err(|err| {
+            err.map(
+                PermanentError::EcdsaPayloadValidationError,
+                TransientError::EcdsaPayloadValidationError,
+            )
+        });
+        let elapsed = timer.stop_and_record();
+        self.metrics.add_to_ecdsa_time_per_validator_run(elapsed);
+        ret?;
 
         let timer = self
             .metrics
