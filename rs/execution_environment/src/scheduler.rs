@@ -973,11 +973,17 @@ impl Scheduler for SchedulerImpl {
         // Invoke the heartbeat of the bitcoin canister.
         {
             let bitcoin_state: BitcoinState = state.take_bitcoin_testnet_state();
-            let bitcoin_state = ic_btc_canister::heartbeat(
-                bitcoin_state,
-                state.metadata.own_subnet_features.bitcoin_testnet(),
-                &self.log,
-            );
+            let bitcoin_state = {
+                let _timer = self
+                    .metrics
+                    .round_bitcoin_canister_heartbeat_duration
+                    .start_timer();
+                ic_btc_canister::heartbeat(
+                    bitcoin_state,
+                    state.metadata.own_subnet_features.bitcoin_testnet(),
+                    &self.log,
+                )
+            };
             state.put_bitcoin_testnet_state(bitcoin_state);
         }
 
