@@ -29,26 +29,34 @@ use ic_protobuf::types::v1 as pb;
 ///
 /// Quadruples must be matched with requests in the same order as requests
 /// are created.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct RequestId {
     pub quadruple_id: QuadrupleId,
-    pub pseudo_random_id: Vec<u8>,
+    pub pseudo_random_id: [u8; 32],
 }
 
 impl From<RequestId> for pb::RequestId {
     fn from(request_id: RequestId) -> Self {
         Self {
             quadruple_id: request_id.quadruple_id.0 as u64,
-            pseudo_random_id: request_id.pseudo_random_id,
+            pseudo_random_id: request_id.pseudo_random_id.to_vec(),
         }
     }
 }
 
-impl From<pb::RequestId> for RequestId {
-    fn from(request_id: pb::RequestId) -> Self {
-        Self {
-            quadruple_id: QuadrupleId(request_id.quadruple_id),
-            pseudo_random_id: request_id.pseudo_random_id,
+impl TryFrom<&pb::RequestId> for RequestId {
+    type Error = &'static str;
+
+    fn try_from(request_id: &pb::RequestId) -> Result<Self, Self::Error> {
+        if request_id.pseudo_random_id.len() != 32 {
+            Err("request_id.pseudo_random_id must be 32 bytes long")
+        } else {
+            let mut pseudo_random_id = [0; 32];
+            pseudo_random_id.copy_from_slice(&request_id.pseudo_random_id);
+            Ok(Self {
+                quadruple_id: QuadrupleId(request_id.quadruple_id),
+                pseudo_random_id,
+            })
         }
     }
 }
@@ -785,7 +793,7 @@ pub trait EcdsaBlockReader {
     ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_>;
 
     /// Returns the set of all the active references.
-    fn active_transcripts(&self) -> Vec<TranscriptRef>;
+    fn active_transcripts(&self) -> BTreeSet<TranscriptRef>;
 
     /// Looks up the transcript for the given transcript ref.
     fn transcript(

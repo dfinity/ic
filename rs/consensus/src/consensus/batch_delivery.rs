@@ -369,7 +369,7 @@ pub fn generate_responses_to_sign_with_ecdsa_calls(
     let mut completed_set = ecdsa_payload
         .signature_agreements
         .iter()
-        .map(|(request_id, sig)| (request_id.pseudo_random_id.clone(), sig))
+        .map(|(request_id, sig)| (request_id.pseudo_random_id, sig))
         .collect::<BTreeMap<_, _>>();
     for (callback_id, context) in contexts.iter() {
         if let Some(CompletedSignature::Unreported(response)) =

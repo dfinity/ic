@@ -38,7 +38,7 @@
 //! different types, because some transcripts should share a random value, while
 //! others need to share the product of two other transcripts. Complete
 //! transcripts will be included in blocks via the functions
-//! [create_tecdsa_payload] and [validate_tecdsa_payload].
+//! [create_data_payload] and [create_summary_payload].
 //!
 //! # [EcdsaImpl] behavior
 //! The ECDSA component is responsible for adding artifacts to the ECDSA
@@ -191,12 +191,14 @@ use std::sync::Arc;
 
 pub(crate) mod complaints;
 pub(crate) mod payload_builder;
+pub(crate) mod payload_verifier;
 pub(crate) mod pre_signer;
 pub(crate) mod signer;
 pub(crate) mod utils;
 
 pub use payload_builder::get_initial_dealings;
 pub(crate) use payload_builder::{create_data_payload, create_summary_payload};
+pub(crate) use payload_verifier::{validate_payload, PermanentError, TransientError};
 
 /// Similar to consensus, we don't fetch artifacts too far ahead in future.
 const LOOK_AHEAD: u64 = 10;

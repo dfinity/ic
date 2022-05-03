@@ -159,6 +159,15 @@ impl EcdsaPayload {
         )
     }
 
+    /// Return an iterator of all ids of quadruples in the payload.
+    pub fn iter_quadruple_ids(&self) -> Box<dyn Iterator<Item = QuadrupleId> + '_> {
+        Box::new(
+            self.available_quadruples
+                .keys()
+                .chain(self.quadruples_in_creation.keys())
+                .cloned(),
+        )
+    }
     /// Return an iterator of all unassigned quadruple ids that is used in the payload.
     /// A quadruple id is assigned if it already paired with a signature request (i.e.
     /// there exists a request id that contains this quadruple id).
@@ -168,30 +177,31 @@ impl EcdsaPayload {
             .map(|id| id.quadruple_id)
             .collect::<BTreeSet<_>>();
         Box::new(
-            self.available_quadruples
-                .keys()
-                .chain(self.quadruples_in_creation.keys())
-                .filter(move |id| !assigned.contains(id))
-                .cloned(),
+            self.iter_quadruple_ids()
+                .filter(move |id| !assigned.contains(id)),
         )
     }
 
     /// Return active transcript references in the  payload.
-    pub fn active_transcripts(&self) -> Vec<TranscriptRef> {
-        let mut active_refs = Vec::new();
+    pub fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
+        let mut active_refs = BTreeSet::new();
+        let mut insert = |refs: Vec<TranscriptRef>| {
+            refs.into_iter().for_each(|r| {
+                active_refs.insert(r);
+            })
+        };
         for obj in self.ongoing_signatures.values() {
-            active_refs.append(&mut obj.get_refs());
+            insert(obj.get_refs())
         }
         for obj in self.available_quadruples.values() {
-            active_refs.append(&mut obj.get_refs());
+            insert(obj.get_refs())
         }
         for obj in self.quadruples_in_creation.values() {
-            active_refs.append(&mut obj.get_refs());
+            insert(obj.get_refs())
         }
         for obj in self.ongoing_xnet_reshares.values() {
-            active_refs.append(&mut obj.as_ref().get_refs());
+            insert(obj.as_ref().get_refs())
         }
-
         active_refs
     }
 
@@ -247,10 +257,11 @@ impl EcdsaDataPayload {
     }
 
     /// Return active transcript references in the data payload.
-    pub fn active_transcripts(&self) -> Vec<TranscriptRef> {
+    pub fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
         let mut active_refs = self.ecdsa_payload.active_transcripts();
-        active_refs.append(&mut self.next_key_transcript_creation.get_refs());
-
+        for r in self.next_key_transcript_creation.get_refs() {
+            active_refs.insert(r);
+        }
         active_refs
     }
 
@@ -304,10 +315,9 @@ impl EcdsaSummaryPayload {
     }
 
     /// Return active transcript references in the summary payload.
-    pub fn active_transcripts(&self) -> Vec<TranscriptRef> {
+    pub fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
         let mut active_refs = self.ecdsa_payload.active_transcripts();
-        active_refs.push(*self.current_key_transcript.as_ref());
-
+        active_refs.insert(*self.current_key_transcript.as_ref());
         active_refs
     }
 
@@ -766,7 +776,7 @@ impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
                 CompletedSignature::ReportedToExecution => vec![],
             };
             signature_agreements.push(pb::CompletedSignature {
-                request_id: Some(request_id.clone().into()),
+                request_id: Some((*request_id).into()),
                 unreported,
             });
         }
@@ -775,7 +785,7 @@ impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
         let mut ongoing_signatures = Vec::new();
         for (request_id, ongoing) in &summary.ecdsa_payload.ongoing_signatures {
             ongoing_signatures.push(pb::OngoingSignature {
-                request_id: Some(request_id.clone().into()),
+                request_id: Some((*request_id).into()),
                 sig_inputs: Some(ongoing.into()),
             })
         }
@@ -870,9 +880,9 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaSummaryPayload {
         for completed_signature in &summary.signature_agreements {
             let request_id = completed_signature
                 .request_id
-                .clone()
+                .as_ref()
                 .ok_or("pb::EcdsaSummaryPayload:: Missing completed_signature request Id")
-                .map(RequestId::from)?;
+                .and_then(RequestId::try_from)?;
             let signature = if !completed_signature.unreported.is_empty() {
                 CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
                     signature: completed_signature.unreported.clone(),
@@ -888,9 +898,9 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaSummaryPayload {
         for ongoing_signature in &summary.ongoing_signatures {
             let request_id = ongoing_signature
                 .request_id
-                .clone()
+                .as_ref()
                 .ok_or("pb::EcdsaSummaryPayload:: Missing ongoing_signature request Id")
-                .map(RequestId::from)?;
+                .and_then(RequestId::try_from)?;
             let proto = ongoing_signature
                 .sig_inputs
                 .as_ref()

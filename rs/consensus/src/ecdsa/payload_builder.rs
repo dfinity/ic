@@ -1,4 +1,4 @@
-//! This module implements the ECDSA payload builder and verifier.
+//! This module implements the ECDSA payload builder.
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::enum_variant_names)]
 
@@ -46,16 +46,16 @@ use std::sync::{Arc, RwLock};
 pub enum EcdsaPayloadError {
     RegistryClientError(RegistryClientError),
     StateManagerError(StateManagerError),
+    SubnetWithNoNodes(SubnetId, RegistryVersion),
     PreSignatureError(PresignatureQuadrupleCreationError),
     IDkgParamsValidationError(IDkgParamsValidationError),
     IDkgTranscriptIdError(IDkgTranscriptIdError),
     DkgSummaryBlockNotFound(Height),
-    SubnetWithNoNodes(RegistryVersion),
     EcdsaConfigNotFound(RegistryVersion),
     ThresholdEcdsaSigInputsCreationError(ThresholdEcdsaSigInputsCreationError),
     TranscriptCastError(ecdsa::TranscriptCastError),
+    InvalidChainCacheError(InvalidChainCacheError),
     InitialIDkgDealingsNotUnmaskedParams(Box<InitialIDkgDealings>),
-    InvalidChainCacheError(String),
 }
 
 impl From<RegistryClientError> for EcdsaPayloadError {
@@ -100,6 +100,33 @@ impl From<ecdsa::TranscriptCastError> for EcdsaPayloadError {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) enum MembershipError {
+    RegistryClientError(RegistryClientError),
+    SubnetWithNoNodes(SubnetId, RegistryVersion),
+}
+
+impl From<MembershipError> for EcdsaPayloadError {
+    fn from(err: MembershipError) -> Self {
+        match err {
+            MembershipError::RegistryClientError(err) => {
+                EcdsaPayloadError::RegistryClientError(err)
+            }
+            MembershipError::SubnetWithNoNodes(subnet_id, err) => {
+                EcdsaPayloadError::SubnetWithNoNodes(subnet_id, err)
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct InvalidChainCacheError(String);
+
+impl From<InvalidChainCacheError> for EcdsaPayloadError {
+    fn from(err: InvalidChainCacheError) -> Self {
+        EcdsaPayloadError::InvalidChainCacheError(err)
+    }
+}
 /// Caches the transcripts queried from the TranscriptBuilder
 struct TranscriptBuilderCache<'a> {
     transcript_builder: &'a dyn EcdsaTranscriptBuilder,
@@ -138,7 +165,7 @@ impl<'a> TranscriptBuilderCache<'a> {
 }
 
 /// Return true if ecdsa is enabled in subnet features in the subnet record.
-fn ecdsa_feature_is_enabled(
+pub(crate) fn ecdsa_feature_is_enabled(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     pool_reader: &PoolReader<'_>,
@@ -192,12 +219,9 @@ pub fn get_initial_dealings(
 pub(crate) fn create_summary_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
-    _crypto: &dyn ConsensusCrypto,
     pool_reader: &PoolReader<'_>,
-    _state_manager: &dyn StateManager<State = ReplicatedState>,
-    _context: &ValidationContext,
     parent_block: &Block,
-    ecdsa_payload_metrics: &EcdsaPayloadMetrics,
+    ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
     log: ReplicaLogger,
 ) -> Result<ecdsa::Summary, EcdsaPayloadError> {
     let height = parent_block.height().increment();
@@ -275,31 +299,14 @@ fn update_summary_refs(
     summary: &mut ecdsa::EcdsaSummaryPayload,
     pool_reader: &PoolReader<'_>,
     parent_block: &Block,
-    ecdsa_payload_metrics: &EcdsaPayloadMetrics,
+    ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<(), EcdsaPayloadError> {
     // Gather the refs and update them to point to the new
     // summary block height.
-    let height = Some(parent_block.height().increment());
-    let mut prev_refs = Vec::new();
-    for quadruple in summary.ecdsa_payload.available_quadruples.values_mut() {
-        prev_refs.append(&mut quadruple.get_refs_and_update(height));
-    }
-    for signature in summary.ecdsa_payload.ongoing_signatures.values_mut() {
-        prev_refs.append(&mut signature.get_refs_and_update(height));
-    }
-    for quadruples in summary.ecdsa_payload.quadruples_in_creation.values_mut() {
-        prev_refs.append(&mut quadruples.get_refs_and_update(height));
-    }
-    for reshare_params in summary.ecdsa_payload.ongoing_xnet_reshares.values_mut() {
-        prev_refs.append(&mut reshare_params.as_mut().get_refs_and_update(height));
-    }
-    prev_refs.push(
-        summary
-            .current_key_transcript
-            .as_mut()
-            .get_and_update(height),
-    );
+    let prev_refs = summary.active_transcripts();
+    let height = parent_block.height().increment();
+    summary.update_refs(height);
 
     // Resolve the transcript refs pointing into the parent chain,
     // copy the resolved transcripts into the summary block.
@@ -311,21 +318,21 @@ fn update_summary_refs(
                 log,
                 "create_summary_payload(): failed to build chain cache: {:?}", err
             );
-            ecdsa_payload_metrics.payload_errors_inc("summary_invalid_chain_cache");
-            return Err(err);
+            if let Some(metrics) = ecdsa_payload_metrics {
+                metrics.payload_errors_inc("summary_invalid_chain_cache");
+            };
+            return Err(err.into());
         }
     };
     let block_reader = EcdsaBlockReaderImpl::new(parent_chain);
     summary.ecdsa_payload.idkg_transcripts.clear();
     for transcript_ref in prev_refs {
+        // We want to panic here if the transcript reference could not be resolved.
+        let transcript = block_reader.transcript(&transcript_ref).unwrap();
         summary
             .ecdsa_payload
             .idkg_transcripts
-            .entry(transcript_ref.transcript_id)
-            .or_insert_with(
-                // We want to panic here if the transcript reference could not be resolved.
-                || block_reader.transcript(&transcript_ref).unwrap(),
-            );
+            .insert(transcript_ref.transcript_id, transcript);
     }
 
     Ok(())
@@ -335,19 +342,23 @@ fn get_subnet_nodes(
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
     subnet_id: SubnetId,
-) -> Result<Vec<NodeId>, EcdsaPayloadError> {
+) -> Result<Vec<NodeId>, MembershipError> {
     // TODO: shuffle the nodes using random beacon?
     registry_client
-        .get_node_ids_on_subnet(subnet_id, registry_version)?
-        .ok_or(EcdsaPayloadError::SubnetWithNoNodes(registry_version))
+        .get_node_ids_on_subnet(subnet_id, registry_version)
+        .map_err(MembershipError::RegistryClientError)?
+        .ok_or(MembershipError::SubnetWithNoNodes(
+            subnet_id,
+            registry_version,
+        ))
 }
 
-fn is_subnet_membership_changing(
+pub(crate) fn is_subnet_membership_changing(
     registry_client: &dyn RegistryClient,
     dkg_registry_version: RegistryVersion,
     context_registry_version: RegistryVersion,
     subnet_id: SubnetId,
-) -> Result<bool, EcdsaPayloadError> {
+) -> Result<bool, MembershipError> {
     let current_nodes = get_subnet_nodes(registry_client, dkg_registry_version, subnet_id)?
         .into_iter()
         .collect::<BTreeSet<_>>();
@@ -476,7 +487,7 @@ pub(crate) fn create_data_payload(
                 "create_data_payload(): failed to build chain cache: {:?}", err
             );
             ecdsa_payload_metrics.payload_errors_inc("payload_invalid_chain_cache");
-            return Err(err);
+            return Err(err.into());
         }
     };
     let current_key_transcript = summary
@@ -608,7 +619,8 @@ pub(crate) fn create_data_payload(
     }))
 }
 
-/// Create a new random transcript config.
+/// Create a new random transcript config and advance the
+/// next_unused_transcript_id by one.
 fn new_random_config(
     subnet_nodes: &[NodeId],
     summary_registry_version: RegistryVersion,
@@ -737,13 +749,13 @@ fn make_new_quadruples_if_needed(
 /// i that are in creation or available.  This logic will allow us to continue
 /// using at least some (and typically most) of the quadruples that were
 /// already available when we pro-actively reshare the signing key.
-fn get_signing_requests<'a>(
+pub(crate) fn get_signing_requests<'a>(
     ecdsa_payload: &ecdsa::EcdsaPayload,
     sign_with_ecdsa_contexts: &'a BTreeMap<CallbackId, SignWithEcdsaContext>,
 ) -> BTreeMap<ecdsa::RequestId, &'a SignWithEcdsaContext> {
-    let known_random_ids: BTreeSet<Vec<u8>> = ecdsa_payload
+    let known_random_ids: BTreeSet<[u8; 32]> = ecdsa_payload
         .iter_request_ids()
-        .map(|id| id.pseudo_random_id.clone())
+        .map(|id| id.pseudo_random_id)
         .collect::<BTreeSet<_>>();
     let mut unassigned_quadruple_ids = ecdsa_payload.unassigned_quadruple_ids().collect::<Vec<_>>();
     // sort in reverse order (bigger to smaller).
@@ -759,7 +771,7 @@ fn get_signing_requests<'a>(
         if let Some(quadruple_id) = unassigned_quadruple_ids.pop() {
             let request_id = ecdsa::RequestId {
                 quadruple_id,
-                pseudo_random_id: context.pseudo_random_id.to_vec(),
+                pseudo_random_id: context.pseudo_random_id,
             };
             new_requests.insert(request_id, context);
         } else {
@@ -784,7 +796,7 @@ fn update_signature_agreements(
 ) {
     let all_random_ids = all_requests
         .values()
-        .map(|context| context.pseudo_random_id.to_vec())
+        .map(|context| context.pseudo_random_id)
         .collect::<BTreeSet<_>>();
     let ecdsa_pool = ecdsa_pool.read().unwrap();
     let builder = EcdsaSignatureBuilderImpl::new(crypto, metrics, log.clone());
@@ -1193,21 +1205,9 @@ fn update_quadruples_in_creation(
     Ok(new_transcripts)
 }
 
-/// Validates a threshold ECDSA summary payload.
-pub fn validate_summary_payload(
-    _payload: ecdsa::EcdsaSummaryPayload,
-) -> Result<(), EcdsaPayloadError> {
-    todo!()
-}
-
-/// Validates a threshold ECDSA data payload.
-pub fn validate_data_payload(_payload: ecdsa::EcdsaDataPayload) -> Result<(), EcdsaPayloadError> {
-    todo!()
-}
-
 /// Helper to build threshold signature inputs from the context and
 /// the pre-signature quadruple
-fn build_signature_inputs(
+pub(crate) fn build_signature_inputs(
     context: &SignWithEcdsaContext,
     quadruple_ref: &ecdsa::PreSignatureQuadrupleRef,
     key_transcript_ref: &ecdsa::UnmaskedTranscript,
@@ -1348,14 +1348,14 @@ pub fn block_chain_cache(
     pool_reader: &PoolReader<'_>,
     start: &Block,
     end: &Block,
-) -> Result<Arc<dyn ConsensusBlockChain>, EcdsaPayloadError> {
+) -> Result<Arc<dyn ConsensusBlockChain>, InvalidChainCacheError> {
     let chain = build_consensus_block_chain(pool_reader.pool(), start, end);
     let expected_len = (end.height().get() - start.height().get() + 1) as usize;
     let chain_len = chain.len();
     if chain_len == expected_len {
         Ok(chain)
     } else {
-        Err(EcdsaPayloadError::InvalidChainCacheError(format!(
+        Err(InvalidChainCacheError(format!(
             "Invalid chain cache length: expected = {:?}, actual = {:?}, \
              start = {:?}, end = {:?}, tip = {:?}, \
              notarized_height = {:?}, finalized_height = {:?}, CUP height = {:?}",
@@ -1628,7 +1628,7 @@ mod tests {
         );
         assert_eq!(new_requests.len(), 1);
         // Check if it is matched with the smaller quadruple ID
-        let request_id_0 = new_requests.keys().next().unwrap().clone();
+        let request_id_0 = *new_requests.keys().next().unwrap();
         assert_eq!(request_id_0.quadruple_id, quadruple_id_0);
         // Now we are going to make quadruple_id_1 available.
         let sig_inputs = create_sig_inputs(10);
@@ -1682,11 +1682,7 @@ mod tests {
                 .sign_with_ecdsa_contexts,
         );
         assert_eq!(new_requests.len(), 2);
-        let request_id_1 = new_requests
-            .keys()
-            .find(|x| x != &&request_id_0)
-            .unwrap()
-            .clone();
+        let request_id_1 = *new_requests.keys().find(|x| x != &&request_id_0).unwrap();
         // We should be able to move the 2nd request into ongoing_signatures.
         let result = update_ongoing_signatures(
             new_requests,
@@ -1696,12 +1692,7 @@ mod tests {
         );
         assert!(result.is_ok());
         assert_eq!(
-            ecdsa_payload
-                .ongoing_signatures
-                .keys()
-                .next()
-                .unwrap()
-                .clone(),
+            *ecdsa_payload.ongoing_signatures.keys().next().unwrap(),
             request_id_1
         );
         // Run get_signing_requests again, we should get request_id_0, but not request_id_1
@@ -2324,7 +2315,7 @@ mod tests {
             ecdsa_payload.signature_agreements.insert(
                 ecdsa::RequestId {
                     quadruple_id: quadruple_id_1,
-                    pseudo_random_id: vec![1; 32],
+                    pseudo_random_id: [1; 32],
                 },
                 ecdsa::CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
                     signature: vec![1; 32],
@@ -2333,7 +2324,7 @@ mod tests {
             ecdsa_payload.signature_agreements.insert(
                 ecdsa::RequestId {
                     quadruple_id: ecdsa_payload.uid_generator.next_quadruple_id(),
-                    pseudo_random_id: vec![0; 32],
+                    pseudo_random_id: [0; 32],
                 },
                 ecdsa::CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
                     signature: vec![2; 32],
@@ -2836,11 +2827,11 @@ mod tests {
             );
             let req_id_1 = ecdsa::RequestId {
                 quadruple_id: quadruple_id_1,
-                pseudo_random_id: Vec::new(),
+                pseudo_random_id: [0; 32],
             };
             let req_id_2 = ecdsa::RequestId {
                 quadruple_id: quadruple_id_2,
-                pseudo_random_id: Vec::new(),
+                pseudo_random_id: [1; 32],
             };
             ecdsa_payload
                 .ongoing_signatures
@@ -2959,7 +2950,7 @@ mod tests {
                 &mut summary,
                 &pool_reader,
                 &parent_block,
-                &EcdsaPayloadMetrics::new(MetricsRegistry::new()),
+                None,
                 &no_op_logger()
             )
             .is_ok());
@@ -3090,11 +3081,11 @@ mod tests {
             let quadruple_id_2 = uid_generator.next_quadruple_id();
             let req_id_1 = ecdsa::RequestId {
                 quadruple_id: quadruple_id_1,
-                pseudo_random_id: vec![0; 32],
+                pseudo_random_id: [0; 32],
             };
             let req_id_2 = ecdsa::RequestId {
                 quadruple_id: quadruple_id_2,
-                pseudo_random_id: vec![1; 32],
+                pseudo_random_id: [1; 32],
             };
             ecdsa_payload.ongoing_signatures.insert(req_id_1, sig_1);
             ecdsa_payload.ongoing_signatures.insert(req_id_2, sig_2);
@@ -3153,14 +3144,14 @@ mod tests {
             ecdsa_payload.signature_agreements.insert(
                 ecdsa::RequestId {
                     quadruple_id: ecdsa_payload.uid_generator.next_quadruple_id(),
-                    pseudo_random_id: vec![2; 32],
+                    pseudo_random_id: [2; 32],
                 },
                 ecdsa::CompletedSignature::ReportedToExecution,
             );
             ecdsa_payload.signature_agreements.insert(
                 ecdsa::RequestId {
                     quadruple_id: ecdsa_payload.uid_generator.next_quadruple_id(),
-                    pseudo_random_id: vec![3; 32],
+                    pseudo_random_id: [3; 32],
                 },
                 ecdsa::CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
                     signature: vec![10; 10],
@@ -3195,7 +3186,7 @@ mod tests {
                 &mut summary,
                 &pool_reader,
                 &parent_block,
-                &EcdsaPayloadMetrics::new(MetricsRegistry::new()),
+                None,
                 &no_op_logger()
             )
             .is_ok());

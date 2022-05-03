@@ -308,12 +308,9 @@ impl BlockMaker {
                     let ecdsa_summary = ecdsa::create_summary_payload(
                         self.replica_config.subnet_id,
                         &*self.registry_client,
-                        &*self.crypto,
                         pool,
-                        &*self.state_manager,
-                        &context,
                         &parent,
-                        &self.ecdsa_payload_metrics,
+                        Some(&self.ecdsa_payload_metrics),
                         self.log.clone(),
                     )
                     .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
