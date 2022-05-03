@@ -531,7 +531,7 @@ impl BackupArtifact {
 
     // Each artifact will be stored separately used the following path:
     //
-    // <subnet_id>/<(height / N) * N>/height/<artifact_specific_name>.bin
+    // <subnet_id>/<replica_version>/<(height / N) * N>/height/<artifact_specific_name>.bin
     //
     // Note that the artifact specific name must contain all parameters to be
     // differentiated not only across other artifacts of the same replica, but also
