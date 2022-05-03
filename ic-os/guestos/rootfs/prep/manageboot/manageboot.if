@@ -1,0 +1,39 @@
+#######################################
+## <summary>
+##   Allow a domain to run the "manageboot" utility.
+## </summary>
+## <param name="domain">
+##   <summary>
+##     The domain that is allowed access to the utility.
+##   </summary>
+## </param>
+
+interface(`ic_call_manageboot', `
+	gen_require(`
+		type ic_manageboot_t, ic_manageboot_sudo_t, ic_manageboot_exec_t;
+	')
+
+	domain_auto_transition_pattern($1, ic_manageboot_exec_t, ic_manageboot_t)
+	allow ic_manageboot_t $1:fd use;
+	allow ic_manageboot_t $1:fifo_file { ioctl getattr read write };
+	allow ic_manageboot_sudo_t $1:fd use;
+	allow ic_manageboot_sudo_t $1:fifo_file { ioctl getattr read write };
+')
+
+#######################################
+## <summary>
+##   Allow the "manageboot" utility to read upgrade images from given
+##   domain.
+## </summary>
+## <param name="domain">
+##   <summary>
+##     The domain that the upgrade images will live in.
+##   </summary>
+## </param>
+interface(`ic_manageboot_read_upgrade_image', `
+	gen_require(`
+		type ic_manageboot_t;
+	')
+
+	read_files_pattern(ic_manageboot_t, $1, $1)
+')
