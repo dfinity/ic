@@ -1,0 +1,25 @@
+[package]
+name = "ic-canister-http-adapter-client"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+candid = "0.7.14"
+futures = "0.3.21"
+ic-canister-http-service = { path = "../service" }
+ic-error-types = { path = "../../types/error_types" }
+ic-ic00-types = { path="../../types/ic00_types" }
+ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-canister-http-adapter-client = { path = "../../interfaces/canister_http_adapter_client" }
+ic-protobuf = { path = "../../protobuf" }
+ic-types = { path = "../../types/types" }
+slog = "2.7.0"
+tokio = { version = "1.15.0", features = ["full"] }
+tonic = "0.6.2"
+tower = { version = "0.4.8", features = ["util"] }
+
+[dev-dependencies]
+ic-test-utilities = { path = "../../test_utilities" }

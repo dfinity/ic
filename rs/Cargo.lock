@@ -3690,6 +3690,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-canister-http-adapter-client"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "futures",
+ "ic-canister-http-service",
+ "ic-error-types",
+ "ic-ic00-types",
+ "ic-interfaces",
+ "ic-interfaces-canister-http-adapter-client",
+ "ic-protobuf",
+ "ic-test-utilities",
+ "ic-types 0.8.0",
+ "slog",
+ "tokio",
+ "tonic",
+ "tower",
+]
+
+[[package]]
 name = "ic-canister-http-service"
 version = "0.1.0"
 dependencies = [
