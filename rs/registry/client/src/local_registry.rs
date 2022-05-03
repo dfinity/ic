@@ -45,7 +45,7 @@ pub struct LocalRegistry {
     // threshold public key of the root subnet changes.
     cached_registry_canister: RwLock<(RootSubnetInfo, RegistryCanister)>,
     query_timeout: Duration,
-    tokio_runtime: tokio::runtime::Runtime,
+    tokio_runtime_handle: tokio::runtime::Handle,
 }
 
 impl LocalRegistry {
@@ -68,16 +68,20 @@ impl LocalRegistry {
     ) -> Result<Self, LocalRegistryError> {
         let tokio_runtime =
             tokio::runtime::Runtime::new().expect("Could not instantiate tokio runtime");
-        Self::new_with_runtime(local_store_path, query_timeout, tokio_runtime)
+        Self::new_with_runtime_handle(
+            local_store_path,
+            query_timeout,
+            tokio_runtime.handle().clone(),
+        )
     }
 
     /// Same as [new].
     ///
-    /// `tokio_runtime` will be used to handle asynchronous code paths.
-    pub fn new_with_runtime<P: AsRef<Path>>(
+    /// `tokio_runtime_handle` will be used to handle asynchronous code paths.
+    pub fn new_with_runtime_handle<P: AsRef<Path>>(
         local_store_path: P,
         query_timeout: Duration,
-        tokio_runtime: tokio::runtime::Runtime,
+        tokio_runtime_handle: tokio::runtime::Handle,
     ) -> Result<Self, LocalRegistryError> {
         let local_store_reader = Arc::new(LocalStoreImpl::new(local_store_path.as_ref()));
         let local_store_writer = LocalStoreImpl::new(local_store_path.as_ref());
@@ -99,7 +103,7 @@ impl LocalRegistry {
             local_store_writer,
             cached_registry_canister,
             query_timeout,
-            tokio_runtime,
+            tokio_runtime_handle,
         })
     }
 
@@ -117,7 +121,7 @@ impl LocalRegistry {
         let (mut raw_changelog, certified_time) = {
             let guard = self.cached_registry_canister.read().unwrap();
             let (raw_changelog, _, t) = self
-                .tokio_runtime
+                .tokio_runtime_handle
                 .block_on(guard.1.get_certified_changes_since(
                     latest_cached_version.get(),
                     &guard.0.urls_and_pubkey.1,
