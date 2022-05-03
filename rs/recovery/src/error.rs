@@ -13,7 +13,8 @@ pub type RecoveryResult<T> = Result<T, RecoveryError>;
 #[allow(clippy::enum_variant_names)]
 pub enum RecoveryError {
     IoError(String, io::Error),
-    CommandError(String),
+    CommandError(Option<i32>, String),
+    OutputError(String),
     DownloadError(String, FileDownloadError),
     StepSkipped,
 }
@@ -25,14 +26,17 @@ impl RecoveryError {
     pub(crate) fn file_error(file: &Path, e: io::Error) -> Self {
         RecoveryError::IoError(format!("File error: {:?}", file), e)
     }
-    pub(crate) fn cmd_error(cmd: &Command, output: String) -> Self {
-        RecoveryError::CommandError(format!(
-            "Failed to execute system command: {:?}, Output: {}",
-            cmd, output
-        ))
+    pub(crate) fn cmd_error(cmd: &Command, exit_code: Option<i32>, output: String) -> Self {
+        RecoveryError::CommandError(
+            exit_code,
+            format!(
+                "Failed to execute system command: {:?}, Output: {}",
+                cmd, output
+            ),
+        )
     }
     pub(crate) fn invalid_output_error(output: String) -> Self {
-        RecoveryError::CommandError(format!("Invalid output: {}", output))
+        RecoveryError::OutputError(format!("Invalid output: {}", output))
     }
     pub(crate) fn download_error(url: String, target: &Path, e: FileDownloadError) -> Self {
         RecoveryError::DownloadError(
@@ -48,8 +52,11 @@ impl fmt::Display for RecoveryError {
             RecoveryError::IoError(msg, e) => {
                 write!(f, "IO error, message: {:?}, error: {:?}", msg, e)
             }
-            RecoveryError::CommandError(msg) => {
-                write!(f, "Command error, message: {:?}", msg)
+            RecoveryError::CommandError(code, msg) => {
+                write!(f, "Command error, message: {:?}, code: {:?}", msg, code)
+            }
+            RecoveryError::OutputError(msg) => {
+                write!(f, "Output error, message: {:?}", msg)
             }
             RecoveryError::DownloadError(msg, e) => {
                 write!(f, "Download error, message: {:?}, error: {:?}", msg, e)
