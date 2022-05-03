@@ -3,7 +3,7 @@ use crate::error::{RecoveryError, RecoveryResult};
 use crate::ssh_helper;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_types::ReplicaVersion;
-use slog::{info, Logger};
+use slog::{info, warn, Logger};
 use std::fs::{self, File, ReadDir};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -74,7 +74,13 @@ pub fn rsync(
     rsync.arg("-e").arg(ssh_helper::get_rsync_ssh_arg(key_file));
     info!(logger, "{:?}", rsync);
     info!(logger, "Starting transfer, waiting for output...");
-    exec_cmd(&mut rsync)
+    match exec_cmd(&mut rsync) {
+        Err(RecoveryError::CommandError(Some(24), msg)) => {
+            warn!(logger, "Masking rsync warning (code 24)");
+            Ok(Some(msg))
+        }
+        res => res,
+    }
 }
 
 pub fn write_file(file: &Path, content: String) -> RecoveryResult<()> {
