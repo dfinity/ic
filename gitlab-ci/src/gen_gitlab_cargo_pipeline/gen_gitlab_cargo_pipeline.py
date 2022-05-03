@@ -410,7 +410,7 @@ def _generate_tests_may_raise_exception(
         generate_gitlab_yaml([], gitlab_ci_config, out, disable_caching=disable_caching)
         return
 
-    changed_files = git_changes.get_changed_files(git_root, [rust_workspace])
+    changed_files = git_changes.get_changed_files(git_root, [rust_workspace], ignored_files=["BUILD.bazel"])
     logging.debug("The following files have changed since the merge base: %s", changed_files)
 
     for file_name in changed_files:
