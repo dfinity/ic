@@ -1,4 +1,7 @@
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry, Timer};
+use ic_metrics::{
+    buckets::{decimal_buckets, decimal_buckets_with_zero},
+    MetricsRegistry, Timer,
+};
 use prometheus::{Histogram, HistogramVec};
 
 const LABEL_STATUS: &str = "status";
@@ -54,13 +57,13 @@ impl BitcoinPayloadBuilderMetrics {
                 METRIC_BLOCKS_PER_GET_SUCCESSORS_RESPONSE,
                 "Number of blocks included per get successors response",
                 // 0, 1, 2, 5, 10, ..., 1000
-                decimal_buckets(0, 3),
+                decimal_buckets_with_zero(0, 3),
             ),
             adapter_response_size_bytes: metrics_registry.histogram(
                 METRIC_ADAPTER_RESPONSE_SIZE_BYTES,
                 "Size of responses received from the adapter in bytes.",
                 // 0, 1, 2, 5, 10, ..., 10MB
-                decimal_buckets(0, 7),
+                decimal_buckets_with_zero(0, 7),
             ),
         }
     }
