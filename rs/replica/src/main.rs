@@ -1,6 +1,6 @@
 //! Replica -- Internet Computer
 
-use ic_async_utils::shutdown_signal;
+use ic_async_utils::{abort_on_panic, shutdown_signal};
 use ic_config::registry_client::DataProviderConfig;
 use ic_config::{subnet_config::SubnetConfigs, Config};
 use ic_crypto_sha::Sha256;
@@ -45,14 +45,6 @@ use regex::Regex;
 use std::fs::File;
 #[cfg(feature = "profiler")]
 use std::io::Write;
-
-fn abort_on_panic() {
-    let default_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |panic_info| {
-        default_hook(panic_info);
-        std::process::abort();
-    }));
-}
 
 /// Determine sha256 hash of the current replica binary
 ///

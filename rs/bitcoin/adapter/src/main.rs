@@ -1,5 +1,5 @@
 use clap::Parser;
-use ic_async_utils::shutdown_signal;
+use ic_async_utils::{abort_on_panic, shutdown_signal};
 use ic_btc_adapter::{
     cli::Cli, spawn_grpc_server, start_router, AdapterState, BlockchainState, GetSuccessorsHandler,
 };
@@ -10,6 +10,11 @@ use tokio::sync::{mpsc::channel, Mutex};
 
 #[tokio::main]
 pub async fn main() {
+    // We abort the whole program with a core dump if a single thread panics.
+    // This way we can capture all the context if a critical error
+    // happens.
+    abort_on_panic();
+
     let cli = Cli::parse();
     let config = match cli.get_config() {
         Ok(config) => config,
