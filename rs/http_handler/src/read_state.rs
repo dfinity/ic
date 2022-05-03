@@ -5,7 +5,7 @@ use crate::{
         cbor_response, into_cbor, make_plaintext_response, make_response_on_validation_error,
     },
     state_reader_executor::StateReaderExecutor,
-    types::{ApiReqType, RequestType},
+    types::{to_legacy_request_type, ApiReqType},
     HttpError, HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
 };
 use hyper::{Body, Response, StatusCode};
@@ -85,8 +85,8 @@ impl Service<Vec<u8>> for ReadStateService {
         self.metrics
             .requests_body_size_bytes
             .with_label_values(&[
-                RequestType::ReadState.as_str(),
-                ApiReqType::ReadState.as_str(),
+                to_legacy_request_type(ApiReqType::ReadState),
+                ApiReqType::ReadState.into(),
                 UNKNOWN_LABEL,
             ])
             .observe(body.len() as f64);

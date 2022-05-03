@@ -2,7 +2,7 @@
 
 use crate::{
     common::{cbor_response, make_plaintext_response, make_response_on_validation_error},
-    types::{ApiReqType, RequestType},
+    types::{to_legacy_request_type, ApiReqType},
     HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
 };
 use futures_util::FutureExt;
@@ -80,8 +80,8 @@ impl Service<Vec<u8>> for QueryService {
         self.metrics
             .requests_body_size_bytes
             .with_label_values(&[
-                RequestType::Query.as_str(),
-                ApiReqType::Query.as_str(),
+                to_legacy_request_type(ApiReqType::Query),
+                ApiReqType::Query.into(),
                 UNKNOWN_LABEL,
             ])
             .observe(body.len() as f64);

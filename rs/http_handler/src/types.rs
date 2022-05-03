@@ -3,7 +3,10 @@
 /// `handle_request`.
 ///
 /// https://sdk.dfinity.org/docs/interface-spec/index.html#request-types
-#[derive(Clone, Copy)]
+use strum::IntoStaticStr;
+
+#[derive(Clone, Copy, IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
 pub(crate) enum ApiReqType {
     /// `call`
     Call,
@@ -23,87 +26,23 @@ pub(crate) enum ApiReqType {
     InvalidArgument,
 }
 
-impl ApiReqType {
-    pub(crate) fn as_str(&self) -> &'static str {
-        use ApiReqType::*;
-        match self {
-            Call => "call",
-            Query => "query",
-            ReadState => "read_state",
-            Status => "status",
-            CatchUpPackage => "catch_up_package",
-            Options => "options",
-            Dashboard => "dashboard",
-            RedirectToDashboard => "redirect_to_dashboard",
-            InvalidArgument => "invalid_argument",
-            PprofHome => "pprof_home",
-            PprofProfile => "pprof_profile",
-            PprofFlamegraph => "pprof_flamegraph",
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
 pub(crate) enum AppLayer {
     Http,
     Https,
 }
 
-impl AppLayer {
-    pub(crate) fn as_str(&self) -> &'static str {
-        use AppLayer::*;
-        match self {
-            Http => "http",
-            Https => "https",
-        }
+// TODO: NET-871
+pub(crate) fn to_legacy_request_type(req_type: ApiReqType) -> &'static str {
+    match req_type {
+        ApiReqType::Call => "submit",
+        _ => req_type.into(),
     }
 }
 
-/// What kind of request did the user send?
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum RequestType {
-    /// A "status" request
-    Status,
-    /// A "submit" request
-    Submit,
-    /// A "query" request
-    Query,
-    /// A "read_state" request
-    ReadState,
-    /// A pre-flight OPTIONS request
-    Options,
-    /// A request for the dashboard, but one that required a redirection
-    RedirectToDashboard,
-    /// A direct request for the dashboard
-    Dashboard,
-    /// A request for the latest Catch-Up Package (CUP)
-    CatchUpPackage,
-    InvalidArgument,
-    PprofHome,
-    PprofProfile,
-    PprofFlamegraph,
-}
-
-impl RequestType {
-    pub(crate) fn as_str(&self) -> &'static str {
-        use RequestType::*;
-        match self {
-            Status => "status",
-            Submit => "submit",
-            ReadState => "read_state",
-            Query => "query",
-            Options => "options",
-            RedirectToDashboard => "redirect_to_dashboard",
-            Dashboard => "dashboard",
-            CatchUpPackage => "catch-up-package",
-            InvalidArgument => "invalid_argument",
-            PprofHome => "pprof_home",
-            PprofProfile => "pprof_profile",
-            PprofFlamegraph => "pprof_flamegraph",
-        }
-    }
-}
-
+#[derive(IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
 pub(crate) enum ConnectionError {
     TlsHandshake,
     ServingHttpConnection,
@@ -113,16 +52,59 @@ pub(crate) enum ConnectionError {
     PeekTimeout,
 }
 
-impl ConnectionError {
-    pub(crate) fn as_str(&self) -> &'static str {
-        use ConnectionError::*;
-        match self {
-            TlsHandshake => "tls_handshake",
-            ServingHttpConnection => "serving_http_connection",
-            ServingHttpsConnection => "serving_https_connection",
-            Accept => "accept",
-            Peek => "peek",
-            PeekTimeout => "peek_timeout",
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_label_values_do_not_change() {
+        type StaticStr = &'static str;
+        assert_eq!(StaticStr::from(ApiReqType::Call), "call");
+        assert_eq!(StaticStr::from(ApiReqType::Query), "query");
+        assert_eq!(StaticStr::from(ApiReqType::ReadState), "read_state");
+        assert_eq!(StaticStr::from(ApiReqType::Status), "status");
+        assert_eq!(
+            StaticStr::from(ApiReqType::CatchUpPackage),
+            "catch_up_package"
+        );
+        assert_eq!(StaticStr::from(ApiReqType::Options), "options");
+        assert_eq!(StaticStr::from(ApiReqType::Dashboard), "dashboard");
+        assert_eq!(
+            StaticStr::from(ApiReqType::RedirectToDashboard),
+            "redirect_to_dashboard"
+        );
+        assert_eq!(
+            StaticStr::from(ApiReqType::InvalidArgument),
+            "invalid_argument"
+        );
+        assert_eq!(StaticStr::from(ApiReqType::PprofHome), "pprof_home");
+        assert_eq!(StaticStr::from(ApiReqType::PprofProfile), "pprof_profile");
+        assert_eq!(
+            StaticStr::from(ApiReqType::PprofFlamegraph),
+            "pprof_flamegraph"
+        );
+
+        assert_eq!(to_legacy_request_type(ApiReqType::Call), "submit");
+
+        assert_eq!(StaticStr::from(AppLayer::Http), "http");
+        assert_eq!(StaticStr::from(AppLayer::Https), "https");
+
+        assert_eq!(
+            StaticStr::from(ConnectionError::TlsHandshake),
+            "tls_handshake"
+        );
+        assert_eq!(
+            StaticStr::from(ConnectionError::ServingHttpConnection),
+            "serving_http_connection"
+        );
+        assert_eq!(
+            StaticStr::from(ConnectionError::ServingHttpsConnection),
+            "serving_https_connection"
+        );
+        assert_eq!(StaticStr::from(ConnectionError::Accept), "accept");
+        assert_eq!(StaticStr::from(ConnectionError::Peek), "peek");
+        assert_eq!(
+            StaticStr::from(ConnectionError::PeekTimeout),
+            "peek_timeout"
+        );
     }
 }

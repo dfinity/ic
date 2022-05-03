@@ -5,7 +5,7 @@ use crate::{
         get_cors_headers, make_plaintext_response, make_response,
         make_response_on_validation_error, map_box_error_to_response,
     },
-    types::{ApiReqType, RequestType},
+    types::{to_legacy_request_type, ApiReqType},
     HttpError, HttpHandlerMetrics, IngressFilterService, UNKNOWN_LABEL,
 };
 use hyper::{Body, Response, StatusCode};
@@ -132,8 +132,8 @@ impl Service<Vec<u8>> for CallService {
         self.metrics
             .requests_body_size_bytes
             .with_label_values(&[
-                RequestType::Submit.as_str(),
-                ApiReqType::Call.as_str(),
+                to_legacy_request_type(ApiReqType::Call),
+                ApiReqType::Call.into(),
                 UNKNOWN_LABEL,
             ])
             .observe(body.len() as f64);
