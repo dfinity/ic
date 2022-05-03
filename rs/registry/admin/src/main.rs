@@ -93,6 +93,7 @@ use ic_types::{
 };
 use prost::Message;
 use registry_canister::mutations::common::decode_registry_value;
+use registry_canister::mutations::do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest};
 use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
 use registry_canister::mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload;
 use registry_canister::mutations::firewall::{
@@ -921,6 +922,24 @@ struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     pub max_instructions_per_install_code: Option<u64>,
 
+    /// Configuration for ECDSA: the number of quadruples to create in advance
+    /// Defaults to 1, must be at least 1
+    #[clap(long)]
+    pub ecdsa_quadruples_to_create_in_advance: Option<u32>,
+
+    /// Configuration for ECDSA:
+    /// A list of existing ECDSA keys as json objects to be requested from other subnets for this
+    /// subnet, and (optionally) the subnet to request each key from
+    ///
+    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`
+    ///
+    /// Example:
+    /// '[{ "key_id": "Secp256k1:key_id_1", "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai" }]'
+    /// For keys with no subnet specified
+    ///'[{ "key_id": "Secp256k1:key_id_1" }]'
+    #[clap(long)]
+    pub ecdsa_keys_to_request: Option<String>,
+
     /// The list of public keys whose owners have "readonly" SSH access to all
     /// replicas on this subnet.
     #[clap(long, multiple_values(true))]
@@ -955,6 +974,47 @@ impl ProposalTitleAndPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             .into_iter()
             .map(NodeId::from)
             .collect();
+
+        let ecdsa_config = if self.ecdsa_quadruples_to_create_in_advance.is_none()
+            && self.ecdsa_keys_to_request.is_none()
+        {
+            None
+        } else {
+            let quadruples_to_create_in_advance =
+                self.ecdsa_quadruples_to_create_in_advance.unwrap_or(1);
+
+            if quadruples_to_create_in_advance < 1 {
+                panic!("--ecdsa-quadruples-to-create-in-advance must be at least 1");
+            }
+
+            Some(EcdsaInitialConfig {
+                quadruples_to_create_in_advance,
+                keys: self.ecdsa_keys_to_request.as_ref().map_or_else(
+                    || vec![],
+                    |json| {
+                        let raw: Vec<BTreeMap<String, String>> =
+                            serde_json::from_str(json).unwrap();
+
+                        raw.iter()
+                            .map(|btree| {
+                                let key_id = btree
+                                    .get("key_id")
+                                    .map(|key| key.parse::<EcdsaKeyId>().unwrap())
+                                    .unwrap();
+
+                                let subnet_id = btree
+                                    .get("subnet_id")
+                                    .map(|x| Some(PrincipalId::from_str(x).unwrap()))
+                                    .unwrap_or_default();
+
+                                EcdsaKeyRequest { key_id, subnet_id }
+                            })
+                            .collect()
+                    },
+                ),
+            })
+        };
+
         let scheduler_config = SchedulerConfig::default_for_subnet_type(self.subnet_type);
         CreateSubnetPayload {
             node_ids,
@@ -999,7 +1059,7 @@ impl ProposalTitleAndPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             ssh_backup_access: self.ssh_backup_access.clone(),
             max_number_of_canisters: self.max_number_of_canisters.unwrap_or(0),
-            ecdsa_config: None,
+            ecdsa_config,
         }
     }
 }
@@ -1270,6 +1330,7 @@ struct ProposeToUpdateSubnetCmd {
     #[clap(long)]
     /// Enable key signing on this subnet for a particular key_id
     /// Only one key_id is permitted at a time at the moment
+    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`
     ecdsa_key_signing_enable: Option<Vec<String>>,
 
     /// Configuration for ECDSA feature.
