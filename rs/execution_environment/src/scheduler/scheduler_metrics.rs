@@ -46,6 +46,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) round: ScopedMetrics,
     pub(super) round_preparation_duration: Histogram,
     pub(super) round_preparation_ingress: Histogram,
+    pub(super) round_bitcoin_canister_heartbeat_duration: Histogram,
     pub(super) round_consensus_queue: ScopedMetrics,
     pub(super) round_subnet_queue: ScopedMetrics,
     pub(super) round_scheduling_duration: Histogram,
@@ -262,6 +263,11 @@ impl SchedulerMetrics {
                 "execution_round_preparation_ingress_pruning_duration_seconds",
                 "The duration of purging ingress during execution round \
                       preparation in seconds.",
+                metrics_registry,
+            ),
+            round_bitcoin_canister_heartbeat_duration: duration_histogram(
+                "execution_round_bitcoin_canister_heartbeat_duration_seconds",
+                "The duration of a heartbeat of the bitcoin canister in seconds.",
                 metrics_registry,
             ),
             round_consensus_queue: ScopedMetrics {
