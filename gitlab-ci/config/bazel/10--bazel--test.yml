@@ -23,6 +23,7 @@ bazel-build-all:
   stage: test
   script:
     - bazel build --config ci :all
+    - bazel build --config ci //rs/...
     - bazel test --config ci //rs/...
 
 bazel-build-guestos:
