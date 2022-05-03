@@ -3299,8 +3299,12 @@ fn execute_compute_initial_ecdsa_dealings(
     state.metadata.own_subnet_features.ecdsa_signatures = own_subnet_is_ecdsa_enabled;
 
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
-    let request_payload =
-        ic00::ComputeInitialEcdsaDealingsArgs::new(key_id, node_ids, RegistryVersion::from(100));
+    let request_payload = ic00::ComputeInitialEcdsaDealingsArgs::new(
+        key_id,
+        None,
+        node_ids,
+        RegistryVersion::from(100),
+    );
     state
         .subnet_queues_mut()
         .push_input(

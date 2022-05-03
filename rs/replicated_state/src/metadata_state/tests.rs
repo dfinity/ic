@@ -294,7 +294,8 @@ fn network_topology_bitcoin_testnet_subnets() {
                 public_key: vec![],
                 nodes: BTreeMap::new(),
                 subnet_type: SubnetType::Application,
-                subnet_features: SubnetFeatures::from_str("bitcoin_testnet").unwrap()
+                subnet_features: SubnetFeatures::from_str("bitcoin_testnet").unwrap(),
+                ecdsa_keys_held: BTreeSet::new(),
             },
 
             // A subnet with the bitcoin testnet feature paused.
@@ -302,7 +303,8 @@ fn network_topology_bitcoin_testnet_subnets() {
                 public_key: vec![],
                 nodes: BTreeMap::new(),
                 subnet_type: SubnetType::Application,
-                subnet_features: SubnetFeatures::from_str("bitcoin_testnet_paused").unwrap()
+                subnet_features: SubnetFeatures::from_str("bitcoin_testnet_paused").unwrap(),
+                ecdsa_keys_held: BTreeSet::new(),
             },
 
             // A subnet without the bitcoin feature enabled.
@@ -310,7 +312,8 @@ fn network_topology_bitcoin_testnet_subnets() {
                 public_key: vec![],
                 nodes: BTreeMap::new(),
                 subnet_type: SubnetType::Application,
-                subnet_features: SubnetFeatures::default()
+                subnet_features: SubnetFeatures::default(),
+                ecdsa_keys_held: BTreeSet::new(),
             }
         ],
         routing_table: Arc::new(RoutingTable::default()),

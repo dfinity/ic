@@ -113,15 +113,15 @@ pub(super) fn resolve_destination(
         }
         Ok(Ic00Method::ECDSAPublicKey) => {
             let key_id = Decode!(payload, ECDSAPublicKeyArgs)?.key_id;
-            route_ecdsa_message(&key_id, network_topology)
+            route_ecdsa_message(&key_id, network_topology, &None)
         }
         Ok(Ic00Method::SignWithECDSA) => {
             let key_id = Decode!(payload, SignWithECDSAArgs)?.key_id;
-            route_ecdsa_message(&key_id, network_topology)
+            route_ecdsa_message(&key_id, network_topology, &None)
         }
         Ok(Ic00Method::ComputeInitialEcdsaDealings) => {
-            let key_id = Decode!(payload, ComputeInitialEcdsaDealingsArgs)?.key_id;
-            route_ecdsa_message(&key_id, network_topology)
+            let args = Decode!(payload, ComputeInitialEcdsaDealingsArgs)?;
+            route_ecdsa_message(&args.key_id, network_topology, &args.subnet_id)
         }
         Err(_) => Err(ResolveDestinationError::MethodNotFound(
             method_name.to_string(),
@@ -129,17 +129,41 @@ pub(super) fn resolve_destination(
     }
 }
 
+/// Routes to the `requested_subnet` if it holds the key (and fails if that
+/// subnet doesn't hold the key).  If a `requested_subnet` is not provided,
+/// route to the first subnet enabled to sign with the given key.
 fn route_ecdsa_message(
     key_id: &EcdsaKeyId,
     network_topology: &NetworkTopology,
+    requested_subnet: &Option<SubnetId>,
 ) -> Result<SubnetId, ResolveDestinationError> {
-    if let Some(subnet_id) = network_topology.ecdsa_subnets(key_id).get(0) {
-        Ok(*subnet_id)
-    } else {
-        Err(ResolveDestinationError::MethodNotFound(format!(
-            "requested key: {}, existing keys: {:?}",
-            key_id, network_topology.ecdsa_keys
-        )))
+    match requested_subnet {
+        Some(subnet_id) => match network_topology.subnets.get(subnet_id) {
+            None => Err(ResolveDestinationError::MethodNotFound(format!(
+                "requested ECDSA key {} from unknown subnet {}",
+                key_id, subnet_id
+            ))),
+            Some(subnet_topology) => {
+                if subnet_topology.ecdsa_keys_held.contains(key_id) {
+                    Ok(*subnet_id)
+                } else {
+                    Err(ResolveDestinationError::MethodNotFound(format!(
+                        "requested ECDSA key {} on subnet {}, subnet has keys: {:?}",
+                        key_id, subnet_id, subnet_topology.ecdsa_keys_held
+                    )))
+                }
+            }
+        },
+        None => {
+            if let Some(subnet_id) = network_topology.ecdsa_subnets(key_id).get(0) {
+                Ok(*subnet_id)
+            } else {
+                Err(ResolveDestinationError::MethodNotFound(format!(
+                    "requested ECDSA key: {}, existing keys: {:?}",
+                    key_id, network_topology.ecdsa_keys
+                )))
+            }
+        }
     }
 }
 
@@ -151,6 +175,7 @@ mod tests {
     use ic_ic00_types::{
         ComputeInitialEcdsaDealingsArgs, EcdsaCurve, EcdsaKeyId, SignWithECDSAArgs,
     };
+    use ic_replicated_state::SubnetTopology;
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use maplit::btreemap;
 
@@ -163,11 +188,24 @@ mod tests {
         }
     }
 
-    fn network_with_ecdsa_on_subnet_0() -> NetworkTopology {
-        let subnet_id = subnet_test_id(0);
+    /// Two subnets have the ECDSA key, but only one of the subnets is enabled
+    /// to sign with it.
+    fn network_with_ecdsa_subnets() -> NetworkTopology {
+        let subnet_id0 = subnet_test_id(0);
         NetworkTopology {
             ecdsa_keys: btreemap! {
-                key_id() => vec![subnet_id],
+                key_id() => vec![subnet_id0],
+            },
+            subnets: btreemap! {
+                subnet_id0 => SubnetTopology {
+                    ecdsa_keys_held: vec![key_id()].into_iter().collect(),
+                    ..SubnetTopology::default()
+                },
+                subnet_test_id(1) => SubnetTopology {
+                    ecdsa_keys_held: vec![key_id()].into_iter().collect(),
+                    ..SubnetTopology::default()
+                },
+                subnet_test_id(2) => SubnetTopology::default(),
             },
             ..NetworkTopology::default()
         }
@@ -177,9 +215,10 @@ mod tests {
         NetworkTopology::default()
     }
 
-    fn compute_initial_ecdsa_dealings_req() -> Vec<u8> {
+    fn compute_initial_ecdsa_dealings_req(subnet_id: Option<SubnetId>) -> Vec<u8> {
         let args = ComputeInitialEcdsaDealingsArgs::new(
             key_id(),
+            subnet_id,
             vec![node_test_id(0)].into_iter().collect(),
             RegistryVersion::from(100),
         );
@@ -199,10 +238,10 @@ mod tests {
     fn resolve_compute_initial_ecdsa_dealings() {
         assert_eq!(
             resolve_destination(
-                &network_with_ecdsa_on_subnet_0(),
+                &network_with_ecdsa_subnets(),
                 &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
-                &compute_initial_ecdsa_dealings_req(),
-                subnet_test_id(1),
+                &compute_initial_ecdsa_dealings_req(None),
+                subnet_test_id(2),
             )
             .unwrap(),
             subnet_test_id(0)
@@ -215,13 +254,69 @@ mod tests {
             resolve_destination(
                 &network_without_ecdsa_subnet(),
                 &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
-                &compute_initial_ecdsa_dealings_req(),
-                subnet_test_id(1),
+                &compute_initial_ecdsa_dealings_req(None),
+                subnet_test_id(2),
             )
             .unwrap_err(),
             ResolveDestinationError::MethodNotFound(err) => assert_eq!(
                 err,
-                format!("requested key: {}, existing keys: {{}}", key_id())
+                format!("requested ECDSA key: {}, existing keys: {{}}", key_id())
+            )
+        )
+    }
+
+    #[test]
+    fn resolve_compute_initial_ecdsa_dealings_with_subnet() {
+        assert_eq!(
+            resolve_destination(
+                &network_with_ecdsa_subnets(),
+                &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
+                &compute_initial_ecdsa_dealings_req(Some(subnet_test_id(1))),
+                subnet_test_id(2),
+            )
+            .unwrap(),
+            subnet_test_id(1)
+        )
+    }
+
+    #[test]
+    fn resolve_compute_initial_ecdsa_dealings_wrong_subnet_error() {
+        assert_matches!(
+                resolve_destination(
+                    &network_with_ecdsa_subnets(),
+                    &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
+                    // Subnet 2 doesn't have the requested key.
+                    &compute_initial_ecdsa_dealings_req(Some(subnet_test_id(2))),
+                    subnet_test_id(2),
+                )
+                .unwrap_err(),
+                ResolveDestinationError::MethodNotFound(err) => assert_eq!(
+                    err,
+                    format!("requested ECDSA key {} on subnet {}, subnet has keys: {{}}",
+                        key_id(),
+                        subnet_test_id(2),
+                )
+            )
+        )
+    }
+
+    #[test]
+    fn resolve_compute_initial_ecdsa_dealings_subnet_not_found_error() {
+        assert_matches!(
+                resolve_destination(
+                    &network_with_ecdsa_subnets(),
+                    &Ic00Method::ComputeInitialEcdsaDealings.to_string(),
+                    // Subnet 3 doesn't exist
+                    &compute_initial_ecdsa_dealings_req(Some(subnet_test_id(3))),
+                    subnet_test_id(2),
+                )
+                .unwrap_err(),
+                ResolveDestinationError::MethodNotFound(err) => assert_eq!(
+                    err,
+                    format!("requested ECDSA key {} from unknown subnet {}",
+                        key_id(),
+                        subnet_test_id(3),
+                )
             )
         )
     }
@@ -230,7 +325,7 @@ mod tests {
     fn resolve_ecdsa_sign() {
         assert_eq!(
             resolve_destination(
-                &network_with_ecdsa_on_subnet_0(),
+                &network_with_ecdsa_subnets(),
                 &Ic00Method::SignWithECDSA.to_string(),
                 &ecdsa_sign_req(),
                 subnet_test_id(1),
@@ -251,7 +346,7 @@ mod tests {
         .unwrap_err(),
         ResolveDestinationError::MethodNotFound(err) => assert_eq!(
                 err,
-                format!("requested key: {}, existing keys: {{}}", key_id())
+                format!("requested ECDSA key: {}, existing keys: {{}}", key_id())
             )
         )
     }

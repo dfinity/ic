@@ -4,7 +4,7 @@ use crate::{
 };
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_ic00_types::CanisterStatusType;
+use ic_ic00_types::{CanisterStatusType, EcdsaKeyId};
 use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore,
     execution_environment::{IngressHistoryWriter, Scheduler},
@@ -452,7 +452,7 @@ impl BatchProcessorImpl {
         let subnet_ids = subnet_ids_record.unwrap_or_default();
 
         // Populate subnet topologies.
-        let mut subnets: BTreeMap<SubnetId, SubnetTopology> = BTreeMap::new();
+        let mut subnets = BTreeMap::new();
 
         for subnet_id in &subnet_ids {
             let mut nodes: BTreeMap<NodeId, NodeTopology> = BTreeMap::new();
@@ -518,6 +518,7 @@ impl BatchProcessorImpl {
                 get_subnet_public_key(Arc::clone(&self.registry), *subnet_id, registry_version)?;
             let subnet_type = self.get_subnet_type(*subnet_id, registry_version);
             let subnet_features = self.get_subnet_features(*subnet_id, registry_version);
+            let ecdsa_keys_held = self.get_ecdsa_keys_held(*subnet_id, registry_version);
             subnets.insert(
                 *subnet_id,
                 SubnetTopology {
@@ -525,6 +526,7 @@ impl BatchProcessorImpl {
                     nodes,
                     subnet_type,
                     subnet_features,
+                    ecdsa_keys_held,
                 },
             );
         }
@@ -606,6 +608,26 @@ impl BatchProcessorImpl {
     ) -> SubnetFeatures {
         let record = self.get_subnet_record(subnet_id, registry_version);
         record.features.unwrap_or_default().into()
+    }
+
+    fn get_ecdsa_keys_held(
+        &self,
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
+    ) -> BTreeSet<EcdsaKeyId> {
+        let record = self.get_subnet_record(subnet_id, registry_version);
+        record
+            .ecdsa_config
+            .map(|ecdsa_config| {
+                ecdsa_config
+                    .key_ids
+                    .into_iter()
+                    .map(|k| {
+                        EcdsaKeyId::try_from(k).expect("Could not read EcdsaKeyId from protobuf")
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     fn get_max_number_of_canisters(
