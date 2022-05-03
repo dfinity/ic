@@ -2,7 +2,7 @@
 
 use crate::{
     common,
-    types::{ApiReqType, RequestType},
+    types::{to_legacy_request_type, ApiReqType},
     HttpHandlerMetrics, UNKNOWN_LABEL,
 };
 use hyper::{Body, Response, StatusCode};
@@ -64,8 +64,8 @@ impl Service<Vec<u8>> for CatchUpPackageService {
         self.metrics
             .requests_body_size_bytes
             .with_label_values(&[
-                RequestType::CatchUpPackage.as_str(),
-                ApiReqType::CatchUpPackage.as_str(),
+                to_legacy_request_type(ApiReqType::CatchUpPackage),
+                ApiReqType::CatchUpPackage.into(),
                 UNKNOWN_LABEL,
             ])
             .observe(body.len() as f64);

@@ -91,7 +91,7 @@ impl HttpHandlerMetrics {
     /// Records the duration of a failed connection setup, by error.
     pub(crate) fn observe_connection_error(&self, error: ConnectionError, start_time: Instant) {
         self.connection_setup_duration
-            .with_label_values(&[STATUS_ERROR, error.as_str()])
+            .with_label_values(&[STATUS_ERROR, error.into()])
             .observe(start_time.elapsed().as_secs_f64());
     }
 
@@ -99,7 +99,7 @@ impl HttpHandlerMetrics {
     /// (protocol).
     pub(crate) fn observe_connection_setup(&self, app_layer: AppLayer, start_time: Instant) {
         self.connection_setup_duration
-            .with_label_values(&[STATUS_SUCCESS, app_layer.as_str()])
+            .with_label_values(&[STATUS_SUCCESS, app_layer.into()])
             .observe(start_time.elapsed().as_secs_f64());
     }
 }
