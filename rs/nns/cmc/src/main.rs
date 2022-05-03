@@ -293,9 +293,8 @@ fn convert_conversion_rate_to_payload(
     serializer.into_inner()
 }
 
-/// Retrieves the current `xdr_permyriad_per_icp` as a certified response.
-#[export_name = "canister_query get_icp_xdr_conversion_rate"]
-fn get_icp_xdr_conversion_rate_() {
+#[candid_method(query, rename = "get_icp_xdr_conversion_rate")]
+fn get_icp_xdr_conversion_rate() -> IcpXdrConversionRateCertifiedResponse {
     let state = STATE.read().unwrap();
 
     let witness_generator = convert_data_to_mixed_hash_tree(&state);
@@ -306,16 +305,17 @@ fn get_icp_xdr_conversion_rate_() {
 
     let payload = convert_conversion_rate_to_payload(icp_xdr_conversion_rate, witness_generator);
 
-    over(
-        candid_one,
-        |_: ()| -> IcpXdrConversionRateCertifiedResponse {
-            IcpXdrConversionRateCertifiedResponse {
-                data: icp_xdr_conversion_rate.clone(),
-                hash_tree: payload,
-                certificate: dfn_core::api::data_certificate().unwrap_or_default(),
-            }
-        },
-    )
+    IcpXdrConversionRateCertifiedResponse {
+        data: icp_xdr_conversion_rate.clone(),
+        hash_tree: payload,
+        certificate: dfn_core::api::data_certificate().unwrap_or_default(),
+    }
+}
+
+/// Retrieves the current `xdr_permyriad_per_icp` as a certified response.
+#[export_name = "canister_query get_icp_xdr_conversion_rate"]
+fn get_icp_xdr_conversion_rate_() {
+    over(candid_one, |_: ()| get_icp_xdr_conversion_rate())
 }
 
 #[export_name = "canister_update set_icp_xdr_conversion_rate"]
