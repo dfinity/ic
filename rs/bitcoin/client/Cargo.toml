@@ -7,8 +7,11 @@ edition = "2021"
 bitcoin = "0.27.1"
 ic-btc-service = { path = "../service" }
 ic-btc-types-internal = { path = "../types/internal" }
+ic-config = { path = "../../config" }
 ic-interfaces-bitcoin-adapter-client = { path = "../../interfaces/bitcoin_adapter_client" }
 ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_bytes = "0.11.5"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }

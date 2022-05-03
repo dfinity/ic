@@ -1,4 +1,4 @@
-use ic_btc_adapter_client::setup_bitcoin_adapter_client;
+use ic_btc_adapter_client::{setup_bitcoin_adapter_clients, BitcoinAdapterClients};
 use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
 use ic_consensus::certification::VerifierImpl;
@@ -227,15 +227,14 @@ pub fn construct_ic_stack(
     );
     let xnet_payload_builder = Arc::new(xnet_payload_builder);
 
-    let btc_testnet_client = setup_bitcoin_adapter_client(
+    let BitcoinAdapterClients {
+        btc_testnet_client,
+        btc_mainnet_client,
+    } = setup_bitcoin_adapter_clients(
         replica_logger.clone(),
+        &metrics_registry,
         rt_handle.clone(),
-        config.adapters_config.bitcoin_testnet_uds_path,
-    );
-    let btc_mainnet_client = setup_bitcoin_adapter_client(
-        replica_logger.clone(),
-        rt_handle.clone(),
-        config.adapters_config.bitcoin_mainnet_uds_path,
+        config.adapters_config.clone(),
     );
     let self_validating_payload_builder = BitcoinPayloadBuilder::new(
         state_manager.clone(),
