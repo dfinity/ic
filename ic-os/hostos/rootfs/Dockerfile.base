@@ -6,10 +6,6 @@
 # - `docker build -t dfinity/hostos-base-dev:<tag> --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .`
 # - `docker push/pull dfinity/hostos-base-dev:<tag>`
 #
-# First build stage:
-# - Download and cache minimal Ubuntu Server 20.04 LTS Docker image.
-# - Install and cache upstream packages from built-in Ubuntu repositories.
-#
 # NOTE:
 # If you edit this file, you will need to perform the following operations
 # to get your changes deployed.
@@ -18,6 +14,55 @@
 # 2. On the next hourly master pipeline, click the "deploy-host-os-baseimg" job
 # 3. Note down the sha256 and update the sha256 reference in the neighboring
 #    Dockerfiles
+
+# First build stage:
+# - Download 3rd party tools
+FROM ubuntu:20.04 AS download
+
+ENV TZ=UTC
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
+    ca-certificates \
+    curl \
+    perl
+
+# Download and verify QEMU
+RUN cd /tmp/ && \
+    curl -L -O https://download.qemu.org/qemu-6.2.0.tar.xz && \
+    echo "68e15d8e45ac56326e0b9a4afa8b49a3dfe8aba3488221d098c84698bca65b45  qemu-6.2.0.tar.xz" > qemu.sha256 && \
+    shasum -c qemu.sha256
+
+# Second build stage:
+# - Compile downloaded archives from first build stage
+FROM ubuntu:20.04 AS build
+
+ENV TZ=UTC
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
+    ca-certificates \
+    build-essential \
+    libglib2.0-dev \
+    libpixman-1-dev \
+    libusb-1.0-0-dev \
+    ninja-build \
+    pkg-config \
+    python3
+
+# Configure and compile QEMU
+COPY --from=download /tmp/qemu-6.2.0.tar.xz /tmp/qemu-6.2.0.tar.xz
+RUN cd /tmp/ && \
+    tar xJf qemu-6.2.0.tar.xz && \
+    cd /tmp/qemu-6.2.0 && \
+    ./configure --target-list=x86_64-softmmu --enable-kvm --enable-libusb && \
+    echo "Compiling qemu..." && \
+    make -j 2 >/dev/null 2>&1 && \
+    DESTDIR="/out" ninja -C build install
+
+# Third build stage:
+# - Download and cache minimal Ubuntu Server 20.04 LTS Docker image.
+# - Install and cache upstream packages from built-in Ubuntu repositories.
+# - Install compiled packages from the second stage.
+#
 FROM ubuntu:20.04
 
 ENV SOURCE_DATE_EPOCH=0
@@ -36,3 +81,7 @@ RUN apt-get -y update && \
     apt-get -y upgrade && \
     apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
     rm /tmp/packages.*
+
+# Install QEMU
+COPY --from=build /out/usr/local/bin/qemu-system-x86_64 /usr/local/bin/
+COPY --from=build /out/usr/local/share/qemu /usr/local/share/qemu
