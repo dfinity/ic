@@ -72,7 +72,7 @@ def get_merge_base(git_repo):
     return merge_base
 
 
-def get_changed_files(repo_path, glob_paths):
+def get_changed_files(repo_path, glob_paths, ignored_files=[]):
     """
     Return a set of changes.
 
@@ -83,6 +83,7 @@ def get_changed_files(repo_path, glob_paths):
     ----
         repo_path: The path to the git repository.
         glob_paths: A list of string paths relative to the git repo root.
+        ignored_files: A list of string paths to ignore.
 
     Returns
     -------
@@ -98,6 +99,11 @@ def get_changed_files(repo_path, glob_paths):
     changed_files = [os.path.join(git_root, item.a_path) for item in git_repo.index.diff(merge_base[0])]
 
     logging.debug("The following files have changed since the merge base: %s", changed_files)
+
+    changed_files = [item for item in changed_files if os.path.basename(item) not in ignored_files]
+    logging.debug(
+        "The following files have changed since the merge base after ignored files have been dropped: %s", changed_files
+    )
 
     # realpath canonicalizes the path e.g. removes trailing slashes.
     glob_paths = [os.path.realpath(os.path.join(git_root, item)) for item in glob_paths]

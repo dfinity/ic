@@ -80,6 +80,15 @@ def test_change_one_file(tmpdir):
     assert not changed_files
 
 
+def test_change_file_ignore(tmpdir):
+    """Tests that a commit has changed one crate."""
+    setup_repo(tmpdir, "change_file_ignore")
+
+    want = os.path.join(tmpdir, "rs", "changed")
+    changed_files = git_changes.get_changed_files(tmpdir, ["rs"], ["BUILD.bazel"])
+    assert want in changed_files
+
+
 def test_is_master_branch_true(tmpdir):
     """Tests that a commit has changed one crate."""
     setup_repo(tmpdir, "change_one_file", branch="master")
