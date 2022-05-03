@@ -42,10 +42,10 @@
 /testnet/ansible/ic_p8s_service_discovery_install.yml       @dfinity-lab/teams/dcs
 /testnet/ansible/roles/boundary_node/    @dfinity-lab/teams/networking-team @dfinity-lab/teams/dcs        
 /testnet/ansible/roles/ic_p8s_network_update/     @dfinity-lab/teams/dcs
-/testnet/ansible/roles/ic_p8s_service_discovery_install     @dfinity-lab/teams/dcs
-/testnet/ansible/roles/icos_test_boundary_node      @dfinity-lab/teams/boundarynode-team
-/testnet/ansible/roles/jiralert_install     @dfinity-lab/teams/dcs
-/testnet/ansible/roles/ssh_keys_dfinity_nodes      @dfinity-lab/teams/dcs
+/testnet/ansible/roles/ic_p8s_service_discovery_install/    @dfinity-lab/teams/dcs
+/testnet/ansible/roles/icos_test_boundary_node/   @dfinity-lab/teams/boundarynode-team
+/testnet/ansible/roles/jiralert_install/          @dfinity-lab/teams/dcs
+/testnet/ansible/roles/ssh_keys_dfinity_nodes/    @dfinity-lab/teams/dcs
 
 # ic-support group owns their documentation
 /testnet/docs/                @dfinity-lab/teams/ic-support-eu @dfinity-lab/teams/ic-support-na
@@ -66,7 +66,6 @@
 /testnet/tests/scripts/network_reliability_test.sh         @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /testnet/tests/scripts/rejoin_test.sh                      @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
 /testnet/tests/scripts/subnet_query_workload.sh            @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
-
 /testnet/tests/scripts/subnet_update_workload.sh           @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /testnet/release/                                          @dfinity-lab/teams/ic-build-qualification
 
@@ -78,7 +77,7 @@
 /rs/bitcoin/client/                     @dfinity-lab/teams/networking-team
 /rs/bitcoin/consensus/                  @dfinity-lab/teams/execution-owners
 /rs/bitcoin/service/                    @dfinity-lab/teams/networking-team
-/rs/bitcoin/types                       @dfinity-lab/teams/execution-owners
+/rs/bitcoin/types/                      @dfinity-lab/teams/execution-owners
 /rs/canister_client/                    @dfinity-lab/teams/networking-team
 /rs/canister_http/                      @dfinity-lab/teams/networking-team
 /rs/canister_sandbox/                   @dfinity-lab/teams/runtime-owners
@@ -87,10 +86,10 @@
 /rs/config/                             @dfinity-lab/teams/interface-owners
 /rs/config/src/execution_environment.rs @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/consensus/                          @dfinity-lab/teams/consensus-owners
-/rs/constants                           @dfinity-lab/teams/interface-owners
+/rs/constants/                          @dfinity-lab/teams/interface-owners
 /rs/crypto/                             @dfinity-lab/teams/crypto-owners
 /rs/cycles_account_manager/             @dfinity-lab/teams/execution-owners
-/rs/depcheck                            @dfinity-lag/teams/interface-owners
+/rs/depcheck/                           @dfinity-lag/teams/interface-owners
 /rs/drun/                               @dfinity-lab/teams/execution-owners
 /rs/embedders/                          @dfinity-lab/teams/runtime-owners
 /rs/execution_environment/              @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
@@ -120,14 +119,14 @@
 /rs/nns/                                @dfinity-lab/teams/nns-team @granstrom1
 /rs/orchestrator/                       @dfinity-lab/teams/orchestrator-owners
 /rs/p2p/                                @dfinity-lab/teams/networking-team
-/rs/protobuf/def/bitcoin                @dfinity-lab/teams/execution-team
-/rs/protobuf/def/canister_http          @dfinity-lab/teams/consensus-owners
-/rs/protobuf/def/crypto                 @dfinity-lab/teams/crypto-owners
-/rs/protobuf/def/messaging              @dfinity-lab/teams/message-routing-owners
-/rs/protobuf/def/p2p                    @dfinity-lab/teams/networking-team
-/rs/protobuf/def/registry               @dfinity-lab/teams/nns-team
-/rs/protobuf/def/state                  @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
-/rs/protobuf/def/types                  @dfinity-lab/teams/interface-owners
+/rs/protobuf/def/bitcoin/               @dfinity-lab/teams/execution-team
+/rs/protobuf/def/canister_http/         @dfinity-lab/teams/consensus-owners
+/rs/protobuf/def/crypto/                @dfinity-lab/teams/crypto-owners
+/rs/protobuf/def/messaging/             @dfinity-lab/teams/message-routing-owners
+/rs/protobuf/def/p2p/                   @dfinity-lab/teams/networking-team
+/rs/protobuf/def/registry/              @dfinity-lab/teams/nns-team
+/rs/protobuf/def/state/                 @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
+/rs/protobuf/def/types/                 @dfinity-lab/teams/interface-owners
 /rs/recovery/                           @dfinity-lab/teams/orchestrator-owners
 /rs/registry/admin/                     @dfinity-lab/teams/nns-team
 /rs/registry/canister/                  @dfinity-lab/teams/nns-team
@@ -146,8 +145,8 @@
 /rs/replay/                             @dfinity-lab/teams/orchestrator-owners
 /rs/replica/                            @dfinity-lab/teams/networking-team
 /rs/replicated_state/                   @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
-/rs/replicated_state/page_map           @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/runtime-owners
-/rs/replicated_state/page_map.rs        @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/runtime-owners
+/rs/replicated_state/src/page_map/      @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/runtime-owners
+/rs/replicated_state/src/page_map.rs    @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/runtime-owners
 /rs/rosetta-api/                        @dfinity-lab/teams/financial-integrations
 /rs/rust_canisters/                     @dfinity-lab/teams/nns-team
 /rs/rust_canisters/memory_test/         @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
@@ -170,7 +169,7 @@
 /rs/tests/src/ledger_tests/             @dfinity-lab/teams/financial-integrations  @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/message_routing/          @dfinity-lab/teams/message-routing-owners  @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/nns_tests/                @dfinity-lab/teams/nns-team @dfinity-lab/teams/ic-testing-verification
-/rs/tests/src/networking                @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
+/rs/tests/src/networking/               @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /rs/tests/src/orchestrator/             @dfinity-lab/teams/orchestrator-owners @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/rosetta_test.rs           @dfinity-lab/teams/financial-integrations @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/tecsda/                   @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/ic-testing-verification
@@ -193,11 +192,11 @@
 /rs/universal_canister/                 @dfinity-lab/teams/execution-owners @dfinity-lab/teams/ic-testing-verification
 /rs/validator/                          @dfinity-lab/teams/execution-owners
 /rs/workload_generator/                 @dfinity-lab/teams/node-team
-/rs/xnet                                @dfinity-lab/teams/message-routing-owners
+/rs/xnet/                               @dfinity-lab/teams/message-routing-owners
 
 # Scalability suite is currently owned by both node-team and networking team
 # Most individual benchmarks are owned by individual teams
-/scalability                            @dfinity-lab/teams/node-team @dfinity-lab/teams/networking-team
+/scalability/                           @dfinity-lab/teams/node-team @dfinity-lab/teams/networking-team
 /scalability/experiments/max_capacity_large_memory.py               @dfinity-lab/teams/runtime-owners
 /scalability/experiments/run_large_memory_experiment.py             @dfinity-lab/teams/runtime-owners
 /scalability/experiments/run_gossip_experiment.py                   @dfinity-lab/teams/networking-team
