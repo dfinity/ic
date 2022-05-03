@@ -211,7 +211,7 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
 impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_metadata::NetworkTopology) -> Result<Self, Self::Error> {
-        let mut subnets = BTreeMap::<SubnetId, SubnetTopology>::new();
+        let mut subnets = BTreeMap::new();
         for entry in item.subnets {
             subnets.insert(
                 subnet_id_try_from_protobuf(try_from_option_field(
@@ -268,6 +268,12 @@ pub struct SubnetTopology {
     pub nodes: BTreeMap<NodeId, NodeTopology>,
     pub subnet_type: SubnetType,
     pub subnet_features: SubnetFeatures,
+    /// ECDSA keys held by this subnet. Just because a subnet holds an ECDSA key
+    /// doesn't mean the subnet has been enabled to sign with that key. This
+    /// will happen when a key is shared with a second subnet which holds it as
+    /// a backup. An additional NNS proposal will be needed to allow the subnet
+    /// holding the key as backup to actually produce signatures.
+    pub ecdsa_keys_held: BTreeSet<EcdsaKeyId>,
 }
 
 impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
@@ -284,6 +290,7 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
                 .collect(),
             subnet_type: i32::from(item.subnet_type),
             subnet_features: Some(pb_subnet::SubnetFeatures::from(item.subnet_features)),
+            ecdsa_keys_held: item.ecdsa_keys_held.iter().map(|k| k.into()).collect(),
         }
     }
 }
@@ -302,6 +309,11 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
             );
         }
 
+        let mut ecdsa_keys_held = BTreeSet::new();
+        for key in item.ecdsa_keys_held {
+            ecdsa_keys_held.insert(EcdsaKeyId::try_from(key)?);
+        }
+
         Ok(Self {
             public_key: item.public_key,
             nodes,
@@ -313,6 +325,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 .subnet_features
                 .map(SubnetFeatures::from)
                 .unwrap_or_default(),
+            ecdsa_keys_held,
         })
     }
 }

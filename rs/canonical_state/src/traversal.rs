@@ -652,12 +652,14 @@ mod tests {
                 nodes: btreemap!{},
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
+                ecdsa_keys_held: BTreeSet::new(),
             },
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
                 nodes: btreemap!{},
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
+                ecdsa_keys_held: BTreeSet::new(),
             }
         };
         fn id_range(from: u64, to: u64) -> CanisterIdRange {

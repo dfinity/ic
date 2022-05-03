@@ -25,6 +25,7 @@ message SubnetTopology {
     bytes public_key = 2;
     registry.subnet.v1.SubnetType subnet_type = 3;
     registry.subnet.v1.SubnetFeatures subnet_features = 4;
+    repeated registry.crypto.v1.EcdsaKeyId ecdsa_keys_held = 5;
 }
 
 message SubnetsEntry {
