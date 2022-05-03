@@ -8,7 +8,8 @@ use hyper::{client::connect::HttpConnector, Client};
 use hyper_socks2::SocksConnector;
 use hyper_tls::HttpsConnector;
 use ic_async_utils::{
-    ensure_single_systemd_socket, incoming_from_first_systemd_socket, incoming_from_path,
+    abort_on_panic, ensure_single_systemd_socket, incoming_from_first_systemd_socket,
+    incoming_from_path,
 };
 use ic_canister_http_adapter::{CanisterHttp, Cli, IncomingSource};
 use ic_canister_http_service::canister_http_service_server::CanisterHttpServiceServer;
@@ -18,6 +19,11 @@ use tonic::transport::{Server, Uri};
 
 #[tokio::main]
 pub async fn main() {
+    // We abort the whole program with a core dump if a single thread panics.
+    // This way we can capture all the context if a critical error
+    // happens.
+    abort_on_panic();
+
     let cli = Cli::parse();
 
     let config = match cli.get_config() {
