@@ -1,0 +1,44 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "elastic_common_schema",
+    crate_name = "elastic_common_schema",
+    srcs = glob(["src/**"]),
+    edition = "2018",
+    deps = [
+        "@crate_index//:chrono",
+        "@crate_index//:erased-serde",
+        "@crate_index//:hyper",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:slog-json",
+        "@crate_index//:uuid",
+    ],
+    proc_macro_deps = [
+        "@crate_index//:slog_derive",
+    ],
+)
+
+rust_doc_test(
+    name = "elastic_common_schema_doctest",
+    crate = ":elastic_common_schema",
+)
+
+rust_test(
+    name = "elastic_common_schema_test",
+    crate = ":elastic_common_schema",
+    deps = [
+        "@crate_index//:anyhow",
+    ],
+)
