@@ -77,40 +77,47 @@ mod test {
 
     #[test]
     fn stack_overflow_traps() {
-        let mut instance = WasmtimeInstanceBuilder::new()
-            .with_wat(
-                r#"
-          (module
-            (func $f (export "canister_update f")
-              ;; define a large number of local variables to quickly overflow the stack
-              (local i64) (local i64) (local i64) (local i64) (local i64)
-              (local i64) (local i64) (local i64) (local i64) (local i64)
-              (local i64) (local i64) (local i64) (local i64) (local i64)
-              (local i64) (local i64) (local i64) (local i64) (local i64)
-              ;; call "f" recursively
-              (call $f)
-            )
-            (memory 0)
-          )
-        "#,
-            )
-            .build();
+        use std::thread;
+        let builder = thread::Builder::new();
+        let handler = builder
+            // Default thread stack gets overflowed before the wasmtime
+            .stack_size(8192000)
+            .spawn(|| {
+                let mut instance = WasmtimeInstanceBuilder::new()
+                    .with_wat(
+                        r#"
+                        (module
+                            (func $f (export "canister_update f")
+                            ;; Define many local variables to quickly overflow the stack
+                            (local i64) (local i64) (local i64) (local i64) (local i64)
+                            (local i64) (local i64) (local i64) (local i64) (local i64)
+                            (local i64) (local i64) (local i64) (local i64) (local i64)
+                            (local i64) (local i64) (local i64) (local i64) (local i64)
+                            ;; call "f" recursively
+                            (call $f)
+                            )
+                            (memory 0)
+                        )
+                        "#,
+                    )
+                    .build();
 
-        let result = instance.run(ic_types::methods::FuncRef::Method(
-            ic_types::methods::WasmMethod::Update("f".to_string()),
-        ));
+                let result = instance.run(ic_types::methods::FuncRef::Method(
+                    ic_types::methods::WasmMethod::Update("f".to_string()),
+                ));
 
-        match result {
-            Ok(_) => panic!("Expected a HypervisorError::Trapped"),
-            Err(err) => {
                 assert_eq!(
-                    err,
-                    ic_interfaces::execution_environment::HypervisorError::Trapped(
-                        ic_interfaces::execution_environment::TrapCode::StackOverflow
+                    result.err(),
+                    Some(
+                        ic_interfaces::execution_environment::HypervisorError::Trapped(
+                            ic_interfaces::execution_environment::TrapCode::StackOverflow
+                        )
                     )
                 );
-            }
-        }
+            })
+            .unwrap();
+
+        handler.join().unwrap();
     }
 
     #[test]
