@@ -21,6 +21,13 @@ require_read_run_systemd(syslogd_t)
 # XXX: not clear
 allow syslogd_t syslogd_t : netlink_generic_socket { create };
 
+# journald wants to scan the /run/user hierarchy (presumably relating to login sessions)
+require { type user_runtime_root_t, user_runtime_t; }
+allow syslogd_t user_runtime_root_t : dir { search };
+allow syslogd_t user_runtime_t : dir { search };
+# it wants to override dac read permissions for the /run/user hierarchy
+allow syslogd_t syslogd_t : capability { dac_read_search };
+
 ###############################################################################
 # systemd-networkd
 

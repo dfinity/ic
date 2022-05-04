@@ -323,7 +323,12 @@ allow unconfined_domain_type ic_canister_sandbox_t : file *;
 allow unconfined_domain_type ic_canister_sandbox_t : lnk_file *;
 allow unconfined_domain_type ic_canister_sandbox_t : process *;
 
-# Silence systemd journal trying to access sandbox proc files
+# Allow journald to access sandbox proc files. Logger wants
+# to enrich log messages with process information, but it can
+# only do that if it has access to the proc files.
+# Long-term, the logging structure should be different, but make
+# policy reflect reality for now.
 require { type syslogd_t; }
-dontaudit syslogd_t ic_canister_sandbox_t : dir { getattr open read search };
-dontaudit syslogd_t ic_canister_sandbox_t : file { open read };
+allow syslogd_t ic_canister_sandbox_t : dir { getattr open read search };
+allow syslogd_t ic_canister_sandbox_t : file { open read getattr ioctl};
+allow syslogd_t ic_canister_sandbox_t : process { getattr };
