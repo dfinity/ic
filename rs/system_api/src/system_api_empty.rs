@@ -1,4 +1,5 @@
 use ic_interfaces::execution_environment::{
+    ExecutionComplexity,
     HypervisorError::{self},
     HypervisorResult, SystemApi,
 };
@@ -15,6 +16,12 @@ const MESSAGE_UNIMPLEMENTED: &str =
 pub struct SystemApiEmpty;
 
 impl SystemApi for SystemApiEmpty {
+    fn set_total_execution_complexity(&mut self, _complexity: ExecutionComplexity) {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn get_total_execution_complexity(&self) -> &ExecutionComplexity {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
     fn set_execution_error(&mut self, _error: HypervisorError) {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
@@ -31,6 +38,9 @@ impl SystemApi for SystemApiEmpty {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn subnet_type(&self) -> SubnetType {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn total_instruction_limit(&self) -> NumInstructions {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn slice_instruction_limit(&self) -> NumInstructions {
