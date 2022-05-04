@@ -20,14 +20,17 @@ crates_repository(
     name = "crate_index",
     lockfile = "//:Cargo.Bazel.lock",
     packages = {
-        "candid": crate.spec(version = "0.7.13"),
+        # Keep sorted.
         "candid_derive": crate.spec(version = "0.4.5"),
-        "serde": crate.spec(version = "1.0.136"),
-        "slog": crate.spec(version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"]),
-        "serde_json": crate.spec(version = "1.0.40"),
-        "serde_derive": crate.spec(version = "1.0.136"),
+        "candid": crate.spec(version = "0.7.13"),
+        "criterion": crate.spec(version = "0.3"),
+        "libc": crate.spec(version = "0.2.91"),
         "openssl": crate.spec(version = "0.10.29"),
+        "serde_derive": crate.spec(version = "1.0.136"),
+        "serde_json": crate.spec(version = "1.0.40"),
+        "serde": crate.spec(version = "1.0.136"),
         "sha2": crate.spec(version = "0.9.1"),
+        "slog": crate.spec(version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"]),
     },
     splicing_config = splicing_config(
         resolver_version = "2",
