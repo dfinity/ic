@@ -31,6 +31,7 @@ use ic_types::{
     nominal_cycles::NominalCycles,
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId,
 };
+use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use std::{str::FromStr, time::Duration};
 
@@ -512,6 +513,7 @@ impl CyclesAccountManager {
     pub fn response_cycles_refund(
         &self,
         log: &ReplicaLogger,
+        error_counter: &IntCounter,
         system_state: &mut SystemState,
         response: &mut Response,
     ) {
@@ -523,6 +525,7 @@ impl CyclesAccountManager {
 
         match some_extra_bytes {
             None => {
+                error_counter.inc();
                 error!(
                     log,
                     "Unexpected response payload size of {} bytes (max expected {})",

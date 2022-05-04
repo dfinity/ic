@@ -16,6 +16,7 @@ use ic_test_utilities::{
 use ic_types::{
     messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, ComputeAllocation, Cycles, NumInstructions,
 };
+use prometheus::IntCounter;
 use std::convert::From;
 
 mod common;
@@ -205,8 +206,10 @@ fn correct_charging_source_canister_for_a_request() {
     sandbox_safe_system_state
         .system_state_changes
         .apply_changes(&mut system_state);
+    let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
     cycles_account_manager.response_cycles_refund(
         &no_op_logger(),
+        &no_op_counter,
         &mut system_state,
         &mut response,
     );
