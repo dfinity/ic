@@ -48,7 +48,7 @@ COPY etc /etc
 # Update POSIX permissions in /etc/
 RUN find /etc -type d -exec chmod 0755 {} \+ && \
     find /etc -type f -not -path "/etc/hostname" -not -path "/etc/hosts" -not -path "/etc/resolv.conf" -exec chmod 0644 {} \+ && \
-    chmod 0755 /etc/systemd/system-generators/mount-generator && \
+    chmod 0755 /etc/systemd/system-generators/* && \
     chmod 0440 /etc/sudoers && \
     chmod 755 /etc/initramfs-tools/scripts/init-bottom/set-machine-id
 
