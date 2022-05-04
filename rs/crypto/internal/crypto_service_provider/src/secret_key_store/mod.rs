@@ -36,14 +36,15 @@ pub trait SecretKeyStore: Send + Sync {
     /// * If there is no existing key with the given `id` in the store, the new
     ///   key is inserted.
     /// * If there is a key with the given `id` in the store, it is replaced.
-    fn insert_or_replace(
-        &mut self,
-        id: KeyId,
-        key: CspSecretKey,
-        scope: Option<Scope>,
-    ) -> Result<(), SecretKeyStoreError> {
+    #[allow(clippy::single_match)]
+    fn insert_or_replace(&mut self, id: KeyId, key: CspSecretKey, scope: Option<Scope>) {
         self.remove(&id);
-        self.insert(id, key, scope)
+        match self.insert(id, key, scope) {
+            Ok(()) => {}
+            Err(SecretKeyStoreError::DuplicateKeyId(_)) => {
+                // unreachable, because key with `id` was removed prior to insertion
+            }
+        }
     }
 
     /// Retrieves the key with the given `id`.

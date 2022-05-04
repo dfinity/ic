@@ -120,15 +120,11 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
         };
 
         // Save state
-        if let Err(err) = self.sks_write_lock().insert_or_replace(
+        self.sks_write_lock().insert_or_replace(
             key_id,
             CspSecretKey::FsEncryption(updated_key_set?),
             Some(NIDKG_FS_SCOPE),
-        ) {
-            match err {
-                SecretKeyStoreError::DuplicateKeyId(_key_id) => unreachable!(),
-            };
-        };
+        );
 
         // FIN
         Ok(())
