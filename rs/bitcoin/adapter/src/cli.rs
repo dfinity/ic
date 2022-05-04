@@ -52,7 +52,11 @@ pub mod test {
             "seed.bitcoin.sprovoost.nl",
             "dnsseed.emzy.de",
             "seed.bitcoin.wiz.biz"
-        ]
+        ],
+        "logger": {
+            "format": "json",
+            "level": "info"
+        }
     }"#;
     const TESTNET_CONFIG: &str = r#"{
         "network": "testnet",
