@@ -20,44 +20,39 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     cargo \
     perl
 
+WORKDIR /tmp
+
 # Download and verify journalbeat
-RUN cd /tmp/ && \
+RUN \
     curl -L -O https://artifacts.elastic.co/downloads/beats/journalbeat/journalbeat-oss-7.5.1-linux-x86_64.tar.gz && \
-    echo "b1c4c12a5ea8b0e95ed78243ad08dc6e82dc414186da8324d86833c5114846c6edf06590b45cf6c0f29f57e4631c4bf4163e0020d466cf3a2cb65910540f39c5  journalbeat-oss-7.5.1-linux-x86_64.tar.gz" > journalbeat.sha512 && \
-    shasum -c journalbeat.sha512
+    echo "b1c4c12a5ea8b0e95ed78243ad08dc6e82dc414186da8324d86833c5114846c6edf06590b45cf6c0f29f57e4631c4bf4163e0020d466cf3a2cb65910540f39c5  journalbeat-oss-7.5.1-linux-x86_64.tar.gz" | shasum -c
 
 # Download and verify node_exporter
-RUN cd /tmp/ && \
+RUN \
     curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-amd64.tar.gz && \
-    echo "68f3802c2dd3980667e4ba65ea2e1fb03f4a4ba026cca375f15a0390ff850949  node_exporter-1.3.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
-    shasum -c node_exporter.sha256
+    echo "68f3802c2dd3980667e4ba65ea2e1fb03f4a4ba026cca375f15a0390ff850949  node_exporter-1.3.1.linux-amd64.tar.gz" | shasum -c
 
 # Download libnginx-mod-http-ndk.deb
-RUN cd /tmp/ && \
+RUN \
    curl -L -O https://github.com/dfinity/nginx-module-cbor-input/releases/download/v0.0.9/libnginx-mod-http-ndk_0.3.1_amd64.deb && \
-   echo "6a496d8c7f3357fda9e5adeb7a729e76c453f32c6d67bc0ec563b0f71e2a0aca  libnginx-mod-http-ndk_0.3.1_amd64.deb" > libnginx-mod-http-ndk.sha256 && \
-   shasum -c  libnginx-mod-http-ndk.sha256
+   echo "6a496d8c7f3357fda9e5adeb7a729e76c453f32c6d67bc0ec563b0f71e2a0aca  libnginx-mod-http-ndk_0.3.1_amd64.deb" | shasum -c
 
 # Download libnginx-mod-http-cbor-input.deb
-RUN cd /tmp/ && \
+RUN \
    curl -L -O https://github.com/dfinity/nginx-module-cbor-input/releases/download/v0.0.9/libnginx-mod-http-cbor-input_0.0.9_amd64.deb && \
-   echo "8dca8fb93a6645c4aee23f601e9d9f62a00638ff29f95ceafcd10f422a3126f0  libnginx-mod-http-cbor-input_0.0.9_amd64.deb" > libnginx-mod-httpor-input.sha256 && \
-   shasum -c  libnginx-mod-httpor-input.sha256
-
+   echo "8dca8fb93a6645c4aee23f601e9d9f62a00638ff29f95ceafcd10f422a3126f0  libnginx-mod-http-cbor-input_0.0.9_amd64.deb" | shasum -c
 
 # Download icx-proxy.deb 
-RUN cd /tmp/ && \
+RUN \
    curl -L -O https://github.com/dfinity/icx-proxy/releases/download/f289318/icx-proxy.deb && \
-   echo "9b434ce9ec1cddb2caf5e6550d5b8bcebd225614809280233334187e088017a9  ./icx-proxy.deb" > icx-proxy.sha256 && \
-   shasum -c icx-proxy.sha256
+   echo "9b434ce9ec1cddb2caf5e6550d5b8bcebd225614809280233334187e088017a9  icx-proxy.deb" | shasum -c
 
 # Download and check service worker
 ARG sw_version
 ARG sw_sha256
-RUN cd /tmp/ && \
+RUN \
    curl -L -O https://registry.npmjs.org/@dfinity/service-worker/-/service-worker-${sw_version}.tgz && \
-   echo "${sw_sha256}  ./service-worker-${sw_version}.tgz" > sw.sha256 && \
-   shasum -c sw.sha256
+   echo "${sw_sha256}  service-worker-${sw_version}.tgz" | shasum -c
 
 # Second build stage: construct the actual target image (root filesystem of the
 # boundary node VM).
