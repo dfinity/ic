@@ -50,8 +50,8 @@ impl GetPayloadError {
 pub struct BitcoinPayloadBuilder {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: Arc<BitcoinPayloadBuilderMetrics>,
-    _bitcoin_mainnet_adapter_client: Arc<dyn BitcoinAdapterClient>,
-    bitcoin_testnet_adapter_client: Arc<dyn BitcoinAdapterClient>,
+    _bitcoin_mainnet_adapter_client: Box<dyn BitcoinAdapterClient>,
+    bitcoin_testnet_adapter_client: Box<dyn BitcoinAdapterClient>,
     log: ReplicaLogger,
 }
 
@@ -59,8 +59,8 @@ impl BitcoinPayloadBuilder {
     pub fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
-        bitcoin_mainnet_adapter_client: Arc<dyn BitcoinAdapterClient>,
-        bitcoin_testnet_adapter_client: Arc<dyn BitcoinAdapterClient>,
+        bitcoin_mainnet_adapter_client: Box<dyn BitcoinAdapterClient>,
+        bitcoin_testnet_adapter_client: Box<dyn BitcoinAdapterClient>,
         log: ReplicaLogger,
     ) -> Self {
         Self {
