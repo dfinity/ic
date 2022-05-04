@@ -6,13 +6,12 @@ use hyper::{
     Client,
 };
 use hyper_socks2::SocksConnector;
-use hyper_tls::HttpsConnector;
-use ic_canister_http_adapter::{CanisterHttp, Config};
+use ic_canister_http_adapter::CanisterHttp;
 use ic_canister_http_service::{
     canister_http_service_client::CanisterHttpServiceClient,
     canister_http_service_server::CanisterHttpServiceServer, CanisterHttpSendRequest, HttpHeader,
 };
-use ic_logger::{new_replica_logger_from_config, ReplicaLogger};
+use ic_logger::replica_logger::no_op_logger;
 use std::convert::TryFrom;
 use std::{convert::Infallible, net::SocketAddr};
 use tokio::net::UnixStream;
@@ -20,25 +19,35 @@ use tonic::transport::{Channel, Endpoint, Server, Uri};
 use tower::service_fn;
 use unix::UnixListenerDrop;
 use uuid::Uuid;
+use wiremock::{
+    http::HeaderValue,
+    matchers::{method, path},
+    Mock, MockServer, ResponseTemplate,
+};
 
 #[tokio::test]
-async fn test_https() {
-    // setup unix domain socket and start gRPC server on one side of the UDS
-    let config = Config::default();
-    let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
+async fn test_canister_http_server() {
+    // Setup local mock server.
+    let mock_server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/hello"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&mock_server)
+        .await;
 
-    let canister_http = setup_grpc_server_with_https_client(logger.clone());
+    // Setup unix domain socket and start gRPC server on one side of the UDS.
+    let canister_http = setup_grpc_server_with_http_client();
     let channel = setup_loop_channel_unix(canister_http).await;
 
-    // create gRPC client that communicated with gRPC server through UDS channel
+    // Create gRPC client that communicated with gRPC server through UDS channel.
     let mut client = CanisterHttpServiceClient::new(channel);
 
-    let request = tonic::Request::new(build_http_canister_request(
-        "https://www.google.com".to_string(),
-    ));
+    let request = tonic::Request::new(build_http_canister_request(format!(
+        "{}/hello",
+        &mock_server.uri()
+    )));
 
     let response = client.canister_http_send(request).await;
-
     assert!(response.is_ok());
     assert_eq!(
         response.unwrap().into_inner().status,
@@ -47,81 +56,84 @@ async fn test_https() {
 }
 
 #[tokio::test]
-async fn test_http() {
-    let config = Config::default();
-    let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
+async fn test_nonascii_header() {
+    let mock_server = MockServer::start().await;
+    // Create invalid header. Needs unsafe to bypass parsing.
+    unsafe {
+        Mock::given(method("GET"))
+            .and(path("/hello"))
+            .respond_with(ResponseTemplate::new(200).insert_header(
+                "invalid-ascii-value",
+                HeaderValue::from_bytes_unchecked("x√ab c".as_bytes().to_vec()),
+            ))
+            .mount(&mock_server)
+            .await;
+    }
 
-    let canister_http = setup_grpc_server_with_https_client(logger.clone());
+    let canister_http = setup_grpc_server_with_http_client();
     let channel = setup_loop_channel_unix(canister_http).await;
+
     let mut client = CanisterHttpServiceClient::new(channel);
 
-    let request = tonic::Request::new(build_http_canister_request(
-        "http://www.bing.com".to_string(),
-    ));
+    let request = tonic::Request::new(build_http_canister_request(format!(
+        "{}/hello",
+        &mock_server.uri()
+    )));
 
-    // HTTP adapter enforces HTTPS. HTTP connection requests are rejected.
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
-    let status = response.unwrap_err();
-    assert_eq!(status.code(), tonic::Code::Unavailable);
 }
 
 #[tokio::test]
-async fn test_no_http() {
-    let config = Config::default();
-    let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
-
-    let canister_http = setup_grpc_server_with_https_client(logger.clone());
+async fn test_missing_protocol() {
+    // Test that missing http protocol specification returns error.
+    let canister_http = setup_grpc_server_with_http_client();
     let channel = setup_loop_channel_unix(canister_http).await;
     let mut client = CanisterHttpServiceClient::new(channel);
 
-    let request = tonic::Request::new(build_http_canister_request("www.google.com".to_string()));
+    let request = tonic::Request::new(build_http_canister_request("127.0.0.1".to_string()));
 
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
 }
 
-// Try to connect through failing proxy.
 #[tokio::test]
 async fn test_bad_socks() {
-    let config = Config::default();
-    let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
-
-    let canister_http = setup_grpc_server_with_socks_client(
-        Uri::from_static("socks5://doesnotexist:8088"),
-        logger.clone(),
-    );
+    // Try to connect through failing proxy.
+    let canister_http =
+        setup_grpc_server_with_socks_client(Uri::from_static("socks5://doesnotexist:8088"));
     let channel = setup_loop_channel_unix(canister_http).await;
     let mut client = CanisterHttpServiceClient::new(channel);
 
-    let request = tonic::Request::new(build_http_canister_request(
-        "https://www.google.com".to_string(),
-    ));
+    let request = tonic::Request::new(build_http_canister_request("https://127.0.0.1".to_string()));
 
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
 }
 
-// Spawn socks proxy on localhost and connect thourgh poxy.
 #[tokio::test]
 async fn test_socks() {
-    let config = Config::default();
-    let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
-
-    let canister_http = setup_grpc_server_with_socks_client(
-        Uri::from_static("socks5://127.0.0.1:8088"),
-        logger.clone(),
-    );
+    // Spawn socks proxy on localhost and connect thourgh poxy.
+    let canister_http =
+        setup_grpc_server_with_socks_client(Uri::from_static("socks5://127.0.0.1:8088"));
     let channel = setup_loop_channel_unix(canister_http).await;
     let mut client = CanisterHttpServiceClient::new(channel);
+
+    let mock_server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/hello"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&mock_server)
+        .await;
 
     tokio::task::spawn(async move {
         spawn_socks5_server("127.0.0.1:8088".to_string()).await;
     });
 
-    let request = tonic::Request::new(build_http_canister_request(
-        "https://www.google.com".to_string(),
-    ));
+    let request = tonic::Request::new(build_http_canister_request(format!(
+        "{}/hello",
+        &mock_server.uri()
+    )));
     let response = client.canister_http_send(request).await;
     assert!(response.is_ok());
 }
@@ -129,9 +141,6 @@ async fn test_socks() {
 // DNS returns multiple addresses and only one is valid. The proxy connector should fallback to the working one.
 #[tokio::test]
 async fn test_socks_fallback() {
-    let config = Config::default();
-    let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
-
     // Setup dns resolver for connecting to socks proxy. Only 127.0.0.1:8089 is working
     let resolver = tower::service_fn(|_name| async move {
         Ok::<_, Infallible>(
@@ -160,21 +169,27 @@ async fn test_socks_fallback() {
         connector,
     };
 
-    let mut https = HttpsConnector::new_with_connector(proxy);
-    https.https_only(true);
-    let https_client = Client::builder().build::<_, hyper::Body>(https);
-    let canister_http = CanisterHttp::new(https_client, logger.clone());
+    let http_client = Client::builder().build::<_, hyper::Body>(proxy);
+    let canister_http = CanisterHttp::new(http_client, no_op_logger());
 
     let channel = setup_loop_channel_unix(canister_http).await;
     let mut client = CanisterHttpServiceClient::new(channel);
+
+    let mock_server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/hello"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&mock_server)
+        .await;
 
     // Spawn socks prox on 127.0.0.1:8089
     tokio::task::spawn(async move {
         spawn_socks5_server("127.0.0.1:8089".to_string()).await;
     });
-    let request = tonic::Request::new(build_http_canister_request(
-        "https://www.bing.com".to_string(),
-    ));
+    let request = tonic::Request::new(build_http_canister_request(format!(
+        "{}/hello",
+        &mock_server.uri()
+    )));
     let response = client.canister_http_send(request).await;
     assert!(response.is_ok());
 }
@@ -193,19 +208,11 @@ fn build_http_canister_request(url: String) -> CanisterHttpSendRequest {
     }
 }
 
-fn setup_grpc_server_with_https_client(
-    logger: ReplicaLogger,
-) -> CanisterHttp<HttpsConnector<HttpConnector>> {
-    let mut https = HttpsConnector::new();
-    https.https_only(true);
-    let https_client = Client::builder().build::<_, hyper::Body>(https);
-    CanisterHttp::new(https_client, logger)
+fn setup_grpc_server_with_http_client() -> CanisterHttp<HttpConnector> {
+    CanisterHttp::new(Client::new(), no_op_logger())
 }
 
-fn setup_grpc_server_with_socks_client(
-    uri: Uri,
-    logger: ReplicaLogger,
-) -> CanisterHttp<HttpsConnector<SocksConnector<HttpConnector>>> {
+fn setup_grpc_server_with_socks_client(uri: Uri) -> CanisterHttp<SocksConnector<HttpConnector>> {
     let mut connector = HttpConnector::new();
     connector.enforce_http(false);
     let proxy = SocksConnector {
@@ -214,10 +221,8 @@ fn setup_grpc_server_with_socks_client(
         connector,
     };
 
-    let mut https = HttpsConnector::new_with_connector(proxy);
-    https.https_only(true);
-    let https_client = Client::builder().build::<_, hyper::Body>(https);
-    CanisterHttp::new(https_client, logger)
+    let https_client = Client::builder().build::<_, hyper::Body>(proxy);
+    CanisterHttp::new(https_client, no_op_logger())
 }
 
 async fn spawn_socks5_server(listen_addr: String) {

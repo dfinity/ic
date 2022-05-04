@@ -33,4 +33,5 @@ url = "2.2.1"
 
 [dev-dependencies]
 fast-socks5 = "0.7.0"
+wiremock = "0.5.10"
 uuid = { version = "0.8.2", features = ["v4"] }
