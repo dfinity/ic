@@ -119,6 +119,7 @@ fn test_automated_node_provider_remuneration() {
             &node_provider_id_1,
             "AN1",
             rewardable_nodes_1,
+            "0:0:0:0:0:0:0:0",
         )
         .await;
 
@@ -133,6 +134,7 @@ fn test_automated_node_provider_remuneration() {
             &node_provider_id_2,
             "BC1",
             rewardable_nodes_2,
+            "0:0:0:0:0:0:0:0",
         )
         .await;
 
@@ -148,6 +150,7 @@ fn test_automated_node_provider_remuneration() {
             &node_provider_id_3,
             "FM1",
             rewardable_nodes_3,
+            "0:0:0:0:0:0:0:0",
         )
         .await;
 
@@ -162,6 +165,7 @@ fn test_automated_node_provider_remuneration() {
             &node_provider_id_1,
             "BC1",
             rewardable_nodes_4,
+            "0:0:0:0:0:0:0:0",
         )
         .await;
 
@@ -428,6 +432,7 @@ async fn add_node_operator(
     np_id: &PrincipalId,
     dc_id: &str,
     rewardable_nodes: BTreeMap<String, u32>,
+    ipv6: &str,
 ) {
     let proposal_payload = AddNodeOperatorPayload {
         node_operator_principal_id: Some(*no_id),
@@ -435,6 +440,7 @@ async fn add_node_operator(
         node_provider_principal_id: Some(*np_id),
         dc_id: dc_id.into(),
         rewardable_nodes,
+        ipv6: Some(ipv6.into()),
     };
 
     let proposal_id: ProposalId = submit_external_update_proposal(

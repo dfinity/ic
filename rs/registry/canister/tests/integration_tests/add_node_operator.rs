@@ -33,6 +33,7 @@ fn test_the_anonymous_user_cannot_add_a_node_operator() {
             node_provider_principal_id: Some(PrincipalId::new_anonymous()),
             dc_id: "AN1".into(),
             rewardable_nodes: BTreeMap::new(),
+            ipv6: None,
         };
 
         // The anonymous end-user tries to add a node operator, bypassing the proposals
@@ -76,6 +77,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_add_a_node_operator
             node_provider_principal_id: Some(PrincipalId::new_anonymous()),
             dc_id: "AN1".into(),
             rewardable_nodes: BTreeMap::new(),
+            ipv6: None,
         };
 
         // The attacker canister tries to add a node operator, pretending to be the
@@ -128,6 +130,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             node_provider_principal_id: Some(PrincipalId::new_anonymous()),
             dc_id: "AN1".into(),
             rewardable_nodes: BTreeMap::new(),
+            ipv6: None,
         };
 
         assert!(
@@ -154,6 +157,7 @@ fn test_accepted_proposal_mutates_the_registry() {
                 node_provider_principal_id: PrincipalId::new_anonymous().to_vec(),
                 dc_id: "AN1".into(),
                 rewardable_nodes: BTreeMap::new(),
+                ipv6: None,
             }
         );
 
@@ -164,6 +168,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             node_provider_principal_id: Some(PrincipalId::new_anonymous()),
             dc_id: "BC1".into(),
             rewardable_nodes: BTreeMap::new(),
+            ipv6: None,
         };
 
         assert!(
@@ -188,6 +193,7 @@ fn test_accepted_proposal_mutates_the_registry() {
                 node_provider_principal_id: PrincipalId::new_anonymous().to_vec(),
                 dc_id: "BC1".into(),
                 rewardable_nodes: BTreeMap::new(),
+                ipv6: None,
             }
         );
 
@@ -198,6 +204,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             node_provider_principal_id: Some(PrincipalId::new_anonymous()),
             dc_id: "CA1".into(),
             rewardable_nodes: BTreeMap::new(),
+            ipv6: None,
         };
 
         assert!(

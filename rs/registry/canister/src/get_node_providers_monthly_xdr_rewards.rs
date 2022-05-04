@@ -121,6 +121,7 @@ mod tests {
             node_provider_principal_id: Some(*TEST_USER1_PRINCIPAL),
             dc_id: "NY1".into(),
             rewardable_nodes: btreemap! {},
+            ipv6: None,
         };
 
         registry.do_add_node_operator(node_operator_payload);
@@ -171,6 +172,7 @@ mod tests {
             node_provider_principal_id: Some(*TEST_USER1_PRINCIPAL),
             dc_id: "NY1".into(),
             rewardable_nodes: rewardable_nodes_1,
+            ipv6: None,
         };
         registry.do_add_node_operator(node_operator_payload_1);
 
@@ -279,6 +281,7 @@ mod tests {
             node_provider_principal_id: Some(*TEST_USER2_PRINCIPAL),
             dc_id: "BC1".into(),
             rewardable_nodes: rewardable_nodes_2,
+            ipv6: None,
         };
         registry.do_add_node_operator(node_operator_payload_2);
 

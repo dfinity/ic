@@ -1,6 +1,6 @@
 use crate::{
     common::LOG_PREFIX,
-    mutations::common::{decode_registry_value, encode_or_panic},
+    mutations::common::{check_ipv6_format, decode_registry_value, encode_or_panic},
     registry::Registry,
 };
 
@@ -71,6 +71,23 @@ impl Registry {
             node_operator_record.node_provider_principal_id = node_provider_id.to_vec();
         }
 
+        if let Some(node_operator_ipv6) = payload.ipv6 {
+            if !check_ipv6_format(&node_operator_ipv6) {
+                panic!(
+                    "{}New Ipv6 field {} doesnt conform to the required format",
+                    LOG_PREFIX, node_operator_ipv6
+                );
+            }
+
+            node_operator_record.ipv6 = Some(node_operator_ipv6);
+        }
+
+        if let Some(set_ipv6_none) = payload.set_ipv6_to_none {
+            if set_ipv6_none {
+                node_operator_record.ipv6 = None;
+            }
+        }
+
         let mutations = vec![RegistryMutation {
             mutation_type: registry_mutation::Type::Update as i32,
             key: node_operator_record_key,
@@ -108,4 +125,14 @@ pub struct UpdateNodeOperatorConfigPayload {
     /// The principal id of this node's provider.
     #[prost(message, optional, tag = "5")]
     pub node_provider_id: Option<PrincipalId>,
+
+    /// The ipv6 address of this node's provider.
+    #[prost(message, optional, tag = "6")]
+    pub ipv6: Option<String>,
+
+    /// Set the field ipv6 in the NodeOperatorRecord to None. If the field ipv6 in the
+    /// UpdateNodeOperatorConfigPayload is set to None, the field ipv6 in the NodeOperatorRecord will
+    /// not be updated. This field is for the case when we want to update the value to be None.
+    #[prost(message, optional, tag = "7")]
+    pub set_ipv6_to_none: Option<bool>,
 }
