@@ -3,8 +3,8 @@ use std::time::Duration;
 use strum::IntoStaticStr;
 
 /// Describe RPC error -- can be either related to transport (i.e.
-/// failure to transport or parse a message) or to server (i.e. server
-/// responded, but gave us a message indicating an error).
+/// failure to transport) or to server (i.e. server responded, but
+/// gave us a message indicating an error).
 #[derive(Debug, IntoStaticStr)]
 pub enum RpcError {
     /// Failure at transport.
@@ -17,8 +17,6 @@ pub enum RpcError {
         message: String,
         source: Box<dyn std::error::Error + Send + Sync + 'static>,
     },
-    /// Invalid request passed to the client.
-    InvalidRequest(BitcoinAdapterRequestWrapper),
 }
 
 pub type RpcResult<T> = Result<T, RpcError>;

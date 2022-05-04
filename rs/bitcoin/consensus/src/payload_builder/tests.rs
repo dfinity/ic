@@ -58,8 +58,8 @@ fn bitcoin_payload_builder_test(
         let bitcoin_payload_builder = BitcoinPayloadBuilder::new(
             Arc::new(state_manager),
             &MetricsRegistry::new(),
-            Arc::new(bitcoin_mainnet_adapter_client),
-            Arc::new(bitcoin_testnet_adapter_client),
+            Box::new(bitcoin_mainnet_adapter_client),
+            Box::new(bitcoin_testnet_adapter_client),
             log,
         );
 
