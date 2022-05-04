@@ -138,6 +138,7 @@ mod tests {
             node_provider_principal_id: Some(*TEST_USER1_PRINCIPAL),
             dc_id: dc_id_1.clone(),
             rewardable_nodes: btreemap! {},
+            ipv6: None,
         };
         let node_operator_1 = NodeOperatorRecord::from(node_operator_payload.clone());
         registry.do_add_node_operator(node_operator_payload);
@@ -147,6 +148,7 @@ mod tests {
             node_provider_principal_id: Some(*TEST_USER1_PRINCIPAL),
             dc_id: dc_id_1.clone(),
             rewardable_nodes: btreemap! {},
+            ipv6: None,
         };
         let node_operator_2 = NodeOperatorRecord::from(node_operator_payload.clone());
         registry.do_add_node_operator(node_operator_payload);
@@ -164,6 +166,7 @@ mod tests {
             node_provider_principal_id: Some(*TEST_USER1_PRINCIPAL),
             dc_id: dc_id_2.clone(),
             rewardable_nodes: btreemap! {},
+            ipv6: None,
         };
         let node_operator_3 = NodeOperatorRecord::from(node_operator_payload.clone());
         registry.do_add_node_operator(node_operator_payload);
@@ -182,6 +185,7 @@ mod tests {
             node_provider_principal_id: Some(*TEST_USER2_PRINCIPAL),
             dc_id: dc_id_3.clone(),
             rewardable_nodes: btreemap! {},
+            ipv6: None,
         };
         let node_operator_4 = NodeOperatorRecord::from(node_operator_payload.clone());
         registry.do_add_node_operator(node_operator_payload);
@@ -240,6 +244,7 @@ mod tests {
             node_provider_principal_id: Some(*TEST_USER1_PRINCIPAL),
             dc_id: dc_id_1.clone(),
             rewardable_nodes: btreemap! {},
+            ipv6: None,
         };
         // Add node operator.
         registry.do_add_node_operator(node_operator_payload);

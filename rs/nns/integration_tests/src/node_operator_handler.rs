@@ -174,6 +174,7 @@ async fn add_node_operator(nns_canisters: &NnsCanisters<'_>, node_operator_id: &
         node_provider_principal_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
         dc_id: "DC".into(),
         rewardable_nodes: rewardable_nodes.clone(),
+        ipv6: Some("0:0:0:0:0:0:0:0".into()),
     };
 
     let node_operator_record_key = make_node_operator_record_key(*node_operator_id).into_bytes();

@@ -60,6 +60,10 @@ pub struct AddNodeOperatorPayload {
     // Provider should be rewarded.
     #[prost(btree_map = "string, uint32", tag = "5")]
     pub rewardable_nodes: BTreeMap<String, u32>,
+
+    // The ipv6 address of the node's provider.
+    #[prost(message, optional, tag = "6")]
+    pub ipv6: Option<String>,
 }
 
 impl From<AddNodeOperatorPayload> for NodeOperatorRecord {
@@ -70,6 +74,7 @@ impl From<AddNodeOperatorPayload> for NodeOperatorRecord {
             node_allowance: val.node_allowance,
             dc_id: val.dc_id,
             rewardable_nodes: val.rewardable_nodes,
+            ipv6: val.ipv6,
         }
     }
 }

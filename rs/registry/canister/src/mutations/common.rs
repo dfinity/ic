@@ -64,3 +64,37 @@ pub(crate) fn check_replica_version_is_blessed(registry: &Registry, replica_vers
         )
     }
 }
+
+/// Check for the ipv6 field in node operator, checks that the string consists in 8 hexadecimal
+/// numbers in the range 0-65535 (2**16).
+pub fn check_ipv6_format(ipv6_string: &str) -> bool {
+    let mut count = 0;
+    for hex_str in ipv6_string.split(':') {
+        count += 1;
+        let hex = i32::from_str_radix(hex_str, 16);
+        if !(hex.is_ok() && hex.unwrap() < 65536) {
+            return false;
+        }
+    }
+    count == 8
+}
+
+#[cfg(test)]
+mod test {
+
+    use crate::mutations::common::check_ipv6_format;
+    #[test]
+    fn test_check_ipv6_format() {
+        // Invalid ipv6
+        assert!(!check_ipv6_format("0:0:0:0:0:0"));
+        assert!(!check_ipv6_format("0-0-0-0-0-0-0"));
+        assert!(!check_ipv6_format("This ipv6"));
+        assert!(!check_ipv6_format("0:0:0:0:0:1234567:0:0"));
+        assert!(!check_ipv6_format("0"));
+        assert!(!check_ipv6_format(""));
+
+        // Valid Ipv6
+        assert!(check_ipv6_format("0:0:0:0:0:0:0:0"));
+        assert!(check_ipv6_format("123:221:4567:323:4123:2111:7:7"));
+    }
+}

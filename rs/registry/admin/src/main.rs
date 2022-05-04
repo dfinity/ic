@@ -1778,6 +1778,10 @@ struct ProposeToAddNodeOperatorCmd {
     /// '{ "default": 10, "storage_upgrade": 24 }'
     #[clap(long)]
     rewardable_nodes: Option<String>,
+
+    /// The ipv6 address.
+    #[clap(long)]
+    ipv6: Option<String>,
 }
 
 #[async_trait]
@@ -1806,6 +1810,7 @@ impl ProposalTitleAndPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperato
             node_provider_principal_id: Some(self.node_provider_principal_id),
             dc_id: self.dc_id.clone().unwrap_or_else(|| "".to_string()),
             rewardable_nodes,
+            ipv6: self.ipv6.clone(),
         }
     }
 }
@@ -1837,6 +1842,16 @@ struct ProposeToUpdateNodeOperatorConfigCmd {
     #[clap(long)]
     /// The principal id of the node provider
     pub node_provider_id: Option<PrincipalId>,
+
+    /// The ipv6 address of the node operator.
+    #[clap(long)]
+    ipv6: Option<String>,
+
+    /// Set the field ipv6 in the NodeOperatorRecord to None. If the field ipv6 in this struct is
+    /// set to None, the field ipv6 in the NodeOperatorRecord will not be updated.
+    /// This field is for the case when we want to update the value to be None.
+    #[clap(long)]
+    pub set_ipv6_to_none: Option<bool>,
 }
 
 #[async_trait]
@@ -1866,6 +1881,8 @@ impl ProposalTitleAndPayload<UpdateNodeOperatorConfigPayload>
             dc_id: self.dc_id.clone(),
             rewardable_nodes,
             node_provider_id: self.node_provider_id,
+            ipv6: self.ipv6.clone(),
+            set_ipv6_to_none: self.set_ipv6_to_none,
         }
     }
 }

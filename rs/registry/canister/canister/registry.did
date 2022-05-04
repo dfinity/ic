@@ -4,6 +4,7 @@ type AddFirewallRulesPayload = record {
   rules : vec FirewallRule;
 };
 type AddNodeOperatorPayload = record {
+  ipv6 : opt text;
   node_operator_principal_id : opt principal;
   node_allowance : nat64;
   rewardable_nodes : vec record { text; nat32 };
@@ -102,6 +103,7 @@ type FirewallRule = record {
 };
 type Gps = record { latitude : float32; longitude : float32 };
 type NodeOperatorRecord = record {
+  ipv6 : opt text;
   node_operator_principal_id : vec nat8;
   node_allowance : nat64;
   rewardable_nodes : vec record { text; nat32 };
@@ -163,6 +165,8 @@ type UpdateNodeOperatorConfigDirectlyPayload = record {
 };
 type UpdateNodeOperatorConfigPayload = record {
   node_operator_id : opt principal;
+  set_ipv6_to_none : opt bool;
+  ipv6 : opt text;
   node_provider_id : opt principal;
   node_allowance : opt nat64;
   rewardable_nodes : vec record { text; nat32 };

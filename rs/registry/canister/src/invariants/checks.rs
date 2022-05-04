@@ -213,6 +213,7 @@ mod tests {
             node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
+            ipv6: None,
         });
         let registry = Registry::new();
         let mutation = vec![insert(key.as_bytes(), &value)];
@@ -231,6 +232,7 @@ mod tests {
             node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
+            ipv6: None,
         });
 
         let mutations = vec![
@@ -257,6 +259,7 @@ mod tests {
             node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
+            ipv6: None,
         });
         let mut mutations = vec![insert(key.as_bytes(), &value)];
 

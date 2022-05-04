@@ -155,6 +155,7 @@ pub struct NodeOperatorEntry {
     node_allowance: u64,
     dc_id: String,
     rewardable_nodes: BTreeMap<String, u32>,
+    ipv6: Option<String>,
 }
 
 // We must be able to inject a values of type NodeOperatorEntry into the
@@ -170,6 +171,7 @@ impl From<NodeOperatorEntry> for NodeOperatorRecord {
                 .unwrap_or_else(Vec::new),
             dc_id: item.dc_id,
             rewardable_nodes: item.rewardable_nodes,
+            ipv6: item.ipv6,
         }
     }
 }
@@ -354,6 +356,7 @@ impl IcConfig {
                     node_provider_principal_id: self.initial_node_provider,
                     dc_id: "".into(),
                     rewardable_nodes: BTreeMap::new(),
+                    ipv6: None,
                 });
         }
 
@@ -702,6 +705,7 @@ impl IcConfig {
                 node_allowance,
                 dc_id: "".into(),
                 rewardable_nodes: BTreeMap::new(),
+                ipv6: None,
             });
         }
 

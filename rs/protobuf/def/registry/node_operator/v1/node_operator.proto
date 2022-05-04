@@ -26,6 +26,8 @@ message NodeOperatorRecord {
   // A map from node type to the number of nodes for which the associated Node
   // Provider should be rewarded.
   map<string, uint32> rewardable_nodes = 5;
+
+  optional string ipv6 = 6;
 }
 
 /// The payload of a request to remove Node Operator records from the Registry

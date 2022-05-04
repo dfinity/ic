@@ -1,5 +1,6 @@
 use candid::Encode;
 use dfn_candid::candid_one;
+use std::collections::BTreeMap;
 
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -66,6 +67,8 @@ fn test_non_governance_users_cannot_update_node_operator_config() {
             dc_id: None,
             rewardable_nodes: btreemap! {},
             node_provider_id: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
+            ipv6: None,
+            set_ipv6_to_none: None,
         };
 
         // The anonymous end-user tries to update a node operator, bypassing
@@ -143,6 +146,8 @@ fn test_accepted_proposal_mutates_the_registry() {
             dc_id: Some("AN1".into()),
             rewardable_nodes: rewardable_nodes.clone(),
             node_provider_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+            ipv6: Some("0:0:0:0:0:0:0:0".into()),
+            set_ipv6_to_none: None,
         };
 
         // ...causing a panic
@@ -162,6 +167,8 @@ fn test_accepted_proposal_mutates_the_registry() {
             dc_id: Some("AN1".into()),
             rewardable_nodes: rewardable_nodes.clone(),
             node_provider_id: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
+            ipv6: Some("0:0:0:0:0:0:0:0".into()),
+            set_ipv6_to_none: None,
         };
 
         assert!(
@@ -184,7 +191,98 @@ fn test_accepted_proposal_mutates_the_registry() {
                 dc_id: "AN1".into(),
                 rewardable_nodes,
                 node_provider_principal_id: (*TEST_NEURON_2_OWNER_PRINCIPAL).to_vec(),
+                ipv6: Some("0:0:0:0:0:0:0:0".into()),
             },
+        );
+
+        Ok(())
+    });
+}
+
+/// Tests that the ipv6 field can be set to None.
+/// See field set_ipv6_to_none in UpdateNodeOperatorConfigPayload in
+/// rs/registry/canister/src/mutations/do_update_node_operator_config.rs
+#[test]
+fn test_set_ipv6_none() {
+    local_test_on_nns_subnet(|runtime| async move {
+        let node_operator_key = make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL);
+        let node_operator_record = NodeOperatorRecord {
+            node_operator_principal_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
+            node_allowance: 5,
+            ipv6: Some("0:0:0:0:0:0:0:0".into()),
+            ..Default::default()
+        };
+        let registry = set_up_registry_canister(
+            &runtime,
+            RegistryCanisterInitPayloadBuilder::new()
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(RegistryAtomicMutateRequest {
+                    mutations: vec![RegistryMutation {
+                        mutation_type: registry_mutation::Type::Insert as i32,
+                        key: node_operator_key.as_bytes().to_vec(),
+                        value: encode_or_panic(&node_operator_record),
+                    }],
+                    preconditions: vec![],
+                })
+                .build(),
+        )
+        .await;
+        let governance = set_up_universal_canister(&runtime).await;
+
+        // A payload with ipv6 None will leave the ipv6 field untouched.
+        let payload = UpdateNodeOperatorConfigPayload {
+            node_operator_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+            node_allowance: None,
+            dc_id: Some("AN2".into()),
+            rewardable_nodes: BTreeMap::default(),
+            node_provider_id: None,
+            ipv6: None,
+            set_ipv6_to_none: None,
+        };
+
+        assert!(
+            forward_call_via_universal_canister(
+                &governance,
+                &registry,
+                "update_node_operator_config",
+                Encode!(&payload).unwrap()
+            )
+            .await
+        );
+
+        // Assert that the ipv6 field remains the same.
+        assert_eq!(
+            get_value::<NodeOperatorRecord>(&registry, node_operator_key.as_bytes())
+                .await
+                .ipv6,
+            Some("0:0:0:0:0:0:0:0".into())
+        );
+
+        // This payload will set the ipv6 to None,
+        let payload = UpdateNodeOperatorConfigPayload {
+            node_operator_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+            node_allowance: None,
+            dc_id: Some("AN2".into()),
+            rewardable_nodes: BTreeMap::default(),
+            node_provider_id: None,
+            ipv6: None,
+            set_ipv6_to_none: Some(true),
+        };
+        assert!(
+            forward_call_via_universal_canister(
+                &governance,
+                &registry,
+                "update_node_operator_config",
+                Encode!(&payload).unwrap()
+            )
+            .await
+        );
+        // Assert ipv6 field is None.
+        assert_eq!(
+            get_value::<NodeOperatorRecord>(&registry, node_operator_key.as_bytes())
+                .await
+                .ipv6,
+            None
         );
 
         Ok(())
