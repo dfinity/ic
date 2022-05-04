@@ -6162,6 +6162,7 @@ dependencies = [
  "rand 0.7.3",
  "serde_json",
  "slog",
+ "slog-async",
  "tempfile",
  "tokio",
  "url",
