@@ -460,8 +460,8 @@ mod tests {
             // `stable_read()` System API call overhead.
             assert_eq!(
                 instructions_consumed_without_data.get(),
-                7 + ic_embedders::wasmtime_embedder::system_api_complexity::STABLE_READ.get()
-                    as u64
+                7 + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
+                    .get() as u64
             );
         })
     }
