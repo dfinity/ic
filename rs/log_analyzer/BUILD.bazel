@@ -1,0 +1,77 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "log_analyzer",
+    srcs = glob(["src/**"]),
+    edition = "2018",
+    deps = [
+        "@crate_index//:chrono",
+        "@crate_index//:regex",
+    ],
+)
+
+rust_test(
+    name = "log_analyzer_test",
+    crate = ":log_analyzer",
+    deps = [
+        "@crate_index//:clap",
+        "@crate_index//:criterion",
+        "@crate_index//:lazy_static",
+    ],
+)
+
+rust_test_suite(
+    name = "tests",
+    srcs = glob(["tests/**"]),
+    edition = "2018",
+    deps = [
+        ":log_analyzer",
+        "@crate_index//:chrono",
+        "@crate_index//:lazy_static",
+        "@crate_index//:regex",
+    ],
+)
+
+rust_binary(
+    name = "log_analyzer_bench",
+    srcs = ["benches/speed.rs"],
+    edition = "2018",
+    deps = [
+        ":log_analyzer",
+        "@crate_index//:criterion",
+    ],
+)
+
+rust_binary(
+    name = "logscan",
+    srcs = ["examples/logscan.rs"],
+    edition = "2018",
+    deps = [
+        ":log_analyzer",
+        "@crate_index//:chrono",
+        "@crate_index//:lazy_static",
+        "@crate_index//:regex",
+    ],
+)
+
+rust_binary(
+    name = "ltl-grep",
+    srcs = ["examples/ltl-grep.rs"],
+    edition = "2018",
+    deps = [
+        ":log_analyzer",
+        "@crate_index//:chrono",
+        "@crate_index//:clap",
+        "@crate_index//:regex",
+    ],
+)
