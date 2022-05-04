@@ -1,0 +1,24 @@
+= IC_SubnetTypeRequesttype_ErrorRateTooHigh.adoc
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+Estimated requests error rate (unsuccessful requests / all requests) is below the SLO limit for 60m.
+Please note we count only 429 error codes as failures. 
+
+== Impact
+
+Users observe high rate of failed requests.
+
+== Possible causes (non-exhaustive)
+
+1. This is most likely due to many client requests or low subnet throughput.
+
+== Troubleshooting and remediation
+
+1. Check the Grafana metrics for changes in user request patterns.
+
+2. Escalate to the networking team (Slack - #eng-networking, Jira -
+https://dfinity.atlassian.net/browse/NET)
+
