@@ -20,6 +20,7 @@
         - 'gitlab-ci/config/bazel/*'
         - '.bazelrc'
         - 'WORKSPACE.bazel'
+        - 'toolchains/*'
       when: always
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[bazel\]/'
       when: always
