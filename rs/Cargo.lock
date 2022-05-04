@@ -4857,6 +4857,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-types 0.8.0",
  "ic-wasm-types",
+ "prometheus",
  "serde",
  "slog",
 ]
@@ -6942,6 +6943,7 @@ dependencies = [
  "ic-utils 0.8.0",
  "lazy_static",
  "maplit",
+ "prometheus",
  "serde",
  "serde_bytes",
  "slog",

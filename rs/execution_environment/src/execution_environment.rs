@@ -1313,6 +1313,7 @@ impl ExecutionEnvironmentImpl {
         // the actual size of the response.
         self.cycles_account_manager.response_cycles_refund(
             &self.log,
+            self.metrics.response_cycles_refund_error_counter(),
             &mut canister.system_state,
             &mut resp,
         );

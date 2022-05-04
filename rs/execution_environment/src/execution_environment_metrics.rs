@@ -2,12 +2,18 @@ use ic_error_types::UserError;
 use ic_ic00_types as ic00;
 use ic_metrics::buckets::decimal_buckets;
 use ic_metrics::{MetricsRegistry, Timer};
-use prometheus::HistogramVec;
+use prometheus::{HistogramVec, IntCounter};
 use std::str::FromStr;
+
+const CRITICAL_ERROR_RESPONSE_CYCLES_REFUND: &str =
+    "cycles_account_manager_response_cycles_refund_error";
 
 /// Metrics used to monitor the performance of the execution environment.
 pub(crate) struct ExecutionEnvironmentMetrics {
     subnet_messages: HistogramVec,
+
+    /// Critical error for responses above the maximum allowed size.
+    response_cycles_refund_error: IntCounter,
 }
 
 impl ExecutionEnvironmentMetrics {
@@ -23,6 +29,8 @@ impl ExecutionEnvironmentMetrics {
                 // The `outcome` label is deprecated and should be replaced by `status` eventually.
                 &["method_name", "outcome", "status"],
             ),
+            response_cycles_refund_error: metrics_registry
+                .error_counter(CRITICAL_ERROR_RESPONSE_CYCLES_REFUND),
         }
     }
 
@@ -71,5 +79,9 @@ impl ExecutionEnvironmentMetrics {
         self.subnet_messages
             .with_label_values(&[&method_name_label, &outcome_label, &status_label])
             .observe(timer.elapsed());
+    }
+
+    pub fn response_cycles_refund_error_counter(&self) -> &IntCounter {
+        &self.response_cycles_refund_error
     }
 }
