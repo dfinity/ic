@@ -140,8 +140,7 @@ pub fn replay(args: ReplayToolArgs) -> Option<(Height, String)> {
         rt.block_on(async move {
             let player = match (subcmd.as_ref(), target_height) {
                 (Some(_), Some(_)) => {
-                    eprintln!("Target height cannot be used with any sub-command in subnet-recovery mode.");
-                    return;
+                    panic!("Target height cannot be used with any sub-command in subnet-recovery mode.");
                 },
                 (_, target_height) => {
                     Player::new(cfg, subnet_id).await.with_replay_target_height(target_height)

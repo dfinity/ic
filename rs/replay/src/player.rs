@@ -59,6 +59,7 @@ use ic_types::{
     consensus::CatchUpContentProtobufBytes,
     crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
 };
+use slog_async::AsyncGuard;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -81,7 +82,8 @@ pub struct Player {
     registry: Arc<RegistryClientImpl>,
     local_store_path: Option<PathBuf>,
     replica_version: ReplicaVersion,
-    _log: ReplicaLogger,
+    log: ReplicaLogger,
+    _async_log_guard: AsyncGuard,
     /// The id of the subnet where the artifacts are taken from.
     pub subnet_id: SubnetId,
     backup_dir: Option<PathBuf>,
@@ -167,9 +169,10 @@ impl Player {
             registry,
             subnet_id,
             Some(pool),
-            log,
             Some(backup_dir),
             replica_version,
+            log,
+            _async_log_guard,
         )
         .await;
         player.tmp_dir = Some(tmp_dir);
@@ -211,9 +214,10 @@ impl Player {
             registry,
             subnet_id,
             consensus_pool,
-            log,
             None,
             replica_version,
+            log,
+            _async_log_guard,
         )
         .await
     }
@@ -225,9 +229,10 @@ impl Player {
         registry: Arc<RegistryClientImpl>,
         subnet_id: SubnetId,
         consensus_pool: Option<ConsensusPoolImpl>,
-        log: ReplicaLogger,
         backup_dir: Option<PathBuf>,
         replica_version: ReplicaVersion,
+        log: ReplicaLogger,
+        _async_log_guard: AsyncGuard,
     ) -> Self {
         let subnet_type = get_subnet_type(
             registry.as_ref(),
@@ -307,7 +312,8 @@ impl Player {
             subnet_id,
             replica_version,
             backup_dir,
-            _log: log,
+            log,
+            _async_log_guard,
             tmp_dir: None,
             replay_target_height: None,
         }
@@ -465,7 +471,7 @@ impl Player {
                 &*self.registry,
                 self.subnet_id,
                 self.replica_version.clone(),
-                &self._log,
+                &self.log,
                 replay_target_height,
                 None,
             ) {
