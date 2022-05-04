@@ -78,7 +78,11 @@ fi
 
 echo '{
     "network": '"${BITCOIN_NETWORK}"',
-    "dns_seeds": ['"${DNS_SEEDS}"']
+    "dns_seeds": ['"${DNS_SEEDS}"'],
+    "logger": {
+        "format": "json",
+        "level": "info"
+    }
 }' >$OUT_FILE
 
 # umask for service is set to be restricted, but this file needs to be
