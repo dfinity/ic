@@ -85,9 +85,9 @@ impl Registry {
     ///
     /// This method is called by the proposals canister.
     pub fn do_add_firewall_rules(&mut self, payload: AddFirewallRulesPayload) {
-        println!("{}do_add_firewall_rules: scope: {:?}, rules: {:?}, positions: {:?}, expected_hash: {:?}", LOG_PREFIX, payload.scope, payload.rules, payload.positions, payload.expected_hash);
+        println!("{}do_add_firewall_rules: scope: {:?}, rules: {:?}, positions: {:?}, expected_hash: {:?}", LOG_PREFIX, "", payload.rules, payload.positions, payload.expected_hash);
 
-        let mut entries = self.fetch_current_ruleset(&payload.scope);
+        let mut entries = self.fetch_current_ruleset(""); //&payload.scope);
 
         if payload.positions.len() != payload.rules.len() {
             panic!(
@@ -113,7 +113,7 @@ impl Registry {
             entries.insert(pos as usize, payload.rules[rule_idx].clone());
         }
 
-        self.do_set_firewall_rules(payload.scope, entries, payload.expected_hash);
+        self.do_set_firewall_rules("".to_string(), entries, payload.expected_hash);
     }
 
     /// Remove firewall rules for a given scope.
@@ -122,10 +122,10 @@ impl Registry {
     pub fn do_remove_firewall_rules(&mut self, payload: RemoveFirewallRulesPayload) {
         println!(
             "{}do_remove_firewall_rules: scope: {:?}, positions: {:?}, expected_hash: {:?}",
-            LOG_PREFIX, payload.scope, payload.positions, payload.expected_hash
+            LOG_PREFIX, "", payload.positions, payload.expected_hash
         );
 
-        let mut entries = self.fetch_current_ruleset(&payload.scope);
+        let mut entries = self.fetch_current_ruleset(""); //&payload.scope);
 
         // Remove entries from the back to front to preserve positions
         let mut positions = payload.positions.clone();
@@ -135,16 +135,16 @@ impl Registry {
             entries.remove(i as usize);
         }
 
-        self.do_set_firewall_rules(payload.scope, entries, payload.expected_hash);
+        self.do_set_firewall_rules("".to_string(), entries, payload.expected_hash);
     }
 
     /// Update firewall rules for a given scope.
     ///
     /// This method is called by the proposals canister.
     pub fn do_update_firewall_rules(&mut self, payload: UpdateFirewallRulesPayload) {
-        println!("{}do_update_firewall_rules: scope: {:?}, rules: {:?}, positions: {:?}, expected_hash: {:?}", LOG_PREFIX, payload.scope, payload.rules, payload.positions, payload.expected_hash);
+        println!("{}do_update_firewall_rules: scope: {:?}, rules: {:?}, positions: {:?}, expected_hash: {:?}", LOG_PREFIX, "", payload.rules, payload.positions, payload.expected_hash);
 
-        let mut entries = self.fetch_current_ruleset(&payload.scope);
+        let mut entries = self.fetch_current_ruleset(""); //&payload.scope);
 
         if payload.positions.len() != payload.rules.len() {
             panic!(
@@ -164,7 +164,7 @@ impl Registry {
             entries[pos as usize] = payload.rules[rule_idx].clone();
         }
 
-        self.do_set_firewall_rules(payload.scope, entries, payload.expected_hash);
+        self.do_set_firewall_rules("".to_string(), entries, payload.expected_hash);
     }
 }
 
@@ -173,8 +173,6 @@ impl Registry {
 /// See /rs/protobuf/def/registry/firewall/v1/firewall.proto
 #[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct AddFirewallRulesPayload {
-    /// Scope of application (with node/subnet prefix as applicable)
-    pub scope: String,
     /// List of rules
     pub rules: Vec<FirewallRule>,
     /// Positions to add the rules at
@@ -188,8 +186,6 @@ pub struct AddFirewallRulesPayload {
 /// See /rs/protobuf/def/registry/firewall/v1/firewall.proto
 #[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct RemoveFirewallRulesPayload {
-    /// Scope of application (with node/subnet prefix as applicable)
-    pub scope: String,
     /// Positions to remove the rules from
     pub positions: Vec<i32>,
     /// SHA-256 hash of the expected result ruleset
@@ -201,8 +197,6 @@ pub struct RemoveFirewallRulesPayload {
 /// See /rs/protobuf/def/registry/firewall/v1/firewall.proto
 #[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct UpdateFirewallRulesPayload {
-    /// Scope of application (with node/subnet prefix as applicable)
-    pub scope: String,
     /// List of rules
     pub rules: Vec<FirewallRule>,
     /// Positions to update the rules at

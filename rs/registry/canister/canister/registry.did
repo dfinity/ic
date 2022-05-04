@@ -1,6 +1,5 @@
 type AddFirewallRulesPayload = record {
   expected_hash : text;
-  scope : text;
   positions : vec int32;
   rules : vec FirewallRule;
 };
@@ -124,7 +123,6 @@ type RecoverSubnetPayload = record {
 };
 type RemoveFirewallRulesPayload = record {
   expected_hash : text;
-  scope : text;
   positions : vec int32;
 };
 type RemoveNodeDirectlyPayload = record { node_id : principal };

@@ -2184,7 +2184,7 @@ impl ProposalTitleAndPayload<AddFirewallRulesPayload> for ProposeToAddFirewallRu
     }
 
     async fn payload(&self, _: Url) -> AddFirewallRulesPayload {
-        let scope = make_firewall_command_scope(&self.scope_type, Some(&self.scope_principal_id));
+        //let scope = make_firewall_command_scope(&self.scope_type, Some(&self.scope_principal_id));
         let rule_file = String::from_utf8(read_file_fully(&self.rules_file)).unwrap();
         let rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
             .unwrap_or_else(|_| panic!("Failed to parse firewall rules"));
@@ -2199,7 +2199,7 @@ impl ProposalTitleAndPayload<AddFirewallRulesPayload> for ProposeToAddFirewallRu
             .collect();
         let expected_hash = &self.expected_ruleset_hash;
         AddFirewallRulesPayload {
-            scope,
+            //scope,
             rules,
             positions,
             expected_hash: expected_hash.to_string(),
@@ -2234,7 +2234,7 @@ impl ProposalTitleAndPayload<RemoveFirewallRulesPayload> for ProposeToRemoveFire
     }
 
     async fn payload(&self, _: Url) -> RemoveFirewallRulesPayload {
-        let scope = make_firewall_command_scope(&self.scope_type, Some(&self.scope_principal_id));
+        //let scope = make_firewall_command_scope(&self.scope_type, Some(&self.scope_principal_id));
         let positions: Vec<i32> = self
             .positions
             .clone()
@@ -2246,7 +2246,7 @@ impl ProposalTitleAndPayload<RemoveFirewallRulesPayload> for ProposeToRemoveFire
             .collect();
         let expected_hash = &self.expected_ruleset_hash;
         RemoveFirewallRulesPayload {
-            scope,
+            //scope,
             positions,
             expected_hash: expected_hash.to_string(),
         }
@@ -2282,7 +2282,7 @@ impl ProposalTitleAndPayload<UpdateFirewallRulesPayload> for ProposeToUpdateFire
     }
 
     async fn payload(&self, _: Url) -> UpdateFirewallRulesPayload {
-        let scope = make_firewall_command_scope(&self.scope_type, Some(&self.scope_principal_id));
+        //let scope = make_firewall_command_scope(&self.scope_type, Some(&self.scope_principal_id));
         let rule_file = String::from_utf8(read_file_fully(&self.rules_file)).unwrap();
         let rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
             .unwrap_or_else(|_| panic!("Failed to parse firewall rules"));
@@ -2297,7 +2297,7 @@ impl ProposalTitleAndPayload<UpdateFirewallRulesPayload> for ProposeToUpdateFire
             .collect();
         let expected_hash = &self.expected_ruleset_hash;
         UpdateFirewallRulesPayload {
-            scope,
+            //scope,
             rules,
             positions,
             expected_hash: expected_hash.to_string(),
