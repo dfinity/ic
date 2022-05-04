@@ -1,4 +1,5 @@
 use crate::api::CspCreateMEGaKeyError;
+use crate::canister_threshold::IDKG_THRESHOLD_KEYS_SCOPE;
 use crate::keygen::mega_key_id;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
@@ -118,9 +119,10 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                         internal_error: format!("{:?}", e),
                     }
                 })?;
-                self.store_canister_secret_key_or_panic(
-                    CspSecretKey::IDkgCommitmentOpening(opening_bytes),
+                self.canister_sks_write_lock().insert_or_replace(
                     commitment_key_id(transcript.combined_commitment.commitment()),
+                    CspSecretKey::IDkgCommitmentOpening(opening_bytes),
+                    Some(IDKG_THRESHOLD_KEYS_SCOPE),
                 );
                 Ok(BTreeMap::new())
             }
@@ -178,9 +180,10 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                         internal_error: format!("{:?}", e),
                     }
                 })?;
-                self.store_canister_secret_key_or_panic(
-                    CspSecretKey::IDkgCommitmentOpening(opening_bytes),
+                self.canister_sks_write_lock().insert_or_replace(
                     commitment_key_id(transcript.combined_commitment.commitment()),
+                    CspSecretKey::IDkgCommitmentOpening(opening_bytes),
+                    Some(IDKG_THRESHOLD_KEYS_SCOPE),
                 );
                 Ok(())
             }

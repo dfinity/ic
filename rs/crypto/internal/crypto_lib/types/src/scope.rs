@@ -93,6 +93,7 @@ pub enum ConstScope {
     NiDkgThresholdKeys,
     NiDkgFsEncryptionKeys,
     IDkgMEGaEncryptionKeys,
+    IDkgThresholdKeys,
 }
 /// Each variant is represented by the variant name ONLY.
 impl std::fmt::Display for ConstScope {

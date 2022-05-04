@@ -42,6 +42,7 @@ use rand::{CryptoRng, Rng};
 use std::collections::BTreeMap;
 
 pub const IDKG_MEGA_SCOPE: Scope = Scope::Const(ConstScope::IDkgMEGaEncryptionKeys);
+pub const IDKG_THRESHOLD_KEYS_SCOPE: Scope = Scope::Const(ConstScope::IDkgThresholdKeys);
 
 /// Interactive distributed key generation client
 ///

@@ -137,19 +137,4 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
             }
         };
     }
-
-    fn store_canister_secret_key_or_panic(&self, csp_secret_key: CspSecretKey, key_id: KeyId) {
-        match &self
-            .canister_sks_write_lock()
-            .insert(key_id, csp_secret_key, None)
-        {
-            Ok(()) => {}
-            Err(SecretKeyStoreError::DuplicateKeyId(key_id)) => {
-                panic!(
-                    "A canister secret share with ID {} has already been inserted",
-                    key_id
-                );
-            }
-        };
-    }
 }
