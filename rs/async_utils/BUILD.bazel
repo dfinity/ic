@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "ic_async_utils",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_async_utils",
+    edition = "2018",
+    deps = [
+        "@crate_index//:async-stream",
+        "@crate_index//:futures",
+        "@crate_index//:prometheus",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:tonic",
+    ],
+)
