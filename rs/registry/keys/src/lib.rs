@@ -3,11 +3,14 @@
 //! Since registry mutations come from various NNS canisters, this library MUST
 //! be compilable to WASM as well a native.
 
+use candid::{CandidType, Deserialize};
+use core::fmt;
 use ic_base_types::{NodeId, SubnetId};
 use ic_ic00_types::EcdsaKeyId;
 use ic_types::crypto::KeyPurpose;
 use ic_types::registry::RegistryClientError;
 use ic_types::PrincipalId;
+use serde::Serialize;
 use std::str::FromStr;
 
 const SUBNET_LIST_KEY: &str = "subnet_list";
@@ -54,8 +57,6 @@ pub fn get_ecdsa_key_id_from_signing_subnet_list_key(
         })
 }
 
-pub const ID_GLOBAL_FIREWALL_RULES: &str = "global";
-
 /// Returns the only key whose payload is the list of subnets.
 pub fn make_subnet_list_record_key() -> String {
     SUBNET_LIST_KEY.to_string()
@@ -92,8 +93,68 @@ pub fn make_firewall_config_record_key() -> String {
     "firewall_config".to_string()
 }
 
-pub fn make_firewall_rules_record_key(id: &str) -> String {
-    format!("firewall_rules_{}", id)
+const FIREWALL_RULES_SCOPE_GLOBAL: &str = "global";
+const FIREWALL_RULES_SCOPE_REPLICA_NODES: &str = "replica_nodes";
+const FIREWALL_RULES_SCOPE_SUBNET_PREFIX: &str = "subnet";
+const FIREWALL_RULES_SCOPE_NODE_PREFIX: &str = "node";
+
+/// The scope for a firewall ruleset
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub enum FirewallRulesScope {
+    Node(NodeId),
+    Subnet(SubnetId),
+    ReplicaNodes,
+    Global,
+}
+
+impl fmt::Display for FirewallRulesScope {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        match self {
+            FirewallRulesScope::Node(node_id) => write!(
+                fmt,
+                "{}_{}",
+                FIREWALL_RULES_SCOPE_NODE_PREFIX,
+                node_id.get()
+            )?,
+            FirewallRulesScope::Subnet(subnet_id) => write!(
+                fmt,
+                "{}_{}",
+                FIREWALL_RULES_SCOPE_SUBNET_PREFIX,
+                subnet_id.get()
+            )?,
+            FirewallRulesScope::ReplicaNodes => {
+                write!(fmt, "{}", FIREWALL_RULES_SCOPE_REPLICA_NODES)?
+            }
+            FirewallRulesScope::Global => write!(fmt, "{}", FIREWALL_RULES_SCOPE_GLOBAL)?,
+        };
+        Ok(())
+    }
+}
+
+impl FromStr for FirewallRulesScope {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<_> = s.split(&['(', ')']).collect();
+        if parts.is_empty() || parts.len() > 2 {
+            return Err("Invalid scope".to_string());
+        }
+        match parts[0].to_lowercase().as_str() {
+            FIREWALL_RULES_SCOPE_GLOBAL => Ok(FirewallRulesScope::Global),
+            FIREWALL_RULES_SCOPE_REPLICA_NODES => Ok(FirewallRulesScope::ReplicaNodes),
+            FIREWALL_RULES_SCOPE_SUBNET_PREFIX => Ok(FirewallRulesScope::Subnet(SubnetId::from(
+                PrincipalId::from_str(parts[1]).unwrap(),
+            ))),
+            FIREWALL_RULES_SCOPE_NODE_PREFIX => Ok(FirewallRulesScope::Node(NodeId::from(
+                PrincipalId::from_str(parts[1]).unwrap(),
+            ))),
+            _ => Err("Invalid scope type".to_string()),
+        }
+    }
+}
+
+pub fn make_firewall_rules_record_key(scope: &FirewallRulesScope) -> String {
+    format!("firewall_rules_{}", scope)
 }
 
 pub fn make_provisional_whitelist_record_key() -> String {

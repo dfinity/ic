@@ -6126,10 +6126,12 @@ dependencies = [
 name = "ic-registry-keys"
 version = "0.8.0"
 dependencies = [
+ "candid",
  "ic-base-types",
  "ic-ic00-types",
  "ic-types 0.8.0",
  "rand 0.7.3",
+ "serde",
 ]
 
 [[package]]
