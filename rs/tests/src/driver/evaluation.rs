@@ -1,3 +1,4 @@
+use std::time::Duration;
 use std::{panic::catch_unwind, time::Instant};
 
 use super::driver_setup::DriverContext;
@@ -7,7 +8,7 @@ use crate::driver::driver_setup::IcSetup;
 use crate::driver::test_env::{HasTestPath, TestEnv, TestEnvAttribute};
 use crate::driver::test_setup::PotSetup;
 use anyhow::{bail, Result};
-use crossbeam_channel::{bounded, Receiver, Sender};
+use crossbeam_channel::{bounded, select, tick, Receiver, Sender};
 use ic_fondue::result::*;
 use slog::{error, info, warn, Logger};
 
@@ -78,7 +79,6 @@ fn evaluate_pot_and_propagate_result(
         .expect("failed to send result to parent node");
 }
 
-#[allow(clippy::mutex_atomic)]
 fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<TestResultNode> {
     if pot.execution_mode == ExecutionMode::Skip {
         return Ok(TestResultNode {
@@ -138,7 +138,6 @@ fn create_group_for_pot(env: &TestEnv, pot: &Pot, logger: &Logger) -> Result<()>
     )?)
 }
 
-#[allow(clippy::mutex_atomic)]
 fn evaluate_pot_with_group(
     ctx: &DriverContext,
     pot: Pot,
@@ -225,7 +224,21 @@ fn evaluate_test(
         .write_test_path(&path)
         .expect("Could not write test path");
     info!(ctx.logger, "Starting test: {}", path);
+
+    let pot_setup = PotSetup::read_attribute(&test_env);
+    // keep underlying group alive
+    let (keep_alive_task, stop_sig_s) = keep_group_alive_task(
+        ctx.logger.clone(),
+        ctx.farm.clone(),
+        &pot_setup.farm_group_name,
+    );
+    let task_handle = std::thread::spawn(keep_alive_task);
     let t_res = catch_unwind(|| (t.f)(test_env));
+    if let Err(e) = stop_sig_s.send(()) {
+        warn!(ctx.logger, "Could not send stop signal: {:?}", e);
+    }
+    task_handle.join().expect("could not join tickle handle");
+
     if let Err(panic_res) = t_res {
         if let Some(s) = panic_res.downcast_ref::<String>() {
             warn!(ctx.logger, "{} FAILED: {}", path, s);
@@ -263,6 +276,30 @@ pub fn collect_n_children(r: Receiver<TestResultNode>, n: usize) -> Vec<TestResu
         ch.push(r);
     }
     ch
+}
+
+/// The goal of this choice of parameters is to
+/// * not overload farm with repeated requests, ...
+/// * while keeping the TTL as short as possible, and
+/// * ensuring that setting the TTL is retried at least once in case of a failure.
+const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(16);
+const GROUP_TTL: Duration = Duration::from_secs(40);
+
+fn keep_group_alive_task(log: Logger, farm: Farm, group_name: &str) -> (impl FnMut(), Sender<()>) {
+    let (stop_sig_s, stop_sig_r) = bounded::<()>(0);
+    let tick = tick(KEEP_ALIVE_INTERVAL);
+    let group_name = group_name.to_string();
+    let task = move || loop {
+        select! {
+            recv(tick) -> _ => {
+                if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
+                    warn!(log, "Failed to set group ttl of {:?}: {:?}", group_name, e);
+                }
+            },
+            recv(stop_sig_r) -> _ => break
+        }
+    };
+    (task, stop_sig_s)
 }
 
 #[cfg(test)]

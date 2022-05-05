@@ -14,7 +14,6 @@ use ic_tests::{
 use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
-use std::time::Duration;
 
 fn main() -> anyhow::Result<()> {
     let cli_args = CliArgs::parse();
@@ -221,7 +220,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "cycles_minting_pot",
                     nns_tests::cycles_minting::config(),
                     par(vec![t("cycles_minting_test", nns_tests::cycles_minting::test)]),
-                ).with_ttl(Duration::from_secs(60 * 15 /* 15 minutes */)),
+                ),
                 pot(
                     "nns_voting_fuzzing_poc_pot",
                     nns_tests::nns_voting_fuzzing_poc_test::config(),
@@ -330,8 +329,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 "xnet_slo_3_subnets_test",
                 xnet_slo_3_subnets.test(),
             )]),
-        )
-        .with_ttl(Duration::from_secs(10 * 60))],
+        )],
     ));
 
     let xnet_slo_3_subnets = message_routing::xnet_slo_test::config_prod_slo_3_subnets();
@@ -346,8 +344,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "xnet_slo_3_subnets_test",
                     xnet_slo_3_subnets.test(),
                 )]),
-            )
-            .with_ttl(Duration::from_secs(30 * 60)),
+            ),
             pot(
                 "xnet_slo_29_subnets_pot",
                 xnet_slo_29_subnets.build(),
@@ -355,8 +352,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "xnet_slo_29_subnets_test",
                     xnet_slo_29_subnets.test(),
                 )]),
-            )
-            .with_ttl(Duration::from_secs(50 * 60)),
+            ),
         ],
     ));
 
@@ -372,8 +368,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "xnet_slo_3_subnets_test",
                     xnet_nightly_3_subnets.test(),
                 )]),
-            )
-            .with_ttl(Duration::from_secs(30 * 60)),
+            ),
             pot(
                 "xnet_slo_29_subnets_pot",
                 xnet_nightly_29_subnets.build(),
@@ -381,8 +376,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "xnet_slo_29_subnets_test",
                     xnet_nightly_29_subnets.test(),
                 )]),
-            )
-            .with_ttl(Duration::from_secs(50 * 60)),
+            ),
             pot(
                 "two_third_latency_pot",
                 workload_counter_canister_test::two_third_latency_config(),
@@ -391,7 +385,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     workload_counter_canister_test::two_third_latency_test,
                 )]),
             )
-            .with_ttl(Duration::from_secs(50 * 60)) //test should last 10min only
             .with_vm_allocation(VmAllocationStrategy::DistributeAcrossDcs),
         ],
     ));
@@ -448,8 +441,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "test_tecdsa_remove_nodes",
                     tecdsa::tecdsa_remove_nodes_test::test,
                 )]),
-            )
-            .with_ttl(Duration::from_secs(15 * 60)), // 15 minutes
+            ),
             pot(
                 "rejoin",
                 message_routing::rejoin_test::config(),
@@ -501,8 +493,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 "nns_backup_pot",
                 orchestrator::nns_backup::config(),
                 par(vec![t("nns_backup_test", orchestrator::nns_backup::test)]),
-            )
-            .with_ttl(Duration::from_secs(7200)),
+            ),
             pot(
                 "workload_counter_canister_pot",
                 workload_counter_canister_test::config(),
@@ -522,8 +513,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
             "wasm_generator_pot",
             wasm_generator_test::config(),
             par(vec![t("wasm_generator_test", wasm_generator_test::test)]),
-        )
-        .with_ttl(Duration::from_secs(7200))],
+        )],
     ));
 
     m.add_suite(suite(
@@ -536,8 +526,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "subnet_recovery_app_same_nodes",
                     orchestrator::subnet_recovery_app_subnet::test,
                 )]),
-            )
-            .with_ttl(Duration::from_secs(1800)),
+            ),
             pot_with_setup(
                 "subnet_recovery_app_failover_nodes",
                 orchestrator::subnet_recovery_app_subnet::setup_failover_nodes,
@@ -545,8 +534,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "subnet_recovery_app_failover_nodes",
                     orchestrator::subnet_recovery_app_subnet::test,
                 )]),
-            )
-            .with_ttl(Duration::from_secs(1800)),
+            ),
         ],
     ));
 
@@ -560,8 +548,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "upgrade_downgrade_app_subnet",
                     orchestrator::upgrade_downgrade::upgrade_downgrade_app_subnet,
                 )]),
-            )
-            .with_ttl(Duration::from_secs(1800)),
+            ),
             pot(
                 "upgrade_downgrade_nns_subnet",
                 orchestrator::upgrade_downgrade::config(),
@@ -569,8 +556,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "upgrade_downgrade_nns_subnet",
                     orchestrator::upgrade_downgrade::upgrade_downgrade_nns_subnet,
                 )]),
-            )
-            .with_ttl(Duration::from_secs(1800)),
+            ),
         ],
     ));
 
@@ -583,8 +569,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 "rosetta_test_everything",
                 rosetta_test::test_everything,
             )]),
-        )
-        .with_ttl(Duration::from_secs(60 * 12))], // 12 minutes
+        )],
     ));
 
     m.add_suite(suite(
