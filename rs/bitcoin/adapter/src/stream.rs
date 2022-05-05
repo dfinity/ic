@@ -3,7 +3,7 @@ use bitcoin::{
     network::message::RawNetworkMessage,
     {consensus::encode, network::message::NetworkMessage},
 };
-use ic_logger::{debug, error, ReplicaLogger};
+use ic_logger::{error, ReplicaLogger};
 use std::{io, net::SocketAddr, time::Duration};
 use thiserror::Error;
 use tokio::{
@@ -273,14 +273,8 @@ pub fn handle_stream(config: StreamConfig) -> tokio::task::JoinHandle<()> {
             }
             Err(err) => {
                 let kind = match err {
-                    StreamError::Io(err) => {
-                        debug!(logger, "{}", err);
-                        StreamEventKind::FailedToConnect
-                    }
-                    StreamError::Timeout => {
-                        debug!(logger, "Timed out connecting to {}", address);
-                        StreamEventKind::FailedToConnect
-                    }
+                    StreamError::Io(_) => StreamEventKind::FailedToConnect,
+                    StreamError::Timeout => StreamEventKind::FailedToConnect,
                     _ => {
                         error!(logger, "{}", err);
                         StreamEventKind::Disconnected

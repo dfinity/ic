@@ -12,6 +12,7 @@ use ic_btc_service::{
     BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
+use ic_logger::{debug, ReplicaLogger};
 use std::convert::{TryFrom, TryInto};
 use tokio::sync::mpsc::Sender;
 use tonic::{transport::Server, Request, Response, Status};
@@ -20,6 +21,7 @@ struct BtcServiceImpl {
     adapter_state: AdapterState,
     get_successors_handler: GetSuccessorsHandler,
     transaction_manager_tx: Sender<TransactionManagerRequest>,
+    logger: ReplicaLogger,
 }
 
 impl TryFrom<BtcServiceGetSuccessorsRequest> for GetSuccessorsRequest {
@@ -76,11 +78,16 @@ impl BtcService for BtcServiceImpl {
         request: Request<BtcServiceGetSuccessorsRequest>,
     ) -> Result<Response<BtcServiceGetSuccessorsResponse>, Status> {
         self.adapter_state.received_now();
-        let request = request.into_inner().try_into()?;
+        let inner = request.into_inner();
+        debug!(self.logger, "Received GetSuccessorsRequest: {:?}", inner);
+        let request = inner.try_into()?;
         match BtcServiceGetSuccessorsResponse::try_from(
             self.get_successors_handler.get_successors(request).await,
         ) {
-            Ok(res) => Ok(Response::new(res)),
+            Ok(res) => {
+                debug!(self.logger, "Sending GetSuccessorsResponse: {:?}", res);
+                Ok(Response::new(res))
+            }
             Err(err) => Err(err),
         }
     }
@@ -104,6 +111,7 @@ impl BtcService for BtcServiceImpl {
 /// Spawns in a separate Tokio task the BTC adapter gRPC service.
 pub fn spawn_grpc_server(
     config: Config,
+    logger: ReplicaLogger,
     adapter_state: AdapterState,
     get_successors_handler: GetSuccessorsHandler,
     transaction_manager_tx: Sender<TransactionManagerRequest>,
@@ -116,6 +124,7 @@ pub fn spawn_grpc_server(
         adapter_state,
         get_successors_handler,
         transaction_manager_tx,
+        logger,
     };
     tokio::spawn(async move {
         match config.incoming_source {

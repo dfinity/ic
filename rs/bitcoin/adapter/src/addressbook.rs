@@ -3,7 +3,7 @@ use bitcoin::{
     network::{constants::ServiceFlags, Address},
     Network,
 };
-use ic_logger::{debug, info, ReplicaLogger};
+use ic_logger::{info, ReplicaLogger};
 use rand::{
     prelude::{IteratorRandom, SliceRandom, StdRng},
     SeedableRng,
@@ -189,11 +189,6 @@ impl AddressBook {
             }
 
             if !validate_services(&address.services) {
-                debug!(
-                    self.logger,
-                    "Address {:?} does not provide the network or network limited services.",
-                    address.address
-                );
                 continue;
             }
 
@@ -214,7 +209,7 @@ impl AddressBook {
         if added_addresses > 0 {
             info!(
                 self.logger,
-                "Added {} addresses from {:?}.", added_addresses, sender
+                "Added {} address(es) from {:?}.", added_addresses, sender
             );
         }
 
@@ -227,13 +222,7 @@ impl AddressBook {
             return;
         }
 
-        let added = self.known_addresses.insert(addr);
-        if added {
-            debug!(
-                self.logger,
-                "Added {} to the list of known addresses.", addr
-            );
-        }
+        self.known_addresses.insert(addr);
     }
 
     /// This function grabs an address randomly from the available addresses pool.

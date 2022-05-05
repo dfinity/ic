@@ -10,7 +10,7 @@ use bitcoin::network::{
     message_network::VersionMessage,
     Address,
 };
-use ic_logger::{debug, error, info, warn, ReplicaLogger};
+use ic_logger::{error, info, trace, warn, ReplicaLogger};
 use rand::prelude::*;
 use thiserror::Error;
 use tokio::{
@@ -216,7 +216,6 @@ impl ConnectionManager {
         }
 
         for addr in needs_ping {
-            info!(self.logger, "Sending ping to {}", addr);
             self.send_ping(&addr).ok();
         }
     }
@@ -258,19 +257,9 @@ impl ConnectionManager {
         for (addr, conn) in self.connections.iter() {
             match conn.state() {
                 ConnectionState::AdapterDiscarded { .. } => {
-                    warn!(
-                        self.logger,
-                        "Adapter discarded connection {}",
-                        conn.address_entry().addr(),
-                    );
                     self.address_book.discard(conn.address_entry());
                 }
                 ConnectionState::NodeDisconnected { .. } => {
-                    debug!(
-                        self.logger,
-                        "Node {} disconnected from adapter",
-                        conn.address_entry().addr(),
-                    );
                     self.address_book.remove_from_active(conn.address_entry());
                 }
                 _ => {}
@@ -360,25 +349,21 @@ impl ConnectionManager {
             self.current_height as i32,
         ));
 
-        debug!(self.logger, "Sending version to {}", addr);
         self.send_to(addr, message)
     }
 
     /// This function is used to send a `verack` message to a specified connection.
     fn send_verack(&mut self, addr: &SocketAddr) -> ConnectionManagerResult<()> {
-        debug!(self.logger, "Sending verack to {}", addr);
         self.send_to(addr, NetworkMessage::Verack)
     }
 
     /// This function is used to send a `getaddr` message to a specified connection.
     fn send_getaddr(&mut self, addr: &SocketAddr) -> ConnectionManagerResult<()> {
-        debug!(self.logger, "Sending getaddr to {}", addr);
         self.send_to(addr, NetworkMessage::GetAddr)
     }
 
     /// This function is used to send a `ping` message to a specified connection.
     fn send_ping(&mut self, addr: &SocketAddr) -> ConnectionManagerResult<()> {
-        debug!(self.logger, "Sending ping to {}", addr);
         let nonce = self.rng.gen();
         let conn = self.get_connection(addr)?;
         conn.expect_pong(nonce);
@@ -427,7 +412,7 @@ impl ConnectionManager {
         address: &SocketAddr,
         message: &VersionMessage,
     ) -> Result<(), ProcessBitcoinNetworkMessageError> {
-        info!(self.logger, "Received version from {}", address);
+        trace!(self.logger, "Received version from {}", address);
         let conn = self
             .get_connection(address)
             .map_err(|_| ProcessBitcoinNetworkMessageError::InvalidMessage)?;
@@ -448,7 +433,7 @@ impl ConnectionManager {
         &mut self,
         address: &SocketAddr,
     ) -> Result<(), ProcessBitcoinNetworkMessageError> {
-        info!(self.logger, "Received verack from {}", address);
+        trace!(self.logger, "Received verack from {}", address);
         if let Ok(conn) = self.get_connection(address) {
             match conn.address_entry() {
                 AddressEntry::Seed(_) => conn.awaiting_addresses(),
@@ -456,9 +441,10 @@ impl ConnectionManager {
             };
         }
 
-        info!(
+        trace!(
             self.logger,
-            "Completed the version handshake with {}", address
+            "Completed the version handshake with {}",
+            address
         );
         Ok(())
     }
@@ -471,7 +457,7 @@ impl ConnectionManager {
     ) -> Result<(), ProcessBitcoinNetworkMessageError> {
         // If we cannot find the connection, the connection has been cleaned up before the
         // message has been received. It can be skipped.
-        debug!(self.logger, "Received ping from {}", address);
+        trace!(self.logger, "Received ping from {}", address);
         self.send_pong(address, nonce).ok();
         Ok(())
     }
@@ -484,7 +470,7 @@ impl ConnectionManager {
     ) -> Result<(), ProcessBitcoinNetworkMessageError> {
         // If we cannot find the connection, the connection has been cleaned up before the
         // message has been received. It can be skipped.
-        info!(self.logger, "Received pong from {}", address);
+        trace!(self.logger, "Received pong from {}", address);
         if let Ok(conn) = self.get_connection(address) {
             let valid_pong = match conn.ping_state() {
                 PingState::ExpectingPong {
@@ -533,6 +519,13 @@ impl ConnectionManager {
         }
 
         if self.address_book.has_enough_addresses() {
+            if self.initial_address_discovery {
+                info!(
+                    self.logger,
+                    "Adapter has discovered enough addresses: {}",
+                    self.address_book.size()
+                );
+            }
             self.initial_address_discovery = false;
         }
         Ok(())
@@ -617,11 +610,11 @@ impl ProcessEvent for ConnectionManager {
                     match result {
                         Ok(_) => {
                             conn.connected();
-                            info!(self.logger, "Connected to {}", event.address);
+                            trace!(self.logger, "Connected to {}", event.address);
                         }
                         Err(err) => {
                             conn.disconnect();
-                            error!(self.logger, "{}", err);
+                            trace!(self.logger, "{}", err);
                         }
                     };
                 }
