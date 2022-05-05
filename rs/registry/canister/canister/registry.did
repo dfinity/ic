@@ -1,5 +1,6 @@
 type AddFirewallRulesPayload = record {
   expected_hash : text;
+  scope : FirewallRulesScope;
   positions : vec int32;
   rules : vec FirewallRule;
 };
@@ -101,6 +102,12 @@ type FirewallRule = record {
   ipv6_prefixes : vec text;
   ports : vec nat32;
 };
+type FirewallRulesScope = variant {
+  Node : principal;
+  ReplicaNodes;
+  Subnet : principal;
+  Global;
+};
 type Gps = record { latitude : float32; longitude : float32 };
 type NodeOperatorRecord = record {
   ipv6 : opt text;
@@ -125,6 +132,7 @@ type RecoverSubnetPayload = record {
 };
 type RemoveFirewallRulesPayload = record {
   expected_hash : text;
+  scope : FirewallRulesScope;
   positions : vec int32;
 };
 type RemoveNodeDirectlyPayload = record { node_id : principal };

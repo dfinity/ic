@@ -80,7 +80,7 @@ use ic_registry_keys::{
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
-    make_subnet_record_key, make_unassigned_nodes_config_record_key,
+    make_subnet_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
     NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
@@ -2132,54 +2132,12 @@ impl ProposalTitleAndPayload<SetFirewallConfigPayload> for ProposeToSetFirewallC
     }
 }
 
-const FIREWALL_RULE_SCOPE_TYPE_GLOBAL: &str = "global";
-const FIREWALL_RULE_SCOPE_TYPE_SUBNET: &str = "subnet";
-const FIREWALL_RULE_SCOPE_TYPE_NODE: &str = "node";
-
-fn make_firewall_command_scope(
-    scope_type: &str,
-    scope_principal_id: Option<&PrincipalId>,
-) -> String {
-    match scope_type {
-        FIREWALL_RULE_SCOPE_TYPE_GLOBAL => FIREWALL_RULE_SCOPE_TYPE_GLOBAL.to_string(),
-        FIREWALL_RULE_SCOPE_TYPE_SUBNET | FIREWALL_RULE_SCOPE_TYPE_NODE => {
-            format!("{}_{}", scope_type, scope_principal_id.unwrap())
-        }
-        _ => {
-            panic!(
-                "SCOPE_TYPE must be one of \"{}\", \"{}\", or \"{}\".",
-                FIREWALL_RULE_SCOPE_TYPE_GLOBAL,
-                FIREWALL_RULE_SCOPE_TYPE_SUBNET,
-                FIREWALL_RULE_SCOPE_TYPE_NODE
-            )
-        }
-    }
-}
-
-fn check_firewall_scope_type(scope_type: &str) {
-    match scope_type {
-        FIREWALL_RULE_SCOPE_TYPE_GLOBAL
-        | FIREWALL_RULE_SCOPE_TYPE_SUBNET
-        | FIREWALL_RULE_SCOPE_TYPE_NODE => (),
-        _ => {
-            panic!(
-                "SCOPE_TYPE must be one of \"{}\", \"{}\", or \"{}\".",
-                FIREWALL_RULE_SCOPE_TYPE_GLOBAL,
-                FIREWALL_RULE_SCOPE_TYPE_SUBNET,
-                FIREWALL_RULE_SCOPE_TYPE_NODE
-            )
-        }
-    }
-}
-
 /// Sub-command to submit a proposal to add firewall rules.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
 struct ProposeToAddFirewallRulesCmd {
-    /// Type of scope to apply new rules at (can be "global", "subnet", or "node")
-    pub scope_type: String,
-    /// PrincipalID of the subnet or node in scope
-    pub scope_principal_id: PrincipalId,
+    /// The scope to apply new rules at (can be "global", "replica_nodes", "subnet(id)", or "node(id)")
+    pub scope: FirewallRulesScope,
     /// File with the rules in JSON format
     pub rules_file: PathBuf,
     /// Comma separated list of indices to insert the rules at within the existing ruleset (0 means top of the list and highest priority, -1 means bottom of the list and lowest priority)
@@ -2201,7 +2159,6 @@ impl ProposalTitleAndPayload<AddFirewallRulesPayload> for ProposeToAddFirewallRu
     }
 
     async fn payload(&self, _: Url) -> AddFirewallRulesPayload {
-        //let scope = make_firewall_command_scope(&self.scope_type, Some(&self.scope_principal_id));
         let rule_file = String::from_utf8(read_file_fully(&self.rules_file)).unwrap();
         let rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
             .unwrap_or_else(|_| panic!("Failed to parse firewall rules"));
@@ -2216,7 +2173,7 @@ impl ProposalTitleAndPayload<AddFirewallRulesPayload> for ProposeToAddFirewallRu
             .collect();
         let expected_hash = &self.expected_ruleset_hash;
         AddFirewallRulesPayload {
-            //scope,
+            scope: self.scope.clone(),
             rules,
             positions,
             expected_hash: expected_hash.to_string(),
@@ -2228,10 +2185,8 @@ impl ProposalTitleAndPayload<AddFirewallRulesPayload> for ProposeToAddFirewallRu
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
 struct ProposeToRemoveFirewallRulesCmd {
-    /// Type of scope to remove rules from (can be "global", "subnet", or "node")
-    pub scope_type: String,
-    /// PrincipalID of the subnet or node in scope
-    pub scope_principal_id: PrincipalId,
+    /// The scope to apply new rules at (can be "global", "replica_nodes", "subnet(id)", or "node(id)")
+    pub scope: FirewallRulesScope,
     /// Comma separated list of indices to remove from the ruleset
     pub positions: String,
     /// Expected SHA-256 of the result ruleset
@@ -2251,7 +2206,6 @@ impl ProposalTitleAndPayload<RemoveFirewallRulesPayload> for ProposeToRemoveFire
     }
 
     async fn payload(&self, _: Url) -> RemoveFirewallRulesPayload {
-        //let scope = make_firewall_command_scope(&self.scope_type, Some(&self.scope_principal_id));
         let positions: Vec<i32> = self
             .positions
             .clone()
@@ -2263,7 +2217,7 @@ impl ProposalTitleAndPayload<RemoveFirewallRulesPayload> for ProposeToRemoveFire
             .collect();
         let expected_hash = &self.expected_ruleset_hash;
         RemoveFirewallRulesPayload {
-            //scope,
+            scope: self.scope.clone(),
             positions,
             expected_hash: expected_hash.to_string(),
         }
@@ -2274,10 +2228,8 @@ impl ProposalTitleAndPayload<RemoveFirewallRulesPayload> for ProposeToRemoveFire
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
 struct ProposeToUpdateFirewallRulesCmd {
-    /// Type of scope to apply updates on (can be "global", "subnet", or "node")
-    pub scope_type: String,
-    /// PrincipalID of the subnet or node in scope
-    pub scope_principal_id: PrincipalId,
+    /// The scope to apply new rules at (can be "global", "replica_nodes", "subnet(id)", or "node(id)")
+    pub scope: FirewallRulesScope,
     /// File with the updated rules in JSON format
     pub rules_file: PathBuf,
     /// Comma separated list of indices to update in the ruleset
@@ -2299,7 +2251,6 @@ impl ProposalTitleAndPayload<UpdateFirewallRulesPayload> for ProposeToUpdateFire
     }
 
     async fn payload(&self, _: Url) -> UpdateFirewallRulesPayload {
-        //let scope = make_firewall_command_scope(&self.scope_type, Some(&self.scope_principal_id));
         let rule_file = String::from_utf8(read_file_fully(&self.rules_file)).unwrap();
         let rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
             .unwrap_or_else(|_| panic!("Failed to parse firewall rules"));
@@ -2314,7 +2265,7 @@ impl ProposalTitleAndPayload<UpdateFirewallRulesPayload> for ProposeToUpdateFire
             .collect();
         let expected_hash = &self.expected_ruleset_hash;
         UpdateFirewallRulesPayload {
-            //scope,
+            scope: self.scope.clone(),
             rules,
             positions,
             expected_hash: expected_hash.to_string(),
@@ -2325,10 +2276,8 @@ impl ProposalTitleAndPayload<UpdateFirewallRulesPayload> for ProposeToUpdateFire
 /// Sub-command to get all firewall rules for a given scope.
 #[derive(Parser)]
 struct GetFirewallRulesCmd {
-    /// Type of scope to apply updates on (can be "global", "subnet", or "node")
-    pub scope_type: String,
-    /// PrincipalID of the subnet or node in scope
-    pub scope_principal_id: PrincipalId,
+    /// The scope to apply new rules at (can be "global", "replica_nodes", "subnet(id)", or "node(id)")
+    pub scope: FirewallRulesScope,
 }
 
 /// Sub-command to get all firewall rules that apply for a specific node.
@@ -2502,18 +2451,10 @@ impl ProposalTitleAndPayload<RerouteCanisterRangePayload> for ProposeToRerouteCa
 
 async fn get_firewall_rules_from_registry(
     registry_canister: &RegistryCanister,
-    scope_type: &str,
-    scope_principal_id: Option<&PrincipalId>,
+    scope: &FirewallRulesScope,
 ) -> Vec<FirewallRule> {
     let registry_answer = registry_canister
-        .get_value(
-            make_firewall_rules_record_key(&make_firewall_command_scope(
-                scope_type,
-                scope_principal_id,
-            ))
-            .into_bytes(),
-            None,
-        )
+        .get_value(make_firewall_rules_record_key(scope).into_bytes(), None)
         .await;
 
     if registry_answer.is_ok() {
@@ -3021,7 +2962,6 @@ async fn main() {
             .await;
         }
         SubCommand::ProposeToAddFirewallRules(cmd) => {
-            check_firewall_scope_type(&cmd.scope_type);
             if cmd.test {
                 test_add_firewall_rules(cmd, &registry_canister).await;
             } else {
@@ -3035,7 +2975,6 @@ async fn main() {
             }
         }
         SubCommand::ProposeToRemoveFirewallRules(cmd) => {
-            check_firewall_scope_type(&cmd.scope_type);
             if cmd.test {
                 test_remove_firewall_rules(cmd, &registry_canister).await;
             } else {
@@ -3049,7 +2988,6 @@ async fn main() {
             }
         }
         SubCommand::ProposeToUpdateFirewallRules(cmd) => {
-            check_firewall_scope_type(&cmd.scope_type);
             if cmd.test {
                 test_update_firewall_rules(cmd, &registry_canister).await;
             } else {
@@ -3063,7 +3001,6 @@ async fn main() {
             }
         }
         SubCommand::GetFirewallRules(cmd) => {
-            check_firewall_scope_type(&cmd.scope_type);
             get_firewall_rules(cmd, &registry_canister).await;
         }
         SubCommand::GetFirewallRulesForNode(cmd) => {
@@ -3317,12 +3254,7 @@ async fn test_add_firewall_rules(
     registry_canister: &RegistryCanister,
 ) {
     // Fetch existing rules for given scope, add new ones, and return
-    let mut entries = get_firewall_rules_from_registry(
-        registry_canister,
-        &cmd.scope_type,
-        Some(&cmd.scope_principal_id),
-    )
-    .await;
+    let mut entries = get_firewall_rules_from_registry(registry_canister, &cmd.scope).await;
 
     let rule_file = String::from_utf8(read_file_fully(&cmd.rules_file)).unwrap();
     let new_rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
@@ -3369,12 +3301,7 @@ async fn test_remove_firewall_rules(
     registry_canister: &RegistryCanister,
 ) {
     // Fetch existing rules for given scope, remove the given ones, and return
-    let mut entries = get_firewall_rules_from_registry(
-        registry_canister,
-        &cmd.scope_type,
-        Some(&cmd.scope_principal_id),
-    )
-    .await;
+    let mut entries = get_firewall_rules_from_registry(registry_canister, &cmd.scope).await;
 
     let mut positions: Vec<i32> = cmd
         .positions
@@ -3402,12 +3329,7 @@ async fn test_update_firewall_rules(
     registry_canister: &RegistryCanister,
 ) {
     // Fetch existing rules for given scope, update the given ones, and return
-    let mut entries = get_firewall_rules_from_registry(
-        registry_canister,
-        &cmd.scope_type,
-        Some(&cmd.scope_principal_id),
-    )
-    .await;
+    let mut entries = get_firewall_rules_from_registry(registry_canister, &cmd.scope).await;
 
     let rule_file = String::from_utf8(read_file_fully(&cmd.rules_file)).unwrap();
     let new_rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
@@ -3446,12 +3368,7 @@ async fn test_update_firewall_rules(
 }
 
 async fn get_firewall_rules(cmd: GetFirewallRulesCmd, registry_canister: &RegistryCanister) {
-    let rules = get_firewall_rules_from_registry(
-        registry_canister,
-        &cmd.scope_type,
-        Some(&cmd.scope_principal_id),
-    )
-    .await;
+    let rules = get_firewall_rules_from_registry(registry_canister, &cmd.scope).await;
     println!("{:?}", serde_json::to_string(&rules));
 }
 
@@ -3470,23 +3387,33 @@ async fn get_firewall_rules_for_node(
     );
 
     // Get the node rules
-    let mut rules =
-        get_firewall_rules_from_registry(registry_canister, "node", Some(&cmd.node_id)).await;
+    let mut rules = get_firewall_rules_from_registry(
+        registry_canister,
+        &FirewallRulesScope::Node(NodeId::from(cmd.node_id)),
+    )
+    .await;
 
     if let Ok(Some((subnet_id, _))) = subnet_id_result {
         // Get the subnet rules
         rules.append(
             &mut get_firewall_rules_from_registry(
                 registry_canister,
-                "subnet",
-                Some(&subnet_id.get()),
+                &FirewallRulesScope::Subnet(subnet_id),
             )
             .await,
         );
     }
 
+    // Get the rules for all replica nodes
+    rules.append(
+        &mut get_firewall_rules_from_registry(registry_canister, &FirewallRulesScope::ReplicaNodes)
+            .await,
+    );
+
     // Get the global rules
-    rules.append(&mut get_firewall_rules_from_registry(registry_canister, "global", None).await);
+    rules.append(
+        &mut get_firewall_rules_from_registry(registry_canister, &FirewallRulesScope::Global).await,
+    );
 
     println!("{:?}", serde_json::to_string(&rules));
 }

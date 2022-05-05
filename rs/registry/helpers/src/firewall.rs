@@ -4,6 +4,7 @@ use ic_protobuf::registry::firewall::v1::FirewallConfig;
 use ic_protobuf::registry::firewall::v1::FirewallRuleSet;
 use ic_registry_keys::make_firewall_config_record_key;
 use ic_registry_keys::make_firewall_rules_record_key;
+use ic_registry_keys::FirewallRulesScope;
 use ic_types::RegistryVersion;
 
 /// A trait that allows access to `FirewallConfig`.  The expectation for the
@@ -17,7 +18,7 @@ pub trait FirewallRegistry {
     fn get_firewall_rules(
         &self,
         version: RegistryVersion,
-        id: &str,
+        scope: &FirewallRulesScope,
     ) -> RegistryClientResult<FirewallRuleSet>;
 }
 
@@ -34,9 +35,9 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
     fn get_firewall_rules(
         &self,
         version: RegistryVersion,
-        id: &str,
+        scope: &FirewallRulesScope,
     ) -> RegistryClientResult<FirewallRuleSet> {
-        let bytes = self.get_value(&make_firewall_rules_record_key(id), version);
+        let bytes = self.get_value(&make_firewall_rules_record_key(scope), version);
         deserialize_registry_value::<FirewallRuleSet>(bytes)
     }
 }
