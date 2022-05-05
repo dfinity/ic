@@ -58,6 +58,3 @@ mv "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release-lto/canister_sandbox \
 ls -l "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release
 
 rm -rf artifacts/release
-if [[ "$CI_JOB_NAME" == "docker-build-ic"* ]] || [ "$CI_JOB_NAME" == "" ]; then
-    cd "$ROOT_DIR"/gitlab-ci/src && python3 -m artifacts.collect_build_binaries artifacts/release
-fi

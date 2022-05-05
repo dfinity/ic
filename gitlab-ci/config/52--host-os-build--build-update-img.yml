@@ -20,6 +20,15 @@ host-os-updateimg:
       VERSION=$(cat VERSION)${VERSION_SUFFIX}
       echo "Build ID: ${VERSION}"
 
+      # set permissions to 777 to test if reproducibility is affected
+      # we compare images we get from:
+      # - host-os-updateimg
+      # - host-os-updateimg-determinism
+      # see CI job: build-determinism-host-update-img
+      if [ "$CI_JOB_NAME" == "host-os-updateimg" ]; then
+        chmod -R 777 ic-os/hostos/rootfs/
+      fi
+
       cd "${CI_PROJECT_DIR}"/ic-os/hostos
       # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-host-update -- \

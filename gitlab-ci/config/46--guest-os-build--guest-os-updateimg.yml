@@ -13,11 +13,10 @@ guest-os-updateimg-build:
     - |
       set -xeuo pipefail
 
-      # TODO: remove this here and in docker-build-ic
-      # once we are sure that build reproducibility is not affected by permissions
-      # !! has to match as used in docker-build-ic file !!
-      find . -not -path "./artifacts" -type d -exec chmod 775 {} \;
-      find . -not -path "./artifacts" -type f -exec chmod 764 {} \;
+      # set permissions to 777 to test if reproducibility is affected
+      # we compare image from docker-build-ic to image we get here
+      # see CI job: build-determinism-guest-update-img
+      chmod -R 777 ic-os/guestos/rootfs/
 
       gitlab-ci/src/job_scripts/lib/guest-os-updateimg.sh
 
@@ -28,10 +27,3 @@ guest-os-updateimg-build-dev:
   variables:
       BUILD_EXTRA_ARGS: "-t dev -p root"
       BUILD_EXTRA_SUFFIX: "-dev"
-
-# An exact dupe of the updateimg job for non-determinism testing.
-guest-os-updateimg-build-determinism:
-  extends:
-    - guest-os-updateimg-build
-  variables:
-    BUILD_EXTRA_SUFFIX: "-determinism"
