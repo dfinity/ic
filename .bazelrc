@@ -4,4 +4,7 @@ build:remote --remote_cache=buildfarm.dfinity.systems
 
 build:log --execution_log_json_file=bazel-build-log.json
 
-build:ci --config=remote --config=log
+build:bes --bes_results_url=https://dash.buildfarm.dfinity.systems/invocation/
+build:bes --bes_backend=bes.buildfarm.dfinity.systems
+
+build:ci --config=remote --config=log --config=bes
