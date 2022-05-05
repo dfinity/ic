@@ -1,0 +1,7 @@
+= The ckBTC Minter Canister
+
+The ckBTC Minter canister is the canister responsible for converting between btc and ckBTC.
+It works in tandem with a link:../../../rosetta-api/ledger_canister/README.md[Ledger Canister], which
+handles the _ckBTC_ token, and a link:../../canister/README.adoc[Bitcoin Canister], which is used to
+interface with the bitcoin network. The ckBTC Minter is named as such because it is the minter of the
+ckBTC Ledger Canister.

@@ -86,7 +86,7 @@ pub struct SendTransactionRequest {
     pub transaction: Vec<u8>,
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub enum SendTransactionError {
     MalformedTransaction,
 }
