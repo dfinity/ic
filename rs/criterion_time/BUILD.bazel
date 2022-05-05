@@ -19,4 +19,3 @@ rust_library(
         "@crate_index//:libc",
     ],
 )
-

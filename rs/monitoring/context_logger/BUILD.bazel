@@ -11,13 +11,13 @@ filegroup(
 )
 
 rust_library(
-  name = "context_logger",
-  srcs = glob(["src/**"]),
-  crate_name = "ic_context_logger",
-  edition = "2018",
-  deps = [
-      "@crate_index//:slog",
-  ]
+    name = "context_logger",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_context_logger",
+    edition = "2018",
+    deps = [
+        "@crate_index//:slog",
+    ],
 )
 
 rust_test(
