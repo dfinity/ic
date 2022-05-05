@@ -17,18 +17,18 @@ docker_tar = rule(
     implementation = _docker_tar_impl,
     attrs = {
         "src": attr.label(
-            allow_files=True,
-            mandatory=True
+            allow_files = True,
+            mandatory = True,
         ),
         "dep": attr.label_list(
-            allow_files=True,
+            allow_files = True,
         ),
         "extra_args": attr.string_list(),
         "_build_docker_save_tool": attr.label(
-            allow_files=True,
-            default=":docker_tar.py",
+            allow_files = True,
+            default = ":docker_tar.py",
         ),
-    }
+    },
 )
 
 def _vfat_image_impl(ctx):
@@ -56,19 +56,19 @@ vfat_image = rule(
     implementation = _vfat_image_impl,
     attrs = {
         "src": attr.label(
-            allow_files=True,
+            allow_files = True,
         ),
         "partition_size": attr.string(
-            mandatory=True,
+            mandatory = True,
         ),
         "subdir": attr.string(
-            default="/",
+            default = "/",
         ),
         "_build_vfat_image": attr.label(
-            allow_files=True,
-            default=":build_vfat_image.py",
-        )
-    }
+            allow_files = True,
+            default = ":build_vfat_image.py",
+        ),
+    },
 )
 
 def _ext4_image_impl(ctx):
@@ -83,9 +83,12 @@ def _ext4_image_impl(ctx):
         args += ["-i", ctx.files.src[0].path]
         inputs += ctx.files.src
     args += [
-        "-o", out.path,
-        "-s", ctx.attr.partition_size,
-        "-p", ctx.attr.subdir
+        "-o",
+        out.path,
+        "-s",
+        ctx.attr.partition_size,
+        "-p",
+        ctx.attr.subdir,
     ]
     if len(ctx.files.file_contexts) > 0:
         args += ["-S", ctx.files.file_contexts[0].path]
@@ -100,7 +103,7 @@ def _ext4_image_impl(ctx):
         arguments = args,
         inputs = inputs,
         outputs = [out],
-        tools = [tool]
+        tools = [tool],
     )
 
     return [DefaultInfo(files = depset([out]))]
@@ -109,27 +112,27 @@ ext4_image = rule(
     implementation = _ext4_image_impl,
     attrs = {
         "src": attr.label(
-            allow_files=True,
+            allow_files = True,
         ),
         "file_contexts": attr.label(
-            allow_files=True,
-            mandatory=False,
+            allow_files = True,
+            mandatory = False,
         ),
         "extra_files": attr.label_keyed_string_dict(
-            allow_files=True,
-            mandatory=False,
+            allow_files = True,
+            mandatory = False,
         ),
         "partition_size": attr.string(
-            mandatory=True,
+            mandatory = True,
         ),
         "subdir": attr.string(
-            default="/",
+            default = "/",
         ),
         "_build_ext4_image": attr.label(
-            allow_files=True,
-            default=":build_ext4_image.py",
-        )
-    }
+            allow_files = True,
+            default = ":build_ext4_image.py",
+        ),
+    },
 )
 
 def _disk_image_impl(ctx):
@@ -150,8 +153,8 @@ def _disk_image_impl(ctx):
             tool_file.path,
             in_layout.path,
             out.path,
-            " ".join(partition_files)
-        )
+            " ".join(partition_files),
+        ),
     )
 
     return [DefaultInfo(files = depset([out]))]
@@ -160,17 +163,17 @@ disk_image = rule(
     implementation = _disk_image_impl,
     attrs = {
         "layout": attr.label(
-            allow_files=True,
-            mandatory=True,
+            allow_files = True,
+            mandatory = True,
         ),
         "partitions": attr.label_list(
-            allow_files=True,
+            allow_files = True,
         ),
         "_build_disk_image_tool": attr.label(
-            allow_files=True,
-            default=":build_disk_image.py",
+            allow_files = True,
+            default = ":build_disk_image.py",
         ),
-    }
+    },
 )
 
 def _tar_extract_impl(ctx):
@@ -184,7 +187,7 @@ def _tar_extract_impl(ctx):
             in_tar.path,
             ctx.attr.path,
             out.path,
-        )
+        ),
     )
 
     return [DefaultInfo(files = depset([out]))]
@@ -193,11 +196,11 @@ tar_extract = rule(
     implementation = _tar_extract_impl,
     attrs = {
         "src": attr.label(
-            allow_files=True,
-            mandatory=True,
+            allow_files = True,
+            mandatory = True,
         ),
         "path": attr.string(
-            mandatory=True,
+            mandatory = True,
         ),
-    }
+    },
 )

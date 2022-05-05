@@ -1,5 +1,5 @@
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
-	"partitions.csv",
+    "partitions.csv",
 ])

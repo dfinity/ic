@@ -12,9 +12,12 @@ filegroup(
 
 rust_library(
     name = "elastic_common_schema",
-    crate_name = "elastic_common_schema",
     srcs = glob(["src/**"]),
+    crate_name = "elastic_common_schema",
     edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:slog_derive",
+    ],
     deps = [
         "@crate_index//:chrono",
         "@crate_index//:erased-serde",
@@ -24,9 +27,6 @@ rust_library(
         "@crate_index//:slog",
         "@crate_index//:slog-json",
         "@crate_index//:uuid",
-    ],
-    proc_macro_deps = [
-        "@crate_index//:slog_derive",
     ],
 )
 
