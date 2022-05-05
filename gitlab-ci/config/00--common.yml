@@ -57,18 +57,19 @@ variables:
     GIT_CACHE_PATH="/cache/git-v3/@{CI_PROJECT_PATH}/@{CI_CONCURRENT_ID}"
     mkdir -p "@{GIT_CACHE_PATH}"
 
+    export GIT_TRACE=1
+    export GIT_CURL_VERBOSE=1
+
     pushd "@{GIT_CACHE_PATH}"
     # Step 1. Seed the repo if it doesn't exit or has been corrupted.
     # On CI we've observed partial downloads of the repo [e.g. missing .git dir]
     if ! git fsck; then
       echo "Cloning fresh git repository"
-      find . -delete
-      time git clone "@{CI_REPOSITORY_URL}" .
+      find . -mindepth 1 -delete
+      time git clone --depth=500 "@{CI_REPOSITORY_URL}" .
     fi
-    popd
 
     # Step 2. Fetch the commit sha into the cache.
-    pushd "@{GIT_CACHE_PATH}"
     # CI_REPOSITORY_URL contains the CI_JOB_TOKEN.
     # The cached one will have come from a previous job, and thus its token
     # is invalid. So just update the token.
@@ -79,8 +80,8 @@ variables:
     # the cache and perform a fresh clone.
     if ! time git fetch origin "@{CI_COMMIT_SHA}"; then
       echo "Git fetch into local cached failed. Making a clean git clone"
-      find "@{GIT_CACHE_PATH}" -mindepth 1 -delete
-      time git clone "@{CI_REPOSITORY_URL}" .
+      find . -mindepth 1 -delete
+      time git clone --depth=500 "@{CI_REPOSITORY_URL}" .
     fi
     popd
 
