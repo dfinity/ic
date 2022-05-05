@@ -140,6 +140,13 @@ impl Farm {
         Ok(())
     }
 
+    pub fn set_group_ttl(&self, group_name: &str, duration: Duration) -> FarmResult<()> {
+        let path = format!("group/{}/ttl/{}", group_name, duration.as_secs());
+        let rb = self.put(&path);
+        let _resp = self.retry_until_success(rb)?;
+        Ok(())
+    }
+
     fn post(&self, path: &str) -> RequestBuilder {
         let url = self.url_from_path(path);
         self.client.post(url)
