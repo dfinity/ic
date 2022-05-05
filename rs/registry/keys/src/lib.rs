@@ -135,7 +135,7 @@ impl FromStr for FirewallRulesScope {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parts: Vec<_> = s.split(&['(', ')']).collect();
+        let parts: Vec<_> = s.split(&['(', ')']).filter(|s| !s.is_empty()).collect();
         if parts.is_empty() || parts.len() > 2 {
             return Err("Invalid scope".to_string());
         }
@@ -381,5 +381,49 @@ mod tests {
                 error: "ECDSA Signing Subnet List key id key_id_UnknownCurve:key_name could not be converted to an EcdsaKeyId: \"UnknownCurve is not a recognized ECDSA curve\"".to_string()
             }
         )
+    }
+
+    #[test]
+    fn firewall_scope_parsing() {
+        let id = PrincipalId::new_node_test_id(42);
+        assert_eq!(
+            format!("{}", FirewallRulesScope::Global),
+            FIREWALL_RULES_SCOPE_GLOBAL
+        );
+        assert_eq!(
+            format!("{}", FirewallRulesScope::ReplicaNodes),
+            FIREWALL_RULES_SCOPE_REPLICA_NODES
+        );
+        assert_eq!(
+            format!("{}", FirewallRulesScope::Subnet(SubnetId::from(id))),
+            format!("{}_{}", FIREWALL_RULES_SCOPE_SUBNET_PREFIX, id)
+        );
+        assert_eq!(
+            format!("{}", FirewallRulesScope::Node(NodeId::from(id))),
+            format!("{}_{}", FIREWALL_RULES_SCOPE_NODE_PREFIX, id)
+        );
+
+        assert_eq!(
+            FirewallRulesScope::from_str(FIREWALL_RULES_SCOPE_GLOBAL).unwrap(),
+            FirewallRulesScope::Global
+        );
+        assert_eq!(
+            FirewallRulesScope::from_str(FIREWALL_RULES_SCOPE_REPLICA_NODES).unwrap(),
+            FirewallRulesScope::ReplicaNodes
+        );
+        assert_eq!(
+            FirewallRulesScope::from_str(
+                format!("{}({})", FIREWALL_RULES_SCOPE_SUBNET_PREFIX, id).as_str()
+            )
+            .unwrap(),
+            FirewallRulesScope::Subnet(SubnetId::from(id))
+        );
+        assert_eq!(
+            FirewallRulesScope::from_str(
+                format!("{}({})", FIREWALL_RULES_SCOPE_NODE_PREFIX, id).as_str()
+            )
+            .unwrap(),
+            FirewallRulesScope::Node(NodeId::from(id))
+        );
     }
 }
