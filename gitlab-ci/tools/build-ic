@@ -89,7 +89,7 @@ fi
 
 if [ "$BUILD_BINARIES" == "true" ]; then
     echo "Building Binaries"
-    gitlab-ci/src/job_scripts/lib/cargo-build-release-linux-native.sh
+    gitlab-ci/tools/job-driver.py cargo-build-release-linux-native
 fi
 if [ "$BUILD_CANISTERS" == "true" ]; then
     echo "Building Canisters"
