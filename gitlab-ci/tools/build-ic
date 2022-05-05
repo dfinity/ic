@@ -8,8 +8,15 @@ ROOT_DIR=$(git rev-parse --show-toplevel)
 BUILD_BINARIES=true
 BUILD_CANISTERS=true
 BUILD_IMAGES=true
-# TODO: remove the assumption that git exists. It should build even from an extracted tarball.
 VERSION="${VERSION:-$(git rev-parse HEAD)}"
+
+# required env variables from build scripts
+export CI_JOB_ID=${CI_JOB_ID:-""}
+export CI_JOB_NAME=${CI_JOB_NAME:-""}
+export ROOT_PIPELINE_ID=${ROOT_PIPELINE_ID:-""}
+export CI_PROJECT_DIR=${CI_PROJECT_DIR:-$ROOT_DIR}
+export BUILD_EXTRA_SUFFIX=${BUILD_EXTRA_SUFFIX:-""}
+export BUILD_EXTRA_ARGS=${BUILD_EXTRA_ARGS:-""}
 
 cd $ROOT_DIR
 
@@ -80,114 +87,36 @@ if [ "$BUILD_IMAGES" == "true" ] && uname -s | grep Darwin; then
     exit 0
 fi
 
-HEADER_BINARIES=$(
-    cat <<"EOF"
-______       _ _     _ _              ______ _                  _
-| ___ \     (_) |   | (_)             | ___ (_)                (_)
-| |_/ /_   _ _| | __| |_ _ __   __ _  | |_/ /_ _ __   __ _ _ __ _  ___  ___
-| ___ \ | | | | |/ _` | | '_ \ / _` | | ___ \ | '_ \ / _` | '__| |/ _ \/ __|
-| |_/ / |_| | | | (_| | | | | | (_| | | |_/ / | | | | (_| | |  | |  __/\__ \_ _ _
-\____/ \__,_|_|_|\__,_|_|_| |_|\__, | \____/|_|_| |_|\__,_|_|  |_|\___||___(_|_|_)
-                                __/ |
-                               |___/
-EOF
-)
-
-HEADER_CANISTERS=$(
-    cat <<"EOF"
-______       _ _     _ _               _____             _     _
-| ___ \     (_) |   | (_)             /  __ \           (_)   | |
-| |_/ /_   _ _| | __| |_ _ __   __ _  | /  \/ __ _ _ __  _ ___| |_ ___ _ __ ___
-| ___ \ | | | | |/ _` | | '_ \ / _` | | |    / _` | '_ \| / __| __/ _ \ '__/ __|
-| |_/ / |_| | | | (_| | | | | | (_| | | \__/\ (_| | | | | \__ \ ||  __/ |  \__ \_ _ _
-\____/ \__,_|_|_|\__,_|_|_| |_|\__, |  \____/\__,_|_| |_|_|___/\__\___|_|  |___(_|_|_)
-                                __/ |
-                               |___/
-EOF
-)
-
-HEADER_ICOS=$(
-    cat <<"EOF"
-______       _ _     _ _               _____ _____   _____ _____   _____
-| ___ \     (_) |   | (_)             |_   _/  __ \ |  _  /  ___| |_   _|
-| |_/ /_   _ _| | __| |_ _ __   __ _    | | | /  \/ | | | \ `--.    | | _ __ ___   __ _  __ _  ___
-| ___ \ | | | | |/ _` | | '_ \ / _` |   | | | |     | | | |`--. \   | || '_ ` _ \ / _` |/ _` |/ _ \
-| |_/ / |_| | | | (_| | | | | | (_| |  _| |_| \__/\ \ \_/ /\__/ /  _| || | | | | | (_| | (_| |  __/_ _ _
-\____/ \__,_|_|_|\__,_|_|_| |_|\__, |  \___/ \____/  \___/\____/   \___/_| |_| |_|\__,_|\__, |\___(_|_|_)
-                                __/ |                                                    __/ |
-                               |___/                                                    |___/
-EOF
-)
-
-HEADER_BUILD=$(
-    cat <<"EOF"
-______       _ _     _    ___       _   _  __           _
-| ___ \     (_) |   | |  / _ \     | | (_)/ _|         | |      _
-| |_/ /_   _ _| | __| | / /_\ \_ __| |_ _| |_ __ _  ___| |_ ___(_)
-| ___ \ | | | | |/ _` | |  _  | '__| __| |  _/ _` |/ __| __/ __|
-| |_/ / |_| | | | (_| | | | | | |  | |_| | || (_| | (__| |_\__ \_
-\____/ \__,_|_|_|\__,_| \_| |_/_|   \__|_|_| \__,_|\___|\__|___(_)
-EOF
-)
-
-export CI_JOB_ID=${CI_JOB_ID:-""}
-export CI_JOB_NAME=${CI_JOB_NAME:-""}
-export ROOT_PIPELINE_ID=${ROOT_PIPELINE_ID:-""}
-export CI_PROJECT_DIR=${CI_PROJECT_DIR:-$ROOT_DIR}
-export BUILD_EXTRA_SUFFIX=${BUILD_EXTRA_SUFFIX:-""}
-export BUILD_EXTRA_ARGS=${BUILD_EXTRA_ARGS:-""}
-
 if [ "$BUILD_BINARIES" == "true" ]; then
-    echo -e "\n${HEADER_BINARIES}\n"
+    echo "Building Binaries"
     gitlab-ci/src/job_scripts/lib/cargo-build-release-linux-native.sh
 fi
 if [ "$BUILD_CANISTERS" == "true" ]; then
-    echo -e "\n${HEADER_CANISTERS}\n"
+    echo "Building Canisters"
     gitlab-ci/tools/job-driver.py cargo-build-canisters "${CANISTERS_DIR}"
 fi
 if [ "$BUILD_IMAGES" == "true" ]; then
-    #if [ "$BUILD_BINARIES" != "true" ]; then
-    #    echo "Trying to pull binaries from S3"
-    #    mkdir -p /ic/artifacts/release
-    #    gitlab-ci/src/artifacts/rclone_download.py --remote-path=release --unpack --mark-executable \
-    #        --git-rev "${VERSION}" --out /ic/artifacts/release
-    #fi
-    echo -e "\n${HEADER_ICOS}\n"
+    echo "Building IC-OS Update Image"
     gitlab-ci/src/job_scripts/lib/guest-os-updateimg.sh "${DISK_DIR}"
 fi
 
-echo
-echo -e "\n${HEADER_BUILD}\n"
 if [ "$BUILD_BINARIES" == "true" ]; then
-    echo Release Binaries
+    echo "Release Binaries"
     cd /ic/artifacts/release
-    ls -1 *.gz | xargs -n1 sha256sum | tee /tmp/binaries.txt
-    echo
+    # shellcheck disable=SC2035
+    sha256sum -b *.gz
 fi
 
 if [ "$BUILD_CANISTERS" == "true" ]; then
-    echo Canister Binaries
+    echo "Canister Binaries"
     cd /ic/artifacts/canisters
-    ls -1 *.gz | xargs -n1 sha256sum | tee /tmp/canisters.txt
-    echo
+    # shellcheck disable=SC2035
+    sha256sum -b *.gz
 fi
 
 if [ "$BUILD_IMAGES" == "true" ] && [ "$BUILD_BINARIES" == "true" ] && [ "$BUILD_CANISTERS" == "true" ]; then
     echo IC-OS Image
     cd "$DISK_DIR"
-    ls -1 update-img.tar.gz | xargs -n1 sha256sum | tee /tmp/update-img.txt
-    echo
+    # shellcheck disable=SC2035
+    sha256sum -b *.gz
 fi
-
-cd /tmp
-echo SHA256SUMS
-if [ "$BUILD_BINARIES" == "true" ]; then
-    sha256sum binaries.txt
-fi
-if [ "$BUILD_CANISTERS" == "true" ]; then
-    sha256sum canisters.txt
-fi
-if [ "$BUILD_IMAGES" == "true" ] && [ "$BUILD_BINARIES" == "true" ] && [ "$BUILD_CANISTERS" == "true" ]; then
-    sha256sum update-img.txt
-fi
-echo

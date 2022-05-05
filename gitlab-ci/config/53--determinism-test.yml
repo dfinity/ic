@@ -5,36 +5,39 @@ build-determinism-binaries:
   stage: build-determinism-test
   allow_failure: true
   needs:
-    - cargo-build-release-linux-native
-    - docker-build-ic
+    - job: cargo-build-release-linux-native
+      artifacts: false
+    - job: docker-build-ic
+      artifacts: false
+    - job: artifacts-upload-to-s3
+      artifacts: false
   script:
     - |
       set -eux
+      VERSION=$(git rev-parse HEAD)
+
+      curl -s "https://download.dfinity.systems/ic/$VERSION/release/SHA256SUMS" \
+          -o SHA256SUMS-cargo-build-release-linux-native
+      curl -s "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/release/SHA256SUMS" \
+          -o SHA256SUMS-docker-build-ic
+
       echo "cargo-build-release-linux-native:"
-      cd artifacts/release
-      # Build Determinism for GLOBIGNORE files will be handled by NNS and Testing & Verification team
-      (
-          sha256sum -- *.gz | tee SHAS
-      )
-      cd -
+      cat SHA256SUMS-cargo-build-release-linux-native
       echo "docker-build-ic:"
-      cd artifacts/docker-build-ic/release
-      (
-          sha256sum -- *.gz | tee SHAS
-      )
-      cd -
+      cat SHA256SUMS-docker-build-ic
+
       if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
           set +x
           echo "Build determinism check compares two binaries built on a separate CI jobs:"
           echo " - cargo-build-release-linux-native"
           echo " - docker-build-ic"
           echo "Difference indicates that this MR introduced changes that break Build Determinism."
-          echo -e "If this job fails, please identify the cause of breaking Build Determinism and fix it. \xF0\x9F\x99\x8F"
+          echo -e "If this job fails, pull the binaries (scroll up for curl info) and run diffoscope on them. \xF0\x9F\x99\x8F"
           set -x
       else
           echo "Difference indicates that Build Determinism is broken for binaries that differ!"
       fi
-      diff -u artifacts/release/SHAS artifacts/docker-build-ic/release/SHAS
+      diff -u SHA256SUMS-cargo-build-release-linux-native SHA256SUMS-docker-build-ic
 
 
 build-determinism-canisters:
@@ -44,60 +47,70 @@ build-determinism-canisters:
   stage: build-determinism-test
   allow_failure: true
   needs:
-    - cargo-build-canisters
-    - docker-build-ic
+    - job: cargo-build-canisters
+      artifacts: false
+    - job: docker-build-ic
+      artifacts: false
+    - job: artifacts-upload-to-s3
+      artifacts: false
   script:
     - |
       set -eux
-      echo "cargo-build-canisters:"
-      cd artifacts/canisters
-      # we ignore panics for now
-      rm -f panics.wasm.gz sns-test-dapp-canister.wasm.gz
-      sha256sum -- *.gz | tee SHAS
-      cd -
+      VERSION=$(git rev-parse HEAD)
+
+      curl -s "https://download.dfinity.systems/ic/$VERSION/canisters/SHA256SUMS" \
+          -o SHA256SUMS-cargo-build-canisters
+      curl -s "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/canisters/SHA256SUMS" \
+          -o SHA256SUMS-docker-build-ic
+
+      echo "cargo-build-release-linux-native:"
+      cat SHA256SUMS-cargo-build-canisters
       echo "docker-build-ic:"
-      cd artifacts/docker-build-ic/canisters
-      rm -f panics.wasm.gz sns-test-dapp-canister.wasm.gz
-      sha256sum -- *.gz | tee SHAS
-      cd -
+      cat SHA256SUMS-docker-build-ic
+
+      # we ignore panics and sns-test-dapp-canister
+      sed -i -E '/(panics.wasm|sns-test-dapp-canister.wasm)/d' SHA256SUMS-*
+
       if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
           set +x
           echo "Build determinism check compares two canister binaries built on a separate CI jobs:"
           echo " - cargo-build-canisters"
           echo " - docker-build-ic"
           echo "Difference indicates that this MR introduced changes that break Build Determinism."
-          echo -e "If this job fails, please identify the cause of breaking Build Determinism and fix it. \xF0\x9F\x99\x8F"
+          echo -e "If this job fails, pull the canisters (scroll up for curl info) and run diffoscope on them. \xF0\x9F\x99\x8F"
           set -x
       else
           echo "Difference indicates that Build Determinism is broken for canister binaries that differ!"
       fi
-      diff -u artifacts/canisters/SHAS artifacts/docker-build-ic/canisters/SHAS
+      diff -u SHA256SUMS-cargo-build-canisters SHA256SUMS-docker-build-ic
 
 
-build-determinism-update-img:
+build-determinism-guest-update-img:
   extends:
     - .ubuntu-nix-docker-pinned-dc
     - .rules-parent-pipeline
   stage: build-determinism-test
   needs:
-    - job: artifacts-upload-to-s3
     - job: guest-os-updateimg-build
       artifacts: false
-    - job: guest-os-updateimg-build-determinism
+    - job: docker-build-ic
+      artifacts: false
+    - job: artifacts-upload-to-s3
       artifacts: false
   script:
     - |
       set -eux
-      VERSION=$(cat VERSION)
-      export VERSION
+      VERSION=$(git rev-parse HEAD)
 
-      for IMG in update-img update-img-determinism
-      do
-        # TODO: just fetch SHA file?
-        "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-            --git-rev="${VERSION}" --remote-path="guest-os/${IMG}" --out="${IMG}"
-        (cd "${IMG}"; sha256sum update-img.tar.gz | tee SHAS)
-      done
+      curl -s "https://download.dfinity.systems/ic/$VERSION/guest-os/update-img/SHA256SUMS" \
+          -o SHA256SUMS-guest-os-updateimg-build
+      curl -s "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/guest-os/update-img/SHA256SUMS" \
+          -o SHA256SUMS-docker-build-ic
+
+      echo "guest-os-updateimg-build:"
+      cat SHA256SUMS-guest-os-updateimg-build
+      echo "docker-build-ic:"
+      cat SHA256SUMS-docker-build-ic
 
       if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
           set +x
@@ -110,7 +123,34 @@ build-determinism-update-img:
       else
           echo "Difference indicates that Build Determinism is broken IC-OS guest image!"
       fi
-      diff -u update-img/SHAS update-img-determinism/SHAS
+
+      if ! diff -u SHA256SUMS-guest-os-updateimg-build SHA256SUMS-docker-build-ic; then
+          # diffoscope runs kvm when doing diff and we need kernel image for that
+          sudo apt-get update && sudo apt-get --no-install-recommends --yes install "linux-image-$(uname -r)" \
+              diffoscope python3-tlsh libguestfs-tools python3-guestfs squashfs-tools
+
+          mkdir guest-os-updateimg-build docker-build-ic artifacts
+          curl -s "https://download.dfinity.systems/ic/$VERSION/guest-os/update-img/update-img.tar.gz" \
+              -o guest-os-updateimg-build/update-img.tar.gz
+          curl -s "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/guest-os/update-img/update-img.tar.gz" \
+              -o docker-build-ic/update-img.tar.gz
+
+          cd guest-os-updateimg-build
+          tar -xzf update-img.tar.gz
+          cd ../docker-build-ic
+          tar -xzf update-img.tar.gz
+          cd ..
+
+          # we give diffoscope 20min to find the diff
+          timeout 20m sudo diffoscope \
+              guest-os-updateimg-build/boot.img \
+              docker-build-ic/boot.img \
+              --html artifacts/output-boot.html --text -
+          timeout 20m sudo diffoscope \
+              guest-os-updateimg-build/root.img \
+              docker-build-ic/root.img \
+              --html artifacts/output-root.html --text -
+      fi
 
 build-determinism-host-update-img:
   extends:
@@ -118,25 +158,28 @@ build-determinism-host-update-img:
     - .rules-parent-pipeline
   stage: build-determinism-test
   needs:
-    - job: artifacts-upload-to-s3
     - job: host-os-updateimg
       artifacts: false
     - job: host-os-updateimg-determinism
       artifacts: false
   allow_failure: true
+  artifacts:
+    paths:
+      - artifacts
   script:
     - |
       set -eux
-      VERSION=$(cat VERSION)
-      export VERSION
+      VERSION=$(git rev-parse HEAD)
 
-      for IMG in update-img update-img-determinism
-      do
-        # TODO: just fetch SHA file?
-        "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-            --git-rev="${VERSION}" --remote-path="hostos/${IMG}" --out="${IMG}"
-        (cd "${IMG}"; sha256sum update-img.tar.gz | tee SHAS)
-      done
+      curl -s "https://download.dfinity.systems/ic/$VERSION/host-os/update-img/SHA256SUMS" \
+          -o SHA256SUMS-host-os-updateimg
+      curl -s "https://download.dfinity.systems/ic/$VERSION/host-os/update-img-determinism/SHA256SUMS" \
+          -o SHA256SUMS-host-os-updateimg-determinism
+
+      echo "host-os-updateimg:"
+      cat SHA256SUMS-host-os-updateimg
+      echo "host-os-updateimg-determinism:"
+      cat SHA256SUMS-host-os-updateimg-determinism
 
       if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
           set +x
@@ -149,4 +192,31 @@ build-determinism-host-update-img:
       else
           echo "Difference indicates that Build Determinism is broken IC-OS host image!"
       fi
-      diff -u update-img/SHAS update-img-determinism/SHAS
+
+      if ! diff -u SHA256SUMS-host-os-updateimg SHA256SUMS-host-os-updateimg-determinism; then
+          # diffoscope runs kvm when doing diff and we need kernel image for that
+          sudo apt-get update && sudo apt-get --no-install-recommends --yes install "linux-image-$(uname -r)" \
+              diffoscope python3-tlsh libguestfs-tools python3-guestfs squashfs-tools
+
+          mkdir host-os-updateimg host-os-updateimg-determinism artifacts
+          curl -s "https://download.dfinity.systems/ic/$VERSION/host-os/update-img/host-update-img.tar.gz" \
+              -o host-os-updateimg/host-update-img.tar.gz
+          curl -s "https://download.dfinity.systems/ic/$VERSION/host-os/update-img-determinism/host-update-img.tar.gz" \
+              -o host-os-updateimg-determinism/host-update-img.tar.gz
+
+          cd host-os-updateimg
+          tar -xzf host-update-img.tar.gz
+          cd ../host-os-updateimg-determinism
+          tar -xzf host-update-img.tar.gz
+          cd ..
+
+          # we give diffoscope 20min to find the diff
+          timeout 20m sudo diffoscope \
+              host-os-updateimg/boot.img \
+              host-os-updateimg-determinism/boot.img \
+              --html artifacts/output-boot.html --text -
+          timeout 20m sudo diffoscope \
+              host-os-updateimg/root.img \
+              host-os-updateimg-determinism/root.img \
+              --html artifacts/output-root.html --text -
+      fi

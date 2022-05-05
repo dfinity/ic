@@ -34,14 +34,7 @@ fi
 GIT_REV=$(git rev-parse HEAD)
 docker image build --no-cache -t ic-build-bd:$TAG -f- . <<EOF
 FROM dfinity/ic-build:$DOCKER_IMG_VERSION
-USER 1000
-COPY --chown=ubuntu:ubuntu . /icrepo
-RUN sudo mkdir /ic && sudo chown -R ubuntu:ubuntu /ic && \
-    cd /ic && git init && git remote add origin /icrepo && \
-    git fetch origin $GIT_REV && git checkout $GIT_REV
-# ! see 46--guest-os-build--guest-os-updateimg.yml !
-RUN cd /ic && find -type d -exec chmod 775 {} \; && \
-    find -type f -exec chmod 764 {} \;
+COPY --chown=ubuntu:ubuntu . /ic
 RUN sudo mkdir /ic/artifacts && sudo chown -R ubuntu:ubuntu /ic/artifacts
 EOF
 

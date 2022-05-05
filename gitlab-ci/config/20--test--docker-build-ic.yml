@@ -4,27 +4,39 @@ docker-build-ic:
     - .rules-parent-pipeline
   needs: []
   stage: test
-  artifacts:
-    paths:
-      - artifacts
   script:
     - |
       set -euo pipefail
 
-      # this builds all the artifacts (binaries, canisters & icos)
-      # docker build image is also build (not using docker build cache)
+      # run docker-build-ic
       gitlab-ci/tools/docker-build-ic
 
-      # print sha256sum
-      cd artifacts/docker-build-ic
-      echo "! SHA256 of binaries !"
-      find ./release -type f -exec sha256sum {} \;
-      echo "! SHA256 of canisters !"
-      find ./canisters -type f -exec sha256sum {} \;
-      echo "!!! SHA256 of ICOS !!!"
-      find ./icos -type f -exec sha256sum {} \;
+      # generate SHA256SUMS files
+      cd artifacts/docker-build-ic/release
+      GLOBIGNORE="SHA256SUMS"
+      echo "Binaries SHA256SUMS"
+      # shellcheck disable=SC2035
+      sha256sum -b *.gz | tee SHA256SUMS
+      cd ../canisters
+      echo "Canisters SHA256SUMS"
+      # shellcheck disable=SC2035
+      sha256sum -b *.gz | tee SHA256SUMS
+      cd ../icos
+      echo "IC-OS SHA256SUMS"
+      # shellcheck disable=SC2035
+      sha256sum -b *.gz | tee SHA256SUMS
+      cd ../../..
 
-      # avoid exceeding gitlab's artifacts size limit
-      rm -rf icos
-
-      # artifacts (canisters & binaries) are used for build determinism tests
+      VERSION=$(git rev-parse HEAD)
+      # release binaries
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
+          "artifacts/docker-build-ic/release" docker-build-ic/release
+      # canister binaries
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
+          "artifacts/docker-build-ic/canisters" docker-build-ic/canisters
+      # ic-os update img
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
+          "artifacts/docker-build-ic/icos" docker-build-ic/guest-os/update-img
