@@ -354,7 +354,10 @@ if __name__ == "__main__":
 
     exp.write_summary_file(
         "run_xnet_experiment",
-        {"rps": [FLAGS.payload_size]},
+        {
+            "rps": [FLAGS.payload_size],
+            "max_capacity": max_capacity,
+        },
         [FLAGS.payload_size],
         "payload size [bytes]",
     )
