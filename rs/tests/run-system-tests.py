@@ -20,6 +20,7 @@ import gzip
 import logging
 import os
 import shutil
+import signal
 import socket
 import stat
 import subprocess
@@ -40,6 +41,31 @@ logging.basicConfig(level=logging.DEBUG, format="%(levelname)s:%(name)s:%(messag
 RED = "\033[1;31m"
 GREEN = "\033[1;32m"
 NC = "\033[0m"
+
+# This timeout should be shorter than the CI job timeout.
+TIMEOUT_DEFAULT_SEC = 50 * 60
+SLACK_CHANNEL_NOTIFY = "test-failure-alerts"
+
+
+def try_kill_pgid(pgid: int) -> None:
+    # If the process has already exited, then ProcessLookupError will be raised.
+    # We simply ignore this specific exception.
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+
+
+def notify_slack(slack_message: str, ci_project_dir: str) -> int:
+    notify_slack_command = " ".join(
+        [
+            f"python3 {ci_project_dir}/gitlab-ci/src/notify_slack/notify_slack.py",
+            f'"{slack_message}"',
+            f'--channel="{SLACK_CHANNEL_NOTIFY}"',
+        ]
+    )
+    returncode = run_command(command=notify_slack_command)
+    return returncode
 
 
 def run_help_command():
@@ -117,6 +143,22 @@ def run_command(command: str, env: Optional[Dict] = None) -> int:
     return process.returncode
 
 
+def run_command_with_timeout(command: str, env: Optional[Dict] = None, timeout=None) -> int:
+    # As the command below launches more than one subprocess, we need to use Popen to have control over child processes.
+    # In particular, we use a new_session to kill the whole group of processes at once.
+    try:
+        p = subprocess.Popen(command, env=env, start_new_session=True, shell=True)
+        pgid = os.getpgid(p.pid)
+        p.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        # Normally, in case of TimeoutExpired return code is not set.
+        p.returncode = p.returncode if p.returncode is not None else 124
+    finally:
+        # Kill the whole process group.
+        try_kill_pgid(pgid)
+    return p.returncode
+
+
 def generate_default_job_id() -> str:
     return f"{getpass.getuser()}-{socket.gethostname()}-{int(time.time())}"
 
@@ -151,6 +193,8 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
     CI_COMMIT_SHA = os.getenv("CI_COMMIT_SHA", default="")
     CI_COMMIT_SHORT_SHA = os.getenv("CI_COMMIT_SHORT_SHA", default="")
     ARTIFACT_DIR = os.getenv("ARTIFACT_DIR", default="")
+    CI_JOB_NAME = os.getenv("CI_JOB_NAME", default="")
+    SYSTEM_TESTS_TIMEOUT_SEC = os.getenv("SYSTEM_TESTS_TIMEOUT", default=TIMEOUT_DEFAULT_SEC)
     # Start set variables.
     is_local_run = JOB_ID is None
     use_locally_prebuilt_artifacts = ARTIFACT_DIR != ""
@@ -159,7 +203,8 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
         ARTIFACT_DIR = os.path.join(base_path, ARTIFACT_DIR)
     is_merge_request = CI_PARENT_PIPELINE_SOURCE == "merge_request_event"
     is_honeycomb_push = not is_local_run
-    is_slack_notify = not is_local_run and CI_PIPELINE_SOURCE == "schedule"
+    is_slack_test_failure_notify = not is_local_run and CI_PIPELINE_SOURCE == "schedule"
+    is_slack_timeout_notify = not is_local_run and CI_JOB_NAME == "system-tests-hourly"
     # End set variables.
 
     # Firstly, build the prod-test-driver binary.
@@ -174,7 +219,7 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
     logging.debug(
         f"is_local_run={is_local_run}, is_merge_request={is_merge_request}, "
         f"use_locally_prebuilt_artifacts={use_locally_prebuilt_artifacts}, is_honeycomb_push={is_honeycomb_push}, "
-        f"is_slack_notify={is_slack_notify}"
+        f"is_slack_test_failure_notify={is_slack_test_failure_notify}, is_slack_timeout_notify={is_slack_timeout_notify}"
     )
 
     if IC_VERSION_ID is None:
@@ -207,7 +252,7 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
 
     if SSH_KEY_DIR is None:
         logging.info("SSH_KEY_DIR variable is not set, generating keys.")
-        SSH_KEY_DIR = tempfile.mkdtemp()
+        SSH_KEY_DIR = tempfile.mkdtemp(prefix="tmp_ssh_keys_")
         folders_to_remove.append(SSH_KEY_DIR)
         gen_key_command = f"ssh-keygen -t ed25519 -N '' -f {SSH_KEY_DIR}/admin"
         gen_key_returncode = run_command(command=gen_key_command)
@@ -228,7 +273,7 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
             logging.info(f"Copying prebuilt artifacts from {ARTIFACT_DIR} to {_tmp}")
             shutil.copytree(ARTIFACT_DIR, _tmp)
         ARTIFACT_DIR = _tmp
-        results_tmp_dir = tempfile.mkdtemp()
+        results_tmp_dir = tempfile.mkdtemp(prefix="tmp_results_")
         folders_to_remove.append(results_tmp_dir)
         RESULT_FILE = f"{results_tmp_dir}/test-results.json"
         SUMMARY_ARGS = f"--test_results {RESULT_FILE} --verbose "
@@ -318,11 +363,30 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
             f"--journalbeat-hosts={TEST_ES_HOSTNAMES}",
         ]
     )
-    testrun_returncode = run_command(command=run_test_driver_cmd, env=env_dict)
 
-    # Both 0 and 1 (case with some failed tests) exit codes are considered to be successful executions of the test suite.
+    # We launch prod-test-driver with a timeout. This enables us to send slack notification before the global CI timeout kills the whole job.
+    testrun_returncode = run_command_with_timeout(
+        command=run_test_driver_cmd, env=env_dict, timeout=SYSTEM_TESTS_TIMEOUT_SEC
+    )
+
+    # Both 0 (successful suite execution) and 1 (case with some failed tests) exit codes are considered to be successful executions of the test suite.
     # All other exit codes are treated as errors. For those we don't generate summary, or push messages to slack or honeycomb.
-    if not (testrun_returncode == 0 or testrun_returncode == 1):
+    # The only exception is timeout error with code 124.
+    has_suite_completed = testrun_returncode == 0 or testrun_returncode == 1
+    if not has_suite_completed:
+        if testrun_returncode == 124 and is_slack_timeout_notify:
+            slack_message = "\n".join(
+                [
+                    f"Scheduled job \`{CI_JOB_NAME}\` *timed out*. <{CI_JOB_URL}|log>.",  # noqa
+                    f"Commit: <{CI_PROJECT_URL}/-/commit/{CI_COMMIT_SHA}|{CI_COMMIT_SHORT_SHA}>.",
+                    f"IC_VERSION_ID: \`{IC_VERSION_ID}\`.",  # noqa
+                ]
+            )
+            returncode = notify_slack(slack_message, CI_PROJECT_DIR)
+            if returncode == 0:
+                logging.info("Successfully sent timeout slack notification.")
+            else:
+                logging.error(f"Failed to send slack timeout notification, exit code={returncode}.")
         exit_with_log(f"Execution of prod-test-driver failed unexpectedly with {testrun_returncode} exit code.")
 
     if is_honeycomb_push:
@@ -342,7 +406,7 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
         else:
             logging.error(f"{RED}Failed to push results to honeycomb.{NC}")
 
-    if is_slack_notify:
+    if is_slack_test_failure_notify:
         msg = "\n".join(
             [
                 f"Pot \`{{}}\` *failed*. <{CI_JOB_URL}|log>.",  # noqa
@@ -387,7 +451,7 @@ if __name__ == "__main__":
         runner_args = runner_args.replace("--keep_artifacts", "")
     if "--working-dir" not in runner_args:
         # create working dir
-        working_dir = tempfile.mkdtemp()
+        working_dir = tempfile.mkdtemp(prefix="tmp_working_dir_")
         runner_args += f" --working-dir={working_dir}"
         folders_to_remove.append(working_dir)
     testrun_returncode = 1
