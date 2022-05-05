@@ -47,6 +47,7 @@ pub async fn main() {
 
     spawn_grpc_server(
         config.clone(),
+        logger.clone(),
         adapter_state.clone(),
         get_successors_handler,
         transaction_manager_tx,

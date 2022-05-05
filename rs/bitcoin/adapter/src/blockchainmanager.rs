@@ -239,9 +239,11 @@ impl BlockchainManager {
         }
 
         // If the inv message is received from a peer that is not connected, then reject it.
-        info!(
+        trace!(
             self.logger,
-            "Received inv message from {} : Inventory {:?}", addr, inventory
+            "Received inv message from {} : Inventory {:?}",
+            addr,
+            inventory
         );
 
         let peer = self
@@ -285,7 +287,7 @@ impl BlockchainManager {
             .peer_info
             .get_mut(addr)
             .ok_or(ReceivedHeadersMessageError::UnknownPeer)?;
-        info!(
+        trace!(
             self.logger,
             "Received headers from {}: {}",
             addr,
@@ -317,7 +319,7 @@ impl BlockchainManager {
             if prev_tip_height < active_tip.height {
                 info!(
                     self.logger,
-                    "Added headers in the headers message. State Changed. Height = {}, Active chain's tip = {}",
+                    "Added headers: Height = {}, Active chain's tip = {}",
                     active_tip.height,
                     active_tip.header.block_hash()
                 );
@@ -339,9 +341,12 @@ impl BlockchainManager {
                 if last.height > peer.height {
                     peer.tip = last.header.block_hash();
                     peer.height = last.height;
-                    debug!(
+                    trace!(
                         self.logger,
-                        "Peer {}'s height = {}, tip = {}", addr, peer.height, peer.tip
+                        "Peer {}'s height = {}, tip = {}",
+                        addr,
+                        peer.height,
+                        peer.tip
                     );
                 }
             }
@@ -395,7 +400,7 @@ impl BlockchainManager {
             .map(|i| i.sent_at.elapsed())
             .unwrap_or_default();
 
-        info!(
+        trace!(
             self.logger,
             "Received block message from {} : Took {:?}sec. Block {:?}",
             addr,
@@ -412,9 +417,10 @@ impl BlockchainManager {
 
         match self.blockchain.lock().await.add_block(block.clone()) {
             Ok(block_height) => {
-                info!(
+                trace!(
                     self.logger,
-                    "Block added to the cache successfully at height = {}", block_height
+                    "Block added to the cache successfully at height = {}",
+                    block_height
                 );
                 Ok(())
             }
@@ -443,7 +449,7 @@ impl BlockchainManager {
             )
         };
 
-        info!(self.logger, "Adding peer_info with addr : {} ", addr);
+        trace!(self.logger, "Adding peer_info with addr : {} ", addr);
         self.peer_info.insert(
             *addr,
             PeerInfo {
@@ -516,18 +522,14 @@ impl BlockchainManager {
 
         let block_cache_size = self.blockchain.lock().await.get_block_cache_size();
 
-        debug!(
-            self.logger,
-            "Cache Size: {}, Max Size: {}", block_cache_size, BLOCK_CACHE_THRESHOLD_BYTES
-        );
+        if block_cache_size >= BLOCK_CACHE_THRESHOLD_BYTES {
+            debug!(
+                self.logger,
+                "Cache Size: {}, Max Size: {}", block_cache_size, BLOCK_CACHE_THRESHOLD_BYTES
+            );
+        }
 
         let is_cache_full = block_cache_size >= BLOCK_CACHE_THRESHOLD_BYTES;
-
-        debug!(
-            self.logger,
-            "Syncing blocks. Blocks to be synced : {:?}",
-            retry_queue.len() + self.block_sync_queue.len()
-        );
 
         // Count the number of requests per peer.
         let mut requests_per_peer: HashMap<SocketAddr, u32> =
@@ -570,9 +572,11 @@ impl BlockchainManager {
                 break;
             }
 
-            info!(
+            trace!(
                 self.logger,
-                "Sending getdata to {} : Inventory {:?}", peer.socket, selected_inventory
+                "Sending getdata to {} : Inventory {:?}",
+                peer.socket,
+                selected_inventory
             );
 
             //Send 'getdata' request for the inventory to the peer.
