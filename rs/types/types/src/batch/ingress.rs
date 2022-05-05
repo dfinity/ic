@@ -1,6 +1,6 @@
 use crate::{
     artifact::{IngressMessageId, SignedIngress},
-    messages::{MessageId, EXPECTED_MESSAGE_ID_LENGTH},
+    messages::MessageId,
     CountBytes, Time,
 };
 use ic_protobuf::types::v1 as pb;
@@ -126,7 +126,11 @@ impl IngressPayload {
 
 impl CountBytes for IngressPayload {
     fn count_bytes(&self) -> usize {
-        self.buffer.len() + self.id_and_pos.len() * EXPECTED_MESSAGE_ID_LENGTH
+        <Vec<SignedIngress>>::try_from(self.clone())
+            .unwrap_or_default()
+            .iter()
+            .map(CountBytes::count_bytes)
+            .sum()
     }
 }
 
