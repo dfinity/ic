@@ -989,9 +989,10 @@ impl ProposalTitleAndPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
 
             Some(EcdsaInitialConfig {
                 quadruples_to_create_in_advance,
-                keys: self.ecdsa_keys_to_request.as_ref().map_or_else(
-                    || vec![],
-                    |json| {
+                keys: self
+                    .ecdsa_keys_to_request
+                    .as_ref()
+                    .map_or_else(Vec::new, |json| {
                         let raw: Vec<BTreeMap<String, String>> =
                             serde_json::from_str(json).unwrap();
 
@@ -1010,8 +1011,7 @@ impl ProposalTitleAndPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
                                 EcdsaKeyRequest { key_id, subnet_id }
                             })
                             .collect()
-                    },
-                ),
+                    }),
             })
         };
 
