@@ -5,6 +5,3 @@ build:remote --remote_cache=buildfarm.dfinity.systems
 build:log --execution_log_json_file=bazel-build-log.json
 
 build:ci --config=remote --config=log
-
-# TODO: just point it to the same config with k8s dns will properly resolve buildfarm.dfinity.systems internally
-build:devenv --config=log --remote_cache=grpc://server.buildfarm.svc.cluster.local:8980
