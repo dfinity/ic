@@ -272,7 +272,7 @@ impl Polynomial {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub enum CommitmentOpening {
     Simple(EccScalar),
     Pedersen(EccScalar, EccScalar),
@@ -575,7 +575,7 @@ impl PolynomialCommitment {
         opening: &CommitmentOpening,
     ) -> ThresholdEcdsaResult<CommitmentOpening> {
         if self.check_opening(index, opening)? {
-            Ok(opening.clone())
+            Ok(*opening)
         } else {
             Err(ThresholdEcdsaError::InvalidCommitment)
         }

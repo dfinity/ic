@@ -458,57 +458,51 @@ impl CommitmentOpening {
                 commitment.return_opening_if_consistent(receiver_index, &combined_opening)
             }
 
-            CombinedCommitment::ByInterpolation(PolynomialCommitment::Pedersen(commitment)) => {
-                let mut x_values = Vec::with_capacity(openings.len());
-                let mut values = Vec::with_capacity(openings.len());
-                let mut masks = Vec::with_capacity(openings.len());
+            CombinedCommitment::ByInterpolation(commitment) => {
+                let opening = match commitment {
+                    PolynomialCommitment::Simple(_) => {
+                        let mut x_values = Vec::with_capacity(openings.len());
+                        let mut values = Vec::with_capacity(openings.len());
 
-                for (dealer_index, opening) in openings {
-                    if let Self::Pedersen(value, mask) = opening {
-                        x_values.push(*dealer_index);
-                        values.push(*value);
-                        masks.push(*mask);
-                    } else {
-                        return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                        for (dealer_index, opening) in openings {
+                            if let Self::Simple(value) = opening {
+                                x_values.push(*dealer_index);
+                                values.push(*value);
+                            } else {
+                                return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                            }
+                        }
+
+                        // Recombine secret by interpolation
+                        let coefficients = LagrangeCoefficients::at_zero(curve, &x_values)?;
+                        let combined_value = coefficients.interpolate_scalar(&values)?;
+                        Self::Simple(combined_value)
                     }
-                }
+                    PolynomialCommitment::Pedersen(_) => {
+                        let mut x_values = Vec::with_capacity(openings.len());
+                        let mut values = Vec::with_capacity(openings.len());
+                        let mut masks = Vec::with_capacity(openings.len());
 
-                // Recombine secret by interpolation
-                let coefficients = LagrangeCoefficients::at_zero(curve, &x_values)?;
-                let combined_value = coefficients.interpolate_scalar(&values)?;
-                let combined_mask = coefficients.interpolate_scalar(&masks)?;
+                        for (dealer_index, opening) in openings {
+                            if let Self::Pedersen(value, mask) = opening {
+                                x_values.push(*dealer_index);
+                                values.push(*value);
+                                masks.push(*mask);
+                            } else {
+                                return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+                            }
+                        }
+
+                        // Recombine secret by interpolation
+                        let coefficients = LagrangeCoefficients::at_zero(curve, &x_values)?;
+                        let combined_value = coefficients.interpolate_scalar(&values)?;
+                        let combined_mask = coefficients.interpolate_scalar(&masks)?;
+                        Self::Pedersen(combined_value, combined_mask)
+                    }
+                };
 
                 // Check reconstructed opening matches the commitment
-                if commitment.check_opening(receiver_index, &combined_value, &combined_mask)? {
-                    Ok(Self::Pedersen(combined_value, combined_mask))
-                } else {
-                    Err(ThresholdEcdsaError::InvalidCommitment)
-                }
-            }
-
-            CombinedCommitment::ByInterpolation(PolynomialCommitment::Simple(commitment)) => {
-                let mut x_values = Vec::with_capacity(openings.len());
-                let mut values = Vec::with_capacity(openings.len());
-
-                for (dealer_index, opening) in openings {
-                    if let Self::Simple(value) = opening {
-                        x_values.push(*dealer_index);
-                        values.push(*value);
-                    } else {
-                        return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
-                    }
-                }
-
-                // Recombine secret by interpolation
-                let coefficients = LagrangeCoefficients::at_zero(curve, &x_values)?;
-                let combined_value = coefficients.interpolate_scalar(&values)?;
-
-                // Check reconstructed opening matches the commitment
-                if commitment.check_opening(receiver_index, &combined_value)? {
-                    Ok(Self::Simple(combined_value))
-                } else {
-                    Err(ThresholdEcdsaError::InvalidCommitment)
-                }
+                commitment.return_opening_if_consistent(receiver_index, &opening)
             }
         }
     }
