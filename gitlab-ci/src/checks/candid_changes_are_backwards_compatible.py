@@ -3,6 +3,7 @@ import argparse
 import contextlib
 import difflib
 import os
+import pprint
 import subprocess
 import sys
 import tempfile
@@ -16,9 +17,12 @@ Compares the working copy of Candid file(s) passed via the command line against
 their original version(s). Fails if the changes are not compatible.
 
 There are two modes of operation, which determine whence the originals come. By
-default, originals come from HEAD. On the other hand, if there is an environment
-variable named CI_MERGE_REQUEST_DIFF_BASE_SHA (available in the Gitlab CI
-execution environment), then that is where originals are drawn from.
+default, originals come from HEAD. Alternatively, if there is an environment
+variable named CI_MERGE_REQUEST_TARGET_BRANCH_NAME (available in the Gitlab CI
+execution environment), then the originals are drawn from the following git
+commit:
+
+  git merge-base $(echo $CI_MERGE_REQUEST_TARGET_BRANCH_NAME) HEAD
 
 A particularly egregious example of an incompatible change would be the removal
 of a method, because well-behaved clients will start seeing rejections from the
@@ -40,7 +44,12 @@ one must git add changed .did files before this test will notice one's changes.
 To install pre-commit, follow the directions described at http://pre-commit.com.
 
 TODO: Support pre-commit's --from-ref (and --to-ref) flags. These cause
-environment variables to be set.
+environment variables to be set. Possible environment variables of interest:
+  - PRE_COMMIT
+  - PRE_COMMIT_FROM_REF
+  - PRE_COMMIT_ORIGIN
+  - PRE_COMMIT_SOURCE
+  - PRE_COMMIT_TO_REF
 
 Requires didc to be on PATH. Can be named didc-arm32, didc-linux64, didc-macos,
 or just didc. Pre-compiled binaries can be downloaded at
@@ -48,7 +57,7 @@ https://github.com/dfinity/candid/releases.
 
 Behavior affected by a couple of environment variables:
 
-1. CI_MERGE_REQUEST_DIFF_BASE_SHA: Described above.
+1. CI_MERGE_REQUEST_TARGET_BRANCH_NAME: Described above.
 2. CI_MERGE_REQUEST_TITLE: See --also-reverse.
 """.strip()
 )
@@ -60,8 +69,8 @@ ARGUMENT_PARSER.add_argument(
 Path(s) to the working copy of .did files that are to be inspected for
 compatibility when compared with their originals. When run "conventionally"
 (i.e. outside Gitlab CI), the original version comes from HEAD. Otherwise,
-originals are taken from the CI_MERGE_REQUEST_DIFF_BASE_SHA environment
-variable.
+originals sourced based on the CI_MERGE_REQUEST_TARGET_BRANCH_NAME environment
+variable (as described in the main help string).
 """.strip(),
 )
 
@@ -244,15 +253,22 @@ def inspect_all_files(candid_file_paths, *, also_reverse, diff_base):
 
 def get_diff_base():
     try:
-        result = os.environ["CI_MERGE_REQUEST_DIFF_BASE_SHA"]
-        print("It appears we are in Gitlab CI.")
-        return result
+        target_branch = os.environ["CI_MERGE_REQUEST_TARGET_BRANCH_NAME"]
     except KeyError:
         print('Looks like we are running "conventionally", i.e. not in Gitlab CI.')
         return "HEAD"
 
+    stdout, _stderr = run(["git", "merge-base", target_branch, "HEAD"])
+    diff_base = stdout.strip()
+    print(f"It appears we are in Gitlab CI. {target_branch = } {diff_base = }")
+    return diff_base
+
 
 def main(argv):
+    print("A selection of environment variables:")
+    pprint.pprint(sorted((k, v) for k, v in os.environ.items() if "commit" in k.lower()))
+    print()
+
     args = ARGUMENT_PARSER.parse_args()
 
     print("Files to be inspected:")
