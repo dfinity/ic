@@ -42,6 +42,8 @@ allow systemd_networkd_t systemd_networkd_t : netlink_generic_socket { bind crea
 # allow networkd to operate dhcp client socket
 corenet_udp_bind_dhcpc_port(systemd_networkd_t)
 corenet_udp_bind_generic_node(systemd_networkd_t)
+# allow self-signal
+allow systemd_networkd_t systemd_networkd_t : process { signal };
 
 ###############################################################################
 # systemd-detect-virt
