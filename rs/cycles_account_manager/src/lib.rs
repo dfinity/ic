@@ -370,9 +370,10 @@ impl CyclesAccountManager {
                 | Ok(Method::ECDSAPublicKey)
                 | Ok(Method::SignWithECDSA)
                 | Ok(Method::ComputeInitialEcdsaDealings)
-                | Ok(Method::BitcoinTestnetGetBalance)
-                | Ok(Method::BitcoinTestnetGetUtxos)
-                | Ok(Method::BitcoinTestnetSendTransaction) => {
+                | Ok(Method::BitcoinGetBalance)
+                | Ok(Method::BitcoinGetUtxos)
+                | Ok(Method::BitcoinSendTransaction)
+                | Ok(Method::BitcoinGetCurrentFees) => {
                     return Err(IngressInductionCostError::SubnetMethodNotAllowed);
                 }
                 Err(_) => {

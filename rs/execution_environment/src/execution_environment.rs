@@ -757,9 +757,10 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             }
 
             // TODO(EXC-940): Send Bitcoin requests to the Bitcoin canister.
-            Ok(Ic00Method::BitcoinTestnetGetBalance)
-            | Ok(Ic00Method::BitcoinTestnetGetUtxos)
-            | Ok(Ic00Method::BitcoinTestnetSendTransaction)
+            Ok(Ic00Method::BitcoinGetBalance)
+            | Ok(Ic00Method::BitcoinGetUtxos)
+            | Ok(Ic00Method::BitcoinSendTransaction)
+            | Ok(Ic00Method::BitcoinGetCurrentFees)
             | Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
