@@ -1,3 +1,7 @@
+"""
+Tools for building IC OS image.
+"""
+
 def _docker_tar_impl(ctx):
     in_dir = ctx.files.src[0]
     tool = ctx.files._build_docker_save_tool[0]
@@ -38,7 +42,7 @@ def _vfat_image_impl(ctx):
         input_args = ["-i", ctx.files.src[0].path]
         inputs = [ctx.files.src[0]]
     else:
-        input_arg = ""
+        input_args = []
         inputs = []
     out = ctx.actions.declare_file(ctx.label.name)
 

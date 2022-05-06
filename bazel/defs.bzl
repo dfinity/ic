@@ -1,3 +1,7 @@
+"""
+Utilities for building IC replica and canisters.
+"""
+
 def _optimize_canister(ctx):
     """Invokes canister WebAssembly module optimizer.
     """

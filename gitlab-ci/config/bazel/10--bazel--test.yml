@@ -26,6 +26,13 @@ bazel-build-all:
     - bazel build --config ci //rs/...
     - bazel test --config ci //rs/...
 
+bazel-buildifier-check:
+  extends:
+    - .bazel-run
+  stage: test
+  script:
+    - bazel run --config ci //:buildifier.check || (echo "Please auto-format your changes with \`bazel run //:buildifier\`" && exit 1)
+
 bazel-build-guestos:
   extends:
     - .bazel-run
