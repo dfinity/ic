@@ -118,7 +118,8 @@ impl<'a> IngressSelector for IngressManager {
         );
 
         let payload = IngressPayload::from(messages_in_payload);
-        debug_assert!(payload.count_bytes() <= byte_limit.get() as usize);
+        let payload_size = payload.count_bytes();
+        debug_assert!(payload_size <= byte_limit.get() as usize);
 
         // A last step is to validate the payload we just created. It will be
         // an error if this fails, in which case we log the error, and return
@@ -1753,6 +1754,75 @@ mod tests {
                         ))
                     );
                 }
+            },
+        );
+    }
+
+    #[tokio::test]
+    async fn test_nearly_oversized_ingress() {
+        const MAX_SIZE: usize = 2 * 1024 * 1024;
+        const ALMOST_MAX_SIZE: usize = 2 * 1024 * 1024 - 140;
+
+        let subnet_id = subnet_test_id(0);
+        let registry = setup_registry(subnet_id, MAX_SIZE);
+
+        setup_with_params(
+            None,
+            Some((registry, subnet_id)),
+            None,
+            Some(
+                ReplicatedStateBuilder::new()
+                    .with_subnet_id(subnet_id)
+                    .with_canister(
+                        CanisterStateBuilder::default()
+                            .with_canister_id(canister_test_id(0))
+                            .build(),
+                    )
+                    .build(),
+            ),
+            |ingress_manager, ingress_pool| {
+                let msg = SignedIngressBuilder::new()
+                    .method_payload(vec![0; ALMOST_MAX_SIZE])
+                    .expiry_time(mock_time())
+                    .build();
+
+                assert_eq!(
+                    IngressPayload::from(vec![msg.clone()]).count_bytes(),
+                    msg.count_bytes()
+                );
+
+                let msg_id = IngressMessageId::from(&msg);
+                let msg_attribute = IngressMessageAttribute::new(&msg);
+                let msg_hash = ic_crypto::crypto_hash(msg.binary()).get();
+                let _payload = IngressPayload::from(vec![msg.clone()]);
+
+                ingress_pool.write().unwrap().insert(UnvalidatedArtifact {
+                    message: msg,
+                    peer_id: node_test_id(0),
+                    timestamp: mock_time(),
+                });
+                ingress_pool
+                    .write()
+                    .unwrap()
+                    .apply_changeset(vec![ChangeAction::MoveToValidated((
+                        msg_id,
+                        node_test_id(0),
+                        0,
+                        msg_attribute,
+                        msg_hash,
+                    ))]);
+
+                let validation_context = ValidationContext {
+                    registry_version: RegistryVersion::new(1),
+                    certified_height: Height::new(0),
+                    time: mock_time(),
+                };
+
+                let _payload = ingress_manager.get_ingress_payload(
+                    &HashSet::new(),
+                    &validation_context,
+                    NumBytes::new(MAX_SIZE as u64),
+                );
             },
         );
     }
