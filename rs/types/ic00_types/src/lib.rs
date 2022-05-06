@@ -40,10 +40,11 @@ pub enum Method {
     UpdateSettings,
     ComputeInitialEcdsaDealings,
 
-    // Bitcoin Testnet Canister
-    BitcoinTestnetGetBalance,
-    BitcoinTestnetGetUtxos,
-    BitcoinTestnetSendTransaction,
+    // Bitcoin Interface.
+    BitcoinGetBalance,
+    BitcoinGetUtxos,
+    BitcoinSendTransaction,
+    BitcoinGetCurrentFees,
 
     // These methods are added for the Mercury I release.
     // They should be removed afterwards.

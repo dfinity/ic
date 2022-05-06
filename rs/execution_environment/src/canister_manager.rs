@@ -335,9 +335,10 @@ impl CanisterManager {
             Ok(Ic00Method::RawRand) => only_canisters_allowed(),
 
             // Bitcoin messages require cycles, so we reject all ingress messages.
-            Ok(Ic00Method::BitcoinTestnetGetBalance)
-                | Ok(Ic00Method::BitcoinTestnetGetUtxos)
-                | Ok(Ic00Method::BitcoinTestnetSendTransaction) => only_canisters_allowed(),
+            Ok(Ic00Method::BitcoinGetBalance)
+                | Ok(Ic00Method::BitcoinGetUtxos)
+                | Ok(Ic00Method::BitcoinSendTransaction)
+                | Ok(Ic00Method::BitcoinGetCurrentFees) => only_canisters_allowed(),
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
             | Ok(Ic00Method::ProvisionalTopUpCanister) => {
