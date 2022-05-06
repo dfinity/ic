@@ -17,25 +17,17 @@
     - set -euo pipefail
     - bazel --version
 
-bazel-build-all:
+bazel-test-all:
   extends:
     - .bazel-run
   stage: test
   script:
-    - bazel build --config ci :all
-    - bazel build --config ci //rs/...
-    - bazel test --config ci //rs/...
+    - bazel test --config ci ...
 
+# TODO: convert buildifier.check to a _test rule and remove this job.
 bazel-buildifier-check:
   extends:
     - .bazel-run
   stage: test
   script:
     - bazel run --config ci //:buildifier.check || (echo "Please auto-format your changes with \`bazel run //:buildifier\`" && exit 1)
-
-bazel-build-guestos:
-  extends:
-    - .bazel-run
-  stage: test
-  script:
-    - bazel build --config ci //ic-os/guestos:disk.img.tar
