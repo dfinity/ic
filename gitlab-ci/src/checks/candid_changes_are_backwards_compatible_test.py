@@ -88,7 +88,8 @@ def env(name, value):
         restore_environment_variable(name, original)
 
 
-def clobber_environment_variable(name):
+def del_environment_variable(name):
+    """Removes an environment variable, and returns the original value."""
     original = os.environ.get(name)
     try:
         del os.environ[name]
@@ -127,15 +128,19 @@ class CommandLineTest(unittest.TestCase):
         self.original_subprocess_called_process_error_str = subprocess.CalledProcessError.__str__
         subprocess.CalledProcessError.__str__ = improved_subprocess_called_process_error_str
 
-        self.original_ci_merge_request_title = clobber_environment_variable("CI_MERGE_REQUEST_TITLE")
-        self.original_ci_merge_request_diff_base_sha = clobber_environment_variable("CI_MERGE_REQUEST_DIFF_BASE_SHA")
+        self.original_ci_merge_request_title = del_environment_variable("CI_MERGE_REQUEST_TITLE")
+        self.original_ci_merge_request_target_branch_name = del_environment_variable(
+            "CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+        )
 
     @staticmethod
     def tearDownClass():
         """Undo setUpClass."""
         self = CommandLineTest
 
-        restore_environment_variable("CI_MERGE_REQUEST_DIFF_BASE_SHA", self.original_ci_merge_request_diff_base_sha)
+        restore_environment_variable(
+            "CI_MERGE_REQUEST_TARGET_BRANCH_NAME", self.original_ci_merge_request_target_branch_name
+        )
         restore_environment_variable("CI_MERGE_REQUEST_TITLE", self.original_ci_merge_request_title)
 
         subprocess.CalledProcessError.__str__ = self.original_subprocess_called_process_error_str
@@ -215,28 +220,6 @@ class CommandLineTest(unittest.TestCase):
         )
 
         run_against("example.did", also_reverse=True)
-
-    @unittest.skip("Test is flaky, temporarily disable")
-    def test_gitlab_ci_diff_base(self):
-        """What happens when it looks like we are in Gitlab CI mode."""
-        # Make it look like we added a method.
-        NO_DO_STUFF_METHOD_SHA = "019035c1b0a832d9c5da3cebea6ad07b074338cc"
-        with env("CI_MERGE_REQUEST_DIFF_BASE_SHA", NO_DO_STUFF_METHOD_SHA):
-            # Ok when run in forward-only mode.
-            run_against("example.did")
-
-            # Not ok when run in forward-and-backward mode.
-            with self.assertRaises(subprocess.CalledProcessError):
-                run_against("example.did", also_reverse=True)
-
-        # Make it look like we deleted a method.
-        HAS_SECRET_METHOD_SHA = "b6c2758bf772669035a4ae06191f1e7fbb6055e6"
-        with env("CI_MERGE_REQUEST_DIFF_BASE_SHA", HAS_SECRET_METHOD_SHA):
-            # Not ok regardless of whether --also-reverse is used.
-            with self.assertRaises(subprocess.CalledProcessError):
-                run_against("example.did")
-            with self.assertRaises(subprocess.CalledProcessError):
-                run_against("example.did", also_reverse=True)
 
     def test_override_also_reverse(self):
         # Add a method to the servce.
