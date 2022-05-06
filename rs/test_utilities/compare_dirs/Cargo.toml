@@ -1,0 +1,4 @@
+[package]
+name = "ic-test-utilities-compare-dirs"
+version = "0.8.0"
+edition = "2018"

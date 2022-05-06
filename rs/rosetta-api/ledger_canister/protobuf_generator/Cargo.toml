@@ -1,0 +1,7 @@
+[package]
+name = "ledger-canister-protobuf-generator"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+prost-build = "0.9.0"

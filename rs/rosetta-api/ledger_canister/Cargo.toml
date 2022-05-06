@@ -47,19 +47,23 @@ path = "src/archive_node.rs"
 canister-test = {path = "../../rust_canisters/canister_test"}
 ed25519-dalek = "1.0.1"
 ic-canister-client = {path = "../../canister_client/"}
+ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+ledger-canister-protobuf-generator = { path = "./protobuf_generator" }
 rand_chacha = "0.2.2"
 rand_core = "0.5.1"
+tempfile = "3.1.0"
 
 [[test]]
 name = "test"
 path = "test/test.rs"
 
+[[test]]
+name = "check_generated_files"
+path = "test/check_generated_files.rs"
+
 [[bin]]
 name = "test-notified"
 path = "test/notified.rs"
-
-[build-dependencies]
-prost-build = "0.9.0"
 
 [features]
 notify-method = []

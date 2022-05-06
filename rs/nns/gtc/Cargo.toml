@@ -33,11 +33,13 @@ serde = { version = "1.0", features = ["derive"] }
 sha3 = "0.9.1"
 simple_asn1 = "0.5.4"
 
+[dev-dependencies]
+ic-nns-gtc-protobuf-generator = { path = "./protobuf_generator" }
+ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+tempfile = "3.1.0"
+
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-nns-test-utils-macros = { path="../../nns/test_utils_macros" }
 
-[build-dependencies]
-ic-base-types = { path = "../../types/base_types" }
-prost-build = "0.9.0"

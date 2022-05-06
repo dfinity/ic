@@ -1,4 +1,3 @@
 #[rustfmt::skip]
-pub mod v1 {
-    include!(concat!(env!("OUT_DIR"), "/registry/registry.nns.v1.rs"));
-}
+#[path = "../../gen/registry/registry.nns.v1.rs"]
+pub mod v1;
