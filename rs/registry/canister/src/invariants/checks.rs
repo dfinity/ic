@@ -2,7 +2,8 @@ use crate::{
     common::LOG_PREFIX,
     invariants::{
         common::RegistrySnapshot, crypto::check_node_crypto_keys_invariants,
-        endpoint::check_endpoint_invariants, node_operator::check_node_operator_invariants,
+        endpoint::check_endpoint_invariants, firewall::check_firewall_invariants,
+        node_operator::check_node_operator_invariants,
         replica_version::check_replica_version_invariants,
         routing_table::check_routing_table_invariants, subnet::check_subnet_invariants,
         unassigned_nodes_config::check_unassigned_nodes_config_invariants,
@@ -75,6 +76,9 @@ impl Registry {
 
         // Endpoint invariants
         result = result.and(check_endpoint_invariants(&snapshot, false));
+
+        // Firewall invariants
+        result = result.and(check_firewall_invariants(&snapshot));
 
         // Unassigned node invariants
         result = result.and(check_unassigned_nodes_config_invariants(&snapshot));

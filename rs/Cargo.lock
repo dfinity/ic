@@ -7651,9 +7651,9 @@ dependencies = [
 
 [[package]]
 name = "ipnet"
-version = "2.3.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47be2f14c678be2fdcab04ab1171db51b2762ce6f0a8ee87c8dd4a04ed216135"
+checksum = "879d54834c8c76457ef4293a689b2a8c59b076067ad77b15efafbb05f92a592b"
 
 [[package]]
 name = "itertools"
@@ -10280,6 +10280,7 @@ dependencies = [
  "ic-replica-tests",
  "ic-test-utilities",
  "ic-types 0.8.0",
+ "ipnet",
  "lazy_static",
  "leb128",
  "maplit",

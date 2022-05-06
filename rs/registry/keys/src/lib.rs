@@ -93,6 +93,7 @@ pub fn make_firewall_config_record_key() -> String {
     "firewall_config".to_string()
 }
 
+const FIREWALL_RULES_RECORD_KEY_PREFIX: &str = "firewall_rules_";
 const FIREWALL_RULES_SCOPE_GLOBAL: &str = "global";
 const FIREWALL_RULES_SCOPE_REPLICA_NODES: &str = "replica_nodes";
 const FIREWALL_RULES_SCOPE_SUBNET_PREFIX: &str = "subnet";
@@ -154,7 +155,27 @@ impl FromStr for FirewallRulesScope {
 }
 
 pub fn make_firewall_rules_record_key(scope: &FirewallRulesScope) -> String {
-    format!("firewall_rules_{}", scope)
+    format!("{}{}", FIREWALL_RULES_RECORD_KEY_PREFIX, scope)
+}
+
+/// Returns the principal_id associated with a given firewall_record key if
+/// the key is, in fact, a valid firewall_record_key of node or subnet scope.
+pub fn get_firewall_rules_record_principal_id(key: &str) -> Option<PrincipalId> {
+    let firewall_node_record_prefix = format!(
+        "{}{}_",
+        FIREWALL_RULES_RECORD_KEY_PREFIX, FIREWALL_RULES_SCOPE_NODE_PREFIX
+    );
+    let firewall_subnet_record_prefix = format!(
+        "{}{}_",
+        FIREWALL_RULES_RECORD_KEY_PREFIX, FIREWALL_RULES_SCOPE_SUBNET_PREFIX
+    );
+    if let Some(key) = key.strip_prefix(&firewall_node_record_prefix) {
+        PrincipalId::from_str(key).ok()
+    } else if let Some(key) = key.strip_prefix(&firewall_subnet_record_prefix) {
+        PrincipalId::from_str(key).ok()
+    } else {
+        None
+    }
 }
 
 pub fn make_provisional_whitelist_record_key() -> String {

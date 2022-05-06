@@ -14,7 +14,8 @@ use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, NNS_S
 use ic_protobuf::registry::routing_table::v1::RoutingTable as RoutingTablePb;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
-    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_firewall_rules_record_key, make_routing_table_record_key, make_subnet_list_record_key,
+    make_subnet_record_key, FirewallRulesScope,
 };
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_transport::{delete, update};
@@ -80,7 +81,7 @@ impl Registry {
         // 5. Delete Subnet record
         let delete_subnet_mutation = delete(make_subnet_record_key(subnet_id_to_remove));
 
-        let mutations = vec![
+        let mut mutations = vec![
             update_routing_table_mutation,
             update_subnet_list_mutation,
             delete_cup_mutation,
@@ -88,7 +89,18 @@ impl Registry {
             delete_subnet_mutation,
         ];
 
-        // 6. Make a call to the CMC and only apply changes if it's successful
+        // 6. Delete Subnet specific Firewall Ruleset (if it exists)
+        let firewall_ruleset_key =
+            make_firewall_rules_record_key(&FirewallRulesScope::Subnet(subnet_id_to_remove));
+        if self
+            .get(firewall_ruleset_key.as_bytes(), self.latest_version())
+            .is_some()
+        {
+            let delete_firewall_ruleset_mutation = delete(firewall_ruleset_key);
+            mutations.push(delete_firewall_ruleset_mutation);
+        }
+
+        // 7. Make a call to the CMC and only apply changes if it's successful
         let cmc_payload = RemoveSubnetFromAuthorizedSubnetListArgs {
             subnet: subnet_id_to_remove,
         };
@@ -101,7 +113,7 @@ impl Registry {
         .await
         .expect("Call to the CMC did not succeed, subnet deletion reverted");
 
-        // 7. Check invariants and apply mutations
+        // 8. Check invariants and apply mutations
         self.maybe_apply_mutation_internal(mutations);
     }
 }
