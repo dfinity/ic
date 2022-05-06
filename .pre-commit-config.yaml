@@ -65,7 +65,19 @@ repos:
   - id: rustfmt
     exclude: |
         (?x)(
-            rs/protobuf/gen|
+            rs/protobuf/gen/|
+            rs/crypto/internal/crypto_service_provider/gen/|
+            rs/types/base_types/gen/|
+            rs/sns/governance/gen/|
+            rs/sns/root/gen/|
+            rs/rosetta-api/ledger_canister/gen/|
+            rs/registry/proto/gen/|
+            rs/registry/transport/gen/|
+            rs/registry/canister/gen/|
+            rs/nns/common/gen/|
+            rs/nns/handlers/root/gen/|
+            rs/nns/gtc/gen/|
+            rs/nns/governance/gen/|
             experimental/|
             rust_canisters/|
             nix/overlays/|

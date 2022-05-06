@@ -1,4 +1,3 @@
 #[rustfmt::skip]
-pub mod v1 {
-    include!(concat!(env!("OUT_DIR"), "/ic_base_types.pb.v1.rs"));
-}
+#[path = "../../gen/ic_base_types.pb.v1.rs"]
+pub mod v1;

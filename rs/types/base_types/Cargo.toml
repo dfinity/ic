@@ -20,12 +20,12 @@ comparable = { version = "0.5", features = ["derive"] }
 
 [dev-dependencies]
 assert_matches = "1.3.0"
+ic-base-types-protobuf-generator = { path = "./protobuf_generator" }
+ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 proptest = "0.9.4"
 proptest-derive = "0.1.0"
 serde_cbor = "0.11.1"
-
-[build-dependencies]
-prost-build = "0.9.0"
+tempfile = "3.1.0"
 
 [features]
 test = []

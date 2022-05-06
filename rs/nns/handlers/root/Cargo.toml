@@ -39,15 +39,16 @@ serde_bytes = "0.11"
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-nns-constants ={path="../../constants"}
+ic-nns-handler-root-protobuf-generator = { path = "./protobuf_generator" }
 ic-nns-test-utils = { path = "../../../nns/test_utils" }
 ic-types = { path = "../../../types/types" }
 ic-test-utilities = {path="../../../test_utilities"}
+ic-test-utilities-compare-dirs = { path = "../../../test_utilities/compare_dirs" }
+tempfile = "3.1.0"
 on_wire = { path = "../../../rust_canisters/on_wire" }
 assert_matches = "1.3.0"
 hex = "0.4.2"
 lazy_static = "1.4.0"
 registry-canister = { path = "../../../registry/canister" }
 
-[build-dependencies]
-ic-base-types = {path="../../../types/base_types"}
-prost-build = "0.9.0"
+

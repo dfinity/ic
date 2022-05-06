@@ -21,7 +21,7 @@ import_mod!(
 
 pub mod log_entry {
     pub mod v1 {
-        include!(concat!(env!("OUT_DIR"), "/log/log.log_entry.v1.rs"));
+        include!("../gen/log/log.log_entry.v1.rs");
 
         impl slog::Value for LogEntry {
             fn serialize(

@@ -26,9 +26,8 @@ use std::time::{Duration, SystemTime};
 pub mod account_identifier;
 pub mod tokens;
 #[rustfmt::skip]
-pub mod protobuf {
-    include!(concat!(env!("OUT_DIR"), "/ic_ledger.pb.v1.rs"));
-}
+#[path = "../gen/ic_ledger.pb.v1.rs"]
+pub mod protobuf;
 pub mod range_utils;
 pub mod timestamp;
 pub mod validate_endpoints;
