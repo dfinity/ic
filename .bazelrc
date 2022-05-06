@@ -8,3 +8,4 @@ build:bes --bes_results_url=https://dash.buildfarm.dfinity.systems/invocation/
 build:bes --bes_backend=bes.buildfarm.dfinity.systems
 
 build:ci --config=remote --config=log --config=bes
+build:dev --config=ci
