@@ -1,5 +1,5 @@
 {
-  "checksum": "f87e8dbb589c14fa306629f6f4b6972ba17cf42c86418e991d75c1f7f265d404",
+  "checksum": "3de2bcc77687a00e3d06da7e219127fe874a92da050834fd8b50fb6aca32a17e",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -6474,13 +6474,13 @@
       },
       "license": "BSD-3-Clause OR MIT OR Apache-2.0"
     },
-    "num_threads 0.1.5": {
+    "num_threads 0.1.6": {
       "name": "num_threads",
-      "version": "0.1.5",
+      "version": "0.1.6",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/num_threads/0.1.5/download",
-          "sha256": "aba1801fb138d8e85e11d0fc70baf4fe1cdfffda7c6cd34a854905df588e5ed0"
+          "url": "https://crates.io/api/v1/crates/num_threads/0.1.6/download",
+          "sha256": "2819ce041d2ee131036f4fc9d6ae7ae125a3a40e97ba64d04fe799ad9dabbb44"
         }
       },
       "targets": [
@@ -6514,7 +6514,7 @@
           }
         },
         "edition": "2015",
-        "version": "0.1.5"
+        "version": "0.1.6"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -10670,7 +10670,7 @@
                 "target": "libc"
               },
               {
-                "id": "num_threads 0.1.5",
+                "id": "num_threads 0.1.6",
                 "target": "num_threads"
               }
             ]

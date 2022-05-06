@@ -15,6 +15,7 @@ filegroup(
     ) + [
         # Keep sorted.
         "//rs/async_utils:sources",
+        "//rs/bitcoin/types/public:sources",
         "//rs/criterion_time:sources",
         "//rs/crypto/internal/crypto_lib/sha2:sources",
         "//rs/crypto/sha:sources",
