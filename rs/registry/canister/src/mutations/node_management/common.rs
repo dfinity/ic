@@ -8,8 +8,9 @@ use ic_protobuf::registry::{
     subnet::v1::{SubnetListRecord, SubnetRecord},
 };
 use ic_registry_keys::{
-    make_crypto_node_key, make_crypto_tls_cert_key, make_node_operator_record_key,
-    make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_crypto_node_key, make_crypto_tls_cert_key, make_firewall_rules_record_key,
+    make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
+    make_subnet_record_key, FirewallRulesScope,
 };
 use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue};
 use ic_registry_transport::{delete, insert, update};
@@ -187,6 +188,7 @@ pub fn make_remove_node_registry_mutations(
     let dkg_dealing_key = make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption);
     let tls_cert_key = make_crypto_tls_cert_key(node_id);
     let idkg_dealing_key = make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption);
+    let firewall_ruleset_key = make_firewall_rules_record_key(&FirewallRulesScope::Node(node_id));
 
     let keys_to_maybe_remove = vec![
         node_key,
@@ -195,6 +197,7 @@ pub fn make_remove_node_registry_mutations(
         dkg_dealing_key,
         tls_cert_key,
         idkg_dealing_key,
+        firewall_ruleset_key,
     ];
 
     let latest_version = registry.latest_version();
