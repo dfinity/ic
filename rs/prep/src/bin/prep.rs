@@ -561,7 +561,10 @@ impl CliArgs {
         let dc_pk_path = match self.dc_pk_path {
             Some(dir) => {
                 if !dir.is_dir() {
-                    bail!("directory {} for DC configuration doesn't exist");
+                    bail!(
+                        "directory {} for DC configuration doesn't exist",
+                        dir.display()
+                    );
                 }
                 Some(dir)
             }
