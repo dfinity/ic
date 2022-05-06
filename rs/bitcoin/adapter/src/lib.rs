@@ -6,11 +6,7 @@
 
 use bitcoin::{network::message::NetworkMessage, BlockHash, BlockHeader};
 use parking_lot::RwLock;
-use std::{
-    net::SocketAddr,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{net::SocketAddr, sync::Arc, time::Instant};
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
 /// are in current use to encourage use from non-utilized addresses.
@@ -149,7 +145,7 @@ pub enum TransactionManagerRequest {
 #[derive(Clone)]
 pub struct AdapterState {
     /// The field contains instant of the latest received request.
-    last_received_at: Arc<RwLock<Instant>>,
+    last_received_at: Arc<RwLock<Option<Instant>>>,
     /// The field contains how long the adapter should wait to before becoming idle.
     idle_seconds: u64,
 }
@@ -158,22 +154,23 @@ impl AdapterState {
     /// Crates new instance of the AdapterState.
     pub fn new(idle_seconds: u64) -> Self {
         Self {
-            // On purpose we pick such time so we are idle when created.
-            last_received_at: Arc::new(RwLock::new(
-                Instant::now() - Duration::from_secs(idle_seconds + 1),
-            )),
+            last_received_at: Arc::new(RwLock::new(None)),
             idle_seconds,
         }
     }
 
     /// Returns if the adapter is idle.
     pub fn is_idle(&self) -> bool {
-        self.last_received_at.read().elapsed().as_secs() > self.idle_seconds
+        match *self.last_received_at.read() {
+            Some(last) => last.elapsed().as_secs() > self.idle_seconds,
+            // Nothing received yet still in idle from startup.
+            None => true,
+        }
     }
 
     /// Updates the current state of the adapter given a request was received.
     pub fn received_now(&self) {
         // Instant::now() is monotonically nondecreasing clock.
-        *self.last_received_at.write() = Instant::now();
+        *self.last_received_at.write() = Some(Instant::now());
     }
 }
