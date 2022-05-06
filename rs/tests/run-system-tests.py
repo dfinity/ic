@@ -304,8 +304,11 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
     # Print all input environmental variables.
     logging.debug(
         f"CI_PROJECT_DIR={CI_PROJECT_DIR}, TEST_ES_HOSTNAMES={TEST_ES_HOSTNAMES}, SHELL_WRAPPER={SHELL_WRAPPER}, "
-        f"SSH_KEY_DIR={SSH_KEY_DIR}, IC_VERSION_ID={IC_VERSION_ID}, JOB_ID={JOB_ID}, DEV_IMG_URL={IC_OS_DEV_IMG_URL}, "
-        f"DEV_IMG_SHA256={IC_OS_DEV_IMG_SHA256}, CI_PARENT_PIPELINE_SOURCE={CI_PARENT_PIPELINE_SOURCE}"
+        f"SSH_KEY_DIR={SSH_KEY_DIR}, IC_VERSION_ID={IC_VERSION_ID}, JOB_ID={JOB_ID}, ADDITIONAL_ARGS={ADDITIONAL_ARGS}, "
+        f"CI_PIPELINE_SOURCE={CI_PIPELINE_SOURCE}, ROOT_PIPELINE_ID={ROOT_PIPELINE_ID}, CI_JOB_URL={CI_JOB_URL}, "
+        f"CI_PROJECT_URL={CI_PROJECT_URL}, DEV_IMG_URL={IC_OS_DEV_IMG_URL}, CI_COMMIT_SHA={CI_COMMIT_SHA}, ARTIFACT_DIR={ARTIFACT_DIR}, "
+        f"DEV_IMG_SHA256={IC_OS_DEV_IMG_SHA256}, CI_PARENT_PIPELINE_SOURCE={CI_PARENT_PIPELINE_SOURCE}, CI_JOB_NAME={CI_JOB_NAME}, "
+        f"SYSTEM_TESTS_TIMEOUT_SEC={SYSTEM_TESTS_TIMEOUT_SEC}"
     )
 
     if use_locally_prebuilt_artifacts:
@@ -374,20 +377,23 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
     # The only exception is timeout error with code 124.
     has_suite_completed = testrun_returncode == 0 or testrun_returncode == 1
     if not has_suite_completed:
-        if testrun_returncode == 124 and is_slack_timeout_notify:
-            slack_message = "\n".join(
-                [
-                    f"Scheduled job \`{CI_JOB_NAME}\` *timed out*. <{CI_JOB_URL}|log>.",  # noqa
-                    f"Commit: <{CI_PROJECT_URL}/-/commit/{CI_COMMIT_SHA}|{CI_COMMIT_SHORT_SHA}>.",
-                    f"IC_VERSION_ID: \`{IC_VERSION_ID}\`.",  # noqa
-                ]
-            )
-            returncode = notify_slack(slack_message, CI_PROJECT_DIR)
-            if returncode == 0:
-                logging.info("Successfully sent timeout slack notification.")
-            else:
-                logging.error(f"Failed to send slack timeout notification, exit code={returncode}.")
-        exit_with_log(f"Execution of prod-test-driver failed unexpectedly with {testrun_returncode} exit code.")
+        exit_message = f"Execution of prod-test-driver failed unexpectedly with {testrun_returncode} exit code."
+        if testrun_returncode == 124:
+            exit_message = "Execution of prod-test-driver failed due to timeout."
+            if is_slack_timeout_notify:
+                slack_message = "\n".join(
+                    [
+                        f"Scheduled job \`{CI_JOB_NAME}\` *timed out*. <{CI_JOB_URL}|log>.",  # noqa
+                        f"Commit: <{CI_PROJECT_URL}/-/commit/{CI_COMMIT_SHA}|{CI_COMMIT_SHORT_SHA}>.",
+                        f"IC_VERSION_ID: \`{IC_VERSION_ID}\`.",  # noqa
+                    ]
+                )
+                returncode = notify_slack(slack_message, CI_PROJECT_DIR)
+                if returncode == 0:
+                    logging.info("Successfully sent timeout slack notification.")
+                else:
+                    logging.error(f"Failed to send slack timeout notification, exit code={returncode}.")
+        exit_with_log(exit_message)
 
     if is_honeycomb_push:
         logging.info("Pushing results to honeycomb.")
