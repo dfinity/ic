@@ -178,12 +178,10 @@ impl CliArgs {
             bail!("Invalid log level: '{}'!", lvl_str);
         };
 
-        let initial_replica_version =
-            if let Ok(v) = ReplicaVersion::try_from(self.initial_replica_version) {
-                v
-            } else {
-                bail!("Invalid initial replica version id: {}",)
-            };
+        let initial_replica_version = match ReplicaVersion::try_from(self.initial_replica_version) {
+            Ok(v) => v,
+            Err(e) => bail!("Invalid initial replica version id: {}", e),
+        };
 
         let nns_canister_path = if let Some(p) = self.nns_canister_path {
             if !p.is_dir() {
