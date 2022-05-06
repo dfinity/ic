@@ -37,6 +37,7 @@ use url::Url;
 
 pub const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 pub const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
+pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// A short wasm module that is a legal canister binary.
 pub(crate) const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
@@ -424,7 +425,9 @@ pub async fn agent_with_identity_mapping(
     // Advertise support for HTTP/2
     tls_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
 
-    let builder = reqwest::Client::builder().use_preconfigured_tls(tls_config);
+    let builder = reqwest::Client::builder()
+        .timeout(AGENT_REQUEST_TIMEOUT)
+        .use_preconfigured_tls(tls_config);
     let builder = match (
         addr_mapping,
         reqwest::Url::parse(url).as_ref().map(|u| u.domain()),
