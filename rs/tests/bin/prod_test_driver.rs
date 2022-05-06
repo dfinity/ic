@@ -494,6 +494,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 orchestrator::nns_backup::config(),
                 par(vec![t("nns_backup_test", orchestrator::nns_backup::test)]),
             ),
+            /* Temporarily disable the test (JIRA: VER-1616)
             pot(
                 "workload_counter_canister_pot",
                 workload_counter_canister_test::config(),
@@ -502,6 +503,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     workload_counter_canister_test::short_test,
                 )]),
             ),
+            */
         ],
     ));
 
