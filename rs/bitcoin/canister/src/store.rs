@@ -115,13 +115,15 @@ pub fn get_unstable_blocks(state: &State) -> Vec<&Block> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::utxos::UtxosTrait;
+    use crate::{
+        test_builder::{BlockBuilder, TransactionBuilder},
+        utxos::UtxosTrait,
+    };
     use bitcoin::blockdata::constants::genesis_block;
     use bitcoin::secp256k1::rand::rngs::OsRng;
     use bitcoin::secp256k1::Secp256k1;
     use bitcoin::{consensus::Decodable, Address, BlockHash, Network, PublicKey};
     use byteorder::{LittleEndian, ReadBytesExt};
-    use ic_btc_test_utils::{BlockBuilder, TransactionBuilder};
     use ic_btc_types::OutPoint;
     use std::fs::File;
     use std::str::FromStr;

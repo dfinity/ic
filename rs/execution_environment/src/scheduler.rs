@@ -21,8 +21,8 @@ use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::{
-    bitcoin_state::BitcoinState, canister_state::QUEUE_INDEX_NONE, CanisterState, CanisterStatus,
-    InputQueueType, NetworkTopology, ReplicatedState,
+    canister_state::QUEUE_INDEX_NONE, CanisterState, CanisterStatus, InputQueueType,
+    NetworkTopology, ReplicatedState,
 };
 use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
@@ -968,17 +968,6 @@ impl Scheduler for SchedulerImpl {
             );
 
             subnet_available_memory = self.exec_env.subnet_available_memory(&state).into();
-        }
-
-        // Invoke the heartbeat of the bitcoin canister.
-        {
-            let bitcoin_state: BitcoinState = state.take_bitcoin_testnet_state();
-            let bitcoin_state = ic_btc_canister::heartbeat(
-                bitcoin_state,
-                state.metadata.own_subnet_features.bitcoin_testnet(),
-                &self.log,
-            );
-            state.put_bitcoin_testnet_state(bitcoin_state);
         }
 
         // Execute subnet messages.

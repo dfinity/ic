@@ -156,10 +156,10 @@ impl<'a> AddressUtxoSet<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::test_builder::TransactionBuilder;
     use bitcoin::secp256k1::rand::rngs::OsRng;
     use bitcoin::secp256k1::Secp256k1;
     use bitcoin::{Address, Network, PublicKey};
-    use ic_btc_test_utils::TransactionBuilder;
     use ic_btc_types::OutPoint as PublicOutPoint;
 
     #[test]

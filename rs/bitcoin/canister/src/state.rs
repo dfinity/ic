@@ -1,19 +1,11 @@
-use crate::proto;
-use crate::{types::Height, PageMapMemory};
+use crate::{block, proto, types::Height, PageMapMemory};
 use bitcoin::{hashes::Hash, Block, Network, OutPoint, Script, TxOut, Txid};
 use ic_protobuf::bitcoin::v1;
 use ic_replicated_state::page_map::PersistenceError;
-use ic_replicated_state::{
-    bitcoin_state::{
-        AdapterQueues, BitcoinState as ReplicatedBitcoinState, UnstableBlocks,
-        UtxoSet as ReplicatedUtxoSet,
-    },
-    page_map::PageMap,
-};
 use ic_state_layout::{AccessPolicy, ProtoFileWith, RwPolicy};
-use stable_structures::{Memory, StableBTreeMap};
+use stable_structures::StableBTreeMap;
 use std::collections::BTreeMap;
-use std::{convert::TryFrom, path::Path};
+use std::path::Path;
 
 /// A structure used to maintain the entire state.
 pub struct State {
@@ -25,9 +17,6 @@ pub struct State {
 
     // Blocks inserted, but are not considered stable yet.
     pub unstable_blocks: UnstableBlocks,
-
-    // Queues used to communicate with the adapter.
-    pub adapter_queues: AdapterQueues,
 }
 
 impl State {
@@ -36,17 +25,15 @@ impl State {
     /// The `stability_threshold` parameter specifies how many confirmations a
     /// block needs before it is considered stable. Stable blocks are assumed
     /// to be final and are never removed.
-    pub fn new(stability_threshold: u32, network: Network, genesis_block: Block) -> Self {
+    pub fn new(stability_threshold: u64, network: Network, genesis_block: Block) -> Self {
         Self {
             height: 0,
             utxos: UtxoSet::new(network),
             unstable_blocks: UnstableBlocks::new(stability_threshold, genesis_block),
-            adapter_queues: AdapterQueues::default(),
         }
     }
 
     /// Serializes the state to disk at the given path.
-    // TODO(EXC-1093): Guard this function with a rust feature. It's only needed in local scripts.
     pub fn serialize(&self, root: &Path) -> Result<(), PersistenceError> {
         // Create the directory if it doesn't exist.
         RwPolicy::check_dir(root).expect("Couldn't create directory.");
@@ -75,7 +62,6 @@ impl State {
             .persist_and_sync_delta(&root.join("medium_utxos.bin"))
     }
 
-    // TODO(EXC-1093): Guard this function with a rust feature. It's only needed in local scripts.
     pub fn load(root: &Path) -> Result<Self, PersistenceError> {
         let small_utxos_memory = PageMapMemory::open(&root.join("small_utxos.bin"))?;
         let medium_utxos_memory = PageMapMemory::open(&root.join("medium_utxos.bin"))?;
@@ -85,7 +71,6 @@ impl State {
         let proto_state = state_file.deserialize_opt().unwrap().unwrap();
 
         Ok(Self {
-            adapter_queues: AdapterQueues::default(),
             height: proto_state.height,
             utxos: UtxoSet::from_proto(
                 proto_state.utxos.unwrap(),
@@ -93,81 +78,8 @@ impl State {
                 medium_utxos_memory,
                 address_to_outpoints_memory,
             ),
-            unstable_blocks: UnstableBlocks::try_from(proto_state.unstable_blocks.unwrap())
-                .unwrap(),
+            unstable_blocks: UnstableBlocks::from_proto(proto_state.unstable_blocks.unwrap()),
         })
-    }
-}
-
-impl From<ReplicatedBitcoinState> for State {
-    fn from(state: ReplicatedBitcoinState) -> Self {
-        let utxos_small = state.utxo_set.utxos_small;
-        let utxos_medium = state.utxo_set.utxos_medium;
-        let address_outpoints = state.utxo_set.address_outpoints;
-
-        Self {
-            adapter_queues: state.adapter_queues,
-            height: state.stable_height,
-            unstable_blocks: state.unstable_blocks,
-            utxos: UtxoSet {
-                utxos: Utxos {
-                    small_utxos: load_or_initialize_btree(
-                        utxos_small,
-                        UTXO_KEY_SIZE,
-                        UTXO_VALUE_MAX_SIZE_SMALL,
-                    ),
-                    medium_utxos: load_or_initialize_btree(
-                        utxos_medium,
-                        UTXO_KEY_SIZE,
-                        UTXO_VALUE_MAX_SIZE_MEDIUM,
-                    ),
-                    large_utxos: state.utxo_set.utxos_large,
-                },
-                network: state.utxo_set.network,
-                address_to_outpoints: load_or_initialize_btree(
-                    address_outpoints,
-                    MAX_ADDRESS_OUTPOINT_SIZE,
-                    0,
-                ),
-            },
-        }
-    }
-}
-
-fn load_or_initialize_btree(
-    page_map: PageMap,
-    max_key_size: u32,
-    max_value_size: u32,
-) -> StableBTreeMap<PageMapMemory> {
-    let memory = PageMapMemory::new(page_map);
-    let mut dst = vec![0; 3];
-    memory.read(0, &mut dst);
-    if dst == vec![0; 3] {
-        // Uninitialized. Create a new stable btreemap.
-        StableBTreeMap::new(memory, max_key_size, max_value_size)
-    } else {
-        StableBTreeMap::load(memory)
-    }
-}
-
-impl From<State> for ReplicatedBitcoinState {
-    fn from(state: State) -> Self {
-        Self {
-            adapter_queues: state.adapter_queues,
-            stable_height: state.height,
-            unstable_blocks: state.unstable_blocks,
-            utxo_set: ReplicatedUtxoSet {
-                utxos_small: state.utxos.utxos.small_utxos.get_memory().into_page_map(),
-                utxos_medium: state.utxos.utxos.medium_utxos.get_memory().into_page_map(),
-                utxos_large: state.utxos.utxos.large_utxos,
-                address_outpoints: state
-                    .utxos
-                    .address_to_outpoints
-                    .get_memory()
-                    .into_page_map(),
-                network: state.utxos.network,
-            },
-        }
     }
 }
 
@@ -176,7 +88,7 @@ impl From<&State> for proto::State {
         proto::State {
             height: state.height,
             utxos: Some(state.utxos.to_proto()),
-            unstable_blocks: Some(v1::UnstableBlocks::from(&state.unstable_blocks)),
+            unstable_blocks: Some(state.unstable_blocks.to_proto()),
         }
     }
 }
@@ -316,7 +228,7 @@ impl UtxoSet {
                 .utxos
                 .large_utxos
                 .iter()
-                .map(|(outpoint, (txout, height))| v1::Utxo {
+                .map(|(outpoint, (txout, height))| proto::Utxo {
                     outpoint: Some(v1::OutPoint {
                         txid: outpoint.txid.to_vec(),
                         vout: outpoint.vout,
@@ -383,6 +295,79 @@ impl UtxoSet {
                 3 => Network::Regtest,
                 _ => panic!("Invalid network ID"),
             },
+        }
+    }
+}
+
+/// A data structure for maintaining all unstable blocks.
+///
+/// A block `b` is considered stable if:
+///   depth(block) ≥ stability_threshold
+///   ∀ b', height(b') = height(b): depth(b) - depth(b’) ≥ stability_threshold
+#[cfg_attr(test, derive(Debug, PartialEq))]
+pub struct UnstableBlocks {
+    pub stability_threshold: u64,
+    pub tree: BlockTree,
+}
+
+impl UnstableBlocks {
+    pub fn new(stability_threshold: u64, anchor: Block) -> Self {
+        Self {
+            stability_threshold,
+            tree: BlockTree::new(anchor),
+        }
+    }
+
+    pub fn to_proto(&self) -> proto::UnstableBlocks {
+        proto::UnstableBlocks {
+            stability_threshold: self.stability_threshold,
+            tree: Some(self.tree.to_proto()),
+        }
+    }
+
+    pub fn from_proto(block_forest_proto: proto::UnstableBlocks) -> Self {
+        Self {
+            stability_threshold: block_forest_proto.stability_threshold,
+            tree: BlockTree::from_proto(
+                block_forest_proto
+                    .tree
+                    .expect("BlockTree must be present in the proto"),
+            ),
+        }
+    }
+}
+
+/// Maintains a tree of connected blocks.
+#[cfg_attr(test, derive(Debug, PartialEq))]
+pub struct BlockTree {
+    pub root: Block,
+    pub children: Vec<BlockTree>,
+}
+
+impl BlockTree {
+    /// Creates a new `BlockTree` with the given block as its root.
+    pub fn new(root: Block) -> Self {
+        Self {
+            root,
+            children: vec![],
+        }
+    }
+
+    pub fn to_proto(&self) -> proto::BlockTree {
+        proto::BlockTree {
+            root: Some(block::to_proto(&self.root)),
+            children: self.children.iter().map(|t| t.to_proto()).collect(),
+        }
+    }
+
+    pub fn from_proto(block_tree_proto: proto::BlockTree) -> Self {
+        Self {
+            root: block::from_proto(&block_tree_proto.root.unwrap()),
+            children: block_tree_proto
+                .children
+                .into_iter()
+                .map(BlockTree::from_proto)
+                .collect(),
         }
     }
 }

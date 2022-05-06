@@ -98,7 +98,7 @@ pub fn from_proto(block: &v1::Block) -> Block {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ic_btc_test_utils::{BlockBuilder, TransactionBuilder};
+    use crate::test_builder::{BlockBuilder, TransactionBuilder};
 
     #[test]
     fn to_from_proto() {

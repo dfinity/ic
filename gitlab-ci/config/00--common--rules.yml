@@ -152,13 +152,14 @@
 #  release qualification pipelines to ensure the hotfix tests are always working.
 .rules-prod-hotfix-pipeline:
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger"'
+    - if: $CI_COMMIT_BRANCH =~ /^rc--/
+      when: always
+    - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger"
       when: manual
       allow_failure: true  # the pipeline continues running even if the manual job is not run
-    - if: '$CI_COMMIT_BRANCH =~ /^rc--/'
-      when: always
-    - if: '$CI_MERGE_REQUEST_TITLE =~ /\[rc\]/ || $CI_MERGE_REQUEST_TITLE =~ /hotfix/i'
-      when: always
+    - if: '$CI_MERGE_REQUEST_TITLE =~ /(\[rc\]|hotfix)/i'
+      when: manual
+      allow_failure: true  # the pipeline continues running even if the manual job is not run
 
 .rules-prod-hotfix-tests:
   rules:
@@ -168,7 +169,9 @@
     - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/'
       when: always
     - if: '$CD_ENV == $cd_target_env && ( $CI_MERGE_REQUEST_TITLE =~ /\[rc\]/ || $CI_MERGE_REQUEST_TITLE =~ /hotfix/i )'
-      when: always
+    - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /(\[rc\]|hotfix)/i'
+      when: manual
+      allow_failure: true
 
 .rules-rollout-pipeline-run-on-trigger:
   rules:

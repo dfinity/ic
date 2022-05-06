@@ -40,10 +40,6 @@ impl PageMapMemory {
         *self.buffer.lock().unwrap() = Buffer::new(new_page_map);
         Ok(())
     }
-
-    pub fn into_page_map(self) -> PageMap {
-        self.buffer.lock().unwrap().into_page_map()
-    }
 }
 
 impl Memory for PageMapMemory {

@@ -1,6 +1,8 @@
-use crate::blocktree::{self, BlockChain, BlockDoesNotExtendTree};
+use crate::{
+    blocktree::{self, BlockChain, BlockDoesNotExtendTree},
+    state::UnstableBlocks,
+};
 use bitcoin::Block;
-use ic_replicated_state::bitcoin_state::UnstableBlocks;
 
 /// Pops the `anchor` block iff ∃ a child `C` of the `anchor` block that
 /// is stable. The child `C` becomes the new `anchor` block, and all its
@@ -108,7 +110,7 @@ pub fn get_blocks(blocks: &UnstableBlocks) -> Vec<&Block> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ic_btc_test_utils::BlockBuilder;
+    use crate::test_builder::BlockBuilder;
 
     #[test]
     fn empty() {

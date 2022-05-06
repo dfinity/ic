@@ -11,16 +11,12 @@ candid = "0.7.4"
 byteorder = "1.4.3"
 ic-protobuf = { path = "../../protobuf" }
 ic-btc-types = { path = "../types/public" }
-ic-btc-types-internal = { path = "../types/internal" }
-ic-logger = { path = "../../monitoring/logger" }
-ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-replicated-state = { path = "../../replicated_state" }
-ic-state-layout = { path = "../../state_layout" }
 lazy_static = "1.4.0"
 prost = "0.9"
 serde = "1.0.132"
-slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 stable-structures = { path = "../../stable-structures" }
+ic-state-layout = { path = "../../state_layout" }
 
 [build-dependencies]
 prost-build = "0.9.0"
@@ -30,7 +26,6 @@ name = "build-utxo-set"
 path = "src/examples/build_utxo_set.rs"
 
 [dev-dependencies]
-ic-btc-test-utils = { path = "../test-utils" }
 bitcoin = {version = "0.27.1", features = ["rand"]} # needed for generating secp256k1 keys.
 clap = {version = "3.1.9", features = ["derive"]}
 maplit = "1.0.2"

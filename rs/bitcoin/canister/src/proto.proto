@@ -14,17 +14,33 @@ enum Network {
 message State {
   uint32 height = 1;
   UtxoSet utxos = 2;
-  bitcoin.v1.UnstableBlocks unstable_blocks = 3;
+  UnstableBlocks unstable_blocks = 3;
 }
 
 message UtxoSet {
-  repeated bitcoin.v1.Utxo large_utxos = 1;
+  repeated Utxo large_utxos = 1;
   Network network = 3;
 
   reserved 2;
   reserved 4;
   reserved 5;
   reserved 6;
+}
+
+message Utxo {
+  bitcoin.v1.OutPoint outpoint = 1;
+  bitcoin.v1.TxOut txout = 2;
+  uint32 height = 3;
+}
+
+message UnstableBlocks {
+  uint64 stability_threshold = 1;
+  BlockTree tree = 2;
+}
+
+message BlockTree {
+  bitcoin.v1.Block root = 1;
+  repeated BlockTree children = 2;
 }
 
 message BlockHeader {

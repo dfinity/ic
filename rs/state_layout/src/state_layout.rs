@@ -1,7 +1,6 @@
 use crate::basic_cpmgr::BasicCheckpointManager;
 use crate::error::LayoutError;
 
-use bitcoin::{hashes::Hash, Network, OutPoint, Script, TxOut, Txid};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::ReplicaLogger;
 use ic_protobuf::{
@@ -27,10 +26,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
+use std::{collections::BTreeSet, sync::Arc};
 
 pub trait CheckpointManager: Send + Sync {
     /// Returns the base directory path managed by checkpoint manager.
@@ -191,25 +187,9 @@ pub struct CanisterStateBits {
 
 /// This struct contains bits of the `BitcoinState` that are not already
 /// covered somewhere else and are too small to be serialized separately.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct BitcoinStateBits {
     pub adapter_queues: bitcoin_state::AdapterQueues,
-    pub unstable_blocks: bitcoin_state::UnstableBlocks,
-    pub stable_height: u32,
-    pub network: Network,
-    pub utxos_large: BTreeMap<OutPoint, (TxOut, u32)>,
-}
-
-impl Default for BitcoinStateBits {
-    fn default() -> Self {
-        Self {
-            network: Network::Testnet,
-            adapter_queues: bitcoin_state::AdapterQueues::default(),
-            unstable_blocks: bitcoin_state::UnstableBlocks::default(),
-            stable_height: 0,
-            utxos_large: BTreeMap::default(),
-        }
-    }
 }
 
 /// `StateLayout` provides convenience functions to construct correct
@@ -1175,29 +1155,6 @@ impl From<&BitcoinStateBits> for pb_bitcoin::BitcoinStateBits {
     fn from(item: &BitcoinStateBits) -> Self {
         pb_bitcoin::BitcoinStateBits {
             adapter_queues: Some((&item.adapter_queues).into()),
-            unstable_blocks: Some((&item.unstable_blocks).into()),
-            stable_height: item.stable_height,
-            network: match item.network {
-                Network::Testnet => 1,
-                Network::Bitcoin => 2,
-                // TODO(EXC-1096): Define our Network struct to avoid this panic.
-                _ => panic!("Invalid network ID"),
-            },
-            utxos_large: item
-                .utxos_large
-                .iter()
-                .map(|(outpoint, (txout, height))| pb_bitcoin::Utxo {
-                    outpoint: Some(pb_bitcoin::OutPoint {
-                        txid: outpoint.txid.to_vec(),
-                        vout: outpoint.vout,
-                    }),
-                    txout: Some(pb_bitcoin::TxOut {
-                        value: txout.value,
-                        script_pubkey: txout.script_pubkey.to_bytes(),
-                    }),
-                    height: *height,
-                })
-                .collect(),
         }
     }
 }
@@ -1208,59 +1165,7 @@ impl TryFrom<pb_bitcoin::BitcoinStateBits> for BitcoinStateBits {
     fn try_from(value: pb_bitcoin::BitcoinStateBits) -> Result<Self, Self::Error> {
         let adapter_queues: bitcoin_state::AdapterQueues =
             try_from_option_field(value.adapter_queues, "BitcoinStateBits::adapter_queues")?;
-
-        // NOTE: The `unwrap_or_default` here is needed temporarily for backward compatibility.
-        // TODO(EXC-1094): Replace the `unwrap_or_default` with an error once this change
-        //                 is deployed to prod.
-        let unstable_blocks: bitcoin_state::UnstableBlocks =
-            try_from_option_field(value.unstable_blocks, "BitcoinStateBits::unstable_blocks")
-                .unwrap_or_default();
-        Ok(BitcoinStateBits {
-            adapter_queues,
-            unstable_blocks,
-            stable_height: value.stable_height,
-            network: match value.network {
-                0 => {
-                    // No network specified. Assume "testnet".
-                    // NOTE: This is needed temporarily for protobuf backward compatibility.
-                    // TODO(EXC-1094): Remove this condition once it has been deployed to prod.
-                    Network::Testnet
-                }
-                1 => Network::Testnet,
-                2 => Network::Bitcoin,
-                other => {
-                    return Err(ProxyDecodeError::ValueOutOfRange {
-                        typ: "Network",
-                        err: format!("Expected 0 or 1 (testnet), 2 (mainnet), got {}", other),
-                    })
-                }
-            },
-            utxos_large: value
-                .utxos_large
-                .into_iter()
-                .map(|utxo| {
-                    let outpoint = utxo
-                        .outpoint
-                        .map(|o| {
-                            OutPoint::new(
-                                Txid::from_hash(Hash::from_slice(&o.txid).unwrap()),
-                                o.vout,
-                            )
-                        })
-                        .unwrap();
-
-                    let tx_out = utxo
-                        .txout
-                        .map(|t| TxOut {
-                            value: t.value,
-                            script_pubkey: Script::from(t.script_pubkey),
-                        })
-                        .unwrap();
-
-                    (outpoint, (tx_out, utxo.height))
-                })
-                .collect(),
-        })
+        Ok(BitcoinStateBits { adapter_queues })
     }
 }
 

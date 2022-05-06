@@ -216,10 +216,6 @@ fn serialize_bitcoin_state_to_tip(
             // TODO(EXC-1076): Remove unnecessary clone.
             (&BitcoinStateBits {
                 adapter_queues: state.adapter_queues.clone(),
-                unstable_blocks: state.unstable_blocks.clone(),
-                stable_height: state.stable_height,
-                network: state.utxo_set.network,
-                utxos_large: state.utxo_set.utxos_large.clone(),
             })
                 .into(),
         )
@@ -421,13 +417,9 @@ fn load_bitcoin_state<P: ReadPolicy>(
 
     Ok(BitcoinState {
         adapter_queues: bitcoin_state_bits.adapter_queues,
-        unstable_blocks: bitcoin_state_bits.unstable_blocks,
-        stable_height: bitcoin_state_bits.stable_height,
         utxo_set: UtxoSet {
-            network: bitcoin_state_bits.network,
             utxos_small,
             utxos_medium,
-            utxos_large: bitcoin_state_bits.utxos_large,
             address_outpoints,
         },
     })

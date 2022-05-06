@@ -1,5 +1,5 @@
+use crate::state::BlockTree;
 use bitcoin::{Block, BlockHash};
-use ic_replicated_state::bitcoin_state::BlockTree;
 
 pub type BlockChain<'a> = Vec<&'a Block>;
 
@@ -46,7 +46,7 @@ pub fn blockchains(block_tree: &BlockTree) -> Vec<BlockChain> {
 }
 
 /// Returns the depth of the tree.
-pub fn depth(block_tree: &BlockTree) -> u32 {
+pub fn depth(block_tree: &BlockTree) -> u64 {
     if block_tree.children.is_empty() {
         return 0;
     }
@@ -104,7 +104,7 @@ fn concat<T>(mut a: Vec<T>, b: Vec<T>) -> Vec<T> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ic_btc_test_utils::BlockBuilder;
+    use crate::test_builder::BlockBuilder;
 
     #[test]
     fn tree_single_block() {
