@@ -27,6 +27,9 @@ prefix:
  * `mr` and `state_manager`: Message Routing team, reachable at
 https://dfinity.slack.com/archives/CKXPC1928[`#eng-messaging`] or via
 `+@team-messaging+`on Slack.
+ * `cycles_account_manager`: Execution team, reachable at 
+ https://dfinity.slack.com/archives/CGZJ7G1J6[`#eng-execution`] or via
+ `+@team-execution+`on Slack.
 
 === `mr_stream_builder_infinite_loop`
 
@@ -67,3 +70,11 @@ that the State Sync implementation had assumed was already present locally.
 
 An occurrence would indicate either a random bit flip or, if this happens on
 multiple replicas, a bug that must be investigated immediately.
+
+=== `cycles_account_manager_response_cycles_refund_error`
+
+Cycles Account Manager did not perform a refund of leftover cycles from the 
+response (those cycles were reserved in the corresponding request sent 
+earlier), since the response was bigger than the max reserved amount.
+
+An occurrence would indicate unexpectedly big response payload size.
