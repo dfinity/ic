@@ -2,10 +2,8 @@
 
 use candid::{CandidType, Deserialize};
 
-pub type Address = String;
 pub type Satoshi = u64;
 pub type BlockHash = Vec<u8>;
-pub type Height = u32;
 
 /// A reference to a transaction output.
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq, Hash)]

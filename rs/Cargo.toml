@@ -10,7 +10,6 @@ members = [
   "bitcoin/canister",
   "bitcoin/consensus",
   "bitcoin/validation",
-  "bitcoin/test-utils",
   "bitcoin/types/internal",
   "bitcoin/types/public",
   "boundary_node/control_plane",

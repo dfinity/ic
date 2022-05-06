@@ -7,7 +7,6 @@ edition = "2018"
 candid = "0.7.14"
 ic-canister-sandbox-replica-controller = { path = "../canister_sandbox/replica_controller" }
 ic-base-types = { path = "../types/base_types" }
-ic-btc-canister = { path = "../bitcoin/canister" }
 ic-config = { path = "../config" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-sha = { path = "../crypto/sha" }

@@ -773,7 +773,6 @@ impl ReplicatedState {
     /// feature is enabled and returns a `StateError` otherwise.
     ///
     /// See documentation of `BitcoinState::push_request` for more information.
-    // TODO(EXC-1097): Remove this method as it isn't being used in production.
     pub fn push_request_bitcoin_testnet(
         &mut self,
         request: BitcoinAdapterRequestWrapper,
@@ -781,7 +780,6 @@ impl ReplicatedState {
         match self.metadata.own_subnet_features.bitcoin_testnet() {
             BitcoinFeature::Enabled => self
                 .bitcoin_testnet
-                .adapter_queues
                 .push_request(request)
                 .map_err(StateError::BitcoinStateError),
             BitcoinFeature::Paused => Err(StateError::BitcoinStateError(
@@ -815,14 +813,6 @@ impl ReplicatedState {
                 BitcoinStateError::TestnetFeatureNotEnabled,
             )),
         }
-    }
-
-    pub fn take_bitcoin_testnet_state(&mut self) -> BitcoinState {
-        std::mem::take(&mut self.bitcoin_testnet)
-    }
-
-    pub fn put_bitcoin_testnet_state(&mut self, bitcoin_testnet: BitcoinState) {
-        self.bitcoin_testnet = bitcoin_testnet;
     }
 }
 

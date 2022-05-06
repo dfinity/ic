@@ -46,10 +46,10 @@ pub fn send_transaction(request: SendTransactionRequest) -> Result<(), SendTrans
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::test_builder::{BlockBuilder, TransactionBuilder};
     use bitcoin::secp256k1::rand::rngs::OsRng;
     use bitcoin::secp256k1::Secp256k1;
     use bitcoin::{blockdata::constants::genesis_block, Address, Network, PublicKey};
-    use ic_btc_test_utils::{BlockBuilder, TransactionBuilder};
     use ic_btc_types::{OutPoint, Utxo};
 
     // A default state to use for tests.
