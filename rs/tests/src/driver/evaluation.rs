@@ -8,7 +8,7 @@ use crate::driver::driver_setup::IcSetup;
 use crate::driver::test_env::{HasTestPath, TestEnv, TestEnvAttribute};
 use crate::driver::test_setup::PotSetup;
 use anyhow::{bail, Result};
-use crossbeam_channel::{bounded, select, tick, Receiver, Sender};
+use crossbeam_channel::{bounded, Receiver, RecvTimeoutError, Sender};
 use ic_fondue::result::*;
 use slog::{error, info, warn, Logger};
 
@@ -237,6 +237,7 @@ fn evaluate_test(
     if let Err(e) = stop_sig_s.send(()) {
         warn!(ctx.logger, "Could not send stop signal: {:?}", e);
     }
+    std::mem::drop(stop_sig_s);
     task_handle.join().expect("could not join tickle handle");
 
     if let Err(panic_res) = t_res {
@@ -282,21 +283,17 @@ pub fn collect_n_children(r: Receiver<TestResultNode>, n: usize) -> Vec<TestResu
 /// * not overload farm with repeated requests, ...
 /// * while keeping the TTL as short as possible, and
 /// * ensuring that setting the TTL is retried at least once in case of a failure.
-const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(16);
-const GROUP_TTL: Duration = Duration::from_secs(40);
+const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(15);
+const GROUP_TTL: Duration = Duration::from_secs(50);
 
 fn keep_group_alive_task(log: Logger, farm: Farm, group_name: &str) -> (impl FnMut(), Sender<()>) {
     let (stop_sig_s, stop_sig_r) = bounded::<()>(0);
-    let tick = tick(KEEP_ALIVE_INTERVAL);
     let group_name = group_name.to_string();
-    let task = move || loop {
-        select! {
-            recv(tick) -> _ => {
-                if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
-                    warn!(log, "Failed to set group ttl of {:?}: {:?}", group_name, e);
-                }
-            },
-            recv(stop_sig_r) -> _ => break
+    let task = move || {
+        while let Err(RecvTimeoutError::Timeout) = stop_sig_r.recv_timeout(KEEP_ALIVE_INTERVAL) {
+            if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
+                warn!(log, "Failed to set group ttl of {:?}: {:?}", group_name, e);
+            }
         }
     };
     (task, stop_sig_s)
