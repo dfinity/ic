@@ -3579,7 +3579,7 @@ impl Governance {
             created_timestamp_seconds: creation_timestamp_seconds,
             aging_since_timestamp_seconds: creation_timestamp_seconds,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
-            followees: parent_neuron.followees.clone(),
+            followees: self.proto.default_followees.clone(),
             recent_ballots: Vec::new(),
             kyc_verified: disburse_to_neuron.kyc_verified,
             transfer: None,
