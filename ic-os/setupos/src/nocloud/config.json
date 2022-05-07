@@ -464,6 +464,12 @@
         "ipv6_gateway": "2a00:fb01:400:100::1",
         "datacenter_name": "zh2"
       },
+      "srga3-cikqa-srnxx-rwejf-672jj-5o6qy-tuzsa-khds3-2ofjw-5gnew-mae": {
+        "ipv6_prefix": "2a00:fb01:400:100",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2a00:fb01:400:100::1",
+        "datacenter_name": "zh2"
+      },
       "gl27f-y5srq-yy5ot-v4x5z-y2a2s-sgoor-l4gjg-qv4x4-v2olb-dz4dc-wae": {
         "ipv6_prefix": "2a00:fc0:5000:300",
         "ipv6_subnet": "/64",
