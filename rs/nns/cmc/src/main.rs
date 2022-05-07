@@ -29,10 +29,6 @@ use lazy_static::lazy_static;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
 
-// Makes expose_build_metadata! available.
-#[macro_use]
-extern crate ic_nervous_system_common;
-
 mod limiter;
 
 /// The past 30 days are used for the average ICP/XDR rate.
@@ -192,7 +188,7 @@ fn init(args: CyclesCanisterInitPayload) {
     state.last_purged_notification = args.last_purged_notification;
 }
 
-expose_build_metadata! {}
+ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
 #[export_name = "canister_update set_authorized_subnetwork_list"]
 fn set_authorized_subnetwork_list_() {

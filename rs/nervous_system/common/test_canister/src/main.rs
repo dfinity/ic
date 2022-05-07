@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate ic_nervous_system_common;
-
 use candid::candid_method;
 use dfn_candid::candid_one;
 use dfn_core::over;
@@ -10,12 +7,12 @@ thread_local! {
     static STATE: RefCell<State> = RefCell::new(State::default());
 }
 
-expose_build_metadata! {}
-
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 struct State {
     i: i32,
 }
+
+ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
 /// Sets an internal integer variable.
 #[export_name = "canister_update set_integer"]
@@ -63,17 +60,41 @@ fn main() {
     std::print!("{}", __export_service());
 }
 
-#[test]
-fn matches_candid_file() {
-    let expected = String::from_utf8(std::fs::read("interface.did").unwrap()).unwrap();
+#[cfg(test)]
+mod test {
 
-    candid::export_service!();
-    let actual = __export_service();
+    #[test]
+    fn matches_candid_file() {
+        let expected = String::from_utf8(std::fs::read("interface.did").unwrap()).unwrap();
 
-    assert_eq!(
-        actual, expected,
-        "Generated candid definition does not match interface.did. \
-         Run `cargo run --bin ic-nervous-system-common-test-canister > interface.did` in \
-         rs/nns/common/test_canister to update interface.did."
-    );
+        candid::export_service!();
+        let actual = __export_service();
+
+        assert_eq!(
+            actual, expected,
+            "Generated candid definition does not match interface.did. \
+             Run `cargo run --bin ic-nervous-system-common-test-canister > interface.did` in \
+             rs/nns/common/test_canister to update interface.did."
+        );
+    }
+
+    #[test]
+    fn test_get_description() {
+        let result = ic_nervous_system_common_build_metadata::get_description!();
+
+        for required_chunk in [
+            "profile: ",
+            "optimization_level: ",
+            "crate_name: ic-nervous-system-common-test-canister",
+            "enabled_features: \n",
+            "compiler_version: ",
+        ] {
+            assert!(
+                result.contains(required_chunk),
+                "result: {} vs. required_chunk: {}",
+                result,
+                required_chunk
+            );
+        }
+    }
 }

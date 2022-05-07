@@ -5,6 +5,9 @@ description = "Canister for cycles administration"
 edition = "2018"
 
 [dependencies]
+# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
+build-info = { version = "0.0.26", default-features = false, features = [] }
+
 candid = "0.7.4"
 dfn_candid = {path = "../../rust_canisters/dfn_candid"}
 dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
@@ -14,7 +17,7 @@ ic-base-types = {path="../../types/base_types"}
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-ic00-types = {path = "../../types/ic00_types"}
 ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
-ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
@@ -36,3 +39,7 @@ ic-certified-map = { git = "https://github.com/dfinity/cdk-rs", rev = "2112e912e
 [[bin]]
 name = "cycles-minting-canister"
 path = "src/main.rs"
+
+[build-dependencies]
+# This MUST be kept in sync with build-info in the [dependencies] section!
+build-info-build = { version="0.0.26", default-features = false, features = [] }

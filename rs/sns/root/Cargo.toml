@@ -8,12 +8,16 @@ name = "sns-root-canister"
 path = "canister/canister.rs"
 
 [dependencies]
+# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
+build-info = { version = "0.0.26", default-features = false, features = [] }
+
 candid = "0.7.4"
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 ic-base-types = { path = "../../types/base_types" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 prost = "0.9.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -22,3 +26,7 @@ serde = { version = "1.0", features = ["derive"] }
 ic-sns-root-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 tempfile = "3.1.0"
+
+[build-dependencies]
+# This MUST be kept in sync with build-info in the [dependencies] section!
+build-info-build = { version="0.0.26", default-features = false, features = [] }

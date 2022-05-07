@@ -11,6 +11,9 @@ name = "genesis-token-canister"
 path = "canister/canister.rs"
 
 [dependencies]
+# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
+build-info = { version = "0.0.26", default-features = false, features = [] }
+
 candid = "0.7.4"
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
@@ -18,7 +21,7 @@ hex = "0.4.2"
 hex-literal = "0.3.1"
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
-ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nns-governance = { path = "../governance" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
@@ -43,3 +46,6 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-nns-test-utils-macros = { path="../../nns/test_utils_macros" }
 
+[build-dependencies]
+# This MUST be kept in sync with build-info in the [dependencies] section!
+build-info-build = { version="0.0.26", default-features = false, features = [] }
