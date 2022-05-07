@@ -20,9 +20,11 @@ use dfn_core::CanisterId;
 use ic_rosetta_api::balance_book::BalanceBook;
 
 use ic_rosetta_api::convert::{from_arg, to_model_account_identifier};
-use ic_rosetta_api::ledger_client::{Blocks, LedgerAccess};
+use ic_rosetta_api::ledger_client::blocks::Blocks;
+use ic_rosetta_api::ledger_client::LedgerAccess;
+use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::rosetta_server::RosettaApiServer;
-use ic_rosetta_api::{store::HashedBlock, RosettaRequestHandler, DEFAULT_TOKEN_SYMBOL};
+use ic_rosetta_api::{store::HashedBlock, DEFAULT_TOKEN_SYMBOL};
 use ic_types::{
     messages::{HttpCallContent, HttpCanisterUpdate},
     PrincipalId,
@@ -36,7 +38,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
-use ic_nns_governance::pb::v1::NeuronInfo;
 use ic_rosetta_test_utils::{acc_id, sample_data::Scribe};
 
 fn init_test_logger() {
@@ -211,7 +212,7 @@ impl LedgerAccess for TestLedger {
         &self,
         _id: NeuronIdOrSubaccount,
         _: bool,
-    ) -> Result<NeuronInfo, ApiError> {
+    ) -> Result<ic_nns_governance::pb::v1::NeuronInfo, ApiError> {
         panic!("Neuron info not available through TestLedger");
     }
 

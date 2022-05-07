@@ -4,8 +4,9 @@ use ic_rosetta_api::models::*;
 
 use ic_rosetta_api::convert::{amount_, block_id, from_hash, timestamp, to_hash};
 use ic_rosetta_api::ledger_client::LedgerAccess;
+use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
-use ic_rosetta_api::{RosettaRequestHandler, API_VERSION, NODE_VERSION};
+use ic_rosetta_api::{API_VERSION, NODE_VERSION};
 
 use std::sync::Arc;
 
@@ -183,7 +184,7 @@ async fn smoke_test() {
 
     let (acc_id, _ed_kp, pk, _pid) = ic_rosetta_test_utils::make_user(4);
     let msg = ConstructionDeriveRequest::new(req_handler.network_id(), pk);
-    let res = req_handler.construction_derive(msg).await;
+    let res = req_handler.construction_derive(msg);
     assert_eq!(
         res,
         Ok(ConstructionDeriveResponse {
@@ -196,7 +197,7 @@ async fn smoke_test() {
     let (_acc_id, _ed_kp, mut pk, _pid) = ic_rosetta_test_utils::make_user(4);
     pk.curve_type = CurveType::Secp256K1;
     let msg = ConstructionDeriveRequest::new(req_handler.network_id(), pk);
-    let res = req_handler.construction_derive(msg).await;
+    let res = req_handler.construction_derive(msg);
     assert!(res.is_err(), "This pk should not have been accepted");
 
     let msg = ConstructionMetadataRequest::new(req_handler.network_id());
