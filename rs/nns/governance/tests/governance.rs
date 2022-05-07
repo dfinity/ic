@@ -5492,6 +5492,20 @@ fn test_disburse_to_neuron() {
             },
         )
         .unwrap();
+    // Add a followee. Later, it is asserted that child neurons do not inherit this.
+    {
+        let topic = Topic::Unspecified as i32;
+        assert!(
+            parent_neuron
+                .followees
+                .insert(topic, Followees { followees: vec![] })
+                .is_none(),
+            "{:#?}",
+            parent_neuron,
+        );
+        let followees = parent_neuron.followees.get_mut(&topic).unwrap();
+        followees.followees.push(NeuronId { id: 42 });
+    }
 
     // Advance the time in the env
     driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
@@ -5551,6 +5565,10 @@ fn test_disburse_to_neuron() {
             ..Default::default()
         }
     );
+    // We expect the child's followees not to be inherited from parent.
+    // Instead, child is supposed to have the default followees.
+    assert_ne!(child_neuron.followees, parent_neuron.followees);
+    assert_eq!(child_neuron.followees, gov.proto.default_followees);
 
     let to_subaccount = {
         let mut state = Sha256::new();
