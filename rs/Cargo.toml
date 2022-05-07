@@ -105,6 +105,7 @@ members = [
   "monitoring/pprof",
   "monitoring/prober",
   "nervous_system/common",
+  "nervous_system/common/build_metadata",
   "nervous_system/common/test_canister",
   "nervous_system/common/test_keys",
   "nervous_system/root",

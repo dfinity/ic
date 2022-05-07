@@ -15,6 +15,9 @@ path = "test_canisters/upgrade_test_canister.rs"
 path = "src/lib.rs"
 
 [dependencies]
+# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
+build-info = { version = "0.0.26", default-features = false, features = [] }
+
 candid = "0.7.5"
 dfn_candid = {path="../../../rust_canisters/dfn_candid"}
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
@@ -22,7 +25,7 @@ dfn_macro = { path = "../../../rust_canisters/dfn_macro" }
 ic-base-types = {path="../../../types/base_types"}
 ic-crypto-sha = {path = "../../../crypto/sha/"}
 ic-ic00-types = {path="../../../types/ic00_types"}
-ic-nervous-system-common = { path = "../../../nervous_system/common" }
+ic-nervous-system-common-build-metadata = { path = "../../../nervous_system/common/build_metadata" }
 ic-nervous-system-root = { path = "../../../nervous_system/root" }
 ic-nns-common ={path="../../common"}
 ic-nns-constants ={path="../../constants"}
@@ -51,4 +54,6 @@ hex = "0.4.2"
 lazy_static = "1.4.0"
 registry-canister = { path = "../../../registry/canister" }
 
-
+[build-dependencies]
+# This MUST be kept in sync with build-info in the [dependencies] section!
+build-info-build = { version="0.0.26", default-features = false, features = [] }

@@ -448,6 +448,8 @@ fn encode_metrics(_w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::
     Ok(())
 }
 
+ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
+
 /// Resources to serve for a given http_request
 #[export_name = "canister_query http_request"]
 fn http_request() {

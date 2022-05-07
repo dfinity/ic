@@ -15,10 +15,6 @@ use ic_nns_handler_root::{
     root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
 };
 
-// Makes expose_build_metadata! available.
-#[macro_use]
-extern crate ic_nervous_system_common;
-
 fn main() {}
 
 #[cfg(target_arch = "wasm32")]
@@ -43,7 +39,7 @@ fn canister_post_upgrade() {
     stable::set(&[]);
 }
 
-expose_build_metadata! {}
+ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
 /// Returns the status of the canister specified in the input.
 ///

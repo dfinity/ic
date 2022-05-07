@@ -1847,6 +1847,8 @@ name = "cycles-minting-canister"
 version = "0.8.0"
 dependencies = [
  "base64 0.13.0",
+ "build-info",
+ "build-info-build",
  "candid",
  "dfn_candid",
  "dfn_core",
@@ -1857,7 +1859,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-ic00-types",
  "ic-metrics-encoder",
- "ic-nervous-system-common",
+ "ic-nervous-system-common-build-metadata",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-protobuf",
@@ -5490,13 +5492,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-common-build-metadata"
+version = "0.8.0"
+
+[[package]]
 name = "ic-nervous-system-common-test-canister"
 version = "0.1.0"
 dependencies = [
+ "build-info",
+ "build-info-build",
  "candid",
+ "canister-test",
  "dfn_candid",
  "dfn_core",
- "ic-nervous-system-common",
+ "ic-nervous-system-common-build-metadata",
+ "ic-state-machine-tests",
+ "ic-types 0.8.0",
+ "tokio",
 ]
 
 [[package]]
@@ -5575,6 +5587,8 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "async-trait",
+ "build-info",
+ "build-info-build",
  "candid",
  "clap 3.1.9",
  "comparable",
@@ -5591,6 +5605,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-metrics-encoder",
  "ic-nervous-system-common",
+ "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
@@ -5625,6 +5640,8 @@ dependencies = [
 name = "ic-nns-gtc"
 version = "0.8.0"
 dependencies = [
+ "build-info",
+ "build-info-build",
  "candid",
  "canister-test",
  "dfn_candid",
@@ -5633,7 +5650,7 @@ dependencies = [
  "hex-literal 0.3.3",
  "ic-base-types",
  "ic-crypto-sha",
- "ic-nervous-system-common",
+ "ic-nervous-system-common-build-metadata",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
@@ -5670,6 +5687,8 @@ name = "ic-nns-handler-root"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
+ "build-info",
+ "build-info-build",
  "candid",
  "canister-test",
  "dfn_candid",
@@ -5679,7 +5698,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-sha",
  "ic-ic00-types",
- "ic-nervous-system-common",
+ "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
@@ -6772,6 +6791,8 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "async-trait",
+ "build-info",
+ "build-info-build",
  "bytes",
  "candid",
  "clap 3.1.9",
@@ -6790,6 +6811,7 @@ dependencies = [
  "ic-ic00-types",
  "ic-metrics-encoder",
  "ic-nervous-system-common",
+ "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-root",
  "ic-protobuf",
  "ic-sns-governance",
@@ -6854,12 +6876,15 @@ dependencies = [
 name = "ic-sns-root"
 version = "0.8.0"
 dependencies = [
+ "build-info",
+ "build-info-build",
  "candid",
  "dfn_candid",
  "dfn_core",
  "ic-base-types",
  "ic-ic00-types",
  "ic-nervous-system-common",
+ "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-root",
  "ic-sns-root-protobuf-generator",
  "ic-test-utilities-compare-dirs",
@@ -10357,6 +10382,8 @@ name = "registry-canister"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
+ "build-info",
+ "build-info-build",
  "candid",
  "canister-test",
  "cycles-minting-canister",
@@ -10375,6 +10402,7 @@ dependencies = [
  "ic-ic00-types",
  "ic-interfaces",
  "ic-nervous-system-common",
+ "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",

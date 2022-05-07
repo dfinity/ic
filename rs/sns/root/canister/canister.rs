@@ -5,8 +5,6 @@ use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::{over, over_async, over_init};
 use ic_base_types::PrincipalId;
 
-#[macro_use]
-extern crate ic_nervous_system_common;
 #[cfg(test)]
 use ic_nervous_system_common::MethodAuthzChange;
 
@@ -83,7 +81,7 @@ fn canister_post_upgrade() {
     println!("{}canister_post_upgrade: Done!", LOG_PREFIX);
 }
 
-expose_build_metadata! {}
+ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
 #[export_name = "canister_update canister_status"]
 fn canister_status() {

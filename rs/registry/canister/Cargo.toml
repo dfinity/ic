@@ -8,6 +8,9 @@ name = "registry-canister"
 path = "canister/canister.rs"
 
 [dependencies]
+# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
+build-info = { version = "0.0.26", default-features = false, features = [] }
+
 candid = "0.7.4"
 cycles-minting-canister = {path = "../../nns/cmc"}
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
@@ -20,6 +23,7 @@ ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
@@ -55,6 +59,10 @@ maplit = "1.0"
 rand = { version = "0.7.2", features = ["small_rng"]}
 rand_core = "0.5"
 rand_distr = "0.3.0"
+
+[build-dependencies]
+# This MUST be kept in sync with build-info in the [dependencies] section!
+build-info-build = { version="0.0.26", default-features = false, features = [] }
 
 [dev-dependencies]
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }

@@ -8,7 +8,6 @@ use std::fmt::Formatter;
 use ic_base_types::PrincipalId;
 use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2, IC_00};
 
-pub mod export_build_metadata_via_candid;
 pub mod ledger;
 pub mod stable_mem_utils;
 

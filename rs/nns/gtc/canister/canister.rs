@@ -17,10 +17,6 @@ use ic_nns_gtc_accounts::FORWARD_WHITELIST;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
-// Makes expose_build_metadata! available.
-#[macro_use]
-extern crate ic_nervous_system_common;
-
 static mut GTC: Option<Gtc> = None;
 
 fn gtc() -> &'static Gtc {
@@ -97,7 +93,7 @@ fn canister_post_upgrade() {
     }
 }
 
-expose_build_metadata! {}
+ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
 /// Returns the sum of all token balances in the internal ledger
 #[export_name = "canister_query total"]

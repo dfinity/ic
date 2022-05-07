@@ -270,6 +270,7 @@ type UpgradeSnsControlledCanister = record {
 };
 type WaitForQuietState = record { current_deadline_timestamp_seconds : nat64 };
 service : (Governance) -> {
+  get_build_metadata : () -> (text) query;
   get_nervous_system_parameters : (null) -> (NervousSystemParameters) query;
   get_neuron : (GetNeuron) -> (GetNeuronResponse) query;
   get_proposal : (GetProposal) -> (GetProposalResponse) query;

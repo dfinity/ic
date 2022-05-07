@@ -36,10 +36,6 @@ use ic_nns_common::{
     types::{NeuronId, ProposalId},
 };
 
-// Makes expose_build_metadata! available.
-#[macro_use]
-extern crate ic_nervous_system_common;
-
 use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
@@ -426,7 +422,7 @@ async fn claim_or_refresh_neuron_from_account_(
     }
 }
 
-expose_build_metadata! {}
+ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
 #[export_name = "canister_update claim_gtc_neurons"]
 fn claim_gtc_neurons() {

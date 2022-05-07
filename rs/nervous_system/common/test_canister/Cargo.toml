@@ -7,7 +7,20 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
+build-info = { version = "0.0.26", default-features = false, features = [] }
+
 candid = "0.7.4"
 dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
-ic-nervous-system-common = { path = ".." }
+ic-nervous-system-common-build-metadata = { path = "../build_metadata" }
+
+[build-dependencies]
+# This MUST be kept in sync with build-info in the [dependencies] section!
+build-info-build = { version="0.0.26", default-features = false, features = [] }
+
+[dev-dependencies]
+canister-test = { path = "../../../rust_canisters/canister_test" }
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-types = { path = "../../../types/types" }
+tokio = { version = "1.15.0", features = ["full"] }
