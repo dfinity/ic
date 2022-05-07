@@ -16,14 +16,25 @@ host-os-upgrade-test:
   extends:
     - .host-e2e-test-base
   needs:
-    - host-os-diskimg
-    - host-os-updateimg-new
+    - job: host-os-diskimg
+      artifacts: false
+    - job: host-os-updateimg-new
+      artifacts: false
   artifacts:
     paths:
     - ic-os/hostos/test-out
-  allow_failure: true
   script:
     - |
+      VERSION=$(git rev-parse HEAD)
+      export VERSION
+
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${VERSION}" --remote-path="host-os/disk-img" \
+          --out="ic-os/hostos/build-out/disk-img"
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${VERSION}-new" --remote-path="host-os/update-img" \
+          --out="ic-os/hostos/build-out/update-img"
+
       # shellcheck disable=SC2154
       $SHELL_WRAPPER timeout -k 10 "${HOST_OS_TEST_TIMEOUT}" \
       capsule -v \

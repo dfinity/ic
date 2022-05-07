@@ -31,7 +31,7 @@ RUN cd /tmp/ && \
 # - Copy downloaded archives from first build stage into the target image
 #
 # Update below image when new dfinity/hostos-base image gets produced (see deploy-host-os-baseimg CI job on master/rc).
-FROM dfinity/hostos-base@sha256:69f5b6ef6f501fe035af89958daf5d7d544cbd56d03c895e8288f744df2800ae
+FROM dfinity/hostos-base@sha256:d283ebaeb1d3cabc9419297f85cfb0e69502ea7dc60a05f0a3646dafa61f3f6b
 
 RUN mkdir -p /boot/config \
              /boot/efi \

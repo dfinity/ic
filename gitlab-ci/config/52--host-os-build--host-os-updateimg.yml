@@ -1,15 +1,13 @@
 host-os-updateimg:
-  needs:
-    - artifacts-upload-to-s3
   extends:
     - .ubuntu-nix-docker-protected
     - .rules-parent-pipeline-autorun-on-trigger
   stage: host-os-build
+  needs: []
   variables:
       BUILD_EXTRA_ARGS: ""
       BUILD_EXTRA_SUFFIX: ""
       VERSION_SUFFIX: ""
-  allow_failure: true
   script:
     - |
       set -xeuo pipefail
@@ -17,7 +15,7 @@ host-os-updateimg:
       BUILD_OUT="build-out/update-img${BUILD_EXTRA_SUFFIX}"
       BUILD_TMP="build-tmp${BUILD_EXTRA_SUFFIX}"
       UPLOAD_TARGET="host-os/update-img${BUILD_EXTRA_SUFFIX}"
-      VERSION=$(cat VERSION)${VERSION_SUFFIX}
+      VERSION=$(git rev-parse HEAD)${VERSION_SUFFIX}
       echo "Build ID: ${VERSION}"
 
       # set permissions to 777 to test if reproducibility is affected

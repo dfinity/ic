@@ -11,18 +11,18 @@ include:
 - local: /gitlab-ci/config/40--artifacts-upload-to-s3.yml
 - local: /gitlab-ci/config/40--cargo-test--child-pipeline.yml
 - local: /gitlab-ci/config/41--guest-os-build--generic-guest-os-diskimg.yml
+- local: /gitlab-ci/config/46--guest-os-build--guest-base-image.yml
 - local: /gitlab-ci/config/46--guest-os-build--guest-os-diskimg.yml
 - local: /gitlab-ci/config/46--guest-os-build--guest-os-updateimg.yml
-- local: /gitlab-ci/config/46--guest-os-build--base-image.yml
 - local: /gitlab-ci/config/46--rosetta-api-docker-image.yml
 - local: /gitlab-ci/config/47--guest-os-test--guest-os-e2e-test.yml
 - local: /gitlab-ci/config/47--guest-os-test--e2e-scalability.yml
-- local: /gitlab-ci/config/52--host-os-build--build-host-img.yml
-- local: /gitlab-ci/config/52--host-os-build--build-update-img.yml
-- local: /gitlab-ci/config/52--host-os-build--build-base-img.yml
-- local: /gitlab-ci/config/53--host-os-build--build-iso-img.yml
-- local: /gitlab-ci/config/53--determinism-test.yml
+- local: /gitlab-ci/config/52--host-os-build--host-base-image.yml
+- local: /gitlab-ci/config/52--host-os-build--host-os-diskimg.yml
+- local: /gitlab-ci/config/52--host-os-build--host-os-updateimg.yml
+- local: /gitlab-ci/config/53--host-os-build--build-setupos.yml
 - local: /gitlab-ci/config/54--host-os-test--host-os-upgrade-test.yml
+- local: /gitlab-ci/config/55--determinism-test.yml
 
 .cargo-build-docker-protected:
   needs: []  # don't wait on other jobs by default
