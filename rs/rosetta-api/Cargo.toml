@@ -51,10 +51,6 @@ tokio = { version = "1.15.0", features = ["full"] }
 tree-deserializer = { path = "../tree_deserializer" }
 url = "2.2.1"
 
-[[bin]]
-name = "utils"
-path = "src/utils.rs"
-
 [dev-dependencies]
 ed25519-dalek = "1.0.1"
 ic-nns-governance = { path = "../nns/governance"}

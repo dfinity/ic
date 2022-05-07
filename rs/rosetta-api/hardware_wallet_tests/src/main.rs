@@ -3,8 +3,8 @@ use ed25519_dalek::Signer;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_rosetta_api::{
     convert::{from_hex, from_public_key, to_arg, to_hex, to_model_account_identifier},
-    make_sig_data, models,
-    models::{CurveType, Signature, SignatureType, SigningPayload},
+    models::{self, CurveType, Signature, SignatureType, SigningPayload},
+    request_handler::make_sig_data,
 };
 use ic_types::{
     messages::{

@@ -1,8 +1,9 @@
 use clap::Parser;
 use ic_crypto_internal_threshold_sig_bls12381 as bls12_381;
 use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
+use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::rosetta_server::{RosettaApiServer, RosettaApiServerOpt};
-use ic_rosetta_api::{ledger_client, RosettaRequestHandler, DEFAULT_TOKEN_SYMBOL};
+use ic_rosetta_api::{ledger_client, DEFAULT_TOKEN_SYMBOL};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{CanisterId, PrincipalId};
 use std::{path::Path, path::PathBuf, str::FromStr, sync::Arc};

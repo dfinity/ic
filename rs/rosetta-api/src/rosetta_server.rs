@@ -4,7 +4,7 @@ use actix_web::{get, post, web, App, HttpResponse, HttpServer};
 
 use crate::errors::ApiError;
 use crate::models::*;
-use crate::{errors, ledger_client::LedgerAccess, RosettaRequestHandler};
+use crate::{errors, ledger_client::LedgerAccess};
 
 use log::{debug, error, info};
 use prometheus::{
@@ -17,6 +17,7 @@ use std::sync::atomic::Ordering::{Relaxed, SeqCst};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::request_handler::RosettaRequestHandler;
 use lazy_static::lazy_static;
 
 struct RosettaEndpointsMetrics {
@@ -69,55 +70,6 @@ lazy_static! {
     .unwrap();
 }
 
-fn to_rosetta_response<S: serde::Serialize>(result: Result<S, ApiError>) -> HttpResponse {
-    match result {
-        Ok(x) => match serde_json::to_string(&x) {
-            Ok(resp) => {
-                ENDPOINTS_METRICS
-                    .rosetta_api_status_total
-                    .with_label_values(&["200"])
-                    .inc();
-                HttpResponse::Ok()
-                    .content_type("application/json")
-                    .body(resp)
-            }
-            Err(_) => {
-                ENDPOINTS_METRICS
-                    .rosetta_api_status_total
-                    .with_label_values(&["700"])
-                    .inc();
-                HttpResponse::InternalServerError()
-                    .content_type("application/json")
-                    .body(Error::serialization_error_json_str())
-            }
-        },
-        Err(err) => {
-            let err = errors::convert_to_error(&err);
-            match serde_json::to_string(&err) {
-                Ok(resp) => {
-                    let err_code = format!("{}", err.code);
-                    ENDPOINTS_METRICS
-                        .rosetta_api_status_total
-                        .with_label_values(&[&err_code])
-                        .inc();
-                    HttpResponse::InternalServerError()
-                        .content_type("application/json")
-                        .body(resp)
-                }
-                Err(_) => {
-                    ENDPOINTS_METRICS
-                        .rosetta_api_status_total
-                        .with_label_values(&["700"])
-                        .inc();
-                    HttpResponse::InternalServerError()
-                        .content_type("application/json")
-                        .body(Error::serialization_error_json_str())
-                }
-            }
-        }
-    }
-}
-
 #[post("/account/balance")]
 async fn account_balance(
     msg: web::Json<AccountBalanceRequest>,
@@ -158,7 +110,7 @@ async fn construction_combine(
     msg: web::Json<ConstructionCombineRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
-    let res = req_handler.construction_combine(msg.into_inner()).await;
+    let res = req_handler.construction_combine(msg.into_inner());
     to_rosetta_response(res)
 }
 
@@ -167,7 +119,7 @@ async fn construction_derive(
     msg: web::Json<ConstructionDeriveRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
-    let res = req_handler.construction_derive(msg.into_inner()).await;
+    let res = req_handler.construction_derive(msg.into_inner());
     to_rosetta_response(res)
 }
 
@@ -176,7 +128,7 @@ async fn construction_hash(
     msg: web::Json<ConstructionHashRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
-    let res = req_handler.construction_hash(msg.into_inner()).await;
+    let res = req_handler.construction_hash(msg.into_inner());
     to_rosetta_response(res)
 }
 
@@ -194,7 +146,7 @@ async fn construction_parse(
     msg: web::Json<ConstructionParseRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
-    let res = req_handler.construction_parse(msg.into_inner()).await;
+    let res = req_handler.construction_parse(msg.into_inner());
     to_rosetta_response(res)
 }
 
@@ -203,7 +155,7 @@ async fn construction_payloads(
     msg: web::Json<ConstructionPayloadsRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
-    let res = req_handler.construction_payloads(msg.into_inner()).await;
+    let res = req_handler.construction_payloads(msg.into_inner());
     to_rosetta_response(res)
 }
 
@@ -212,7 +164,7 @@ async fn construction_preprocess(
     msg: web::Json<ConstructionPreprocessRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
-    let res = req_handler.construction_preprocess(msg.into_inner()).await;
+    let res = req_handler.construction_preprocess(msg.into_inner());
     to_rosetta_response(res)
 }
 
@@ -286,6 +238,55 @@ async fn search_transactions(
     to_rosetta_response(res)
 }
 
+fn to_rosetta_response<S: serde::Serialize>(result: Result<S, ApiError>) -> HttpResponse {
+    match result {
+        Ok(x) => match serde_json::to_string(&x) {
+            Ok(resp) => {
+                ENDPOINTS_METRICS
+                    .rosetta_api_status_total
+                    .with_label_values(&["200"])
+                    .inc();
+                HttpResponse::Ok()
+                    .content_type("application/json")
+                    .body(resp)
+            }
+            Err(_) => {
+                ENDPOINTS_METRICS
+                    .rosetta_api_status_total
+                    .with_label_values(&["700"])
+                    .inc();
+                HttpResponse::InternalServerError()
+                    .content_type("application/json")
+                    .body(Error::serialization_error_json_str())
+            }
+        },
+        Err(err) => {
+            let err = errors::convert_to_error(&err);
+            match serde_json::to_string(&err) {
+                Ok(resp) => {
+                    let err_code = format!("{}", err.code);
+                    ENDPOINTS_METRICS
+                        .rosetta_api_status_total
+                        .with_label_values(&[&err_code])
+                        .inc();
+                    HttpResponse::InternalServerError()
+                        .content_type("application/json")
+                        .body(resp)
+                }
+                Err(_) => {
+                    ENDPOINTS_METRICS
+                        .rosetta_api_status_total
+                        .with_label_values(&["700"])
+                        .inc();
+                    HttpResponse::InternalServerError()
+                        .content_type("application/json")
+                        .body(Error::serialization_error_json_str())
+                }
+            }
+        }
+    }
+}
+
 #[get("/metrics")]
 async fn rosetta_metrics() -> HttpResponse {
     let metrics = prometheus::gather();
@@ -318,8 +319,11 @@ impl RosettaApiServer {
                     web::JsonConfig::default()
                         .limit(4 * 1024 * 1024)
                         .error_handler(move |e, _| {
-                            errors::convert_to_error(&ApiError::invalid_request(format!("{}", e)))
-                                .into()
+                            errors::convert_to_error(&ApiError::invalid_request(format!(
+                                "{:#?}",
+                                e
+                            )))
+                            .into()
                         }),
                 )
                 .data(req_handler.clone())

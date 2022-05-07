@@ -2824,7 +2824,6 @@ async fn test_neuron_info_with_hotkey_raw(
     let pk_hotkey = serde_json::to_value(to_public_key(&hotkey_keypair)).unwrap();
 
     // Call /construction/derive.
-    println!("Calling /construction/derive");
     let req_derive = json!({
         "network_identifier": &ros.network_id(),
         "public_key": pk_hotkey,
@@ -2836,7 +2835,6 @@ async fn test_neuron_info_with_hotkey_raw(
 
     // Call /construction/preprocess
     // Test both public_key and principal for identifying controller.
-    println!("Calling /construction/preprocess");
     let operations = json!([
         {
             "operation_identifier": {
@@ -2874,7 +2872,6 @@ async fn test_neuron_info_with_hotkey_raw(
         "operations": operations,
         "metadata": {},
     });
-    println!("preprocess request: {:#?}", req_preprocess);
     let res_preprocess = raw_construction(ros, "preprocess", req_preprocess).await;
     let options = res_preprocess.get("options");
     assert_json_eq!(
@@ -2902,7 +2899,6 @@ async fn test_neuron_info_with_hotkey_raw(
     );
 
     // Call /construction/metadata
-    println!("Calling /construction/metadata");
     let req_metadata = json!({
         "network_identifier": &ros.network_id(),
         "options": options,
@@ -2912,7 +2908,6 @@ async fn test_neuron_info_with_hotkey_raw(
     // NB: metadata response will have to be added to payloads request.
 
     // Call /construction/payloads
-    println!("Calling /construction/payloads");
     let req_payloads = json!({
         "network_identifier": &ros.network_id(),
         "operations": operations,
@@ -2926,7 +2921,6 @@ async fn test_neuron_info_with_hotkey_raw(
     assert_eq!(4, payloads.len(), "Expecting 4 payloads.");
 
     // Call /construction/parse (unsigned).
-    println!("Calling /construction/parse (unsigned)");
     let req_parse = json!({
         "network_identifier": &ros.network_id(),
         "signed": false,
@@ -2936,7 +2930,6 @@ async fn test_neuron_info_with_hotkey_raw(
 
     // Call /construction/combine.
     // NB: we always have to sign ingress and read payloads.
-    println!("Calling /construction/combine");
     let signatures = json!([
         {
             "signing_payload": payloads[0],
@@ -2971,7 +2964,6 @@ async fn test_neuron_info_with_hotkey_raw(
     let res_combine = raw_construction(ros, "combine", req_combine).await;
 
     // Call /construction/parse (signed).
-    println!("Calling /construction/parse (signed)");
     let signed_transaction: &Value = res_combine.get("signed_transaction").unwrap();
     let req_parse = json!({
         "network_identifier": &ros.network_id(),
@@ -2981,7 +2973,6 @@ async fn test_neuron_info_with_hotkey_raw(
     let _res_parse = raw_construction(ros, "parse", req_parse).await;
 
     // Call /construction/hash.
-    println!("Calling /construction/hash");
     let req_hash = json!({
         "network_identifier": &ros.network_id(),
         "signed_transaction": &signed_transaction
@@ -2994,7 +2985,6 @@ async fn test_neuron_info_with_hotkey_raw(
         "signed_transaction": &signed_transaction
     });
     let res_submit = raw_construction(ros, "submit", req_submit).await;
-    println!("neuron info submit response: {:#?}", res_submit);
 
     // Check submit results.
     let operations = res_submit
@@ -3302,7 +3292,6 @@ async fn test_follow_with_hotkey_raw(
         "operations": operations,
         "metadata": {},
     });
-    println!("preprocess request: {:#?}", req_preprocess);
     let res_preprocess = raw_construction(ros, "preprocess", req_preprocess).await;
     let options = res_preprocess.get("options");
     assert_json_eq!(

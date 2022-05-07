@@ -391,7 +391,7 @@ pub fn from_operations(
                 Err(op_error(
                     o,
                     format!(
-                        "neuron management {} operation cannot have an amount",
+                        "neuron management {:?} operation cannot have an amount",
                         o._type
                     ),
                 ))
@@ -399,7 +399,7 @@ pub fn from_operations(
                 Err(op_error(
                     o,
                     format!(
-                        "neuron management {} operation cannot have a coin change",
+                        "neuron management {:?} operation cannot have a coin change",
                         o._type
                     ),
                 ))
@@ -515,7 +515,7 @@ pub fn from_operations(
                 state.neuron_info(account, principal, neuron_index)?;
             }
             OperationType::Burn | OperationType::Mint => {
-                let msg = format!("Unsupported operation type: {}", o._type);
+                let msg = format!("Unsupported operation type: {:?}", o._type);
                 return Err(op_error(o, msg));
             }
             OperationType::Follow => {
