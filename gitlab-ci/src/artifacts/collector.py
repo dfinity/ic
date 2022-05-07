@@ -135,7 +135,7 @@ class Collector:
 
     def _strip(self, in_path: str):
         if ENV.is_linux:
-            sh("objcopy", "-D", "--strip-debug", in_path)
+            sh("objcopy", "-D", "--strip-debug", "-R", ".comment", in_path)
         elif ENV.is_macos:
             sh("strip", "-S", in_path)
 
