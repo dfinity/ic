@@ -499,13 +499,17 @@ async fn serve_secure_connection(
 ) {
     let registry_version = http_handler.registry_client.get_latest_version();
     let service = create_main_service(metrics.clone(), http_handler, AppLayer::Https);
+    let peer_addr = tcp_stream.peer_addr();
     match tls_handshake
         .perform_tls_server_handshake_without_client_auth(tcp_stream, registry_version)
         .await
     {
         Err(err) => {
             metrics.observe_connection_error(ConnectionError::TlsHandshake, connection_start_time);
-            warn!(log, "Connection error (TLS handshake): {}", err);
+            warn!(
+                log,
+                "Connection error (TLS handshake): peer_addr = {:?}, error = {}", peer_addr, err
+            );
         }
         Ok(tls_stream) => {
             if let Err(err) = http.serve_connection(tls_stream, service).await {
