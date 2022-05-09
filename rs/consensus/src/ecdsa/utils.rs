@@ -5,7 +5,7 @@ use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_types::consensus::ecdsa::{EcdsaBlockReader, TranscriptRef};
 use ic_types::consensus::ecdsa::{
-    EcdsaDataPayload, EcdsaMessage, IDkgTranscriptParamsRef, KeyTranscriptCreation, RequestId,
+    EcdsaMessage, EcdsaPayload, IDkgTranscriptParamsRef, KeyTranscriptCreation, RequestId,
     ThresholdEcdsaSigInputsRef, TranscriptLookupError,
 };
 use ic_types::consensus::{Block, BlockPayload, HasHeight};
@@ -18,7 +18,7 @@ use std::sync::Arc;
 pub(crate) struct EcdsaBlockReaderImpl {
     chain: Arc<dyn ConsensusBlockChain>,
     tip: Block,
-    tip_ecdsa_payload: Option<EcdsaDataPayload>,
+    tip_ecdsa_payload: Option<EcdsaPayload>,
 }
 
 impl EcdsaBlockReaderImpl {
@@ -47,7 +47,7 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             let tip_ecdsa_payload = &self.tip.payload.as_ref().as_data().ecdsa;
             if let Some(payload) = tip_ecdsa_payload {
                 return matches!(
-                    payload.next_key_transcript_creation,
+                    payload.key_transcript.next_in_creation,
                     KeyTranscriptCreation::XnetReshareOfUnmaskedParams(_)
                 );
             }
@@ -77,7 +77,7 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
         self.tip_ecdsa_payload
             .as_ref()
             .map_or(Box::new(std::iter::empty()), |payload| {
-                Box::new(payload.ecdsa_payload.ongoing_signatures.iter())
+                Box::new(payload.ongoing_signatures.iter())
             })
     }
 
@@ -103,14 +103,12 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
                 .into_summary()
                 .ecdsa
                 .ok_or(TranscriptLookupError::NoEcdsaSummary(*transcript_ref))?
-                .ecdsa_payload
                 .idkg_transcripts
         } else {
             block_payload
                 .into_data()
                 .ecdsa
                 .ok_or(TranscriptLookupError::NoEcdsaPayload(*transcript_ref))?
-                .ecdsa_payload
                 .idkg_transcripts
         };
 
@@ -193,10 +191,11 @@ pub(crate) mod test_utils {
     use ic_types::artifact::EcdsaMessageId;
     use ic_types::consensus::ecdsa::{
         EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaDealing, EcdsaDealingSupport,
-        EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaSigShare,
-        EcdsaSignedDealing, EcdsaUIDGenerator, IDkgTranscriptParamsRef, MaskedTranscript,
-        PreSignatureQuadrupleRef, RequestId, ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef,
-        TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
+        EcdsaKeyTranscript, EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload,
+        EcdsaSigShare, EcdsaSignedDealing, EcdsaUIDGenerator, IDkgTranscriptParamsRef,
+        KeyTranscriptCreation, MaskedTranscript, PreSignatureQuadrupleRef, RequestId,
+        ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef, TranscriptLookupError, TranscriptRef,
+        UnmaskedTranscript,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{
         IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgOpening, IDkgReceivers,
@@ -1073,6 +1072,10 @@ pub(crate) mod test_utils {
             idkg_transcripts: BTreeMap::new(),
             ongoing_xnet_reshares: BTreeMap::new(),
             xnet_reshare_agreements: BTreeMap::new(),
+            key_transcript: EcdsaKeyTranscript {
+                current: None,
+                next_in_creation: KeyTranscriptCreation::Begin,
+            },
         }
     }
 }

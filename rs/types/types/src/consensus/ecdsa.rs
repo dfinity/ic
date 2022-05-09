@@ -66,69 +66,9 @@ pub struct EcdsaPayload {
 
     /// Completed resharing requests.
     pub xnet_reshare_agreements: BTreeMap<EcdsaReshareRequest, CompletedReshareRequest>,
-}
 
-/// The payload information necessary for ECDSA threshold signatures, that is
-/// published on every consensus round. It represents the current state of
-/// the protocol since the summary block.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EcdsaDataPayload {
-    /// Ecdsa Payload data
-    pub ecdsa_payload: EcdsaPayload,
-    /// Progress of creating the next ECDSA key transcript.
-    pub next_key_transcript_creation: KeyTranscriptCreation,
-}
-
-/// The creation of an ecdsa key transcript goes through one of the three paths below:
-/// 1. RandomTranscript -> ReshareOfMasked -> Created
-/// 2. ReshareOfUnmasked -> Created
-/// 3. XnetReshareOfUnmaskedParams -> Created (xnet bootstrapping from initial dealings)
-///
-/// The initial bootstrap will start with an empty 'EcdsaSummaryPayload', and then
-/// we'll go through the first path to create the key transcript.
-///
-/// After the initial key transcript is created, we will be able to create the first
-/// 'EcdsaSummaryPayload' by carrying over the key transcript, which will be carried
-/// over to the next DKG interval if there is no node membership change.
-///
-/// If in the future there is a membership change, we will create a new key transcript
-/// by going through the second path above. Then the switch-over will happen at
-/// the next 'EcdsaSummaryPayload'.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum KeyTranscriptCreation {
-    Begin,
-    // Configuration to create initial random transcript.
-    RandomTranscriptParams(RandomTranscriptParams),
-    // Configuration to create initial key transcript by resharing the random transcript.
-    ReshareOfMaskedParams(ReshareOfMaskedParams),
-    // Configuration to create next key transcript by resharing the current key transcript.
-    ReshareOfUnmaskedParams(ReshareOfUnmaskedParams),
-    // Bootstrapping from xnet initial dealings.
-    XnetReshareOfUnmaskedParams(ReshareOfUnmaskedParams),
-    // Created
-    Created(UnmaskedTranscript),
-}
-
-impl KeyTranscriptCreation {
-    pub fn get_refs(&self) -> Vec<TranscriptRef> {
-        match self {
-            Self::Begin | Self::XnetReshareOfUnmaskedParams(_) => vec![],
-            Self::RandomTranscriptParams(params) => params.as_ref().get_refs(),
-            Self::ReshareOfMaskedParams(params) => params.as_ref().get_refs(),
-            Self::ReshareOfUnmaskedParams(params) => params.as_ref().get_refs(),
-            Self::Created(unmasked) => vec![*unmasked.as_ref()],
-        }
-    }
-
-    fn update(&mut self, height: Height) {
-        match self {
-            Self::Begin | Self::XnetReshareOfUnmaskedParams(_) => (),
-            Self::RandomTranscriptParams(params) => params.as_mut().update(height),
-            Self::ReshareOfMaskedParams(params) => params.as_mut().update(height),
-            Self::ReshareOfUnmaskedParams(params) => params.as_mut().update(height),
-            Self::Created(unmasked) => unmasked.as_mut().update(height),
-        }
-    }
+    /// State of the key transcripts.
+    pub key_transcript: EcdsaKeyTranscript,
 }
 
 impl EcdsaPayload {
@@ -141,11 +81,27 @@ impl EcdsaPayload {
             .ongoing_xnet_reshares
             .values()
             .map(|reshare_param| reshare_param.as_ref());
+        let iter = self
+            .key_transcript
+            .transcript_config_in_creation()
+            .into_iter()
+            .chain(iter);
         Box::new(
             self.quadruples_in_creation
                 .iter()
                 .flat_map(|(_, quadruple)| quadruple.iter_transcript_configs_in_creation())
                 .chain(iter),
+        )
+    }
+
+    /// Return an iterator of the ongoing xnet reshare transcripts.
+    pub fn iter_xnet_reshare_transcript_configs(
+        &self,
+    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
+        Box::new(
+            self.ongoing_xnet_reshares
+                .values()
+                .map(|reshare_param| reshare_param.as_ref()),
         )
     }
 
@@ -202,6 +158,7 @@ impl EcdsaPayload {
         for obj in self.ongoing_xnet_reshares.values() {
             insert(obj.as_ref().get_refs())
         }
+        insert(self.key_transcript.get_refs());
         active_refs
     }
 
@@ -219,70 +176,9 @@ impl EcdsaPayload {
         for obj in self.ongoing_xnet_reshares.values_mut() {
             obj.as_mut().update(height);
         }
-    }
-}
-
-impl EcdsaDataPayload {
-    /// Return an iterator of all transcript configs that have no matching
-    /// results yet.
-    pub fn iter_transcript_configs_in_creation(
-        &self,
-    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
-        let iter = match &self.next_key_transcript_creation {
-            KeyTranscriptCreation::RandomTranscriptParams(x) => Some(x.as_ref()),
-            KeyTranscriptCreation::ReshareOfMaskedParams(x) => Some(x.as_ref()),
-            KeyTranscriptCreation::ReshareOfUnmaskedParams(x) => Some(x.as_ref()),
-            KeyTranscriptCreation::XnetReshareOfUnmaskedParams(x) => Some(x.as_ref()),
-            KeyTranscriptCreation::Begin => None,
-            KeyTranscriptCreation::Created(_) => None,
-        }
-        .into_iter();
-        Box::new(
-            self.ecdsa_payload
-                .iter_transcript_configs_in_creation()
-                .chain(iter),
-        )
+        self.key_transcript.update_refs(height)
     }
 
-    /// Return an iterator of the ongoing xnet reshare transcripts.
-    pub fn iter_xnet_reshare_transcript_configs(
-        &self,
-    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
-        Box::new(
-            self.ecdsa_payload
-                .ongoing_xnet_reshares
-                .values()
-                .map(|reshare_param| reshare_param.as_ref()),
-        )
-    }
-
-    /// Return active transcript references in the data payload.
-    pub fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
-        let mut active_refs = self.ecdsa_payload.active_transcripts();
-        for r in self.next_key_transcript_creation.get_refs() {
-            active_refs.insert(r);
-        }
-        active_refs
-    }
-
-    /// Updates the height of all the transcript refs to the given height.
-    pub fn update_refs(&mut self, height: Height) {
-        self.ecdsa_payload.update_refs(height);
-        self.next_key_transcript_creation.update(height);
-    }
-}
-
-/// The payload information necessary for ECDSA threshold signatures, that is
-/// published on summary blocks.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EcdsaSummaryPayload {
-    /// Ecdsa payload data.
-    pub ecdsa_payload: EcdsaPayload,
-    /// The ECDSA key transcript used for the corresponding interval.
-    pub current_key_transcript: UnmaskedTranscript,
-}
-
-impl EcdsaSummaryPayload {
     /// Return the oldest registry version required to keep nodes in the subnet
     /// in order to finish signature signing. It is important for security purpose
     /// to require ongoing signature requests to finish before we can let nodes
@@ -291,12 +187,18 @@ impl EcdsaSummaryPayload {
     /// Note that we do not consider available quadruples here because it would
     /// prevent nodes from leaving when the quadruples are not consumed.
     pub(crate) fn get_oldest_registry_version_in_use(&self) -> Option<RegistryVersion> {
-        let idkg_transcripts = &self.ecdsa_payload.idkg_transcripts;
-        let key_transcript_id = self.current_key_transcript.as_ref().transcript_id;
-        let registry_version = idkg_transcripts
-            .get(&key_transcript_id)
-            .map(|transcript| transcript.registry_version);
-        self.ecdsa_payload.ongoing_signatures.iter().fold(
+        // TODO: need to consider next_in_creation?
+        let idkg_transcripts = &self.idkg_transcripts;
+        let registry_version = match self.key_transcript.current {
+            Some(unmasked) => {
+                let key_transcript_id = unmasked.as_ref().transcript_id;
+                idkg_transcripts
+                    .get(&key_transcript_id)
+                    .map(|transcript| transcript.registry_version)
+            }
+            _ => None,
+        };
+        self.ongoing_signatures.iter().fold(
             registry_version,
             |mut registry_version, (_, sig_input_ref)| {
                 for r in sig_input_ref.get_refs() {
@@ -313,18 +215,184 @@ impl EcdsaSummaryPayload {
             },
         )
     }
+}
 
-    /// Return active transcript references in the summary payload.
-    pub fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
-        let mut active_refs = self.ecdsa_payload.active_transcripts();
-        active_refs.insert(*self.current_key_transcript.as_ref());
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EcdsaKeyTranscript {
+    /// The ECDSA key transcript used for the current interval.
+    pub current: Option<UnmaskedTranscript>,
+    /// Progress of creating the next ECDSA key transcript.
+    pub next_in_creation: KeyTranscriptCreation,
+}
+
+impl EcdsaKeyTranscript {
+    pub fn get_refs(&self) -> Vec<TranscriptRef> {
+        let mut active_refs = match &self.next_in_creation {
+            KeyTranscriptCreation::Begin => vec![],
+            KeyTranscriptCreation::RandomTranscriptParams(params) => params.as_ref().get_refs(),
+            KeyTranscriptCreation::ReshareOfMaskedParams(params) => params.as_ref().get_refs(),
+            KeyTranscriptCreation::ReshareOfUnmaskedParams(params) => params.as_ref().get_refs(),
+            KeyTranscriptCreation::XnetReshareOfUnmaskedParams(params) => {
+                params.as_ref().get_refs()
+            }
+            KeyTranscriptCreation::Created(unmasked) => vec![*unmasked.as_ref()],
+        };
+        if let Some(unmasked) = &self.current {
+            active_refs.push(*unmasked.as_ref());
+        }
         active_refs
     }
 
-    /// Updates the height of all the transcript refs to the given height.
-    pub fn update_refs(&mut self, height: Height) {
-        self.ecdsa_payload.update_refs(height);
-        self.current_key_transcript.as_mut().update(height);
+    fn update_refs(&mut self, height: Height) {
+        match &mut self.next_in_creation {
+            KeyTranscriptCreation::Begin => (),
+            KeyTranscriptCreation::RandomTranscriptParams(params) => params.as_mut().update(height),
+            KeyTranscriptCreation::ReshareOfMaskedParams(params) => params.as_mut().update(height),
+            KeyTranscriptCreation::ReshareOfUnmaskedParams(params) => {
+                params.as_mut().update(height)
+            }
+            KeyTranscriptCreation::XnetReshareOfUnmaskedParams(params) => {
+                params.as_mut().update(height)
+            }
+            KeyTranscriptCreation::Created(unmasked) => unmasked.as_mut().update(height),
+        }
+        if let Some(unmasked) = &mut self.current {
+            unmasked.as_mut().update(height);
+        }
+    }
+
+    pub fn transcript_config_in_creation(&self) -> Option<&IDkgTranscriptParamsRef> {
+        match &self.next_in_creation {
+            KeyTranscriptCreation::Begin => None,
+            KeyTranscriptCreation::RandomTranscriptParams(x) => Some(x.as_ref()),
+            KeyTranscriptCreation::ReshareOfMaskedParams(x) => Some(x.as_ref()),
+            KeyTranscriptCreation::ReshareOfUnmaskedParams(x) => Some(x.as_ref()),
+            KeyTranscriptCreation::XnetReshareOfUnmaskedParams(x) => Some(x.as_ref()),
+            KeyTranscriptCreation::Created(_) => None,
+        }
+    }
+}
+
+/// The creation of an ecdsa key transcript goes through one of the three paths below:
+/// 1. RandomTranscript -> ReshareOfMasked -> Created
+/// 2. ReshareOfUnmasked -> Created
+/// 3. XnetReshareOfUnmaskedParams -> Created (xnet bootstrapping from initial dealings)
+///
+/// The initial bootstrap will start with an empty 'EcdsaSummaryPayload', and then
+/// we'll go through the first path to create the key transcript.
+///
+/// After the initial key transcript is created, we will be able to create the first
+/// 'EcdsaSummaryPayload' by carrying over the key transcript, which will be carried
+/// over to the next DKG interval if there is no node membership change.
+///
+/// If in the future there is a membership change, we will create a new key transcript
+/// by going through the second path above. Then the switch-over will happen at
+/// the next 'EcdsaSummaryPayload'.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum KeyTranscriptCreation {
+    Begin,
+    // Configuration to create initial random transcript.
+    RandomTranscriptParams(RandomTranscriptParams),
+    // Configuration to create initial key transcript by resharing the random transcript.
+    ReshareOfMaskedParams(ReshareOfMaskedParams),
+    // Configuration to create next key transcript by resharing the current key transcript.
+    ReshareOfUnmaskedParams(ReshareOfUnmaskedParams),
+    // Bootstrapping from xnet initial dealings.
+    XnetReshareOfUnmaskedParams(ReshareOfUnmaskedParams),
+    // Created
+    Created(UnmaskedTranscript),
+}
+
+impl From<&KeyTranscriptCreation> for pb::KeyTranscriptCreation {
+    fn from(key_transcript_in_creation: &KeyTranscriptCreation) -> Self {
+        let mut ret = pb::KeyTranscriptCreation {
+            state: pb::KeyTranscriptCreationState::BeginUnspecified as i32,
+            random: None,
+            reshare_of_masked: None,
+            reshare_of_unmasked: None,
+            xnet_reshare_of_unmasked: None,
+            created: None,
+        };
+        match key_transcript_in_creation {
+            KeyTranscriptCreation::Begin => {
+                ret.state = pb::KeyTranscriptCreationState::BeginUnspecified as i32;
+            }
+            KeyTranscriptCreation::RandomTranscriptParams(params) => {
+                ret.state = pb::KeyTranscriptCreationState::RandomTranscriptParams as i32;
+                ret.random = Some(params.into());
+            }
+            KeyTranscriptCreation::ReshareOfMaskedParams(params) => {
+                ret.state = pb::KeyTranscriptCreationState::ReshareOfMaskedParams as i32;
+                ret.reshare_of_masked = Some(params.into());
+            }
+            KeyTranscriptCreation::ReshareOfUnmaskedParams(params) => {
+                ret.state = pb::KeyTranscriptCreationState::ReshareOfUnmaskedParams as i32;
+                ret.reshare_of_unmasked = Some(params.into());
+            }
+            KeyTranscriptCreation::XnetReshareOfUnmaskedParams(params) => {
+                ret.state = pb::KeyTranscriptCreationState::XnetReshareOfUnmaskedParams as i32;
+                ret.xnet_reshare_of_unmasked = Some(params.into());
+            }
+            KeyTranscriptCreation::Created(params) => {
+                ret.state = pb::KeyTranscriptCreationState::Created as i32;
+                ret.created = Some(params.into());
+            }
+        }
+        ret
+    }
+}
+
+impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
+    type Error = String;
+    fn try_from(proto: &pb::KeyTranscriptCreation) -> Result<Self, Self::Error> {
+        if proto.state == (pb::KeyTranscriptCreationState::BeginUnspecified as i32) {
+            Ok(KeyTranscriptCreation::Begin)
+        } else if proto.state == (pb::KeyTranscriptCreationState::RandomTranscriptParams as i32) {
+            let param_proto = proto
+                .random
+                .as_ref()
+                .ok_or("pb::KeyTranscriptCreation:: Missing random transcript")?;
+            Ok(KeyTranscriptCreation::RandomTranscriptParams(
+                param_proto.try_into()?,
+            ))
+        } else if proto.state == (pb::KeyTranscriptCreationState::ReshareOfMaskedParams as i32) {
+            let param_proto = proto
+                .reshare_of_masked
+                .as_ref()
+                .ok_or("pb::KeyTranscriptCreation:: Missing reshare of masked transcript")?;
+            Ok(KeyTranscriptCreation::ReshareOfMaskedParams(
+                param_proto.try_into()?,
+            ))
+        } else if proto.state == (pb::KeyTranscriptCreationState::ReshareOfUnmaskedParams as i32) {
+            let param_proto = proto
+                .reshare_of_unmasked
+                .as_ref()
+                .ok_or("pb::KeyTranscriptCreation:: Missing reshare of unmasked transcript")?;
+            Ok(KeyTranscriptCreation::ReshareOfUnmaskedParams(
+                param_proto.try_into()?,
+            ))
+        } else if proto.state
+            == (pb::KeyTranscriptCreationState::XnetReshareOfUnmaskedParams as i32)
+        {
+            let param_proto = proto
+                .xnet_reshare_of_unmasked
+                .as_ref()
+                .ok_or("pb::KeyTranscriptCreation:: Missing xnet reshare transcript")?;
+            Ok(KeyTranscriptCreation::XnetReshareOfUnmaskedParams(
+                param_proto.try_into()?,
+            ))
+        } else if proto.state == (pb::KeyTranscriptCreationState::Created as i32) {
+            let param_proto = proto
+                .created
+                .as_ref()
+                .ok_or("pb::KeyTranscriptCreation:: Missing created transcript")?;
+            Ok(KeyTranscriptCreation::Created(param_proto.try_into()?))
+        } else {
+            Err(format!(
+                "pb::KeyTranscriptCreation:: invalid state: {}",
+                pb::KeyTranscriptCreationState::Created as i32
+            ))
+        }
     }
 }
 
@@ -761,16 +829,15 @@ impl TryFrom<EcdsaMessage> for EcdsaOpening {
     }
 }
 
-// The ECDSA summary.
-pub type Summary = Option<EcdsaSummaryPayload>;
+pub type Summary = Option<EcdsaPayload>;
 
-pub type Payload = Option<EcdsaDataPayload>;
+pub type Payload = Option<EcdsaPayload>;
 
-impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
-    fn from(summary: &EcdsaSummaryPayload) -> Self {
+impl From<&EcdsaPayload> for pb::EcdsaSummaryPayload {
+    fn from(summary: &EcdsaPayload) -> Self {
         // signature_agreements
         let mut signature_agreements = Vec::new();
-        for (request_id, completed) in &summary.ecdsa_payload.signature_agreements {
+        for (request_id, completed) in &summary.signature_agreements {
             let unreported = match completed {
                 CompletedSignature::Unreported(signature) => signature.signature.clone(),
                 CompletedSignature::ReportedToExecution => vec![],
@@ -783,7 +850,7 @@ impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
 
         // ongoing_signatures
         let mut ongoing_signatures = Vec::new();
-        for (request_id, ongoing) in &summary.ecdsa_payload.ongoing_signatures {
+        for (request_id, ongoing) in &summary.ongoing_signatures {
             ongoing_signatures.push(pb::OngoingSignature {
                 request_id: Some((*request_id).into()),
                 sig_inputs: Some(ongoing.into()),
@@ -792,7 +859,7 @@ impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
 
         // available_quadruples
         let mut available_quadruples = Vec::new();
-        for (quadruple_id, quadruple) in &summary.ecdsa_payload.available_quadruples {
+        for (quadruple_id, quadruple) in &summary.available_quadruples {
             available_quadruples.push(pb::AvailableQuadruple {
                 quadruple_id: quadruple_id.0,
                 quadruple: Some(quadruple.into()),
@@ -801,36 +868,27 @@ impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
 
         // quadruples_in_creation
         let mut quadruples_in_creation = Vec::new();
-        for (quadruple_id, quadruple) in &summary.ecdsa_payload.quadruples_in_creation {
+        for (quadruple_id, quadruple) in &summary.quadruples_in_creation {
             quadruples_in_creation.push(pb::QuadrupleInProgress {
                 quadruple_id: quadruple_id.0,
                 quadruple: Some(quadruple.into()),
             });
         }
 
-        let next_unused_transcript_id: Option<subnet_pb::IDkgTranscriptId> = Some(
-            (&summary
-                .ecdsa_payload
-                .uid_generator
-                .next_unused_transcript_id)
-                .into(),
-        );
+        let next_unused_transcript_id: Option<subnet_pb::IDkgTranscriptId> =
+            Some((&summary.uid_generator.next_unused_transcript_id).into());
 
-        let next_unused_quadruple_id = summary
-            .ecdsa_payload
-            .uid_generator
-            .next_unused_quadruple_id
-            .0;
+        let next_unused_quadruple_id = summary.uid_generator.next_unused_quadruple_id.0;
 
         // idkg_transcripts
         let mut idkg_transcripts = Vec::new();
-        for transcript in summary.ecdsa_payload.idkg_transcripts.values() {
+        for transcript in summary.idkg_transcripts.values() {
             idkg_transcripts.push(transcript.into());
         }
 
         // ongoing_xnet_reshares
         let mut ongoing_xnet_reshares = Vec::new();
-        for (request, transcript) in &summary.ecdsa_payload.ongoing_xnet_reshares {
+        for (request, transcript) in &summary.ongoing_xnet_reshares {
             ongoing_xnet_reshares.push(pb::OngoingXnetReshare {
                 request: Some(request.into()),
                 transcript: Some(transcript.into()),
@@ -839,7 +897,7 @@ impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
 
         // xnet_reshare_agreements
         let mut xnet_reshare_agreements = Vec::new();
-        for (request, completed) in &summary.ecdsa_payload.xnet_reshare_agreements {
+        for (request, completed) in &summary.xnet_reshare_agreements {
             let initial_dealings = match completed {
                 CompletedReshareRequest::Unreported(initial_dealings) => {
                     Some(initial_dealings.as_ref().into())
@@ -853,7 +911,12 @@ impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
             });
         }
 
-        let current_key_transcript = Some((&summary.current_key_transcript).into());
+        let current_key_transcript = summary
+            .key_transcript
+            .current
+            .as_ref()
+            .map(|transcript| transcript.into());
+        let next_key_in_creation = Some((&summary.key_transcript.next_in_creation).into());
 
         Self {
             signature_agreements,
@@ -866,11 +929,12 @@ impl From<&EcdsaSummaryPayload> for pb::EcdsaSummaryPayload {
             ongoing_xnet_reshares,
             xnet_reshare_agreements,
             current_key_transcript,
+            next_key_in_creation,
         }
     }
 }
 
-impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaSummaryPayload {
+impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaPayload {
     type Error = String;
     fn try_from(
         (summary, height): (&pb::EcdsaSummaryPayload, Height),
@@ -1003,24 +1067,32 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaSummaryPayload {
             xnet_reshare_agreements.insert(request, completed);
         }
 
+        // Key transcript state
+        let current_key_transcript: Option<UnmaskedTranscript> =
+            if let Some(proto) = &summary.current_key_transcript {
+                Some(proto.try_into()?)
+            } else {
+                None
+            };
         let proto = summary
-            .current_key_transcript
+            .next_key_in_creation
             .as_ref()
-            .ok_or("pb::EcdsaSummaryPayload:: Missing current_key_transcript")?;
-        let current_key_transcript: UnmaskedTranscript = proto.try_into()?;
+            .ok_or("pb::EcdsaSummaryPayload:: Missing next_key_in_creation")?;
+        let next_key_in_creation: KeyTranscriptCreation = proto.try_into()?;
 
         let mut ret = Self {
-            ecdsa_payload: EcdsaPayload {
-                signature_agreements,
-                ongoing_signatures,
-                available_quadruples,
-                quadruples_in_creation,
-                idkg_transcripts,
-                ongoing_xnet_reshares,
-                xnet_reshare_agreements,
-                uid_generator,
+            signature_agreements,
+            ongoing_signatures,
+            available_quadruples,
+            quadruples_in_creation,
+            idkg_transcripts,
+            ongoing_xnet_reshares,
+            xnet_reshare_agreements,
+            uid_generator,
+            key_transcript: EcdsaKeyTranscript {
+                current: current_key_transcript,
+                next_in_creation: next_key_in_creation,
             },
-            current_key_transcript,
         };
         ret.update_refs(height);
         Ok(ret)
