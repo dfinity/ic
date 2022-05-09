@@ -31,7 +31,6 @@ use ic_nervous_system_root::{
     AddCanisterProposal, CanisterAction, CanisterStatusResult, ChangeCanisterProposal,
     StopOrStartCanisterProposal,
 };
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
@@ -97,6 +96,8 @@ use registry_canister::mutations::do_create_subnet::{EcdsaInitialConfig, EcdsaKe
 use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
 use registry_canister::mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload;
 use registry_canister::mutations::firewall::{
+    add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
+    remove_firewall_rules_compute_entries, update_firewall_rules_compute_entries,
     AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
 };
 use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;
@@ -113,7 +114,6 @@ use registry_canister::mutations::{
 use serde::Serialize;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Debug;
-use std::fmt::Write as FmtWrite;
 use std::io::Write;
 use std::sync::Arc;
 use std::{
@@ -3315,7 +3315,7 @@ async fn test_add_firewall_rules(
     let new_rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
         .unwrap_or_else(|_| panic!("Failed to parse firewall rules"));
 
-    let mut positions: Vec<i32> = cmd
+    let positions: Vec<i32> = cmd
         .positions
         .clone()
         .split(',')
@@ -3330,21 +3330,15 @@ async fn test_add_firewall_rules(
             positions.len(), new_rules.len()
         );
     }
-    // Add entries from the back to front to preserve positions
-    positions.sort_unstable();
-    positions.reverse();
-    for (rule_idx, mut pos) in positions.into_iter().enumerate() {
-        if pos < 0 {
-            pos = entries.len() as i32;
-        }
-        if pos > entries.len() as i32 {
-            panic!(
-                "Provided position does not match the size of the existing ruleset. Position: {:?}, ruleset size: {:?}.",
-                pos, entries.len()
-            );
-        }
-        entries.insert(pos as usize, new_rules[rule_idx].clone());
-    }
+
+    let payload = AddFirewallRulesPayload {
+        scope: cmd.scope,
+        rules: new_rules,
+        positions,
+        expected_hash: cmd.expected_ruleset_hash,
+    };
+
+    add_firewall_rules_compute_entries(&mut entries, &payload);
 
     println!("{:?}", serde_json::to_string(&entries));
 
@@ -3358,7 +3352,7 @@ async fn test_remove_firewall_rules(
     // Fetch existing rules for given scope, remove the given ones, and return
     let mut entries = get_firewall_rules_from_registry(registry_canister, &cmd.scope).await;
 
-    let mut positions: Vec<i32> = cmd
+    let positions: Vec<i32> = cmd
         .positions
         .clone()
         .split(',')
@@ -3367,12 +3361,13 @@ async fn test_remove_firewall_rules(
         })
         .collect();
 
-    // Remove entries from the back to front to preserve positions
-    positions.sort_unstable();
-    positions.reverse();
-    for i in positions {
-        entries.remove(i as usize);
-    }
+    let payload = RemoveFirewallRulesPayload {
+        scope: cmd.scope,
+        positions,
+        expected_hash: cmd.expected_ruleset_hash,
+    };
+
+    remove_firewall_rules_compute_entries(&mut entries, &payload);
 
     println!("{:?}", serde_json::to_string(&entries));
 
@@ -3406,16 +3401,14 @@ async fn test_update_firewall_rules(
         );
     }
 
-    // Update the entries
-    for (rule_idx, pos) in positions.into_iter().enumerate() {
-        if pos < 0 || pos >= entries.len() as i32 {
-            panic!(
-                "Provided position is out of bounds for the existing ruleset. Position: {:?}, ruleset size: {:?}.",
-                pos, entries.len()
-            );
-        }
-        entries[pos as usize] = new_rules[rule_idx].clone();
-    }
+    let payload = UpdateFirewallRulesPayload {
+        scope: cmd.scope,
+        rules: new_rules,
+        positions,
+        expected_hash: cmd.expected_ruleset_hash,
+    };
+
+    update_firewall_rules_compute_entries(&mut entries, &payload);
 
     println!("{:?}", serde_json::to_string(&entries));
 
@@ -3471,19 +3464,6 @@ async fn get_firewall_rules_for_node(
     );
 
     println!("{:?}", serde_json::to_string(&rules));
-}
-
-fn compute_firewall_ruleset_hash(rules: &[FirewallRule]) -> String {
-    let mut hasher = Sha256::new();
-    for rule in rules {
-        hasher.write(&encode_or_panic(rule));
-    }
-    let bytes = &hasher.finish();
-    let mut result_hash = String::new();
-    for b in bytes {
-        let _ = write!(result_hash, "{:02X}", b);
-    }
-    result_hash
 }
 
 fn get_firewall_ruleset_hash(cmd: GetFirewallRulesetHashCmd) {
