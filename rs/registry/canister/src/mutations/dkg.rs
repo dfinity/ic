@@ -1,6 +1,6 @@
 use candid::{CandidType, Decode, Deserialize};
 
-use ic_base_types::PrincipalId;
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_ic00_types::EcdsaKeyId;
 use ic_protobuf::{
     registry::crypto::v1::PublicKey,
@@ -55,6 +55,7 @@ impl SetupInitialDKGResponse {
 #[derive(CandidType, Deserialize, Debug, Eq, PartialEq)]
 pub struct ComputeInitialEcdsaDealingsArgs {
     pub key_id: EcdsaKeyId,
+    pub subnet_id: Option<SubnetId>,
     pub nodes: Vec<PrincipalId>,
     pub registry_version: u64,
 }

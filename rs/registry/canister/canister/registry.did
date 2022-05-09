@@ -127,6 +127,7 @@ type RecoverSubnetPayload = record {
   replacement_nodes : opt vec principal;
   subnet_id : principal;
   registry_store_uri : opt record { text; text; nat64 };
+  ecdsa_config : opt EcdsaInitialConfig;
   state_hash : vec nat8;
   time_ns : nat64;
 };

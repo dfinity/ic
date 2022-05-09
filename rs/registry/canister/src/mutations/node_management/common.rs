@@ -3,14 +3,12 @@ use crate::{common::LOG_PREFIX, mutations::common::decode_registry_value, regist
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_protobuf::registry::{
-    node::v1::NodeRecord,
-    node_operator::v1::NodeOperatorRecord,
-    subnet::v1::{SubnetListRecord, SubnetRecord},
+    node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord,
 };
 use ic_registry_keys::{
     make_crypto_node_key, make_crypto_tls_cert_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
-    make_subnet_record_key, FirewallRulesScope,
+    FirewallRulesScope,
 };
 use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue};
 use ic_registry_transport::{delete, insert, update};
@@ -27,30 +25,10 @@ pub fn find_subnet_for_node(
         .iter()
         .find(|subnet_id| -> bool {
             let subnet_id = SubnetId::new(PrincipalId::try_from(*subnet_id).unwrap());
-            let subnet_record = get_subnet_record(registry, subnet_id);
+            let subnet_record = registry.get_subnet_or_panic(subnet_id);
             subnet_record.membership.contains(&node_id.get().to_vec())
         })
         .map(|subnet_vector| SubnetId::new(PrincipalId::try_from(subnet_vector).unwrap()))
-}
-
-fn get_subnet_record(registry: &Registry, subnet_id: SubnetId) -> SubnetRecord {
-    let subnet_key = make_subnet_record_key(subnet_id);
-    let RegistryValue {
-        value: subnet_record_vec,
-        version: _,
-        deletion_marker: _,
-    } = registry
-        .get(subnet_key.as_bytes(), registry.latest_version())
-        .map_or(
-            Err(format!(
-                "{}do_remove_nodes: Subnet not found in the registry, aborting node removal.",
-                LOG_PREFIX
-            )),
-            Ok,
-        )
-        .unwrap();
-
-    decode_registry_value::<SubnetRecord>(subnet_record_vec.to_vec())
 }
 
 pub fn get_subnet_list_record(registry: &Registry) -> SubnetListRecord {

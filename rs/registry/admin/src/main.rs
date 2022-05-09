@@ -922,21 +922,30 @@ struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     pub max_instructions_per_install_code: Option<u64>,
 
-    /// Configuration for ECDSA: the number of quadruples to create in advance
-    /// Defaults to 1, must be at least 1
+    /// Configuration for ECDSA: the number of quadruples to create in advance.
+    /// Defaults to 1, must be at least 1.
     #[clap(long)]
     pub ecdsa_quadruples_to_create_in_advance: Option<u32>,
 
     /// Configuration for ECDSA:
     /// A list of existing ECDSA keys as json objects to be requested from other subnets for this
-    /// subnet, and (optionally) the subnet to request each key from
+    /// subnet, and (optionally) the subnet to request each key from.
     ///
-    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`
+    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`.
     ///
     /// Example:
-    /// '[{ "key_id": "Secp256k1:key_id_1", "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai" }]'
-    /// For keys with no subnet specified
-    ///'[{ "key_id": "Secp256k1:key_id_1" }]'
+    /// '[
+    ///     {
+    ///         "key_id": "Secp256k1:key_id_1",
+    ///         "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
+    ///     }
+    /// ]'
+    /// For keys with no subnet specified:
+    ///'[
+    ///     {
+    ///         "key_id": "Secp256k1:key_id_1"
+    ///     }
+    /// ]'
     #[clap(long)]
     pub ecdsa_keys_to_request: Option<String>,
 
@@ -953,6 +962,53 @@ struct ProposeToCreateSubnetCmd {
     /// subnet.
     #[clap(long)]
     pub max_number_of_canisters: Option<u64>,
+}
+
+/// Parse the options that are used to create EcdsaInitialConfig option
+/// and optionally create an InitialEcdsaConfig object if one or both is set.
+/// `ecdsa_keys_to_request` is a JSON encoded object, whose schema is specified in the documentation
+/// for ProposeToCreateSubnetCmd and ProposeToUpdateRecoveryCupCmd.
+fn parse_initial_ecdsa_config_options(
+    ecdsa_quadruples_to_create_in_advance: &Option<u32>,
+    ecdsa_keys_to_request: &Option<String>,
+) -> Option<EcdsaInitialConfig> {
+    if ecdsa_quadruples_to_create_in_advance.is_none() && ecdsa_keys_to_request.is_none() {
+        return None;
+    }
+    let quadruples_to_create_in_advance: u32 = ecdsa_quadruples_to_create_in_advance.unwrap_or(1);
+
+    if quadruples_to_create_in_advance < 1 {
+        panic!("--ecdsa-quadruples-to-create-in-advance must be at least 1");
+    }
+
+    Some(EcdsaInitialConfig {
+        quadruples_to_create_in_advance,
+        keys: ecdsa_keys_to_request.as_ref().map_or_else(
+            || vec![],
+            |json| {
+                let raw: Vec<BTreeMap<String, String>> = serde_json::from_str(json).unwrap();
+
+                raw.iter()
+                    .map(|btree| {
+                        let key_id = btree
+                            .get("key_id")
+                            .map(|key| {
+                                key.parse::<EcdsaKeyId>()
+                                    .unwrap_or_else(|_| panic!("Could not parse key_id: '{}'", key))
+                            })
+                            .unwrap();
+
+                        let subnet_id = btree
+                            .get("subnet_id")
+                            .map(|x| Some(PrincipalId::from_str(x).unwrap()))
+                            .unwrap_or_default();
+
+                        EcdsaKeyRequest { key_id, subnet_id }
+                    })
+                    .collect()
+            },
+        ),
+    })
 }
 
 #[async_trait]
@@ -975,45 +1031,10 @@ impl ProposalTitleAndPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             .map(NodeId::from)
             .collect();
 
-        let ecdsa_config = if self.ecdsa_quadruples_to_create_in_advance.is_none()
-            && self.ecdsa_keys_to_request.is_none()
-        {
-            None
-        } else {
-            let quadruples_to_create_in_advance =
-                self.ecdsa_quadruples_to_create_in_advance.unwrap_or(1);
-
-            if quadruples_to_create_in_advance < 1 {
-                panic!("--ecdsa-quadruples-to-create-in-advance must be at least 1");
-            }
-
-            Some(EcdsaInitialConfig {
-                quadruples_to_create_in_advance,
-                keys: self
-                    .ecdsa_keys_to_request
-                    .as_ref()
-                    .map_or_else(Vec::new, |json| {
-                        let raw: Vec<BTreeMap<String, String>> =
-                            serde_json::from_str(json).unwrap();
-
-                        raw.iter()
-                            .map(|btree| {
-                                let key_id = btree
-                                    .get("key_id")
-                                    .map(|key| key.parse::<EcdsaKeyId>().unwrap())
-                                    .unwrap();
-
-                                let subnet_id = btree
-                                    .get("subnet_id")
-                                    .map(|x| Some(PrincipalId::from_str(x).unwrap()))
-                                    .unwrap_or_default();
-
-                                EcdsaKeyRequest { key_id, subnet_id }
-                            })
-                            .collect()
-                    }),
-            })
-        };
+        let ecdsa_config = parse_initial_ecdsa_config_options(
+            &self.ecdsa_quadruples_to_create_in_advance,
+            &self.ecdsa_keys_to_request,
+        );
 
         let scheduler_config = SchedulerConfig::default_for_subnet_type(self.subnet_type);
         CreateSubnetPayload {
@@ -1146,6 +1167,33 @@ struct ProposeToUpdateRecoveryCupCmd {
     /// The registry version that should be used for the recovery cup
     #[clap(long)]
     pub registry_version: Option<u64>,
+
+    /// Configuration for ECDSA: the number of quadruples to create in advance.
+    /// Defaults to 1, must be at least 1.
+    #[clap(long)]
+    pub ecdsa_quadruples_to_create_in_advance: Option<u32>,
+
+    /// Configuration for ECDSA:
+    /// A list of existing ECDSA keys as json objects to be requested from other subnets for this
+    /// subnet, and (optionally) the subnet to request each key from.
+    ///
+    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`.
+    ///
+    /// Example:
+    /// '[
+    ///     {
+    ///         "key_id": "Secp256k1:key_id_1",
+    ///         "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
+    ///     }
+    /// ]'
+    /// For keys with no subnet specified:
+    ///'[
+    ///     {
+    ///         "key_id": "Secp256k1:key_id_1"
+    ///     }
+    /// ]'
+    #[clap(long)]
+    pub ecdsa_keys_to_request: Option<String>,
 }
 
 #[async_trait]
@@ -1173,8 +1221,13 @@ impl ProposalTitleAndPayload<RecoverSubnetPayload> for ProposeToUpdateRecoveryCu
             .registry_store_hash
             .clone()
             .unwrap_or_else(|| "".to_string());
+
         let registry_version = self.registry_version.unwrap_or(0);
 
+        let ecdsa_config = parse_initial_ecdsa_config_options(
+            &self.ecdsa_quadruples_to_create_in_advance,
+            &self.ecdsa_keys_to_request,
+        );
         RecoverSubnetPayload {
             subnet_id,
             height: self.height,
@@ -1186,6 +1239,7 @@ impl ProposalTitleAndPayload<RecoverSubnetPayload> for ProposeToUpdateRecoveryCu
                 .registry_store_uri
                 .clone()
                 .map(|uri| (uri, hash, registry_version)),
+            ecdsa_config,
         }
     }
 }
@@ -1328,12 +1382,13 @@ struct ProposeToUpdateSubnetCmd {
     max_instructions_per_install_code: Option<u64>,
 
     #[clap(long)]
-    /// Enable key signing on this subnet for a particular key_id
-    /// Only one key_id is permitted at a time at the moment
-    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`
+    /// Enable key signing on this subnet for a particular key_id.
+    /// Only one key_id is permitted at a time at the moment.
+    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`.
     ecdsa_key_signing_enable: Option<Vec<String>>,
 
-    /// Configuration for ECDSA feature.
+    /// Configuration for ECDSA: the number of quadruples to create in advance.
+    /// Defaults to 1, must be at least 1.
     #[clap(long)]
     pub ecdsa_quadruples_to_create_in_advance: Option<u32>,
 
