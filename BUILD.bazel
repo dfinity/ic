@@ -1,26 +1,38 @@
 load("//bazel:defs.bzl", "cargo_build", "gzip_compress", "optimized_canister")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
+load("//bazel:buildifier.bzl", "buildifier_test")
 
 package(default_visibility = ["//visibility:public"])
 
+BUILDIFIER_EXCLUDES = [
+    "./.git/*",
+    "./gitlab-ci/src/git_changes/test_data/**",
+]
+
 buildifier(
     name = "buildifier",
-    exclude_patterns = [
-        "./.git/*",
-        "./gitlab-ci/src/git_changes/test_data/**",
-    ],
+    exclude_patterns = BUILDIFIER_EXCLUDES,
     lint_mode = "fix",
     mode = "fix",
 )
 
+# buildifier.check rule is used by buildifier_test
 buildifier(
     name = "buildifier.check",
-    exclude_patterns = [
-        "./.git/*",
-        "./gitlab-ci/src/git_changes/test_data/**",
-    ],
+    exclude_patterns = BUILDIFIER_EXCLUDES,
     lint_mode = "warn",
     mode = "diff",
+)
+
+buildifier_test(
+    name = "buildifier_test",
+    tags = [
+        "external",
+        "local",
+        "no-sandbox",
+        "small",
+        "smoke",
+    ],
 )
 
 cargo_build(

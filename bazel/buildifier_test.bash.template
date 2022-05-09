@@ -1,0 +1,17 @@
+#! /usr/bin/env bash
+
+set -eEuo pipefail
+
+export BUILD_WORKSPACE_DIRECTORY=$(dirname $(realpath @@WORKSPACE@@))
+
+if ( ! @@BUILDIFIER_BIN@@ ); then
+  cat <<'ERRMSG' >&2
+
+
+        Please auto-format your changes with `bazel run //:buildifier`
+
+
+ERRMSG
+  exit 1
+fi
+
