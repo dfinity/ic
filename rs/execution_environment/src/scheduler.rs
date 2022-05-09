@@ -890,9 +890,11 @@ impl SchedulerImpl {
                 state.metadata.own_subnet_type,
                 self.exec_env.max_canister_memory_size(),
             ) {
+                self.metrics.canister_invariants.inc();
                 warn!(
                     round_log,
-                    "At Round {} @ time {}, canister {} has invalid state after execution. Invariants check failed with err: {}",
+                    "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariants check failed with err: {}",
+                    CANISTER_INVARIANT_BROKEN,
                     current_round,
                     state.time(),
                     canister_id,
@@ -1132,6 +1134,7 @@ impl Scheduler for SchedulerImpl {
 
             // Check replicated state invariants still hold after the round execution.
             if total_canister_memory_usage > self.exec_env.subnet_memory_capacity() {
+                self.metrics.subnet_memory_usage_invariant.inc();
                 warn!(
                     round_log,
                     "At Round {} @ time {}, the resulted state after execution does not hold the invariants. Exceeding capacity subnet memory allowed: used {} allowed {}",

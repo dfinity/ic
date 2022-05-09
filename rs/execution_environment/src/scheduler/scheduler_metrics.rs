@@ -12,6 +12,10 @@ use crate::metrics::{
     messages_histogram, ScopedMetrics,
 };
 
+pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";
+pub(crate) const SUBNET_MEMORY_USAGE_INVARIANT_BROKEN: &str =
+    "scheduler_subnet_memory_usage_invariant_broken";
+
 pub(super) struct SchedulerMetrics {
     pub(super) canister_age: Histogram,
     pub(super) canister_compute_allocation_violation: IntCounter,
@@ -68,6 +72,8 @@ pub(super) struct SchedulerMetrics {
     pub(super) canisters_not_in_routing_table: IntGauge,
     pub(super) canister_install_code_debits: Histogram,
     pub(super) old_open_call_contexts: IntGaugeVec,
+    pub(super) canister_invariants: IntCounter,
+    pub(super) subnet_memory_usage_invariant: IntCounter,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -480,6 +486,8 @@ impl SchedulerMetrics {
                 "Number of call contexts that have been open for more than the given age.",
                 &["age"]
             ),
+            canister_invariants: metrics_registry.error_counter(CANISTER_INVARIANT_BROKEN),
+            subnet_memory_usage_invariant: metrics_registry.error_counter(SUBNET_MEMORY_USAGE_INVARIANT_BROKEN),
         }
     }
 
