@@ -61,6 +61,7 @@ pub enum PermanentError {
     InvalidChainCacheError(InvalidChainCacheError),
     NewTranscriptNotFound(IDkgTranscriptId),
     NewTranscriptMiscount(u64),
+    UnexpectedDataPayload,
 }
 
 impl From<PermanentError> for EcdsaValidationError {
@@ -143,7 +144,7 @@ pub fn validate_summary_payload(
     registry_client: &dyn RegistryClient,
     pool_reader: &PoolReader<'_>,
     parent_block: &Block,
-    summary_payload: Option<&ecdsa::EcdsaSummaryPayload>,
+    summary_payload: Option<&ecdsa::EcdsaPayload>,
 ) -> ValidationResult<EcdsaValidationError> {
     let height = parent_block.height().increment();
     if !ecdsa_feature_is_enabled(subnet_id, registry_client, pool_reader, height)
@@ -190,18 +191,19 @@ pub fn validate_data_payload(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
-    data_payload: Option<&ecdsa::EcdsaDataPayload>,
+    data_payload: Option<&ecdsa::EcdsaPayload>,
 ) -> ValidationResult<EcdsaValidationError> {
     let height = parent_block.height().increment();
-    let data_payload = if ecdsa_feature_is_enabled(subnet_id, registry_client, pool_reader, height)
-        .map_err(TransientError::from)?
-    {
-        data_payload.ok_or(PermanentError::MissingEcdsaDataPayload)?
-    } else if let Some(payload) = data_payload {
-        return Err(PermanentError::EcdsaFeatureDisabled.into());
-    } else {
-        return Ok(());
-    };
+    let ecdsa_enabled = ecdsa_feature_is_enabled(subnet_id, registry_client, pool_reader, height)
+        .map_err(TransientError::from)?;
+    if !ecdsa_enabled {
+        if data_payload.is_some() {
+            return Err(PermanentError::EcdsaFeatureDisabled.into());
+        } else {
+            return Ok(());
+        }
+    }
+
     let block_payload = &parent_block.payload.as_ref();
     let summary_block = pool_reader
         .dkg_summary_block(parent_block)
@@ -221,45 +223,43 @@ pub fn validate_data_payload(
             quadruples_to_create_in_advance: 1, // default value
             ..EcdsaConfig::default()
         });
-    let prev_payload = if block_payload.is_summary() {
+    let (prev_payload, cur_payload) = if block_payload.is_summary() {
         match &summary.ecdsa {
-            None => ecdsa::EcdsaDataPayload {
-                ecdsa_payload: ecdsa::EcdsaPayload {
-                    signature_agreements: BTreeMap::new(),
-                    ongoing_signatures: BTreeMap::new(),
-                    available_quadruples: BTreeMap::new(),
-                    quadruples_in_creation: BTreeMap::new(),
-                    uid_generator: ecdsa::EcdsaUIDGenerator::new(subnet_id, height),
-                    idkg_transcripts: BTreeMap::new(),
-                    ongoing_xnet_reshares: BTreeMap::new(),
-                    xnet_reshare_agreements: BTreeMap::new(),
-                },
-                next_key_transcript_creation: ecdsa::KeyTranscriptCreation::Begin,
-            },
-            Some(ecdsa_summary) => ecdsa::EcdsaDataPayload {
-                ecdsa_payload: ecdsa_summary.ecdsa_payload.clone(),
-                next_key_transcript_creation: if is_subnet_membership_changing(
-                    registry_client,
-                    summary_registry_version,
-                    parent_block.context.registry_version,
-                    subnet_id,
-                )? {
-                    ecdsa::KeyTranscriptCreation::Begin
+            None => {
+                if data_payload.is_some() {
+                    return Err(PermanentError::UnexpectedDataPayload.into());
                 } else {
-                    ecdsa::KeyTranscriptCreation::Created(ecdsa_summary.current_key_transcript)
-                },
-            },
+                    return Ok(());
+                }
+            }
+            Some(ecdsa_summary) => {
+                if data_payload.is_none() {
+                    return Err(PermanentError::MissingEcdsaDataPayload.into());
+                }
+                (ecdsa_summary.clone(), data_payload.as_ref().unwrap())
+            }
         }
     } else {
         match &block_payload.as_data().ecdsa {
-            None => return Err(PermanentError::MissingParentDataPayload.into()),
-            Some(payload) => payload.clone(),
+            None => {
+                if data_payload.is_some() {
+                    return Err(PermanentError::UnexpectedDataPayload.into());
+                } else {
+                    return Ok(());
+                }
+            }
+            Some(payload) => {
+                if data_payload.is_none() {
+                    return Err(PermanentError::MissingEcdsaDataPayload.into());
+                }
+                (payload.clone(), data_payload.as_ref().unwrap())
+            }
         }
     };
     let parent_chain = block_chain_cache(pool_reader, &summary_block, parent_block)
         .map_err(PermanentError::from)?;
     let block_reader = EcdsaBlockReaderImpl::new(parent_chain);
-    validate_transcript_refs(&block_reader, &prev_payload, data_payload)?;
+    validate_transcript_refs(&block_reader, &prev_payload, cur_payload)?;
     Ok(())
 }
 
@@ -272,12 +272,12 @@ pub fn validate_data_payload(
 // in prev_payload resolve correctly. So only new references need to be checked.
 fn validate_transcript_refs(
     block_reader: &dyn EcdsaBlockReader,
-    prev_payload: &ecdsa::EcdsaDataPayload,
-    curr_payload: &ecdsa::EcdsaDataPayload,
+    prev_payload: &ecdsa::EcdsaPayload,
+    curr_payload: &ecdsa::EcdsaPayload,
 ) -> ValidationResult<EcdsaValidationError> {
     use PermanentError::*;
     let mut count = 0;
-    let idkg_transcripts = &curr_payload.ecdsa_payload.idkg_transcripts;
+    let idkg_transcripts = &curr_payload.idkg_transcripts;
     let prev_refs = prev_payload.active_transcripts();
     for transcript_ref in curr_payload.active_transcripts().iter() {
         if !prev_refs.contains(transcript_ref) && block_reader.transcript(transcript_ref).is_err() {
@@ -316,10 +316,7 @@ mod test {
         //let subnet_nodes = env.receivers().into_iter().collect::<Vec<_>>();
         let algorithm = AlgorithmId::ThresholdEcdsaSecp256k1;
         let mut block_reader = TestEcdsaBlockReader::new();
-        let prev_payload = ecdsa::EcdsaDataPayload {
-            ecdsa_payload: empty_ecdsa_payload(subnet_id),
-            next_key_transcript_creation: ecdsa::KeyTranscriptCreation::Begin,
-        };
+        let prev_payload = empty_ecdsa_payload(subnet_id);
         let mut curr_payload = prev_payload.clone();
         // Empty payload verifies
         assert!(validate_transcript_refs(&block_reader, &prev_payload, &curr_payload).is_ok());
@@ -329,7 +326,6 @@ mod test {
         let transcript_ref_0 =
             ecdsa::UnmaskedTranscript::try_from((Height::new(100), &transcript_0)).unwrap();
         curr_payload
-            .ecdsa_payload
             .idkg_transcripts
             .insert(transcript_0.transcript_id, transcript_0);
         // Error because transcript is not referenced
@@ -341,7 +337,7 @@ mod test {
         ));
 
         // Add the reference
-        curr_payload.next_key_transcript_creation =
+        curr_payload.key_transcript.next_in_creation =
             ecdsa::KeyTranscriptCreation::Created(transcript_ref_0);
         assert!(validate_transcript_refs(&block_reader, &prev_payload, &curr_payload).is_ok());
 
@@ -349,7 +345,7 @@ mod test {
         let transcript_1 = generate_key_transcript(&env, algorithm);
         let transcript_ref_1 =
             ecdsa::UnmaskedTranscript::try_from((Height::new(100), &transcript_1)).unwrap();
-        curr_payload.next_key_transcript_creation =
+        curr_payload.key_transcript.next_in_creation =
             ecdsa::KeyTranscriptCreation::Created(transcript_ref_1);
         assert!(matches!(
             validate_transcript_refs(&block_reader, &prev_payload, &curr_payload),
@@ -358,7 +354,7 @@ mod test {
             ))
         ));
 
-        curr_payload.ecdsa_payload.idkg_transcripts = BTreeMap::new();
+        curr_payload.idkg_transcripts = BTreeMap::new();
         block_reader.add_transcript(*transcript_ref_1.as_ref(), transcript_1);
         println!(
             "{:?}",

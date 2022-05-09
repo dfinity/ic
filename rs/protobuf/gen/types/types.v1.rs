@@ -222,6 +222,8 @@ pub struct EcdsaSummaryPayload {
     pub current_key_transcript: ::core::option::Option<UnmaskedTranscript>,
     #[prost(uint64, tag="10")]
     pub next_unused_quadruple_id: u64,
+    #[prost(message, optional, tag="11")]
+    pub next_key_in_creation: ::core::option::Option<KeyTranscriptCreation>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -408,6 +410,33 @@ pub struct EcdsaReshareRequest {
     pub registry_version: u64,
     #[prost(message, optional, tag="4")]
     pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct KeyTranscriptCreation {
+    #[prost(enumeration="KeyTranscriptCreationState", tag="1")]
+    pub state: i32,
+    #[prost(message, optional, tag="2")]
+    pub random: ::core::option::Option<RandomTranscriptParams>,
+    #[prost(message, optional, tag="3")]
+    pub reshare_of_masked: ::core::option::Option<ReshareOfMaskedParams>,
+    #[prost(message, optional, tag="4")]
+    pub reshare_of_unmasked: ::core::option::Option<ReshareOfUnmaskedParams>,
+    #[prost(message, optional, tag="5")]
+    pub xnet_reshare_of_unmasked: ::core::option::Option<ReshareOfUnmaskedParams>,
+    #[prost(message, optional, tag="9")]
+    pub created: ::core::option::Option<UnmaskedTranscript>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum KeyTranscriptCreationState {
+    BeginUnspecified = 0,
+    RandomTranscriptParams = 1,
+    ReshareOfMaskedParams = 2,
+    ReshareOfUnmaskedParams = 3,
+    XnetReshareOfUnmaskedParams = 4,
+    Created = 5,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Eq, Hash)]

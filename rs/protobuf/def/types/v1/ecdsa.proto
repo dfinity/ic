@@ -16,6 +16,7 @@ message EcdsaSummaryPayload {
   repeated XnetReshareAgreement xnet_reshare_agreements = 8;
   UnmaskedTranscript current_key_transcript = 9;
   uint64 next_unused_quadruple_id = 10;
+  KeyTranscriptCreation next_key_in_creation = 11;
 }
 
 message OngoingSignature {
@@ -136,5 +137,23 @@ message EcdsaReshareRequest {
   repeated types.v1.NodeId receiving_node_ids = 2;
   uint64 registry_version = 3;
   registry.crypto.v1.EcdsaKeyId key_id = 4;
+}
+
+enum KeyTranscriptCreationState {
+  KEY_TRANSCRIPT_CREATION_STATE_BEGIN_UNSPECIFIED = 0;
+  KEY_TRANSCRIPT_CREATION_STATE_RANDOM_TRANSCRIPT_PARAMS = 1;
+  KEY_TRANSCRIPT_CREATION_STATE_RESHARE_OF_MASKED_PARAMS = 2;
+  KEY_TRANSCRIPT_CREATION_STATE_RESHARE_OF_UNMASKED_PARAMS = 3;
+  KEY_TRANSCRIPT_CREATION_STATE_XNET_RESHARE_OF_UNMASKED_PARAMS = 4;
+  KEY_TRANSCRIPT_CREATION_STATE_CREATED = 5;
+}
+
+message KeyTranscriptCreation {
+  KeyTranscriptCreationState state = 1;
+  RandomTranscriptParams random = 2;
+  ReshareOfMaskedParams reshare_of_masked = 3;
+  ReshareOfUnmaskedParams reshare_of_unmasked = 4;
+  ReshareOfUnmaskedParams xnet_reshare_of_unmasked = 5;
+  UnmaskedTranscript created = 9;
 }
 

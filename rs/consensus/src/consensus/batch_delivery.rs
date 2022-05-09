@@ -125,8 +125,11 @@ pub fn deliver_batches(
                     ecdsa_summary.and_then(|ecdsa| {
                         let chain = build_consensus_block_chain(pool.pool(), &summary, &block);
                         let block_reader = EcdsaBlockReaderImpl::new(chain);
-                        let transcript_ref = ecdsa.current_key_transcript.as_ref();
-                        match block_reader.transcript(transcript_ref) {
+                        let transcript_ref = match ecdsa.key_transcript.current {
+                            Some(unmasked) => *unmasked.as_ref(),
+                            None => return None,
+                        };
+                        match block_reader.transcript(&transcript_ref) {
                             Ok(transcript) =>  get_tecdsa_master_public_key(&transcript).ok(),
                             Err(err) => {
                                 warn!(
@@ -250,7 +253,7 @@ pub fn generate_responses_to_subnet_calls(
                 .sign_with_ecdsa_contexts;
             consensus_responses.append(&mut generate_responses_to_sign_with_ecdsa_calls(
                 sign_with_ecdsa_contexts,
-                &payload.ecdsa_payload,
+                payload,
             ));
 
             let ecdsa_dealings_contexts = &state
@@ -260,7 +263,7 @@ pub fn generate_responses_to_subnet_calls(
                 .ecdsa_dealings_contexts;
             consensus_responses.append(&mut generate_responses_to_initial_dealings_calls(
                 ecdsa_dealings_contexts,
-                &payload.ecdsa_payload,
+                payload,
             ));
         }
     }
