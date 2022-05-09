@@ -16,6 +16,11 @@ cd "$ROOT_DIR" || exit 1
 
 cd "$ROOT_DIR"/ic-os/hostos || exit 1
 mkdir -p "$BUILD_OUT"
+
+if [ "${POLLUTE_PERMISSIONS}" != "" ]; then
+    chmod -R 777 rootfs
+fi
+
 echo "$VERSION" >"${BUILD_TMP}/version.txt"
 echo "${VERSION}" >"rootfs/opt/ic/share/version.txt"
 echo "${VERSION}" >"rootfs/boot/version.txt"

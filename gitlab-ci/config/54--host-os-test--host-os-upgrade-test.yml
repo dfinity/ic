@@ -18,8 +18,6 @@ host-os-upgrade-test:
   needs:
     - job: host-os-diskimg
       artifacts: false
-    - job: host-os-updateimg-new
-      artifacts: false
   artifacts:
     paths:
     - ic-os/hostos/test-out
@@ -29,10 +27,24 @@ host-os-upgrade-test:
       export VERSION
 
       "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${VERSION}" --remote-path="release" \
+          --out="artifacts/release"
+
+      mkdir -p test-tools-tmp
+      IC_ADMIN="test-tools-tmp/ic-admin"
+      gunzip -c "artifacts/release/ic-admin.gz" > "${IC_ADMIN}"
+      chmod +x "${IC_ADMIN}"
+
+      # sets the variable $TARGET_VERSION
+      # shellcheck source=/dev/null
+      source ic-os/guestos/tests/mainnet-revision.sh
+
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
           --git-rev="${VERSION}" --remote-path="host-os/disk-img" \
           --out="ic-os/hostos/build-out/disk-img"
+
       "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="${VERSION}-new" --remote-path="host-os/update-img" \
+          --git-rev="${TARGET_VERSION}" --remote-path="host-os/update-img" \
           --out="ic-os/hostos/build-out/update-img"
 
       # shellcheck disable=SC2154
