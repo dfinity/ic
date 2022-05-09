@@ -1348,7 +1348,7 @@ impl ExecutionEnvironmentImpl {
                 subnet_available_memory,
                 ExecutionMode::Replicated,
             );
-            let (mut canister, cycles, heap_delta, result) = self.hypervisor.execute_callback(
+            let (mut canister, cycles, action, heap_delta) = self.hypervisor.execute_callback(
                 canister,
                 &call_origin,
                 callback,
@@ -1360,12 +1360,6 @@ impl ExecutionEnvironmentImpl {
             );
 
             let log = self.log.clone();
-
-            let action = canister
-                .system_state
-                .call_context_manager_mut()
-                .unwrap()
-                .on_canister_result(call_context_id, result);
 
             let result = match call_origin {
                 CallOrigin::Ingress(user_id, message_id) => {

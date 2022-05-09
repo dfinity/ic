@@ -4225,8 +4225,11 @@ fn cannot_execute_callback_on_stopped_canister() {
                     network_topology,
                     execution_parameters,
                 )
-                .3,
-            Err(HypervisorError::CanisterStopped)
+                .2,
+            CallContextAction::Fail {
+                error: HypervisorError::CanisterStopped,
+                refund: Cycles::from(0),
+            }
         );
     });
 }
