@@ -361,13 +361,17 @@ impl Player {
 
             // Redeliver certifications to state manager. It will panic if there is any
             // mismatch.
+            print!("Redelivering certifications:");
             for h in certification_pool.certified_heights() {
                 let certification = certification_pool
                     .certification_at_height(h)
                     .unwrap_or_else(|| panic!("Missing certification at height {:?}", h));
                 self.state_manager
                     .deliver_state_certification(certification);
+                print!(" {}", h);
             }
+            println!();
+            println!("All blocks successfully replayed.");
         }
 
         let (latest_context_time, extra_batch_delivery) =
