@@ -2408,21 +2408,28 @@ impl Governance {
     /// - the neuron exists
     /// - the caller has the permission to configure a neuron
     ///   (permission `ConfigureDissolveState`)
+    /// - the neuron is not in the set of neurons with ongoing operations
     fn configure_neuron(
         &mut self,
         id: &NeuronId,
         caller: &PrincipalId,
         configure: &manage_neuron::Configure,
     ) -> Result<(), GovernanceError> {
-        let neuron = self
-            .proto
+        self.proto
             .neurons
-            .get_mut(&id.to_string())
-            .ok_or_else(|| Self::neuron_not_found_error(id))?;
-
-        neuron.check_authorized(caller, NeuronPermissionType::ConfigureDissolveState)?;
+            .get(&id.to_string())
+            .ok_or_else(|| Self::neuron_not_found_error(id))
+            .and_then(|neuron| {
+                neuron.check_authorized(caller, NeuronPermissionType::ConfigureDissolveState)
+            })?;
 
         let now_seconds = self.env.now();
+        let lock_command = NeuronInFlightCommand {
+            timestamp: now_seconds,
+            command: Some(InFlightCommand::Configure(configure.clone())),
+        };
+        let _lock = self.lock_neuron_for_command(id, lock_command)?;
+
         let max_dissolve_delay_seconds = self
             .proto
             .parameters
@@ -2430,6 +2437,12 @@ impl Governance {
             .expect("NervousSystemParameters not present")
             .max_dissolve_delay_seconds
             .expect("NervousSystemParameters must have max_dissolve_delay_seconds");
+
+        let neuron = self
+            .proto
+            .neurons
+            .get_mut(&id.to_string())
+            .ok_or_else(|| Self::neuron_not_found_error(id))?;
 
         neuron.configure(now_seconds, configure, max_dissolve_delay_seconds)?;
         Ok(())
