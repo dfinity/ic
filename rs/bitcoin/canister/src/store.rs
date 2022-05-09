@@ -76,12 +76,12 @@ pub fn get_utxos(
     let utxos: Vec<Utxo> = address_utxos.into_vec();
 
     Ok(GetUtxosResponse {
-        total_count: utxos.len() as u32,
         utxos,
         // TODO(EXC-1010): We are guaranteed that the tip block hash and height
         // are always available. Refactor the code to avoid this panic.
         tip_block_hash: tip_block_hash.expect("Tip block must exist").to_vec(),
         tip_height: tip_block_height.expect("Tip height must exist"),
+        next_page: None,
     })
 }
 
@@ -274,9 +274,9 @@ mod test {
                 value: 1000,
                 height: 0,
             }],
-            total_count: 1,
             tip_block_hash: block_0.block_hash().to_vec(),
             tip_height: 0,
+            next_page: None,
         };
 
         // Assert that the UTXOs of address 1 are present.
@@ -307,9 +307,9 @@ mod test {
                     value: 1000,
                     height: 1,
                 }],
-                total_count: 1,
                 tip_block_hash: block_1.block_hash().to_vec(),
                 tip_height: 1,
+                next_page: None,
             })
         );
 
@@ -317,9 +317,9 @@ mod test {
             get_utxos(&state, &address_1.to_string(), 0),
             Ok(GetUtxosResponse {
                 utxos: vec![],
-                total_count: 0,
                 tip_block_hash: block_1.block_hash().to_vec(),
                 tip_height: 1,
+                next_page: None,
             })
         );
 
@@ -339,18 +339,18 @@ mod test {
             get_utxos(&state, &address_2.to_string(), 0),
             Ok(GetUtxosResponse {
                 utxos: vec![],
-                total_count: 0,
                 tip_block_hash: block_0.block_hash().to_vec(),
                 tip_height: 0,
+                next_page: None,
             })
         );
         assert_eq!(
             get_utxos(&state, &address_3.to_string(), 0),
             Ok(GetUtxosResponse {
                 utxos: vec![],
-                total_count: 0,
                 tip_block_hash: block_0.block_hash().to_vec(),
                 tip_height: 0,
+                next_page: None,
             })
         );
         assert_eq!(
@@ -374,27 +374,27 @@ mod test {
             get_utxos(&state, &address_1.to_string(), 0),
             Ok(GetUtxosResponse {
                 utxos: vec![],
-                total_count: 0,
                 tip_block_hash: block_2_prime.block_hash().to_vec(),
                 tip_height: 2,
+                next_page: None,
             })
         );
         assert_eq!(
             get_utxos(&state, &address_2.to_string(), 0),
             Ok(GetUtxosResponse {
                 utxos: vec![],
-                total_count: 0,
                 tip_block_hash: block_2_prime.block_hash().to_vec(),
                 tip_height: 2,
+                next_page: None,
             })
         );
         assert_eq!(
             get_utxos(&state, &address_3.to_string(), 0),
             Ok(GetUtxosResponse {
                 utxos: vec![],
-                total_count: 0,
                 tip_block_hash: block_2_prime.block_hash().to_vec(),
                 tip_height: 2,
+                next_page: None,
             })
         );
         // The funds are now with address 4.
@@ -409,9 +409,9 @@ mod test {
                     value: 1000,
                     height: 2,
                 }],
-                total_count: 1,
                 tip_block_hash: block_2_prime.block_hash().to_vec(),
                 tip_height: 2,
+                next_page: None,
             })
         );
     }
@@ -457,7 +457,6 @@ mod test {
                     value: 4000000,
                     height: 75361,
                 }],
-                total_count: 1,
                 // The tip should be the block hash at height 100,000
                 // https://bitcoinchain.com/block_explorer/block/100000/
                 tip_block_hash: BlockHash::from_str(
@@ -466,6 +465,7 @@ mod test {
                 .unwrap()
                 .to_vec(),
                 tip_height: 100_000,
+                next_page: None,
             })
         );
 
@@ -489,7 +489,6 @@ mod test {
                     value: 500000000,
                     height: 66184,
                 }],
-                total_count: 1,
                 // The tip should be the block hash at height 100,000
                 // https://bitcoinchain.com/block_explorer/block/100000/
                 tip_block_hash: BlockHash::from_str(
@@ -498,6 +497,7 @@ mod test {
                 .unwrap()
                 .to_vec(),
                 tip_height: 100_000,
+                next_page: None,
             })
         );
 
@@ -535,7 +535,6 @@ mod test {
                     value: 48_0000_0000,
                     height: 96778,
                 }],
-                total_count: 1,
                 // The tip should be the block hash at height 99,995
                 // https://blockchair.com/bitcoin/block/99995
                 tip_block_hash: BlockHash::from_str(
@@ -544,6 +543,7 @@ mod test {
                 .unwrap()
                 .to_vec(),
                 tip_height: 99_995,
+                next_page: None,
             })
         );
 
@@ -613,9 +613,9 @@ mod test {
                         value: 1000,
                         height: 0,
                     }],
-                    total_count: 1,
                     tip_block_hash: block_0.block_hash().to_vec(),
-                    tip_height: 0
+                    tip_height: 0,
+                    next_page: None,
                 })
             );
             assert_eq!(
@@ -671,9 +671,9 @@ mod test {
                 get_utxos(&state, &address_1.to_string(), 0),
                 Ok(GetUtxosResponse {
                     utxos: vec![],
-                    total_count: 0,
                     tip_block_hash: block_1.block_hash().to_vec(),
-                    tip_height: 1
+                    tip_height: 1,
+                    next_page: None,
                 })
             );
         }
