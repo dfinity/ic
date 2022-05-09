@@ -7,7 +7,7 @@ host-os-updateimg:
   variables:
       BUILD_EXTRA_ARGS: ""
       BUILD_EXTRA_SUFFIX: ""
-      VERSION_SUFFIX: ""
+      POLLUTE_PERMISSIONS: ""
   script:
     - |
       set -xeuo pipefail
@@ -15,7 +15,7 @@ host-os-updateimg:
       BUILD_OUT="build-out/update-img${BUILD_EXTRA_SUFFIX}"
       BUILD_TMP="build-tmp${BUILD_EXTRA_SUFFIX}"
       UPLOAD_TARGET="host-os/update-img${BUILD_EXTRA_SUFFIX}"
-      VERSION=$(git rev-parse HEAD)${VERSION_SUFFIX}
+      VERSION=$(git rev-parse HEAD)
       echo "Build ID: ${VERSION}"
 
       # set permissions to 777 to test if reproducibility is affected
@@ -39,14 +39,6 @@ host-os-updateimg:
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" rclone -- \
       "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "$BUILD_OUT" "$UPLOAD_TARGET"
 
-host-os-updateimg-new:
-  extends:
-    - host-os-updateimg
-  variables:
-      BUILD_EXTRA_ARGS: ""
-      BUILD_EXTRA_SUFFIX: ""
-      VERSION_SUFFIX: "-new"
-
 # An exact dupe of the updateimg job for non-determinism testing.
 host-os-updateimg-determinism:
   extends:
@@ -54,4 +46,4 @@ host-os-updateimg-determinism:
   variables:
       BUILD_EXTRA_ARGS: ""
       BUILD_EXTRA_SUFFIX: "-determinism"
-      VERSION_SUFFIX: ""
+      POLLUTE_PERMISSIONS: "true"
