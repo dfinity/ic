@@ -13,7 +13,7 @@ use ic_types::{
         CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponse,
         CanisterHttpResponseContent,
     },
-    messages::{InternalQuery, InternalQueryResponse, Request},
+    messages::{AnonymousQuery, AnonymousQueryResponse, Request},
     CanisterId, Time,
 };
 use tokio::{
@@ -208,19 +208,19 @@ async fn transform_adapter_response(
     })?;
 
     // Query to execution.
-    let internal_query = InternalQuery {
+    let anonymous_query = AnonymousQuery {
         receiver: transform_canister,
         method_name: transform_method.clone(),
         method_payload,
     };
 
-    match Oneshot::new(anonymous_query_handler, internal_query).await {
+    match Oneshot::new(anonymous_query_handler, anonymous_query).await {
         Ok(query_response) => match query_response {
-            InternalQueryResponse::Rejected {
+            AnonymousQueryResponse::Rejected {
                 reject_code,
                 reject_message,
             } => Err((reject_code, reject_message)),
-            InternalQueryResponse::Replied { reply } => {
+            AnonymousQueryResponse::Replied { reply } => {
                 let transform_response = Decode!(
                     &reply.arg.to_vec(),
                     ic_ic00_types::CanisterHttpResponsePayload
@@ -325,18 +325,18 @@ mod tests {
     use tower::{service_fn, util::BoxService, Service, ServiceBuilder};
 
     struct SingleResponseAnonymousQueryService {
-        response: InternalQueryResponse,
+        response: AnonymousQueryResponse,
     }
 
     // Can specify anonymous query response at creation.
     impl SingleResponseAnonymousQueryService {
-        fn new(resp: InternalQueryResponse) -> Self {
+        fn new(resp: AnonymousQueryResponse) -> Self {
             Self { response: resp }
         }
     }
 
-    impl Service<InternalQuery> for SingleResponseAnonymousQueryService {
-        type Response = InternalQueryResponse;
+    impl Service<AnonymousQuery> for SingleResponseAnonymousQueryService {
+        type Response = AnonymousQueryResponse;
         type Error = Infallible;
         #[allow(clippy::type_complexity)]
         type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -345,7 +345,7 @@ mod tests {
             Poll::Ready(Ok(()))
         }
 
-        fn call(&mut self, _internal_query: InternalQuery) -> Self::Future {
+        fn call(&mut self, _anonymous_query: AnonymousQuery) -> Self::Future {
             let response = self.response.clone();
             Box::pin(async move { Ok(response) })
         }
@@ -491,7 +491,7 @@ mod tests {
         .await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
         let mock_anon_svc =
-            SingleResponseAnonymousQueryService::new(InternalQueryResponse::Rejected {
+            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Rejected {
                 reject_code: RejectCode::SysFatal,
                 reject_message: "dsf".to_string(),
             });
@@ -543,7 +543,7 @@ mod tests {
             setup_adapter_mock(Err((Code::Unavailable, "adapter unavailable".to_string()))).await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
         let mock_anon_svc =
-            SingleResponseAnonymousQueryService::new(InternalQueryResponse::Rejected {
+            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Rejected {
                 reject_code: RejectCode::SysFatal,
                 reject_message: "dsf".to_string(),
             });
@@ -593,7 +593,7 @@ mod tests {
         .await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
         let mock_anon_svc =
-            SingleResponseAnonymousQueryService::new(InternalQueryResponse::Rejected {
+            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Rejected {
                 reject_code: RejectCode::SysFatal,
                 reject_message: "dsf".to_string(),
             });
@@ -657,8 +657,8 @@ mod tests {
         .await;
         // Asynchronous query handler mock setup. Return unmodified adapter reponse but encoded in 'http_response' candid.
         let mock_anon_svc =
-            SingleResponseAnonymousQueryService::new(InternalQueryResponse::Replied {
-                reply: ic_types::messages::InternalQueryResponseReply {
+            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Replied {
+                reply: ic_types::messages::AnonymousQueryResponseReply {
                     arg: Blob(
                         Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
                             status: 200_u64,
@@ -742,8 +742,8 @@ mod tests {
         .await;
         // Asynchronous query handler mock setup. Return an response that can't be decoded to 'http_response'.
         let mock_anon_svc =
-            SingleResponseAnonymousQueryService::new(InternalQueryResponse::Replied {
-                reply: ic_types::messages::InternalQueryResponseReply {
+            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Replied {
+                reply: ic_types::messages::AnonymousQueryResponseReply {
                     arg: Blob("INVALID ENCODING".to_string().as_bytes().to_vec()),
                 },
             });
@@ -812,7 +812,7 @@ mod tests {
         .await;
         // Asynchronous query handler mock setup. Returns a rejection with some reason.
         let mock_anon_svc =
-            SingleResponseAnonymousQueryService::new(InternalQueryResponse::Rejected {
+            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Rejected {
                 reject_code: RejectCode::SysFatal,
                 reject_message: "test fail".to_string(),
             });
@@ -864,7 +864,7 @@ mod tests {
             setup_adapter_mock(Err((Code::Unavailable, "adapter unavailable".to_string()))).await;
         // Asynchronous query handler mock setup. No relevance in this test case.
         let mock_anon_svc =
-            SingleResponseAnonymousQueryService::new(InternalQueryResponse::Rejected {
+            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Rejected {
                 reject_code: RejectCode::SysFatal,
                 reject_message: "dsf".to_string(),
             });

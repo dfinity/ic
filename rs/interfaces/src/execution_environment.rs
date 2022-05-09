@@ -11,8 +11,8 @@ use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{
-        CertificateDelegation, HttpQueryResponse, InternalQuery, InternalQueryResponse, MessageId,
-        Response, SignedIngressContent, UserQuery,
+        AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, HttpQueryResponse,
+        MessageId, Response, SignedIngressContent, UserQuery,
     },
     ComputeAllocation, Cycles, ExecutionRound, Height, NumInstructions, Randomness, Time,
 };
@@ -244,7 +244,7 @@ pub type HypervisorResult<T> = Result<T, HypervisorError>;
 // The buffer also dampens usage by reducing the risk of
 // spiky traffic when users retry in case failed requests.
 pub type AnonymousQueryService =
-    Buffer<BoxService<InternalQuery, InternalQueryResponse, Infallible>, InternalQuery>;
+    Buffer<BoxService<AnonymousQuery, AnonymousQueryResponse, Infallible>, AnonymousQuery>;
 
 /// Interface for the component to filter out ingress messages that
 /// the canister is not willing to accept.

@@ -5,7 +5,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     ingress::WasmResult,
-    messages::{Blob, InternalQuery, InternalQueryResponse, InternalQueryResponseReply},
+    messages::{AnonymousQuery, AnonymousQueryResponse, AnonymousQueryResponseReply, Blob},
     NumInstructions,
 };
 use std::convert::Infallible;
@@ -50,8 +50,8 @@ impl AnonymousQueryHandler {
     }
 }
 
-impl Service<InternalQuery> for AnonymousQueryHandler {
-    type Response = InternalQueryResponse;
+impl Service<AnonymousQuery> for AnonymousQueryHandler {
+    type Response = AnonymousQueryResponse;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -60,7 +60,7 @@ impl Service<InternalQuery> for AnonymousQueryHandler {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, internal_query: InternalQuery) -> Self::Future {
+    fn call(&mut self, anonymous_query: AnonymousQuery) -> Self::Future {
         let instructions_limit = self.max_instructions_per_message;
         let exec_env = Arc::clone(&self.exec_env);
         let state_reader = Arc::clone(&self.state_reader);
@@ -70,25 +70,25 @@ impl Service<InternalQuery> for AnonymousQueryHandler {
             if !tx.is_closed() {
                 let state = state_reader.get_latest_state().take();
                 let result =
-                    exec_env.execute_anonymous_query(internal_query, state, instructions_limit);
+                    exec_env.execute_anonymous_query(anonymous_query, state, instructions_limit);
 
-                let internal_query_response = match result {
+                let anonymous_query_response = match result {
                     Ok(wasm_result) => match wasm_result {
-                        WasmResult::Reply(vec) => InternalQueryResponse::Replied {
-                            reply: InternalQueryResponseReply { arg: Blob(vec) },
+                        WasmResult::Reply(vec) => AnonymousQueryResponse::Replied {
+                            reply: AnonymousQueryResponseReply { arg: Blob(vec) },
                         },
-                        WasmResult::Reject(message) => InternalQueryResponse::Rejected {
+                        WasmResult::Reject(message) => AnonymousQueryResponse::Rejected {
                             reject_code: RejectCode::CanisterReject,
                             reject_message: message,
                         },
                     },
-                    Err(user_error) => InternalQueryResponse::Rejected {
+                    Err(user_error) => AnonymousQueryResponse::Rejected {
                         reject_code: user_error.reject_code(),
                         reject_message: user_error.to_string(),
                     },
                 };
 
-                let _ = tx.send(Ok(internal_query_response));
+                let _ = tx.send(Ok(anonymous_query_response));
             }
         });
         Box::pin(async move {
