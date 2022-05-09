@@ -25,7 +25,7 @@ pub fn get_utxos(
             // Return UTXOs with the requested number of confirmations.
             store::get_utxos(state, &request.address, min_confirmations)
         }
-        Some(UtxosFilter::Pagination { .. }) => {
+        Some(UtxosFilter::Page { .. }) => {
             // It's safe to use `todo!` here as this code isn't yet hooked up the rest of the
             // replica.
             todo!("EXC-1009")
@@ -102,9 +102,9 @@ mod test {
                         value: 1000,
                         height: 0,
                     }],
-                    total_count: 1,
                     tip_block_hash: genesis_block.block_hash().to_vec(),
-                    tip_height: 0
+                    tip_height: 0,
+                    next_page: None,
                 })
             );
         }
@@ -318,9 +318,9 @@ mod test {
                             value: 1000,
                             height: 1,
                         }],
-                        total_count: 1,
                         tip_block_hash: block_1.block_hash().to_vec(),
-                        tip_height: 1
+                        tip_height: 1,
+                        next_page: None,
                     })
                 );
 
@@ -334,9 +334,9 @@ mod test {
                     ),
                     Ok(GetUtxosResponse {
                         utxos: vec![],
-                        total_count: 0,
                         tip_block_hash: block_1.block_hash().to_vec(),
-                        tip_height: 1
+                        tip_height: 1,
+                        next_page: None,
                     })
                 );
             }
@@ -353,9 +353,9 @@ mod test {
                 ),
                 Ok(GetUtxosResponse {
                     utxos: vec![],
-                    total_count: 0,
                     tip_block_hash: block_0.block_hash().to_vec(),
-                    tip_height: 0
+                    tip_height: 0,
+                    next_page: None,
                 })
             );
             assert_eq!(
@@ -375,9 +375,9 @@ mod test {
                         value: 1000,
                         height: 0,
                     }],
-                    total_count: 1,
                     tip_block_hash: block_0.block_hash().to_vec(),
-                    tip_height: 0
+                    tip_height: 0,
+                    next_page: None,
                 })
             );
 

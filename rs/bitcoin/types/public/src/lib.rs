@@ -1,11 +1,13 @@
 //! Types used to support the candid API.
 
 use candid::{CandidType, Deserialize};
+use serde_bytes::ByteBuf;
 
 pub type Address = String;
 pub type Satoshi = u64;
 pub type BlockHash = Vec<u8>;
 pub type Height = u32;
+pub type Page = ByteBuf;
 
 /// A reference to a transaction output.
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq, Hash)]
@@ -27,11 +29,7 @@ pub struct Utxo {
 #[derive(CandidType, Debug, Deserialize, PartialEq)]
 pub enum UtxosFilter {
     MinConfirmations(u32),
-    Pagination {
-        tip_block_hash: BlockHash,
-        offset: u32,
-        limit: u32,
-    },
+    Page(Page),
 }
 
 /// A request for getting the UTXOs for a given address.
@@ -41,13 +39,13 @@ pub struct GetUtxosRequest {
     pub filter: Option<UtxosFilter>,
 }
 
-/// Errors when processing a `get_utxos` request.
+/// The response returned for a request to get the UTXOs of a given address.
 #[derive(CandidType, Debug, Deserialize, PartialEq, Clone)]
 pub struct GetUtxosResponse {
     pub utxos: Vec<Utxo>,
-    pub total_count: u32,
     pub tip_block_hash: BlockHash,
     pub tip_height: u32,
+    pub next_page: Option<Page>,
 }
 
 /// Errors when processing a `get_utxos` request.
