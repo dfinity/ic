@@ -362,6 +362,12 @@
         "ipv6_gateway": "2607:f758:c300::1",
         "datacenter_name": "tp1"
       },
+      "rib2u-3v4q2-bg7wx-aqnpl-2t3gd-4ciw6-regko-73ytr-anutm-wx6k6-5ae": {
+        "ipv6_prefix": "2607:f758:c300:0",
+        "ipv6_subnet": "/64",
+        "ipv6_gateway": "2607:f758:c300::1",
+        "datacenter_name": "tp1"
+      },
       "7l2et-gtaqh-wfokv-27gat-rnh6h-m4gd4-to2fe-6ecpz-7ox4r-nph27-mqe": {
         "ipv6_prefix": "2607:ff70:3:2",
         "ipv6_subnet": "/64",
