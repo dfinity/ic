@@ -189,6 +189,11 @@ RUN addgroup socks && \
     adduser socks socks && chmod +s /usr/sbin/danted && \
     chmod 0755 /etc/init.d/stunnel4
 
+RUN \
+    addgroup prober && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Prober" prober && \
+    adduser prober prober
+
 # Install journalbeat
 COPY --from=download /tmp/journalbeat-oss-7.5.1-linux-x86_64.tar.gz /tmp/journalbeat-oss-7.5.1-linux-x86_64.tar.gz
 RUN cd /tmp/ && \

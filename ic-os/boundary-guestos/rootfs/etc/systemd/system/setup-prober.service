@@ -1,0 +1,11 @@
+[Unit]
+Description=Setup Prober
+After=bootstrap-ic-node.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-prober.sh
+
+[Install]
+WantedBy=multi-user.target

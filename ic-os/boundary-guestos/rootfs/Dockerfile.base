@@ -36,9 +36,9 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     chrony \
     cryptsetup \
     curl \
+    dante-server \
     faketime \
     fdisk \
-    dante-server \
     haveged \
     initramfs-tools \
     inotify-tools \
@@ -54,8 +54,8 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     lvm2 \
     net-tools \
     nftables \
-    nginx=1.21.3-1~focal \
     nginx-module-njs=1.21.3+0.7.0-1~focal \
+    nginx=1.21.3-1~focal \
     opensc \
     openssh-client openssh-server \
     parted \
