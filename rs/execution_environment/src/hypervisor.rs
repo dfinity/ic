@@ -446,29 +446,35 @@ impl Hypervisor {
         time: Time,
         network_topology: Arc<NetworkTopology>,
         execution_parameters: ExecutionParameters,
-    ) -> (
-        CanisterState,
-        NumInstructions,
-        NumBytes,
-        HypervisorResult<Option<WasmResult>>,
-    ) {
+    ) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
         // Validate that the canister is not stopped.
         if canister.status() == CanisterStatusType::Stopped {
             return (
                 canister,
                 execution_parameters.total_instruction_limit,
+                CallContextAction::Fail {
+                    error: HypervisorError::CanisterStopped,
+                    refund: Cycles::new(0),
+                },
                 NumBytes::from(0),
-                Err(HypervisorError::CanisterStopped),
             );
         }
 
         // Validate that the canister has an `ExecutionState`.
         if canister.execution_state.is_none() {
+            let action = canister
+                .system_state
+                .call_context_manager_mut()
+                .unwrap()
+                .on_canister_result(
+                    callback.call_context_id,
+                    Err(HypervisorError::WasmModuleNotFound),
+                );
             return (
                 canister,
                 execution_parameters.total_instruction_limit,
+                action,
                 NumBytes::from(0),
-                Err(HypervisorError::WasmModuleNotFound),
             );
         }
 
@@ -531,13 +537,13 @@ impl Hypervisor {
         let call_origin = call_origin.clone();
 
         canister.execution_state = Some(output_execution_state);
-        match output.wasm_result {
+        let (num_instr, num_bytes, result) = match output.wasm_result {
             result @ Ok(_) => {
                 // Executing the reply/reject closure succeeded.
                 canister.system_state = output_system_state;
                 let heap_delta =
                     NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
-                (canister, output.num_instructions_left, heap_delta, result)
+                (output.num_instructions_left, heap_delta, result)
             }
             Err(callback_err) => {
                 // A trap has occurred when executing the reply/reject closure.
@@ -546,7 +552,6 @@ impl Hypervisor {
                     None => {
                         // No cleanup closure present. Return the callback error as-is.
                         (
-                            canister,
                             output.num_instructions_left,
                             NumBytes::from(0),
                             Err(callback_err),
@@ -587,7 +592,6 @@ impl Hypervisor {
                                 // Note that, even though the callback has succeeded,
                                 // the original callback error is returned.
                                 (
-                                    canister,
                                     cleanup_output.num_instructions_left,
                                     heap_delta,
                                     Err(callback_err),
@@ -596,7 +600,6 @@ impl Hypervisor {
                             Err(cleanup_err) => {
                                 // Executing the cleanup call back failed.
                                 (
-                                    canister,
                                     cleanup_output.num_instructions_left,
                                     NumBytes::from(0),
                                     Err(HypervisorError::Cleanup {
@@ -609,7 +612,13 @@ impl Hypervisor {
                     }
                 }
             }
-        }
+        };
+        let action = canister
+            .system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .on_canister_result(callback.call_context_id, result);
+        (canister, num_instr, action, num_bytes)
     }
 
     /// Executes the system method `canister_start`.

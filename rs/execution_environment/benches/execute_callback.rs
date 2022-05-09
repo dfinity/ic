@@ -8,6 +8,7 @@ use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_types::Cycles;
 
+use ic_replicated_state::CallContextAction;
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -63,7 +64,7 @@ pub fn bench_execute_callback(c: &mut Criterion) {
              callback,
              ..
          }| {
-            let (_state, instructions, _bytes, result) = hypervisor.execute_callback(
+            let (_state, instructions, action, _bytes) = hypervisor.execute_callback(
                 canister_state,
                 &call_origin,
                 callback,
@@ -73,7 +74,11 @@ pub fn bench_execute_callback(c: &mut Criterion) {
                 network_topology,
                 execution_parameters,
             );
-            assert_eq!(result, Ok(None), "Error executing a callback");
+            match action {
+                CallContextAction::NoResponse { refund: _ } => (),
+                _ => panic!("Unexpected callback result: {:?}", action),
+            }
+
             assert_eq!(
                 expected_instructions,
                 common::MAX_NUM_INSTRUCTIONS.get() - instructions.get(),

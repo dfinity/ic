@@ -405,7 +405,7 @@ impl<'a> QueryContext<'a> {
             self.query_allocations_used
                 .write()
                 .unwrap()
-                .allocation_before_execution(&canister)
+                .allocation_before_execution(&canister.canister_id())
                 .into(),
         );
         let execution_parameters = self.execution_parameters(&canister, instruction_limit);
@@ -440,12 +440,7 @@ impl<'a> QueryContext<'a> {
         mut canister: CanisterState,
         response: Response,
         measurement_scope: &MeasurementScope,
-    ) -> (
-        CanisterState,
-        CallContextId,
-        CallOrigin,
-        HypervisorResult<Option<WasmResult>>,
-    ) {
+    ) -> (CanisterState, CallOrigin, CallContextAction) {
         let canister_id = canister.canister_id();
         // As we have executed a request on the canister earlier, it must
         // contain a call context manager hence the following should not fail.
@@ -468,28 +463,26 @@ impl<'a> QueryContext<'a> {
         let call_origin = call_context_manager
             .call_origin(callback.call_context_id)
             .unwrap();
-        let call_context_id = callback.call_context_id;
 
         let instruction_limit = self.max_instructions_per_message.min(
             self.query_allocations_used
                 .write()
                 .unwrap()
-                .allocation_before_execution(&canister)
+                .allocation_before_execution(&canister_id)
                 .into(),
         );
         let execution_parameters = self.execution_parameters(&canister, instruction_limit);
-        let (canister, instructions_left, _heap_delta, execution_result) =
-            self.hypervisor.execute_callback(
-                canister,
-                &call_origin,
-                callback,
-                response.response_payload,
-                // No cycles are refunded in a response to a query call.
-                Cycles::from(0),
-                self.state.time(),
-                Arc::clone(&self.network_topology),
-                execution_parameters,
-            );
+        let (canister, instructions_left, action, _heap_delta) = self.hypervisor.execute_callback(
+            canister,
+            &call_origin,
+            callback,
+            response.response_payload,
+            // No cycles are refunded in a response to a query call.
+            Cycles::from(0),
+            self.state.time(),
+            Arc::clone(&self.network_topology),
+            execution_parameters,
+        );
         let instructions_executed = instruction_limit - instructions_left;
         measurement_scope.add(instructions_executed, NumMessages::from(1));
         self.query_allocations_used
@@ -499,7 +492,8 @@ impl<'a> QueryContext<'a> {
                 &canister,
                 QueryAllocation::from(instructions_executed),
             );
-        (canister, call_context_id, call_origin, execution_result)
+
+        (canister, call_origin, action)
     }
 
     // Executes a query sent from one canister to another. If a loop in the call
@@ -611,25 +605,12 @@ impl<'a> QueryContext<'a> {
     fn handle_response_with_query_origin(
         &mut self,
         mut canister: CanisterState,
-        call_context_id: CallContextId,
-        execution_result: Result<Option<WasmResult>, HypervisorError>,
+        action: CallContextAction,
     ) -> Option<Result<WasmResult, UserError>> {
         let canister_id = canister.canister_id();
-        // As we have executed a request on the canister earlier, it must
-        // contain a call context manager hence the following should not fail.
-        let call_context_manager = canister
-            .system_state
-            .call_context_manager_mut()
-            .unwrap_or_else(|| {
-                fatal!(
-                    self.log,
-                    "Canister {}: Expected to find a CallContextManager",
-                    canister_id
-                )
-            });
 
         use CallContextAction::*;
-        match call_context_manager.on_canister_result(call_context_id, execution_result) {
+        match action {
             Reply { payload, refund } => {
                 if !refund.is_zero() {
                     warn!(
@@ -702,23 +683,9 @@ impl<'a> QueryContext<'a> {
         mut canister: CanisterState,
         originator: CanisterId,
         callback_id: CallbackId,
-        call_context_id: CallContextId,
-        execution_result: Result<Option<WasmResult>, HypervisorError>,
+        action: CallContextAction,
     ) -> Option<Result<WasmResult, UserError>> {
         let canister_id = canister.canister_id();
-        // As we have executed a request on the canister earlier, it must
-        // contain a call context manager hence the following should not fail.
-        let call_context_manager = canister
-            .system_state
-            .call_context_manager_mut()
-            .unwrap_or_else(|| {
-                fatal!(
-                    self.log,
-                    "Canister {}: Expected to find a CallContextManager",
-                    canister_id
-                )
-            });
-
         let logger = self.log;
 
         // A helper function to produce and enqueue `Response`s from
@@ -735,7 +702,7 @@ impl<'a> QueryContext<'a> {
         };
 
         use CallContextAction::*;
-        match call_context_manager.on_canister_result(call_context_id, execution_result) {
+        match action {
             Reply { payload, refund } => {
                 if !refund.is_zero() {
                     warn!(
@@ -852,13 +819,11 @@ impl<'a> QueryContext<'a> {
             )
         });
 
-        let (canister, call_context_id, call_origin, execution_result) =
+        let (canister, call_origin, action) =
             self.execute_callback(canister, response, measurement_scope);
 
         match call_origin {
-            CallOrigin::Query(_) => {
-                self.handle_response_with_query_origin(canister, call_context_id, execution_result)
-            }
+            CallOrigin::Query(_) => self.handle_response_with_query_origin(canister, action),
 
             CallOrigin::CanisterUpdate(_, _)
             | CallOrigin::Ingress(_, _)
@@ -868,14 +833,9 @@ impl<'a> QueryContext<'a> {
                 canister_id
             ),
 
-            CallOrigin::CanisterQuery(originator, callback_id) => self
-                .handle_response_with_canister_origin(
-                    canister,
-                    originator,
-                    callback_id,
-                    call_context_id,
-                    execution_result,
-                ),
+            CallOrigin::CanisterQuery(originator, callback_id) => {
+                self.handle_response_with_canister_origin(canister, originator, callback_id, action)
+            }
         }
     }
 

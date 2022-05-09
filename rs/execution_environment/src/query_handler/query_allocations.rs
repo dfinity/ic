@@ -27,9 +27,9 @@ impl QueryAllocationsUsed {
     /// allocation that is still available for executing.
     pub(crate) fn allocation_before_execution(
         &mut self,
-        canister: &CanisterState,
+        canister_id: &CanisterId,
     ) -> QueryAllocation {
-        let allocation_used = match self.allocations.get(&canister.canister_id()) {
+        let allocation_used = match self.allocations.get(canister_id) {
             None => QueryAllocation::zero(),
             Some(allocation) => *allocation,
         };
