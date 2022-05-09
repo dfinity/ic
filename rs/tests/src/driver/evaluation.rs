@@ -234,10 +234,13 @@ fn evaluate_test(
     );
     let task_handle = std::thread::spawn(keep_alive_task);
     let t_res = catch_unwind(|| (t.f)(test_env));
-    if let Err(e) = stop_sig_s.send(()) {
+
+    info!(ctx.logger, "Stopping keep alive task for test: {}", path);
+    if let Err(e) = stop_sig_s.try_send(()) {
         warn!(ctx.logger, "Could not send stop signal: {:?}", e);
     }
     std::mem::drop(stop_sig_s);
+    info!(ctx.logger, "Joining keep alive task for test: {}", path);
     task_handle.join().expect("could not join tickle handle");
 
     if let Err(panic_res) = t_res {
@@ -287,7 +290,9 @@ const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(15);
 const GROUP_TTL: Duration = Duration::from_secs(50);
 
 fn keep_group_alive_task(log: Logger, farm: Farm, group_name: &str) -> (impl FnMut(), Sender<()>) {
-    let (stop_sig_s, stop_sig_r) = bounded::<()>(0);
+    // A non-empty channel guarantees that a signal can be sent at least once
+    // without the sender being blocked.
+    let (stop_sig_s, stop_sig_r) = bounded::<()>(1);
     let group_name = group_name.to_string();
     let task = move || {
         while let Err(RecvTimeoutError::Timeout) = stop_sig_r.recv_timeout(KEEP_ALIVE_INTERVAL) {
