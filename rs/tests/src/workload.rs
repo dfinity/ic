@@ -6,6 +6,7 @@ use std::{
     cmp::{max, min},
     time::{Duration, Instant},
 };
+use tokio::time::timeout;
 use tokio::{
     sync::mpsc::{channel, Receiver, Sender},
     task::{self, JoinHandle},
@@ -40,6 +41,11 @@ pub struct Workload<T> {
     /// Execution/scheduling plan of the requests.
     plan: T,
     log: slog::Logger,
+    /// All requests should be submitted strictly within this time bound.
+    /// This value is the sum of the ([`self.duration`]) field and an additional extra timeout (if provided).
+    requests_dispatch_timeout: Duration,
+    /// Additional time bound for collecting all the responses, after requests' dispatch completion.
+    responses_collection_extra_timeout: Duration,
 }
 
 /// Fully defines a call to be executed against a canister.
@@ -77,7 +83,12 @@ pub struct RequestResult {
 type Counter = usize;
 
 #[derive(Debug, Clone)]
-pub struct WorkloadError;
+pub enum WorkloadError {
+    RequestsDispatchTimeout(String),
+    ResponsesCollectionTimeout(String),
+    RequestDispatchFailure(String),
+    ResponseCollectionFailure(String),
+}
 
 /// Defines result of the workload execution.
 pub struct Metrics {
@@ -188,33 +199,37 @@ impl<T: Plan> Workload<T> {
             duration,
             plan,
             log,
+            requests_dispatch_timeout: duration,
+            responses_collection_extra_timeout: Duration::ZERO,
         }
     }
 
-    /// Execute all requests against canisters.
-    /// Requests are executed in separate tasks asynchronously.
-    /// Each task executes a request and uses a "sender" (producer) object to place result of the request execution into a high-throughput
-    /// channel. Another asynchronous task (collector) dequeues results from the channel via "receiver" (consumer) object and processes them.
-    pub async fn execute(&self) -> Result<Metrics, WorkloadError> {
-        let requests_count = self.rps * self.duration.as_secs() as usize;
+    /// This extra timeout should normally not be provided.
+    /// As the workload's rate limiter should ensure that requests are dispatched strictly within the specified ([`self.duration`]) time bound.
+    /// However, there might be scenarios, where this dispatch time bound should be relaxed.
+    pub fn increase_requests_dispatch_timeout(mut self, extra_timeout: Duration) -> Self {
+        self.requests_dispatch_timeout += extra_timeout;
+        self
+    }
 
+    pub fn with_responses_collection_extra_timeout(mut self, timeout: Duration) -> Self {
+        self.responses_collection_extra_timeout = timeout;
+        self
+    }
+
+    async fn dispatch_requests(
+        &self,
+        sender: Sender<RequestResult>,
+        requests_count: usize,
+    ) -> Result<(), WorkloadError> {
         let rate_limiter = RateLimiter::builder()
             .initial(self.rps)
             .interval(RATE_LIMITER_INTERVAL)
             .refill(self.rps)
             .build();
 
-        // Single consumer, multiple producers channel.
-        let (sender, receiver) = channel(requests_count);
-        let collector_handle =
-            tokio::task::spawn(collect_results(self.log.clone(), receiver, requests_count));
         let mut request_handles: Vec<JoinHandle<()>> = Vec::with_capacity(requests_count);
 
-        info!(
-            self.log,
-            "Starting workload execution with {} requests.", requests_count,
-        );
-        let start = Instant::now();
         for idx in 0..requests_count {
             rate_limiter.acquire_one().await;
             let request = self.plan.get_request(idx);
@@ -227,28 +242,73 @@ impl<T: Plan> Workload<T> {
             request_handles.push(task);
         }
         for (idx, handle) in request_handles.iter_mut().enumerate() {
-            handle
-                .await
-                .unwrap_or_else(|_| panic!("Execution of the request with index={} failed.", idx));
+            if let Err(err) = handle.await {
+                return Err(WorkloadError::RequestDispatchFailure(format!(
+                    "Execution of the request with index={} failed with error={}.",
+                    idx, err,
+                )));
+            }
         }
-        let sending_requests_duration = start.elapsed();
+        Ok(())
+    }
+
+    /// Execute all requests against canisters.
+    /// Requests are executed in separate tasks asynchronously.
+    /// Each task executes a request and uses a "sender" (producer) object to place result of the request execution into a high-throughput
+    /// channel. Another asynchronous task (collector) dequeues results from the channel via "receiver" (consumer) object and processes them.
+    pub async fn execute(&self) -> Result<Metrics, WorkloadError> {
+        let requests_count = self.rps * self.duration.as_secs() as usize;
+        // Single consumer, multiple producers channel.
+        let (sender, receiver) = channel::<RequestResult>(requests_count);
+        let collector_handle =
+            task::spawn(collect_results(self.log.clone(), receiver, requests_count));
+        info!(
+            self.log,
+            "Starting dispatch of {} requests, to be executed within {} sec.",
+            requests_count,
+            self.duration.as_secs()
+        );
+        let start = Instant::now();
+        let is_timeout = timeout(
+            self.requests_dispatch_timeout,
+            self.dispatch_requests(sender, requests_count),
+        )
+        .await
+        .is_err();
+        if is_timeout {
+            return Err(WorkloadError::RequestsDispatchTimeout(format!(
+                "Requests were not submitted within the timeout of {} sec.",
+                self.requests_dispatch_timeout.as_secs()
+            )));
+        }
+        let requests_dispatch_duration = start.elapsed();
         info!(
             self.log,
             "Workload finished sending requests in: {} sec/{} ms/{} μs.",
-            sending_requests_duration.as_secs(),
-            sending_requests_duration.as_millis() % 1000,
-            sending_requests_duration.as_micros() % 1000000,
+            requests_dispatch_duration.as_secs(),
+            requests_dispatch_duration.as_millis() % 1_000,
+            requests_dispatch_duration.as_micros() % 1_000_000,
         );
-        let metrics = collector_handle
-            .await
-            .expect("Execution of the results collector failed.");
-        let additional_resp_collection_duration = start.elapsed() - sending_requests_duration;
+        let metrics = match timeout(self.responses_collection_extra_timeout, collector_handle).await
+        {
+            Err(_) => {
+                return Err(WorkloadError::ResponsesCollectionTimeout(format!(
+                    "Responses were not collected within the timeout={} sec, after requests had been dispatched. Consider increasing the response collection timeout.",
+                    self.responses_collection_extra_timeout.as_secs()
+                )))
+            }
+            Ok(result) => match result {
+                Err(err) => return Err(WorkloadError::ResponseCollectionFailure(err.to_string())),
+                Ok(res) => res,
+            },
+        };
+        let additional_resp_collection_duration = start.elapsed() - requests_dispatch_duration;
         info!(
             self.log,
-            "All responses were collected after workload finished within: {} sec/{} ms/{} μs.",
+            "It took additional {} sec/{} ms/{} μs to collect all responses, after requests were dispatched.",
             additional_resp_collection_duration.as_secs(),
-            additional_resp_collection_duration.as_millis() % 1000,
-            additional_resp_collection_duration.as_micros() % 1000000
+            additional_resp_collection_duration.as_millis() % 1_000,
+            additional_resp_collection_duration.as_micros() % 1_000_000
         );
         Ok(metrics)
     }

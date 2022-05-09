@@ -44,6 +44,7 @@ const NON_EXISTING_METHOD_B: &str = "non_existing_method_b";
 const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
 const SUCCESS_THRESHOLD: f32 = 0.95; // If more than 95% of the expected calls are successful the test passes
+const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(5); // Responses are collected during the workload execution + this extra time, after all requests had been dispatched.
 
 /// Default configuration for this test
 pub fn config() -> InternetComputer {
@@ -134,7 +135,8 @@ fn test(
             )),
             Request::Update(CallSpec::new(canisters[1], "write", payload.clone())),
         ]);
-        let workload = Workload::new(agents, rps, duration, plan, ctx.logger.clone());
+        let workload = Workload::new(agents, rps, duration, plan, ctx.logger.clone())
+            .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT);
         let metrics = workload
             .execute()
             .await
