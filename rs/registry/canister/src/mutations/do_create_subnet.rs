@@ -4,10 +4,7 @@ use crate::{
     common::LOG_PREFIX,
     mutations::{
         common::{decode_registry_value, encode_or_panic},
-        dkg::{
-            ComputeInitialEcdsaDealingsArgs, ComputeInitialEcdsaDealingsResponse,
-            SetupInitialDKGArgs, SetupInitialDKGResponse,
-        },
+        dkg::{SetupInitialDKGArgs, SetupInitialDKGResponse},
     },
     registry::Registry,
 };
@@ -23,9 +20,7 @@ use ic_ic00_types::EcdsaKeyId;
 use ic_protobuf::registry::subnet::v1::EcdsaConfig;
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
-    subnet::v1::{
-        CatchUpPackageContents, EcdsaInitialization, GossipAdvertConfig, GossipConfig, SubnetRecord,
-    },
+    subnet::v1::{CatchUpPackageContents, GossipAdvertConfig, GossipConfig, SubnetRecord},
 };
 use ic_registry_keys::make_node_record_key;
 use ic_registry_keys::{
@@ -67,7 +62,7 @@ impl Registry {
             registry_version: self.latest_version(),
         };
 
-        // 2. Invoke NI-DKG on ic_00
+        // 2a. Invoke NI-DKG on ic_00
         let response_bytes = call(
             CanisterId::ic_00(),
             "setup_initial_dkg",
@@ -87,48 +82,13 @@ impl Registry {
         let subnet_id_principal = payload.subnet_id_override.unwrap_or(generated_subnet_id);
         let subnet_id = SubnetId::new(subnet_id_principal);
 
-        let latest_version = self.latest_version() as u64;
-        let initial_ecdsa_dealings_futures = payload
-            .ecdsa_config
-            .clone()
-            .unwrap_or_default() // empty config
-            .keys
-            .iter()
-            .map(|key_install| {
-                // create requests outside of async move context to avoid ownership problems
-                let key_id = key_install.key_id.clone();
-                ComputeInitialEcdsaDealingsArgs {
-                    key_id,
-                    nodes: node_principal_ids.clone(),
-                    registry_version: latest_version,
-                }
-            })
-            .map(|dealing_request| async move {
-                let response_bytes = call(
-                    CanisterId::ic_00(),
-                    "compute_initial_ecdsa_dealings",
-                    bytes,
-                    Encode!(&dealing_request).unwrap(),
-                )
-                .await
-                .unwrap();
-
-                let response =
-                    ComputeInitialEcdsaDealingsResponse::decode(&response_bytes).unwrap();
-                println!(
-                    "{}response from compute_initial_ecdsa_dealings successfully received",
-                    LOG_PREFIX
-                );
-
-                EcdsaInitialization {
-                    key_id: Some((&dealing_request.key_id).into()),
-                    dealings: Some(response.initial_dealings),
-                }
-            })
-            .collect::<Vec<_>>();
-
-        let ecdsa_initializations: Vec<EcdsaInitialization> =
-            futures::future::join_all(initial_ecdsa_dealings_futures).await;
+        // 2b. Invoke compute_initial_ecdsa_dealings on ic_00
+        let ecdsa_initializations = self
+            .get_all_initial_ecdsa_dealings_from_ic00(
+                &payload.ecdsa_config,
+                node_principal_ids.clone(),
+            )
+            .await;
 
         // 3. Create subnet record and associated entries
         let cup_contents = CatchUpPackageContents {

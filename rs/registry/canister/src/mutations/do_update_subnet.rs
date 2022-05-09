@@ -4,19 +4,15 @@ use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Re
 
 use candid::{CandidType, Deserialize};
 use dfn_core::println;
-use ic_nns_common::registry::decode_or_panic;
 use serde::Serialize;
 
 use ic_base_types::{subnet_id_into_protobuf, SubnetId};
 use ic_ic00_types::EcdsaKeyId;
-use ic_protobuf::registry::{
-    crypto::v1::EcdsaSigningSubnetList,
-    subnet::v1::{GossipAdvertConfig, SubnetRecord},
-};
+use ic_protobuf::registry::subnet::v1::{GossipAdvertConfig, SubnetRecord};
 use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
 use ic_types::p2p::build_default_gossip_config;
 
 /// Updates the subnet's configuration in the registry.
@@ -43,9 +39,9 @@ impl Registry {
 
         if let Some(ecdsa_key_signing_enable) = payload.ecdsa_key_signing_enable {
             for key_id in &ecdsa_key_signing_enable {
-                let ecdsa_signing_subnet_list_key_id = make_ecdsa_signing_subnet_list_key(key_id);
                 let mut ecdsa_signing_subnet_list_record = self
-                    .get_ecdsa_signing_subnet_list_or_default(&ecdsa_signing_subnet_list_key_id);
+                    .get_ecdsa_signing_subnet_list(key_id)
+                    .unwrap_or_default();
 
                 let ecdsa_signing_subnet_list_contains_subnet_id = ecdsa_signing_subnet_list_record
                     .subnets
@@ -74,7 +70,7 @@ impl Registry {
 
                     let ecdsa_signing_subnet_list_mutation = RegistryMutation {
                         mutation_type: registry_mutation::Type::Upsert as i32,
-                        key: ecdsa_signing_subnet_list_key_id.as_bytes().to_vec(),
+                        key: make_ecdsa_signing_subnet_list_key(key_id).into_bytes(),
                         value: encode_or_panic(&ecdsa_signing_subnet_list_record),
                     };
 
@@ -85,25 +81,6 @@ impl Registry {
 
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
-    }
-
-    fn get_ecdsa_signing_subnet_list_or_default(
-        &self,
-        ecdsa_signing_subnet_list_key_id: &str,
-    ) -> EcdsaSigningSubnetList {
-        match self.get(
-            ecdsa_signing_subnet_list_key_id.as_bytes(),
-            self.latest_version(),
-        ) {
-            Some(RegistryValue {
-                value: ecdsa_signing_subnet_list_record_vec,
-                version: _,
-                deletion_marker: _,
-            }) => decode_or_panic::<EcdsaSigningSubnetList>(
-                ecdsa_signing_subnet_list_record_vec.to_vec(),
-            ),
-            None => EcdsaSigningSubnetList { subnets: vec![] },
-        }
     }
 
     /// Validates that EcdsaKeyId's are globally unique across all subnets
