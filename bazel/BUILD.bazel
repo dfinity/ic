@@ -1,0 +1,4 @@
+exports_files(
+    ["buildifier_test.bash.template"],
+    visibility = ["//visibility:public"],
+)
