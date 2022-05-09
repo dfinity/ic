@@ -1,0 +1,16 @@
+[Unit]
+Description=Boundary Node Prober
+
+[Service]
+User=prober
+Group=prober
+Restart=always
+ExecStart=/opt/ic/bin/boundary-node-prober \
+    --routes-dir "${ROUTES_DIR}" \
+    --wallets-path "${WALLETS_PATH}" \
+    --identity-path "${IDENTITY_PATH}" \
+    --root-key-path "${ROOT_KEY_PATH}" \
+    --metrics-addr "${METRICS_ADDR}"
+
+[Install]
+WantedBy=multi-user.target
