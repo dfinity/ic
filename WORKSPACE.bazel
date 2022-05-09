@@ -34,6 +34,7 @@ crates_repository(
         "criterion": crate.spec(version = "0.3"),
         "erased-serde": crate.spec(version = "0.3.11"),
         "futures": crate.spec(version = "0.3.21"),
+        "futures-util": crate.spec(version = "0.3.21"),
         "hyper": crate.spec(version = "0.14.18"),
         "lazy_static": crate.spec(version = "1.4.0"),
         "libc": crate.spec(version = "0.2.91"),

@@ -18,6 +18,8 @@ rust_library(
     deps = [
         "@crate_index//:async-stream",
         "@crate_index//:futures",
+        "@crate_index//:futures-util",
+        "@crate_index//:hyper",
         "@crate_index//:prometheus",
         "@crate_index//:slog",
         "@crate_index//:tokio",
