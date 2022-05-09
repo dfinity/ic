@@ -265,7 +265,7 @@ allow ic_canister_sandbox_t root_t:lnk_file { getattr read };
 allow ic_canister_sandbox_t unconfined_domain_type:association recvfrom;
 allow ic_canister_sandbox_t usr_t:dir { getattr open search };
 allow ic_canister_sandbox_t ic_canister_sandbox_exec_t:file { entrypoint execute map read };
-allow ic_canister_sandbox_t ic_canister_sandbox_t:process { execmem fork getsched };
+allow ic_canister_sandbox_t ic_canister_sandbox_t:process { fork getsched };
 
 allow ic_canister_sandbox_t ic_canister_sandbox_exec_t : file { entrypoint execute map read };
 
@@ -287,11 +287,14 @@ allow ic_canister_sandbox_t ic_replica_t : unix_stream_socket { read write };
 # Allow to access the shared memory area set up by replica. NB this should be
 # labelled differently eventually because allowing tmpfs is fairly broad.
 require { type tmpfs_t; }
-allow ic_canister_sandbox_t tmpfs_t : file { read write };
+allow ic_canister_sandbox_t tmpfs_t : file { map read write getattr };
+# Also allow read-only access to checkpoint files (also given passed via
+# file descriptor from replica).
+allow ic_canister_sandbox_t ic_data_t : file { map read getattr };
 
 # Wants to read its own control group. Should deny that.
 dontaudit ic_canister_sandbox_t cgroup_t : dir { search };
-dontaudit ic_canister_sandbox_t cgroup_t : file { open read };
+dontaudit ic_canister_sandbox_t cgroup_t : file { open read getattr };
 
 # There is a leaked epoll descriptor from orchestrator!
 dontaudit ic_canister_sandbox_t ic_orchestrator_t : fd { use };
@@ -316,6 +319,11 @@ dontaudit ic_canister_sandbox_t proc_t : lnk_file { read };
 dontaudit ic_canister_sandbox_t sysctl_kernel_t : dir { search };
 dontaudit ic_canister_sandbox_t sysctl_kernel_t : file { getattr open read };
 dontaudit ic_canister_sandbox_t sysctl_t : dir { search };
+# Runtime wants to read the global memory overcommit settings. Not clear
+# why, it is not supposed to care.
+require { type sysctl_vm_overcommit_t, sysctl_vm_t; }
+dontaudit ic_canister_sandbox_t sysctl_vm_t : dir { search };
+dontaudit ic_canister_sandbox_t sysctl_vm_overcommit_t : file { open read };
 
 # Allow our unconfined domain to debug this process
 allow unconfined_domain_type ic_canister_sandbox_t : dir *;
