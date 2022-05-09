@@ -1,8 +1,10 @@
 use slog::{info, Logger};
 
+mod http;
 mod observable_counting_semaphore;
 mod unix;
 
+pub use http::{receive_body, receive_body_without_timeout, BodyReceiveError};
 pub use observable_counting_semaphore::*;
 pub use unix::{
     ensure_single_systemd_socket, incoming_from_first_systemd_socket, incoming_from_path,

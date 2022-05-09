@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use url::Url;
 
-const DEFAULT_HTTP_CONNECT_TIMEOUT_SECS: u64 = 1;
-const DEFAULT_HTTP_REQUEST_TIMEOUT_SECS: u64 = 3;
-const DEFAULT_HTTP_REQUEST_SIZE_LIMIT_BYTES: u64 = 1048576; // 1Mb
+const DEFAULT_HTTP_CONNECT_TIMEOUT_SECS: u64 = 5;
+const DEFAULT_HTTP_REQUEST_TIMEOUT_SECS: u64 = 10;
+const DEFAULT_HTTP_REQUEST_SIZE_LIMIT_BYTES: usize = 10 * 1024 * 1024; // 10Mb
 
 #[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
 /// The source of the unix domain socket to be used for inter-process
@@ -29,7 +29,7 @@ impl Default for IncomingSource {
 pub struct Config {
     pub http_connect_timeout_secs: u64,
     pub http_request_timeout_secs: u64,
-    pub http_request_size_limit_bytes: u64,
+    pub http_request_size_limit_bytes: usize,
     pub incoming_source: IncomingSource,
     pub logger: LoggerConfig,
     // Boundary node socks proxy on mainnet: https://gitlab.com/dfinity-lab/public/ic/-/blob/master/ic-os/boundary-guestos/doc/Components.adoc#user-content-socks-proxy

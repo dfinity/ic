@@ -3558,11 +3558,17 @@ name = "ic-async-utils"
 version = "0.8.0"
 dependencies = [
  "async-stream",
+ "bytes",
  "futures",
+ "futures-util",
+ "hyper",
+ "ic-types 0.8.0",
  "prometheus",
+ "rand 0.8.4",
  "slog",
  "tokio",
  "tonic",
+ "tower",
 ]
 
 [[package]]
