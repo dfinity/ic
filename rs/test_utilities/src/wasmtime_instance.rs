@@ -24,21 +24,12 @@ use crate::{
 
 pub const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 
-fn execution_parameters() -> ExecutionParameters {
-    ExecutionParameters {
-        total_instruction_limit: DEFAULT_NUM_INSTRUCTIONS,
-        slice_instruction_limit: DEFAULT_NUM_INSTRUCTIONS,
-        canister_memory_limit: ic_types::NumBytes::from(4 << 30),
-        subnet_available_memory: AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into(),
-        compute_allocation: ComputeAllocation::default(),
-        subnet_type: SubnetType::Application,
-        execution_mode: ExecutionMode::Replicated,
-    }
-}
-
 pub struct WasmtimeInstanceBuilder {
     wat: String,
     globals: Vec<Global>,
+    api_type: ic_system_api::ApiType,
+    num_instructions: NumInstructions,
+    subnet_type: SubnetType,
 }
 
 impl Default for WasmtimeInstanceBuilder {
@@ -46,6 +37,9 @@ impl Default for WasmtimeInstanceBuilder {
         Self {
             wat: "".to_string(),
             globals: vec![],
+            api_type: ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
+            num_instructions: DEFAULT_NUM_INSTRUCTIONS,
+            subnet_type: SubnetType::Application,
         }
     }
 }
@@ -66,6 +60,24 @@ impl WasmtimeInstanceBuilder {
         Self { globals, ..self }
     }
 
+    pub fn with_api_type(self, api_type: ic_system_api::ApiType) -> Self {
+        Self { api_type, ..self }
+    }
+
+    pub fn with_num_instructions(self, num_instructions: NumInstructions) -> Self {
+        Self {
+            num_instructions,
+            ..self
+        }
+    }
+
+    pub fn with_subnet_type(self, subnet_type: SubnetType) -> Self {
+        Self {
+            subnet_type,
+            ..self
+        }
+    }
+
     pub fn build(self) -> WasmtimeInstance<SystemApiImpl> {
         let log = no_op_logger();
         let wasm = wabt::wat2wasm(self.wat).expect("Failed to convert wat to wasm");
@@ -78,17 +90,23 @@ impl WasmtimeInstanceBuilder {
             .compile(&output.binary)
             .expect("Failed to compile canister wasm");
 
-        let user_id = user_test_id(24);
-
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
         let system_state = SystemStateBuilder::default().build();
         let sandbox_safe_system_state =
             SandboxSafeSystemState::new(&system_state, cycles_account_manager);
         let api = ic_system_api::SystemApiImpl::new(
-            ic_system_api::ApiType::init(mock_time(), vec![], user_id.get()),
+            self.api_type,
             sandbox_safe_system_state,
             ic_types::NumBytes::from(0),
-            execution_parameters(),
+            ExecutionParameters {
+                total_instruction_limit: self.num_instructions,
+                slice_instruction_limit: self.num_instructions,
+                canister_memory_limit: ic_types::NumBytes::from(4 << 30),
+                subnet_available_memory: AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into(),
+                compute_allocation: ComputeAllocation::default(),
+                subnet_type: self.subnet_type,
+                execution_mode: ExecutionMode::Replicated,
+            },
             Memory::default(),
             Arc::new(ic_system_api::DefaultOutOfInstructionsHandler {}),
             log,
@@ -106,7 +124,7 @@ impl WasmtimeInstanceBuilder {
             )
             .map_err(|r| r.0)
             .expect("Failed to create instance");
-        instance.set_num_instructions(DEFAULT_NUM_INSTRUCTIONS);
+        instance.set_num_instructions(self.num_instructions);
         instance
     }
 }
