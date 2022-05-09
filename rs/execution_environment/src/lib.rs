@@ -1,3 +1,4 @@
+mod anonymous_query_handler;
 mod canister_manager;
 mod canister_settings;
 mod execution;
@@ -6,14 +7,13 @@ mod execution_environment_metrics;
 mod history;
 mod hypervisor;
 mod ingress_filter;
-mod internal_query_handler;
 mod metrics;
 mod query_handler;
 mod scheduler;
 mod types;
 pub mod util;
 
-use crate::internal_query_handler::AnonymousQueryHandler;
+use crate::anonymous_query_handler::AnonymousQueryHandler;
 pub use execution_environment::{
     CanisterHeartbeatError, ExecutionEnvironment, ExecutionEnvironmentImpl,
 };

@@ -41,15 +41,14 @@ use ic_replicated_state::{
     },
     CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
 };
-use ic_types::messages::InternalQuery;
 use ic_types::{
     canister_http::{CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequestContext},
     crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey},
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
     ingress::{IngressStatus, WasmResult},
     messages::{
-        is_subnet_message, CallbackId, Ingress, MessageId, Payload, RejectContext, Request,
-        Response, SignedIngressContent, StopCanisterContext,
+        is_subnet_message, AnonymousQuery, CallbackId, Ingress, MessageId, Payload, RejectContext,
+        Request, Response, SignedIngressContent, StopCanisterContext,
     },
     CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId, Time, UserId,
 };
@@ -1639,11 +1638,11 @@ impl ExecutionEnvironmentImpl {
 
     pub(crate) fn execute_anonymous_query(
         &self,
-        internal_query: InternalQuery,
+        anonymous_query: AnonymousQuery,
         state: Arc<ReplicatedState>,
         max_instructions_per_message: NumInstructions,
     ) -> Result<WasmResult, UserError> {
-        let canister_id = internal_query.receiver;
+        let canister_id = anonymous_query.receiver;
         let canister = state.get_active_canister(&canister_id)?;
         let subnet_available_memory = subnet_memory_capacity(&self.config);
         let execution_parameters = self.execution_parameters(
@@ -1657,8 +1656,8 @@ impl ExecutionEnvironmentImpl {
             .hypervisor
             .execute_anonymous_query(
                 state.time(),
-                &internal_query.method_name,
-                &internal_query.method_payload,
+                &anonymous_query.method_name,
+                &anonymous_query.method_payload,
                 canister,
                 None,
                 execution_parameters,

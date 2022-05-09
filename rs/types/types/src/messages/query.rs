@@ -75,7 +75,7 @@ impl HasCanisterId for UserQuery {
 
 /// Represents a Query that is sent by the IC.
 #[derive(Clone, PartialEq, Debug)]
-pub struct InternalQuery {
+pub struct AnonymousQuery {
     pub receiver: CanisterId,
     pub method_name: String,
     pub method_payload: Vec<u8>,
@@ -84,9 +84,9 @@ pub struct InternalQuery {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "status")]
-pub enum InternalQueryResponse {
+pub enum AnonymousQueryResponse {
     Replied {
-        reply: InternalQueryResponseReply,
+        reply: AnonymousQueryResponseReply,
     },
     Rejected {
         reject_code: RejectCode,
@@ -94,9 +94,9 @@ pub enum InternalQueryResponse {
     },
 }
 
-/// The body of the `InternalQueryResponse`.
+/// The body of the `AnonymousQueryResponse`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct InternalQueryResponseReply {
+pub struct AnonymousQueryResponseReply {
     pub arg: Blob,
 }
 
