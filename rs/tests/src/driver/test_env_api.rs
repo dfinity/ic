@@ -161,6 +161,7 @@ use slog::{info, warn, Logger};
 use ssh2::Session;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
+use std::io::Read;
 use std::net::{Ipv4Addr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -649,6 +650,12 @@ pub trait HasPublicApiUrl {
     /// Waits until the is_healthy() returns true
     fn await_status_is_healthy(&self) -> Result<()>;
 
+    /// Is it accessible via ssh with the admin user
+    fn can_login_as_admin_via_ssh(&self) -> Result<bool>;
+
+    /// Waits until the accessible() returns true
+    fn await_can_login_as_admin_via_ssh(&self) -> Result<()>;
+
     fn with_default_agent<F, Fut, R>(&self, op: F) -> R
     where
         F: FnOnce(Agent) -> Fut + 'static,
@@ -695,6 +702,27 @@ impl HasPublicApiUrl for IcNodeSnapshot {
             serde_cbor::value::from_value::<HttpStatusResponse>(cbor_response)
                 .expect("failed to deserialize a response to HttpStatusResponse"),
         )
+    }
+
+    fn can_login_as_admin_via_ssh(&self) -> Result<bool> {
+        let sess = self.get_ssh_session(ADMIN)?;
+        let mut channel = sess.channel_session()?;
+        channel.exec("echo ready")?;
+        let mut s = String::new();
+        channel.read_to_string(&mut s)?;
+        Ok(s.trim() == "ready")
+    }
+
+    fn await_can_login_as_admin_via_ssh(&self) -> Result<()> {
+        retry(self.env.logger(), RETRY_TIMEOUT, RETRY_BACKOFF, || {
+            self.can_login_as_admin_via_ssh().and_then(|s| {
+                if !s {
+                    bail!("Not ready!")
+                } else {
+                    Ok(())
+                }
+            })
+        })
     }
 
     fn status_is_healthy(&self) -> Result<bool> {
