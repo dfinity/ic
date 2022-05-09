@@ -46,7 +46,7 @@ tar_extract(
 ext4_image(
     name = "partition-boot.tar",
     src = ":rootfs-tree.tar",
-    extra_files={
+    extra_files = {
         ":extra_boot_args.dev": "/boot/extra_boot_args:0644",
     },
     file_contexts = ":file_contexts",
