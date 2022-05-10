@@ -25,7 +25,6 @@ gflags.DEFINE_string(
 gflags.MarkFlagAsRequired("wg_testnet")
 gflags.DEFINE_integer("subnet", 1, "Subnet from which to choose the target machine.")
 gflags.DEFINE_integer("wg_subnet", 0, "Subnet in which to run the workload generator.")
-gflags.DEFINE_integer("wg_connections_per_host", 1, "Number of connections to use per workload generator.")
 gflags.DEFINE_string("target_subnet_id", "", "Subnet ID that is running the canister specified by canister_id.")
 gflags.DEFINE_boolean("target_all", False, "Target all nodes, even when running query calls.")
 gflags.DEFINE_string("targets", "", "Set load target IP adresses from this coma-separated list directly.")
@@ -37,6 +36,16 @@ gflags.DEFINE_integer(
     0,
     "The node idx to use within the subnetwork to target for query calls. Only relevant when running against mainnet.",
 )
+
+# When failure rate reaches this level, there is no point keep running, so stop following experiments.
+STOP_FAILURE_RATE = 0.4
+# When median latency reaches this level, there is no point keep running, so stop following experiments.
+STOP_T_MEDIAN = 30000
+
+# When failure rate is below this level, we consider the experiment successful.
+ALLOWABLE_FAILURE_RATE = 0.2
+# When median latency is below this level, we consider the experiment successful.
+ALLOWABLE_T_MEDIAN = 5000
 
 
 class WorkloadExperiment(base_experiment.BaseExperiment):
@@ -184,7 +193,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         recovered = False
         curr_i = 0
 
-        if FLAGS.no_instrument or FLAGS.no_prometheus:
+        if FLAGS.no_instrument:
             time.sleep(60)
             return
 

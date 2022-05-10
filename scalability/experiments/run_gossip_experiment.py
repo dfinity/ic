@@ -24,16 +24,16 @@ from statistics import mean
 import gflags
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common.workload_experiment import WorkloadExperiment  # noqa
+from common import workload_experiment  # noqa
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_integer("duration", 60, "Duration to run the workload in seconds.")
-gflags.DEFINE_integer("load", 50, "Load in requests per second to issue, default is 50.")
+gflags.DEFINE_integer("iter_duration", 60, "Duration to run the workload in seconds.")
+gflags.DEFINE_integer("rps", 50, "Load in requests per second to issue, default is 50.")
 gflags.DEFINE_integer("max_nodes", 50, "Add machines until given number of nodes is reached.")
 gflags.DEFINE_integer("subnet_to_grow", 1, "Index of the subnet to grow.")
 
 
-class GossipExperiment(WorkloadExperiment):
+class GossipExperiment(workload_experiment.WorkloadExperiment):
     """Implementation for testing gossip capacity with varied size of subnets."""
 
     def __init__(self):
@@ -145,16 +145,17 @@ class GossipExperiment(WorkloadExperiment):
             duration_in_iteration = int(time.time()) - t_start
             duration.append(duration_in_iteration)
 
-            if failure_rate < FLAGS.allowable_failure_rate and t_median < FLAGS.update_allowable_t_median:
+            if failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE and t_median < FLAGS.allowable_t_median:
                 subnet_size_max = max(subnet_size_max, len(members))
 
             num_succ_per_iteration.append(num_success)
             subnet_sizes.append(subnet_size_max)
 
             run = (
-                failure_rate < FLAGS.stop_failure_rate
-                and t_median < FLAGS.stop_t_median
+                failure_rate < workload_experiment.STOP_FAILURE_RATE
+                and t_median < workload_experiment.STOP_T_MEDIAN
                 and len(self.get_unassigned_nodes()) > 0
+                and len(members) <= FLAGS.max_nodes
             )
 
             # Write summary file in each iteration including experiment specific data.

@@ -47,9 +47,6 @@ gflags.DEFINE_string(
 
 gflags.DEFINE_boolean("simulate_machine_failures", False, "Simulate machine failures while testing.")
 gflags.DEFINE_string("nns_url", "", "Use the following NNS URL instead of getting it from the testnet configuration")
-gflags.DEFINE_string(
-    "artifacts_git_revision", "HEAD", "GIT revision to use for the artifacts (e.g. workload generator)"
-)
 
 
 class BaseExperiment:
@@ -107,9 +104,7 @@ class BaseExperiment:
             subprocess.run(["rm", "-rf", self.artifacts_path], check=True)
             # Download new artifacts.
             artifacts_env = os.environ.copy()
-            artifacts_env["GIT"] = subprocess.check_output(
-                ["git", "rev-parse", FLAGS.artifacts_git_revision], encoding="utf-8"
-            )
+            artifacts_env["GIT"] = subprocess.check_output(["git", "rev-parse", "HEAD"], encoding="utf-8")
             artifacts_env["GET_GUEST_OS"] = "0"
             output = subprocess.check_output(
                 ["../ic-os/guestos/scripts/get-artifacts.sh"], encoding="utf-8", env=artifacts_env

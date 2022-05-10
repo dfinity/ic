@@ -1,11 +1,7 @@
 import os
 
-import gflags
 from common import metrics
 from common import ssh
-
-FLAGS = gflags.FLAGS
-gflags.DEFINE_boolean("no_flamegraphs", False, "Set true to disable generating flamegraphs.")
 
 TARGET_DIR = "/var/lib/ic/data/flamegraph"
 
@@ -19,8 +15,7 @@ class Flamegraph(metrics.Metric):
 
         Called once at the beginning of the benchmark.
         """
-        if FLAGS.no_flamegraphs:
-            self.do_instrument = False
+        if not self.do_instrument:
             return
         self.install_flamegraph([self.target])
 
@@ -111,10 +106,6 @@ if __name__ == "__main__":
     import threading
 
     import common.base_experiment as base_experiment
-    import gflags
-    import sys
-
-    gflags.FLAGS(sys.argv)
 
     exp = base_experiment.BaseExperiment()
     exp.start_iteration()
@@ -129,7 +120,7 @@ if __name__ == "__main__":
         th = threading.Thread(target=thread)
         th.start()
 
-        m = Flamegraph("flamegraph", exp.target)
+        m = Flamegraph("flamegraph", exp.target, True)
         m.init()
         m.start_iteration("/tmp")
         time.sleep(500)

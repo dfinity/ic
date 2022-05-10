@@ -63,7 +63,7 @@ def main(argv):
     base_arguments = [
         "--nns_url",
         ic_url,
-        "--no_flamegraphs=True",
+        "--no_instrument=True",
         "--no_prometheus=True",
         "--testnet",
         "none",
@@ -125,7 +125,7 @@ def main(argv):
             "experiments/run_system_baseline_experiment.py",
             "--iter_duration",
             "10",
-            "--load",
+            "--rps",
             "50",
             "--num_workload_generators",
             "1",
@@ -140,7 +140,7 @@ def main(argv):
             "experiments/run_system_baseline_experiment.py",
             "--iter_duration",
             "10",
-            "--load",
+            "--rps",
             "5",
             "--use_updates=True",
             "--num_workload_generators",
@@ -156,9 +156,9 @@ def main(argv):
             "experiments/max_capacity_system_baseline.py",
             "--iter_duration",
             "20",
-            "--query_initial_rps",
+            "--initial_rps",
             "20",
-            "--max_query_load",
+            "--max_rps",
             "20",
             "--num_workload_generators",
             "1",
@@ -173,9 +173,9 @@ def main(argv):
             "experiments/max_capacity_system_baseline.py",
             "--iter_duration",
             "20",
-            "--update_initial_rps",
+            "--initial_rps",
             "20",
-            "--max_update_load",
+            "--max_rps",
             "20",
             "--num_workload_generators",
             "1",
@@ -207,7 +207,7 @@ def main(argv):
         [
             "python3",
             "experiments/run_gossip_experiment.py",
-            "--duration",
+            "--iter_duration",
             "10",
         ]
         + base_arguments_load_test
@@ -220,7 +220,7 @@ def main(argv):
             "experiments/run_large_memory_experiment.py",
             "--iter_duration",
             "10",
-            "--target_update_load",
+            "--rps",
             "5",
             "--use_updates=True",
         ]
@@ -234,9 +234,9 @@ def main(argv):
             "experiments/max_capacity_large_memory.py",
             "--iter_duration",
             "20",
-            "--query_initial_rps",
+            "--initial_rps",
             "20",
-            "--max_query_load",
+            "--max_rps",
             "20",
         ]
         + base_arguments_load_test
@@ -249,9 +249,9 @@ def main(argv):
             "experiments/max_capacity_large_memory.py",
             "--iter_duration",
             "20",
-            "--query_initial_rps",
+            "--initial_rps",
             "20",
-            "--max_query_load",
+            "--max_rps",
             "20",
         ]
         + base_arguments_load_test
