@@ -9,8 +9,7 @@ use ic_types::consensus::ecdsa::{
     ThresholdEcdsaSigInputsRef, TranscriptLookupError,
 };
 use ic_types::consensus::{Block, BlockPayload, HasHeight};
-use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
-use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation;
+use ic_types::crypto::canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptOperation};
 use ic_types::Height;
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -172,12 +171,13 @@ pub(crate) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
 
 #[cfg(test)]
 pub(crate) mod test_utils {
+    use super::*;
     use crate::consensus::mocks::{dependencies, Dependencies};
     use crate::ecdsa::complaints::{
         EcdsaComplaintHandlerImpl, EcdsaTranscriptLoader, TranscriptLoadStatus,
     };
     use crate::ecdsa::pre_signer::{EcdsaPreSignerImpl, EcdsaTranscriptBuilder};
-    use crate::ecdsa::signer::EcdsaSignerImpl;
+    use crate::ecdsa::signer::{EcdsaSignatureBuilder, EcdsaSignerImpl};
     use ic_artifact_pool::ecdsa_pool::EcdsaPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
@@ -203,7 +203,7 @@ pub(crate) mod test_utils {
         IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
     };
     use ic_types::crypto::canister_threshold_sig::{
-        ExtendedDerivationPath, ThresholdEcdsaSigShare,
+        ExtendedDerivationPath, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigShare,
     };
     use ic_types::crypto::AlgorithmId;
     use ic_types::malicious_behaviour::MaliciousBehaviour;
@@ -449,7 +449,6 @@ pub(crate) mod test_utils {
         fn get_completed_transcript(
             &self,
             transcript_id: IDkgTranscriptId,
-            _ecdsa_pool: &dyn EcdsaPool,
         ) -> Option<IDkgTranscript> {
             self.transcripts
                 .lock()
@@ -461,7 +460,6 @@ pub(crate) mod test_utils {
         fn get_validated_dealings(
             &self,
             transcript_id: IDkgTranscriptId,
-            _ecdsa_pool: &dyn EcdsaPool,
         ) -> BTreeMap<NodeId, IDkgDealing> {
             self.dealings
                 .lock()
@@ -469,6 +467,27 @@ pub(crate) mod test_utils {
                 .get(&transcript_id)
                 .cloned()
                 .unwrap_or_default()
+        }
+    }
+
+    pub(crate) struct TestEcdsaSignatureBuilder {
+        signatures: Vec<(RequestId, ThresholdEcdsaCombinedSignature)>,
+    }
+
+    impl TestEcdsaSignatureBuilder {
+        pub(crate) fn new() -> Self {
+            Self {
+                signatures: Vec::new(),
+            }
+        }
+    }
+
+    impl EcdsaSignatureBuilder for TestEcdsaSignatureBuilder {
+        fn get_completed_signatures(
+            &self,
+            _chain: Arc<dyn ConsensusBlockChain>,
+        ) -> Vec<(RequestId, ThresholdEcdsaCombinedSignature)> {
+            self.signatures.clone()
         }
     }
 

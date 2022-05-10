@@ -26,7 +26,8 @@ use ic_types::signature::MultiSignature;
 use ic_types::{Height, NodeId, SubnetId};
 
 use prometheus::IntCounterVec;
-use std::collections::{BTreeMap, BTreeSet};
+use std::cell::RefCell;
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
 
@@ -916,21 +917,16 @@ impl EcdsaPreSigner for EcdsaPreSignerImpl {
     }
 }
 
-pub(crate) trait EcdsaTranscriptBuilder: Send {
+pub(crate) trait EcdsaTranscriptBuilder {
     /// Returns the specified transcript if it can be successfully
     /// built from the current entries in the ECDSA pool
-    fn get_completed_transcript(
-        &self,
-        transcript_id: IDkgTranscriptId,
-        ecdsa_pool: &dyn EcdsaPool,
-    ) -> Option<IDkgTranscript>;
+    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript>;
 
     /// Returns the validated dealings for the given transcript Id from
     /// the ECDSA pool
     fn get_validated_dealings(
         &self,
         transcript_id: IDkgTranscriptId,
-        ecdsa_pool: &dyn EcdsaPool,
     ) -> BTreeMap<NodeId, IDkgDealing>;
 }
 
@@ -938,6 +934,8 @@ pub(crate) struct EcdsaTranscriptBuilderImpl<'a> {
     requested_transcripts: Vec<IDkgTranscriptParams>,
     crypto: &'a dyn ConsensusCrypto,
     metrics: &'a EcdsaPayloadMetrics,
+    ecdsa_pool: &'a dyn EcdsaPool,
+    cache: RefCell<BTreeMap<IDkgTranscriptId, IDkgTranscript>>,
     log: ReplicaLogger,
 }
 
@@ -945,6 +943,7 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
     pub(crate) fn new(
         chain: Arc<dyn ConsensusBlockChain>,
         crypto: &'a dyn ConsensusCrypto,
+        ecdsa_pool: &'a dyn EcdsaPool,
         metrics: &'a EcdsaPayloadMetrics,
         log: ReplicaLogger,
     ) -> Self {
@@ -955,21 +954,20 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
             metrics.payload_errors.clone(),
             &log,
         );
+        let cache = RefCell::new(BTreeMap::new());
 
         Self {
             requested_transcripts,
             crypto,
+            ecdsa_pool,
+            cache,
             metrics,
             log,
         }
     }
 
     /// Build the specified transcript from the pool.
-    fn build_transcript(
-        &self,
-        transcript_id: IDkgTranscriptId,
-        ecdsa_pool: &dyn EcdsaPool,
-    ) -> Option<IDkgTranscript> {
+    fn build_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
         // Look up the transcript params
         let transcript_params = self
             .requested_transcripts
@@ -988,14 +986,15 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
         timed_call(
             "aggregate_dealing_support",
             || {
-                for (_, signed_dealing) in ecdsa_pool.validated().signed_dealings() {
+                for (_, signed_dealing) in self.ecdsa_pool.validated().signed_dealings() {
                     let dealing = signed_dealing.get();
                     if dealing.idkg_dealing.transcript_id != transcript_id {
                         continue;
                     }
 
                     // Collect the shares for this dealing and aggregate the shares
-                    let support_shares: Vec<EcdsaDealingSupport> = ecdsa_pool
+                    let support_shares: Vec<EcdsaDealingSupport> = self
+                        .ecdsa_pool
                         .validated()
                         .dealing_support()
                         .filter_map(|(_, support)| {
@@ -1129,13 +1128,9 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
     }
 
     /// Helper to get the validated dealings.
-    fn get_validated_dealings(
-        &self,
-        transcript_id: IDkgTranscriptId,
-        ecdsa_pool: &dyn EcdsaPool,
-    ) -> BTreeMap<NodeId, IDkgDealing> {
+    fn validated_dealings(&self, transcript_id: IDkgTranscriptId) -> BTreeMap<NodeId, IDkgDealing> {
         let mut ret = BTreeMap::new();
-        for (_, signed_dealing) in ecdsa_pool.validated().signed_dealings() {
+        for (_, signed_dealing) in self.ecdsa_pool.validated().signed_dealings() {
             let dealing = signed_dealing.get();
             if dealing.idkg_dealing.transcript_id == transcript_id {
                 ret.insert(dealing.idkg_dealing.dealer_id, dealing.idkg_dealing.clone());
@@ -1146,14 +1141,15 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
 }
 
 impl<'a> EcdsaTranscriptBuilder for EcdsaTranscriptBuilderImpl<'a> {
-    fn get_completed_transcript(
-        &self,
-        transcript_id: IDkgTranscriptId,
-        ecdsa_pool: &dyn EcdsaPool,
-    ) -> Option<IDkgTranscript> {
+    fn get_completed_transcript(&self, transcript_id: IDkgTranscriptId) -> Option<IDkgTranscript> {
         timed_call(
             "get_completed_transcript",
-            || self.build_transcript(transcript_id, ecdsa_pool),
+            || match self.cache.borrow_mut().entry(transcript_id) {
+                Entry::Vacant(e) => self
+                    .build_transcript(transcript_id)
+                    .map(|transcript| e.insert(transcript).clone()),
+                Entry::Occupied(e) => Some(e.get().clone()),
+            },
             &self.metrics.transcript_builder_duration,
         )
     }
@@ -1161,11 +1157,10 @@ impl<'a> EcdsaTranscriptBuilder for EcdsaTranscriptBuilderImpl<'a> {
     fn get_validated_dealings(
         &self,
         transcript_id: IDkgTranscriptId,
-        ecdsa_pool: &dyn EcdsaPool,
     ) -> BTreeMap<NodeId, IDkgDealing> {
         timed_call(
             "get_validated_dealings",
-            || self.get_validated_dealings(transcript_id, ecdsa_pool),
+            || self.validated_dealings(transcript_id),
             &self.metrics.transcript_builder_duration,
         )
     }
