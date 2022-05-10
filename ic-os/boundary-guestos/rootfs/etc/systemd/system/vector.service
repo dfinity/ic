@@ -1,0 +1,11 @@
+[Unit]
+Description=Vector
+
+[Service]
+User=vector
+Group=vector
+Restart=always
+ExecStart=/usr/bin/vector --config /etc/vector/vector.toml
+
+[Install]
+WantedBy=multi-user.target

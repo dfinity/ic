@@ -1,0 +1,28 @@
+[sources.vector_metrics]
+type = "internal_metrics"
+
+[sinks.vector_exporter]
+type = "prometheus_exporter"
+inputs = ["vector_metrics"]
+address = "0.0.0.0:9598"
+default_namespace = "vector"
+
+[sources.nginx_access]
+type = "file"
+include = ["/var/log/nginx/access_json.log"]
+
+[transforms.nginx_access_json]
+type = "remap"
+inputs = ["nginx_access"]
+source = """
+. = parse_json!(.message)
+"""
+
+[sinks.elasticsearch_nginx_access]
+type = "elasticsearch"
+inputs = ["nginx_access_json"]
+endpoint = "${ELASTICSEARCH_URL}"
+mode = "bulk"
+bulk.index = "vector-nginx-access-%Y-%m-%d"
+tls.enabled = true
+tls.verify_certificate = false
