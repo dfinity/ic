@@ -27,6 +27,11 @@ RUN \
     curl -L -O https://artifacts.elastic.co/downloads/beats/journalbeat/journalbeat-oss-7.5.1-linux-x86_64.tar.gz && \
     echo "b1c4c12a5ea8b0e95ed78243ad08dc6e82dc414186da8324d86833c5114846c6edf06590b45cf6c0f29f57e4631c4bf4163e0020d466cf3a2cb65910540f39c5  journalbeat-oss-7.5.1-linux-x86_64.tar.gz" | shasum -c
 
+# Download and verify vector
+RUN \
+    curl -L -O https://packages.timber.io/vector/0.21.0/vector_0.21.0-1_amd64.deb && \
+    echo "bd713a9e739cca53f9aa1e49e4abf0f0a3ba68a1c5f5f42106ed9b98282f2f06f009e0779c24368aea9d4e829af7614043ae9625dcc849717931c20a6812ede7  vector_0.21.0-1_amd64.deb" | shasum -c
+
 # Download and verify node_exporter
 RUN \
     curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-amd64.tar.gz && \
@@ -175,6 +180,11 @@ RUN addgroup journalbeat && \
     adduser journalbeat journalbeat && \
     adduser journalbeat systemd-journal
 
+# The "vector" account. Used to run vector binary
+RUN addgroup vector && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Vector" vector && \
+    adduser vector vector
+
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
 RUN addgroup node_exporter && \
@@ -212,6 +222,11 @@ RUN cd /tmp/ && \
                /var/log/journalbeat && \
     chmod 0644 /etc/journalbeat/*.yml && \
     rm /tmp/journalbeat-oss-7.5.1-linux-x86_64.tar.gz
+
+# Install vector
+COPY --from=download /tmp/vector_0.21.0-1_amd64.deb /tmp/vector_0.21.0-1_amd64.deb
+RUN dpkg -i --force-confold /tmp/vector_0.21.0-1_amd64.deb && \
+    rm /tmp/vector_0.21.0-1_amd64.deb
 
 # Install node_exporter
 COPY --from=download /tmp/node_exporter-1.3.1.linux-amd64.tar.gz /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
