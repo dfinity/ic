@@ -22,6 +22,7 @@ use ic_replicated_state::{
 use ic_replicated_state::{ExportedFunctions, NetworkTopology, PageIndex, SubnetTopology};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ApiType;
+use ic_test_utilities::execution_environment::{assert_empty_reply, ExecutionTestBuilder};
 use ic_test_utilities::types::messages::{IngressBuilder, RequestBuilder};
 use ic_test_utilities::{
     assert_utils::assert_balance_equals,
@@ -5211,62 +5212,36 @@ fn execute_with_huge_cycle_balance() {
 
 #[test]
 fn install_gzip_compressed_module() {
-    with_hypervisor(|hypervisor, tmp_path| {
-        let wat = r#"
-                (module
-                    (import "ic0" "msg_reply" (func $msg_reply))
-                    (import "ic0" "msg_reply_data_append"
-                        (func $msg_reply_data_append (param i32 i32)))
-                    (func $inc
-                        (i32.store
-                            (i32.const 0)
-                            (i32.add (i32.load (i32.const 0)) (i32.const 1))))
-                    (func $read
-                        (call $msg_reply_data_append
-                            (i32.const 0) ;; the counter from heap[0]
-                            (i32.const 4)) ;; length
-                        (call $msg_reply))
-                    (memory $memory 1)
-                    (export "canister_query read" (func $read))
-                    (export "canister_update inc" (func $inc))
-                )"#;
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+                (func $msg_reply_data_append (param i32 i32)))
+            (func $inc
+                (i32.store
+                    (i32.const 0)
+                    (i32.add (i32.load (i32.const 0)) (i32.const 1))))
+            (func $read
+                (call $msg_reply_data_append
+                    (i32.const 0) ;; the counter from heap[0]
+                    (i32.const 4)) ;; length
+                (call $msg_reply))
+            (memory $memory 1)
+            (export "canister_query read" (func $read))
+            (export "canister_update inc" (func $inc))
+        )"#;
 
-        let binary = {
-            let wasm = wabt::wat2wasm(wat).unwrap();
-            let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
-            std::io::copy(&mut &wasm[..], &mut encoder).unwrap();
-            encoder.finish().into_result().unwrap()
-        };
+    let binary = {
+        let wasm = wabt::wat2wasm(wat).unwrap();
+        let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
+        std::io::copy(&mut &wasm[..], &mut encoder).unwrap();
+        encoder.finish().into_result().unwrap()
+    };
 
-        let canister_id = canister_test_id(42);
-        let execution_state = hypervisor
-            .create_execution_state(binary, tmp_path, canister_id)
-            .unwrap();
-
-        let canister = canister_from_exec_state(execution_state, canister_id);
-        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
-
-        let (_, _, subnet_topology) = setup();
-
-        let (canister, _, _, _) = hypervisor.execute_update(
-            canister,
-            RequestOrIngress::Ingress(IngressBuilder::new().method_name("inc".to_string()).build()),
-            mock_time(),
-            subnet_topology,
-            execution_parameters.clone(),
-        );
-
-        let (_, _, result) = hypervisor.execute_query(
-            QueryExecutionType::Replicated,
-            "read",
-            EMPTY_PAYLOAD.as_slice(),
-            test_caller(),
-            canister,
-            None,
-            mock_time(),
-            execution_parameters,
-        );
-
-        assert_eq!(result, Ok(Some(WasmResult::Reply(vec![1, 0, 0, 0]))));
-    });
+    let canister_id = test.canister_from_binary(binary).unwrap();
+    let result = test.ingress(canister_id, "inc", vec![]);
+    assert_empty_reply(result);
+    let result = test.ingress(canister_id, "read", vec![]);
+    assert_eq!(result, Ok(WasmResult::Reply(vec![1, 0, 0, 0])));
 }

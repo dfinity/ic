@@ -7269,6 +7269,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-cycles-account-manager",
  "ic-embedders",
+ "ic-error-types",
  "ic-execution-environment",
  "ic-ic00-types",
  "ic-interfaces",
