@@ -372,18 +372,18 @@ impl EcdsaSigner for EcdsaSignerImpl {
     }
 }
 
-pub(crate) trait EcdsaSignatureBuilder: Send {
+pub(crate) trait EcdsaSignatureBuilder {
     /// Returns the signatures that can be successfully built from
     /// the current entries in the ECDSA pool
     fn get_completed_signatures(
         &self,
         chain: Arc<dyn ConsensusBlockChain>,
-        ecdsa_pool: &dyn EcdsaPool,
     ) -> Vec<(RequestId, ThresholdEcdsaCombinedSignature)>;
 }
 
 pub(crate) struct EcdsaSignatureBuilderImpl<'a> {
     crypto: &'a dyn ConsensusCrypto,
+    ecdsa_pool: &'a dyn EcdsaPool,
     metrics: &'a EcdsaPayloadMetrics,
     log: ReplicaLogger,
 }
@@ -391,11 +391,13 @@ pub(crate) struct EcdsaSignatureBuilderImpl<'a> {
 impl<'a> EcdsaSignatureBuilderImpl<'a> {
     pub(crate) fn new(
         crypto: &'a dyn ConsensusCrypto,
+        ecdsa_pool: &'a dyn EcdsaPool,
         metrics: &'a EcdsaPayloadMetrics,
         log: ReplicaLogger,
     ) -> Self {
         Self {
             crypto,
+            ecdsa_pool,
             metrics,
             log,
         }
@@ -430,7 +432,6 @@ impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
     fn get_completed_signatures(
         &self,
         chain: Arc<dyn ConsensusBlockChain>,
-        ecdsa_pool: &dyn EcdsaPool,
     ) -> Vec<(RequestId, ThresholdEcdsaCombinedSignature)> {
         let block_reader = EcdsaBlockReaderImpl::new(chain);
         let requested_signatures = resolve_sig_inputs_refs(
@@ -447,7 +448,7 @@ impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
         }
 
         // Step 1: collect per request signature shares
-        for (_, share) in ecdsa_pool.validated().signature_shares() {
+        for (_, share) in self.ecdsa_pool.validated().signature_shares() {
             let signature_state = match sig_input_map.get_mut(&share.request_id) {
                 Some(state) => state,
                 None => continue,
