@@ -53,7 +53,6 @@ strum = "0.23.0"
 comparable = { version = "0.5", features = ["derive"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-clap = "3.0.0-beta.2"
 csv = "1.1"
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 

@@ -1,4 +1,4 @@
-use clap::{App, Arg};
+use clap::{Arg, Command};
 use ic_config::{Config, ConfigSource};
 use ic_logger::{info, new_replica_logger_from_config};
 use std::os::unix::io::FromRawFd;
@@ -8,7 +8,7 @@ const IC_CRYPTO_CSP_SOCKET_NAME: &str = "ic-crypto-csp.socket";
 
 #[tokio::main]
 async fn main() {
-    let flags = App::new("Remote CspVault server")
+    let flags = Command::new("Remote CspVault server")
         .version("0.1")
         .author("Internet Computer Developers")
         .about(
@@ -20,7 +20,7 @@ async fn main() {
             .as_str(),
         )
         .arg(
-            Arg::with_name("replica-config-file")
+            Arg::new("replica-config-file")
                 .long("replica-config-file")
                 .value_name("STRING")
                 .help("The path to the replica config file (ic.json5)")

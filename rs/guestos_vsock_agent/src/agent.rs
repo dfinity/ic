@@ -76,44 +76,44 @@ fn send_msg_to_host(message: &str, port: u32) -> Result<(), Error> {
     send_msg(message, cid_host, port)
 }
 
-use clap::{App, Arg};
+use clap::{Arg, Command};
 
 fn main() -> Result<(), Error> {
-    let matches = App::new("Host notifier")
+    let matches = Command::new("Host notifier")
         .version("0.1.0")
         .author("DFINITY Stiftung (c) 2021")
         .about("Sends messages to the VM host (Hypervisor) over Vsock")
         .arg(
-            Arg::with_name("attach-hsm")
+            Arg::new("attach-hsm")
                 .long("attach-hsm")
                 .help("Request the HSM device to be attached"),
         )
         .arg(
-            Arg::with_name("detach-hsm")
+            Arg::new("detach-hsm")
                 .long("detach-hsm")
                 .help("Request the HSM device to be detached"),
         )
         .arg(
-            Arg::with_name("set-node-id")
+            Arg::new("set-node-id")
                 .long("set-node-id")
                 .value_name("node_id")
                 .help("Set the node ID on the host.")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("join-success")
+            Arg::new("join-success")
                 .long("join-success")
                 .help("Notify the host of a successful join request"),
         )
         .arg(
-            Arg::with_name("upgrade")
+            Arg::new("upgrade")
                 .long("upgrade")
                 .value_name("info")
                 .help("Request the HostOS to apply upgrade")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("port")
+            Arg::new("port")
                 .long("port")
                 .value_name("PORT")
                 .help("Sets a custom port")
@@ -122,7 +122,7 @@ fn main() -> Result<(), Error> {
         )
         .get_matches();
 
-    let port = clap::value_t_or_exit!(matches.value_of("port"), u32);
+    let port = matches.value_of_t_or_exit("port");
 
     if matches.is_present("attach-hsm") {
         return send_msg_to_host("attach-hsm", port);

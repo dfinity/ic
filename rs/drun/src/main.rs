@@ -1,4 +1,4 @@
-use clap::{App, Arg, ArgMatches};
+use clap::{Arg, ArgMatches, Command};
 use ic_canister_sandbox_backend_lib::{
     canister_sandbox_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
@@ -65,38 +65,44 @@ async fn drun_main() -> Result<(), String> {
     })
 }
 
-fn get_arg_matches() -> ArgMatches<'static> {
-    App::new("ic standalone interface")
+fn get_arg_matches() -> ArgMatches {
+    Command::new("ic standalone interface")
         .about("Standalone interface for testing application canisters.")
         .arg(
-            Arg::with_name(ARG_EXTRA_BATCHES)
+            Arg::new(ARG_EXTRA_BATCHES)
                 .long("extra-batches")
                 .value_name("INT")
-                .help(&format!(
+                .help(
+                    format!(
                     "Extra batches to execute after each response has been received (default: {}).",
                     DEFAULT_EXTRA_BATCHES
-                ))
+                )
+                    .as_str(),
+                )
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(ARG_CONF)
-                .short("c")
+            Arg::new(ARG_CONF)
+                .short('c')
                 .long("config")
                 .value_name("config")
-                .help(&format!(
-                    "Main configuration of the node (default: {}).",
-                    DEFAULT_CONFIG_FILE
-                ))
+                .help(
+                    format!(
+                        "Main configuration of the node (default: {}).",
+                        DEFAULT_CONFIG_FILE
+                    )
+                    .as_str(),
+                )
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(ARG_MESSAGES)
+            Arg::new(ARG_MESSAGES)
                 .required(true)
                 .value_name("Query/Ingress Messages")
                 .help("Text file containing one message per line."),
         )
         .arg(
-            Arg::with_name(ARG_LOG_FILE)
+            Arg::new(ARG_LOG_FILE)
                 .long(ARG_LOG_FILE)
                 .value_name("log_file")
                 .help("Log file for the run (default: None).")

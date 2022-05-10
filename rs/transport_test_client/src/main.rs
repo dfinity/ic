@@ -22,7 +22,7 @@ use async_trait::async_trait;
 ///
 /// If not specified, message_count = 100 (default, applies only for the source
 /// node)
-use clap::{App, Arg, ArgMatches};
+use clap::{Arg, ArgMatches, Command};
 use crossbeam_channel::{self, Receiver, RecvTimeoutError, Sender};
 use rand::Rng;
 use std::collections::HashSet;
@@ -416,18 +416,18 @@ impl AsyncTransportEventHandler for TestClientEventHandler {
 }
 
 // Returns the command line argument matcher.
-fn cmd_line_matches() -> ArgMatches<'static> {
-    App::new("Test Transport Client")
+fn cmd_line_matches() -> ArgMatches {
+    Command::new("Test Transport Client")
         .about("Test program to test the transport layer")
         .arg(
-            Arg::with_name(ARG_NODE_ID)
+            Arg::new(ARG_NODE_ID)
                 .long("node")
                 .help("node id [1..3]")
                 .required(true)
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(ARG_MSG_COUNT)
+            Arg::new(ARG_MSG_COUNT)
                 .long("message_count")
                 .help("Message Count")
                 .default_value("100")
