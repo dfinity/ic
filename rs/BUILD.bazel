@@ -25,5 +25,6 @@ filegroup(
         "//rs/protobuf:sources",
         "//rs/protobuf/generator:sources",
         "//rs/test_utilities/compare_dirs:sources",
+        "//rs/utils:sources",
     ],
 )
