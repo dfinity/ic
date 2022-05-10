@@ -1,4 +1,5 @@
 use crate::{
+    driver::test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
     nns::{
         get_governance_canister, submit_bless_replica_version_proposal,
         submit_update_subnet_replica_version_proposal, vote_execute_proposal_assert_executed,
@@ -52,7 +53,7 @@ pub(crate) fn get_update_image_url(image_type: UpdateImageType, git_revision: &s
     }
 }
 
-pub async fn fetch_update_file_sha256(version_str: &str, is_test_img: bool) -> String {
+pub(crate) async fn fetch_update_file_sha256(version_str: &str, is_test_img: bool) -> String {
     let sha_url = get_update_image_url(UpdateImageType::Sha256, version_str);
     let tmp_dir = tempfile::tempdir().unwrap().into_path();
     let mut tmp_file = tmp_dir.clone();
@@ -78,7 +79,7 @@ pub async fn fetch_update_file_sha256(version_str: &str, is_test_img: bool) -> S
     panic!("SHA256 hash is not fund in {}", sha_url)
 }
 
-pub async fn get_blessed_replica_versions(
+pub(crate) async fn get_blessed_replica_versions(
     registry_canister: &RegistryCanister,
 ) -> BlessedReplicaVersions {
     let blessed_vers_result = registry_canister
@@ -136,6 +137,20 @@ pub(crate) fn get_assigned_replica_version(endpoint: &IcEndpoint) -> Result<Stri
     }
 }
 
+/// Gets the replica version from the endpoint if it is healthy.
+pub(crate) fn get_assigned_replica_version_v2(node: &IcNodeSnapshot) -> Result<String, String> {
+    let version = match node.status() {
+        Ok(status) if Some(ReplicaHealthStatus::Healthy) == status.replica_health_status => status,
+        Ok(_) => return Err("Replica is not healty".to_string()),
+        Err(err) => return Err(err.to_string()),
+    }
+    .impl_version;
+    match version {
+        Some(ver) => Ok(ver),
+        None => Err("No version found in status".to_string()),
+    }
+}
+
 pub(crate) async fn bless_replica_version(
     nns_node: &IcEndpoint,
     target_version: &str,
@@ -179,7 +194,51 @@ pub(crate) async fn bless_replica_version(
     info!(logger, "Updated: {:?}", blessed_versions);
 }
 
-pub async fn update_subnet_replica_version(
+pub(crate) async fn bless_replica_version_v2(
+    nns_node: &IcNodeSnapshot,
+    target_version: &str,
+    image_type: UpdateImageType,
+    url_image_type: UpdateImageType, // normaly it is the same as above, unless we want to have bogus url
+    logger: &Logger,
+) {
+    let upgrade_url = get_update_image_url(url_image_type, target_version);
+    info!(logger, "Upgrade URL: {}", upgrade_url);
+
+    let nns = runtime_from_url(nns_node.get_public_url());
+    let governance_canister = get_governance_canister(&nns);
+    let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
+    let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
+    let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
+    let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
+    info!(logger, "Initial: {:?}", blessed_versions);
+    let sha256 =
+        fetch_update_file_sha256(target_version, image_type == UpdateImageType::ImageTest).await;
+
+    let replica_version = match image_type == UpdateImageType::ImageTest {
+        true => ReplicaVersion::try_from(format!("{}-test", target_version)).unwrap(),
+        false => ReplicaVersion::try_from(target_version).unwrap(),
+    };
+
+    info!(
+        logger,
+        "Blessing replica version {} with sha256 {}", replica_version, sha256
+    );
+
+    let proposal_id = submit_bless_replica_version_proposal(
+        &governance_canister,
+        proposal_sender.clone(),
+        test_neuron_id,
+        replica_version,
+        sha256,
+        upgrade_url,
+    )
+    .await;
+    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
+    let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
+    info!(logger, "Updated: {:?}", blessed_versions);
+}
+
+pub(crate) async fn update_subnet_replica_version(
     nns_node: &IcEndpoint,
     new_replica_version: &ReplicaVersion,
     subnet_id: SubnetId,
@@ -188,7 +247,7 @@ pub async fn update_subnet_replica_version(
     let governance_canister = get_governance_canister(&nns);
     let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
     let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
-    let proposal2_id = submit_update_subnet_replica_version_proposal(
+    let proposal_id = submit_update_subnet_replica_version_proposal(
         &governance_canister,
         proposal_sender.clone(),
         test_neuron_id,
@@ -196,5 +255,25 @@ pub async fn update_subnet_replica_version(
         subnet_id,
     )
     .await;
-    vote_execute_proposal_assert_executed(&governance_canister, proposal2_id).await;
+    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
+}
+
+pub(crate) async fn update_subnet_replica_version_v2(
+    nns_node: &IcNodeSnapshot,
+    new_replica_version: &ReplicaVersion,
+    subnet_id: SubnetId,
+) {
+    let nns = runtime_from_url(nns_node.get_public_url());
+    let governance_canister = get_governance_canister(&nns);
+    let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
+    let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
+    let proposal_id = submit_update_subnet_replica_version_proposal(
+        &governance_canister,
+        proposal_sender.clone(),
+        test_neuron_id,
+        new_replica_version.clone(),
+        subnet_id,
+    )
+    .await;
+    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
 }
