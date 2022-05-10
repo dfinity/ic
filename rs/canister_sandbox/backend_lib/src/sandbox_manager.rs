@@ -458,6 +458,18 @@ impl SandboxManager {
         paused_execution.resume();
     }
 
+    /// Abort the paused Wasm execution.
+    pub fn abort_execution(sandbox_manager: &Arc<SandboxManager>, exec_id: ExecId) {
+        let paused_execution = {
+            let mut guard = sandbox_manager.repr.lock().unwrap();
+            guard
+                .paused_executions
+                .remove(&exec_id)
+                .unwrap_or_else(|| unreachable!("Failed to get paused execution {}", exec_id))
+        };
+        paused_execution.abort();
+    }
+
     pub fn create_execution_state(
         &self,
         wasm_id: WasmId,

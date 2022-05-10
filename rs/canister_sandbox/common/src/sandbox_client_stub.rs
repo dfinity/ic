@@ -80,6 +80,16 @@ impl SandboxService for SandboxClientStub {
         Call::new(cell)
     }
 
+    fn abort_execution(&self, req: AbortExecutionRequest) -> Call<AbortExecutionReply> {
+        let cell = self
+            .channel
+            .call(Request::AbortExecution(req), |rep| match rep {
+                Reply::AbortExecution(rep) => Ok(rep),
+                _ => Err(Error::ServerError),
+            });
+        Call::new(cell)
+    }
+
     fn create_execution_state(
         &self,
         req: CreateExecutionStateRequest,

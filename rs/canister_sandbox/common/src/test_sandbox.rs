@@ -46,6 +46,12 @@ impl sandbox_service::SandboxService for DummySandboxService {
     ) -> rpc::Call<sbxsvc::ResumeExecutionReply> {
         unimplemented!()
     }
+    fn abort_execution(
+        &self,
+        _req: sbxsvc::AbortExecutionRequest,
+    ) -> rpc::Call<sbxsvc::AbortExecutionReply> {
+        unimplemented!()
+    }
     fn create_execution_state(
         &self,
         _req: sbxsvc::CreateExecutionStateRequest,

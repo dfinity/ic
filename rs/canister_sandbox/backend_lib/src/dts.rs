@@ -152,10 +152,7 @@ impl DeterministicTimeSlicing {
                 unreachable!("Unexpected paused status after waiting for a condition variable")
             }
             ExecutionStatus::Running => Ok(state.slice_instruction_limit),
-            ExecutionStatus::Aborted => {
-                // TODO(EXC-864): Implement aborting of execution by return a new "abort" error here.
-                unimplemented!()
-            }
+            ExecutionStatus::Aborted => Err(HypervisorError::Aborted),
         }
     }
 }
@@ -171,8 +168,6 @@ impl PausedExecution {
         self.dts.resume();
     }
 
-    // TODO(EXC-864): Implement aborting of execution.
-    #[allow(dead_code)]
     pub fn abort(self) {
         self.dts.abort();
     }
