@@ -269,6 +269,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         orchestrator::unassigned_node_upgrade_test::test,
                     )]),
                 ),
+                pot_with_setup(
+                    "unstuck_subnet_test_pot",
+                    orchestrator::unstuck_subnet_test::config,
+                    par(vec![sys_t("unstuck_subnet_test", orchestrator::unstuck_subnet_test::test)]),
+                ),
                 pot(
                     "ssh_access_to_nodes_pot",
                     orchestrator::ssh_access_to_nodes::config(),

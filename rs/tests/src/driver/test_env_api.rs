@@ -375,7 +375,6 @@ impl IcNodeSnapshot {
         Url::parse(&url).expect("Could not parse Url")
     }
 
-    #[allow(dead_code)]
     pub fn get_ip_addr(&self) -> IpAddr {
         let node_record = self.raw_node_record();
         let connection_endpoint = node_record.http.expect("Node doesn't have URL");
