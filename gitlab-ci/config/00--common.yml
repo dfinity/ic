@@ -56,6 +56,15 @@ variables:
     GIT_CACHE_PATH="/cache/git-v3/@{CI_PROJECT_PATH}/@{CI_CONCURRENT_ID}"
     mkdir -p "@{GIT_CACHE_PATH}"
 
+    JOB_ID_FILE="@{GIT_CACHE_PATH}/CI_JOB_ID.bak"
+    touch "@{JOB_ID_FILE}"
+    if [ "$(cat @{JOB_ID_FILE})" == "@{CI_JOB_ID}" ]; then
+        RETRY_DELAY=@(( RANDOM % 60 + 60))
+        echo "Sleeping @{RETRY_DELAY} second(s) before retry ..."
+        sleep "@{RETRY_DELAY}"
+    fi
+    trap 'echo -n "@{CI_JOB_ID}" > "@{JOB_ID_FILE}"' EXIT
+
     export GIT_TRACE=1
     export GIT_CURL_VERBOSE=1
 
