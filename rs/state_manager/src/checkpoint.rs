@@ -17,6 +17,7 @@ use ic_state_layout::{
 use ic_types::Height;
 use ic_utils::thread::parallel_map;
 use std::collections::BTreeMap;
+use std::time::{Duration, Instant};
 use std::{
     convert::{From, TryFrom},
     path::Path,
@@ -44,7 +45,7 @@ pub fn make_checkpoint(
 
     {
         let _timer = metrics
-            .step_duration
+            .make_checkpoint_step_duration
             .with_label_values(&["serialize_to_tip"])
             .start_timer();
         serialize_to_tip(log, state, &tip, thread_pool)?;
@@ -52,7 +53,7 @@ pub fn make_checkpoint(
 
     let cp = {
         let _timer = metrics
-            .step_duration
+            .make_checkpoint_step_duration
             .with_label_values(&["tip_to_checkpoint"])
             .start_timer();
         layout.tip_to_checkpoint(tip, Some(thread_pool))?
@@ -60,10 +61,15 @@ pub fn make_checkpoint(
 
     let state = {
         let _timer = metrics
-            .step_duration
+            .make_checkpoint_step_duration
             .with_label_values(&["load"])
             .start_timer();
-        load_checkpoint(&cp, state.metadata.own_subnet_type, Some(thread_pool))?
+        load_checkpoint(
+            &cp,
+            state.metadata.own_subnet_type,
+            metrics,
+            Some(thread_pool),
+        )?
     };
 
     Ok(state)
@@ -238,10 +244,16 @@ fn serialize_bitcoin_state_to_tip(
 pub fn load_checkpoint_parallel<P: ReadPolicy + Send + Sync>(
     checkpoint_layout: &CheckpointLayout<P>,
     own_subnet_type: SubnetType,
+    metrics: &CheckpointMetrics,
 ) -> Result<ReplicatedState, CheckpointError> {
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
 
-    load_checkpoint(checkpoint_layout, own_subnet_type, Some(&mut thread_pool))
+    load_checkpoint(
+        checkpoint_layout,
+        own_subnet_type,
+        metrics,
+        Some(&mut thread_pool),
+    )
 }
 
 /// loads the node state heighted with `height` using the specified
@@ -249,6 +261,7 @@ pub fn load_checkpoint_parallel<P: ReadPolicy + Send + Sync>(
 pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
     checkpoint_layout: &CheckpointLayout<P>,
     own_subnet_type: SubnetType,
+    metrics: &CheckpointMetrics,
     thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> Result<ReplicatedState, CheckpointError> {
     let into_checkpoint_error =
@@ -258,40 +271,76 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
             proto_err: err.to_string(),
         };
 
-    let mut metadata = ic_replicated_state::SystemMetadata::try_from(
-        checkpoint_layout.system_metadata().deserialize()?,
-    )
-    .map_err(|err| into_checkpoint_error("SystemMetadata".into(), err))?;
-    metadata.own_subnet_type = own_subnet_type;
+    let metadata = {
+        let _timer = metrics
+            .load_checkpoint_step_duration
+            .with_label_values(&["system_metadata"])
+            .start_timer();
 
-    let subnet_queues = ic_replicated_state::CanisterQueues::try_from(
-        checkpoint_layout.subnet_queues().deserialize()?,
-    )
-    .map_err(|err| into_checkpoint_error("CanisterQueues".into(), err))?;
+        let mut metadata = ic_replicated_state::SystemMetadata::try_from(
+            checkpoint_layout.system_metadata().deserialize()?,
+        )
+        .map_err(|err| into_checkpoint_error("SystemMetadata".into(), err))?;
+        metadata.own_subnet_type = own_subnet_type;
+        metadata
+    };
 
-    let mut canister_states = BTreeMap::new();
-    let canister_ids = checkpoint_layout.canister_ids()?;
-    match thread_pool {
-        Some(thread_pool) => {
-            let results = parallel_map(thread_pool, canister_ids.iter(), |canister_id| {
-                load_canister_state_from_checkpoint(checkpoint_layout, canister_id)
-            });
+    let subnet_queues = {
+        let _timer = metrics
+            .load_checkpoint_step_duration
+            .with_label_values(&["subnet_queues"])
+            .start_timer();
 
-            for canister_state in results.into_iter() {
-                let canister_state = canister_state?;
-                canister_states.insert(canister_state.system_state.canister_id(), canister_state);
+        ic_replicated_state::CanisterQueues::try_from(
+            checkpoint_layout.subnet_queues().deserialize()?,
+        )
+        .map_err(|err| into_checkpoint_error("CanisterQueues".into(), err))?
+    };
+
+    let canister_states = {
+        let _timer = metrics
+            .load_checkpoint_step_duration
+            .with_label_values(&["canister_states"])
+            .start_timer();
+
+        let mut canister_states = BTreeMap::new();
+        let canister_ids = checkpoint_layout.canister_ids()?;
+        match thread_pool {
+            Some(thread_pool) => {
+                let results = parallel_map(thread_pool, canister_ids.iter(), |canister_id| {
+                    load_canister_state_from_checkpoint(checkpoint_layout, canister_id)
+                });
+
+                for canister_state in results.into_iter() {
+                    let (canister_state, durations) = canister_state?;
+                    canister_states
+                        .insert(canister_state.system_state.canister_id(), canister_state);
+
+                    durations.apply(metrics);
+                }
+            }
+            None => {
+                for canister_id in canister_ids.iter() {
+                    let (canister_state, durations) =
+                        load_canister_state_from_checkpoint(checkpoint_layout, canister_id)?;
+                    canister_states
+                        .insert(canister_state.system_state.canister_id(), canister_state);
+
+                    durations.apply(metrics);
+                }
             }
         }
-        None => {
-            for canister_id in canister_ids.iter() {
-                let canister_state =
-                    load_canister_state_from_checkpoint(checkpoint_layout, canister_id)?;
-                canister_states.insert(canister_state.system_state.canister_id(), canister_state);
-            }
-        }
-    }
+        canister_states
+    };
 
-    let bitcoin_testnet = load_bitcoin_state(checkpoint_layout)?;
+    let bitcoin_testnet = {
+        let _timer = metrics
+            .load_checkpoint_step_duration
+            .with_label_values(&["bitcoin_testnet"])
+            .start_timer();
+
+        load_bitcoin_state(checkpoint_layout)?
+    };
 
     let state = ReplicatedState::new_from_checkpoint(
         canister_states,
@@ -306,17 +355,37 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
     Ok(state)
 }
 
+#[derive(Default)]
+pub struct LoadCanisterMetrics {
+    durations: BTreeMap<&'static str, Duration>,
+}
+
+impl LoadCanisterMetrics {
+    pub fn apply(&self, metrics: &CheckpointMetrics) {
+        for (key, duration) in &self.durations {
+            metrics
+                .load_canister_step_duration
+                .with_label_values(&[key])
+                .observe(duration.as_secs_f64());
+        }
+    }
+}
+
 pub fn load_canister_state<P: ReadPolicy>(
     canister_layout: &CanisterLayout<P>,
     canister_id: &CanisterId,
     height: Height,
-) -> Result<CanisterState, CheckpointError> {
+) -> Result<(CanisterState, LoadCanisterMetrics), CheckpointError> {
+    let mut durations = BTreeMap::<&str, Duration>::default();
+
     let into_checkpoint_error =
         |field: String, err: ic_protobuf::proxy::ProxyDecodeError| CheckpointError::ProtoError {
             path: canister_layout.raw_path(),
             field,
             proto_err: err.to_string(),
         };
+
+    let starting_time = Instant::now();
     let canister_state_bits: CanisterStateBits =
         CanisterStateBits::try_from(canister_layout.canister().deserialize()?).map_err(|err| {
             into_checkpoint_error(
@@ -324,20 +393,30 @@ pub fn load_canister_state<P: ReadPolicy>(
                 err,
             )
         })?;
+    durations.insert("canister_state_bits", starting_time.elapsed());
 
     let session_nonce = None;
 
     let execution_state = match canister_state_bits.execution_state_bits {
         Some(execution_state_bits) => {
+            let starting_time = Instant::now();
             let wasm_memory = Memory::new(
                 PageMap::open(&canister_layout.vmemory_0(), Some(height))?,
                 execution_state_bits.heap_size,
             );
+            durations.insert("wasm_memory", starting_time.elapsed());
+
+            let starting_time = Instant::now();
             let stable_memory = Memory::new(
                 PageMap::open(&canister_layout.stable_memory_blob(), Some(height))?,
                 canister_state_bits.stable_memory_size,
             );
+            durations.insert("stable_memory", starting_time.elapsed());
+
+            let starting_time = Instant::now();
             let wasm_binary = WasmBinary::new(canister_layout.wasm().deserialize()?);
+            durations.insert("wasm_binary", starting_time.elapsed());
+
             let canister_root = canister_layout.raw_path();
             Some(ExecutionState {
                 canister_root,
@@ -354,6 +433,7 @@ pub fn load_canister_state<P: ReadPolicy>(
         None => None,
     };
 
+    let starting_time = Instant::now();
     let queues =
         ic_replicated_state::CanisterQueues::try_from(canister_layout.queues().deserialize()?)
             .map_err(|err| {
@@ -362,6 +442,8 @@ pub fn load_canister_state<P: ReadPolicy>(
                     err,
                 )
             })?;
+    durations.insert("canister_queues", starting_time.elapsed());
+
     let canister_metrics = CanisterMetrics {
         scheduled_as_first: canister_state_bits.scheduled_as_first,
         skipped_round_due_to_no_messages: canister_state_bits.skipped_round_due_to_no_messages,
@@ -382,7 +464,7 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.cycles_balance,
     );
 
-    Ok(CanisterState {
+    let canister_state = CanisterState {
         system_state,
         execution_state,
         scheduler_state: SchedulerState {
@@ -396,13 +478,17 @@ pub fn load_canister_state<P: ReadPolicy>(
             heap_delta_debit: canister_state_bits.heap_delta_debit,
             install_code_debit: canister_state_bits.install_code_debit,
         },
-    })
+    };
+
+    let metrics = LoadCanisterMetrics { durations };
+
+    Ok((canister_state, metrics))
 }
 
 fn load_canister_state_from_checkpoint<P: ReadPolicy>(
     checkpoint_layout: &CheckpointLayout<P>,
     canister_id: &CanisterId,
-) -> Result<CanisterState, CheckpointError> {
+) -> Result<(CanisterState, LoadCanisterMetrics), CheckpointError> {
     let canister_layout = checkpoint_layout.canister(canister_id)?;
     load_canister_state::<P>(&canister_layout, canister_id, checkpoint_layout.height())
 }
@@ -677,6 +763,7 @@ mod tests {
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
                 own_subnet_type,
+                &checkpoint_metrics(),
                 Some(&mut thread_pool()),
             )
             .unwrap();
@@ -748,6 +835,7 @@ mod tests {
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
                 own_subnet_type,
+                &checkpoint_metrics(),
                 Some(&mut thread_pool()),
             )
             .unwrap();
@@ -767,7 +855,12 @@ mod tests {
                 .checkpoint(MISSING_HEIGHT)
                 .map_err(CheckpointError::from)
                 .and_then(|c| {
-                    load_checkpoint(&c, SubnetType::Application, Some(&mut thread_pool()))
+                    load_checkpoint(
+                        &c,
+                        SubnetType::Application,
+                        &checkpoint_metrics(),
+                        Some(&mut thread_pool()),
+                    )
                 }) {
                 Err(CheckpointError::NotFound(_)) => (),
                 Err(err) => panic!("Expected to get NotFound error, got {:?}", err),
@@ -866,6 +959,7 @@ mod tests {
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
                 own_subnet_type,
+                &checkpoint_metrics(),
                 Some(&mut thread_pool()),
             )
             .unwrap();
@@ -917,6 +1011,7 @@ mod tests {
             let loaded_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
                 own_subnet_type,
+                &checkpoint_metrics(),
                 Some(&mut thread_pool()),
             )
             .unwrap();
@@ -962,6 +1057,7 @@ mod tests {
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
                 own_subnet_type,
+                &checkpoint_metrics(),
                 Some(&mut thread_pool()),
             )
             .unwrap();
@@ -1002,6 +1098,7 @@ mod tests {
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
                 own_subnet_type,
+                &checkpoint_metrics(),
                 Some(&mut thread_pool()),
             )
             .unwrap();
@@ -1050,6 +1147,7 @@ mod tests {
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
                 own_subnet_type,
+                &checkpoint_metrics(),
                 Some(&mut thread_pool()),
             )
             .unwrap();
@@ -1087,6 +1185,7 @@ mod tests {
             let recovered_state = load_checkpoint(
                 &layout.checkpoint(HEIGHT).unwrap(),
                 own_subnet_type,
+                &checkpoint_metrics(),
                 Some(&mut thread_pool()),
             )
             .unwrap();
