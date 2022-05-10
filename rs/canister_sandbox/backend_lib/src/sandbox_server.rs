@@ -80,6 +80,13 @@ impl SandboxService for SandboxServer {
         })
     }
 
+    fn abort_execution(&self, req: AbortExecutionRequest) -> rpc::Call<AbortExecutionReply> {
+        rpc::Call::new_resolved({
+            SandboxManager::abort_execution(&self.manager, req.exec_id);
+            Ok(AbortExecutionReply { success: true })
+        })
+    }
+
     fn create_execution_state(
         &self,
         req: CreateExecutionStateRequest,
@@ -113,7 +120,7 @@ mod tests {
     use ic_config::subnet_config::CyclesAccountManagerConfig;
     use ic_cycles_account_manager::CyclesAccountManager;
     use ic_interfaces::execution_environment::{
-        AvailableMemory, ExecutionMode, ExecutionParameters,
+        AvailableMemory, ExecutionMode, ExecutionParameters, HypervisorError,
     };
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{Global, NetworkTopology, NumWasmPages, PageIndex, PageMap};
@@ -1268,5 +1275,115 @@ mod tests {
         close_memory(&srv, stable_memory_id);
         close_memory(&srv, child_wasm_memory_id);
         close_memory(&srv, child_stable_memory_id);
+    }
+
+    #[test]
+    fn test_pause_abort() {
+        // The result of a single slice of execution.
+        #[allow(clippy::large_enum_variant)]
+        enum Completion {
+            Paused(protocol::ctlsvc::ExecutionPausedRequest),
+            Finished(protocol::ctlsvc::ExecutionFinishedRequest),
+        }
+
+        // Set up a mock service that puts the result of execution slice into this `SyncCell`.
+        let exec_sync_rx = Arc::new(SyncCell::<Completion>::new());
+        let mut controller = MockControllerService::new();
+        let exec_sync_tx = Arc::clone(&exec_sync_rx);
+        controller.expect_execution_paused().returning(move |req| {
+            (*exec_sync_tx).put(Completion::Paused(req));
+            rpc::Call::new_resolved(Ok(protocol::ctlsvc::ExecutionPausedReply {}))
+        });
+        let exec_sync_tx = Arc::clone(&exec_sync_rx);
+        controller
+            .expect_execution_finished()
+            .returning(move |req| {
+                (*exec_sync_tx).put(Completion::Finished(req));
+                rpc::Call::new_resolved(Ok(protocol::ctlsvc::ExecutionFinishedReply {}))
+            });
+        controller
+            .expect_log_via_replica()
+            .returning(move |_req| rpc::Call::new_resolved(Ok(())));
+
+        // Set up a sandbox server.
+        let srv = SandboxServer::new(SandboxManager::new(
+            Arc::new(controller),
+            EmbeddersConfig::default(),
+        ));
+
+        // Compile the wasm code.
+        let wasm_id = WasmId::new();
+        let rep = srv
+            .open_wasm(OpenWasmRequest {
+                wasm_id,
+                wasm_src: make_long_running_canister_wasm(),
+            })
+            .sync()
+            .unwrap();
+        assert!(rep.0.is_ok());
+
+        let wasm_memory = PageMap::default();
+        let wasm_memory_id = open_memory(&srv, &wasm_memory, 1);
+        let stable_memory = PageMap::default();
+        let stable_memory_id = open_memory(&srv, &stable_memory, 1);
+
+        let child_wasm_memory_id = MemoryId::new();
+        let child_stable_memory_id = MemoryId::new();
+
+        // Prepare the input such that the total execution requires 600+ instructions.
+        let exec_id = ExecId::new();
+        let mut exec_input = exec_input_for_update(
+            "run",
+            &[100, 0, 0, 0],
+            vec![],
+            child_wasm_memory_id,
+            child_stable_memory_id,
+        );
+        exec_input.execution_parameters.total_instruction_limit = NumInstructions::new(1000);
+        exec_input.execution_parameters.slice_instruction_limit = NumInstructions::new(70);
+
+        // Execute the first slice.
+        let rep = srv
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
+                exec_id,
+                wasm_id,
+                wasm_memory_id,
+                stable_memory_id,
+                exec_input,
+            })
+            .sync()
+            .unwrap();
+        assert!(rep.success);
+
+        let completion = exec_sync_rx.get();
+        match completion {
+            Completion::Paused(paused) => assert_eq!(paused.exec_id, exec_id),
+            Completion::Finished(finished) => {
+                unreachable!(
+                    "Expected the execution to pause, but it finished: {:?}",
+                    finished.exec_output.wasm
+                )
+            }
+        };
+
+        let rep = srv
+            .abort_execution(protocol::sbxsvc::AbortExecutionRequest { exec_id })
+            .sync()
+            .unwrap();
+        assert!(rep.success);
+
+        let completion = exec_sync_rx.get();
+        let result = match completion {
+            Completion::Paused(_) => {
+                unreachable!("Expected the execution to finish, but it was paused")
+            }
+            Completion::Finished(result) => result,
+        };
+        let wasm_result = result.exec_output.wasm.wasm_result;
+
+        assert_eq!(wasm_result, Err(HypervisorError::Aborted));
+
+        close_memory(&srv, wasm_memory_id);
+        close_memory(&srv, stable_memory_id);
     }
 }

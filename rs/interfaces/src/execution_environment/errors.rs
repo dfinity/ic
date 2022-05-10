@@ -121,6 +121,10 @@ pub enum HypervisorError {
     /// The canister is close to running out of Wasm memory and
     /// attempted to allocate reserved Wasm pages.
     WasmReservedPages,
+    /// The execution was aborted by deterministic time slicing. This error is
+    /// not observable by the user and should be processed before leaving Wasm
+    /// execution.
+    Aborted,
 }
 
 impl From<WasmInstrumentationError> for HypervisorError {
@@ -281,6 +285,9 @@ impl HypervisorError {
                     "Canister {} encountered a Wasm engine error: {}", canister_id, err
                 ),
             ),
+            Self::Aborted => {
+                unreachable!("Aborted execution should not be visible to the user.");
+            }
         }
     }
 
@@ -307,6 +314,7 @@ impl HypervisorError {
             HypervisorError::Cleanup { .. } => "Cleanup",
             HypervisorError::WasmEngineError(_) => "WasmEngineError",
             HypervisorError::WasmReservedPages => "WasmReservedPages",
+            HypervisorError::Aborted => "Aborted",
         }
     }
 
@@ -314,7 +322,9 @@ impl HypervisorError {
     /// Other errors could be caused by bad canister code.
     pub fn is_system_error(&self) -> bool {
         match self {
-            HypervisorError::InstrumentationFailed(_) | HypervisorError::WasmEngineError(_) => true,
+            HypervisorError::InstrumentationFailed(_)
+            | HypervisorError::WasmEngineError(_)
+            | HypervisorError::Aborted => true,
             HypervisorError::Cleanup {
                 callback_err,
                 cleanup_err,
