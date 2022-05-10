@@ -30,9 +30,7 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin ic-p8s-service-discovery \
     --bin ic-p8s-sd \
     --bin ic-prep \
-    --bin ic-recovery \
     --bin ic-regedit \
-    --bin ic-replay \
     --bin ic-rosetta-api \
     --bin ic-starter \
     --bin ic-workload-generator \
@@ -44,6 +42,10 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin prod-test-driver \
     --bin e2e-test-driver \
     --bin ic-nns-init
+
+cargo build --target $CARGO_BUILD_TARGET --profile release-stripped \
+    --bin ic-recovery \
+    --bin ic-replay
 
 cargo build --target $CARGO_BUILD_TARGET --profile release-lto \
     --bin canister_sandbox \
