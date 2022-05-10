@@ -130,6 +130,7 @@
 //! Thus, instead of randomly selecting a node to fetch registry updates, it is
 //! better to let the user select a node.
 //!
+
 use super::driver_setup::{IcSetup, SSH_AUTHORIZED_PRIV_KEYS_DIR};
 use super::test_setup::PotSetup;
 use crate::driver::farm::Farm;
@@ -372,6 +373,13 @@ impl IcNodeSnapshot {
 
         let url = format!("http://{}:{}/", host_str, http.port);
         Url::parse(&url).expect("Could not parse Url")
+    }
+
+    #[allow(dead_code)]
+    pub fn get_ip_addr(&self) -> IpAddr {
+        let node_record = self.raw_node_record();
+        let connection_endpoint = node_record.http.expect("Node doesn't have URL");
+        IpAddr::from_str(&connection_endpoint.ip_addr).expect("Missing IP address in the node")
     }
 }
 
@@ -676,7 +684,7 @@ pub trait HasPublicApiUrl {
 impl HasPublicApiUrl for IcNodeSnapshot {
     fn get_public_url(&self) -> Url {
         let node_record = self.raw_node_record();
-        IcNodeSnapshot::http_endpoint_to_url(&node_record.http.unwrap())
+        IcNodeSnapshot::http_endpoint_to_url(&node_record.http.expect("Node doesn't have URL"))
     }
 
     fn status(&self) -> Result<HttpStatusResponse> {
@@ -1096,6 +1104,10 @@ where
             }
         }
     }
+}
+
+pub fn secs(sec: u64) -> Duration {
+    Duration::from_secs(sec)
 }
 
 impl<T> RegistryResultHelper<T> for RegistryClientResult<T> {
