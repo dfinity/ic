@@ -6,11 +6,12 @@ use std::collections::BTreeMap;
 use std::net::Ipv6Addr;
 use url::Url;
 
-use super::farm::CreateVmRequest;
 use super::farm::Farm;
 use super::farm::FarmResult;
 use super::farm::ImageLocation;
 use super::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
+use super::farm::{CreateVmRequest, HostFeature};
+use super::ic::VmAllocationStrategy;
 use super::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::driver_setup::IcSetup;
 
@@ -89,6 +90,8 @@ pub struct VmSpec {
     pub memory_kibibytes: AmountOfMemoryKiB,
     pub boot_image: BootImage,
     pub has_ipv4: bool,
+    pub vm_allocation: Option<VmAllocationStrategy>,
+    pub required_host_features: Vec<HostFeature>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -176,6 +179,8 @@ pub fn get_resource_request_for_universal_vm(
             .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM),
         boot_image: BootImage::GroupDefault,
         has_ipv4: universal_vm.has_ipv4,
+        vm_allocation: universal_vm.vm_allocation.clone(),
+        required_host_features: universal_vm.required_host_features.clone(),
     });
     Ok(res_req)
 }
@@ -194,6 +199,8 @@ pub fn allocate_resources(farm: &Farm, req: &ResourceRequest) -> FarmResult<Reso
                 BootImage::Image(disk_image) => From::from(disk_image.clone()),
             },
             vm_config.has_ipv4,
+            vm_config.vm_allocation.clone(),
+            vm_config.required_host_features.clone(),
         );
 
         let created_vm = farm.create_vm(group_name, create_vm_request)?;
@@ -216,5 +223,7 @@ fn vm_spec_from_node(n: &Node) -> VmSpec {
             .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM),
         boot_image: BootImage::GroupDefault,
         has_ipv4: false,
+        vm_allocation: n.vm_allocation.clone(),
+        required_host_features: n.required_host_features.clone(),
     }
 }

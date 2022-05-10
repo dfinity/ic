@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use slog::Logger;
 
 use super::driver_setup::tee_logger;
+use super::farm::HostFeature;
 use super::ic::VmAllocationStrategy;
 use super::test_env_api::IcHandleConstructor;
 use crate::driver::ic::InternetComputer;
@@ -26,7 +27,7 @@ pub fn suite(name: &str, pots: Vec<Pot>) -> Suite {
 }
 
 pub fn pot_with_setup<F: PotSetupFn>(name: &str, setup: F, testset: TestSet) -> Pot {
-    Pot::new(name, ExecutionMode::Run, setup, testset, None, None)
+    Pot::new(name, ExecutionMode::Run, setup, testset, None, None, vec![])
 }
 
 pub fn pot(name: &str, mut ic: InternetComputer, testset: TestSet) -> Pot {
@@ -87,6 +88,7 @@ pub struct Pot {
     pub testset: TestSet,
     pub pot_timeout: Option<Duration>,
     pub vm_allocation: Option<VmAllocationStrategy>,
+    pub required_host_features: Vec<HostFeature>,
 }
 
 // In order to evaluate this function in a catch_unwind(), we need to take
@@ -124,6 +126,7 @@ impl Pot {
         testset: TestSet,
         pot_timeout: Option<Duration>,
         vm_allocation: Option<VmAllocationStrategy>,
+        required_host_features: Vec<HostFeature>,
     ) -> Self {
         Self {
             name: name.to_string(),
@@ -132,6 +135,7 @@ impl Pot {
             testset,
             pot_timeout,
             vm_allocation,
+            required_host_features,
         }
     }
 
@@ -142,6 +146,11 @@ impl Pot {
 
     pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
         self.vm_allocation = Some(vm_allocation);
+        self
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.required_host_features = required_host_features;
         self
     }
 }

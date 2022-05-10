@@ -1,6 +1,8 @@
 use super::driver_setup::IcSetup;
 use super::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
 use super::farm::Farm;
+use super::farm::HostFeature;
+use super::ic::VmAllocationStrategy;
 use super::ic::VmResources;
 use super::resource::AllocatedVm;
 use super::resource::{allocate_resources, get_resource_request_for_universal_vm, DiskImage};
@@ -25,6 +27,8 @@ use std::process::Command;
 pub struct UniversalVm {
     pub name: String,
     pub vm_resources: VmResources,
+    pub vm_allocation: Option<VmAllocationStrategy>,
+    pub required_host_features: Vec<HostFeature>,
     pub has_ipv4: bool,
     pub primary_image: Option<DiskImage>,
     pub config_dir: Option<PathBuf>,
@@ -41,6 +45,8 @@ impl UniversalVm {
         UniversalVm {
             name,
             vm_resources: Default::default(),
+            vm_allocation: Default::default(),
+            required_host_features: Default::default(),
             has_ipv4: true,
             primary_image: Default::default(),
             config_dir: Default::default(),
@@ -49,6 +55,16 @@ impl UniversalVm {
 
     pub fn with_vm_resources(mut self, vm_resources: VmResources) -> Self {
         self.vm_resources = vm_resources;
+        self
+    }
+
+    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
+        self.vm_allocation = Some(vm_allocation);
+        self
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.required_host_features = required_host_features;
         self
     }
 
