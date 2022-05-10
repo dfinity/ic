@@ -1,7 +1,7 @@
 class Metric(object):
     """Base class for all types of metrics."""
 
-    def __init__(self, name, target, do_instrument):
+    def __init__(self, name: str, target: str, do_instrument: bool):
         """Init Metric."""
         self.name = name
         self.target = target

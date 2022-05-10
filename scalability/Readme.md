@@ -4,20 +4,21 @@ The benchmarking suite is structured as follows:
 
 - An abstraction for experiments together with a set of experiments {1, 2, 3, .. ,n}
 - An abstraction for metrics, with an implementation of flamegraph and prometheus metrics.
-- A simple first report generator to render results from those experiments.
+- A report generator that renders a human-friendly summary report from those experiments.
+- A integration for sending performance data points to Grafana dashboard.
+- A pattern for exercising scenario max capacity and a pattern for spot exercising and performance verification.
 
 Currently, there is support for installing canisters, running the workload generator with different configurations and collecting statistics for it.
 
-Experiments typically run in iterations, where each iteration typically increases stress on the system.
+Maximum capacity experiments run in iterations, where each iteration typically increases stress on the system, until the benchmake suite considers system can no longer process more transactions.
 
-Each experiment has an entry point at `run_experiment_*.py`.
-Some of them (currently only Experiment 1) have a maximum capacity script as well (`max_capacity_*.py`), where the load of the system is incrementally increased until failures occur.
+Each experiment has an entry point.  `run_experiment_*.py` for a spot run, or `max_capacity_*.py` for a maximum capacity run. Worth noting that, maximum capacity runs internally call spot runs, in iteration.
 
-When running benchmarks, the tool collects all measurements and quite a few metrics, most of them are collected for each iteration the benchmark is running.
+When running benchmarks, the tool collects all measurements and metrics, most of them are collected for each iteration the benchmark is running, which will be used to generate summary report that includes iteration measurements. The reports are HTML reports, and they contain rich content (such as flamegraphs), but they also contain links to existing material such as existing Grafana dashboards.
 
-A separate tool can be used to generate reports for previously collected benchmark runs (generate_report.py). 
-Those are HTML reports. Later, we can introduce more reports, e.g. to monitor performance over time. 
-Reports contain rich content (such as flamegraphs), but they also contain links to existing material such as existing Grafana dashboards.
+Report generation (generate_report.py) is decoupled from the benchmark runs. It can be invoked by supplying the `base_dir` directory which is the root of previous experiment run artifacts are generated into, the `git_revision` of IC the experiment was executed on, and the `timestamp` the experiment is marked with. `results`, `git_revision` and `timestamp` will be concatenated to form the full artifact directory of the previous experiment run. An example of generating report command will look like:
+```common/generate_report.py --base_dir "results/" --git_revision 9f8390a49caaf43b1bd5a9d3e566ec4837b687eb --timestamp 1651766562```
+In this example, `generate_report.py` script will compile the report from artifacts in directory of `scalability/results/9f8390a49caaf43b1bd5a9d3e566ec4837b687eb/1651766562`.  Please note, always trigger your scripts from `scalability/` folder as the root.
 
 The code is as follows:
 - `metrics.py`: Abstraction for metrics. Can be started and stopped, which typically happens at the beginning and end of an iteration respectively. Currently supported are:
@@ -82,15 +83,28 @@ Depending on your requirements, boot the testnets as usual.
 
 # Run the benchmark (experiment)
 
-As described above, make sure you have *two* testnets reserved, then:
+There is a collection of flags to instruct how to run an experiment. Common ones are:
+* use_updates
+* initial_rps
+* increment_rps
+* target_rps
+* max_rps
+* testnet
+* ... 
+
+You can add more flags for your experiment as needed. 
+
+For the common workload setting flags (e.g. `initial_rps`, `increment_rps`, `target_rps`, `max_rps`), as their definition are shared between query experiments and update experiments, the default values are also shared between the two. So it is expected from experiment developer, to set sensible workload targets for the environment they run the experiment on. A typical way of doing it correctly, takes a couple of tries of different values, to find a sensible compilation of numbers, to set to the recurring pipeline.
+
+Make sure you have *two* testnets reserved, then:
 
 - Run the python script corresponding to your benchmark. A good starting point is the following, which benchmarks system overhead by stressing with query and update calls. Default are queries, use `--use_updates=True` for update calls:
 
   ```
-  $  pipenv run ./max_capacity_system_baseline.py --testnet $TESTNET --wg_testnet $WG_TESTNET
+  $  pipenv run experiments/max_capacity_system_baseline.py --testnet $TESTNET --wg_testnet $WG_TESTNET
   ```
 - You can observe the benchmark on the following dashboard: https://grafana.dfinity.systems/d/u016YUeGz/workload-generator-metrics?orgId=1&refresh=5s - make sure to select the target subnetwork *as well as* the subnetwork with workload generators under "IC" and "IC workload generator" at the top respectively.
-- Create the report `pipenv run generate_report.py githash timestamp`. This is normally called from the suite automatically, so in many cases you won't to manually run it.
+- Create the report `pipenv run generate_report.py --base_dir {your_artifacts_root_dir} --git_revision {IC_revision_your_experiment_ran_on} --timestamp {the_timestamp_marker_of_your_experiment}`. This is normally called from the suite automatically, so in many cases you won't to manually run it.
 
 # Run against mainnet
 

@@ -46,7 +46,7 @@ class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
             FLAGS.rps,
             outdir=self.iter_outdir,
             payload=codecs.encode(
-                json.dumps({"response_size": config["response_payload_size"]}).encode("utf-8"), "hex"
+                json.dumps({"response_size_bytes": config["response_payload_size"]}).encode("utf-8"), "hex"
             ),
             call_method="query",
             method="Query",
@@ -61,7 +61,8 @@ class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
         evaluated_summaries = {}
         for datapoint in datapoints:
             summary = self.run_experiment(
-                {"response_payload_size": datapoint, "load_total": datapoint}  # for labels of iteration headings
+                # for labels of iteration headings
+                {"response_payload_size": datapoint, "load_total": datapoint}
             )
             evaluated_summaries[datapoint] = summary
             print(f"{datapoint} -> {summary.percentiles[95]} -> {summary.t_median}")

@@ -40,7 +40,7 @@ import common.misc as misc  # noqa
 import common.workload_experiment as workload_experiment  # noqa
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_integer("load", 50, "Load in requests per second to issue")
+gflags.DEFINE_integer("rps", 50, "Load in requests per second to issue")
 gflags.DEFINE_integer("num_workload_generators", 2, "Number of workload generators to run")
 gflags.DEFINE_integer("iter_duration", 300, "Duration in seconds for which to execute workload in each round.")
 
@@ -106,7 +106,6 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
         total_requests = 0
         num_success = 0
         num_failure = 0
-        allowable_t_median = 0
 
         while run:
 
@@ -157,16 +156,15 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
                 run = False
 
             else:
-                allowable_t_median = FLAGS.update_allowable_t_median if self.use_updates else FLAGS.allowable_t_median
                 rps_max_iter.append(rps_max)
-                if failure_rate < FLAGS.allowable_failure_rate and t_median < allowable_t_median:
+                if failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE and t_median < FLAGS.allowable_t_median:
                     if num_success / duration_in_iteration > rps_max:
                         rps_max = evaluated_summaries.get_avg_success_rate(iter_duration)
                         rps_max_in = load_total
 
                 run = (
-                    failure_rate < FLAGS.stop_failure_rate
-                    and t_median < FLAGS.stop_t_median
+                    failure_rate < workload_experiment.STOP_FAILURE_RATE
+                    and t_median < workload_experiment.STOP_T_MEDIAN
                     and iteration < len(datapoints)
                 )
 
@@ -191,8 +189,10 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
                     "duration": duration,
                     "target_duration": iter_duration,
                     "target_load": load_total,
-                    "allowable_failure_rate": FLAGS.allowable_failure_rate if len(datapoints) > 1 else "n.a.",
-                    "allowable_t_median": FLAGS.allowable_t_median if len(datapoints) > 1 else "n.a.",
+                    "allowable_failure_rate": workload_experiment.ALLOWABLE_FAILURE_RATE
+                    if len(datapoints) > 1
+                    else "n.a.",
+                    "allowable_t_median": workload_experiment.ALLOWABLE_T_MEDIAN if len(datapoints) > 1 else "n.a.",
                 },
                 rps,
                 "requests / s",
@@ -209,4 +209,4 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
 if __name__ == "__main__":
     misc.parse_command_line_args()
     exp = BaselineExperiment()
-    exp.run_iterations([FLAGS.load])
+    exp.run_iterations([FLAGS.rps])

@@ -43,8 +43,7 @@ from common import workload_experiment  # noqa
 CANISTER = "memory-test-canister.wasm"
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_integer("target_query_load", 160, "Target query load in queries per second to issue.")
-gflags.DEFINE_integer("target_update_load", 20, "Target update load in queries per second to issue.")
+gflags.DEFINE_integer("rps", 160, "Targeted requests per second.")
 gflags.DEFINE_integer("payload_size", 5000000, "Payload size to pass to memory test canister")
 gflags.DEFINE_integer("iter_duration", 60, "Duration in seconds for which to execute workload in each round.")
 
@@ -147,14 +146,14 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
                 run = False
 
             else:
-                if failure_rate < FLAGS.allowable_failure_rate and t_median < FLAGS.allowable_t_median:
+                if failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE and t_median < FLAGS.allowable_t_median:
                     if num_success / self.last_duration > rps_max:
                         rps_max = num_success / self.last_duration
                         rps_max_in = load_total
 
                 run = (
-                    failure_rate < FLAGS.stop_failure_rate
-                    and t_median < FLAGS.stop_t_median
+                    failure_rate < workload_experiment.STOP_FAILURE_RATE
+                    and t_median < workload_experiment.STOP_T_MEDIAN
                     and iteration < len(datapoints)
                 )
 
@@ -194,5 +193,5 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
 if __name__ == "__main__":
     misc.parse_command_line_args()
     exp = LargeMemoryExperiment()
-    datapoints = [FLAGS.target_update_load]
+    datapoints = [FLAGS.rps]
     exp.run_iterations(datapoints)
