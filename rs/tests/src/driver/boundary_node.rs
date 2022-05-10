@@ -10,8 +10,8 @@ use std::{
 use crate::driver::driver_setup::{IcSetup, SSH_AUTHORIZED_PUB_KEYS_DIR};
 
 use super::{
-    farm::{CreateVmRequest, Farm, ImageLocation, VMCreateResponse},
-    ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
+    farm::{CreateVmRequest, Farm, HostFeature, ImageLocation, VMCreateResponse},
+    ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
     resource::DiskImage,
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{
@@ -41,6 +41,8 @@ fn mk_compressed_img_path() -> std::string::String {
 pub struct BoundaryNode {
     pub name: String,
     pub vm_resources: VmResources,
+    pub vm_allocation: Option<VmAllocationStrategy>,
+    pub required_host_features: Vec<HostFeature>,
     pub has_ipv4: bool,
     pub boot_image: Option<DiskImage>,
     pub nns_node_urls: Vec<Url>,
@@ -52,11 +54,23 @@ impl BoundaryNode {
         Self {
             name,
             vm_resources: Default::default(),
+            vm_allocation: Default::default(),
+            required_host_features: Default::default(),
             has_ipv4: true,
             boot_image: Default::default(),
             nns_node_urls: Default::default(),
             nns_public_key: Default::default(),
         }
+    }
+
+    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
+        self.vm_allocation = Some(vm_allocation);
+        self
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.required_host_features = required_host_features;
+        self
     }
 
     pub fn with_nns_urls(mut self, nns_node_urls: Vec<Url>) -> Self {
@@ -90,6 +104,8 @@ impl BoundaryNode {
                 Some(disk_image) => From::from(disk_image.clone()),
             },
             self.has_ipv4,
+            self.vm_allocation.clone(),
+            self.required_host_features.clone(),
         );
         let vm = farm.create_vm(&pot_setup.farm_group_name, create_vm_req)?;
 

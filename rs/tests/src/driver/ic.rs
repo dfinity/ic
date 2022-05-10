@@ -1,4 +1,5 @@
 use super::bootstrap::{init_ic, setup_and_start_vms};
+use super::farm::HostFeature;
 use super::resource::{allocate_resources, get_resource_request, ResourceGroup};
 use super::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::driver_setup::IcSetup;
@@ -26,6 +27,8 @@ use std::time::Duration;
 pub struct InternetComputer {
     pub initial_version: Option<NodeSoftwareVersion>,
     pub default_vm_resources: VmResources,
+    pub vm_allocation: Option<VmAllocationStrategy>,
+    pub required_host_features: Vec<HostFeature>,
     pub subnets: Vec<Subnet>,
     pub node_operator: Option<PrincipalId>,
     pub node_provider: Option<PrincipalId>,
@@ -38,6 +41,8 @@ pub struct InternetComputer {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum VmAllocationStrategy {
+    #[serde(rename = "distributeToArbitraryHost")]
+    DistributeToArbitraryHost,
     #[serde(rename = "distributeWithinSingleHost")]
     DistributeWithinSingleHost,
     #[serde(rename = "distributeAcrossDcs")]
@@ -60,6 +65,16 @@ impl InternetComputer {
         self
     }
 
+    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
+        self.vm_allocation = Some(vm_allocation);
+        self
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.required_host_features = required_host_features;
+        self
+    }
+
     pub fn add_subnet(mut self, subnet: Subnet) -> Self {
         self.subnets.push(subnet);
         self
@@ -74,6 +89,8 @@ impl InternetComputer {
     pub fn add_fast_single_node_subnet(mut self, subnet_type: SubnetType) -> Self {
         let mut subnet = Subnet::fast_single_node(subnet_type);
         subnet.default_vm_resources = self.default_vm_resources;
+        subnet.vm_allocation = self.vm_allocation.clone();
+        subnet.required_host_features = self.required_host_features.clone();
         self.subnets.push(subnet);
         self
     }
@@ -103,8 +120,11 @@ impl InternetComputer {
     /// The nodes inherit the VM resources of the IC.
     pub fn with_unassigned_nodes(mut self, no_of_nodes: i32) -> Self {
         for _ in 0..no_of_nodes {
-            self.unassigned_nodes
-                .push(Node::new_with_vm_resources(self.default_vm_resources));
+            self.unassigned_nodes.push(Node::new_with_settings(
+                self.default_vm_resources,
+                self.vm_allocation.clone(),
+                self.required_host_features.clone(),
+            ));
         }
         self
     }
@@ -188,6 +208,8 @@ impl InternetComputer {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Subnet {
     pub default_vm_resources: VmResources,
+    pub vm_allocation: Option<VmAllocationStrategy>,
+    pub required_host_features: Vec<HostFeature>,
     pub nodes: Vec<Node>,
     pub max_ingress_bytes_per_message: Option<u64>,
     pub ingress_bytes_per_block_soft_cap: Option<u64>,
@@ -214,6 +236,8 @@ impl Subnet {
     pub fn new(subnet_type: SubnetType) -> Self {
         Self {
             default_vm_resources: Default::default(),
+            vm_allocation: Default::default(),
+            required_host_features: vec![],
             nodes: vec![],
             max_ingress_bytes_per_message: None,
             ingress_bytes_per_block_soft_cap: None,
@@ -242,6 +266,16 @@ impl Subnet {
     /// has to be via `Node::new_with_vm_resources`.
     pub fn with_default_vm_resources(mut self, default_vm_resources: VmResources) -> Self {
         self.default_vm_resources = default_vm_resources;
+        self
+    }
+
+    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
+        self.vm_allocation = Some(vm_allocation);
+        self
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.required_host_features = required_host_features;
         self
     }
 
@@ -302,7 +336,13 @@ impl Subnet {
     pub fn add_nodes(self, no_of_nodes: usize) -> Self {
         (0..no_of_nodes).fold(self, |subnet, _| {
             let default_vm_resources = subnet.default_vm_resources;
-            subnet.add_node(Node::new_with_vm_resources(default_vm_resources))
+            let vm_allocation = subnet.vm_allocation.clone();
+            let required_host_features = subnet.required_host_features.clone();
+            subnet.add_node(Node::new_with_settings(
+                default_vm_resources,
+                vm_allocation,
+                required_host_features,
+            ))
         })
     }
 
@@ -366,6 +406,8 @@ impl Default for Subnet {
     fn default() -> Self {
         Self {
             default_vm_resources: Default::default(),
+            vm_allocation: Default::default(),
+            required_host_features: vec![],
             nodes: vec![],
             max_ingress_bytes_per_message: None,
             ingress_bytes_per_block_soft_cap: None,
@@ -405,6 +447,8 @@ pub struct VmResources {
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Node {
     pub vm_resources: VmResources,
+    pub vm_allocation: Option<VmAllocationStrategy>,
+    pub required_host_features: Vec<HostFeature>,
     pub secret_key_store: Option<NodeSecretKeyStore>,
     pub ipv6: Option<Ipv6Addr>,
 }
@@ -414,9 +458,15 @@ impl Node {
         Default::default()
     }
 
-    pub fn new_with_vm_resources(vm_resources: VmResources) -> Self {
+    pub fn new_with_settings(
+        vm_resources: VmResources,
+        vm_allocation: Option<VmAllocationStrategy>,
+        required_host_features: Vec<HostFeature>,
+    ) -> Self {
         let mut node = Node::new();
         node.vm_resources = vm_resources;
+        node.vm_allocation = vm_allocation;
+        node.required_host_features = required_host_features;
         node
     }
 

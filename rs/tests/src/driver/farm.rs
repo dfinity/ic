@@ -8,7 +8,8 @@ use std::{
 use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy};
 use anyhow::Result;
 use reqwest::blocking::{multipart, Client, RequestBuilder};
-use serde::{Deserialize, Serialize};
+use serde::de::Error;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use slog::{error, info, warn, Logger};
 use std::io::Write;
 use thiserror::Error;
@@ -222,6 +223,53 @@ struct CreateGroupRequest {
 pub struct GroupSpec {
     #[serde(rename = "vmAllocation")]
     pub vm_allocation: Option<VmAllocationStrategy>,
+    #[serde(rename = "requiredHostFeatures")]
+    pub required_host_features: Vec<HostFeature>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum HostFeature {
+    DC(String),
+    Host(String),
+}
+
+impl Serialize for HostFeature {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            HostFeature::DC(dc) => {
+                let mut host_feature: String = "dc=".to_owned();
+                host_feature.push_str(dc);
+                serializer.serialize_str(&host_feature)
+            }
+            HostFeature::Host(host) => {
+                let mut host_feature: String = "host=".to_owned();
+                host_feature.push_str(host);
+                serializer.serialize_str(&host_feature)
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for HostFeature {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let input: String = Deserialize::deserialize(deserializer)?;
+        if let Some(("", dc)) = input.split_once("dc=") {
+            Ok(HostFeature::DC(dc.to_owned()))
+        } else if let Some(("", host)) = input.split_once("host=") {
+            Ok(HostFeature::Host(host.to_owned()))
+        } else {
+            Err(Error::unknown_variant(
+                &input,
+                &["dc=<dc-name>", "host=<host-name>"],
+            ))
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -238,6 +286,10 @@ pub struct CreateVmRequest {
     pub primary_image: ImageLocation,
     #[serde(rename = "hasIPv4")]
     pub has_ipv4: bool,
+    #[serde(rename = "vmAllocation")]
+    pub vm_allocation: Option<VmAllocationStrategy>,
+    #[serde(rename = "requiredHostFeatures")]
+    pub required_host_features: Vec<HostFeature>,
 }
 
 impl CreateVmRequest {
@@ -247,6 +299,8 @@ impl CreateVmRequest {
         memory_kibibytes: AmountOfMemoryKiB,
         primary_image: ImageLocation,
         has_ipv4: bool,
+        vm_allocation: Option<VmAllocationStrategy>,
+        required_host_features: Vec<HostFeature>,
     ) -> Self {
         Self {
             name,
@@ -254,6 +308,8 @@ impl CreateVmRequest {
             memory_kibibytes,
             primary_image,
             has_ipv4,
+            vm_allocation,
+            required_host_features,
             _type: "production".to_string(),
         }
     }

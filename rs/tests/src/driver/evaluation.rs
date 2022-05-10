@@ -134,6 +134,7 @@ fn create_group_for_pot(env: &TestEnv, pot: &Pot, logger: &Logger) -> Result<()>
         pot_setup.pot_timeout,
         GroupSpec {
             vm_allocation: pot.vm_allocation.clone(),
+            required_host_features: pot.required_host_features.clone(),
         },
     )?)
 }
