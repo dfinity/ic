@@ -3600,7 +3600,7 @@ version = "0.8.0"
 dependencies = [
  "bincode",
  "byteorder",
- "clap 2.33.3",
+ "clap 3.1.9",
  "criterion",
  "ic-config",
  "ic-consensus-message",
@@ -4251,7 +4251,7 @@ dependencies = [
  "arrayvec 0.5.1",
  "async-trait",
  "base64 0.11.0",
- "clap 2.33.3",
+ "clap 3.1.9",
  "criterion",
  "ed25519-dalek",
  "hex",
@@ -5053,7 +5053,7 @@ dependencies = [
 name = "ic-drun"
 version = "0.8.0"
 dependencies = [
- "clap 2.33.3",
+ "clap 3.1.9",
  "hex",
  "ic-canister-sandbox-backend-lib",
  "ic-canister-sandbox-launcher",
@@ -5678,7 +5678,6 @@ dependencies = [
  "build-info",
  "build-info-build",
  "candid",
- "clap 3.1.9",
  "comparable",
  "criterion",
  "csv",
@@ -6883,7 +6882,6 @@ dependencies = [
  "build-info-build",
  "bytes",
  "candid",
- "clap 3.1.9",
  "comparable",
  "criterion",
  "csv",
@@ -7385,7 +7383,7 @@ name = "ic-transport-test-client"
 version = "0.8.0"
 dependencies = [
  "async-trait",
- "clap 2.33.3",
+ "clap 3.1.9",
  "crossbeam-channel 0.5.1",
  "futures",
  "ic-config",
@@ -7599,7 +7597,7 @@ dependencies = [
  "byte-unit",
  "candid",
  "chrono",
- "clap 2.33.3",
+ "clap 3.1.9",
  "console 0.11.3",
  "ed25519-dalek",
  "futures",
@@ -13013,7 +13011,7 @@ dependencies = [
 name = "vsock_agent"
 version = "0.8.0"
 dependencies = [
- "clap 2.33.3",
+ "clap 3.1.9",
  "libc",
  "nix 0.23.0",
  "rand 0.8.4",

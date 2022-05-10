@@ -1,4 +1,4 @@
-use clap::{App, Arg, SubCommand};
+use clap::{arg, Arg, Command};
 use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
     consensus_pool::{PoolSectionOps, UncachedConsensusPoolImpl},
@@ -22,29 +22,28 @@ use std::io::Write;
 use std::path::PathBuf;
 
 fn main() {
-    let app = App::new("ic-consensus-pool-util")
+    let mut app = Command::new("ic-consensus-pool-util")
         .version("0.1")
         .about("IC Consensus Pool Unitity")
         .subcommand(
-            SubCommand::with_name("export")
-                .about("Export data to stdout")
-                .arg(
-                    Arg::with_name("artifact")
-                        .short("a")
-                        .long("artifact")
-                        .value_name("NAME")
-                        .help("Artifact name")
-                        .multiple(true)
-                        .takes_value(true),
-                ),
+            Command::new("export").about("Export data to stdout").arg(
+                Arg::new("artifact")
+                    .short('a')
+                    .long("artifact")
+                    .value_name("NAME")
+                    .help("Artifact name")
+                    .multiple_occurrences(true)
+                    .multiple_values(true)
+                    .takes_value(true),
+            ),
         )
-        .subcommand(SubCommand::with_name("import").about("Import data from stdin"))
+        .subcommand(Command::new("import").about("Import data from stdin"))
         .subcommand(
-            SubCommand::with_name("export-cup-proto")
+            Command::new("export-cup-proto")
                 .about("Export the highest CatchUpPackage protobuf (binary) data")
                 .arg(
-                    Arg::with_name("output")
-                        .short("o")
+                    Arg::new("output")
+                        .short('o')
                         .long("output")
                         .value_name("FILE")
                         .help("Output filename")
@@ -52,7 +51,7 @@ fn main() {
                         .takes_value(true),
                 ),
         )
-        .args_from_usage("<PATH>       'PATH to the consensus pool directory'");
+        .arg(arg!(<PATH>       "PATH to the consensus pool directory"));
     let mut help = Vec::new();
     app.write_help(&mut help)
         .expect("Unable to output help message");

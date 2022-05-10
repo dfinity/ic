@@ -42,7 +42,6 @@ strum = "0.18.0"
 strum_macros = "0.18.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-clap = "3.0.0-beta.2"
 csv = "1.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]

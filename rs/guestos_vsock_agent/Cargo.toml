@@ -12,7 +12,7 @@ vsock = "0.2.3"
 rand = "0.8.3"
 sha2 = "0.9.3"
 serde_json = "1.0.64"
-clap = "2.33.3"
+clap = { version = "3.1.6", features = ["derive"] }
 
 [lib]
 name = "vsock_agent"
