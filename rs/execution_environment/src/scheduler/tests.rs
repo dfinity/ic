@@ -2233,7 +2233,7 @@ fn can_record_metrics_single_scheduler_thread() {
                 .build(),
         );
 
-        let bitcoin_canister = Arc::new(BitcoinCanister::new(&metrics_registry));
+        let bitcoin_canister = Arc::new(BitcoinCanister::new(&metrics_registry, no_op_logger()));
 
         let network_topology = Arc::new(NetworkTopology {
             subnets: [(
@@ -2603,6 +2603,7 @@ fn heap_delta_rate_limiting_disabled() {
         );
         let bitcoin_canister = Arc::new(BitcoinCanister::new(
             &scheduler_test_fixture.metrics_registry,
+            no_op_logger(),
         ));
         let scheduler = SchedulerImpl::new(
             scheduler_test_fixture.scheduler_config.clone(),
@@ -4246,7 +4247,10 @@ fn scheduler_test(
                 .with_max_num_instructions(MAX_INSTRUCTIONS_PER_MESSAGE)
                 .build(),
         );
-        let bitcoin_canister = Arc::new(BitcoinCanister::new(&test_fixture.metrics_registry));
+        let bitcoin_canister = Arc::new(BitcoinCanister::new(
+            &test_fixture.metrics_registry,
+            no_op_logger(),
+        ));
         let scheduler = SchedulerImpl::new(
             test_fixture.scheduler_config.clone(),
             subnet_test_id(1),

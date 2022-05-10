@@ -988,7 +988,6 @@ impl Scheduler for SchedulerImpl {
                 self.bitcoin_canister.heartbeat(
                     bitcoin_state,
                     state.metadata.own_subnet_features.bitcoin_testnet(),
-                    &self.log,
                 )
             };
             state.put_bitcoin_testnet_state(bitcoin_state);

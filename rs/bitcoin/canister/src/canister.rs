@@ -4,6 +4,7 @@ use ic_btc_types::{
     GetBalanceError, GetBalanceRequest, GetUtxosError, GetUtxosRequest, GetUtxosResponse,
     SendTransactionError, SendTransactionRequest, UtxosFilter,
 };
+use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 
 /// The Bitcoin Canister component.
@@ -12,12 +13,14 @@ use ic_metrics::MetricsRegistry;
 /// runtime, such as metrics.
 pub struct BitcoinCanister {
     pub(crate) metrics: BitcoinCanisterMetrics,
+    pub(crate) log: ReplicaLogger,
 }
 
 impl BitcoinCanister {
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry, log: ReplicaLogger) -> Self {
         Self {
             metrics: BitcoinCanisterMetrics::new(metrics_registry),
+            log,
         }
     }
 }
