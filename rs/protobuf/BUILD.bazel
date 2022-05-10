@@ -1,0 +1,60 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "protobuf",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    crate_name = "ic_protobuf",
+    edition = "2018",
+    deps = [
+        "@crate_index//:bincode",
+        "@crate_index//:candid",
+        "@crate_index//:erased-serde",
+        "@crate_index//:maplit",
+        "@crate_index//:prost",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+    ],
+)
+
+rust_test(
+    name = "protobuf_test",
+    crate = ":protobuf",
+)
+
+rust_test(
+    name = "check_generated_files",
+    srcs = ["tests/check_generated_files.rs"],
+    data = glob([
+        "gen/**",
+        "def/**",
+    ]) + [
+        "@rules_rust//rust/toolchain:current_exec_rustfmt_files",
+        "@com_google_protobuf//:protoc",
+        "@com_google_protobuf//:well_known_protos",
+    ],
+    edition = "2018",
+    env = {
+        "PROTOC": "$(rootpath @com_google_protobuf//:protoc)",
+        "PROTOC_INCLUDE": "external/com_github_protocolbuffers_protobuf/src",
+        "CARGO_MANIFEST_DIR": "rs/protobuf",
+    },
+    deps = [
+        "//rs/protobuf/generator:lib",
+        "//rs/test_utilities/compare_dirs",
+        "@crate_index//:tempfile",
+    ],
+)

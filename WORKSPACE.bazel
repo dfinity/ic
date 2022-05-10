@@ -24,6 +24,7 @@ crates_repository(
         # Keep sorted.
         "anyhow": crate.spec(version = "1.0.31"),
         "async-stream": crate.spec(version = "0.3.3"),
+        "bincode": crate.spec(version = "1.2.1"),
         "candid": crate.spec(version = "0.7.13"),
         "candid_derive": crate.spec(version = "0.4.5"),
         "chrono": crate.spec(version = "0.4.19"),
@@ -38,7 +39,10 @@ crates_repository(
         "hyper": crate.spec(version = "0.14.18"),
         "lazy_static": crate.spec(version = "1.4.0"),
         "libc": crate.spec(version = "0.2.91"),
+        "maplit": crate.spec(version = "1.0.2"),
         "openssl": crate.spec(version = "0.10.29"),
+        "prost": crate.spec(version = "0.9.0"),
+        "prost-build": crate.spec(version = "0.9.0"),
         "prometheus": crate.spec(
             features = ["process"],
             version = "0.13.0",
@@ -62,6 +66,7 @@ crates_repository(
             version = "2.3",
         ),
         "slog_derive": crate.spec(version = "0.2.0"),
+        "tempfile": crate.spec(version = "3.1.0"),
         "tokio": crate.spec(
             features = ["full"],
             version = "1.18.1",
@@ -80,6 +85,22 @@ crates_repository(
 load("@crate_index//:defs.bzl", "crate_repositories")
 
 crate_repositories()
+
+http_archive(
+    name = "rules_proto",
+    sha256 = "66bfdf8782796239d3875d37e7de19b1d94301e8972b3cbd2446b332429b4df1",
+    strip_prefix = "rules_proto-4.0.0",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/rules_proto/archive/refs/tags/4.0.0.tar.gz",
+        "https://github.com/bazelbuild/rules_proto/archive/refs/tags/4.0.0.tar.gz",
+    ],
+)
+
+load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies", "rules_proto_toolchains")
+
+rules_proto_dependencies()
+
+rules_proto_toolchains()
 
 http_archive(
     name = "buildifier_prebuilt",
