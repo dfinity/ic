@@ -1,0 +1,18 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "compare_dirs",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_test_utilities_compare_dirs",
+    edition = "2018",
+)

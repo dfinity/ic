@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "lib",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_protobuf_generator",
+    edition = "2018",
+    deps = [
+        "@crate_index//:prost-build",
+    ],
+)
+
+rust_binary(
+    name = "generator",
+    srcs = ["src/main.rs"],
+    data = [
+        "@com_google_protobuf//:protoc",
+        "@com_google_protobuf//:well_known_protos",
+        "@rules_rust//rust/toolchain:current_exec_rustfmt_files",
+    ],
+    edition = "2018",
+    rustc_env = {
+        "PROTOC": "$(rootpath @com_google_protobuf//:protoc)",
+        "PROTOC_INCLUDE": "external/com_github_protocolbuffers_protobuf/src",
+    },
+    deps = [":lib"],
+)
