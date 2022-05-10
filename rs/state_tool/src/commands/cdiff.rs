@@ -6,7 +6,7 @@ use ic_state_manager::{
     checkpoint::load_checkpoint,
     tree_diff::{diff, Changes, PrettyPrintedChanges},
     tree_hash::hash_state,
-    CheckpointError,
+    CheckpointError, CheckpointMetrics,
 };
 use ic_types::Height;
 use std::path::PathBuf;
@@ -15,14 +15,18 @@ use std::path::PathBuf;
 fn diff_checkpoints(path_a: PathBuf, path_b: PathBuf) -> Result<Changes, CheckpointError> {
     let unused_height = Height::from(0);
     let own_subnet_type = SubnetType::Application;
+    let dummy_metrics_registry = ic_metrics::MetricsRegistry::new();
+    let dummy_metrics = CheckpointMetrics::new(&dummy_metrics_registry);
     let state_a = load_checkpoint(
         &CompleteCheckpointLayout::new(path_a, unused_height)?,
         own_subnet_type,
+        &dummy_metrics,
         None,
     )?;
     let state_b = load_checkpoint(
         &CompleteCheckpointLayout::new(path_b, unused_height)?,
         own_subnet_type,
+        &dummy_metrics,
         None,
     )?;
 

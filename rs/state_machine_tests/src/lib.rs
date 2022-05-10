@@ -501,7 +501,8 @@ impl StateMachine {
                 canister_directory.display(),
                 e
             )
-        });
+        })
+        .0;
 
         let (h, mut state) = self.state_manager.take_tip();
         state.put_canister_state(canister_state);

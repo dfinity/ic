@@ -9,7 +9,7 @@ const NUM_THREADS: u32 = 3;
 /// `IncompleteState`
 struct TestEnvironment {
     log: ReplicaLogger,
-    metrics: StateSyncMetrics,
+    metrics: StateManagerMetrics,
     state_layout: StateLayout,
     cache: Arc<parking_lot::RwLock<StateSyncCache>>,
     _root_dir: TempDir,
@@ -19,7 +19,7 @@ impl TestEnvironment {
     fn new(log: ReplicaLogger) -> Self {
         let root_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
         let cache = Arc::new(parking_lot::RwLock::new(StateSyncCache::new(log.clone())));
-        let metrics = StateSyncMetrics::new(&MetricsRegistry::new());
+        let metrics = StateManagerMetrics::new(&MetricsRegistry::new());
         let state_layout = StateLayout::new(log.clone(), root_dir.path().to_owned());
 
         Self {

@@ -68,8 +68,12 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
             .state_layout
             .checkpoint(height)
             .expect("failed to create checkpoint layout");
-        let state = crate::checkpoint::load_checkpoint_parallel(&ro_layout, self.own_subnet_type)
-            .expect("failed to recover checkpoint");
+        let state = crate::checkpoint::load_checkpoint_parallel(
+            &ro_layout,
+            self.own_subnet_type,
+            &self.metrics.checkpoint_metrics,
+        )
+        .expect("failed to recover checkpoint");
         self.on_synced_checkpoint(state, height, msg.manifest, msg.root_hash);
 
         Ok(ArtifactAcceptance::Processed)

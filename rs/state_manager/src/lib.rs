@@ -112,29 +112,51 @@ pub struct ManifestMetrics {
 
 #[derive(Clone)]
 pub struct StateSyncMetrics {
-    state_sync_size: IntCounterVec,
-    state_sync_duration: HistogramVec,
-    state_sync_step_duration: HistogramVec,
-    state_sync_remaining: IntGauge,
-    state_sync_corrupted_chunks_critical: IntCounter,
-    state_sync_corrupted_chunks: IntCounterVec,
+    size: IntCounterVec,
+    duration: HistogramVec,
+    step_duration: HistogramVec,
+    remaining: IntGauge,
+    corrupted_chunks_critical: IntCounter,
+    corrupted_chunks: IntCounterVec,
 }
 
 #[derive(Clone)]
 pub struct CheckpointMetrics {
-    step_duration: HistogramVec,
+    make_checkpoint_step_duration: HistogramVec,
+    load_checkpoint_step_duration: HistogramVec,
+    load_canister_step_duration: HistogramVec,
 }
 
 impl CheckpointMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
-        let step_duration = metrics_registry.histogram_vec(
+        let make_checkpoint_step_duration = metrics_registry.histogram_vec(
             "state_manager_checkpoint_steps_duration_seconds",
             "Duration of make_checkpoint steps in seconds.",
             // 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, …, 10s, 20s, 50s
             decimal_buckets(-3, 1),
             &["step"],
         );
-        Self { step_duration }
+        let load_checkpoint_step_duration = metrics_registry.histogram_vec(
+            "state_manager_load_checkpoint_steps_duration_seconds",
+            "Duration of load_checkpoint steps in seconds.",
+            // 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, …, 10s, 20s, 50s
+            decimal_buckets(-3, 1),
+            &["step"],
+        );
+
+        let load_canister_step_duration = metrics_registry.histogram_vec(
+            "state_manager_load_canister_steps_duration_seconds",
+            "Duration of load_canister_state steps in seconds.",
+            // 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, …, 10s, 20s, 50s
+            decimal_buckets(-3, 1),
+            &["step"],
+        );
+
+        Self {
+            make_checkpoint_step_duration,
+            load_checkpoint_step_duration,
+            load_canister_step_duration,
+        }
     }
 }
 
@@ -264,7 +286,7 @@ impl ManifestMetrics {
 
 impl StateSyncMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
-        let state_sync_size = metrics_registry.int_counter_vec(
+        let size = metrics_registry.int_counter_vec(
             "state_sync_size_bytes_total",
             "Size of chunks synchronized by different operations ('fetch', 'copy_files', 'copy_chunks', 'preallocate') during all the state sync in bytes.",
             &["op"],
@@ -277,15 +299,15 @@ impl StateSyncMetrics {
             LABEL_COPY_CHUNKS,
             LABEL_PREALLOCATE,
         ] {
-            state_sync_size.with_label_values(&[*op]);
+            size.with_label_values(&[*op]);
         }
 
-        let state_sync_remaining = metrics_registry.int_gauge(
+        let remaining = metrics_registry.int_gauge(
             "state_sync_remaining_chunks",
             "Number of chunks not syncronized yet of all active state syncs",
         );
 
-        let state_sync_duration = metrics_registry.histogram_vec(
+        let duration = metrics_registry.histogram_vec(
             "state_sync_duration_seconds",
             "Duration of state sync in seconds indexed by status ('ok', 'already_exists', 'unrecoverable', 'io_err', 'aborted', 'aborted_blank').",
             // 1s, 2s, 5s, 10s, 20s, 50s, …, 1000s, 2000s, 5000s
@@ -302,10 +324,10 @@ impl StateSyncMetrics {
             "aborted",
             "aborted_blank",
         ] {
-            state_sync_duration.with_label_values(&[*status]);
+            duration.with_label_values(&[*status]);
         }
 
-        let state_sync_step_duration = metrics_registry.histogram_vec(
+        let step_duration = metrics_registry.histogram_vec(
             "state_sync_step_duration_seconds",
             "Duration of state sync sub-steps in seconds indexed by step ('copy_files', 'copy_chunks')",
             // 0.1s, 0.2s, 0.5s, 1s, 2s, 5s, …, 1000s, 2000s, 5000s
@@ -315,13 +337,13 @@ impl StateSyncMetrics {
 
         // Note [Metrics preallocation]
         for step in &[LABEL_COPY_FILES, LABEL_COPY_CHUNKS] {
-            state_sync_step_duration.with_label_values(&[*step]);
+            step_duration.with_label_values(&[*step]);
         }
 
-        let state_sync_corrupted_chunks_critical =
+        let corrupted_chunks_critical =
             metrics_registry.error_counter(CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS);
 
-        let state_sync_corrupted_chunks = metrics_registry.int_counter_vec(
+        let corrupted_chunks = metrics_registry.int_counter_vec(
             "state_sync_corrupted_chunks",
             "Number of chunks not copied during state sync due to hash mismatch by source ('fetch', copy_files', 'copy_chunks')",
             &["source"],
@@ -329,16 +351,16 @@ impl StateSyncMetrics {
 
         // Note [Metrics preallocation]
         for source in &[LABEL_FETCH, LABEL_COPY_FILES, LABEL_COPY_CHUNKS] {
-            state_sync_corrupted_chunks.with_label_values(&[*source]);
+            corrupted_chunks.with_label_values(&[*source]);
         }
 
         Self {
-            state_sync_size,
-            state_sync_duration,
-            state_sync_step_duration,
-            state_sync_remaining,
-            state_sync_corrupted_chunks_critical,
-            state_sync_corrupted_chunks,
+            size,
+            duration,
+            step_duration,
+            remaining,
+            corrupted_chunks_critical,
+            corrupted_chunks,
         }
     }
 }
@@ -640,7 +662,12 @@ fn load_checkpoint(
                 .checkpoint_op_duration
                 .with_label_values(&["recover"])
                 .start_timer();
-            checkpoint::load_checkpoint(&layout, own_subnet_type, Some(&mut thread_pool))
+            checkpoint::load_checkpoint(
+                &layout,
+                own_subnet_type,
+                &metrics.checkpoint_metrics,
+                Some(&mut thread_pool),
+            )
         })
 }
 
@@ -652,6 +679,7 @@ fn load_checkpoint(
 fn load_checkpoint_as_tip(
     #[cfg(debug_assertions)] lock: &Arc<Mutex<()>>,
     log: &ReplicaLogger,
+    metrics: &CheckpointMetrics,
     state_layout: &StateLayout,
     snapshot: &Snapshot,
     own_subnet_type: SubnetType,
@@ -671,7 +699,7 @@ fn load_checkpoint_as_tip(
         .tip(snapshot.height)
         .unwrap_or_else(|err| fatal!(log, "Failed to retrieve tip {:?}", err));
 
-    let mut tip = checkpoint::load_checkpoint_parallel(&tip_layout, own_subnet_type)
+    let mut tip = checkpoint::load_checkpoint_parallel(&tip_layout, own_subnet_type, metrics)
         .unwrap_or_else(|err| fatal!(log, "Failed to load checkpoint as tip {:?}", err));
 
     // Ensure that the `PageMap`s of the tip use the clean read-only checkpoint
@@ -1156,10 +1184,14 @@ impl StateManagerImpl {
                     )
                 });
 
-                let state = checkpoint::load_checkpoint_parallel(&cp_layout, own_subnet_type)
-                    .unwrap_or_else(|err| {
-                        fatal!(log, "Failed to load checkpoint @{}: {}", height, err)
-                    });
+                let state = checkpoint::load_checkpoint_parallel(
+                    &cp_layout,
+                    own_subnet_type,
+                    &metrics.checkpoint_metrics,
+                )
+                .unwrap_or_else(|err| {
+                    fatal!(log, "Failed to load checkpoint @{}: {}", height, err)
+                });
                 info!(log, "Loading checkpoint took {:?}", starting_time.elapsed());
 
                 let checkpoint_metadata = states_metadata.remove(&height);
@@ -1205,6 +1237,7 @@ impl StateManagerImpl {
                     #[cfg(debug_assertions)]
                     &load_checkpoint_as_tip_guard,
                     &log,
+                    &metrics.checkpoint_metrics,
                     &state_layout,
                     snapshot,
                     own_subnet_type,
@@ -1343,7 +1376,7 @@ impl StateManagerImpl {
             id.hash.clone(),
             self.state_layout.clone(),
             self.latest_manifest(),
-            self.metrics.state_sync_metrics.clone(),
+            self.metrics.clone(),
             self.own_subnet_type,
             Arc::clone(&self.checkpoint_thread_pool),
             self.state_sync_refs.clone(),
@@ -1956,6 +1989,7 @@ impl StateManager for StateManagerImpl {
             #[cfg(debug_assertions)]
             &self.load_checkpoint_as_tip_guard,
             &self.log,
+            &self.metrics.checkpoint_metrics,
             &self.state_layout,
             &target_snapshot,
             self.own_subnet_type,
@@ -2494,7 +2528,11 @@ impl StateManager for StateManagerImpl {
                                     .with_label_values(&["recover"])
                                     .start_timer();
 
-                                checkpoint::load_checkpoint_parallel(&layout, self.own_subnet_type)
+                                checkpoint::load_checkpoint_parallel(
+                                    &layout,
+                                    self.own_subnet_type,
+                                    &self.metrics.checkpoint_metrics,
+                                )
                             })
                             .unwrap_or_else(|err| {
                                 fatal!(
