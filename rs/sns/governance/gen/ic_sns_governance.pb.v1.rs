@@ -63,7 +63,7 @@ pub struct Neuron {
     /// this field for a dissolving neuron is `u64::MAX`.
     #[prost(uint64, tag="6")]
     pub aging_since_timestamp_seconds: u64,
-    /// The neuron's followees, specified as a map of proposal actions to followees.
+    /// The neuron's followees, specified as a map of proposal functions IDs to followees neuron IDs.
     /// The map's keys are represented by integers as Protobuf does not support enum keys in maps.
     #[prost(btree_map="uint64, message", tag="11")]
     pub followees: ::prost::alloc::collections::BTreeMap<u64, neuron::Followees>,
@@ -95,7 +95,7 @@ pub struct Neuron {
 }
 /// Nested message and enum types in `Neuron`.
 pub mod neuron {
-    /// A list of a neuron's followees for a specific action.
+    /// A list of a neuron's followees for a specific function.
     #[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable))]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Followees {
@@ -157,45 +157,76 @@ pub mod neuron {
 pub struct NervousSystemFunction {
     /// The unique id of this function.
     ///
-    /// Ids 0-999 are reserved for core governance proposals and can't
+    /// Ids 0-999 are reserved for native governance proposals and can't
     /// be used by generic NervousSystemFunction's.
     #[prost(uint64, tag="1")]
     pub id: u64,
-    /// The id of the target canister that will be called to execute the proposal.
-    #[prost(message, optional, tag="2")]
-    pub target_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
-    /// The name of the method that will be called to execute the proposal.
-    /// The signature of the method must be equivalent to the following:
-    /// <method_name>(proposal_data: ProposalData) -> Result<(), String>.
+    /// A short (<256 chars) description of the NervousSystemFunction.
+    #[prost(string, tag="2")]
+    pub name: ::prost::alloc::string::String,
+    /// An optional description of what the NervousSystemFunction does.
     #[prost(string, optional, tag="3")]
-    pub target_method_name: ::core::option::Option<::prost::alloc::string::String>,
-    /// The id of the canister that will be called to validate the proposal before
-    /// it is put up for a vote.
-    #[prost(message, optional, tag="4")]
-    pub validator_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
-    /// The name of the method that will be called to validate the proposal
-    /// before it is put up for a vote.
-    /// The signature of the method must be equivalent to the following:
-    /// <method_name>(proposal_data: ProposalData) -> Result<(), String>
-    #[prost(string, optional, tag="5")]
-    pub validator_method_name: ::core::option::Option<::prost::alloc::string::String>,
+    pub description: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(oneof="nervous_system_function::FunctionType", tags="4, 5")]
+    pub function_type: ::core::option::Option<nervous_system_function::FunctionType>,
 }
-/// A proposal action defining a generic proposal, i.e., a proposal
+/// Nested message and enum types in `NervousSystemFunction`.
+pub mod nervous_system_function {
+    #[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable))]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct GenericNervousSystemFunction {
+        /// The id of the target canister that will be called to execute the proposal.
+        #[prost(message, optional, tag="2")]
+        pub target_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// The name of the method that will be called to execute the proposal.
+        /// The signature of the method must be equivalent to the following:
+        /// <method_name>(proposal_data: ProposalData) -> Result<(), String>.
+        #[prost(string, optional, tag="3")]
+        pub target_method_name: ::core::option::Option<::prost::alloc::string::String>,
+        /// The id of the canister that will be called to validate the proposal before
+        /// it is put up for a vote.
+        #[prost(message, optional, tag="4")]
+        pub validator_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// The name of the method that will be called to validate the proposal
+        /// before it is put up for a vote.
+        /// The signature of the method must be equivalent to the following:
+        /// <method_name>(proposal_data: ProposalData) -> Result<String, String>
+        #[prost(string, optional, tag="5")]
+        pub validator_method_name: ::core::option::Option<::prost::alloc::string::String>,
+    }
+    #[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable))]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum FunctionType {
+        /// Whether this is a native function (i.e. a Action::Motion or
+        /// Action::UpgradeSnsControlledCanister) or one of user-defined
+        /// NervousSystemFunctions.
+        #[prost(message, tag="4")]
+        NativeNervousSystemFunction(super::Empty),
+        /// Whether this is a GenericNervousSystemFunction which can call
+        /// any canister.
+        #[prost(message, tag="5")]
+        GenericNervousSystemFunction(GenericNervousSystemFunction),
+    }
+}
+/// A proposal function defining a generic proposal, i.e., a proposal
 /// that is not build into the standard SNS and calls a canister outside
 /// the SNS for execution.
 /// The canister and method to call are derived from the `function_id`.
 #[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable))]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ExecuteNervousSystemFunction {
+pub struct ExecuteGenericNervousSystemFunction {
     /// This enum value determines what canister to call and what
     /// function to call on that canister.
+    ///
+    /// 'function_id` must be in the range `\[1000--u64:MAX\]` as this
+    /// can't be used to execute native functions.
     #[prost(uint64, tag="1")]
     pub function_id: u64,
     /// The payload of the nervous system function's payload.
     #[prost(bytes="vec", tag="2")]
     pub payload: ::prost::alloc::vec::Vec<u8>,
 }
-/// A proposal action that should guide the future strategy of the SNS's
+/// A proposal function that should guide the future strategy of the SNS's
 /// ecosystem but does not have immediate effect in the sense that a method is executed.
 #[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable), self_describing)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -204,7 +235,7 @@ pub struct Motion {
     #[prost(string, tag="1")]
     pub motion_text: ::prost::alloc::string::String,
 }
-/// A proposal action that upgrades a canister that is controlled by the
+/// A proposal function that upgrades a canister that is controlled by the
 /// SNS governance canister.
 #[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable))]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -233,22 +264,42 @@ pub struct Proposal {
     #[prost(string, tag="3")]
     pub url: ::prost::alloc::string::String,
     /// The action that the proposal proposes to take on adoption.
+    ///
+    /// Each action is associated with an function id that can be used for following.
+    /// Native (typed) actions each have an id in the range \[0-999\], while
+    /// NervousSystemFunctions with a `function_type` of GenericNervousSystemFunction
+    /// are each associated with an id in the range \[1000-u64:MAX\].
+    ///
+    /// See `impl From<&Action> for u64` in src/types.rs for the implementation
+    /// of this mapping.
     #[prost(oneof="proposal::Action", tags="4, 5, 6, 7, 8, 9, 10")]
     pub action: ::core::option::Option<proposal::Action>,
 }
 /// Nested message and enum types in `Proposal`.
 pub mod proposal {
     /// The action that the proposal proposes to take on adoption.
+    ///
+    /// Each action is associated with an function id that can be used for following.
+    /// Native (typed) actions each have an id in the range \[0-999\], while
+    /// NervousSystemFunctions with a `function_type` of GenericNervousSystemFunction
+    /// are each associated with an id in the range \[1000-u64:MAX\].
+    ///
+    /// See `impl From<&Action> for u64` in src/types.rs for the implementation
+    /// of this mapping.
     #[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable))] #[allow(clippy::large_enum_variant)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Action {
         /// The `Unspecified` action is used as a fallback when
         /// following. That is, if no followees are specified for a given
         /// action, the followees for this action are used instead.
+        ///
+        /// Id = 0.
         #[prost(message, tag="4")]
         Unspecified(super::Empty),
         /// A motion that should guide the future strategy of the SNS's ecosystem
         /// but does not have immediate effect in the sense that a method is executed.
+        ///
+        /// Id = 1.
         #[prost(message, tag="5")]
         Motion(super::Motion),
         /// Change the nervous system's parameters.
@@ -259,20 +310,30 @@ pub mod proposal {
         /// the neuron is created. If this NervousSystemParameter is decreased, all neurons
         /// created after this change will have at least the new minimum stake. However,
         /// neurons created before this change may have less stake.
+        ///
+        /// Id = 2.
         #[prost(message, tag="6")]
         ManageNervousSystemParameters(super::NervousSystemParameters),
         /// Upgrade a canister that is controlled by the SNS governance canister.
+        ///
+        /// Id = 3.
         #[prost(message, tag="7")]
         UpgradeSnsControlledCanister(super::UpgradeSnsControlledCanister),
-        /// Execute a method outside the SNS canisters.
+        /// Add a new NervousSystemFunction, of generic type,  to be executable by proposal.
+        ///
+        /// Id = 4.
         #[prost(message, tag="8")]
-        ExecuteNervousSystemFunction(super::ExecuteNervousSystemFunction),
-        /// Add a new NervousSystemFunction to be executable by proposal.
-        #[prost(message, tag="9")]
-        AddNervousSystemFunction(super::NervousSystemFunction),
-        /// Remove a NervousSystemFunction from being executable by proposal.
-        #[prost(uint64, tag="10")]
-        RemoveNervousSystemFunction(u64),
+        AddGenericNervousSystemFunction(super::NervousSystemFunction),
+        /// Remove a NervousSystemFunction, of generic type, from being executable by proposal.
+        ///
+        /// Id = 5.
+        #[prost(uint64, tag="9")]
+        RemoveGenericNervousSystemFunction(u64),
+        /// Execute a method outside the SNS canisters.
+        ///
+        /// Id = \[1000-u64::MAX\].
+        #[prost(message, tag="10")]
+        ExecuteGenericNervousSystemFunction(super::ExecuteGenericNervousSystemFunction),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable), compare_default)]
@@ -522,11 +583,11 @@ pub struct NervousSystemParameters {
     #[prost(uint64, optional, tag="5")]
     pub initial_voting_period: ::core::option::Option<u64>,
     /// The set of default followees that every newly created neuron will follow
-    /// per action. This is specified as a mapping of proposal actions to followees.
+    /// per function. This is specified as a mapping of proposal functions to followees.
     ///
     /// If unset, neurons will have no followees by default.
-    /// The set of followees for each action can be at most of size
-    /// max_followees_per_action.
+    /// The set of followees for each function can be at most of size
+    /// max_followees_per_function.
     #[prost(message, optional, tag="6")]
     pub default_followees: ::core::option::Option<DefaultFollowees>,
     /// The maximum number of allowed neurons. When this maximum is reached, no new
@@ -541,12 +602,12 @@ pub struct NervousSystemParameters {
     /// The chosen value must be smaller than max_dissolve_delay_seconds.
     #[prost(uint64, optional, tag="8")]
     pub neuron_minimum_dissolve_delay_to_vote_seconds: ::core::option::Option<u64>,
-    /// The maximum number of followees each neuron can establish for each action.
+    /// The maximum number of followees each neuron can establish for each nervous system function.
     ///
     /// This number can be at most as large as the defined ceiling
-    /// MAX_FOLLOWEES_PER_ACTION_CEILING.
+    /// MAX_FOLLOWEES_PER_FUNCTION_CEILING.
     #[prost(uint64, optional, tag="9")]
-    pub max_followees_per_action: ::core::option::Option<u64>,
+    pub max_followees_per_function: ::core::option::Option<u64>,
     /// The maximum dissolve delay that a neuron can have. That is, the maximum
     /// that a neuron's dissolve delay can be increased to. The maximum is also enforced
     /// when saturating the dissolve delay bonus in the voting power computation.
@@ -590,8 +651,8 @@ pub struct NervousSystemParameters {
     #[prost(uint64, optional, tag="17")]
     pub max_number_of_principals_per_neuron: ::core::option::Option<u64>,
 }
-/// The set of default followees that every newly created neuron will follow per action.
-/// This is specified as a mapping of proposal actions to followees for that action.
+/// The set of default followees that every newly created neuron will follow per function.
+/// This is specified as a mapping of proposal functions to followees for that function.
 #[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable))]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DefaultFollowees {
@@ -963,32 +1024,32 @@ pub mod manage_neuron {
         pub to_account: ::core::option::Option<::ledger_canister::protobuf::AccountIdentifier>,
     }
     /// The operation that adds a new follow relation to a neuron, specifying
-    /// that it follows a set of followee neurons for a given proposal action.
+    /// that it follows a set of followee neurons for a given proposal function.
     /// If the neuron already has a defined follow relation for this proposal
-    /// action, then the current list is replaced with the new list (not added).
+    /// function, then the current list is replaced with the new list (not added).
     /// If the provided followee list is empty, the follow relation for this
-    /// proposal action is removed.
+    /// proposal function is removed.
     ///
     /// A follow relation has the effect that the governance canister will
     /// automatically cast a vote for the following neuron for proposals of
-    /// the given action if a majority of the specified followees vote in the
+    /// the given function if a majority of the specified followees vote in the
     /// same way.
     /// In more detail, once a majority of the followees vote to adopt
-    /// or reject a proposal belonging to the specified action, the neuron
+    /// or reject a proposal belonging to the specified function, the neuron
     /// votes the same way. If it becomes impossible for a majority of
     /// the followees to adopt (for example, because they are split 50-50
     /// between adopt and reject), then the neuron votes to reject.
-    /// If a rule is specified where the proposal action is UNSPECIFIED,
+    /// If a rule is specified where the proposal function is UNSPECIFIED,
     /// then it becomes a catch-all follow rule, which will be used to vote
     /// automatically on proposals with actions for which no
     /// specific rule has been specified.
     #[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable))]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Follow {
-        /// The proposal action defining for which proposals this
-        /// follow relation is relevant.
+        /// The function id of the proposal function defining for which proposals
+        /// this follow relation is relevant.
         #[prost(uint64, tag="1")]
-        pub action_type: u64,
+        pub function_id: u64,
         /// The list of followee neurons, specified by their neuron ID.
         #[prost(message, repeated, tag="2")]
         pub followees: ::prost::alloc::vec::Vec<super::NeuronId>,
@@ -1373,8 +1434,14 @@ pub struct ListNeuronsResponse {
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListNervousSystemFunctionsResponse {
+    /// Current set of nervous system function, both native and user-defined,
+    /// that can be executed by proposal.
     #[prost(message, repeated, tag="1")]
     pub functions: ::prost::alloc::vec::Vec<NervousSystemFunction>,
+    /// Set of nervous system function ids that are reserved and cannot be
+    /// used to add new NervousSystemFunctions.
+    #[prost(uint64, repeated, tag="2")]
+    pub reserved_ids: ::prost::alloc::vec::Vec<u64>,
 }
 /// The different types of neuron permissions, i.e., privileges to modify a neuron,
 /// that principals can have.

@@ -91,7 +91,23 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         .join(" "),
     );
     config.type_attribute(
-        "ic_sns_governance.pb.v1.ExecuteNervousSystemFunction",
+        "ic_sns_governance.pb.v1.NervousSystemFunction.function_type",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.NervousSystemFunction.GenericNervousSystemFunction",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.ExecuteGenericNervousSystemFunction",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",
             "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",

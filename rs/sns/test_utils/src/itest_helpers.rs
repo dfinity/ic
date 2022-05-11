@@ -572,14 +572,14 @@ impl SnsCanisters<'_> {
         sender: &Sender,
         subaccount: &Subaccount,
         followees: Vec<NeuronId>,
-        action_type: u64,
+        function_id: u64,
     ) -> ManageNeuronResponse {
         self.send_manage_neuron(
             sender,
             ManageNeuron {
                 subaccount: subaccount.to_vec(),
                 command: Some(Command::Follow(Follow {
-                    action_type,
+                    function_id,
                     followees,
                 })),
             },

@@ -16,6 +16,7 @@ use ic_nervous_system_common::stable_mem_utils::{
 use rand::rngs::StdRng;
 use rand_core::{RngCore, SeedableRng};
 use std::boxed::Box;
+use std::convert::TryFrom;
 use std::time::SystemTime;
 
 use prost::Message;
@@ -177,7 +178,7 @@ fn canister_init() {
 /// In addition to canister_init, this method is called by canister_post_upgrade.
 #[candid_method(init)]
 fn canister_init_(init_payload: GovernanceProto) {
-    let init_payload = ValidGovernanceProto::new(init_payload).expect(
+    let init_payload = ValidGovernanceProto::try_from(init_payload).expect(
         "Cannot start canister, because the deserialized \
          GovernanceProto is invalid in some way",
     );
