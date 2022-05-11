@@ -15,14 +15,14 @@ use std::collections::HashMap;
 impl Registry {
     /// Removes an existing node from the registry.
     pub fn do_remove_nodes(&mut self, payload: RemoveNodesPayload) {
-        println!("{}do_remove_nodes: {:?}", LOG_PREFIX, payload);
+        println!("{}do_remove_nodes started: {:?}", LOG_PREFIX, payload);
 
         // This hashmap tracks node operators for which mutations have already been
         // determined; increments to node allowance should not be idempotent
         let mut node_operator_hmap = HashMap::<String, u64>::new();
 
         // 1. De-duplicate the node list
-        let mut nodes_to_be_removed = payload.node_ids;
+        let mut nodes_to_be_removed = payload.node_ids.clone();
         nodes_to_be_removed.sort_unstable();
         nodes_to_be_removed.dedup();
 
@@ -86,10 +86,12 @@ impl Registry {
 
         // 8. Apply mutations after checking invariants
         self.maybe_apply_mutation_internal(mutations);
+
+        println!("{}do_remove_nodes finished: {:?}", LOG_PREFIX, payload);
     }
 }
 
-/// The payload of an update request to add a new node.
+/// The payload of an update request to remove some nodes.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct RemoveNodesPayload {
     /// The list of Node IDs that will be removed
