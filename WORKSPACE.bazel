@@ -27,7 +27,10 @@ crates_repository(
         "async-stream": crate.spec(version = "0.3.3"),
         "base64": crate.spec(version = "0.11.0"),
         "bincode": crate.spec(version = "1.2.1"),
-        "bitcoin": crate.spec(version = "0.27"),
+        "bitcoin": crate.spec(
+            features = ["rand"],
+            version = "0.27.1",
+        ),
         "bitflags": crate.spec(version = "1.2.1"),
         "candid": crate.spec(version = "0.7.13"),
         "candid_derive": crate.spec(version = "0.4.5"),
