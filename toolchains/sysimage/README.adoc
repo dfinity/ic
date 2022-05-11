@@ -234,6 +234,31 @@ generally be build using the +ext4_image+ or +vfat_image+ rules above.
 They must be +tar+ archives containing a single file named +partition.img+
 each.
 
+=== Compute sha256sum
+
+Synopsis:
+[subs="quotes"]
+----
+sha256sum(
+    name = "binary.sha256",
+    srcs = [":binary"],
+)
+
+sha256sum(
+    name = "data.sha256",
+    srcs = [":data"],
+)
+
+sha256sum(
+    name = "version.txt",
+    srcs = [":binary.sha256", ":data.sha256"],
+    suffix = "-foo"
+)
+----
+
+Computes the sha256sum of the input(s) and outputs its hash (hexadecimal).
+Optionally, a suffix may be appended to the end of the hash.
+
 === Example
 
 A complete example to build a disk image using a single partition populated

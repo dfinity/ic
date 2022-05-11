@@ -1,4 +1,4 @@
-load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "tar_extract", "vfat_image")
+load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "summary_sha256sum", "tar_extract", "vfat_image")
 
 docker_tar(
     name = "bootloader-tree.tar",
@@ -43,21 +43,23 @@ tar_extract(
     path = "etc/selinux/default/contexts/files/file_contexts",
 )
 
-ext4_image(
-    name = "partition-boot.tar",
-    src = ":rootfs-tree.tar",
-    extra_files = {
+# Declare the dependencies that we will have for the built filesystem images.
+# This needs to be done separately from the build rules because we want to
+# compute the hash over all inputs going into the image and derive the
+# "version.txt" file from it.
+IC_OS_IMAGE_DEPS = {
+    "bootfs": {
+        # base layer
+        ":rootfs-tree.tar": "/",
+
+        # additional files to install
         ":extra_boot_args.dev": "/boot/extra_boot_args:0644",
     },
-    file_contexts = ":file_contexts",
-    partition_size = "1G",
-    subdir = "boot/",
-)
+    "rootfs": {
+        # base layer
+        ":rootfs-tree.tar": "/",
 
-ext4_image(
-    name = "partition-root.tar",
-    src = ":rootfs-tree.tar",
-    extra_files = {
+        # additional files to install
         "//:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",
         "//:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",
         "//:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
@@ -67,6 +69,41 @@ ext4_image(
         "//:replica": "/opt/ic/bin/replica:0755",
         "//:state-tool": "/opt/ic/bin/state-tool:0755",
         "//:vsock_agent": "/opt/ic/bin/vsock_agent:0755",
+    },
+}
+
+# This macro expands to compute the hash sum of all inputs individually, and
+# then aggregating the hash into a summary hash.
+summary_sha256sum(
+    name = "version.txt",
+    inputs = IC_OS_IMAGE_DEPS,
+    suffix = "-dev",
+)
+
+ext4_image(
+    name = "partition-boot.tar",
+    src = ":rootfs-tree.tar",
+    # Take the dependency list declared above, and add in the "version.txt"
+    # at the correct place.
+    extra_files = {
+        k: v
+        for k, v in (IC_OS_IMAGE_DEPS["bootfs"].items() + [(":version.txt", "/boot/version.txt:0644")])
+        if v != "/"
+    },
+    file_contexts = ":file_contexts",
+    partition_size = "1G",
+    subdir = "boot/",
+)
+
+ext4_image(
+    name = "partition-root.tar",
+    src = ":rootfs-tree.tar",
+    # Take the dependency list declared above, and add in the "version.txt"
+    # at the correct place.
+    extra_files = {
+        k: v
+        for k, v in (IC_OS_IMAGE_DEPS["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
+        if v != "/"
     },
     file_contexts = ":file_contexts",
     partition_size = "3G",
