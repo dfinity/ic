@@ -13,11 +13,14 @@ gflags.DEFINE_string("disk_image", None, "Path to disk image to use for VMs")
 gflags.MarkFlagAsRequired("disk_image")
 
 
-def upgrade(ic_url):
+def upgrade(machine):
+    ic_url = machine.get_ipv6()
+
     filename = "/tmp/update-img.tar.gz"
 
     ictools.send_upgrade_ssh(ic_url, FLAGS.upgrade_tar, filename)
     ictools.apply_upgrade_ssh(ic_url, filename)
+    machine.reboot()
 
     return ictools.get_upgrade_image_version(FLAGS.upgrade_tar)
 
@@ -56,8 +59,8 @@ def main(argv):
         version = ictools.get_host_version(m.get_ipv6())
         print("%-30s %s" % (m.get_ipv6(), version))
 
-    upgrade(machines[0].get_ipv6())
-    version = upgrade(machines[1].get_ipv6())
+    upgrade(machines[0])
+    version = upgrade(machines[1])
 
     # Check version on each machine
     print("Checking versions on all hosts")
