@@ -99,7 +99,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // Kill another NNS node. With two malfunctioned nodes, the network is stuck,
     // i.e. all update requests will be rejected.
     nns_endpoints[2].kill_node(ctx.logger.clone());
-    // Start over the node killed first.
+    // Restart the node killed first.
     let _ = nns_endpoints[1].start_node(ctx.logger.clone());
 
     // A transfer request can be started right away, even though the rejoined node
@@ -108,10 +108,14 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // Note: the moment when a node starts accepting requests is succeeded by a short period of time
     // when the node is not full operational, e.g. a WASM module is not yet installed.
     // Thus, a transfer may not be successful at first attempt.
-    for _ in 0..MAX_NUMBER_OF_RETRIES {
+    for i in 0..MAX_NUMBER_OF_RETRIES {
         if transfer(ctx, &rt, &ledger.clone(), &can2.clone(), &can1.clone(), 100) {
             return;
         }
+        info!(
+            &ctx.logger,
+            "Transfer attempt {} failed, {} attempts left", i, MAX_NUMBER_OF_RETRIES
+        );
         std::thread::sleep(Duration::from_secs(2));
     }
     panic!("Failed to make a transfer after rejoining a node.")
