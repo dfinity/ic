@@ -3,7 +3,6 @@ build-determinism-binaries:
     - .ubuntu-nix-docker-pinned-dc
     - .rules-parent-pipeline
   stage: build-determinism-test
-  allow_failure: true
   needs:
     - job: cargo-build-release-linux-native
       artifacts: false
@@ -45,7 +44,6 @@ build-determinism-canisters:
     - .ubuntu-nix-docker-pinned-dc
     - .rules-parent-pipeline
   stage: build-determinism-test
-  allow_failure: true
   needs:
     - job: cargo-build-canisters
       artifacts: false
@@ -91,11 +89,11 @@ build-determinism-guest-update-img:
     - .rules-parent-pipeline
   stage: build-determinism-test
   needs:
+    - job: build-determinism-binaries
+      artifacts: false
     - job: guest-os-updateimg-build
       artifacts: false
     - job: docker-build-ic
-      artifacts: false
-    - job: artifacts-upload-to-s3
       artifacts: false
   script:
     - |
@@ -162,7 +160,6 @@ build-determinism-host-update-img:
       artifacts: false
     - job: host-os-updateimg-determinism
       artifacts: false
-  allow_failure: true
   artifacts:
     paths:
       - artifacts
