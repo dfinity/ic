@@ -66,6 +66,19 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
             )
         )
 
+    def get_mainnet_targets(self) -> List[str]:
+        """Get target if running in mainnet."""
+        # If we want boundary nodes, we can see here:
+        # http://prometheus.dfinity.systems:9090/graph?g0.expr=nginx_up&g0.tab=1&g0.stacked=0&g0.range_input=1h
+        r = json.loads(self._get_subnet_info(FLAGS.target_subnet_id))
+        node_ips = []
+        for node_id in r["records"][0]["value"]["membership"]:
+            node_ips.append(self.get_node_ip_address(node_id))
+        if self.request_type == "call" or FLAGS.target_all:
+            return node_ips
+        else:
+            return [node_ips[FLAGS.query_target_node_idx]]
+
     def init(self):
         """More init."""
         self.target_nodes = self.get_mainnet_targets() if self.testnet == "mercury" else self.__get_targets()
@@ -307,9 +320,9 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
 
         # Set timeout to 2 + len(targets) of the duration.
         # E.g. timeout will linearly increase as target machines number incrase
-        # Wait at least 120s, as there is a potentially high startup overhead for super-small
+        # Wait at least 300s, as there is a potentially high startup overhead for super-small
         # workloads.
-        timeout = max((len(targets) / 10 + 2) * duration, 120)
+        timeout = max((len(targets) / 10 + 2) * duration, 300)
         print(f"Setting workload generator timeout to: {timeout}")
         ssh.run_all_ssh_in_parallel(machines, commands, f_stdout, f_stderr, timeout)
 
