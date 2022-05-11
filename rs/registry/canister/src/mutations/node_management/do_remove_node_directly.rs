@@ -81,7 +81,7 @@ impl Registry {
     }
 }
 
-/// The payload of an update request to add a new node.
+/// The payload of an update request to remove a node.
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct RemoveNodeDirectlyPayload {
     pub node_id: NodeId,
