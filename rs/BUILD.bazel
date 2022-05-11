@@ -30,6 +30,7 @@ filegroup(
         "//rs/phantom_newtype:sources",
         "//rs/protobuf:sources",
         "//rs/protobuf/generator:sources",
+        "//rs/rust_canisters/on_wire:sources",
         "//rs/sys:sources",
         "//rs/test_utilities/compare_dirs:sources",
         "//rs/utils:sources",
