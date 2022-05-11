@@ -1,3 +1,4 @@
+load("//bazel:prost.bzl", "generated_files_check")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -35,23 +36,14 @@ rust_test(
     crate = ":protobuf",
 )
 
-rust_test(
+generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
     data = glob([
         "gen/**",
         "def/**",
-    ]) + [
-        "@rules_rust//rust/toolchain:current_exec_rustfmt_files",
-        "@com_google_protobuf//:protoc",
-        "@com_google_protobuf//:well_known_protos",
-    ],
-    edition = "2018",
-    env = {
-        "PROTOC": "$(rootpath @com_google_protobuf//:protoc)",
-        "PROTOC_INCLUDE": "external/com_github_protocolbuffers_protobuf/src",
-        "CARGO_MANIFEST_DIR": "rs/protobuf",
-    },
+    ]),
+    manifest_dir = "rs/protobuf",
     deps = [
         "//rs/protobuf/generator:lib",
         "//rs/test_utilities/compare_dirs",

@@ -12,7 +12,6 @@ filegroup(
             "nervous_system/common/bazel-out/**",
         ],
     ) + [
-        # Keep sorted.
         "//rs/async_utils:sources",
         "//rs/bitcoin/test-utils:sources",
         "//rs/bitcoin/types/internal:sources",
@@ -33,6 +32,10 @@ filegroup(
         "//rs/rust_canisters/on_wire:sources",
         "//rs/sys:sources",
         "//rs/test_utilities/compare_dirs:sources",
+        "//rs/types/base_types:sources",
+        "//rs/types/base_types/protobuf_generator:sources",
+        "//rs/types/error_types:sources",
+        "//rs/types/ic00_types:sources",
         "//rs/utils:sources",
     ],
 )

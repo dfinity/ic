@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "ic00_types",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_ic00_types",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:strum_macros",
+    ],
+    deps = [
+        "//rs/protobuf",
+        "//rs/types/base_types",
+        "//rs/types/error_types",
+        "@crate_index//:candid",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:strum",
+    ],
+)
+
+rust_test(
+    name = "ic00_types_test",
+    crate = ":ic00_types",
+)
