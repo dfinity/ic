@@ -8,6 +8,9 @@ import gflags
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_bool("use_updates", False, "Issue update calls instead of query calls")
+gflags.DEFINE_string("target_subnet_id", None, "")
+gflags.MarkFlagAsRequired("target_subnet_id")
+gflags.DEFINE_string("testnet", "mercury", "")
 
 
 class Mainnet:
@@ -20,6 +23,7 @@ class Mainnet:
 
         # Testnets you have booked and the number of subnetworks each (including NNS)
         self.testnets = {
+            "benchmarklarge": 2,
             "large01": 5,
             # "large02": 5,
             "large03": 5,
@@ -87,10 +91,10 @@ class Mainnet:
     def get_query_command(self, canister, subnet, wg_testnet, wg_subnet, subnet_prefix):
         """Return query command."""
         return [
-            "./max_capacity_system_baseline.py",
+            "experiments/max_capacity_system_baseline.py",
             "--testnet",
             "mercury",
-            "--canister",
+            "--canister_id",
             canister,
             "--target_subnet_id",
             subnet,
@@ -109,7 +113,6 @@ class Mainnet:
             str(500),
             "--max_rps",
             str(500),
-            "--skip_generate_report=True",
             "--target_rps",
             str(440),
             "--increment_rps",
@@ -119,11 +122,12 @@ class Mainnet:
 
     def get_update_command(self, canister, subnet, wg_testnet, wg_subnet, subnet_prefix):
         """Retrun update command."""
+        LOAD = 600
         return [
-            "./max_capacity_system_baseline.py",
+            "experiments/max_capacity_system_baseline.py",
             "--testnet",
             "mercury",
-            "--canister",
+            "--canister_id",
             canister,
             "--target_subnet_id",
             subnet,
@@ -133,7 +137,7 @@ class Mainnet:
             str(wg_subnet),
             "--no_instrument=True",
             "--max_rps",
-            str(600),
+            str(LOAD),
             "--top_level_out_dir",
             "mainnet-{}".format(self.start_time),
             "--second_level_out_dir",
@@ -141,14 +145,11 @@ class Mainnet:
             "--num_workload_generators",
             str(4),
             "--target_rps",
-            str(600),
+            str(LOAD),
             "--increment_rps",
             str(4),
             "--initial_rps",
-            str(600),
-            "--skip_generate_report=True",
-            "--target_rps",
-            str(600),
+            str(LOAD),
             "--use_updates=True",
             "--iter_duration={}".format(300),
         ]
