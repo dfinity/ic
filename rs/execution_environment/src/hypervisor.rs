@@ -1027,7 +1027,7 @@ impl Hypervisor {
     // - `scheduler_state` is taken from the corresponding argument.
     // - `system_state` is taken from the system_state_accessor if the execution
     //   succeeded; otherwise, it is taken from the corresponding argument.
-    fn system_execution_result(
+    pub fn system_execution_result(
         &self,
         output: WasmExecutionOutput,
         execution_state: ExecutionState,
