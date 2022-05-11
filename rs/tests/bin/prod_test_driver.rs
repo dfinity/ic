@@ -411,7 +411,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )]),
             ),
             pot(
-                "nns_fault_tolerance_pot",
+                "token_fault_tolerance_pot",
                 ledger_tests::token_fault_tolerance::config(),
                 par(vec![t(
                     "token_fault_tolerance_test",
