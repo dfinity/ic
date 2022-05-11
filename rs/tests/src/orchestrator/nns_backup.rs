@@ -42,6 +42,7 @@ use core::time;
 use ic_fondue::ic_manager::IcHandle;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
+use slog::info;
 use std::convert::TryFrom;
 use std::io::{Read, Write};
 use std::net::IpAddr;
@@ -58,6 +59,7 @@ pub fn config() -> InternetComputer {
 
 pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
+    let log = ctx.logger.clone();
 
     ctx.install_nns_canisters(&handle, true);
 
@@ -81,10 +83,13 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
     let backup = Backup::new(node_ip, backup_private_key, subnet_id, ctx.logger.clone());
 
-    // Pull an early version of the registry
+    info!(
+        log,
+        "nns_backup_test: Pull an early version of the registry"
+    );
     backup.rsync_local_store();
 
-    // Bless the test replica version
+    info!(log, "nns_backup_test: Bless the test replica version");
     block_on(bless_replica_version(
         nns_node,
         &replica_version,
@@ -92,7 +97,10 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         &ctx.logger,
     ));
 
-    // Proposal to upgrade the subnet replica version
+    info!(
+        log,
+        "nns_backup_test: Proposal to upgrade the subnet replica version"
+    );
     let test_version = format!("{}-test", replica_version);
     block_on(update_subnet_replica_version(
         nns_node,
@@ -100,23 +108,38 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         subnet_id,
     ));
 
-    // Wait until the upgrade happens and the backup keys are made available:
+    info!(
+        log,
+        "nns_backup_test: Wait until the upgrade happens and the backup keys are made available"
+    );
     assert_assigned_replica_version(nns_node, &test_version, &ctx.logger);
     wait_until_authentication_is_granted(&node_ip, "backup", &backup_mean);
 
-    // Sync the data necessary for the backup
+    info!(
+        log,
+        "nns_backup_test: Sync the data necessary for the backup"
+    );
     backup.sync_ic_json5_file();
     backup.rsync_spool();
 
-    // Let's hijack the stdout from the replay tool for later analysis.
+    info!(
+        log,
+        "nns_backup_test: Let's hijack the stdout from the replay tool for later analysis."
+    );
     let mut shh = shh::stdout().unwrap();
 
     backup.replay(&replica_version);
 
-    // Check that the replay correctly recognized an upgrade.
+    info!(
+        log,
+        "nns_backup_test: Check that the replay correctly recognized an upgrade."
+    );
     let mut buffer = String::new();
     shh.read_to_string(&mut buffer).unwrap();
-    // Drop shh here to enable writing to stdout again.
+    info!(
+        log,
+        "nns_backup_test: Drop shh here to enable writing to stdout again (1)."
+    );
     drop(shh);
     std::io::stdout().write_all(buffer.as_bytes()).unwrap();
     if !buffer.contains("Please use the replay tool of version") {
@@ -127,14 +150,20 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     }
 
     for _ in 0..20 {
-        // Let's pull some more artefacts and replay with the new version.
+        info!(
+            log,
+            "nns_backup_test: Let's pull some more artefacts and replay with the new version."
+        );
         backup.rsync_spool();
         let mut shh = shh::stdout().unwrap();
         backup.replay(&test_version);
 
         let mut buffer = String::new();
         shh.read_to_string(&mut buffer).unwrap();
-        // Drop shh here to enable writing to stdout again.
+        info!(
+            log,
+            "nns_backup_test: Drop shh here to enable writing to stdout again (2)."
+        );
         drop(shh);
         std::io::stdout().write_all(buffer.as_bytes()).unwrap();
 
@@ -142,13 +171,18 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             panic!("State computation diverged post-upgrade.");
         }
 
-        // Continue until we were able to find at least one CUP.
+        info!(
+            log,
+            "nns_backup_test: Continue until we were able to find at least one CUP."
+        );
         if buffer.contains("Found a CUP") {
+            info!(log, "nns_backup_test: found a cup, test ends");
             return;
         }
         thread::sleep(time::Duration::from_secs(10));
     }
 
+    info!(log, "nns_backup_test: Panic if we couldn't find a CUP");
     // Panic if we couldn't find a CUP
     panic!("No CUP is produced post-upgrade");
 }
