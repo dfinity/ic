@@ -11,12 +11,10 @@ filegroup(
 )
 
 rust_library(
-    name = "ic_btc_types",
+    name = "ic_btc_test_utils",
     srcs = glob(["src/**"]),
     edition = "2018",
     deps = [
-        "@crate_index//:candid",
-        "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
+        "@crate_index//:bitcoin",
     ],
 )
