@@ -1,10 +1,12 @@
 use candid::Encode;
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
-use ic_sns_governance::governance::NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER;
+use ic_sns_governance::pb::v1::nervous_system_function::{
+    FunctionType, GenericNervousSystemFunction,
+};
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_sns_governance::pb::v1::{
-    ExecuteNervousSystemFunction, NervousSystemFunction, NervousSystemParameters,
+    ExecuteGenericNervousSystemFunction, NervousSystemFunction, NervousSystemParameters,
     NeuronPermissionList, NeuronPermissionType, Proposal, ProposalDecisionStatus, ProposalId,
 };
 use ic_sns_governance::types::ONE_YEAR_SECONDS;
@@ -69,7 +71,8 @@ fn test_add_remove_and_execute_nervous_system_functions() {
 
         let list_nervous_system_functions_response =
             sns_canisters.list_nervous_system_functions().await;
-        assert_eq!(list_nervous_system_functions_response.functions.len(), 0);
+        // Initially we should have the 6 native functions
+        assert_eq!(list_nervous_system_functions_response.functions.len(), 6);
 
         let neuron_id = sns_canisters
             .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
@@ -81,15 +84,21 @@ fn test_add_remove_and_execute_nervous_system_functions() {
 
         let nervous_system_function = NervousSystemFunction {
             id: 1000,
-            target_canister_id: Some(dapp_canister.canister_id().get()),
-            target_method_name: Some("test_dapp_method".to_string()),
-            validator_canister_id: Some(dapp_canister.canister_id().get()),
-            validator_method_name: Some("test_dapp_method_validate".to_string()),
+            name: "Call test dapp method".to_string(),
+            description: None,
+            function_type: Some(FunctionType::GenericNervousSystemFunction(
+                GenericNervousSystemFunction {
+                    target_canister_id: Some(dapp_canister.canister_id().get()),
+                    target_method_name: Some("test_dapp_method".to_string()),
+                    validator_canister_id: Some(dapp_canister.canister_id().get()),
+                    validator_method_name: Some("test_dapp_method_validate".to_string()),
+                },
+            )),
         };
 
         let proposal_payload = Proposal {
-            title: "Add new ExecuteNervousSystemFunction".into(),
-            action: Some(Action::AddNervousSystemFunction(
+            title: "Add new GenericNervousSystemFunction".into(),
+            action: Some(Action::AddGenericNervousSystemFunction(
                 nervous_system_function.clone(),
             )),
             ..Default::default()
@@ -104,20 +113,22 @@ fn test_add_remove_and_execute_nervous_system_functions() {
 
         let list_nervous_system_functions_response =
             sns_canisters.list_nervous_system_functions().await;
-        assert_eq!(list_nervous_system_functions_response.functions.len(), 1);
+        // We should now have an extra function, which we just added.
+        assert_eq!(list_nervous_system_functions_response.functions.len(), 7);
         assert!(
             list_nervous_system_functions_response
                 .functions
-                .get(0)
+                .get(6)
+                .as_ref()
                 .unwrap()
-                == &nervous_system_function
+                == &&nervous_system_function
         );
 
         let invalid_value = 5i64;
         let proposal_payload = Proposal {
             title: "An invalid ExecuteNervousSystemFunction call".into(),
-            action: Some(Action::ExecuteNervousSystemFunction(
-                ExecuteNervousSystemFunction {
+            action: Some(Action::ExecuteGenericNervousSystemFunction(
+                ExecuteGenericNervousSystemFunction {
                     function_id: 1000,
                     payload: Encode!(&invalid_value).unwrap(),
                 },
@@ -140,8 +151,8 @@ fn test_add_remove_and_execute_nervous_system_functions() {
 
         let proposal_payload = Proposal {
             title: "A valid ExecuteNervousSystemFunction call".into(),
-            action: Some(Action::ExecuteNervousSystemFunction(
-                ExecuteNervousSystemFunction {
+            action: Some(Action::ExecuteGenericNervousSystemFunction(
+                ExecuteGenericNervousSystemFunction {
                     function_id: 1000,
                     payload: Encode!(&valid_value).unwrap(),
                 },
@@ -166,7 +177,7 @@ fn test_add_remove_and_execute_nervous_system_functions() {
         // Now remove the NervousSystemFunction
         let proposal_payload = Proposal {
             title: "Remove ExecuteNervousSystemFunction".into(),
-            action: Some(Action::RemoveNervousSystemFunction(1000)),
+            action: Some(Action::RemoveGenericNervousSystemFunction(1000)),
             ..Default::default()
         };
 
@@ -179,8 +190,8 @@ fn test_add_remove_and_execute_nervous_system_functions() {
 
         let proposal_payload = Proposal {
             title: "An invalid ExecuteNervousSystemFunction call".into(),
-            action: Some(Action::ExecuteNervousSystemFunction(
-                ExecuteNervousSystemFunction {
+            action: Some(Action::ExecuteGenericNervousSystemFunction(
+                ExecuteGenericNervousSystemFunction {
                     function_id: 1000,
                     payload: Encode!(&valid_value).unwrap(),
                 },
@@ -200,9 +211,15 @@ fn test_add_remove_and_execute_nervous_system_functions() {
 
         let list_nervous_system_functions_response =
             sns_canisters.list_nervous_system_functions().await;
+        // Since we removed the function we should go back to only having the native
+        // functions listed, and the removed function should appear in the reserved ids.
+        assert_eq!(list_nervous_system_functions_response.functions.len(), 6);
         assert_eq!(
-            list_nervous_system_functions_response.functions,
-            vec![NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER.clone()],
+            list_nervous_system_functions_response
+                .reserved_ids
+                .get(0)
+                .unwrap(),
+            &nervous_system_function.id,
         );
 
         Ok(())

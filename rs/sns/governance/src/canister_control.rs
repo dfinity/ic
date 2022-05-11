@@ -11,10 +11,10 @@ use dfn_core::println;
 use crate::{
     governance::log_prefix,
     pb::v1::{
-        governance_error::ErrorType, ExecuteNervousSystemFunction, GovernanceError,
+        governance_error::ErrorType, ExecuteGenericNervousSystemFunction, GovernanceError,
         NervousSystemFunction,
     },
-    proposal::ValidNervousSystemFunction,
+    proposal::ValidGenericNervousSystemFunction,
     types::Environment,
 };
 
@@ -190,14 +190,14 @@ pub async fn stop_canister(
     }
 }
 
-/// Validates and renders a nervous system function (i.e., a non-native SNS proposal).
-pub async fn perform_execute_nervous_system_function_validate_and_render_call(
+/// Validates and renders a generic nervous system function (i.e., a non-native SNS proposal).
+pub async fn perform_execute_generic_nervous_system_function_validate_and_render_call(
     env: &dyn Environment,
     function: NervousSystemFunction,
-    call: ExecuteNervousSystemFunction,
+    call: ExecuteGenericNervousSystemFunction,
 ) -> Result<String, String> {
     // Get the canister id and the method against which we validate and render the proposal.
-    let valid_function = ValidNervousSystemFunction::try_from(&function)?;
+    let valid_function = ValidGenericNervousSystemFunction::try_from(&function)?;
 
     let result = env
         .call_canister(
@@ -229,14 +229,14 @@ pub async fn perform_execute_nervous_system_function_validate_and_render_call(
     }
 }
 
-/// Executes a nervous system function (i.e., a non-native SNS proposal).
-pub async fn perform_execute_nervous_system_function_call(
+/// Executes a generic nervous system function (i.e., a non-native SNS proposal).
+pub async fn perform_execute_generic_nervous_system_function_call(
     env: &dyn Environment,
     function: NervousSystemFunction,
-    call: ExecuteNervousSystemFunction,
+    call: ExecuteGenericNervousSystemFunction,
 ) -> Result<(), GovernanceError> {
     // Get the canister id and the method against which we execute the proposal.
-    let valid_function = ValidNervousSystemFunction::try_from(&function)
+    let valid_function = ValidGenericNervousSystemFunction::try_from(&function)
         .map_err(|e| GovernanceError::new_with_message(ErrorType::InvalidProposal, e))?;
 
     let result = env

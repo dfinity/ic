@@ -1,11 +1,14 @@
-use crate::governance::{log_prefix, Governance, TimeWarp};
+use crate::governance::{
+    log_prefix, Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
+};
 use crate::pb::v1::governance_error::ErrorType;
 use crate::pb::v1::manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse};
 use crate::pb::v1::proposal::Action;
+use crate::pb::v1::Empty;
 use crate::pb::v1::{
-    manage_neuron_response, DefaultFollowees, GovernanceError, ManageNeuronResponse,
-    NervousSystemParameters, NeuronId, NeuronPermissionList, NeuronPermissionType, ProposalId,
-    RewardEvent, Vote,
+    manage_neuron_response, nervous_system_function::FunctionType, DefaultFollowees,
+    GovernanceError, ManageNeuronResponse, NervousSystemFunction, NervousSystemParameters,
+    NeuronId, NeuronPermissionList, NeuronPermissionType, ProposalId, RewardEvent, Vote,
 };
 
 use async_trait::async_trait;
@@ -14,7 +17,7 @@ use ic_base_types::CanisterId;
 use ic_nervous_system_common::NervousSystemError;
 use ledger_canister::{DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 
 pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
@@ -54,9 +57,9 @@ impl NervousSystemParameters {
     /// degradation in the governance canister or the subnet hosting the SNS.
     pub const INITIAL_VOTING_PERIOD_FLOOR: u64 = ONE_DAY_SECONDS;
 
-    /// This is an upper bound for `max_followees_per_action`. Exceeding it may cause
+    /// This is an upper bound for `max_followees_per_function`. Exceeding it may cause
     /// degradation in the governance canister or the subnet hosting the SNS.
-    pub const MAX_FOLLOWEES_PER_ACTION_CEILING: u64 = 15;
+    pub const MAX_FOLLOWEES_PER_FUNCTION_CEILING: u64 = 15;
 
     /// This is an upper bound for `max_number_of_principals_per_neuron`. Exceeding
     /// it may cause may cause degradation in the governance canister or the subnet
@@ -73,7 +76,7 @@ impl NervousSystemParameters {
             default_followees: Some(DefaultFollowees::default()),
             max_number_of_neurons: Some(200_000),
             neuron_minimum_dissolve_delay_to_vote_seconds: Some(6 * ONE_MONTH_SECONDS), // 6m
-            max_followees_per_action: Some(15),
+            max_followees_per_function: Some(15),
             max_dissolve_delay_seconds: Some(8 * ONE_YEAR_SECONDS), // 8y
             max_neuron_age_for_age_bonus: Some(4 * ONE_YEAR_SECONDS), // 4y
             reward_distribution_period_seconds: Some(ONE_DAY_SECONDS), // 1d
@@ -106,9 +109,9 @@ impl NervousSystemParameters {
         new_params.neuron_minimum_dissolve_delay_to_vote_seconds = self
             .neuron_minimum_dissolve_delay_to_vote_seconds
             .or(base.neuron_minimum_dissolve_delay_to_vote_seconds);
-        new_params.max_followees_per_action = self
-            .max_followees_per_action
-            .or(base.max_followees_per_action);
+        new_params.max_followees_per_function = self
+            .max_followees_per_function
+            .or(base.max_followees_per_function);
         new_params.max_dissolve_delay_seconds = self
             .max_dissolve_delay_seconds
             .or(base.max_dissolve_delay_seconds);
@@ -146,7 +149,7 @@ impl NervousSystemParameters {
         self.validate_default_followees()?;
         self.validate_max_number_of_neurons()?;
         self.validate_neuron_minimum_dissolve_delay_to_vote_seconds()?;
-        self.validate_max_followees_per_action()?;
+        self.validate_max_followees_per_function()?;
         self.validate_max_dissolve_delay_seconds()?;
         self.validate_max_neuron_age_for_age_bonus()?;
         self.validate_reward_distribution_period_seconds()?;
@@ -244,12 +247,12 @@ impl NervousSystemParameters {
             .as_ref()
             .ok_or_else(|| "NervousSystemParameters.default_followees must be set".to_string())?;
 
-        let max_followees_per_action = self.validate_max_followees_per_action()?;
+        let max_followees_per_function = self.validate_max_followees_per_function()?;
 
-        if default_followees.followees.len() > max_followees_per_action as usize {
+        if default_followees.followees.len() > max_followees_per_function as usize {
             return Err(format!(
                 "NervousSystemParameters.default_followees must have size less than {}",
-                max_followees_per_action
+                max_followees_per_function
             ));
         }
 
@@ -297,20 +300,20 @@ impl NervousSystemParameters {
         }
     }
 
-    /// Validates that the nervous system parameter max_followees_per_action is well-formed.
-    fn validate_max_followees_per_action(&self) -> Result<u64, String> {
-        let max_followees_per_action = self.max_followees_per_action.ok_or_else(|| {
-            "NervousSystemParameters.max_followees_per_action must be set".to_string()
+    /// Validates that the nervous system parameter max_followees_per_function is well-formed.
+    fn validate_max_followees_per_function(&self) -> Result<u64, String> {
+        let max_followees_per_function = self.max_followees_per_function.ok_or_else(|| {
+            "NervousSystemParameters.max_followees_per_function must be set".to_string()
         })?;
 
-        if max_followees_per_action > Self::MAX_FOLLOWEES_PER_ACTION_CEILING {
+        if max_followees_per_function > Self::MAX_FOLLOWEES_PER_FUNCTION_CEILING {
             Err(format!(
-                "NervousSystemParameters.max_followees_per_action ({}) cannot be greater than {}",
-                max_followees_per_action,
-                Self::MAX_FOLLOWEES_PER_ACTION_CEILING
+                "NervousSystemParameters.max_followees_per_function ({}) cannot be greater than {}",
+                max_followees_per_function,
+                Self::MAX_FOLLOWEES_PER_FUNCTION_CEILING
             ))
         } else {
-            Ok(max_followees_per_action)
+            Ok(max_followees_per_function)
         }
     }
 
@@ -522,6 +525,15 @@ impl Vote {
     }
 }
 
+impl NervousSystemFunction {
+    pub fn is_native(&self) -> bool {
+        matches!(
+            self.function_type,
+            Some(FunctionType::NativeNervousSystemFunction(_))
+        )
+    }
+}
+
 impl ManageNeuronResponse {
     pub fn is_err(&self) -> bool {
         matches!(
@@ -666,13 +678,79 @@ impl Action {
         }
     }
 
-    /// Returns whether a provided action is a valid [Action].
-    /// This is to prevent memory attacks due to keying on u64
-    pub fn is_valid_action(_action: &u64) -> bool {
-        todo!()
+    // Returns the native functions, i.e. the ones that are supported directly by the governance canister.
+    pub fn native_functions() -> Vec<NervousSystemFunction> {
+        vec![
+            NervousSystemFunction {
+                id: 0,
+                name: "Unspecified".to_string(),
+                description: Some(
+                    "Catch-all w.r.t to following for all types of proposals.".to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+            NervousSystemFunction {
+                id: 1,
+                name: "Motion".to_string(),
+                description: Some(
+                    "Side-effect-less proposals to set general governance direction.".to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+            NervousSystemFunction {
+                id: 2,
+                name: "Manage nervous system parameters".to_string(),
+                description: Some(
+                    "Proposal to change the core parameters of SNS governance.".to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+            NervousSystemFunction {
+                id: 3,
+                name: "Upgrade SNS controlled canister".to_string(),
+                description: Some(
+                    "Proposal to upgrade the wasm of an SNS controlled canister.".to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+            NervousSystemFunction {
+                id: 4,
+                name: "Add nervous system function".to_string(),
+                description: Some(
+                    "Proposal to add a new, user-defined, nervous system function:\
+                     a canister call which can then be executed by proposal."
+                        .to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+            NervousSystemFunction {
+                id: 5,
+                name: "Remove nervous system function".to_string(),
+                description: Some(
+                    "Proposal to remove a user-defined nervous system function,\
+                     which will be no longer executable by proposal."
+                        .to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+        ]
+    }
+
+    // The current set of valid native function ids, for the purposes of following.
+    // See `Proposal`.
+    // See `impl From<&Action> for u64`.
+    pub fn native_function_ids() -> Vec<u64> {
+        Action::native_functions()
+            .into_iter()
+            .map(|m| m.id)
+            .collect()
     }
 }
 
+// Mapping of action to the unique function id of that action.
+//
+// When adding/removing an action here, also add/remove from
+// `Action::native_actions_metadata()`.
 impl From<&Action> for u64 {
     fn from(action: &Action) -> Self {
         match action {
@@ -680,10 +758,25 @@ impl From<&Action> for u64 {
             Action::Motion(_) => 1,
             Action::ManageNervousSystemParameters(_) => 2,
             Action::UpgradeSnsControlledCanister(_) => 3,
-            Action::ExecuteNervousSystemFunction(_) => 4,
-            Action::AddNervousSystemFunction(_) => 5,
-            Action::RemoveNervousSystemFunction(_) => 6,
+            Action::AddGenericNervousSystemFunction(_) => 4,
+            Action::RemoveGenericNervousSystemFunction(_) => 5,
+            Action::ExecuteGenericNervousSystemFunction(proposal) => proposal.function_id,
         }
+    }
+}
+
+pub fn is_registered_function_id(
+    function_id: u64,
+    nervous_system_functions: &BTreeMap<u64, NervousSystemFunction>,
+) -> bool {
+    // Check if the function id is present among the native actions.
+    if Action::native_function_ids().contains(&function_id) {
+        return true;
+    }
+
+    match nervous_system_functions.get(&function_id) {
+        None => false,
+        Some(function) => function != &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
     }
 }
 
@@ -837,7 +930,7 @@ mod tests {
                 ..NervousSystemParameters::with_default_values()
             },
             NervousSystemParameters {
-                max_followees_per_action: Some(0),
+                max_followees_per_function: Some(0),
                 default_followees: Some(DefaultFollowees {
                     followees: btreemap! {12 => Followees { followees: vec![NeuronId { id: vec![] }] }},
                 }),
@@ -871,12 +964,12 @@ mod tests {
                 ..NervousSystemParameters::with_default_values()
             },
             NervousSystemParameters {
-                max_followees_per_action: None,
+                max_followees_per_function: None,
                 ..NervousSystemParameters::with_default_values()
             },
             NervousSystemParameters {
-                max_followees_per_action: Some(
-                    NervousSystemParameters::MAX_FOLLOWEES_PER_ACTION_CEILING + 1,
+                max_followees_per_function: Some(
+                    NervousSystemParameters::MAX_FOLLOWEES_PER_FUNCTION_CEILING + 1,
                 ),
                 ..NervousSystemParameters::with_default_values()
             },

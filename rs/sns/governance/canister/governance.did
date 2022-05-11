@@ -1,11 +1,11 @@
 type AccountIdentifier = record { hash : vec nat8 };
 type Action = variant {
   ManageNervousSystemParameters : NervousSystemParameters;
-  AddNervousSystemFunction : NervousSystemFunction;
-  ExecuteNervousSystemFunction : ExecuteNervousSystemFunction;
+  AddGenericNervousSystemFunction : NervousSystemFunction;
+  RemoveGenericNervousSystemFunction : nat64;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
-  RemoveNervousSystemFunction : nat64;
   Unspecified : record {};
+  ExecuteGenericNervousSystemFunction : ExecuteGenericNervousSystemFunction;
   Motion : Motion;
 };
 type AddNeuronPermissions = record {
@@ -98,12 +98,22 @@ type DissolveState = variant {
   DissolveDelaySeconds : nat64;
   WhenDissolvedTimestampSeconds : nat64;
 };
-type ExecuteNervousSystemFunction = record {
+type ExecuteGenericNervousSystemFunction = record {
   function_id : nat64;
   payload : vec nat8;
 };
-type Follow = record { action_type : nat64; followees : vec NeuronId };
+type Follow = record { function_id : nat64; followees : vec NeuronId };
 type Followees = record { followees : vec NeuronId };
+type FunctionType = variant {
+  NativeNervousSystemFunction : record {};
+  GenericNervousSystemFunction : GenericNervousSystemFunction;
+};
+type GenericNervousSystemFunction = record {
+  validator_canister_id : opt principal;
+  target_canister_id : opt principal;
+  validator_method_name : opt text;
+  target_method_name : opt text;
+};
 type GetNeuron = record { neuron_id : opt NeuronId };
 type GetNeuronResponse = record { result : opt Result };
 type GetProposal = record { proposal_id : opt ProposalId };
@@ -142,6 +152,7 @@ type IncreaseDissolveDelay = record {
   additional_dissolve_delay_seconds : nat32;
 };
 type ListNervousSystemFunctionsResponse = record {
+  reserved_ids : vec nat64;
   functions : vec NervousSystemFunction;
 };
 type ListNeurons = record {
@@ -169,14 +180,14 @@ type MergeMaturityResponse = record {
 type Motion = record { motion_text : text };
 type NervousSystemFunction = record {
   id : nat64;
-  validator_canister_id : opt principal;
-  target_canister_id : opt principal;
-  validator_method_name : opt text;
-  target_method_name : opt text;
+  name : text;
+  description : opt text;
+  function_type : opt FunctionType;
 };
 type NervousSystemParameters = record {
   default_followees : opt DefaultFollowees;
   max_dissolve_delay_seconds : opt nat64;
+  max_followees_per_function : opt nat64;
   neuron_claimer_permissions : opt NeuronPermissionList;
   neuron_minimum_stake_e8s : opt nat64;
   initial_voting_period : opt nat64;
@@ -190,7 +201,6 @@ type NervousSystemParameters = record {
   reward_distribution_period_seconds : opt nat64;
   neuron_grantable_permissions : opt NeuronPermissionList;
   max_number_of_principals_per_neuron : opt nat64;
-  max_followees_per_action : opt nat64;
 };
 type Neuron = record {
   id : opt NeuronId;

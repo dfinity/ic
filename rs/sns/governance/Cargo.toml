@@ -31,6 +31,7 @@ ic-nervous-system-common = {path = "../../nervous_system/common"}
 ic-nervous-system-common-build-metadata = {path = "../../nervous_system/common/build_metadata"}
 ic-nervous-system-root = {path = "../../nervous_system/root"}
 ic-protobuf = { path = "../../protobuf" }
+lazy_static = "1.4.0"
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = "0.9.0"

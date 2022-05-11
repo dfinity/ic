@@ -136,10 +136,10 @@ message Neuron {
     uint64 dissolve_delay_seconds = 8;
   }
 
-  // A list of a neuron's followees for a specific action.
+  // A list of a neuron's followees for a specific function.
   message Followees {repeated NeuronId followees = 1;}
 
-  // The neuron's followees, specified as a map of proposal actions to followees.
+  // The neuron's followees, specified as a map of proposal functions IDs to followees neuron IDs.
   // The map's keys are represented by integers as Protobuf does not support enum keys in maps.
   map<uint64, Followees> followees = 11;
 
@@ -181,50 +181,73 @@ enum Vote {
 message NervousSystemFunction {
   // The unique id of this function.
   //
-  // Ids 0-999 are reserved for core governance proposals and can't
+  // Ids 0-999 are reserved for native governance proposals and can't
   // be used by generic NervousSystemFunction's.
   uint64 id = 1;
 
-  // The id of the target canister that will be called to execute the proposal.
-  ic_base_types.pb.v1.PrincipalId target_canister_id = 2;
+  // A short (<256 chars) description of the NervousSystemFunction.
+  string name = 2;
 
-  // The name of the method that will be called to execute the proposal.
-  // The signature of the method must be equivalent to the following:
-  // <method_name>(proposal_data: ProposalData) -> Result<(), String>.
-  optional string target_method_name = 3;
+  // An optional description of what the NervousSystemFunction does.
+  optional string description = 3;
 
-  // The id of the canister that will be called to validate the proposal before
-  // it is put up for a vote.
-  ic_base_types.pb.v1.PrincipalId validator_canister_id = 4;
+  message GenericNervousSystemFunction {
+    // The id of the target canister that will be called to execute the proposal.
+    ic_base_types.pb.v1.PrincipalId target_canister_id = 2;
 
-  // The name of the method that will be called to validate the proposal
-  // before it is put up for a vote.
-  // The signature of the method must be equivalent to the following:
-  // <method_name>(proposal_data: ProposalData) -> Result<(), String>
-  optional string validator_method_name = 5;
+    // The name of the method that will be called to execute the proposal.
+    // The signature of the method must be equivalent to the following:
+    // <method_name>(proposal_data: ProposalData) -> Result<(), String>.
+    optional string target_method_name = 3;
+
+    // The id of the canister that will be called to validate the proposal before
+    // it is put up for a vote.
+    ic_base_types.pb.v1.PrincipalId validator_canister_id = 4;
+
+    // The name of the method that will be called to validate the proposal
+    // before it is put up for a vote.
+    // The signature of the method must be equivalent to the following:
+    // <method_name>(proposal_data: ProposalData) -> Result<String, String>
+    optional string validator_method_name = 5;
+  }
+
+  oneof function_type {
+    // Whether this is a native function (i.e. a Action::Motion or
+    // Action::UpgradeSnsControlledCanister) or one of user-defined
+    // NervousSystemFunctions.
+    Empty native_nervous_system_function = 4;
+
+    // Whether this is a GenericNervousSystemFunction which can call
+    // any canister.
+    GenericNervousSystemFunction generic_nervous_system_function = 5;
+  }
 }
 
-// A proposal action defining a generic proposal, i.e., a proposal
+// A proposal function defining a generic proposal, i.e., a proposal
 // that is not build into the standard SNS and calls a canister outside
 // the SNS for execution.
 // The canister and method to call are derived from the `function_id`.
-message ExecuteNervousSystemFunction {
+message ExecuteGenericNervousSystemFunction {
+
   // This enum value determines what canister to call and what
   // function to call on that canister.
+  //
+  // 'function_id` must be in the range `[1000--u64:MAX]` as this
+  // can't be used to execute native functions.
   uint64 function_id = 1;
 
   // The payload of the nervous system function's payload.
   bytes payload = 2;
 }
 
-// A proposal action that should guide the future strategy of the SNS's
+// A proposal function that should guide the future strategy of the SNS's
 // ecosystem but does not have immediate effect in the sense that a method is executed.
 message Motion {
   // The text of the motion, which can at most be 100kib.
   string motion_text = 1;
 }
 
-// A proposal action that upgrades a canister that is controlled by the
+// A proposal function that upgrades a canister that is controlled by the
 // SNS governance canister.
 message UpgradeSnsControlledCanister {
   // The id of the canister that is upgraded.
@@ -248,14 +271,26 @@ message Proposal {
   string url = 3;
 
   // The action that the proposal proposes to take on adoption.
+  //
+  // Each action is associated with an function id that can be used for following.
+  // Native (typed) actions each have an id in the range [0-999], while
+  // NervousSystemFunctions with a `function_type` of GenericNervousSystemFunction
+  // are each associated with an id in the range [1000-u64:MAX].
+  //
+  // See `impl From<&Action> for u64` in src/types.rs for the implementation
+  // of this mapping.
   oneof action {
     // The `Unspecified` action is used as a fallback when
     // following. That is, if no followees are specified for a given
     // action, the followees for this action are used instead.
+    //
+    // Id = 0.
     Empty unspecified = 4;
 
     // A motion that should guide the future strategy of the SNS's ecosystem
     // but does not have immediate effect in the sense that a method is executed.
+    //
+    // Id = 1.
     Motion motion = 5;
 
     // Change the nervous system's parameters.
@@ -266,19 +301,29 @@ message Proposal {
     // the neuron is created. If this NervousSystemParameter is decreased, all neurons
     // created after this change will have at least the new minimum stake. However,
     // neurons created before this change may have less stake.
+    //
+    // Id = 2.
     NervousSystemParameters manage_nervous_system_parameters = 6;
 
     // Upgrade a canister that is controlled by the SNS governance canister.
+    //
+    // Id = 3.
     UpgradeSnsControlledCanister upgrade_sns_controlled_canister = 7;
 
+    // Add a new NervousSystemFunction, of generic type,  to be executable by proposal.
+    //
+    // Id = 4.
+    NervousSystemFunction add_generic_nervous_system_function = 8;
+
+    // Remove a NervousSystemFunction, of generic type, from being executable by proposal.
+    //
+    // Id = 5.
+    uint64 remove_generic_nervous_system_function = 9;
+
     // Execute a method outside the SNS canisters.
-    ExecuteNervousSystemFunction execute_nervous_system_function = 8;
-
-    // Add a new NervousSystemFunction to be executable by proposal.
-    NervousSystemFunction add_nervous_system_function = 9;
-
-    // Remove a NervousSystemFunction from being executable by proposal.
-    uint64 remove_nervous_system_function = 10;
+    //
+    // Id = [1000-u64::MAX].
+    ExecuteGenericNervousSystemFunction execute_generic_nervous_system_function = 10;
   }
 }
 
@@ -570,11 +615,11 @@ message NervousSystemParameters {
   optional uint64 initial_voting_period = 5;
 
   // The set of default followees that every newly created neuron will follow
-  // per action. This is specified as a mapping of proposal actions to followees.
+  // per function. This is specified as a mapping of proposal functions to followees.
   //
   // If unset, neurons will have no followees by default.
-  // The set of followees for each action can be at most of size
-  // max_followees_per_action.
+  // The set of followees for each function can be at most of size
+  // max_followees_per_function.
   optional DefaultFollowees default_followees = 6;
 
   // The maximum number of allowed neurons. When this maximum is reached, no new
@@ -589,11 +634,11 @@ message NervousSystemParameters {
   // The chosen value must be smaller than max_dissolve_delay_seconds.
   optional uint64 neuron_minimum_dissolve_delay_to_vote_seconds = 8;
 
-  // The maximum number of followees each neuron can establish for each action.
+  // The maximum number of followees each neuron can establish for each nervous system function.
   //
   // This number can be at most as large as the defined ceiling
-  // MAX_FOLLOWEES_PER_ACTION_CEILING.
-  optional uint64 max_followees_per_action = 9;
+  // MAX_FOLLOWEES_PER_FUNCTION_CEILING.
+  optional uint64 max_followees_per_function = 9;
 
   // The maximum dissolve delay that a neuron can have. That is, the maximum
   // that a neuron's dissolve delay can be increased to. The maximum is also enforced
@@ -638,8 +683,8 @@ message NervousSystemParameters {
   optional uint64 max_number_of_principals_per_neuron = 17;
 }
 
-// The set of default followees that every newly created neuron will follow per action.
-// This is specified as a mapping of proposal actions to followees for that action.
+// The set of default followees that every newly created neuron will follow per function.
+// This is specified as a mapping of proposal functions to followees for that function.
 message DefaultFollowees {
   map<uint64, Neuron.Followees> followees = 1;
 }
@@ -943,29 +988,29 @@ message ManageNeuron {
   }
 
   // The operation that adds a new follow relation to a neuron, specifying
-  // that it follows a set of followee neurons for a given proposal action.
+  // that it follows a set of followee neurons for a given proposal function.
   // If the neuron already has a defined follow relation for this proposal
-  // action, then the current list is replaced with the new list (not added).
+  // function, then the current list is replaced with the new list (not added).
   // If the provided followee list is empty, the follow relation for this
-  // proposal action is removed.
+  // proposal function is removed.
   //
   // A follow relation has the effect that the governance canister will
   // automatically cast a vote for the following neuron for proposals of
-  // the given action if a majority of the specified followees vote in the
+  // the given function if a majority of the specified followees vote in the
   // same way.
   // In more detail, once a majority of the followees vote to adopt
-  // or reject a proposal belonging to the specified action, the neuron
+  // or reject a proposal belonging to the specified function, the neuron
   // votes the same way. If it becomes impossible for a majority of
   // the followees to adopt (for example, because they are split 50-50
   // between adopt and reject), then the neuron votes to reject.
-  // If a rule is specified where the proposal action is UNSPECIFIED,
+  // If a rule is specified where the proposal function is UNSPECIFIED,
   // then it becomes a catch-all follow rule, which will be used to vote
   // automatically on proposals with actions for which no
   // specific rule has been specified.
   message Follow {
-    // The proposal action defining for which proposals this
-    // follow relation is relevant.
-    uint64 action_type = 1;
+    // The function id of the proposal function defining for which proposals
+    // this follow relation is relevant.
+    uint64 function_id = 1;
 
     // The list of followee neurons, specified by their neuron ID.
     repeated NeuronId followees = 2;
@@ -1243,5 +1288,11 @@ message ListNeuronsResponse {
 
 // The response to the list_nervous_system_functions query.
 message ListNervousSystemFunctionsResponse {
+  // Current set of nervous system function, both native and user-defined,
+  // that can be executed by proposal.
   repeated NervousSystemFunction functions = 1;
+
+  // Set of nervous system function ids that are reserved and cannot be
+  // used to add new NervousSystemFunctions.
+  repeated uint64 reserved_ids = 2;
 }

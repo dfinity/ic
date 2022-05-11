@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
-use crate::canister_control::perform_execute_nervous_system_function_validate_and_render_call;
+use crate::canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call;
 use crate::governance::{log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER};
+use crate::pb::v1::nervous_system_function::{FunctionType, GenericNervousSystemFunction};
 use crate::pb::v1::{
-    proposal, ExecuteNervousSystemFunction, Motion, NervousSystemFunction, NervousSystemParameters,
-    Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus, Tally,
-    UpgradeSnsControlledCanister, Vote,
+    proposal, ExecuteGenericNervousSystemFunction, Motion, NervousSystemFunction,
+    NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus, ProposalRewardStatus,
+    Tally, UpgradeSnsControlledCanister, Vote,
 };
 use crate::types::{Environment, ONE_DAY_SECONDS};
 use crate::{validate_chars_count, validate_len, validate_required_field};
@@ -145,13 +146,19 @@ pub async fn validate_and_render_action(
         proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
             validate_and_render_upgrade_sns_controlled_canister(upgrade)
         }
-        proposal::Action::AddNervousSystemFunction(function_to_add) => {
-            validate_and_render_add_nervous_system_function(function_to_add, existing_functions)
+        proposal::Action::AddGenericNervousSystemFunction(function_to_add) => {
+            validate_and_render_add_generic_nervous_system_function(
+                function_to_add,
+                existing_functions,
+            )
         }
-        proposal::Action::RemoveNervousSystemFunction(id_to_remove) => {
-            validate_and_render_remove_nervous_system_function(*id_to_remove, existing_functions)
+        proposal::Action::RemoveGenericNervousSystemFunction(id_to_remove) => {
+            validate_and_render_remove_nervous_generic_system_function(
+                *id_to_remove,
+                existing_functions,
+            )
         }
-        proposal::Action::ExecuteNervousSystemFunction(execute) => {
+        proposal::Action::ExecuteGenericNervousSystemFunction(execute) => {
             validate_and_render_execute_nervous_system_function(env, execute, existing_functions)
                 .await
         }
@@ -253,7 +260,7 @@ fn validate_and_render_upgrade_sns_controlled_canister(
 }
 
 #[derive(Debug)]
-pub(crate) struct ValidNervousSystemFunction {
+pub(crate) struct ValidGenericNervousSystemFunction {
     pub id: u64,
     pub target_canister_id: CanisterId,
     pub target_method: String,
@@ -283,83 +290,126 @@ fn validate_canister_id(
     }
 }
 
-impl TryFrom<&NervousSystemFunction> for ValidNervousSystemFunction {
+impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
     type Error = String;
 
     fn try_from(value: &NervousSystemFunction) -> Result<Self, Self::Error> {
+        if value == &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER {
+            return Err(
+                "NervousSystemFunction is a deletion marker and not an actual function."
+                    .to_string(),
+            );
+        }
+
+        if value.is_native() {
+            return Err("NervousSystemFunction is not generic.".to_string());
+        }
+
         let NervousSystemFunction {
             id,
-            validator_canister_id,
-            validator_method_name,
-            target_canister_id,
-            target_method_name,
+            name,
+            description,
+            function_type,
         } = value;
 
         let mut defects = vec![];
 
-        if id < &1000 {
+        if *id < 1000 {
             defects.push("NervousSystemFunction's must have ids starting at 1000".to_string());
         }
 
-        // Validate the target_canister_id field.
-        let target_canister_id =
-            validate_canister_id("target_canister_id", target_canister_id, &mut defects);
-
-        // Validate the validator_canister_id field.
-        let validator_canister_id =
-            validate_canister_id("validator_canister_id", validator_canister_id, &mut defects);
-
-        // Validate the target_method_name field.
-        if target_method_name.is_none() || target_method_name.as_ref().unwrap().is_empty() {
-            defects.push("target_method_name was empty.".to_string());
+        if name.is_empty() || name.len() > 256 {
+            defects.push(
+                "NervousSystemFunction's must have set name with a max of 255 bytes".to_string(),
+            );
         }
 
-        if validator_method_name.is_none() || validator_method_name.as_ref().unwrap().is_empty() {
-            defects.push("validator_method_name was empty.".to_string());
+        if description.is_some() && description.as_ref().unwrap().len() > 10000 {
+            defects.push(
+                "NervousSystemFunction's description must be at most 10000 bytes".to_string(),
+            );
         }
 
-        if !defects.is_empty() {
-            return Err(format!(
-                "ExecuteNervousSystemFunction was invalid for the following reason(s):\n{}",
-                defects.join("\n")
-            ));
-        }
+        match function_type {
+            Some(FunctionType::GenericNervousSystemFunction(GenericNervousSystemFunction {
+                target_canister_id,
+                target_method_name,
+                validator_canister_id,
+                validator_method_name,
+            })) => {
+                // Validate the target_canister_id field.
+                let target_canister_id =
+                    validate_canister_id("target_canister_id", target_canister_id, &mut defects);
 
-        Ok(ValidNervousSystemFunction {
-            id: *id,
-            target_canister_id: target_canister_id.unwrap(),
-            target_method: target_method_name.as_ref().unwrap().clone(),
-            validator_canister_id: validator_canister_id.unwrap(),
-            validator_method: validator_method_name.as_ref().unwrap().clone(),
-        })
+                // Validate the validator_canister_id field.
+                let validator_canister_id = validate_canister_id(
+                    "validator_canister_id",
+                    validator_canister_id,
+                    &mut defects,
+                );
+
+                // Validate the target_method_name field.
+                if target_method_name.is_none() || target_method_name.as_ref().unwrap().is_empty() {
+                    defects.push("target_method_name was empty.".to_string());
+                }
+
+                if validator_method_name.is_none()
+                    || validator_method_name.as_ref().unwrap().is_empty()
+                {
+                    defects.push("validator_method_name was empty.".to_string());
+                }
+
+                if !defects.is_empty() {
+                    return Err(format!(
+                        "ExecuteNervousSystemFunction was invalid for the following reason(s):\n{}",
+                        defects.join("\n")
+                    ));
+                }
+
+                Ok(ValidGenericNervousSystemFunction {
+                    id: *id,
+                    target_canister_id: target_canister_id.unwrap(),
+                    target_method: target_method_name.as_ref().unwrap().clone(),
+                    validator_canister_id: validator_canister_id.unwrap(),
+                    validator_method: validator_method_name.as_ref().unwrap().clone(),
+                })
+            }
+            _ => {
+                defects.push("NervousSystemFunction must have a function_type set to GenericNervousSystemFunction".to_string());
+                return Err(format!(
+                    "ExecuteNervousSystemFunction was invalid for the following reason(s):\n{}",
+                    defects.join("\n")
+                ));
+            }
+        }
     }
 }
 
 /// Validates and renders a proposal with action AddNervousSystemFunction.
-pub fn validate_and_render_add_nervous_system_function(
+pub fn validate_and_render_add_generic_nervous_system_function(
     add: &NervousSystemFunction,
     existing_functions: &BTreeMap<u64, NervousSystemFunction>,
 ) -> Result<String, String> {
-    if existing_functions.contains_key(&add.id) {
+    let validated_function = ValidGenericNervousSystemFunction::try_from(add)?;
+    if existing_functions.contains_key(&validated_function.id) {
         Err(format!(
             "There is already a NervousSystemFunction with id: {}",
-            add.id
+            validated_function.id
         ))
     } else {
-        let validated_function = ValidNervousSystemFunction::try_from(add)?;
         Ok(format!(
             r"Proposal to add new NervousSystemFunction:
 
 ## Function:
 
 {:?}",
-            validated_function
+            add
         ))
     }
 }
 
 /// Validates and renders a proposal with action RemoveNervousSystemFunction.
-pub fn validate_and_render_remove_nervous_system_function(
+pub fn validate_and_render_remove_nervous_generic_system_function(
     remove: u64,
     existing_functions: &BTreeMap<u64, NervousSystemFunction>,
 ) -> Result<String, String> {
@@ -380,7 +430,7 @@ pub fn validate_and_render_remove_nervous_system_function(
 /// This retrieves the nervous system function's validator method and calls it.
 pub async fn validate_and_render_execute_nervous_system_function(
     env: &dyn Environment,
-    execute: &ExecuteNervousSystemFunction,
+    execute: &ExecuteGenericNervousSystemFunction,
     existing_functions: &BTreeMap<u64, NervousSystemFunction>,
 ) -> Result<String, String> {
     let id = execute.function_id;
@@ -388,18 +438,19 @@ pub async fn validate_and_render_execute_nervous_system_function(
         None => Err(format!("There is no NervousSystemFunction with id: {}", id)),
         Some(function) => {
             // Make sure this isn't a NervousSystemFunction which has been deleted.
-            if function == &NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER {
+            if function == &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER {
                 Err(format!("There is no NervousSystemFunction with id: {}", id))
             } else {
                 // To validate the proposal we try and call the validation method,
                 // which should produce a payload rendering if the proposal is valid
                 // or an error if it isn't.
-                let rendering = perform_execute_nervous_system_function_validate_and_render_call(
-                    env,
-                    function.clone(),
-                    execute.clone(),
-                )
-                .await?;
+                let rendering =
+                    perform_execute_generic_nervous_system_function_validate_and_render_call(
+                        env,
+                        function.clone(),
+                        execute.clone(),
+                    )
+                    .await?;
 
                 Ok(format!(
                     r"# Proposal to execute nervous system function:
@@ -973,18 +1024,24 @@ mod test {
     fn basic_add_nervous_system_function_proposal() -> Proposal {
         let nervous_system_function = NervousSystemFunction {
             id: 1000,
-            target_canister_id: Some(CanisterId::from_u64(1).get()),
-            target_method_name: Some("test_method".to_string()),
-            validator_canister_id: Some(CanisterId::from_u64(1).get()),
-            validator_method_name: Some("test_validator_method".to_string()),
+            name: "a".to_string(),
+            description: None,
+            function_type: Some(FunctionType::GenericNervousSystemFunction(
+                GenericNervousSystemFunction {
+                    target_canister_id: Some(CanisterId::from_u64(1).get()),
+                    target_method_name: Some("test_method".to_string()),
+                    validator_canister_id: Some(CanisterId::from_u64(1).get()),
+                    validator_method_name: Some("test_validator_method".to_string()),
+                },
+            )),
         };
-        assert_is_ok(validate_and_render_add_nervous_system_function(
+        assert_is_ok(validate_and_render_add_generic_nervous_system_function(
             &nervous_system_function,
             &EMPTY_FUNCTIONS,
         ));
 
         let mut result = basic_motion_proposal();
-        result.action = Some(proposal::Action::AddNervousSystemFunction(
+        result.action = Some(proposal::Action::AddGenericNervousSystemFunction(
             nervous_system_function,
         ));
 
@@ -998,64 +1055,150 @@ mod test {
     fn add_nervous_system_function_function_must_have_fields_set() {
         let mut proposal = basic_add_nervous_system_function_proposal();
 
-        // Make sure invalid/unset ids are invalid.
+        // Make sure function type is invalid
         match proposal.clone().action.as_mut().unwrap() {
-            proposal::Action::AddNervousSystemFunction(nervous_system_function) => {
-                nervous_system_function.id = 100;
-                assert_is_err(validate_and_render_add_nervous_system_function(
+            proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
+                nervous_system_function.function_type = None;
+                assert_is_err(validate_and_render_add_generic_nervous_system_function(
                     nervous_system_function,
                     &EMPTY_FUNCTIONS,
                 ));
             }
-            _ => panic!("Proposal.action is not AddNervousSystemFunction"),
+            _ => panic!("Proposal.action is not AddGenericNervousSystemFunction"),
+        }
+
+        // Make sure invalid/unset ids are invalid.
+        match proposal.clone().action.as_mut().unwrap() {
+            proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
+                nervous_system_function.id = 100;
+                assert_is_err(validate_and_render_add_generic_nervous_system_function(
+                    nervous_system_function,
+                    &EMPTY_FUNCTIONS,
+                ));
+            }
+            _ => panic!("Proposal.action is not AddGenericNervousSystemFunction"),
+        }
+
+        // Make sure name is set
+        match proposal.clone().action.as_mut().unwrap() {
+            proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
+                nervous_system_function.name = "".to_string();
+                assert_is_err(validate_and_render_add_generic_nervous_system_function(
+                    nervous_system_function,
+                    &EMPTY_FUNCTIONS,
+                ));
+            }
+            _ => panic!("Proposal.action is not AddGenericNervousSystemFunction"),
+        }
+
+        // Make sure name is not too big
+        match proposal.clone().action.as_mut().unwrap() {
+            proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
+                nervous_system_function.name = "X".repeat(257);
+                assert_is_err(validate_and_render_add_generic_nervous_system_function(
+                    nervous_system_function,
+                    &EMPTY_FUNCTIONS,
+                ));
+            }
+            _ => panic!("Proposal.action is not AddGenericNervousSystemFunction"),
+        }
+
+        // Make sure description is not too big
+        match proposal.clone().action.as_mut().unwrap() {
+            proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
+                nervous_system_function.description = Some("X".repeat(10010));
+                assert_is_err(validate_and_render_add_generic_nervous_system_function(
+                    nervous_system_function,
+                    &EMPTY_FUNCTIONS,
+                ));
+            }
+            _ => panic!("Proposal.action is not AddGenericNervousSystemFunction"),
         }
 
         // Make sure not setting the target canister is invalid.
         match proposal.clone().action.as_mut().unwrap() {
-            proposal::Action::AddNervousSystemFunction(nervous_system_function) => {
-                nervous_system_function.target_canister_id = None;
-                assert_is_err(validate_and_render_add_nervous_system_function(
+            proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
+                match nervous_system_function.function_type.as_mut() {
+                    Some(FunctionType::GenericNervousSystemFunction(
+                        GenericNervousSystemFunction {
+                            target_canister_id, ..
+                        },
+                    )) => {
+                        *target_canister_id = None;
+                    }
+                    _ => panic!("FunctionType is not GenericNervousSystemFunction"),
+                }
+                assert_is_err(validate_and_render_add_generic_nervous_system_function(
                     nervous_system_function,
                     &EMPTY_FUNCTIONS,
                 ));
             }
-            _ => panic!("Proposal.action is not AddNervousSystemFunction"),
+            _ => panic!("Proposal.action is not AddGenericNervousSystemFunction"),
         }
 
         // Make sure not seeting the target method name is invalid.
         match proposal.clone().action.as_mut().unwrap() {
-            proposal::Action::AddNervousSystemFunction(nervous_system_function) => {
-                nervous_system_function.target_method_name = None;
-                assert_is_err(validate_and_render_add_nervous_system_function(
+            proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
+                match nervous_system_function.function_type.as_mut() {
+                    Some(FunctionType::GenericNervousSystemFunction(
+                        GenericNervousSystemFunction {
+                            target_method_name, ..
+                        },
+                    )) => {
+                        *target_method_name = None;
+                    }
+                    _ => panic!("FunctionType is not GenericNervousSystemFunction"),
+                }
+                assert_is_err(validate_and_render_add_generic_nervous_system_function(
                     nervous_system_function,
                     &EMPTY_FUNCTIONS,
                 ));
             }
-            _ => panic!("Proposal.action is not AddNervousSystemFunction"),
+            _ => panic!("Proposal.action is not AddGenericNervousSystemFunction"),
         }
 
         // Make sure not setting the validator canister id is invalid.
         match proposal.clone().action.as_mut().unwrap() {
-            proposal::Action::AddNervousSystemFunction(nervous_system_function) => {
-                nervous_system_function.validator_canister_id = None;
-                assert_is_err(validate_and_render_add_nervous_system_function(
+            proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
+                match nervous_system_function.function_type.as_mut() {
+                    Some(FunctionType::GenericNervousSystemFunction(
+                        GenericNervousSystemFunction {
+                            validator_canister_id,
+                            ..
+                        },
+                    )) => {
+                        *validator_canister_id = None;
+                    }
+                    _ => panic!("FunctionType is not GenericNervousSystemFunction"),
+                }
+                assert_is_err(validate_and_render_add_generic_nervous_system_function(
                     nervous_system_function,
                     &EMPTY_FUNCTIONS,
                 ));
             }
-            _ => panic!("Proposal.action is not AddNervousSystemFunction"),
+            _ => panic!("Proposal.action is not AddGenericNervousSystemFunction"),
         }
 
         // Make sure not setting the validator method name is invalid.
         match proposal.action.as_mut().unwrap() {
-            proposal::Action::AddNervousSystemFunction(nervous_system_function) => {
-                nervous_system_function.validator_method_name = None;
-                assert_is_err(validate_and_render_add_nervous_system_function(
+            proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
+                match nervous_system_function.function_type.as_mut() {
+                    Some(FunctionType::GenericNervousSystemFunction(
+                        GenericNervousSystemFunction {
+                            validator_method_name,
+                            ..
+                        },
+                    )) => {
+                        *validator_method_name = None;
+                    }
+                    _ => panic!("FunctionType is not GenericNervousSystemFunction"),
+                }
+                assert_is_err(validate_and_render_add_generic_nervous_system_function(
                     nervous_system_function,
                     &EMPTY_FUNCTIONS,
                 ));
             }
-            _ => panic!("Proposal.action is not AddNervousSystemFunction"),
+            _ => panic!("Proposal.action is not AddGenericNervousSystemFunction"),
         }
     }
 
@@ -1063,28 +1206,34 @@ mod test {
     fn add_nervous_system_function_cant_reuse_ids() {
         let nervous_system_function = NervousSystemFunction {
             id: 1000,
-            target_canister_id: Some(CanisterId::from_u64(1).get()),
-            target_method_name: Some("test_method".to_string()),
-            validator_canister_id: Some(CanisterId::from_u64(1).get()),
-            validator_method_name: Some("test_validator_method".to_string()),
+            name: "a".to_string(),
+            description: None,
+            function_type: Some(FunctionType::GenericNervousSystemFunction(
+                GenericNervousSystemFunction {
+                    target_canister_id: Some(CanisterId::from_u64(1).get()),
+                    target_method_name: Some("test_method".to_string()),
+                    validator_canister_id: Some(CanisterId::from_u64(1).get()),
+                    validator_method_name: Some("test_validator_method".to_string()),
+                },
+            )),
         };
 
         let mut functions_map = BTreeMap::new();
-        assert_is_ok(validate_and_render_add_nervous_system_function(
+        assert_is_ok(validate_and_render_add_generic_nervous_system_function(
             &nervous_system_function,
             &functions_map,
         ));
 
         functions_map.insert(1000, nervous_system_function.clone());
 
-        assert_is_ok(validate_and_render_remove_nervous_system_function(
+        assert_is_ok(validate_and_render_remove_nervous_generic_system_function(
             1000,
             &functions_map,
         ));
 
-        functions_map.insert(1000, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER);
+        functions_map.insert(1000, (*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER).clone());
 
-        assert_is_err(validate_and_render_add_nervous_system_function(
+        assert_is_err(validate_and_render_add_generic_nervous_system_function(
             &nervous_system_function,
             &functions_map,
         ));
