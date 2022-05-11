@@ -11,6 +11,7 @@ use std::path::Path;
 
 use crate::pb::v1::{Governance, NetworkEconomics, Neuron};
 use ic_base_types::PrincipalId;
+use ic_nervous_system_common::ledger;
 use ic_nns_common::types::NeuronId;
 
 #[allow(dead_code)]
@@ -196,7 +197,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                         "follows",
                     ]
                 );
-            } else {
+            } else if headers.len() == 8 {
                 assert_eq!(
                     headers,
                     vec![
@@ -208,6 +209,23 @@ impl GovernanceCanisterInitPayloadBuilder {
                         "earnings",
                         "follows",
                         "not_for_profit"
+                    ]
+                );
+            } else {
+                assert_eq!(
+                    headers,
+                    vec![
+                        "neuron_id",
+                        "owner_id",
+                        "created_ts_ns",
+                        "duration_to_dissolution_ns",
+                        "staked_icpt",
+                        "earnings",
+                        "follows",
+                        "not_for_profit",
+                        "memo",
+                        "maturity_e8s_equivalent",
+                        "kyc_verified"
                     ]
                 );
             }
@@ -256,14 +274,36 @@ impl GovernanceCanisterInitPayloadBuilder {
                     .expect("couldn't read the neuron's not-for-profit flag")
             };
 
+            let memo = if record.len() < 9 {
+                self.rng.next_u64()
+            } else {
+                record[8].parse::<u64>().expect("could not parse memo")
+            };
+
+            let maturity_e8s_equivalent = if record.len() < 10 {
+                0
+            } else {
+                record[9].parse::<u64>().expect("could not parse maturity")
+            };
+
+            let kyc_verified = if record.len() < 11 {
+                false
+            } else {
+                record[10]
+                    .parse::<bool>()
+                    .expect("could not parse kyc_verified")
+            };
+
             let neuron = Neuron {
                 id: Some(neuron_id.clone()),
-                account: self.make_subaccount().into(),
+                account: ledger::compute_neuron_staking_subaccount(principal_id, memo).into(),
                 controller: Some(principal_id),
                 hot_keys: vec![principal_id],
                 cached_neuron_stake_e8s: staked_icpt * 100_000_000, // to e8s
                 created_timestamp_seconds: creation_ts_ns / (1_000_000_000), // to sec
                 aging_since_timestamp_seconds: creation_ts_ns / (1_000_000_000), // to sec
+                kyc_verified,
+                maturity_e8s_equivalent,
                 not_for_profit,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                     duration_to_dissolution_ns / (1_000_000_000),
