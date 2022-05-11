@@ -923,6 +923,9 @@ struct ProposeToCreateSubnetCmd {
     pub max_instructions_per_install_code: Option<u64>,
 
     /// Configuration for ECDSA: the number of quadruples to create in advance.
+    /// This controls how many signatures the subnet can make rapidly as quadruples are used in the
+    /// signing process and are expensive to compute.  Having a store of them allows the subnet
+    /// to quickly sign bursts of requests before needing to regenerate them.
     /// Defaults to 1, must be at least 1.
     #[clap(long)]
     pub ecdsa_quadruples_to_create_in_advance: Option<u32>,
@@ -1169,6 +1172,9 @@ struct ProposeToUpdateRecoveryCupCmd {
     pub registry_version: Option<u64>,
 
     /// Configuration for ECDSA: the number of quadruples to create in advance.
+    /// This controls how many signatures the subnet can make rapidly as quadruples are used in the
+    /// signing process and are expensive to compute.  Having a store of them allows the subnet
+    /// to quickly sign bursts of requests before needing to regenerate them.
     /// Defaults to 1, must be at least 1.
     #[clap(long)]
     pub ecdsa_quadruples_to_create_in_advance: Option<u32>,
@@ -1384,13 +1390,41 @@ struct ProposeToUpdateSubnetCmd {
     #[clap(long)]
     /// Enable key signing on this subnet for a particular key_id.
     /// Only one key_id is permitted at a time at the moment.
+    ///
     /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`.
     ecdsa_key_signing_enable: Option<Vec<String>>,
 
+    #[clap(long)]
+    /// Disable key signing on this subnet for a particular key_id.
+    /// Cannot have same values as ecdsa_key_signing_enable, or proposal will not execute.
+    ///
+    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`.
+    ecdsa_key_signing_disable: Option<Vec<String>>,
+
     /// Configuration for ECDSA: the number of quadruples to create in advance.
+    /// This controls how many signatures the subnet can make rapidly as quadruples are used in the
+    /// signing process and are expensive to compute.  Having a store of them allows the subnet
+    /// to quickly sign bursts of requests before needing to regenerate them.
     /// Defaults to 1, must be at least 1.
     #[clap(long)]
     pub ecdsa_quadruples_to_create_in_advance: Option<u32>,
+
+    /// Configuration for ECDSA:
+    /// The keys to add to this subnet. The keys must not already exist on the IC. The subnet will
+    /// create the keys when it is added but is not already held by the subnet.
+    ///
+    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`.
+    #[clap(long)]
+    pub ecdsa_keys_to_generate: Option<Vec<String>>,
+
+    /// Configuration for ECDSA:
+    /// The keys to remove from this subnet.
+    /// If this subnet signs for a particular key, it must also be given in the
+    /// `ecdsa_key_signing_disable` option.
+    ///
+    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`.
+    #[clap(long)]
+    pub ecdsa_keys_to_remove: Option<Vec<String>>,
 
     /// The features that are enabled and disabled on the subnet.
     #[clap(long)]
@@ -1412,6 +1446,23 @@ struct ProposeToUpdateSubnetCmd {
     pub max_number_of_canisters: Option<u64>,
 }
 
+fn parse_ecdsa_keys_option(maybe_value: &Option<Vec<String>>) -> Vec<EcdsaKeyId> {
+    maybe_value
+        .as_ref()
+        .map(|key_strings| parse_ecdsa_keys(key_strings))
+        .unwrap_or_default()
+}
+
+fn parse_ecdsa_keys(key_strings: &[String]) -> Vec<EcdsaKeyId> {
+    key_strings
+        .iter()
+        .map(|key| {
+            key.parse::<EcdsaKeyId>()
+                .unwrap_or_else(|_| panic!("Could not parse key_id: '{}'", key))
+        })
+        .collect::<Vec<EcdsaKeyId>>()
+}
+
 #[async_trait]
 impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
     fn title(&self) -> String {
@@ -1427,6 +1478,63 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
     async fn payload(&self, nns_url: Url) -> UpdateSubnetPayload {
         let registry_canister = RegistryCanister::new(vec![nns_url.clone()]);
         let subnet_id = self.subnet.get_id(&registry_canister).await;
+
+        let ecdsa_config = if self.ecdsa_quadruples_to_create_in_advance.is_none()
+            && self.ecdsa_keys_to_generate.is_none()
+            && self.ecdsa_keys_to_remove.is_none()
+        {
+            // No update
+            None
+        } else {
+            let subnet = get_subnet_record(&registry_canister, subnet_id).await;
+            let current_quadruples_value = subnet
+                .ecdsa_config
+                .as_ref()
+                .map(|c| c.quadruples_to_create_in_advance);
+
+            let keys_to_remove = parse_ecdsa_keys_option(&self.ecdsa_keys_to_remove);
+            let mut keys_to_add = parse_ecdsa_keys_option(&self.ecdsa_keys_to_generate);
+            let mut current_keys = subnet
+                .ecdsa_config
+                .as_ref()
+                .map(|c| c.key_ids.to_vec())
+                .unwrap_or_default();
+
+            current_keys.retain(|current| !keys_to_remove.contains(current));
+            current_keys.append(&mut keys_to_add);
+
+            Some(EcdsaConfig {
+                // Default to current value if present, then 1
+                quadruples_to_create_in_advance: self
+                    .ecdsa_quadruples_to_create_in_advance
+                    .unwrap_or_else(|| current_quadruples_value.unwrap_or(1)),
+                key_ids: current_keys,
+            })
+        };
+
+        let ecdsa_key_signing_enable = self
+            .ecdsa_key_signing_enable
+            .as_ref()
+            .map(|key_strings| parse_ecdsa_keys(key_strings));
+
+        let ecdsa_key_signing_disable = self
+            .ecdsa_key_signing_disable
+            .as_ref()
+            .map(|key_strings| parse_ecdsa_keys(key_strings));
+
+        if let (Some(enable_signing), Some(disable_signing)) =
+            (&ecdsa_key_signing_enable, &ecdsa_key_signing_disable)
+        {
+            let enable_set = enable_signing.iter().collect::<HashSet<_>>();
+            let disable_set = disable_signing.iter().collect::<HashSet<_>>();
+            let intersection = enable_set.intersection(&disable_set).collect::<Vec<_>>();
+            if !intersection.is_empty() {
+                panic!("You are attempting to enable and disable signing for the same ECDSA keys: {:?}",
+                       intersection
+                )
+            }
+        }
+
         UpdateSubnetPayload {
             subnet_id,
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message,
@@ -1456,17 +1564,9 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
             max_instructions_per_round: self.max_instructions_per_round,
             max_instructions_per_install_code: self.max_instructions_per_install_code,
             features: self.features,
-            ecdsa_config: self
-                .ecdsa_quadruples_to_create_in_advance
-                .map(|val| EcdsaConfig {
-                    quadruples_to_create_in_advance: val,
-                    key_ids: vec![],
-                }),
-            ecdsa_key_signing_enable: self.ecdsa_key_signing_enable.as_ref().map(|keys| {
-                keys.iter()
-                    .map(|key| key.parse::<EcdsaKeyId>().unwrap())
-                    .collect()
-            }),
+            ecdsa_config,
+            ecdsa_key_signing_enable,
+            ecdsa_key_signing_disable,
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             ssh_backup_access: self.ssh_backup_access.clone(),
             max_number_of_canisters: self.max_number_of_canisters,
@@ -2522,6 +2622,19 @@ async fn get_firewall_rules_from_registry(
     } else {
         vec![]
     }
+}
+
+async fn get_subnet_record(
+    registry_canister: &RegistryCanister,
+    subnet_id: SubnetId,
+) -> SubnetRecord {
+    let registry_answer = registry_canister
+        .get_value(make_subnet_record_key(subnet_id).into_bytes(), None)
+        .await;
+
+    let (bytes, _) = registry_answer.unwrap();
+    let value = SubnetRecordProto::decode(&bytes[..]).expect("Error decoding value from registry.");
+    SubnetRecord::from(&value)
 }
 
 /// `main()` method for the `ic-admin` utility.

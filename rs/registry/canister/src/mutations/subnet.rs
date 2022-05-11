@@ -23,6 +23,7 @@ use ic_registry_transport::upsert;
 use on_wire::bytes;
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::iter::FromIterator;
 use std::{collections::HashSet, convert::TryFrom};
 
 impl Registry {
@@ -197,7 +198,7 @@ impl Registry {
             .map(|key_request| {
                 // create requests outside of async move context to avoid ownership problems
                 let key_id = key_request.key_id.clone();
-                let target_subnet = key_request.subnet_id.map(|x| SubnetId::new(x));
+                let target_subnet = key_request.subnet_id.map(SubnetId::new);
                 ComputeInitialEcdsaDealingsArgs {
                     key_id,
                     subnet_id: target_subnet,
@@ -247,34 +248,73 @@ impl Registry {
         })
     }
 
-    pub fn mutations_to_remove_subnet_from_ecdsa_signing_subnets(
+    pub fn mutations_to_disable_subnet_signing(
         &self,
         subnet_id: SubnetId,
-        keys: Vec<&EcdsaKeyId>,
+        ecdsa_key_signing_disable: &Vec<EcdsaKeyId>,
     ) -> Vec<RegistryMutation> {
-        let protobuf_subnet_id = subnet_id_into_protobuf(subnet_id);
+        let mut mutations = vec![];
+        for key_id in ecdsa_key_signing_disable {
+            let mut signing_list_for_key = self
+                .get_ecdsa_signing_subnet_list(key_id)
+                .unwrap_or_default();
 
-        keys.into_iter()
-            .flat_map(|key_id| {
-                let signing_list = self.get_ecdsa_signing_subnet_list(key_id);
+            // If this subnet does not sign for that key, do nothing.
+            if !signing_list_for_key
+                .subnets
+                .contains(&subnet_id_into_protobuf(subnet_id))
+            {
+                continue;
+            }
 
-                match signing_list {
-                    None => None,
-                    Some(mut signing_list) => {
-                        if signing_list.subnets.contains(&protobuf_subnet_id) {
-                            let ecdsa_signing_subnet_list_key_id =
-                                make_ecdsa_signing_subnet_list_key(key_id);
-                            signing_list.subnets.retain(|x| x != &protobuf_subnet_id);
-                            Some(upsert(
-                                ecdsa_signing_subnet_list_key_id,
-                                encode_or_panic(&signing_list),
-                            ))
-                        } else {
-                            None
-                        }
-                    }
-                }
-            })
-            .collect()
+            let protobuf_subnet_id = subnet_id_into_protobuf(subnet_id);
+            // Preconditions are okay, so we remove the subnet from our list of signing subnets.
+            signing_list_for_key
+                .subnets
+                .retain(|subnet| subnet != &protobuf_subnet_id);
+
+            mutations.push(upsert(
+                make_ecdsa_signing_subnet_list_key(key_id).into_bytes(),
+                encode_or_panic(&signing_list_for_key),
+            ));
+        }
+        mutations
     }
+
+    pub fn get_ecdsa_keys_held_by_subnet(&self, subnet_id: SubnetId) -> Vec<EcdsaKeyId> {
+        let subnet_record = self.get_subnet_or_panic(subnet_id);
+        subnet_record
+            .ecdsa_config
+            .map(|c| {
+                c.key_ids
+                    .iter()
+                    .map(|k| k.clone().try_into().unwrap())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn get_keys_that_will_be_removed_from_subnet(
+        &self,
+        subnet_id: SubnetId,
+        updated_key_list: Vec<EcdsaKeyId>,
+    ) -> Vec<EcdsaKeyId> {
+        let current_keys = vec_to_set(self.get_ecdsa_keys_held_by_subnet(subnet_id));
+        let requested_keys = vec_to_set(updated_key_list);
+        current_keys.difference(&requested_keys).cloned().collect()
+    }
+
+    pub fn get_keys_that_will_be_added_to_subnet(
+        &self,
+        subnet_id: SubnetId,
+        updated_key_list: Vec<EcdsaKeyId>,
+    ) -> Vec<EcdsaKeyId> {
+        let current_keys = vec_to_set(self.get_ecdsa_keys_held_by_subnet(subnet_id));
+        let requested_keys = vec_to_set(updated_key_list);
+        requested_keys.difference(&current_keys).cloned().collect()
+    }
+}
+
+fn vec_to_set<T: std::hash::Hash + std::cmp::Eq>(vector: Vec<T>) -> HashSet<T> {
+    HashSet::from_iter(vector.into_iter())
 }

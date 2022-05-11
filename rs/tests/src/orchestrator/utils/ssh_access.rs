@@ -173,6 +173,7 @@ pub(crate) fn get_updatesubnetpayload_with_keys(
         features: None,
         ecdsa_config: None,
         ecdsa_key_signing_enable: None,
+        ecdsa_key_signing_disable: None,
         max_number_of_canisters: None,
         ssh_readonly_access: readonly_keys,
         ssh_backup_access: backup_keys,

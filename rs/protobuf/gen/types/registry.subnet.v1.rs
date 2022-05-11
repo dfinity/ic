@@ -72,8 +72,8 @@ pub struct SubnetRecord {
     #[prost(string, repeated, tag="26")]
     pub ssh_backup_access: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// ECDSA Config. This field cannot be set back to `None` once it has been set
-    /// to `Some`. To turn off ECDSA signing the list of `key_ids` can be set to
-    /// the empty list.
+    /// to `Some`. To remove a key, the list of `key_ids` can be set to not include a particular key.
+    /// If a removed key is not held by another subnet, it will be lost.
     #[prost(message, optional, tag="27")]
     pub ecdsa_config: ::core::option::Option<EcdsaConfig>,
 }
