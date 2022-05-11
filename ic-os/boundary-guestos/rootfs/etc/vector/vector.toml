@@ -16,6 +16,16 @@ type = "remap"
 inputs = ["nginx_access"]
 source = """
 . = parse_json!(.message)
+
+.@timestamp, err = to_float(.msec) * 1000
+if err != null {
+    .@timestamp = null
+}
+
+.@timestamp = to_int(.@timestamp)
+if .@timestamp == 0 {
+    .@timestamp = null
+}
 """
 
 [sinks.elasticsearch_nginx_access]
@@ -23,6 +33,6 @@ type = "elasticsearch"
 inputs = ["nginx_access_json"]
 endpoint = "${ELASTICSEARCH_URL}"
 mode = "bulk"
-bulk.index = "vector-nginx-access-%Y-%m-%d"
+bulk.index = "boundary-node-nginx-access-%Y.%m.%d"
 tls.enabled = true
 tls.verify_certificate = false
