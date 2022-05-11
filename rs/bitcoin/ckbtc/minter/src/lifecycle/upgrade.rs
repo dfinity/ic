@@ -1,5 +1,9 @@
+use candid::{CandidType, Deserialize};
 use ic_ckbtc_minter::runtime::Runtime;
-use ic_ckbtc_minter::types::UpgradeArgs;
+use serde::Serialize;
+
+#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq)]
+pub struct UpgradeArgs {}
 
 pub fn pre_upgrade(_runtime: &mut dyn Runtime) {
     ic_cdk::println!("Executing pre upgrade");

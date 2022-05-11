@@ -9,11 +9,13 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = "0.1.53"
+bitcoin = "0.28.0"
 candid = "0.7.13"
 dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-cdk = "0.5.0"
 ic-cdk-macros = "0.5.0"
+ic-ledger-types = "0.1.1"
 ic-metrics-encoder = { path = "../../../monitoring/metrics_encoder" }
 lazy_static = "1.4.0"
 serde = "1.0.136"
