@@ -208,3 +208,60 @@ tar_extract = rule(
         ),
     },
 )
+
+def _sha256sum_impl(ctx):
+    out = ctx.actions.declare_file(ctx.label.name)
+    input_paths = []
+    for src in ctx.files.srcs:
+        input_paths.append(src.path)
+    input_paths = " ".join(input_paths)
+
+    ctx.actions.run_shell(
+        inputs = ctx.files.srcs,
+        outputs = [out],
+        command = "cat {} | sha256sum | sed -e 's/ \\+-/{}/' > {}".format(input_paths, ctx.attr.suffix, out.path),
+    )
+
+    return [DefaultInfo(files = depset([out]))]
+
+sha256sum = rule(
+    implementation = _sha256sum_impl,
+    attrs = {
+        "srcs": attr.label_list(
+            allow_files = True,
+            mandatory = True,
+        ),
+        "suffix": attr.string(
+            default = "",
+        ),
+    },
+)
+
+def summary_sha256sum(name, inputs, suffix = ""):
+    """Compute summary sha256 of image inputs.
+
+    Args:
+      name: Name of the target to be built
+      inputs: Input files to hash
+      suffix: Suffix string to append to hash (only chars, numbers and dash allowed)
+
+    This macro expands to individual rules that compute the sha256 of the
+    individual inputs into the filesystem image artifacts, and computes
+    a summary sha256 combining all into a single hash.
+    """
+    all_deps = {}
+    for _, deps in inputs.items():
+        all_deps.update(deps)
+    labels = []
+    for dep in all_deps.keys():
+        label = dep.split(":")[1] + ".sha256"
+        sha256sum(
+            name = label,
+            srcs = [dep],
+        )
+        labels.append(":" + label)
+    sha256sum(
+        name = name,
+        srcs = labels,
+        suffix = suffix,
+    )
