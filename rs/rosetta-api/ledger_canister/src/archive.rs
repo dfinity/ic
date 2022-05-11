@@ -298,7 +298,9 @@ async fn create_and_initialize_node_canister(
         )
     });
 
-    let node_canister_id: CanisterId = spawn::create_canister(cycles_for_archive_creation).await;
+    let node_canister_id: CanisterId = spawn::create_canister(cycles_for_archive_creation)
+        .await
+        .map_err(|e| FailedToArchiveBlocks(format!("{:?} {}", e.0, e.1)))?;
 
     print("[archive] calling install_code()");
 
