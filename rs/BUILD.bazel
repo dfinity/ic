@@ -19,6 +19,7 @@ filegroup(
         "//rs/constants:sources",
         "//rs/criterion_time:sources",
         "//rs/crypto/internal/crypto_lib/sha2:sources",
+        "//rs/crypto/internal/crypto_lib/types:sources",
         "//rs/crypto/sha:sources",
         "//rs/elastic_common_schema:sources",
         "//rs/log_analyzer:sources",
