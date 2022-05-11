@@ -22,7 +22,7 @@ gflags.DEFINE_integer(
 # continue running the benchmark, but do not consider this RPS
 # for max capacity
 gflags.DEFINE_integer(
-    "allowable_t_median",
+    "allowable_latency",
     5000,
     "Maximum update median latency in unit of milliseconds at which to consider the iteration successful.",
 )

@@ -145,7 +145,7 @@ class GossipExperiment(workload_experiment.WorkloadExperiment):
             duration_in_iteration = int(time.time()) - t_start
             duration.append(duration_in_iteration)
 
-            if failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE and t_median < FLAGS.allowable_t_median:
+            if failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE and t_median < FLAGS.allowable_latency:
                 subnet_size_max = max(subnet_size_max, len(members))
 
             num_succ_per_iteration.append(num_success)

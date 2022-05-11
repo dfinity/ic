@@ -23,7 +23,7 @@ gflags.DEFINE_float("target_rps", 1, "Requests per second.")
 # continue running the benchmark, but do not consider this RPS
 # for max capacity
 gflags.DEFINE_integer(
-    "allowable_t_median",
+    "allowable_latency",
     5000,
     "Maximum update median latency in unit of milliseconds at which to consider the iteration successful.",
 )
@@ -77,7 +77,7 @@ if __name__ == "__main__":
         )
 
         duration = int(time.time()) - t_start
-        if failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE and t_median < FLAGS.allowable_t_median:
+        if failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE and t_median < FLAGS.allowable_latency:
             if num_succ / duration > payload_size_max:
                 payload_size_max = num_succ / duration
                 payload_size_max_in = curr_payload_size
