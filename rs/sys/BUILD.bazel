@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "sys",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_sys",
+    edition = "2018",
+    deps = [
+        "//rs/crypto/sha",
+        "//rs/phantom_newtype",
+        "@crate_index//:hex",
+        "@crate_index//:lazy_static",
+        "@crate_index//:libc",
+        "@crate_index//:nix",
+        "@crate_index//:wsl",
+    ],
+)
+
+rust_test(
+    name = "sys_test",
+    crate = ":sys",
+    deps = [
+        "@crate_index//:tempfile",
+    ],
+)
