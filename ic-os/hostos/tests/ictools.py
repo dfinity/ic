@@ -63,8 +63,6 @@ def apply_upgrade_ssh(host, image):
         "root@%s" % host,
         "/opt/ic/bin/install-upgrade.sh",
         image,
-        "&&",
-        "reboot",
     ]
     subprocess.run(command_line, check=True)
 
