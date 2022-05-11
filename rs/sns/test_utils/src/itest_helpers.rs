@@ -21,8 +21,8 @@ use ic_sns_governance::pb::v1::{
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ledger_canister as ledger;
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, LedgerCanisterInitPayload, Memo, SendArgs, Subaccount,
-    Tokens, DEFAULT_TRANSFER_FEE,
+    protobuf::AccountIdentifier as AccountIdentifierProto, AccountBalanceArgs, AccountIdentifier,
+    LedgerCanisterInitPayload, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::IntoWire;
 use std::collections::HashMap;
@@ -36,6 +36,8 @@ use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
 use ic_crypto_sha::Sha256;
 use ic_sns_governance::governance::TimeWarp;
+use ic_sns_governance::pb::v1::manage_neuron::disburse::Amount;
+use ic_sns_governance::pb::v1::manage_neuron::{Disburse, Split, StartDissolving};
 use ic_sns_governance::pb::v1::proposal::Action;
 use ic_types::{CanisterId, PrincipalId};
 use maplit::hashset;
@@ -526,6 +528,23 @@ impl SnsCanisters<'_> {
         };
     }
 
+    pub async fn start_dissolving(
+        &self,
+        sender: &Sender,
+        subaccount: &Subaccount,
+    ) -> ManageNeuronResponse {
+        self.send_manage_neuron(
+            sender,
+            ManageNeuron {
+                subaccount: subaccount.to_vec(),
+                command: Some(Command::Configure(Configure {
+                    operation: Some(Operation::StartDissolving(StartDissolving {})),
+                })),
+            },
+        )
+        .await
+    }
+
     pub async fn vote(
         &self,
         sender: &Sender,
@@ -535,24 +554,17 @@ impl SnsCanisters<'_> {
     ) -> ManageNeuronResponse {
         let vote = if accept { Vote::Yes } else { Vote::No } as i32;
 
-        let response: ManageNeuronResponse = self
-            .governance
-            .update_from_sender(
-                "manage_neuron",
-                candid_one,
-                ManageNeuron {
-                    subaccount: subaccount.to_vec(),
-                    command: Some(Command::RegisterVote(RegisterVote {
-                        proposal: Some(proposal_id),
-                        vote,
-                    })),
-                },
-                sender,
-            )
-            .await
-            .expect("Error calling the manage_neuron API.");
-
-        response
+        self.send_manage_neuron(
+            sender,
+            ManageNeuron {
+                subaccount: subaccount.to_vec(),
+                command: Some(Command::RegisterVote(RegisterVote {
+                    proposal: Some(proposal_id),
+                    vote,
+                })),
+            },
+        )
+        .await
     }
 
     pub async fn follow(
@@ -562,24 +574,79 @@ impl SnsCanisters<'_> {
         followees: Vec<NeuronId>,
         action_type: u64,
     ) -> ManageNeuronResponse {
-        let response: ManageNeuronResponse = self
-            .governance
-            .update_from_sender(
-                "manage_neuron",
-                candid_one,
-                ManageNeuron {
-                    subaccount: subaccount.to_vec(),
-                    command: Some(Command::Follow(Follow {
-                        action_type,
-                        followees,
-                    })),
-                },
-                sender,
-            )
-            .await
-            .expect("Error calling the manage_neuron API.");
+        self.send_manage_neuron(
+            sender,
+            ManageNeuron {
+                subaccount: subaccount.to_vec(),
+                command: Some(Command::Follow(Follow {
+                    action_type,
+                    followees,
+                })),
+            },
+        )
+        .await
+    }
 
-        response
+    pub async fn disburse_neuron(
+        &self,
+        sender: &Sender,
+        subaccount: &Subaccount,
+        amount_e8s: Option<u64>,
+        to_account: Option<AccountIdentifier>,
+    ) -> ManageNeuronResponse {
+        let amount = amount_e8s.map(|e8s| Amount { e8s });
+
+        let to_account: Option<AccountIdentifierProto> =
+            to_account.map(|to_account| to_account.into());
+
+        self.send_manage_neuron(
+            sender,
+            ManageNeuron {
+                subaccount: subaccount.to_vec(),
+                command: Some(Command::Disburse(Disburse { amount, to_account })),
+            },
+        )
+        .await
+    }
+
+    pub async fn split_neuron(
+        &self,
+        sender: &Sender,
+        subaccount: &Subaccount,
+        amount_e8s: u64,
+        memo: u64,
+    ) -> ManageNeuronResponse {
+        self.send_manage_neuron(
+            sender,
+            ManageNeuron {
+                subaccount: subaccount.to_vec(),
+                command: Some(Command::Split(Split { amount_e8s, memo })),
+            },
+        )
+        .await
+    }
+
+    /// Frequently tests will call the `ManageNeuron::Split` command knowing it will fail.
+    /// This method will call the API and parse the error response in a useful way. Use
+    /// this method when intentionally expecting a failure.
+    pub async fn split_neuron_with_failure(
+        &self,
+        sender: &Sender,
+        subaccount: &Subaccount,
+        amount_e8s: u64,
+        memo: u64,
+    ) -> GovernanceError {
+        let split_response = self
+            .split_neuron(sender, subaccount, amount_e8s, memo)
+            .await;
+
+        match split_response.command.unwrap() {
+            CommandResponse::Split(_) => {
+                panic!("Splitting a neuron should have produced a GovernanceError")
+            }
+            CommandResponse::Error(error) => error,
+            _ => panic!("Unexpected command response when Calling ManageNeuron::Split"),
+        }
     }
 
     pub async fn get_user_account_balance(&self, sender: &Sender) -> Tokens {
@@ -767,6 +834,17 @@ impl SnsCanisters<'_> {
         };
 
         self.make_proposal(sender, subaccount, proposal).await
+    }
+
+    async fn send_manage_neuron(
+        &self,
+        sender: &Sender,
+        manage_neuron: ManageNeuron,
+    ) -> ManageNeuronResponse {
+        self.governance
+            .update_from_sender("manage_neuron", candid_one, manage_neuron, sender)
+            .await
+            .expect("Error calling the manage_neuron")
     }
 }
 

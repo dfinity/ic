@@ -6,6 +6,7 @@ use ic_crypto_sha::Sha256;
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
+use ic_sns_governance::neuron::NeuronState;
 use ic_sns_governance::pb::v1::governance_error::ErrorType;
 use ic_sns_governance::pb::v1::manage_neuron::{
     claim_or_refresh::{By, MemoAndController},
@@ -26,6 +27,7 @@ use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder, UserInfo, NONCE,
 };
+use ic_sns_test_utils::now_seconds;
 use ic_types::PrincipalId;
 use ledger_canister::{AccountIdentifier, Tokens, TOKEN_SUBDIVIDABLE_BY};
 use ledger_canister::{Memo, SendArgs, Subaccount, DEFAULT_TRANSFER_FEE};
@@ -1736,4 +1738,698 @@ fn get_neuron_permission_from_neuron(
         .find(|permission| permission.principal.unwrap() == *principal_id)
         .expect("PrincipalId not present in NeuronPermissions")
         .clone()
+}
+
+/// Tests the happy path of `ManageNeuron::Disburse` and that a neuron can disburse its stake
+/// to the neuron owner's account.
+#[test]
+fn test_disburse_neuron_to_self_succeeds() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(user.sender.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(params.clone())
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        // Stake and claim a neuron for the user. The dissolve delay is set to ONE_YEAR_SECONDS
+        // and is in state `NotDissolving`
+        sns_canisters
+            .stake_and_claim_neuron(&user.sender, Some(ONE_YEAR_SECONDS as u32))
+            .await;
+
+        // Attempt to disburse a neuron when it is not dissolved
+        let disburse_response = sns_canisters
+            .disburse_neuron(&user.sender, &user.subaccount, None, None)
+            .await;
+
+        // This should fail with error_type as PreconditionFailed
+        let error = match disburse_response.command.unwrap() {
+            CommandResponse::Error(error) => error,
+            CommandResponse::Disburse(_) => {
+                panic!("Neuron is not dissolved, Disburse command should have failed.")
+            }
+            _ => panic!("Unexpected command response when disbursing the neuron"),
+        };
+        assert_eq!(error.error_type, ErrorType::PreconditionFailed as i32);
+
+        // Start dissolving the neuron
+        sns_canisters
+            .start_dissolving(&user.sender, &user.subaccount)
+            .await;
+
+        // Check that the Neuron has entered the dissolving state
+        let neuron = sns_canisters.get_neuron(&user.neuron_id).await;
+        assert_eq!(
+            neuron.aging_since_timestamp_seconds,
+            u64::MAX,
+            "Neuron age not set to the 'dissolving' default value"
+        );
+        let neuron_state = neuron.state(now_seconds(None));
+        assert_eq!(neuron_state, NeuronState::Dissolving);
+
+        // Advance time one year so the neuron is now in the "dissolved" state
+        let delta_s = ONE_YEAR_SECONDS;
+        sns_canisters
+            .set_time_warp(delta_s as i64)
+            .await
+            .expect("Expected set_time_warp to succeed");
+
+        let neuron = sns_canisters.get_neuron(&user.neuron_id).await;
+
+        // Assert that the Neuron is now dissolved
+        let neuron_state = neuron.state(now_seconds(Some(delta_s)));
+        assert_eq!(neuron_state, NeuronState::Dissolved);
+
+        // Record balances before disbursal
+        let neuron_stake_before_disbursal = neuron.cached_neuron_stake_e8s;
+        assert!(neuron_stake_before_disbursal > 0);
+        let account_balance_before_disbursal =
+            sns_canisters.get_user_account_balance(&user.sender).await;
+
+        // Disburse the neuron to self and assert that it succeeds
+        let disburse_response = sns_canisters
+            .disburse_neuron(&user.sender, &user.subaccount, None, None)
+            .await;
+
+        let transfer_block_height = match disburse_response.command.unwrap() {
+            CommandResponse::Disburse(response) => response.transfer_block_height,
+            CommandResponse::Error(error) => {
+                panic!("Unexpected error when disbursing the neuron: {}", error)
+            }
+            _ => panic!("Unexpected command response when disbursing the neuron"),
+        };
+        assert!(transfer_block_height > 0);
+
+        // Assert that the neuron's stake is now zero
+        let neuron = sns_canisters.get_neuron(&user.neuron_id).await;
+        assert_eq!(neuron.cached_neuron_stake_e8s, 0);
+
+        // Calculate how much balance should have been disbursed
+        let expected_disbursal_amount =
+            Tokens::from_e8s(neuron_stake_before_disbursal - params.transaction_fee_e8s.unwrap());
+        let expected_account_balance_after_disbursal =
+            (account_balance_before_disbursal + expected_disbursal_amount).unwrap();
+
+        // Assert that the Neuron owner's account balance has increased the expected amount
+        let account_balance_after_disbursal =
+            sns_canisters.get_user_account_balance(&user.sender).await;
+        assert_eq!(
+            account_balance_after_disbursal,
+            expected_account_balance_after_disbursal
+        );
+
+        Ok(())
+    });
+}
+
+/// Tests the the `ManageNeuron::Disburse` command supports disbursing to ledger accounts
+/// other than the owner of a neuron.
+#[test]
+fn test_disburse_neuron_to_different_account_succeeds() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let neuron_owner = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        let funds_receiver = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(neuron_owner.sender.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(params.clone())
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        // Stake and claim a neuron for the user. No dissolve delay is specified so the
+        // neuron is in the dissolved state and can be disbursed.
+        sns_canisters
+            .stake_and_claim_neuron(&neuron_owner.sender, None)
+            .await;
+
+        let neuron = sns_canisters.get_neuron(&neuron_owner.neuron_id).await;
+
+        // Assert that the Neuron is dissolved
+        let neuron_state = neuron.state(now_seconds(None));
+        assert_eq!(neuron_state, NeuronState::Dissolved);
+
+        // Record balances before disbursal
+        let neuron_stake_before_disbursal = neuron.cached_neuron_stake_e8s;
+        let amount_to_disburse = neuron_stake_before_disbursal / 2;
+        assert!(neuron_stake_before_disbursal > 0);
+        let account_balance_before_disbursal_of_neuron_owner = sns_canisters
+            .get_user_account_balance(&neuron_owner.sender)
+            .await;
+        let account_balance_before_disbursal_of_funds_receiver = sns_canisters
+            .get_user_account_balance(&funds_receiver.sender)
+            .await;
+
+        // Disburse half the stake to the 'funds_receiver' user's ledger account, and assert it succeeds
+        let disburse_response = sns_canisters
+            .disburse_neuron(
+                &neuron_owner.sender,
+                &neuron_owner.subaccount,
+                Some(amount_to_disburse),
+                Some(funds_receiver.sender.get_principal_id().into()),
+            )
+            .await;
+        let transfer_block_height = match disburse_response.command.unwrap() {
+            CommandResponse::Disburse(response) => response.transfer_block_height,
+            CommandResponse::Error(error) => {
+                panic!("Unexpected error when disbursing the neuron: {}", error)
+            }
+            _ => panic!("Unexpected command response when disbursing the neuron"),
+        };
+        assert!(transfer_block_height > 0);
+
+        // Assert that the neurons stake has been reduced by half (transaction fees are deducted
+        // from the amount that is being transferred)
+        let neuron = sns_canisters.get_neuron(&neuron_owner.neuron_id).await;
+        let neuron_stake_after_disbursal = neuron.cached_neuron_stake_e8s;
+        assert_eq!(neuron_stake_after_disbursal, amount_to_disburse);
+
+        // Assert that the balance of the neuron owner should not have changed
+        let account_balance_after_disbursal_of_neuron_owner = sns_canisters
+            .get_user_account_balance(&neuron_owner.sender)
+            .await;
+        assert_eq!(
+            account_balance_before_disbursal_of_neuron_owner,
+            account_balance_after_disbursal_of_neuron_owner
+        );
+
+        // Calculate how much balance should have been disbursed. The transaction fee is subtracted
+        // from the disbursed amount
+        let expected_disbursal_amount =
+            Tokens::from_e8s(amount_to_disburse - params.transaction_fee_e8s.unwrap());
+        let expected_account_balance_after_disbursal_of_funds_receiver =
+            (account_balance_before_disbursal_of_funds_receiver + expected_disbursal_amount)
+                .unwrap();
+
+        // Assert that the funds receiver account balance has increased the expected amount
+        let account_balance_after_disbursal_of_funds_receiver = sns_canisters
+            .get_user_account_balance(&funds_receiver.sender)
+            .await;
+        assert_eq!(
+            account_balance_after_disbursal_of_funds_receiver,
+            expected_account_balance_after_disbursal_of_funds_receiver
+        );
+
+        Ok(())
+    });
+}
+
+/// Tests that `ManageNeuron::Disburse` will burn fees associated with rejected proposals.
+#[test]
+fn test_disburse_neuron_burns_neuron_fees() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        // Create another user to vote no on Proposals from parent, so parent accumulates neuron_fees
+        let voter = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(user.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(voter.sender.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(params.clone())
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        // Stake and claim a neuron for the user. The dissolve delay is set to ONE_YEAR_SECONDS
+        // and is in state `NotDissolving`
+        sns_canisters
+            .stake_and_claim_neuron(&user.sender, Some(ONE_YEAR_SECONDS as u32))
+            .await;
+
+        // Stake and claim a neuron for the voter with a majority of voting power
+        sns_canisters
+            .stake_and_claim_neuron(&voter.sender, Some((20 * ONE_YEAR_SECONDS) as u32))
+            .await;
+
+        // Create a proposal and have the user submit it
+        let proposal = Proposal {
+            action: Some(Action::Motion(Motion {
+                motion_text: String::from(""),
+            })),
+            ..Default::default()
+        };
+
+        let proposal_id = sns_canisters
+            .make_proposal(&user.sender, &user.subaccount, proposal)
+            .await
+            .expect("Expected make_proposal to succeed");
+
+        // Have the voter vote no on the proposal so the user neuron accumulates
+        // neuron fees
+        sns_canisters
+            .vote(&voter.sender, &voter.subaccount, proposal_id, false)
+            .await;
+
+        // Start dissolving the neuron
+        sns_canisters
+            .start_dissolving(&user.sender, &user.subaccount)
+            .await;
+
+        // Advance time one year so the neuron is now in the "dissolved" state
+        let delta_s = ONE_YEAR_SECONDS;
+        sns_canisters
+            .set_time_warp(delta_s as i64)
+            .await
+            .expect("Expected set_time_warp to succeed");
+
+        let neuron = sns_canisters.get_neuron(&user.neuron_id).await;
+
+        // Assert that the Neuron is now dissolved
+        let neuron_state = neuron.state(now_seconds(Some(delta_s)));
+        assert_eq!(neuron_state, NeuronState::Dissolved);
+
+        // Record balances before disbursal
+        let neuron_stake_before_disbursal = neuron.cached_neuron_stake_e8s;
+        assert!(neuron_stake_before_disbursal > 0);
+        let neuron_fees_before_disbursal = neuron.neuron_fees_e8s;
+        assert_eq!(
+            neuron_fees_before_disbursal,
+            params.reject_cost_e8s.unwrap()
+        );
+        let account_balance_before_disbursal =
+            sns_canisters.get_user_account_balance(&user.sender).await;
+
+        // Disburse the neuron to the neuron owner and assert that it succeeds
+        let disburse_response = sns_canisters
+            .disburse_neuron(&user.sender, &user.subaccount, None, None)
+            .await;
+
+        let transfer_block_height = match disburse_response.command.unwrap() {
+            CommandResponse::Disburse(response) => response.transfer_block_height,
+            CommandResponse::Error(error) => {
+                panic!("Unexpected error when disbursing the neuron: {}", error)
+            }
+            _ => panic!("Unexpected command response when disbursing the neuron"),
+        };
+        assert!(transfer_block_height > 0);
+
+        let neuron = sns_canisters.get_neuron(&user.neuron_id).await;
+        // Assert that the neuron's stake is now zero, i.e. the stake has been disbursed
+        assert_eq!(neuron.cached_neuron_stake_e8s, 0);
+        // Assert that the neuron's fees are now zero, i.e. the fees have been burned
+        assert_eq!(neuron.neuron_fees_e8s, 0);
+
+        // Calculate how much balance should have been disbursed. The neuron fees and ledger
+        // transactions fees should be deducted from the stake.
+        let expected_disbursal_amount = Tokens::from_e8s(
+            neuron_stake_before_disbursal
+                - neuron_fees_before_disbursal
+                - params.transaction_fee_e8s.unwrap(),
+        );
+        let expected_account_balance_after_disbursal =
+            (account_balance_before_disbursal + expected_disbursal_amount).unwrap();
+
+        // Assert that the Neuron owner's account balance has increased the expected amount
+        let account_balance_after_disbursal =
+            sns_canisters.get_user_account_balance(&user.sender).await;
+        assert_eq!(
+            account_balance_after_disbursal,
+            expected_account_balance_after_disbursal
+        );
+
+        Ok(())
+    });
+}
+
+/// Tests the flow of `ManageNeuron::Split`, and that when a child neuron is split from a parent
+/// neuron the correct neuron state is inherited.
+#[test]
+fn test_split_neuron_succeeds() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let parent = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(parent.sender.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(params.clone())
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        // Stake and claim a neuron for the parent
+        sns_canisters
+            .stake_and_claim_neuron(&parent.sender, None)
+            .await;
+
+        let parent_neuron = sns_canisters.get_neuron(&parent.neuron_id).await;
+        let parent_neuron_stake_before_split = parent_neuron.cached_neuron_stake_e8s;
+        let amount_to_split = parent_neuron_stake_before_split / 2;
+
+        // Split the parent neuron and have the child neuron inherit half of the parent's
+        // stake
+        let split_response = sns_canisters
+            .split_neuron(
+                &parent.sender,
+                &parent.subaccount,
+                amount_to_split,
+                0, // memo
+            )
+            .await;
+
+        // Assert that the Split command succeeded
+        let child_neuron_id = match split_response.command.unwrap() {
+            CommandResponse::Split(response) => response
+                .created_neuron_id
+                .expect("Expected a NeuronId to be returned after splitting"),
+            CommandResponse::Error(error) => {
+                panic!("Unexpected error when splitting the neuron: {}", error)
+            }
+            _ => panic!("Unexpected command response when splitting the neuron"),
+        };
+
+        let parent_neuron = sns_canisters.get_neuron(&parent.neuron_id).await;
+        let child_neuron = sns_canisters.get_neuron(&child_neuron_id).await;
+
+        // Assert that the stake's of the two neurons have been adjusted correctly. The transaction
+        // fee is deducted from the amount inherited by the child.
+        let expected_parent_neuron_stake_after_split = amount_to_split;
+        let expected_child_neuron_stake_after_split =
+            amount_to_split - params.transaction_fee_e8s.unwrap();
+        assert_eq!(
+            expected_parent_neuron_stake_after_split,
+            parent_neuron.cached_neuron_stake_e8s
+        );
+        assert_eq!(
+            expected_child_neuron_stake_after_split,
+            child_neuron.cached_neuron_stake_e8s
+        );
+
+        assert_eq!(parent_neuron.permissions, child_neuron.permissions);
+        assert_eq!(
+            parent_neuron.aging_since_timestamp_seconds,
+            child_neuron.aging_since_timestamp_seconds
+        );
+        assert_eq!(parent_neuron.followees, child_neuron.followees);
+        assert_eq!(parent_neuron.dissolve_state, child_neuron.dissolve_state);
+        assert_eq!(child_neuron.maturity_e8s_equivalent, 0);
+        assert_eq!(child_neuron.neuron_fees_e8s, 0);
+        assert!(child_neuron.created_timestamp_seconds > 0);
+
+        Ok(())
+    });
+}
+
+/// Tests that when a Neuron is split using `ManageNeuron::Split`, fields such as neuron_fees_e8s
+/// are not inherited.
+#[test]
+fn test_split_neuron_inheritance() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let parent = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        // Create another user to vote no on Proposals from parent, so parent accumulates neuron_fees
+        let voter = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(parent.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(voter.sender.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(params.clone())
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        // Stake and claim a neuron for the parent
+        sns_canisters
+            .stake_and_claim_neuron(&parent.sender, Some(ONE_YEAR_SECONDS as u32))
+            .await;
+
+        // Stake and claim a neuron for the voter with a majority of voting power
+        sns_canisters
+            .stake_and_claim_neuron(&voter.sender, Some((20 * ONE_YEAR_SECONDS) as u32))
+            .await;
+
+        // Create a proposal and have the parent submit it
+        let proposal = Proposal {
+            action: Some(Action::Motion(Motion {
+                motion_text: String::from(""),
+            })),
+            ..Default::default()
+        };
+
+        let proposal_id = sns_canisters
+            .make_proposal(&parent.sender, &parent.subaccount, proposal)
+            .await
+            .expect("Expected make_proposal to succeed");
+
+        // Have the voter vote no on the proposal so the parent neuron accumulates
+        // neuron fees
+        sns_canisters
+            .vote(&voter.sender, &voter.subaccount, proposal_id, false)
+            .await;
+
+        // Assert that the fees are present before the split
+        let parent_neuron = sns_canisters.get_neuron(&parent.neuron_id).await;
+        assert_eq!(
+            parent_neuron.neuron_fees_e8s,
+            params.reject_cost_e8s.unwrap()
+        );
+
+        // Split the parent neuron and have the child neuron inherit half of the parent's
+        // stake
+        let split_response = sns_canisters
+            .split_neuron(
+                &parent.sender,
+                &parent.subaccount,
+                parent_neuron.cached_neuron_stake_e8s / 2,
+                0, // memo
+            )
+            .await;
+
+        // Assert that the Split command succeeded
+        let child_neuron_id = match split_response.command.unwrap() {
+            CommandResponse::Split(response) => response
+                .created_neuron_id
+                .expect("Expected a NeuronId to be returned after splitting"),
+            CommandResponse::Error(error) => {
+                panic!("Unexpected error when splitting the neuron: {}", error)
+            }
+            _ => panic!("Unexpected command response when splitting the neuron"),
+        };
+
+        let parent_neuron = sns_canisters.get_neuron(&parent.neuron_id).await;
+        let child_neuron = sns_canisters.get_neuron(&child_neuron_id).await;
+
+        // The parent should retain the fees, the child should not
+        assert_eq!(
+            parent_neuron.neuron_fees_e8s,
+            params.reject_cost_e8s.unwrap()
+        );
+        assert_eq!(child_neuron.neuron_fees_e8s, 0);
+
+        Ok(())
+    });
+}
+
+/// Tests that when a Neuron is split using `ManageNeuron::Split`, the child neuron will be split
+/// with enough stake to meet the minimum stake requirements
+#[test]
+fn test_split_neuron_child_amount_is_above_min_stake() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let parent = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(parent.sender.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(params.clone())
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        // Stake and claim a neuron for the parent
+        sns_canisters
+            .stake_and_claim_neuron(&parent.sender, None)
+            .await;
+
+        // Initially, set the split amount to below the current minimum_stake
+        let mut split_amount_e8s = params.neuron_minimum_stake_e8s.unwrap() - 1;
+
+        let error = sns_canisters
+            .split_neuron_with_failure(
+                &parent.sender,
+                &parent.subaccount,
+                split_amount_e8s,
+                0, // memo
+            )
+            .await;
+        assert_eq!(error.error_type, ErrorType::InsufficientFunds as i32);
+
+        // Setting the split amount to the current minimum_stake should also fail as the transaction fee
+        // is deducted from the amount that is inherited
+        split_amount_e8s = params.neuron_minimum_stake_e8s.unwrap();
+
+        let error = sns_canisters
+            .split_neuron_with_failure(
+                &parent.sender,
+                &parent.subaccount,
+                split_amount_e8s,
+                0, // memo
+            )
+            .await;
+        assert_eq!(error.error_type, ErrorType::InsufficientFunds as i32);
+
+        // Setting the split amount to the current minimum_stake plus the transaction_fee should
+        // result in a successful split as the child neuron will now have the needed minimum stake
+        split_amount_e8s =
+            params.neuron_minimum_stake_e8s.unwrap() + params.transaction_fee_e8s.unwrap();
+
+        let split_response = sns_canisters
+            .split_neuron(
+                &parent.sender,
+                &parent.subaccount,
+                split_amount_e8s,
+                0, // memo
+            )
+            .await;
+        let child_neuron_id = match split_response.command.unwrap() {
+            CommandResponse::Split(response) => response
+                .created_neuron_id
+                .expect("Expected a NeuronId to be returned after splitting"),
+            CommandResponse::Error(error) => {
+                panic!("Unexpected error when splitting the neuron: {}", error)
+            }
+            _ => panic!("Unexpected command response when splitting the neuron"),
+        };
+
+        // The child should now be created and have stake equal to the minimum stake
+        let child_neuron = sns_canisters.get_neuron(&child_neuron_id).await;
+        assert_eq!(
+            params.neuron_minimum_stake_e8s.unwrap(),
+            child_neuron.cached_neuron_stake_e8s
+        );
+
+        Ok(())
+    });
+}
+
+/// Tests that when a Neuron is split using `ManageNeuron::Split`, after the split the parent
+/// neuron's stake will be above the minimum stake
+#[test]
+fn test_split_neuron_parent_amount_is_above_min_stake() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let parent = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(parent.sender.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(params.clone())
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        // Stake and claim a neuron for the parent
+        sns_canisters
+            .stake_and_claim_neuron(&parent.sender, None)
+            .await;
+
+        let parent_neuron = sns_canisters.get_neuron(&parent.neuron_id).await;
+
+        // Initially, set the split amount to an amount that will leave the parent neuron's stake just
+        // below the minimum_stake
+        let mut split_amount_e8s =
+            parent_neuron.cached_neuron_stake_e8s - params.neuron_minimum_stake_e8s.unwrap() + 1;
+
+        let error = sns_canisters
+            .split_neuron_with_failure(
+                &parent.sender,
+                &parent.subaccount,
+                split_amount_e8s,
+                0, // memo
+            )
+            .await;
+        assert_eq!(error.error_type, ErrorType::InsufficientFunds as i32);
+
+        // Setting the split amount to the current minimum_stake plus the transaction_fee should
+        // result in a successful split as the parent neuron will now have the needed minimum stake
+        split_amount_e8s =
+            parent_neuron.cached_neuron_stake_e8s - params.neuron_minimum_stake_e8s.unwrap();
+
+        let split_response = sns_canisters
+            .split_neuron(
+                &parent.sender,
+                &parent.subaccount,
+                split_amount_e8s,
+                0, // memo
+            )
+            .await;
+        let child_neuron_id = match split_response.command.unwrap() {
+            CommandResponse::Split(response) => response
+                .created_neuron_id
+                .expect("Expected a NeuronId to be returned after splitting"),
+            CommandResponse::Error(error) => {
+                panic!("Unexpected error when splitting the neuron: {}", error)
+            }
+            _ => panic!("Unexpected command response when splitting the neuron"),
+        };
+
+        // The child neuron should now exist, and the parent neuron should have exactly the
+        // minimum_stake
+        let parent_neuron = sns_canisters.get_neuron(&parent.neuron_id).await;
+        let child_neuron = sns_canisters.get_neuron(&child_neuron_id).await;
+        assert_eq!(
+            params.neuron_minimum_stake_e8s.unwrap(),
+            parent_neuron.cached_neuron_stake_e8s
+        );
+
+        let expected_stake_of_child_neuron = split_amount_e8s - params.transaction_fee_e8s.unwrap();
+        assert_eq!(
+            child_neuron.cached_neuron_stake_e8s,
+            expected_stake_of_child_neuron
+        );
+
+        Ok(())
+    });
 }

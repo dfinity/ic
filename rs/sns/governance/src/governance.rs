@@ -2400,7 +2400,7 @@ impl Governance {
         }
     }
 
-    /// Configures a given neuron (specified by the givern neuron id).
+    /// Configures a given neuron (specified by the given neuron id).
     /// Specifically, this allows to stop and start dissolving a neuron
     /// as well as to increase a neuron's dissolve delay.
     ///
