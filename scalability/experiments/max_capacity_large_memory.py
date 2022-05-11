@@ -23,7 +23,7 @@ gflags.DEFINE_integer("target_rps", 500, "Targeted requests per second.")
 # continue running the benchmark, but do not consider this RPS
 # for max capacity
 gflags.DEFINE_integer(
-    "allowable_t_median", 5000, "Maximum median latency at which to consider the iteration successful."
+    "allowable_latency", 5000, "Maximum median latency at which to consider the iteration successful."
 )
 
 if __name__ == "__main__":

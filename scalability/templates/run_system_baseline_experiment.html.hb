@@ -26,7 +26,7 @@ The system is considered healthy iff:
   <li>The failure rate perceived by the workload generators is less than:
     <span class="w3-tag w3-light-grey exp_value">{{experiment_details.allowable_failure_rate}}</span>
   <li>The median latency is less than:
-    <span class="w3-tag w3-light-grey exp_value">{{experiment_details.allowable_t_median}}</span>
+    <span class="w3-tag w3-light-grey exp_value">{{experiment_details.allowable_latency}}{{experiment_details.allowable_t_median}}</span>
 </ul>
 </p>
 

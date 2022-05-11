@@ -45,7 +45,7 @@ STOP_T_MEDIAN = 30000
 # When failure rate is below this level, we consider the experiment successful.
 ALLOWABLE_FAILURE_RATE = 0.2
 # When median latency is below this level, we consider the experiment successful.
-ALLOWABLE_T_MEDIAN = 5000
+ALLOWABLE_LATENCY = 5000
 
 
 class WorkloadExperiment(base_experiment.BaseExperiment):

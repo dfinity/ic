@@ -22,7 +22,7 @@ gflags.DEFINE_integer(
 # continue running the benchmark, but do not consider this RPS
 # for max capacity
 gflags.DEFINE_integer(
-    "allowable_t_median", 5000, "Maximum query median latency at which to consider the iteration successful."
+    "allowable_latency", 5000, "Maximum query median latency at which to consider the iteration successful."
 )
 
 if __name__ == "__main__":

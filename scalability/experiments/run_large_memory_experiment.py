@@ -146,7 +146,7 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
                 run = False
 
             else:
-                if failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE and t_median < FLAGS.allowable_t_median:
+                if failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE and t_median < FLAGS.allowable_latency:
                     if num_success / self.last_duration > rps_max:
                         rps_max = num_success / self.last_duration
                         rps_max_in = load_total
