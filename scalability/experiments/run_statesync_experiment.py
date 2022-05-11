@@ -161,7 +161,10 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
         if len(parsed) == 1:
             ((value_timestamp, value), _metric) = parsed[0]
             print("state sync duration is:", value)
+            state_sync_duration = value
             print("*************")
+        else:
+            state_sync_duration = None
 
         print("End of test")
         print("Cleanup: restart nodes with the same prefix", restarted_ip_prefix)
@@ -184,8 +187,10 @@ if __name__ == "__main__":
 
     exp.start_experiment()
 
-    r = exp.run_experiment({})
+    state_sync_duration = exp.run_experiment({})
 
-    exp.write_summary_file("run_statesync_experiment", {"state_sync_duration": r}, ["n.a."], "no axis label")
+    exp.write_summary_file(
+        "run_statesync_experiment", {"state_sync_duration": state_sync_duration}, ["n.a."], "no axis label"
+    )
 
     exp.end_experiment()
