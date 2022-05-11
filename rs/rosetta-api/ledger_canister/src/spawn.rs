@@ -28,7 +28,9 @@ pub async fn install_code<Arg: IntoWire>(
     .await
 }
 
-pub async fn create_canister(cycles_for_canister_creation: u64) -> CanisterId {
+pub async fn create_canister(
+    cycles_for_canister_creation: u64,
+) -> Result<CanisterId, (Option<i32>, String)> {
     dfn_core::api::print(format!(
         "[spawn] create_canister(cycles_for_canister_creation={})",
         cycles_for_canister_creation
@@ -43,5 +45,5 @@ pub async fn create_canister(cycles_for_canister_creation: u64) -> CanisterId {
     )
     .await;
     dfn_core::api::print(format!("[spawn] create_canister() = {:?}", result));
-    result.unwrap().get_canister_id()
+    result.map(|r| r.get_canister_id())
 }
