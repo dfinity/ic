@@ -1,0 +1,34 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "ic_btc_validation",
+    srcs = glob(["src/**"]),
+    edition = "2018",
+    deps = [
+        "@crate_index//:bitcoin",
+    ],
+)
+
+rust_test(
+    name = "ic_btc_validation_tests",
+    srcs = glob(["**/*.rs"]),
+    crate = ":ic_btc_validation",
+    data = ["tests/data/headers.csv"],
+    edition = "2018",
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/bitcoin/validation",
+    },
+    deps = [
+        "@crate_index//:csv",
+    ],
+)

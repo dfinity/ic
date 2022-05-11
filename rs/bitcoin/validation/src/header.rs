@@ -279,7 +279,7 @@ fn compute_next_difficulty(
 #[cfg(test)]
 mod test {
 
-    use std::{collections::HashMap, str::FromStr};
+    use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
     use bitcoin::{consensus::deserialize, hashes::hex::FromHex, TxMerkleNode};
     use csv::Reader;
@@ -363,7 +363,10 @@ mod test {
     /// This function reads `num_headers` headers from `blockchain_headers.csv`
     /// and returns them.
     fn get_bitcoin_headers() -> Vec<BlockHeader> {
-        let rdr = Reader::from_path("tests/data/headers.csv");
+        let rdr = Reader::from_path(
+            PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+                .join("tests/data/headers.csv"),
+        );
         assert!(rdr.is_ok(), "Unable to find blockchain_headers.csv file");
         let mut rdr = rdr.unwrap();
         let mut headers = vec![];
