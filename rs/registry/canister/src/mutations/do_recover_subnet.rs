@@ -30,9 +30,7 @@ use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
 use ic_registry_transport::upsert;
 use on_wire::bytes;
 use serde::Serialize;
-use std::collections::HashSet;
 use std::convert::TryFrom;
-use std::convert::TryInto;
 
 impl Registry {
     /// Recover a subnet
@@ -105,36 +103,17 @@ impl Registry {
             // and make sure the subnet is not listed as signing_subnet for keys it no longer holds
             if let Some(ref new_ecdsa_config) = payload.ecdsa_config {
                 // get current set of keys
-                let existing_keys: HashSet<EcdsaKeyId> = subnet_record
-                    .ecdsa_config
-                    .map(|c| {
-                        c.key_ids
-                            .iter()
-                            .map(|k| k.clone().try_into().unwrap())
-                            .collect()
-                    })
-                    .unwrap_or_default();
 
-                let requested_keys: HashSet<EcdsaKeyId> = new_ecdsa_config
+                let new_key_list: Vec<EcdsaKeyId> = new_ecdsa_config
                     .keys
                     .iter()
                     .map(|key_request| key_request.key_id.clone())
                     .collect();
 
-                // If existing_keys contains keys not in requested_keys
-                if !requested_keys.is_superset(&existing_keys) {
-                    let missing_keys = existing_keys
-                        .difference(&requested_keys)
-                        .collect::<Vec<_>>();
-
-                    let mut remove_signing_key_mutations = self
-                        .mutations_to_remove_subnet_from_ecdsa_signing_subnets(
-                            subnet_id,
-                            missing_keys,
-                        );
-                    // Mutations to remove subnet from ecdsa_signing_keys for key_ids it is missing
-                    mutations.append(&mut remove_signing_key_mutations);
-                }
+                mutations.append(&mut self.mutations_to_disable_subnet_signing(
+                    subnet_id,
+                    &self.get_keys_that_will_be_removed_from_subnet(subnet_id, new_key_list),
+                ));
                 // Update ECDSA configuration on subnet record to reflect new holdings
                 let mut subnet_record = self.get_subnet_or_panic(subnet_id);
                 subnet_record.ecdsa_config = Some(new_ecdsa_config.clone().into());

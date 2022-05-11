@@ -86,8 +86,8 @@ message SubnetRecord {
   repeated string ssh_backup_access = 26;
 
   // ECDSA Config. This field cannot be set back to `None` once it has been set
-  // to `Some`. To turn off ECDSA signing the list of `key_ids` can be set to
-  // the empty list.
+  // to `Some`. To remove a key, the list of `key_ids` can be set to not include a particular key.
+  // If a removed key is not held by another subnet, it will be lost.
   EcdsaConfig ecdsa_config = 27;
 }
 

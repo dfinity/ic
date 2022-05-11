@@ -86,6 +86,7 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
+            ecdsa_key_signing_disable: None,
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -209,6 +210,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
+            ecdsa_key_signing_disable: None,
             max_number_of_canisters: Some(100),
             ssh_readonly_access: None,
             ssh_backup_access: None,
@@ -324,6 +326,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
+            ecdsa_key_signing_disable: None,
             max_number_of_canisters: Some(42),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -390,7 +393,19 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
 
 #[test]
 fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
-    const REJECT_MSG: &str = "Canister rejected with message: IC0503: Canister rwlgt-iiaaa-aaaaa-aaaaa-cai trapped explicitly: Panicked at 'Proposal attempts to enable signing for ECDSA key Secp256k1:key_id_1 on Subnet bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae,  but the subnet does not hold the given key. A proposal to add that key to the subnet must first be separately submitted.'";
+    const ENABLE_BEFORE_ADDING_REJECT_MSG: &str = "Canister rejected with \
+    message: IC0503: Canister rwlgt-iiaaa-aaaaa-aaaaa-cai trapped explicitly: \
+    Panicked at '[Registry] Proposal attempts to enable signing for ECDSA key \
+    'Secp256k1:key_id_1' on Subnet \
+    'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', but the \
+    subnet does not hold the given key. A proposal to add that key to the subnet \
+    must first be separately submitted.'";
+
+    const NO_ECDSA_CONFIG_REJECT_MSG: &str = "Canister rejected with message: \
+    IC0503: Canister rwlgt-iiaaa-aaaaa-aaaaa-cai trapped explicitly: Panicked at \
+    '[Registry]  invariant check failed with message:The subnet \
+    bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae does not \
+    have an ECDSA config'";
 
     local_test_on_nns_subnet(|runtime| async move {
         let subnet_id = SubnetId::from(
@@ -469,7 +484,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
         )
         .await
         .unwrap_err()
-        .starts_with(REJECT_MSG));
+        .starts_with(ENABLE_BEFORE_ADDING_REJECT_MSG));
 
         let new_subnet_record =
             get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
@@ -493,7 +508,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
         )
         .await
         .unwrap_err()
-        .starts_with(REJECT_MSG));
+        .starts_with(NO_ECDSA_CONFIG_REJECT_MSG));
 
         let new_subnet_record =
             get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
@@ -609,5 +624,6 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         ssh_backup_access: None,
         ecdsa_config: None,
         ecdsa_key_signing_enable: None,
+        ecdsa_key_signing_disable: None,
     }
 }

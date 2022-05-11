@@ -195,6 +195,7 @@ type UpdateSubnetPayload = record {
   subnet_id : principal;
   max_ingress_bytes_per_message : opt nat64;
   dkg_dealings_per_block : opt nat64;
+  ecdsa_key_signing_disable : opt vec EcdsaKeyId;
   max_block_payload_size : opt nat64;
   max_instructions_per_install_code : opt nat64;
   start_as_nns : opt bool;

@@ -85,6 +85,7 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
         features: None,
         ecdsa_config: None,
         ecdsa_key_signing_enable: None,
+        ecdsa_key_signing_disable: None,
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
