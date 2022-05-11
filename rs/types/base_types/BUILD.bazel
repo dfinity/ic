@@ -1,0 +1,84 @@
+load("//bazel:prost.bzl", "generated_files_check")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+COMMON_DEPS = [
+    "//rs/crypto/sha",
+    "//rs/phantom_newtype",
+    "//rs/protobuf",
+    "@crate_index//:base32",
+    "@crate_index//:byte-unit",
+    "@crate_index//:bytes",
+    "@crate_index//:candid",
+    "@crate_index//:crc32fast",
+    "@crate_index//:prost",
+    "@crate_index//:serde",
+    "@crate_index//:strum",
+]
+
+rust_library(
+    name = "base_types",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    crate_name = "ic_base_types",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:strum_macros",
+    ],
+    deps = COMMON_DEPS,
+)
+
+rust_library(
+    name = "base_types_comparable",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    crate_features = ["test"],
+    crate_name = "ic_base_types",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:strum_macros",
+    ],
+    deps = COMMON_DEPS + ["@crate_index//:comparable"],
+)
+
+rust_test(
+    name = "base_types_test",
+    crate = ":base_types",
+    proc_macro_deps = [
+        "@crate_index//:proptest-derive",
+    ],
+    deps = [
+        "@crate_index//:assert_matches",
+        "@crate_index//:proptest",
+        "@crate_index//:serde_cbor",
+    ],
+)
+
+generated_files_check(
+    name = "check_generated_files",
+    srcs = ["tests/check_generated_files.rs"],
+    data = glob([
+        "gen/**",
+        "def/**",
+        "proto/**",
+    ]),
+    manifest_dir = "rs/types/base_types",
+    deps = [
+        "//rs/test_utilities/compare_dirs",
+        "//rs/types/base_types/protobuf_generator:lib",
+        "@crate_index//:tempfile",
+    ],
+)

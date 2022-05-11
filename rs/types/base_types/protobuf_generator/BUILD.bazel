@@ -14,7 +14,7 @@ filegroup(
 rust_library(
     name = "lib",
     srcs = ["src/lib.rs"],
-    crate_name = "ic_protobuf_generator",
+    crate_name = "ic_base_types_protobuf_generator",
     edition = "2018",
     deps = [
         "@crate_index//:prost-build",
@@ -22,7 +22,7 @@ rust_library(
 )
 
 protobuf_generator(
-    name = "generator",
+    name = "protobuf_generator",
     srcs = ["src/main.rs"],
     deps = [":lib"],
 )

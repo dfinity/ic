@@ -1,0 +1,28 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "error_types",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_error_types",
+    edition = "2018",
+    proc_macro_deps = ["@crate_index//:strum_macros"],
+    deps = [
+        "@crate_index//:serde",
+        "@crate_index//:strum",
+    ],
+)
+
+rust_test(
+    name = "error_types_test",
+    crate = ":error_types",
+)
