@@ -1,5 +1,5 @@
 {
-  "checksum": "9cc20458644e97052e40fed8934c55d84da492b3b1e30e7a6d421f1c30b4aa39",
+  "checksum": "f2b0a910e18b58a62c8560d2724819e815806c66ce80f5ec04ddd8f96f154343",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -3044,6 +3044,10 @@
             {
               "id": "uuid 0.8.2",
               "target": "uuid"
+            },
+            {
+              "id": "wsl 0.1.0",
+              "target": "wsl"
             }
           ],
           "selects": {}
@@ -14195,6 +14199,39 @@
         ]
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "wsl 0.1.0": {
+      "name": "wsl",
+      "version": "0.1.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/wsl/0.1.0/download",
+          "sha256": "f8dab7ac864710bdea6594becbea5b5050333cf34fefb0dc319567eb347950d4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wsl",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "wsl",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.1.0"
+      },
+      "license": "MIT"
     }
   },
   "binary_crates": [

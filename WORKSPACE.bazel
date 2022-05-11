@@ -46,12 +46,12 @@ crates_repository(
         "maplit": crate.spec(version = "1.0.2"),
         "nix": crate.spec(version = "0.23.0"),
         "openssl": crate.spec(version = "0.10.29"),
-        "prost": crate.spec(version = "0.9.0"),
-        "prost-build": crate.spec(version = "0.9.0"),
         "prometheus": crate.spec(
             features = ["process"],
             version = "0.13.0",
         ),
+        "prost-build": crate.spec(version = "0.9.0"),
+        "prost": crate.spec(version = "0.9.0"),
         "rand": crate.spec(version = "0.8.3"),
         "regex": crate.spec(version = "1.3.9"),
         "scoped_threadpool": crate.spec(version = "0.1.0"),
@@ -84,6 +84,7 @@ crates_repository(
             features = ["v4"],
             version = "0.8.1",
         ),
+        "wsl": crate.spec(version = "0.1.0"),
     },
     splicing_config = splicing_config(
         resolver_version = "2",
