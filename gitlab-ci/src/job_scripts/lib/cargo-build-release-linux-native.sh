@@ -47,6 +47,13 @@ cargo build --target $CARGO_BUILD_TARGET --profile release-stripped \
     --bin ic-recovery \
     --bin ic-replay
 
+rm -f "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release/ic-recovery
+rm -f "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release/ic-replay
+
+mv "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release-stripped/ic-recovery \
+    "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release-stripped/ic-replay \
+    "$CARGO_TARGET_DIR"/x86_64-unknown-linux-gnu/release/
+
 cargo build --target $CARGO_BUILD_TARGET --profile release-lto \
     --bin canister_sandbox \
     --bin sandbox_launcher
