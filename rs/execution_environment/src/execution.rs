@@ -1,5 +1,5 @@
 // Replicated messages.
-mod call;
+pub(crate) mod call;
 mod heartbeat;
 mod response;
 
@@ -8,4 +8,4 @@ mod nonreplicated_query;
 mod nonreplicated_response;
 
 // Common helpers.
-mod common;
+pub(crate) mod common;

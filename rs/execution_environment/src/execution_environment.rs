@@ -3,9 +3,10 @@ use crate::{
         CanisterManager, CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
     },
     canister_settings::CanisterSettings,
+    execution::call::{execute_ingress_call, execute_request_call},
+    execution::common::action_to_result,
     execution_environment_metrics::ExecutionEnvironmentMetrics,
     hypervisor::Hypervisor,
-    QueryExecutionType,
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;
@@ -31,7 +32,7 @@ use ic_interfaces::{
     },
     messages::{CanisterInputMessage, RequestOrIngress},
 };
-use ic_logger::{error, fatal, info, warn, ReplicaLogger};
+use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
@@ -39,7 +40,7 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{
         EcdsaDealingsContext, SetupInitialDkgContext, SignWithEcdsaContext,
     },
-    CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
+    CanisterState, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
     canister_http::{CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequestContext},
@@ -47,10 +48,10 @@ use ic_types::{
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
     ingress::{IngressStatus, WasmResult},
     messages::{
-        is_subnet_message, AnonymousQuery, CallbackId, Ingress, MessageId, Payload, RejectContext,
-        Request, Response, SignedIngressContent, StopCanisterContext,
+        is_subnet_message, AnonymousQuery, Payload, RejectContext, Request, Response,
+        SignedIngressContent, StopCanisterContext,
     },
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId, Time, UserId,
+    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId, Time,
 };
 #[cfg(test)]
 use mockall::automock;
@@ -833,13 +834,17 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 }
                 (
                     true,
-                    self.execute_canister_request(
+                    execute_request_call(
                         canister,
                         request,
                         instructions_limit,
                         time,
                         network_topology,
                         subnet_available_memory,
+                        &self.config,
+                        self.own_subnet_type,
+                        &self.hypervisor,
+                        &self.log,
                     ),
                 )
             }
@@ -870,13 +875,17 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 }
                 (
                     true,
-                    self.execute_ingress(
+                    execute_ingress_call(
                         canister,
                         ingress,
                         instructions_limit,
                         time,
                         network_topology,
                         subnet_available_memory,
+                        &self.config,
+                        self.own_subnet_type,
+                        &self.hypervisor,
+                        &self.log,
                     ),
                 )
             }
@@ -1347,7 +1356,7 @@ impl ExecutionEnvironmentImpl {
                 subnet_available_memory,
                 ExecutionMode::Replicated,
             );
-            let (mut canister, cycles, action, heap_delta) = self.hypervisor.execute_callback(
+            let (canister, cycles, action, heap_delta) = self.hypervisor.execute_callback(
                 canister,
                 &call_origin,
                 callback,
@@ -1360,28 +1369,7 @@ impl ExecutionEnvironmentImpl {
 
             let log = self.log.clone();
 
-            let result = match call_origin {
-                CallOrigin::Ingress(user_id, message_id) => {
-                    match self.get_ingress_status(&mut canister, user_id, action, message_id, time)
-                    {
-                        Some((msg_id, status)) => ExecResult::IngressResult((msg_id, status)),
-                        None => ExecResult::Empty,
-                    }
-                }
-                CallOrigin::CanisterUpdate(caller_canister_id, callback_id) => {
-                    action_to_result(&canister, action, caller_canister_id, callback_id)
-                }
-                CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => fatal!(
-                    log,
-                    "The update path should not have created a callback with a query origin",
-                ),
-                CallOrigin::Heartbeat => {
-                    // Since heartbeat messages are invoked by the system as opposed
-                    // to a principal, they cannot respond since there's no one to
-                    // respond to. Do nothing.
-                    ExecResult::Empty
-                }
-            };
+            let result = action_to_result(&canister, action, call_origin, time, &log);
 
             let res = ExecuteMessageResult {
                 canister,
@@ -1390,139 +1378,6 @@ impl ExecutionEnvironmentImpl {
                 heap_delta,
             };
             (true, res)
-        }
-    }
-
-    // Execute an inter-canister request.
-    #[allow(clippy::too_many_arguments)]
-    fn execute_canister_request(
-        &self,
-        canister: CanisterState,
-        req: Request,
-        cycles: NumInstructions,
-        time: Time,
-        network_topology: Arc<NetworkTopology>,
-        subnet_available_memory: SubnetAvailableMemory,
-    ) -> ExecuteMessageResult<CanisterState> {
-        if CanisterStatusType::Running != canister.status() {
-            // Canister isn't running. Reject the request.
-            let canister_id = canister.canister_id();
-            let err_code = match canister.status() {
-                CanisterStatusType::Running => unreachable!(),
-                CanisterStatusType::Stopping => ErrorCode::CanisterStopping,
-                CanisterStatusType::Stopped => ErrorCode::CanisterStopped,
-            };
-            let err_msg = format!("Canister {} is not running", canister_id);
-            let user_error = Err(UserError::new(err_code, err_msg));
-            let response = Response {
-                originator: req.sender,
-                respondent: canister.canister_id(),
-                originator_reply_callback: req.sender_reply_callback,
-                refund: req.payment,
-                response_payload: Payload::from(user_error),
-            };
-            return ExecuteMessageResult {
-                canister,
-                num_instructions_left: cycles,
-                result: ExecResult::ResponseResult(response),
-                heap_delta: NumBytes::from(0),
-            };
-        }
-
-        if canister.exports_query_method(req.method_name.clone()) {
-            self.execute_query_method_for_request(canister, req, cycles, time)
-        } else {
-            self.execute_update_method_for_request(
-                canister,
-                req,
-                cycles,
-                time,
-                network_topology,
-                subnet_available_memory,
-            )
-        }
-    }
-
-    // Execute an update method from an inter-canister request.
-    #[allow(clippy::too_many_arguments)]
-    fn execute_update_method_for_request(
-        &self,
-        canister: CanisterState,
-        req: Request,
-        cycles: NumInstructions,
-        time: Time,
-        network_topology: Arc<NetworkTopology>,
-        subnet_available_memory: SubnetAvailableMemory,
-    ) -> ExecuteMessageResult<CanisterState> {
-        let sender = req.sender;
-        let reply_callback = req.sender_reply_callback;
-
-        let execution_parameters = self.execution_parameters(
-            &canister,
-            cycles,
-            subnet_available_memory,
-            ExecutionMode::Replicated,
-        );
-
-        let (canister, cycles, action, heap_delta) = self.hypervisor.execute_update(
-            canister,
-            RequestOrIngress::Request(req),
-            time,
-            network_topology,
-            execution_parameters,
-        );
-        let result = action_to_result(&canister, action, sender, reply_callback);
-        ExecuteMessageResult {
-            canister,
-            num_instructions_left: cycles,
-            result,
-            heap_delta,
-        }
-    }
-
-    // Execute a query method from an inter-canister request.
-    fn execute_query_method_for_request(
-        &self,
-        canister: CanisterState,
-        req: Request,
-        cycles: NumInstructions,
-        time: Time,
-    ) -> ExecuteMessageResult<CanisterState> {
-        // Letting the canister grow arbitrarily when executing the
-        // query is fine as we do not persist state modifications.
-        let subnet_available_memory = subnet_memory_capacity(&self.config);
-        let execution_parameters = self.execution_parameters(
-            &canister,
-            cycles,
-            subnet_available_memory,
-            ExecutionMode::Replicated,
-        );
-        let (canister, cycles, result) = self.hypervisor.execute_query(
-            QueryExecutionType::Replicated,
-            req.method_name.as_str(),
-            req.method_payload.as_slice(),
-            *req.sender.get_ref(),
-            canister,
-            None,
-            time,
-            execution_parameters,
-        );
-
-        let result = result
-            .map_err(|err| self.log_and_transform_to_user_error(err, &canister.canister_id()));
-
-        let response = Response {
-            originator: req.sender,
-            respondent: canister.canister_id(),
-            originator_reply_callback: req.sender_reply_callback,
-            refund: Cycles::zero(),
-            response_payload: Payload::from(result),
-        };
-        ExecuteMessageResult {
-            canister,
-            num_instructions_left: cycles,
-            result: ExecResult::ResponseResult(response),
-            heap_delta: NumBytes::from(0),
         }
     }
 
@@ -1673,189 +1528,6 @@ impl ExecutionEnvironmentImpl {
                 )),
             },
             Err(err) => Err(err.into_user_error(&canister_id)),
-        }
-    }
-
-    // Execute an ingress message.
-    #[allow(clippy::too_many_arguments)]
-    fn execute_ingress(
-        &self,
-        canister: CanisterState,
-        ingress: Ingress,
-        num_instructions: NumInstructions,
-        time: Time,
-        network_topology: Arc<NetworkTopology>,
-        subnet_available_memory: SubnetAvailableMemory,
-    ) -> ExecuteMessageResult<CanisterState> {
-        let canister_id = canister.canister_id();
-        if CanisterStatusType::Running != canister.status() {
-            // Canister isn't running. Reject the request.
-            let err_code = match canister.status() {
-                CanisterStatusType::Running => unreachable!(),
-                CanisterStatusType::Stopping => ErrorCode::CanisterStopping,
-                CanisterStatusType::Stopped => ErrorCode::CanisterStopped,
-            };
-            let status = IngressStatus::Failed {
-                receiver: canister_id.get(),
-                user_id: ingress.source,
-                error: UserError::new(
-                    err_code,
-                    format!(
-                        "Canister {} is not running and cannot accept ingress messages.",
-                        canister_id,
-                    ),
-                ),
-                time,
-            };
-
-            return ExecuteMessageResult {
-                canister,
-                num_instructions_left: num_instructions,
-                result: ExecResult::IngressResult((ingress.message_id, status)),
-                heap_delta: NumBytes::from(0),
-            };
-        }
-
-        // Scheduler must ensure that this function is never called for expired
-        // messages.
-        if ingress.expiry_time < time {
-            error!(self.log, "[EXC-BUG] Executing expired ingress message.");
-            let status = IngressStatus::Failed {
-                receiver: canister_id.get(),
-                user_id: ingress.source,
-                error: UserError::new(
-                    ErrorCode::IngressMessageTimeout,
-                    "Ingress message timed out waiting to start executing.",
-                ),
-                time,
-            };
-            return ExecuteMessageResult {
-                canister,
-                num_instructions_left: num_instructions,
-                result: ExecResult::IngressResult((ingress.message_id, status)),
-                heap_delta: NumBytes::from(0),
-            };
-        }
-
-        if canister.exports_query_method(ingress.method_name.clone()) {
-            self.execute_query_method_for_ingress(canister, ingress, num_instructions, time)
-        } else {
-            self.execute_update_method_for_ingress(
-                canister,
-                ingress,
-                num_instructions,
-                time,
-                network_topology,
-                subnet_available_memory,
-            )
-        }
-    }
-
-    // Execute an update method from an ingress message.
-    #[allow(clippy::too_many_arguments)]
-    fn execute_update_method_for_ingress(
-        &self,
-        canister: CanisterState,
-        ingress: Ingress,
-        cycles: NumInstructions,
-        time: Time,
-        network_topology: Arc<NetworkTopology>,
-        subnet_available_memory: SubnetAvailableMemory,
-    ) -> ExecuteMessageResult<CanisterState> {
-        let message_id = ingress.message_id.clone();
-        let source = ingress.source;
-
-        let execution_parameters = self.execution_parameters(
-            &canister,
-            cycles,
-            subnet_available_memory,
-            ExecutionMode::Replicated,
-        );
-        let (mut canister, cycles, action, heap_delta) = self.hypervisor.execute_update(
-            canister,
-            RequestOrIngress::Ingress(ingress),
-            time,
-            network_topology,
-            execution_parameters,
-        );
-
-        let ingress_status =
-            self.get_ingress_status(&mut canister, source, action, message_id, time);
-        let result = match ingress_status {
-            Some((msg_id, status)) => ExecResult::IngressResult((msg_id, status)),
-            None => ExecResult::Empty,
-        };
-        ExecuteMessageResult {
-            canister,
-            num_instructions_left: cycles,
-            result,
-            heap_delta,
-        }
-    }
-
-    // Execute a query call from an ingress message.
-    fn execute_query_method_for_ingress(
-        &self,
-        canister: CanisterState,
-        ingress: Ingress,
-        cycles: NumInstructions,
-        time: Time,
-    ) -> ExecuteMessageResult<CanisterState> {
-        // Letting the canister grow arbitrarily when executing the
-        // query is fine as we do not persist state modifications.
-        let subnet_available_memory = subnet_memory_capacity(&self.config);
-        let execution_parameters = self.execution_parameters(
-            &canister,
-            cycles,
-            subnet_available_memory,
-            ExecutionMode::Replicated,
-        );
-        let (canister, cycles, result) = self.hypervisor.execute_query(
-            QueryExecutionType::Replicated,
-            ingress.method_name.as_str(),
-            ingress.method_payload.as_slice(),
-            *ingress.source.get_ref(),
-            canister,
-            None,
-            time,
-            execution_parameters,
-        );
-
-        let result = result
-            .map_err(|err| self.log_and_transform_to_user_error(err, &canister.canister_id()));
-        let ingress_status = match result {
-            Ok(wasm_result) => match wasm_result {
-                None => IngressStatus::Failed {
-                    receiver: canister.canister_id().get(),
-                    user_id: ingress.source,
-                    error: UserError::new(
-                        ErrorCode::CanisterDidNotReply,
-                        format!(
-                            "Canister {} did not reply to the call",
-                            canister.canister_id(),
-                        ),
-                    ),
-                    time,
-                },
-                Some(wasm_result) => IngressStatus::Completed {
-                    receiver: canister.canister_id().get(),
-                    user_id: ingress.source,
-                    result: wasm_result,
-                    time,
-                },
-            },
-            Err(user_error) => IngressStatus::Failed {
-                receiver: canister.canister_id().get(),
-                user_id: ingress.source,
-                error: user_error,
-                time,
-            },
-        };
-        ExecuteMessageResult {
-            canister,
-            num_instructions_left: cycles,
-            result: ExecResult::IngressResult((ingress.message_id, ingress_status)),
-            heap_delta: NumBytes::from(0),
         }
     }
 
@@ -2137,104 +1809,6 @@ impl ExecutionEnvironmentImpl {
         Ok(())
     }
 
-    fn get_ingress_status(
-        &self,
-        canister: &mut CanisterState,
-        user_id: UserId,
-        action: CallContextAction,
-        message_id: MessageId,
-        time: Time,
-    ) -> Option<(MessageId, IngressStatus)> {
-        let ingress_status = match action {
-            CallContextAction::NoResponse { refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        self.log,
-                        "[EXC-BUG] No funds can be included with an ingress message: user {}, canister_id {}, message_id {}.",
-                        user_id, canister.canister_id(), message_id
-                    );
-                }
-                Some(IngressStatus::Failed {
-                    receiver: canister.canister_id().get(),
-                    user_id,
-                    error: UserError::new(
-                        ErrorCode::CanisterDidNotReply,
-                        format!(
-                            "Canister {} did not reply to the call",
-                            canister.canister_id()
-                        ),
-                    ),
-                    time,
-                })
-            }
-            CallContextAction::Reply { payload, refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        self.log,
-                        "[EXC-BUG] No funds can be included with an ingress message: user {}, canister_id {}, message_id {}.",
-                        user_id, canister.canister_id(), message_id
-                    );
-                }
-                Some(IngressStatus::Completed {
-                    receiver: canister.canister_id().get(),
-                    user_id,
-                    result: WasmResult::Reply(payload),
-                    time,
-                })
-            }
-            CallContextAction::Reject { payload, refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        self.log,
-                        "[EXC-BUG] No funds can be included with an ingress message: user {}, canister_id {}, message_id {}.",
-                        user_id, canister.canister_id(), message_id
-                    );
-                }
-                Some(IngressStatus::Completed {
-                    receiver: canister.canister_id().get(),
-                    user_id,
-                    result: WasmResult::Reject(payload),
-                    time,
-                })
-            }
-            CallContextAction::Fail { error, refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        self.log,
-                        "[EXC-BUG] No funds can be included with an ingress message: user {}, canister_id {}, message_id {}.",
-                        user_id, canister.canister_id(), message_id
-                    );
-                }
-                Some(IngressStatus::Failed {
-                    receiver: canister.canister_id().get(),
-                    user_id,
-                    error: error.into_user_error(&canister.canister_id()),
-                    time,
-                })
-            }
-            CallContextAction::NotYetResponded => Some(IngressStatus::Processing {
-                receiver: canister.canister_id().get(),
-                user_id,
-                time,
-            }),
-            CallContextAction::AlreadyResponded => None,
-        };
-        ingress_status.map(|status| (message_id, status))
-    }
-
-    fn log_and_transform_to_user_error(
-        &self,
-        hypervisor_err: HypervisorError,
-        canister_id: &CanisterId,
-    ) -> UserError {
-        let user_error = hypervisor_err.into_user_error(canister_id);
-        info!(
-            self.log,
-            "Executing message on {} failed with {:?}", canister_id, user_error
-        );
-        user_error
-    }
-
     /// For testing purposes only.
     #[doc(hidden)]
     pub fn hypervisor_for_testing(&self) -> &Hypervisor {
@@ -2261,56 +1835,5 @@ fn get_canister_mut(
             ErrorCode::CanisterNotFound,
             format!("Canister {} not found.", &canister_id),
         )),
-    }
-}
-
-fn action_to_result(
-    canister: &CanisterState,
-    action: CallContextAction,
-    originator: CanisterId,
-    reply_callback_id: CallbackId,
-) -> ExecResult {
-    let response_payload_and_refund = match action {
-        CallContextAction::NotYetResponded | CallContextAction::AlreadyResponded => None,
-        CallContextAction::NoResponse { refund } => Some((
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterError,
-                message: "No response".to_string(),
-            }),
-            refund,
-        )),
-
-        CallContextAction::Reject { payload, refund } => Some((
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterReject,
-                message: payload,
-            }),
-            refund,
-        )),
-
-        CallContextAction::Reply { payload, refund } => Some((Payload::Data(payload), refund)),
-
-        CallContextAction::Fail { error, refund } => {
-            let user_error = error.into_user_error(&canister.canister_id());
-            Some((
-                Payload::Reject(RejectContext {
-                    code: user_error.reject_code(),
-                    message: user_error.to_string(),
-                }),
-                refund,
-            ))
-        }
-    };
-
-    if let Some((response_payload, refund)) = response_payload_and_refund {
-        ExecResult::ResponseResult(Response {
-            originator,
-            respondent: canister.canister_id(),
-            originator_reply_callback: reply_callback_id,
-            refund,
-            response_payload,
-        })
-    } else {
-        ExecResult::Empty
     }
 }
