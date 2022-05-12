@@ -46,6 +46,11 @@ pub struct Workload<T> {
     requests_dispatch_timeout: Duration,
     /// Additional time bound for collecting all the responses, after requests' dispatch completion.
     responses_collection_extra_timeout: Duration,
+    /// Duration of each request is bucket-sorted with respect to the predefined threshold values (above or below each threshold).
+    /// This enables computing requests ratio (that are above/below predefined thresholds) in O(N) time/memory.
+    /// Here N is the number of predefined thresholds/buckets.
+    /// If one provides a range of duration thresholds, then approximate computation of percentiles could be done.
+    requests_duration_thresholds: Option<Vec<Duration>>,
 }
 
 /// Fully defines a call to be executed against a canister.
@@ -91,6 +96,7 @@ pub enum WorkloadError {
 }
 
 /// Defines result of the workload execution.
+#[derive(Debug)]
 pub struct Metrics {
     errors_max: Counter,
     errors_map: HashMap<String, Counter>,
@@ -98,6 +104,7 @@ pub struct Metrics {
     failure_calls: Counter,
     min_request_duration: Duration,
     max_request_duration: Duration,
+    requests_duration_buckets: Option<Vec<RequestDurationBucket>>,
 }
 
 impl Default for Metrics {
@@ -110,11 +117,21 @@ impl Default for Metrics {
             failure_calls: 0,
             min_request_duration: Duration::MAX,
             max_request_duration: Duration::default(),
+            requests_duration_buckets: None,
         }
     }
 }
 
 impl Metrics {
+    pub fn with_requests_duration_bucket(&mut self, request_duration_thresholds: Vec<Duration>) {
+        self.requests_duration_buckets = Some(
+            request_duration_thresholds
+                .into_iter()
+                .map(|threshold| RequestDurationBucket::new(threshold))
+                .collect(),
+        );
+    }
+
     pub fn total_calls(&self) -> Counter {
         self.success_calls + self.failure_calls()
     }
@@ -142,6 +159,16 @@ impl Metrics {
     pub fn process_request(&mut self, request: RequestResult) {
         self.min_request_duration = min(self.min_request_duration, request.duration);
         self.max_request_duration = max(self.max_request_duration, request.duration);
+        if let Some(ref mut request_duration_bucket) = self.requests_duration_buckets {
+            for bucket in request_duration_bucket.iter_mut() {
+                if request.duration >= bucket.threshold {
+                    bucket.requests_above_threshold += 1;
+                } else {
+                    bucket.requests_below_threshold += 1;
+                }
+            }
+        }
+
         match request.call_status {
             CallStatus::Success => self.success_calls += 1,
             CallStatus::Failure(err) => {
@@ -154,6 +181,16 @@ impl Metrics {
                     );
                 }
             }
+        }
+    }
+
+    pub fn find_request_duration_bucket(
+        &self,
+        threshold: Duration,
+    ) -> Option<RequestDurationBucket> {
+        match self.requests_duration_buckets {
+            None => None,
+            Some(ref x) => x.iter().find(|r| r.threshold == threshold).cloned(),
         }
     }
 }
@@ -182,6 +219,39 @@ impl Plan for RoundRobinPlan {
     }
 }
 
+#[derive(Default, Clone, Debug)]
+pub struct RequestDurationBucket {
+    threshold: Duration,
+    requests_above_threshold: Counter,
+    requests_below_threshold: Counter,
+}
+
+impl RequestDurationBucket {
+    pub fn new(threshold: Duration) -> Self {
+        Self {
+            threshold,
+            ..Default::default()
+        }
+    }
+
+    pub fn requests_ratio_below_threshold(&self) -> f64 {
+        self.requests_below_threshold as f64
+            / (self.requests_above_threshold + self.requests_below_threshold) as f64
+    }
+
+    pub fn requests_ratio_above_threshold(&self) -> f64 {
+        1.0 - self.requests_ratio_below_threshold()
+    }
+
+    pub fn requests_count_below_threshold(&self) -> Counter {
+        self.requests_below_threshold
+    }
+
+    pub fn requests_count_above_threshold(&self) -> Counter {
+        self.requests_above_threshold
+    }
+}
+
 impl<T: Plan> Workload<T> {
     pub fn new(
         agents: Vec<Agent>,
@@ -201,7 +271,16 @@ impl<T: Plan> Workload<T> {
             log,
             requests_dispatch_timeout: duration,
             responses_collection_extra_timeout: Duration::ZERO,
+            requests_duration_thresholds: None,
         }
+    }
+
+    pub fn with_requests_duration_bucket(mut self, duration_threshold: Duration) -> Self {
+        match self.requests_duration_thresholds {
+            Some(ref mut threshold) => threshold.push(duration_threshold),
+            None => self.requests_duration_thresholds = Some(vec![duration_threshold]),
+        }
+        self
     }
 
     /// This extra timeout should normally not be provided.
@@ -260,8 +339,12 @@ impl<T: Plan> Workload<T> {
         let requests_count = self.rps * self.duration.as_secs() as usize;
         // Single consumer, multiple producers channel.
         let (sender, receiver) = channel::<RequestResult>(requests_count);
-        let collector_handle =
-            task::spawn(collect_results(self.log.clone(), receiver, requests_count));
+        let collector_handle = task::spawn(collect_results(
+            self.log.clone(),
+            self.requests_duration_thresholds.clone(),
+            receiver,
+            requests_count,
+        ));
         info!(
             self.log,
             "Starting dispatch of {} requests, to be executed within {} sec.",
@@ -355,10 +438,14 @@ async fn execute_request(request: Request, agent: Agent, sender: Sender<RequestR
 /// A collector, implementing a very simple post-processing/aggregation of the executed requests.
 async fn collect_results(
     log: slog::Logger,
+    requests_duration_thresholds: Option<Vec<Duration>>,
     mut receiver: Receiver<RequestResult>,
     requests_count: usize,
 ) -> Metrics {
     let mut metrics = Metrics::default();
+    if let Some(threshold) = requests_duration_thresholds {
+        metrics.with_requests_duration_bucket(threshold);
+    }
     while let Some(request) = receiver.recv().await {
         metrics.process_request(request);
         if metrics.total_calls() == requests_count {
@@ -425,6 +512,50 @@ mod tests {
     }
 
     #[test]
+    fn test_process_request_with_duration_bucket() {
+        let threshold = Duration::from_secs(3);
+        let mut metrics = Metrics {
+            requests_duration_buckets: Some(vec![RequestDurationBucket::new(threshold)]),
+            ..Metrics::default()
+        };
+        let requests_below_threshold = RequestResult {
+            duration: Duration::from_secs(1),
+            call_status: CallStatus::Success,
+        };
+        let request_above_threshold = RequestResult {
+            duration: Duration::from_secs(4),
+            call_status: CallStatus::Success,
+        };
+
+        let bucket = metrics.find_request_duration_bucket(threshold).unwrap();
+        assert_eq!(bucket.requests_count_above_threshold(), 0);
+        assert_eq!(bucket.requests_count_below_threshold(), 0);
+        // Act 1
+        metrics.process_request(requests_below_threshold);
+        let bucket = metrics.find_request_duration_bucket(threshold).unwrap();
+        assert_eq!(bucket.requests_count_above_threshold(), 0);
+        assert_eq!(bucket.requests_count_below_threshold(), 1);
+        assert_eq!(bucket.requests_ratio_above_threshold(), 0.0);
+        assert_eq!(bucket.requests_ratio_below_threshold(), 1.0);
+        // Act 2
+        metrics.process_request(request_above_threshold);
+        let bucket = metrics.find_request_duration_bucket(threshold).unwrap();
+        assert_eq!(bucket.requests_count_above_threshold(), 1);
+        assert_eq!(bucket.requests_count_below_threshold(), 1);
+        assert_eq!(bucket.requests_ratio_above_threshold(), 0.5);
+        assert_eq!(bucket.requests_ratio_below_threshold(), 0.5);
+        // Additional assertions
+        let non_predefined_threshold = Duration::from_secs(5);
+        let non_existing_bucket = metrics.find_request_duration_bucket(non_predefined_threshold);
+        assert!(non_existing_bucket.is_none());
+        assert_eq!(2, metrics.success_calls());
+        assert_eq!(0, metrics.failure_calls());
+        assert_eq!(0, metrics.errors().len());
+        assert_eq!(metrics.min_request_duration, Duration::from_secs(1));
+        assert_eq!(metrics.max_request_duration, Duration::from_secs(4));
+    }
+
+    #[test]
     #[should_panic(expected = "Hash table holding errors exceeded predefined max_size=1.")]
     fn test_process_request_with_overflow() {
         let mut metrics = Metrics {
@@ -459,7 +590,7 @@ mod tests {
             .await
             .expect("Sending request's result to the channel has failed.");
 
-        let metrics = collect_results(log, receiver, requests_count).await;
+        let metrics = collect_results(log, None, receiver, requests_count).await;
 
         assert_eq!(metrics.success_calls(), 1);
     }

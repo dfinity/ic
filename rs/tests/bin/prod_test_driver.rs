@@ -361,6 +361,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
         ],
     ));
 
+    let network_reliability = networking::network_reliability::config_sys_4_nodes_app_4_nodes();
     let xnet_nightly_3_subnets = message_routing::xnet_slo_test::config_nightly_3_subnets();
     let xnet_nightly_29_subnets = message_routing::xnet_slo_test::config_nightly_29_subnets();
     m.add_suite(suite(
@@ -391,6 +392,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )]),
             )
             .with_vm_allocation(VmAllocationStrategy::DistributeAcrossDcs),
+            pot_with_setup(
+                "network_reliability_pot",
+                network_reliability.build(),
+                par(vec![sys_t(
+                    "network_reliability_test",
+                    network_reliability.test(),
+                )]),
+            ),
         ],
     ));
 

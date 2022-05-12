@@ -21,7 +21,6 @@ use crate::nns::{
 use crate::util::{
     self, block_on, get_random_application_node_endpoint, get_random_nns_node_endpoint,
 };
-use ic_config::config::ConfigOptional;
 use ic_fondue::ic_manager::IcHandle;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
@@ -33,8 +32,6 @@ use url::Url;
 
 const WAIT_TIMEOUT: Duration = Duration::from_secs(60);
 const BACKOFF_DELAY: Duration = Duration::from_secs(5);
-const CFG_TEMPLATE_BYTES: &[u8] =
-    include_bytes!("../../../../ic-os/guestos/rootfs/opt/ic/share/ic.json5.template");
 
 pub fn config() -> InternetComputer {
     InternetComputer::new()
@@ -103,18 +100,7 @@ fn get_request_succeeds(log: &slog::Logger, c: &Client, url: &Url) -> bool {
 }
 
 fn prepare_proposal_payload() -> SetFirewallConfigPayload {
-    let cfg = String::from_utf8_lossy(CFG_TEMPLATE_BYTES).to_string();
-    // make the string parseable by templating out placeholders with dummy
-    // values
-    let cfg = cfg.replace("{{ node_index }}", "0");
-    let cfg = cfg.replace("{{ ipv6_address }}", "::");
-    let cfg = cfg.replace("{{ backup_retention_time_secs }}", "0");
-    let cfg = cfg.replace("{{ backup_purging_interval_secs }}", "0");
-    let cfg = cfg.replace("{{ log_debug_overrides }}", "[]");
-    let cfg = cfg.replace("{{ nns_url }}", "http://www.fakeurl.com/");
-    let cfg = cfg.replace("{{ malicious_behavior }}", "null");
-    let cfg = json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5");
-
+    let cfg = util::get_config();
     let firewall_config = cfg.firewall.unwrap();
     let ipv6_prefixes = firewall_config.ipv6_prefixes;
     let firewall_config = firewall_config.firewall_config.replace("9090, ", "");
