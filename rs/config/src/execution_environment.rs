@@ -27,7 +27,7 @@ const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(350 * GB);
 ///
 /// Message memory usage is calculated as the total size of enqueued canister
 /// responses; plus the maximum allowed response size per queue reservation.
-const SUBNET_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(50 * GB);
+const SUBNET_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(25 * GB);
 
 /// This is the upper limit on how much memory can be used by the ingress
 /// history on a given subnet. It is lower than the subnet messsage memory
