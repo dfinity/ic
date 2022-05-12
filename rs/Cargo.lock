@@ -11101,7 +11101,7 @@ version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26947345339603ae8395f68e2f3d85a6b0a8ddfe6315818e80b8504415099db0"
 dependencies = [
- "secp256k1-sys 0.5.1",
+ "secp256k1-sys 0.5.2",
 ]
 
 [[package]]
@@ -11115,9 +11115,9 @@ dependencies = [
 
 [[package]]
 name = "secp256k1-sys"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa6f71720acd498e888501dd485d54bb437735f02dd95eb717dac5aee6631894"
+checksum = "152e20a0fd0519390fc43ab404663af8a0b794273d2a91d60ad4a39f13ffe110"
 dependencies = [
  "cc",
 ]
