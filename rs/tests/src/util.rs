@@ -3,6 +3,7 @@ use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
 use ic_agent::{Agent, AgentError, Identity, RequestId};
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
+use ic_config::ConfigOptional;
 use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
 use ic_ic00_types::{CanisterStatusResult, EmptyBlob};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -41,6 +42,9 @@ pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// A short wasm module that is a legal canister binary.
 pub(crate) const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
+
+pub(crate) const CFG_TEMPLATE_BYTES: &[u8] =
+    include_bytes!("../../../ic-os/guestos/rootfs/opt/ic/share/ic.json5.template");
 
 fn get_identity() -> ic_agent::identity::BasicIdentity {
     let contents = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEILhMGpmYuJ0JEhDwocj6pxxOmIpGAXZd40AjkNhuae6q\noSMDIQBeXC6ae2dkJ8QC50bBjlyLqsFQFsMsIThWB21H6t6JRA==\n-----END PRIVATE KEY-----";
@@ -919,6 +923,19 @@ pub(crate) fn escape_for_wat(id: &Principal) -> String {
         res.push_str(&format!("\\{:02x}", b));
         res
     })
+}
+
+pub fn get_config() -> ConfigOptional {
+    let cfg = String::from_utf8_lossy(CFG_TEMPLATE_BYTES).to_string();
+    // Make the string parsable by filling the template placeholders with dummy values
+    let cfg = cfg.replace("{{ node_index }}", "0");
+    let cfg = cfg.replace("{{ ipv6_address }}", "::");
+    let cfg = cfg.replace("{{ backup_retention_time_secs }}", "0");
+    let cfg = cfg.replace("{{ backup_purging_interval_secs }}", "0");
+    let cfg = cfg.replace("{{ log_debug_overrides }}", "[]");
+    let cfg = cfg.replace("{{ nns_url }}", "http://www.fakeurl.com/");
+    let cfg = cfg.replace("{{ malicious_behavior }}", "null");
+    json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
 }
 
 // TODO: remove in favor of dfinity/agent-rs/pull/337

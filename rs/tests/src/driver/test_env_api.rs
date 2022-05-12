@@ -1019,6 +1019,8 @@ where
 }
 
 pub const ADMIN: &str = "admin";
+// Name of the network interfaces on the Node.
+pub const DEVICE_NAME: &str = "enp1s0";
 
 pub fn get_ssh_session_from_env(env: &TestEnv, user: &str, ip: IpAddr) -> Result<Session> {
     let tcp = TcpStream::connect((ip, 22))?;
