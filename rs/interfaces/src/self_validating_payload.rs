@@ -1,18 +1,25 @@
 use crate::{payload::BatchPayloadSectionType, validation::ValidationError};
+use ic_interfaces_state_manager::StateManagerError;
 
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext},
     consensus::Payload,
+    registry::RegistryClientError,
     Height, NumBytes, Time,
 };
 
 /// A SelfValidatingPayload error from which it is not possible to recover.
 #[derive(Debug)]
-pub enum InvalidSelfValidatingPayload {}
+pub enum InvalidSelfValidatingPayload {
+    Disabled,
+}
 
 /// A SelfValidatingPayload error from which it may be possible to recover.
 #[derive(Debug)]
-pub enum SelfValidatingTransientValidationError {}
+pub enum SelfValidatingTransientValidationError {
+    GetStateFailed(Height, StateManagerError),
+    GetRegistryFailed(RegistryClientError),
+}
 
 /// A SelfValidationPayload error that results from payload validation.
 pub type SelfValidatingPayloadValidationError =
@@ -34,7 +41,8 @@ pub trait SelfValidatingPayloadBuilder: Send + Sync {
         validation_context: &ValidationContext,
         past_payloads: &[&SelfValidatingPayload],
         byte_limit: NumBytes,
-    ) -> SelfValidatingPayload;
+        priority: usize,
+    ) -> (SelfValidatingPayload, NumBytes);
 
     /// Checks whether the provided `SelfValidatingPayload` is valid given a
     /// `ValidationContext` (certified height and registry version) and

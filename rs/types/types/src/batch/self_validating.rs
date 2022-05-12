@@ -1,5 +1,5 @@
 use crate::CountBytes;
-use ic_btc_types_internal::BitcoinAdapterResponse;
+use ic_btc_types_internal::{BitcoinAdapterResponse, BitcoinAdapterResponseWrapper};
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -15,6 +15,18 @@ impl SelfValidatingPayload {
 
     pub fn get(&self) -> &[BitcoinAdapterResponse] {
         &self.0
+    }
+
+    /// Returns the number of Bitcoin blocks included in this payload.
+    pub fn num_bitcoin_blocks(&self) -> usize {
+        let mut res = 0;
+        for response in self.0.iter() {
+            match &response.response {
+                BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) => res += r.blocks.len(),
+                BitcoinAdapterResponseWrapper::SendTransactionResponse(_) => (),
+            }
+        }
+        res
     }
 }
 

@@ -11,6 +11,7 @@ ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-replicated-state = { path = "../../replicated_state" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-types = { path = "../../types/types" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
@@ -20,3 +21,4 @@ thiserror = "1.0"
 [dev-dependencies]
 ic-protobuf = { path = "../../protobuf" }
 ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-registry = { path = "../../test_utilities/registry" }
