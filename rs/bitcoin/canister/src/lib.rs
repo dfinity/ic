@@ -2,6 +2,7 @@ mod address_utxoset;
 mod blocktree;
 mod canister;
 mod heartbeat;
+mod metrics;
 mod page_map_memory;
 use page_map_memory::PageMapMemory;
 pub mod state;
@@ -18,4 +19,4 @@ pub mod proto {
 
 // Expose the canister's interface directly.
 pub use canister::*;
-pub use heartbeat::heartbeat;
+pub use metrics::BitcoinCanisterMetrics;

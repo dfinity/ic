@@ -1,9 +1,26 @@
-use crate::{state::State, store};
+use crate::{metrics::BitcoinCanisterMetrics, state::State, store};
 use bitcoin::{util::psbt::serialize::Deserialize, Transaction};
 use ic_btc_types::{
     GetBalanceError, GetBalanceRequest, GetUtxosError, GetUtxosRequest, GetUtxosResponse,
     SendTransactionError, SendTransactionRequest, UtxosFilter,
 };
+use ic_metrics::MetricsRegistry;
+
+/// The Bitcoin Canister component.
+///
+/// Maintains information that is needed to be accessed at the bitcoin canister's
+/// runtime, such as metrics.
+pub struct BitcoinCanister {
+    pub(crate) metrics: BitcoinCanisterMetrics,
+}
+
+impl BitcoinCanister {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            metrics: BitcoinCanisterMetrics::new(metrics_registry),
+        }
+    }
+}
 
 /// Retrieves the balance of the given Bitcoin address.
 pub fn get_balance(state: &State, request: GetBalanceRequest) -> Result<u64, GetBalanceError> {

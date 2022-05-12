@@ -5,6 +5,7 @@ use crate::{
     util::process_response,
     util::process_responses,
 };
+use ic_btc_canister::BitcoinCanister;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto::prng::{Csprng, RandomnessPurpose::ExecutionThread};
@@ -92,6 +93,7 @@ pub(crate) struct SchedulerImpl {
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     exec_env: Arc<dyn ExecutionEnvironment>,
     cycles_account_manager: Arc<CyclesAccountManager>,
+    bitcoin_canister: Arc<BitcoinCanister>,
     metrics: Arc<SchedulerMetrics>,
     log: ReplicaLogger,
     thread_pool: RefCell<scoped_threadpool::Pool>,
@@ -317,6 +319,7 @@ impl SchedulerImpl {
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         exec_env: Arc<dyn ExecutionEnvironment>,
         cycles_account_manager: Arc<CyclesAccountManager>,
+        bitcoin_canister: Arc<BitcoinCanister>,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
         rate_limiting_of_heap_delta: FlagStatus,
@@ -330,6 +333,7 @@ impl SchedulerImpl {
             ingress_history_writer,
             exec_env,
             cycles_account_manager,
+            bitcoin_canister,
             metrics: Arc::new(SchedulerMetrics::new(metrics_registry)),
             log,
             rate_limiting_of_heap_delta,
@@ -981,7 +985,7 @@ impl Scheduler for SchedulerImpl {
                     .metrics
                     .round_bitcoin_canister_heartbeat_duration
                     .start_timer();
-                ic_btc_canister::heartbeat(
+                self.bitcoin_canister.heartbeat(
                     bitcoin_state,
                     state.metadata.own_subnet_features.bitcoin_testnet(),
                     &self.log,

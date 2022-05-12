@@ -9,6 +9,7 @@ edition = "2018"
 bitcoin = "0.27.1"
 candid = "0.7.4"
 byteorder = "1.4.3"
+ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
 ic-btc-types = { path = "../types/public" }
 ic-btc-types-internal = { path = "../types/internal" }
@@ -17,6 +18,7 @@ ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-state-layout = { path = "../../state_layout" }
 lazy_static = "1.4.0"
+prometheus = { version = "0.12.0", features = [ "process" ] }
 prost = "0.9"
 serde = "1.0.132"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }

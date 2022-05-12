@@ -1,4 +1,4 @@
-use crate::{blocktree::BlockDoesNotExtendTree, state::State, store};
+use crate::{blocktree::BlockDoesNotExtendTree, state::State, store, BitcoinCanister};
 use bitcoin::{
     hash_types::{BlockHash, TxMerkleNode},
     hashes::Hash,
@@ -13,55 +13,59 @@ use ic_replicated_state::bitcoin_state::{
     BitcoinState as ReplicatedBitcoinState, BitcoinStateError,
 };
 
-/// The heartbeat of the Bitcoin canister.
-///
-/// The heartbeat sends and processes `GetSuccessor` requests/responses, which
-/// is needed to fetch new blocks from the network.
-pub fn heartbeat(
-    bitcoin_state: ReplicatedBitcoinState,
-    bitcoin_feature: BitcoinFeature,
-    log: &ReplicaLogger,
-) -> ReplicatedBitcoinState {
-    let mut state: State = State::from(bitcoin_state);
+impl BitcoinCanister {
+    /// The heartbeat of the Bitcoin canister.
+    ///
+    /// The heartbeat sends and processes `GetSuccessor` requests/responses, which
+    /// is needed to fetch new blocks from the network.
+    pub fn heartbeat(
+        &self,
+        bitcoin_state: ReplicatedBitcoinState,
+        bitcoin_feature: BitcoinFeature,
+        log: &ReplicaLogger,
+    ) -> ReplicatedBitcoinState {
+        let mut state: State = State::from(bitcoin_state);
 
-    // Process all incoming responses from the adapter.
-    let height = process_adapter_responses(&mut state, log);
+        // Process all incoming responses from the adapter.
+        let height = process_adapter_responses(&mut state, log);
 
-    match bitcoin_feature {
-        BitcoinFeature::Enabled => {
-            info!(log, "Bitcoin testnet chain height: {}", height);
-            info!(log, "# UTXOs: {}", state.utxos.utxos.len());
-            info!(
-                log,
-                "# Address outpoints: {}",
-                state.utxos.address_to_outpoints.len()
-            );
+        match bitcoin_feature {
+            BitcoinFeature::Enabled => {
+                let network_label = state.utxos.network.to_string();
+                self.metrics.observe_chain_height(height, &network_label);
+                self.metrics
+                    .observe_utxos_length(state.utxos.utxos.len(), &network_label);
+                self.metrics.observe_address_to_outpoints_length(
+                    state.utxos.address_to_outpoints.len(),
+                    &network_label,
+                );
 
-            if !state.adapter_queues.has_in_flight_get_successors_requests() {
-                let request = get_successors_request(&mut state);
-                info!(log, "Sending GetSuccessorsRequest: {:?}", request);
+                if !state.adapter_queues.has_in_flight_get_successors_requests() {
+                    let request = get_successors_request(&mut state);
+                    info!(log, "Sending GetSuccessorsRequest: {:?}", request);
 
-                match state
-                    .adapter_queues
-                    .push_request(BitcoinAdapterRequestWrapper::GetSuccessorsRequest(request))
-                {
-                    Ok(()) => {}
-                    Err(err @ BitcoinStateError::QueueFull { .. }) => {
-                        error!(log, "Could not push GetSuccessorsRequest because the adapter queues are full. Error: {:?}", err);
+                    match state
+                        .adapter_queues
+                        .push_request(BitcoinAdapterRequestWrapper::GetSuccessorsRequest(request))
+                    {
+                        Ok(()) => {}
+                        Err(err @ BitcoinStateError::QueueFull { .. }) => {
+                            error!(log, "Could not push GetSuccessorsRequest because the adapter queues are full. Error: {:?}", err);
+                        }
+                        // TODO(EXC-1098): Refactor the `push_request` method to not return these
+                        // errors to avoid this `unreachable` statement.
+                        Err(BitcoinStateError::TestnetFeatureNotEnabled)
+                        | Err(BitcoinStateError::NonMatchingResponse { .. }) => unreachable!(),
                     }
-                    // TODO(EXC-1098): Refactor the `push_request` method to not return these
-                    // errors to avoid this `unreachable` statement.
-                    Err(BitcoinStateError::TestnetFeatureNotEnabled)
-                    | Err(BitcoinStateError::NonMatchingResponse { .. }) => unreachable!(),
                 }
             }
+            BitcoinFeature::Paused | BitcoinFeature::Disabled => {
+                // Don't send requests to the adapter.
+            }
         }
-        BitcoinFeature::Paused | BitcoinFeature::Disabled => {
-            // Don't send requests to the adapter.
-        }
-    }
 
-    state.into()
+        state.into()
+    }
 }
 
 // Retrieves a `GetSuccessorsRequest` to send to the adapter.
@@ -171,12 +175,14 @@ fn to_btc_block(block: &Block) -> bitcoin::Block {
 mod tests {
     use super::*;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
 
     #[test]
     fn does_not_push_requests_to_adapter_if_feature_is_disabled() {
         let state = ReplicatedBitcoinState::default();
         assert_eq!(state.adapter_queues.num_requests(), 0);
-        let state = heartbeat(state, BitcoinFeature::Disabled, &no_op_logger());
+        let bitcoin_canister = BitcoinCanister::new(&MetricsRegistry::new());
+        let state = bitcoin_canister.heartbeat(state, BitcoinFeature::Disabled, &no_op_logger());
         assert_eq!(state.adapter_queues.num_requests(), 0);
     }
 
@@ -184,7 +190,8 @@ mod tests {
     fn does_not_push_requests_to_adapter_if_feature_is_paused() {
         let state = ReplicatedBitcoinState::default();
         assert_eq!(state.adapter_queues.num_requests(), 0);
-        let state = heartbeat(state, BitcoinFeature::Paused, &no_op_logger());
+        let bitcoin_canister = BitcoinCanister::new(&MetricsRegistry::new());
+        let state = bitcoin_canister.heartbeat(state, BitcoinFeature::Paused, &no_op_logger());
         assert_eq!(state.adapter_queues.num_requests(), 0);
     }
 
@@ -192,7 +199,8 @@ mod tests {
     fn pushes_requests_to_adapter_if_feature_is_enabled() {
         let state = ReplicatedBitcoinState::default();
         assert_eq!(state.adapter_queues.num_requests(), 0);
-        let state = heartbeat(state, BitcoinFeature::Enabled, &no_op_logger());
+        let bitcoin_canister = BitcoinCanister::new(&MetricsRegistry::new());
+        let state = bitcoin_canister.heartbeat(state, BitcoinFeature::Enabled, &no_op_logger());
         assert_eq!(state.adapter_queues.num_requests(), 1);
     }
 }
