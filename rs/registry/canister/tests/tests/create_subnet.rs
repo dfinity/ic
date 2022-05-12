@@ -8,12 +8,14 @@ use ic_nns_test_utils::{
     },
     registry::invariant_compliant_mutation_as_atomic_req,
 };
-use ic_protobuf::registry::crypto::v1::{EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as pbEcdsaKeyId};
+use ic_protobuf::registry::crypto::v1::{
+    EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as pbEcdsaKeyId, EcdsaSigningSubnetList,
+};
+use std::convert::TryFrom;
 
-use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetListRecord, SubnetRecord};
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
-    make_subnet_list_record_key, make_subnet_record_key,
+    make_ecdsa_signing_subnet_list_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -30,18 +32,17 @@ use registry_canister::{
 };
 
 use crate::test_helpers::{
-    dummy_cup_for_subnet, get_added_subnet, get_cup_contents, get_subnet_holding_ecdsa_keys,
-    get_subnet_list_record, prepare_registry_with_nodes, set_up_universal_canister_as_governance,
-    setup_registry_synced_with_fake_client,
+    get_added_subnet, get_cup_contents, get_subnet_list_record, prepare_registry_with_nodes,
+    set_up_universal_canister_as_governance, setup_registry_synced_with_fake_client,
 };
 use assert_matches::assert_matches;
 use canister_test::Runtime;
+use ic_base_types::{subnet_id_into_protobuf, PrincipalId, SubnetId};
 use ic_config::Config;
 use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
 use ic_interfaces::registry::RegistryClient;
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
-use ic_test_utilities::types::ids::subnet_test_id;
 use registry_canister::mutations::common::decode_registry_value;
 use registry_canister::mutations::do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest};
 
@@ -206,6 +207,7 @@ fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
 fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
     let mut ic_config = get_ic_config();
     let mut subnet_config = ic_config.topology_config.get_subnet(0).unwrap();
+    // println!("Topology config {:?}", ic_config.topology_config);
     subnet_config.features.ecdsa_signatures = true;
     ic_config.topology_config.insert_subnet(0, subnet_config);
 
@@ -216,18 +218,12 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
         subnet_config,
         ic_config,
         |local_runtime| async move {
-            let runtime = Runtime::Local(local_runtime);
-            // Given a registry
-            let (data_provider, fake_client) = match runtime {
-                Runtime::Remote(_) => {
-                    panic!("Cannot run this test on Runtime::Remote at this time");
-                }
-                Runtime::Local(ref r) => {
-                    (r.registry_data_provider.clone(), r.registry_client.clone())
-                }
-            };
+            let data_provider = local_runtime.registry_data_provider.clone();
+            let fake_client = local_runtime.registry_client.clone();
 
-            // Here we set up the ECDSA-holding subnets in the registry for the following 2 keys
+            let runtime = Runtime::Local(local_runtime);
+
+            // We wil be requesting 2 keys when creating the subnet
             let key_1 = EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: "foo-bar".to_string(),
@@ -237,18 +233,11 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
                 name: "bar-baz".to_string(),
             };
 
-            let (init_mutate, mut node_ids) = prepare_registry_with_nodes(5);
+            let (init_mutate, node_ids) = prepare_registry_with_nodes(5);
 
-            let key_1_nodes = vec![node_ids.pop().unwrap()];
-            let key_2_nodes = vec![node_ids.pop().unwrap()];
-
-            let subnet_holding_key_1 =
-                get_subnet_holding_ecdsa_keys(&[key_1.clone()], key_1_nodes.clone());
-            let subnet_holding_key_2 =
-                get_subnet_holding_ecdsa_keys(&[key_2.clone()], key_2_nodes.clone());
-
-            // Get our base list of subnets
-            let mut subnet_list_record = decode_registry_value::<SubnetListRecord>(
+            // Here we discover the IC's subnet ID (from our test harness)
+            // and then modify it to hold 2 keys and sign for one of them
+            let subnet_list_record = decode_registry_value::<SubnetListRecord>(
                 fake_client
                     .get_value(
                         &make_subnet_list_record_key(),
@@ -258,61 +247,59 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
                     .unwrap(),
             );
 
-            let key_1_subnet_id = subnet_test_id(1001);
-            let key_2_subnet_id = subnet_test_id(1002);
-
-            subnet_list_record
+            let subnet_principals = subnet_list_record
                 .subnets
-                .push(key_1_subnet_id.get().into_vec());
+                .iter()
+                .map(|record| PrincipalId::try_from(record).unwrap())
+                .collect::<Vec<_>>();
+            let system_subnet_principal = subnet_principals.get(0).unwrap();
 
-            subnet_list_record
-                .subnets
-                .push(key_2_subnet_id.get().into_vec());
+            let system_subnet_id = SubnetId::new(*system_subnet_principal);
+            let mut subnet_record = decode_registry_value::<SubnetRecord>(
+                fake_client
+                    .get_value(
+                        &make_subnet_record_key(system_subnet_id),
+                        fake_client.get_latest_version(),
+                    )
+                    .unwrap()
+                    .unwrap(),
+            );
+            subnet_record.ecdsa_config = Some(EcdsaConfig {
+                quadruples_to_create_in_advance: 100,
+                key_ids: vec![(&key_1).into(), (&key_2).into()],
+            });
 
-            // Add the subnets holding requested keys
-            // Note, because these mutations are also synced with underlying IC registry, they
-            // need a CUP
-            let mutations = vec![
-                upsert(
-                    make_subnet_record_key(key_1_subnet_id).into_bytes(),
-                    encode_or_panic(&subnet_holding_key_1),
-                ),
-                upsert(
-                    make_subnet_record_key(key_2_subnet_id).into_bytes(),
-                    encode_or_panic(&subnet_holding_key_2),
-                ),
-                upsert(
-                    make_subnet_list_record_key().into_bytes(),
-                    encode_or_panic(&subnet_list_record),
-                ),
-                insert(
-                    make_crypto_threshold_signing_pubkey_key(key_1_subnet_id).as_bytes(),
-                    encode_or_panic(&vec![]),
-                ),
-                insert(
-                    make_crypto_threshold_signing_pubkey_key(key_2_subnet_id).as_bytes(),
-                    encode_or_panic(&vec![]),
-                ),
-                insert(
-                    make_catch_up_package_contents_key(key_1_subnet_id).as_bytes(),
-                    encode_or_panic(&dummy_cup_for_subnet(key_1_nodes)),
-                ),
-                insert(
-                    make_catch_up_package_contents_key(key_2_subnet_id).as_bytes(),
-                    encode_or_panic(&dummy_cup_for_subnet(key_2_nodes)),
-                ),
-            ];
-
-            let add_subnets_mutate = RegistryAtomicMutateRequest {
+            let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
+                mutations: vec![upsert(
+                    make_subnet_record_key(system_subnet_id),
+                    encode_or_panic(&subnet_record),
+                )],
                 preconditions: vec![],
-                mutations,
+            };
+
+            // TODO - remove this after routing bug in route_ecdsa_message is fixed
+            // Currently an EcdsaKeyRequest not pointing at a specific subnet fails if signing
+            // is not enabled for the key in question on some subnet, even though the only requirement
+            // is that a subnet holds the key being requested
+            let ecdsa_signing_subnets_mutate = RegistryAtomicMutateRequest {
+                preconditions: vec![],
+                mutations: vec![insert(
+                    make_ecdsa_signing_subnet_list_key(&key_1),
+                    encode_or_panic(&EcdsaSigningSubnetList {
+                        subnets: vec![subnet_id_into_protobuf(system_subnet_id)],
+                    }),
+                )],
             };
 
             let registry = setup_registry_synced_with_fake_client(
                 &runtime,
-                fake_client,
+                fake_client.clone(),
                 data_provider,
-                vec![init_mutate, add_subnets_mutate],
+                vec![
+                    init_mutate,
+                    modify_base_subnet_mutate,
+                    ecdsa_signing_subnets_mutate,
+                ],
             )
             .await;
 
@@ -330,12 +317,11 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
                     keys: vec![
                         EcdsaKeyRequest {
                             key_id: key_1,
-                            // TODO(NNS1-1362) - We need a way to test targeting subnets
-                            subnet_id: None, // should be able to test: Some(key_1_subnet_id.get()),
+                            subnet_id: None,
                         },
                         EcdsaKeyRequest {
                             key_id: key_2,
-                            subnet_id: None,
+                            subnet_id: Some(*system_subnet_principal),
                         },
                     ],
                 });
