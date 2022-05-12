@@ -231,6 +231,7 @@ pub struct GroupSpec {
 pub enum HostFeature {
     DC(String),
     Host(String),
+    AmdSevSnp,
 }
 
 impl Serialize for HostFeature {
@@ -249,9 +250,12 @@ impl Serialize for HostFeature {
                 host_feature.push_str(host);
                 serializer.serialize_str(&host_feature)
             }
+            HostFeature::AmdSevSnp => serializer.serialize_str(AMD_SEV_SNP),
         }
     }
 }
+
+const AMD_SEV_SNP: &str = "AMD-SEV-SNP";
 
 impl<'de> Deserialize<'de> for HostFeature {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -263,6 +267,8 @@ impl<'de> Deserialize<'de> for HostFeature {
             Ok(HostFeature::DC(dc.to_owned()))
         } else if let Some(("", host)) = input.split_once("host=") {
             Ok(HostFeature::Host(host.to_owned()))
+        } else if input == AMD_SEV_SNP {
+            Ok(HostFeature::AmdSevSnp)
         } else {
             Err(Error::unknown_variant(
                 &input,
