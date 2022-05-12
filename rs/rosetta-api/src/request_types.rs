@@ -491,7 +491,7 @@ pub struct SpawnMetadata {
 
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub controller: Option<PrincipalId>,
+    pub controller: Option<PublicKeyOrPrincipal>,
 
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -965,7 +965,7 @@ impl TransactionBuilder {
             coin_change: None,
             metadata: Some(
                 SpawnMetadata {
-                    controller: *controller,
+                    controller: controller.map(PublicKeyOrPrincipal::Principal),
                     neuron_index: *neuron_index,
                     percentage_to_spawn: *percentage_to_spawn,
                     spawned_neuron_index: *spawned_neuron_index,
