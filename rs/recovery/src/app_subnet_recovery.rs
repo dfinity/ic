@@ -4,7 +4,7 @@ use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_types::ReplicaVersion;
 use slog::{warn, Logger};
-use std::{net::IpAddr, path::PathBuf};
+use std::net::IpAddr;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
@@ -13,9 +13,7 @@ use crate::{NeuronArgs, Recovery, Step};
 #[derive(Debug, Copy, Clone, EnumIter)]
 pub enum StepType {
     Halt,
-    DeployReadOnly,
     DownloadState,
-    CreateBackup,
     UpdateConfig,
     ICReplay,
     ValidateReplayOutput,
@@ -23,6 +21,7 @@ pub enum StepType {
     UpgradeVersion,
     ProposeCup,
     UploadState,
+    WaitForCUP,
     Unhalt,
     Cleanup,
 }
@@ -33,10 +32,6 @@ pub struct AppSubnetRecoveryArgs {
     /// Id of the broken subnet
     #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
     pub subnet_id: SubnetId,
-
-    /// Path to create backup of downloaded state in
-    #[clap(long)]
-    pub backup_dir: Option<PathBuf>,
 
     /// Replica version to upgrade the broken subnet to
     #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
@@ -94,19 +89,17 @@ impl AppSubnetRecovery {
 
     pub fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>> {
         match step_type {
-            StepType::Halt => Ok(Box::new(
-                self.recovery.halt_subnet(self.params.subnet_id, true),
-            )),
-
-            StepType::DeployReadOnly => {
-                if let Some(pub_key) = &self.params.pub_key {
-                    Ok(Box::new(self.recovery.set_readonly_keys(
-                        self.params.subnet_id,
-                        &[pub_key.clone()],
-                    )))
+            StepType::Halt => {
+                let keys = if let Some(pub_key) = &self.params.pub_key {
+                    vec![pub_key.clone()]
                 } else {
-                    Err(RecoveryError::StepSkipped)
-                }
+                    vec![]
+                };
+                Ok(Box::new(self.recovery.halt_subnet(
+                    self.params.subnet_id,
+                    true,
+                    &keys,
+                )))
             }
 
             StepType::DownloadState => {
@@ -115,16 +108,6 @@ impl AppSubnetRecovery {
                         node_ip,
                         self.params.pub_key.is_some(),
                     )))
-                } else {
-                    Err(RecoveryError::StepSkipped)
-                }
-            }
-
-            StepType::CreateBackup => {
-                if let Some(backup_dir) = &self.params.backup_dir {
-                    Ok(Box::new(
-                        self.recovery.get_create_backup_step(backup_dir.clone()),
-                    ))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
@@ -140,6 +123,14 @@ impl AppSubnetRecovery {
                 self.recovery
                     .get_validate_replay_step(self.params.subnet_id),
             )),
+
+            StepType::UploadState => {
+                if let Some(node_ip) = self.params.upload_node {
+                    Ok(Box::new(self.recovery.get_upload_and_restart_step(node_ip)))
+                } else {
+                    Err(RecoveryError::StepSkipped)
+                }
+            }
 
             StepType::BlessVersion => {
                 if let Some(upgrade_version) = &self.params.upgrade_version {
@@ -173,17 +164,19 @@ impl AppSubnetRecovery {
                 )))
             }
 
-            StepType::UploadState => {
+            StepType::WaitForCUP => {
                 if let Some(node_ip) = self.params.upload_node {
-                    Ok(Box::new(self.recovery.get_upload_and_restart_step(node_ip)))
+                    Ok(Box::new(self.recovery.get_wait_for_cup_step(node_ip)))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
             }
 
-            StepType::Unhalt => Ok(Box::new(
-                self.recovery.halt_subnet(self.params.subnet_id, false),
-            )),
+            StepType::Unhalt => Ok(Box::new(self.recovery.halt_subnet(
+                self.params.subnet_id,
+                false,
+                &["".to_string()],
+            ))),
 
             StepType::Cleanup => Ok(Box::new(self.recovery.get_cleanup_step())),
         }

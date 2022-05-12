@@ -1,13 +1,13 @@
 //! Command line interfaces to various subnet recovery processes.
 //! Calls the recovery library.
 use crate::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType};
+use crate::error::RecoveryError;
 use crate::{NeuronArgs, Recovery, RecoveryArgs};
 use ic_types::ReplicaVersion;
 use slog::{info, warn, Logger};
 use std::convert::TryFrom;
 use std::io::{stdin, stdout, Write};
 use std::net::IpAddr;
-use std::path::PathBuf;
 
 /// Application subnets are recovered by:
 ///     1. Halting the broken subnet
@@ -37,7 +37,7 @@ pub fn app_subnet_recovery(
     info!(logger, "Starting recovery of subnet with ID:");
     info!(logger, "-> {:?}", subnet_recovery_args.subnet_id);
     info!(logger, "Binary version:");
-    info!(logger, "-> {}", args.replica_version);
+    info!(logger, "-> {:?}", args.replica_version);
     info!(logger, "Creating recovery directory in {:?}", args.dir);
     wait_for_confirmation(&logger);
 
@@ -54,11 +54,28 @@ pub fn app_subnet_recovery(
     let mut subnet_recovery =
         AppSubnetRecovery::new(logger.clone(), args, neuron_args, subnet_recovery_args);
 
+    if subnet_recovery.params.pub_key.is_none() {
+        if let Some(pub_key) = read_optional(
+            &logger,
+            "Enter public key to add readonly SSH access to subnet: ",
+        ) {
+            subnet_recovery.params.pub_key = Some(pub_key);
+        }
+    }
+
     while let Some((step_type, step)) = subnet_recovery.next() {
         print_step_type(&logger, step_type);
         info!(logger, "{}", step.descr());
         if consent_given(&logger, "Execute now?") {
-            step.exec().expect("Execution of step failed");
+            match step.exec() {
+                Err(RecoveryError::OutputError(e))
+                    if matches!(step_type, StepType::ValidateReplayOutput) =>
+                {
+                    warn!(logger, "Error: {}", e);
+                    wait_for_confirmation(&logger);
+                }
+                res => res.expect("Execution of step failed"),
+            }
         }
         // Depending on which step we just executed we might require some user interaction before we can start the next step.
         match step_type {
@@ -86,44 +103,36 @@ pub fn app_subnet_recovery(
                         .expect("Couldn't parse given address.");
                     subnet_recovery.params.download_node = Some(node_ip);
                 }
-
-                if let Some(pub_key) = read_optional(
-                    &logger,
-                    "Enter public key to add readonly SSH access to subnet: ",
-                ) {
-                    subnet_recovery.params.pub_key = Some(pub_key);
-                }
-            }
-
-            StepType::DownloadState => {
-                if let Some(input) = read_optional(&logger, "Enter backup directory:") {
-                    let backup_dir = PathBuf::from(input);
-                    subnet_recovery.params.backup_dir = Some(backup_dir);
-                }
             }
 
             StepType::ValidateReplayOutput => {
-                if let Some(version) = read_optional(&logger, "Upgrade version: ") {
-                    let upgrade_version =
-                        ReplicaVersion::try_from(version).expect("Could not parse replica version");
-                    subnet_recovery.params.upgrade_version = Some(upgrade_version);
+                if subnet_recovery.params.upgrade_version.is_none() {
+                    if let Some(version) = read_optional(&logger, "Upgrade version: ") {
+                        let upgrade_version = ReplicaVersion::try_from(version)
+                            .expect("Could not parse replica version");
+                        subnet_recovery.params.upgrade_version = Some(upgrade_version);
+                    }
                 }
-
-                let input =
-                    read_optional(&logger, "Enter space separated list of replacement nodes: ");
-                if let Some(nodes_string) = input {
-                    let nodes = nodes_string.split(' ').map(|s| s.to_string()).collect();
-                    subnet_recovery.params.replacement_nodes = Some(nodes);
+                if subnet_recovery.params.replacement_nodes.is_none() {
+                    let input =
+                        read_optional(&logger, "Enter space separated list of replacement nodes: ");
+                    if let Some(nodes_string) = input {
+                        let nodes = nodes_string.split(' ').map(|s| s.to_string()).collect();
+                        subnet_recovery.params.replacement_nodes = Some(nodes);
+                    }
                 }
             }
 
             StepType::ProposeCup => {
-                if let Some(input) = read_optional(&logger, "Enter IP of node with admin access: ")
-                {
-                    let admin_node_ip = input
-                        .parse::<IpAddr>()
-                        .expect("Couldn't parse given address.");
-                    subnet_recovery.params.upload_node = Some(admin_node_ip);
+                if subnet_recovery.params.upload_node.is_none() {
+                    if let Some(input) =
+                        read_optional(&logger, "Enter IP of node with admin access: ")
+                    {
+                        let admin_node_ip = input
+                            .parse::<IpAddr>()
+                            .expect("Couldn't parse given address.");
+                        subnet_recovery.params.upload_node = Some(admin_node_ip);
+                    }
                 }
             }
             _ => {}

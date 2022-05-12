@@ -21,7 +21,7 @@ pub struct RecoveryToolArgs {
 
     /// replica version of ic-admin binary
     #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
-    pub replica_version: ReplicaVersion,
+    pub replica_version: Option<ReplicaVersion>,
 
     /// The directory to perform recovery in
     #[clap(long, parse(from_os_str))]

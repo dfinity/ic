@@ -8,7 +8,7 @@
 use admin_helper::{AdminHelper, IcAdmin};
 use command_helper::{exec_cmd, pipe_all};
 use error::{RecoveryError, RecoveryResult};
-use file_sync_helper::{create_dir, download_binary};
+use file_sync_helper::{create_dir, download_binary, read_dir};
 use ic_cup_explorer::get_catchup_content;
 use ic_types::messages::HttpStatusResponse;
 use ic_types::{Height, ReplicaVersion, SubnetId};
@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
 use ssh_helper::SshHelper;
 use std::net::{IpAddr, SocketAddr};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{thread, time};
 use steps::*;
@@ -36,9 +36,15 @@ pub mod steps;
 pub(crate) mod util;
 
 pub const IC_DATA_PATH: &str = "/var/lib/ic/data";
+pub const IC_STATE_DIR: &str = "data/ic_state";
 pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
 pub const IC_JSON5_PATH: &str = "/run/ic-node/config/ic.json5";
 pub const IC_STATE_EXCLUDES: &[&str] = &["images", "tip", "backups", "fs_tmp", "cups"];
+pub const IC_STATE: &str = "ic_state";
+pub const NEW_IC_STATE: &str = "new_ic_state";
+pub const CHECKPOINTS: &str = "checkpoints";
+pub const ADMIN: &str = "admin";
+pub const READONLY: &str = "readonly";
 
 #[derive(Clone, Debug)]
 pub struct NeuronArgs {
@@ -57,7 +63,7 @@ pub struct NodeHeight {
 pub struct RecoveryArgs {
     pub dir: PathBuf,
     pub nns_url: Url,
-    pub replica_version: ReplicaVersion,
+    pub replica_version: Option<ReplicaVersion>,
     pub key_file: Option<PathBuf>,
 }
 
@@ -73,9 +79,6 @@ pub struct Recovery {
     pub binary_dir: PathBuf,
     pub data_dir: PathBuf,
     pub work_dir: PathBuf,
-
-    // replica_version of ic-admin binary
-    pub replica_version: ReplicaVersion,
 
     pub admin_helper: AdminHelper,
 
@@ -93,17 +96,15 @@ impl Recovery {
         neuron_args: Option<NeuronArgs>,
     ) -> RecoveryResult<Self> {
         let recovery_dir = args.dir.join("recovery");
-        let version_dir = recovery_dir.join(args.replica_version.as_ref());
-        let binary_dir = version_dir.join("binaries");
-        let data_dir = version_dir.join("original_data");
-        let work_dir = version_dir.join("working_dir");
+        let binary_dir = recovery_dir.join("binaries");
+        let data_dir = recovery_dir.join("original_data");
+        let work_dir = recovery_dir.join("working_dir");
 
         let r = Self {
             recovery_dir,
             binary_dir: binary_dir.clone(),
             data_dir,
             work_dir,
-            replica_version: args.replica_version.clone(),
             admin_helper: AdminHelper::new(binary_dir.clone(), args.nns_url, neuron_args),
             key_file: args.key_file,
             logger,
@@ -112,12 +113,16 @@ impl Recovery {
         r.create_dirs()?;
 
         if !binary_dir.join("ic-admin").exists() {
-            block_on(download_binary(
-                &r.logger,
-                r.replica_version.clone(),
-                String::from("ic-admin"),
-                r.binary_dir.clone(),
-            ))?;
+            if let Some(version) = args.replica_version {
+                block_on(download_binary(
+                    &r.logger,
+                    version,
+                    String::from("ic-admin"),
+                    r.binary_dir.clone(),
+                ))?;
+            } else {
+                info!(r.logger, "No ic-admin version provided, skipping download.");
+            }
         } else {
             info!(r.logger, "ic-admin exists, skipping download.");
         }
@@ -138,12 +143,12 @@ impl Recovery {
     }
 
     /// Return a recovery [AdminStep] to halt or unhalt the given subnet
-    pub fn halt_subnet(&self, subnet_id: SubnetId, is_halted: bool) -> impl Step {
+    pub fn halt_subnet(&self, subnet_id: SubnetId, is_halted: bool, keys: &[String]) -> impl Step {
         AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: self
                 .admin_helper
-                .get_halt_subnet_command(subnet_id, is_halted),
+                .get_halt_subnet_command(subnet_id, is_halted, keys),
         }
     }
 
@@ -215,23 +220,13 @@ impl Recovery {
             })
     }
 
-    /// Return an [AdminStep] setting the given keys as read only ssh access
-    /// keys for the given subnet.
-    pub fn set_readonly_keys(&self, subnet_id: SubnetId, keys: &[String]) -> impl Step {
-        AdminStep {
-            logger: self.logger.clone(),
-            ic_admin_cmd: self
-                .admin_helper
-                .set_ssh_readonly_keys_command(subnet_id, keys),
-        }
-    }
-
     /// Returns true if ssh access to the given account and ip exists.
     pub fn check_ssh_access(&self, account: &str, node_ip: IpAddr) -> bool {
         let ssh_helper = SshHelper::new(
             self.logger.clone(),
             account.to_string(),
             node_ip,
+            self.admin_helper.neuron_args.is_some(),
             self.key_file.clone(),
         );
         ssh_helper.can_connect()
@@ -273,15 +268,9 @@ impl Recovery {
             try_readonly,
             node_ip,
             target: self.data_dir.display().to_string(),
+            working_dir: self.work_dir.display().to_string(),
+            require_confirmation: self.admin_helper.neuron_args.is_some(),
             key_file: self.key_file.clone(),
-        }
-    }
-
-    pub fn get_create_backup_step(&self, backup_dir: PathBuf) -> impl Step {
-        CreateBackupStep {
-            logger: self.logger.clone(),
-            data_src: self.data_dir.clone(),
-            backup_dir: backup_dir.join("original_data_backup"),
         }
     }
 
@@ -289,7 +278,6 @@ impl Recovery {
     /// the downloaded state.
     pub fn get_update_config_step(&self) -> impl Step {
         UpdateConfigStep {
-            target: self.data_dir.display().to_string(),
             work_dir: self.work_dir.display().to_string(),
         }
     }
@@ -300,10 +288,22 @@ impl Recovery {
         ReplayStep {
             logger: self.logger.clone(),
             subnet_id,
-            data_dir: self.data_dir.clone(),
+            work_dir: self.work_dir.clone(),
             config: self.work_dir.join("ic.json5"),
             result: self.work_dir.join(replay_helper::OUTPUT_FILE_NAME),
         }
+    }
+
+    pub fn get_checkpoint_names(path: &Path) -> RecoveryResult<Vec<String>> {
+        let res = read_dir(path)?
+            .flatten()
+            .filter_map(|e| {
+                e.path()
+                    .file_name()
+                    .and_then(|n| n.to_str().map(String::from))
+            })
+            .collect::<Vec<String>>();
+        Ok(res)
     }
 
     /// Parse and return the output of the replay step.
@@ -320,6 +320,19 @@ impl Recovery {
             logger: self.logger.clone(),
             subnet_id,
             work_dir: self.work_dir.clone(),
+        }
+    }
+
+    /// Return an [UploadAndRestartStep] to upload the current recovery state to
+    /// a node and restart it.
+    pub fn get_upload_and_restart_step(&self, node_ip: IpAddr) -> impl Step {
+        UploadAndRestartStep {
+            logger: self.logger.clone(),
+            node_ip,
+            work_dir: self.work_dir.clone(),
+            data_src: self.work_dir.join(IC_STATE_DIR),
+            require_confirmation: self.admin_helper.neuron_args.is_some(),
+            key_file: self.key_file.clone(),
         }
     }
 
@@ -425,6 +438,16 @@ impl Recovery {
                     state_hash,
                     replacement_nodes,
                 ),
+        }
+    }
+
+    /// Return an [UploadAndRestartStep] to upload the current recovery state to
+    /// a node and restart it.
+    pub fn get_wait_for_cup_step(&self, node_ip: IpAddr) -> impl Step {
+        WaitForCUPStep {
+            logger: self.logger.clone(),
+            node_ip,
+            work_dir: self.work_dir.clone(),
         }
     }
 
@@ -539,18 +562,6 @@ impl Recovery {
         }
 
         Ok(())
-    }
-
-    /// Return an [UploadAndRestartStep] to upload the current recovery state to
-    /// a node and restart it.
-    pub fn get_upload_and_restart_step(&self, node_ip: IpAddr) -> impl Step {
-        UploadAndRestartStep {
-            logger: self.logger.clone(),
-            node_ip,
-            work_dir: self.work_dir.clone(),
-            data_src: self.data_dir.join("data/ic_state"),
-            key_file: self.key_file.clone(),
-        }
     }
 
     /// Return a [CleanupStep] to remove the recovery directory and all of its contents

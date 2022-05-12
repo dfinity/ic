@@ -14,21 +14,19 @@ fn main() {
     let logger = slog::Logger::root(drain, o!());
 
     let args = RecoveryToolArgs::parse();
+    let recovery_args = RecoveryArgs {
+        dir: args.dir,
+        nns_url: args.nns_url,
+        replica_version: args.replica_version,
+        key_file: args.key_file,
+    };
 
     match args.subcmd {
-        SubCommand::AppSubnetRecovery(subnet_recovery_args) => {
-            let recovery_args = RecoveryArgs {
-                dir: args.dir,
-                nns_url: args.nns_url,
-                replica_version: args.replica_version,
-                key_file: args.key_file,
-            };
-            cli::app_subnet_recovery(
-                logger.clone(),
-                recovery_args,
-                subnet_recovery_args,
-                args.test,
-            )
-        }
+        SubCommand::AppSubnetRecovery(subnet_recovery_args) => cli::app_subnet_recovery(
+            logger.clone(),
+            recovery_args,
+            subnet_recovery_args,
+            args.test,
+        ),
     }
 }
