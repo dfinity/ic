@@ -429,6 +429,7 @@ impl Consensus for ConsensusImpl {
         // Log some information about the state of consensus
         // This is useful for testing purposes
         debug!(
+            every_n_seconds => 1,
             self.log,
             "Consensus finalized height: {}, state available: {}, DKG key material available: {}",
             pool_reader.get_finalized_height(),
