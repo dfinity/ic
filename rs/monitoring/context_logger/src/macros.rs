@@ -112,6 +112,11 @@ macro_rules! debug {
             log!($logger, slog::Level::Debug, $message $(,$args)*)
         }
     }};
+    (every_n_seconds => $seconds:expr, $logger:expr, $message:expr $(,$args:expr)* $(,)*) => {{
+        if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Debug)) {
+            log!($logger, slog::Level::Debug, $message $(,$args)*)
+        }
+    }};
     ($logger:expr, $message:expr $(,$args:expr)* $(,)*) => {{
         log!($logger, slog::Level::Debug, $message $(,$args)*)
     }};
