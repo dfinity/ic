@@ -1,9 +1,6 @@
 use std::fmt::Display;
 use std::panic::{catch_unwind, UnwindSafe};
 
-use serde::{Deserialize, Serialize};
-use slog::Logger;
-
 use super::driver_setup::tee_logger;
 use super::farm::HostFeature;
 use super::ic::VmAllocationStrategy;
@@ -12,6 +9,7 @@ use crate::driver::ic::InternetComputer;
 use crate::driver::test_env::TestEnv;
 use ic_fondue::ic_manager::IcHandle;
 use ic_fondue::pot::{Context, FondueTestFn};
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -54,14 +52,14 @@ where
         name: name.to_string(),
         execution_mode: ExecutionMode::Run,
         f: Box::new(|test_env: TestEnv| {
-            let log = test_env.logger();
-            let (ic_handle, test_ctx) = get_ic_handle_and_ctx(test_env, log);
+            let (ic_handle, test_ctx) = get_ic_handle_and_ctx(test_env);
             (test)(ic_handle, &test_ctx);
         }),
     }
 }
 
-pub fn get_ic_handle_and_ctx(test_env: TestEnv, log: Logger) -> (IcHandle, Context) {
+pub fn get_ic_handle_and_ctx(test_env: TestEnv) -> (IcHandle, Context) {
+    let log = test_env.logger();
     let rng = rand_core::SeedableRng::seed_from_u64(42);
     let test_ctx = Context::new(rng, tee_logger(&test_env, log));
     let ic_handle = test_env
@@ -241,7 +239,7 @@ impl TestPath {
 
 #[cfg(test)]
 mod tests {
-    use slog::o;
+    use slog::{o, Logger};
 
     use super::*;
 

@@ -71,8 +71,7 @@ pub fn setup_failover_nodes(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    let logger = env.logger();
-    let (handle, ctx) = get_ic_handle_and_ctx(env.clone(), logger);
+    let (handle, ctx) = get_ic_handle_and_ctx(env.clone());
 
     let mut rng = ctx.rng.clone();
     ctx.install_nns_canisters(&handle, true);
