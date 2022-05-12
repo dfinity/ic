@@ -1,10 +1,10 @@
 use crate::admin_helper::IcAdmin;
 use crate::command_helper::pipe_all;
 use crate::error::{RecoveryError, RecoveryResult};
-use crate::file_sync_helper::{create_dir, read_dir, remove_dir, rsync, write_file};
-use crate::replay_helper;
+use crate::file_sync_helper::{remove_dir, rsync, write_file};
 use crate::ssh_helper::SshHelper;
 use crate::util::{block_on, parse_hex_str};
+use crate::{replay_helper, ADMIN, CHECKPOINTS, IC_STATE, NEW_IC_STATE, READONLY};
 use crate::{Recovery, IC_CHECKPOINTS_PATH, IC_DATA_PATH, IC_JSON5_PATH, IC_STATE_EXCLUDES};
 use ic_types::{Height, SubnetId};
 use slog::{info, Logger};
@@ -50,6 +50,8 @@ pub struct DownloadIcStateStep {
     pub try_readonly: bool,
     pub node_ip: IpAddr,
     pub target: String,
+    pub working_dir: String,
+    pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
 }
 
@@ -58,21 +60,22 @@ impl Step for DownloadIcStateStep {
         let data_src = format!("[{}]:{}", self.node_ip, IC_DATA_PATH);
         let config_src = format!("[{}]:{}", self.node_ip, IC_JSON5_PATH);
         format!(
-            "Copy ic data from {} and config from {} to {}.",
-            data_src, config_src, self.target
+            "Copy ic data from {} and config from {} to {}. Then copy to {}",
+            data_src, config_src, self.target, self.working_dir
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
         let account = if self.try_readonly {
-            "readonly".to_string()
+            READONLY.to_string()
         } else {
-            "admin".to_string()
+            ADMIN.to_string()
         };
         let mut ssh_helper = SshHelper::new(
             self.logger.clone(),
             account,
             self.node_ip,
+            self.require_confirmation,
             self.key_file.clone(),
         );
         let mut access_granted = false;
@@ -85,7 +88,7 @@ impl Step for DownloadIcStateStep {
             thread::sleep(time::Duration::from_secs(5));
         }
         if !access_granted {
-            ssh_helper.account = "admin".to_string();
+            ssh_helper.account = ADMIN.to_string();
             if !ssh_helper.can_connect() {
                 return Err(RecoveryError::invalid_output_error(
                     "SSH access denied".to_string(),
@@ -104,11 +107,23 @@ impl Step for DownloadIcStateStep {
             ssh_helper.account, self.node_ip, IC_JSON5_PATH
         );
 
+        let mut excludes = IC_STATE_EXCLUDES.to_vec();
+        let res = ssh_helper
+            .ssh(format!(
+                r"echo $(ls {}/{} | sort | awk 'n>=1 {{ print a[n%1] }} {{ a[n++%1]=$0 }}');",
+                IC_DATA_PATH, IC_CHECKPOINTS_PATH
+            ))?
+            .unwrap_or_default();
+        res.trim().split(' ').for_each(|cp| {
+            excludes.push(cp);
+        });
+
         if let Some(res) = rsync(
             &self.logger,
-            IC_STATE_EXCLUDES.to_vec(),
+            excludes,
             &data_src,
             &self.target,
+            self.require_confirmation,
             self.key_file.as_ref(),
         )? {
             info!(self.logger, "{}", res);
@@ -118,7 +133,18 @@ impl Step for DownloadIcStateStep {
             vec![],
             &config_src,
             &self.target,
+            self.require_confirmation,
             self.key_file.as_ref(),
+        )? {
+            info!(self.logger, "{}", res);
+        }
+        if let Some(res) = rsync(
+            &self.logger,
+            vec![],
+            &format!("{}/", self.target),
+            &self.working_dir,
+            self.require_confirmation,
+            None,
         )? {
             info!(self.logger, "{}", res);
         }
@@ -127,50 +153,21 @@ impl Step for DownloadIcStateStep {
     }
 }
 
-pub struct CreateBackupStep {
-    pub logger: Logger,
-    pub data_src: PathBuf,
-    pub backup_dir: PathBuf,
-}
-
-impl Step for CreateBackupStep {
-    fn descr(&self) -> String {
-        format!(
-            "Copy data from {} to {}.",
-            self.data_src.display(),
-            self.backup_dir.display()
-        )
-    }
-
-    fn exec(&self) -> RecoveryResult<()> {
-        create_dir(&self.backup_dir)?;
-        rsync(
-            &self.logger,
-            vec![],
-            &self.data_src.display().to_string(),
-            &self.backup_dir.display().to_string(),
-            None,
-        )?;
-        Ok(())
-    }
-}
-
 pub struct UpdateConfigStep {
-    pub target: String,
     pub work_dir: String,
 }
 
 impl Step for UpdateConfigStep {
     fn descr(&self) -> String {
         format!(
-            "In {}/ic.json5, update node_ip and listen_addr to localhost, and replace ic path with working directory. Save file to {}/ic.json5",
-            self.target, self.work_dir
+            "In {}/ic.json5, update node_ip and listen_addr to localhost, and replace ic path with working directory.",
+            self.work_dir
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
         let mut cat = Command::new("cat");
-        cat.arg(format!("{}/ic.json5", self.target));
+        cat.arg(format!("{}/ic.json5", self.work_dir));
         let mut sed1 = Command::new("sed");
         sed1.arg("-e")
             .arg(r#"s/node_ip: \".*\"/node_ip: \"127.0.0.1\"/"#);
@@ -179,7 +176,7 @@ impl Step for UpdateConfigStep {
             .arg(r#"s/listen_addr: \".*:\([0-9]*\)\"/listen_addr: \"127.0.0.1:\1\"/"#);
         let mut sed3 = Command::new("sed");
         sed3.arg("-e")
-            .arg(format!("s|/var/lib/ic/|{}/|g", self.target));
+            .arg(format!("s|/var/lib/ic/|{}/|g", self.work_dir));
 
         if let Some(res) = pipe_all(&mut [cat, sed1, sed2, sed3])? {
             let mut path = PathBuf::from(&self.work_dir);
@@ -197,16 +194,16 @@ impl Step for UpdateConfigStep {
 pub struct ReplayStep {
     pub logger: Logger,
     pub subnet_id: SubnetId,
-    pub data_dir: PathBuf,
+    pub work_dir: PathBuf,
     pub config: PathBuf,
     pub result: PathBuf,
 }
 
 impl Step for ReplayStep {
     fn descr(&self) -> String {
-        let checkpoint_path = self.data_dir.join("data").join(IC_CHECKPOINTS_PATH);
+        let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
         format!(
-            "Delete old checkpoints found in {}, then execute:\nic-replay {} --subnet-id {:?}",
+            "Delete old checkpoints found in {}, and execute:\nic-replay {} --subnet-id {:?}",
             checkpoint_path.display(),
             self.config.display(),
             self.subnet_id,
@@ -214,29 +211,28 @@ impl Step for ReplayStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let checkpoint_path = self.data_dir.join("data").join(IC_CHECKPOINTS_PATH);
-        let paths = read_dir(&checkpoint_path)?;
+        let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
 
-        let checkpoints = paths
-            .flatten()
-            .filter_map(|e| {
-                e.path()
-                    .file_name()
-                    .and_then(|n| n.to_str().map(String::from))
-            })
-            .collect::<Vec<String>>();
+        let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
 
         let checkpoint_heights = checkpoints
             .iter()
             .map(|c| parse_hex_str(c))
             .collect::<RecoveryResult<Vec<u64>>>()?;
 
-        if let Some(max) = checkpoint_heights.iter().max() {
+        let delete_checkpoints = |except: &u64| {
             checkpoints
                 .iter()
-                .filter(|c| parse_hex_str(c).unwrap() != *max)
-                .map(|c| remove_dir(&checkpoint_path.join(c)))
-                .collect::<RecoveryResult<Vec<_>>>()?;
+                .filter(|c| parse_hex_str(c).unwrap() != *except)
+                .map(|c| {
+                    info!(self.logger, "Deleting checkpoint {}", c);
+                    remove_dir(&checkpoint_path.join(c))
+                })
+                .collect::<RecoveryResult<Vec<_>>>()
+        };
+
+        if let Some(max) = checkpoint_heights.iter().max() {
+            delete_checkpoints(max)?;
             let height = Height::from(*max);
 
             let (latest_height, state_hash) = block_on(replay_helper::replay(
@@ -255,6 +251,9 @@ impl Step for ReplayStep {
             }
 
             info!(self.logger, "State hash: {}", state_hash);
+
+            info!(self.logger, "Deleting old checkpoints");
+            delete_checkpoints(&latest_height.get())?;
 
             return Ok(());
         }
@@ -316,6 +315,7 @@ pub struct UploadAndRestartStep {
     pub node_ip: IpAddr,
     pub work_dir: PathBuf,
     pub data_src: PathBuf,
+    pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
 }
 
@@ -325,26 +325,56 @@ impl Step for UploadAndRestartStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let (latest_height, state_hash) =
-            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?;
-        let recovery_height = Recovery::get_recovery_height(latest_height);
-
-        Recovery::wait_for_recovery_cup(&self.logger, self.node_ip, recovery_height, state_hash)?;
-
-        let account = "admin";
+        let account = ADMIN;
         let ssh_helper = SshHelper::new(
             self.logger.clone(),
             account.to_string(),
             self.node_ip,
+            self.require_confirmation,
             self.key_file.clone(),
         );
 
-        let upload_dir = format!("{}/new_ic_state", IC_DATA_PATH);
+        let checkpoint_path = self.data_src.join(CHECKPOINTS);
+        let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
 
-        info!(self.logger, "Creating remote directory...");
+        if checkpoints.len() != 1 {
+            return Err(RecoveryError::invalid_output_error(
+                "Found multiple checkpoints in upload directory".to_string(),
+            ));
+        }
+
+        let max_checkpoint = checkpoints.into_iter().max().ok_or_else(|| {
+            RecoveryError::invalid_output_error("No checkpoints found".to_string())
+        })?;
+        let (replay_height, _) =
+            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?;
+
+        if parse_hex_str(&max_checkpoint)? != replay_height.get() {
+            return Err(RecoveryError::invalid_output_error(format!(
+                "Latest checkpoint height ({}) doesn't match replay output ({})",
+                max_checkpoint, replay_height
+            )));
+        }
+
+        let ic_checkpoints_path = format!("{}/{}", IC_DATA_PATH, IC_CHECKPOINTS_PATH);
+        // upload directory to create
+        let upload_dir = format!("{}/{}", IC_DATA_PATH, NEW_IC_STATE);
+        // path of highest checkpoint on upload node
+        let copy_from = format!(
+            "{}/$(ls {} | sort | tail -1)",
+            ic_checkpoints_path, ic_checkpoints_path
+        );
+        // path and name of checkpoint after replay
+        let copy_to = format!("{}/{}/{}", upload_dir, CHECKPOINTS, max_checkpoint);
+        let cp = format!("sudo cp -r {} {}", copy_from, copy_to);
+
+        info!(
+            self.logger,
+            "Creating remote directory and copying previous checkpoint..."
+        );
         if let Some(res) = ssh_helper.ssh(format!(
-            "sudo mkdir {}; sudo chown {} {};",
-            upload_dir, account, upload_dir
+            "sudo mkdir -p {}/{}; {}; sudo chown -R {} {};",
+            upload_dir, CHECKPOINTS, cp, account, upload_dir
         ))? {
             info!(self.logger, "{}", res);
         }
@@ -357,12 +387,13 @@ impl Step for UploadAndRestartStep {
             IC_STATE_EXCLUDES.to_vec(),
             &src,
             &target,
+            self.require_confirmation,
             self.key_file.as_ref(),
         )? {
             info!(self.logger, "{}", res);
         }
 
-        let ic_state_path = format!("{}/ic_state", IC_DATA_PATH);
+        let ic_state_path = format!("{}/{}", IC_DATA_PATH, IC_STATE);
         info!(self.logger, "Restarting replica...");
         let mut replace_state = String::new();
         replace_state.push_str("sudo systemctl stop ic-replica;");
@@ -385,11 +416,33 @@ impl Step for UploadAndRestartStep {
             ic_state_path
         ));
         replace_state.push_str("sudo systemctl start ic-replica;");
+        replace_state.push_str("sudo systemctl status ic-replica;");
 
-        if let Some(res) = ssh_helper.ssh(replace_state)? {
-            info!(self.logger, "{}", res);
-        }
+        ssh_helper.ssh(replace_state)?;
         Ok(())
+    }
+}
+
+pub struct WaitForCUPStep {
+    pub logger: Logger,
+    pub node_ip: IpAddr,
+    pub work_dir: PathBuf,
+}
+
+impl Step for WaitForCUPStep {
+    fn descr(&self) -> String {
+        format!(
+            "Waiting until recovery CUP is found on node {}.",
+            self.node_ip
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let (latest_height, state_hash) =
+            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?;
+        let recovery_height = Recovery::get_recovery_height(latest_height);
+
+        Recovery::wait_for_recovery_cup(&self.logger, self.node_ip, recovery_height, state_hash)
     }
 }
 
@@ -399,9 +452,7 @@ pub struct CleanupStep {
 
 impl Step for CleanupStep {
     fn descr(&self) -> String {
-        format!(
-            "Deleting directory {}. Backup directory is preserved if outside of recovery directory." , self.recovery_dir.display()
-        )
+        format!("Deleting directory {}.", self.recovery_dir.display())
     }
 
     fn exec(&self) -> RecoveryResult<()> {

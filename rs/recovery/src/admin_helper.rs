@@ -67,30 +67,24 @@ impl AdminHelper {
         }
     }
 
-    pub fn get_halt_subnet_command(&self, subnet_id: SubnetId, is_halted: bool) -> IcAdmin {
+    pub fn get_halt_subnet_command(
+        &self,
+        subnet_id: SubnetId,
+        is_halted: bool,
+        keys: &[String],
+    ) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
         AdminHelper::add_propose_to_update_subnet_base(&mut ic_admin, &self.neuron_args, subnet_id);
         ic_admin.push(format!("--is-halted={}", is_halted));
-        ic_admin.push("--summary".to_string());
-        ic_admin.push(format!(
-            "\"{} subnet {}, for recovery\"",
-            if is_halted { "Halt" } else { "Unhalt" },
-            subnet_id,
-        ));
-
-        ic_admin
-    }
-
-    pub fn set_ssh_readonly_keys_command(&self, subnet_id: SubnetId, keys: &[String]) -> IcAdmin {
-        let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
-        AdminHelper::add_propose_to_update_subnet_base(&mut ic_admin, &self.neuron_args, subnet_id);
-
         keys.iter()
             .map(|k| format!("--ssh-readonly-access=\"{}\"", k))
             .for_each(|k| ic_admin.push(k));
-
         ic_admin.push("--summary".to_string());
-        ic_admin.push("\"Set readonly keys for subnet recovery\"".to_string());
+        ic_admin.push(format!(
+            "\"{} subnet {}, for recovery and update ssh readonly access\"",
+            if is_halted { "Halt" } else { "Unhalt" },
+            subnet_id,
+        ));
 
         ic_admin
     }

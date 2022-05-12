@@ -154,14 +154,13 @@ pub fn test(env: TestEnv) {
     let recovery_args = RecoveryArgs {
         dir: tempdir.path().to_path_buf(),
         nns_url: nns_node.url.clone(),
-        replica_version: ReplicaVersion::try_from(master_version).unwrap(),
+        replica_version: Some(ReplicaVersion::try_from(master_version).unwrap()),
         key_file: Some(ssh_authorized_priv_keys_dir.join(ADMIN)),
     };
 
     // Unlike during a production recovery using the CLI, here we already know all of parameters ahead of time.
     let subnet_args = AppSubnetRecoveryArgs {
         subnet_id,
-        backup_dir: Some(tempdir.path().to_path_buf()),
         upgrade_version: Some(ReplicaVersion::try_from(working_version.clone()).unwrap()),
         replacement_nodes: Some(unassigned_nodes),
         pub_key: Some(pub_key),

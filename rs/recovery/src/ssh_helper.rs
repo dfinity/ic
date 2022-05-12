@@ -1,3 +1,4 @@
+use crate::cli::wait_for_confirmation;
 use crate::command_helper::exec_cmd;
 use crate::RecoveryResult;
 use slog::{info, Logger};
@@ -19,15 +20,23 @@ pub struct SshHelper {
     logger: Logger,
     pub account: String,
     pub ip: IpAddr,
+    pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
 }
 
 impl SshHelper {
-    pub fn new(logger: Logger, account: String, ip: IpAddr, key_file: Option<PathBuf>) -> Self {
+    pub fn new(
+        logger: Logger,
+        account: String,
+        ip: IpAddr,
+        require_confirmation: bool,
+        key_file: Option<PathBuf>,
+    ) -> Self {
         Self {
             logger,
             account,
             ip,
+            require_confirmation,
             key_file,
         }
     }
@@ -35,8 +44,19 @@ impl SshHelper {
     /// Execute the given command string on a remote machine using SSH.
     pub fn ssh(&self, commands: String) -> RecoveryResult<Option<String>> {
         let mut ssh = self.get_command(commands);
+        info!(self.logger, "");
+        info!(self.logger, "About to execute:");
         info!(self.logger, "{:?}", ssh);
-        exec_cmd(&mut ssh)
+        if self.require_confirmation {
+            wait_for_confirmation(&self.logger);
+        }
+        match exec_cmd(&mut ssh) {
+            Ok(Some(res)) => {
+                info!(self.logger, "{}", res);
+                Ok(Some(res))
+            }
+            res => res,
+        }
     }
 
     /// Return the [Command] object of an SSH command executing the given command

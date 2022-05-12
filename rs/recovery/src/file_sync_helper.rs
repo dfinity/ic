@@ -1,3 +1,4 @@
+use crate::cli::wait_for_confirmation;
 use crate::command_helper::exec_cmd;
 use crate::error::{RecoveryError, RecoveryResult};
 use crate::ssh_helper;
@@ -60,6 +61,7 @@ pub fn rsync(
     excludes: Vec<&str>,
     src: &str,
     target: &str,
+    require_confirmation: bool,
     key_file: Option<&PathBuf>,
 ) -> RecoveryResult<Option<String>> {
     let mut rsync = Command::new("rsync");
@@ -72,7 +74,12 @@ pub fn rsync(
         });
     rsync.arg(src).arg(target);
     rsync.arg("-e").arg(ssh_helper::get_rsync_ssh_arg(key_file));
+    info!(logger, "");
+    info!(logger, "About to execute:");
     info!(logger, "{:?}", rsync);
+    if require_confirmation {
+        wait_for_confirmation(logger);
+    }
     info!(logger, "Starting transfer, waiting for output...");
     match exec_cmd(&mut rsync) {
         Err(RecoveryError::CommandError(Some(24), msg)) => {
@@ -102,5 +109,9 @@ pub fn read_dir(path: &Path) -> RecoveryResult<ReadDir> {
 }
 
 pub fn remove_dir(path: &Path) -> RecoveryResult<()> {
-    fs::remove_dir_all(path).map_err(|e| RecoveryError::dir_error(path, e))
+    if path.exists() {
+        fs::remove_dir_all(path).map_err(|e| RecoveryError::dir_error(path, e))
+    } else {
+        Ok(())
+    }
 }
