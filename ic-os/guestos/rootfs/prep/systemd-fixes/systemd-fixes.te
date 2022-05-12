@@ -136,3 +136,10 @@ systemd_connect_userdb(local_login_t)
 
 # ssh also needs access to userdb
 systemd_connect_userdb(sshd_t)
+
+###############################################################################
+# pcscd
+
+# allow smart card daemon access to /run/udev
+require { type udev_var_run_t, pcscd_t; }
+read_files_pattern(pcscd_t, udev_var_run_t, udev_var_run_t)
