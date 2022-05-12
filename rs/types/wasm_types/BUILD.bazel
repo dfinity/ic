@@ -1,0 +1,24 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "wasm_types",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_wasm_types",
+    edition = "2018",
+    deps = [
+        "//rs/crypto/sha",
+        "//rs/sys",
+        "//rs/utils",
+        "@crate_index//:serde",
+    ],
+)
