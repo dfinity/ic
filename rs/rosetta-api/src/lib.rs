@@ -4,11 +4,11 @@ pub mod convert;
 pub mod errors;
 pub mod ledger_client;
 pub mod models;
+pub mod request;
 pub mod request_handler;
 pub mod request_types;
 pub mod rosetta_server;
 pub mod store;
-pub mod time;
 pub mod transaction_id;
 
 pub const API_VERSION: &str = "1.4.10";

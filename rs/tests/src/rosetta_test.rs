@@ -18,7 +18,6 @@ use assert_json_diff::{assert_json_eq, assert_json_include};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_rosetta_api::models::{ConstructionPayloadsResponse, NeuronState, Object, PublicKey};
-use ic_rosetta_api::time::Seconds;
 use ledger_canister::{
     protobuf::TipOfChainRequest, AccountBalanceArgs, AccountIdentifier, ArchiveOptions,
     BlockHeight, Certification, LedgerCanisterInitPayload, Operation, Subaccount, TipOfChainRes,
@@ -40,10 +39,13 @@ use ic_rosetta_api::convert::{
     from_hex, from_model_account_identifier, neuron_account_from_public_key,
     neuron_subaccount_bytes_from_public_key, to_hex, to_model_account_identifier,
 };
+use ic_rosetta_api::models::seconds::Seconds;
+use ic_rosetta_api::request::request_result::RequestResult;
+use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{
     AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo as NeuronInfoRequest,
-    PublicKeyOrPrincipal, RemoveHotKey, Request, RequestResult, SetDissolveTimestamp, Spawn, Stake,
-    StartDissolve, Status, StopDissolve,
+    PublicKeyOrPrincipal, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake, StartDissolve, Status,
+    StopDissolve,
 };
 use ic_rosetta_test_utils::{
     acc_id, assert_canister_error, assert_ic_error, do_multiple_txn, do_multiple_txn_external,

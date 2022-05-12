@@ -4,15 +4,16 @@ use crate::models::{ConstructionParseRequest, ConstructionParseResponse, ParsedT
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
     AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, PublicKeyOrPrincipal, RemoveHotKey,
-    Request, RequestType, SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve,
+    RequestType, SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve,
 };
-use crate::time::Seconds;
 
 use ic_nns_governance::pb::v1::{
     manage_neuron::{self, Command, NeuronIdOrSubaccount},
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
 };
 
+use crate::models::seconds::Seconds;
+use crate::request::Request;
 use ic_types::messages::{Blob, HttpCallContent, HttpCanisterUpdate};
 use ic_types::PrincipalId;
 use ledger_canister::{AccountIdentifier, Operation, SendArgs};

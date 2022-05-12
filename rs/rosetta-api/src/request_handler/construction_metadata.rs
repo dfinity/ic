@@ -1,5 +1,5 @@
-use crate::convert;
 use crate::errors::ApiError;
+use crate::models::amount::tokens_to_amount;
 use crate::models::{
     ConstructionMetadataRequest, ConstructionMetadataResponse, ConstructionPayloadsRequestMetadata,
 };
@@ -25,7 +25,7 @@ impl RosettaRequestHandler {
             }
             _ => {
                 let transfer_fee = self.ledger.transfer_fee().await?.transfer_fee;
-                Some(vec![convert::amount_(
+                Some(vec![tokens_to_amount(
                     transfer_fee,
                     self.ledger.token_symbol(),
                 )?])

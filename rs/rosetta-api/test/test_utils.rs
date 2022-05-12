@@ -6,9 +6,7 @@ use ic_rosetta_api::errors::ApiError;
 use ic_rosetta_api::models::{
     AccountBalanceRequest, EnvelopePair, PartialBlockIdentifier, SignedTransaction,
 };
-use ic_rosetta_api::request_types::{
-    Request, RequestResult, RequestType, Status, TransactionResults,
-};
+use ic_rosetta_api::request_types::{RequestType, Status};
 use ledger_canister::{
     self, AccountIdentifier, Block, BlockHeight, Operation, SendArgs, Tokens, TransferFee,
     DEFAULT_TRANSFER_FEE,
@@ -38,6 +36,9 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
+use ic_rosetta_api::request::request_result::RequestResult;
+use ic_rosetta_api::request::transaction_results::TransactionResults;
+use ic_rosetta_api::request::Request;
 use ic_rosetta_test_utils::{acc_id, sample_data::Scribe};
 
 fn init_test_logger() {

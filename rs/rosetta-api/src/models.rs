@@ -1,4 +1,10 @@
-use crate::request_types::TransactionOperationResults;
+pub mod amount;
+pub mod seconds;
+pub mod timestamp;
+
+use crate::models::amount::Amount;
+use crate::models::timestamp::Timestamp;
+use crate::request::transaction_operation_results::TransactionOperationResults;
 use crate::{
     convert::from_hex, errors, errors::ApiError, request_types::RequestType,
     transaction_id::TransactionIdentifier,
@@ -186,35 +192,6 @@ impl Allow {
     }
 }
 
-/// Amount is some Value of a Currency. It is considered invalid to specify a
-/// Value without a Currency.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Amount {
-    /// Value of the transaction in atomic units represented as an
-    /// arbitrary-sized signed integer.  For example, 1 BTC would be represented
-    /// by a value of 100000000.
-    #[serde(rename = "value")]
-    pub value: String,
-
-    #[serde(rename = "currency")]
-    pub currency: Currency,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
-}
-
-impl Amount {
-    pub fn new(value: String, currency: Currency) -> Amount {
-        Amount {
-            value,
-            currency,
-            metadata: None,
-        }
-    }
-}
-
 /// Blocks contain an array of Transactions that occurred at a particular
 /// BlockIdentifier.  A hard requirement for blocks returned by Rosetta
 /// implementations is that they MUST be _inalterable_: once a client has
@@ -374,26 +351,6 @@ pub struct BlockTransactionResponse {
 impl BlockTransactionResponse {
     pub fn new(transaction: Transaction) -> BlockTransactionResponse {
         BlockTransactionResponse { transaction }
-    }
-}
-
-/// Coin contains its unique identifier and the amount it represents.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Coin {
-    #[serde(rename = "coin_identifier")]
-    pub coin_identifier: CoinIdentifier,
-
-    #[serde(rename = "amount")]
-    pub amount: Amount,
-}
-
-impl Coin {
-    pub fn new(coin_identifier: CoinIdentifier, amount: Amount) -> Coin {
-        Coin {
-            coin_identifier,
-            amount,
-        }
     }
 }
 
@@ -1899,38 +1856,6 @@ impl SyncStatus {
     }
 }
 
-/// The timestamp of the block in milliseconds since the Unix Epoch. The
-/// timestamp is stored in milliseconds because some blockchains produce blocks
-/// more often than once a second.
-#[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct Timestamp(i64);
-
-impl ::std::convert::From<i64> for Timestamp {
-    fn from(x: i64) -> Self {
-        Timestamp(x)
-    }
-}
-
-impl ::std::convert::From<Timestamp> for i64 {
-    fn from(x: Timestamp) -> Self {
-        x.0
-    }
-}
-
-impl ::std::ops::Deref for Timestamp {
-    type Target = i64;
-    fn deref(&self) -> &i64 {
-        &self.0
-    }
-}
-
-impl ::std::ops::DerefMut for Timestamp {
-    fn deref_mut(&mut self) -> &mut i64 {
-        &mut self.0
-    }
-}
-
 /// Transactions contain an array of Operations that are attributable to the
 /// same TransactionIdentifier.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -2329,8 +2254,6 @@ pub enum NeuronState {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct NeuronInfoResponse {
-    //    #[serde(rename = "neuron_id")]
-    //    pub neuron_id: u64,
     #[serde(rename = "verified_query")]
     pub verified_query: bool,
 

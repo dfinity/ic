@@ -1,13 +1,20 @@
 use super::*;
 
-use ic_rosetta_api::models::*;
-
-use ic_rosetta_api::convert::{amount_, block_id, from_hash, timestamp, to_hash};
+use ic_rosetta_api::convert::{block_id, from_hash, to_hash};
 use ic_rosetta_api::ledger_client::LedgerAccess;
+use ic_rosetta_api::models::amount::{tokens_to_amount, Amount};
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
-use ic_rosetta_api::{API_VERSION, NODE_VERSION};
+use ic_rosetta_api::{models, API_VERSION, NODE_VERSION};
 
+use ic_rosetta_api::models::{
+    AccountBalanceResponse, BlockIdentifier, BlockRequest, BlockTransaction,
+    BlockTransactionRequest, ConstructionDeriveRequest, ConstructionDeriveResponse,
+    ConstructionMetadataRequest, ConstructionMetadataResponse, Currency, CurveType,
+    MempoolResponse, MempoolTransactionRequest, MetadataRequest, NetworkListResponse,
+    NetworkRequest, NetworkStatusResponse, SearchTransactionsRequest, SearchTransactionsResponse,
+    SyncStatus,
+};
 use std::sync::Arc;
 
 #[actix_rt::test]
@@ -59,7 +66,7 @@ async fn smoke_test() {
         res,
         Ok(NetworkStatusResponse::new(
             block_id(scribe.blockchain.back().unwrap()).unwrap(),
-            timestamp(
+            models::timestamp::from_system_time(
                 scribe
                     .blockchain
                     .back()
@@ -174,7 +181,7 @@ async fn smoke_test() {
         res,
         Ok(AccountBalanceResponse::new(
             block_id(scribe.blockchain.back().unwrap()).unwrap(),
-            vec![amount_(
+            vec![tokens_to_amount(
                 *scribe.balance_book.get(&acc_id(0)).unwrap(),
                 DEFAULT_TOKEN_SYMBOL
             )
