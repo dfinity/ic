@@ -1,7 +1,6 @@
 use crate::metrics::BitcoinPayloadBuilderMetrics;
 use ic_btc_types_internal::{BitcoinAdapterResponse, BitcoinAdapterResponseWrapper};
 use ic_interfaces::{
-    payload::BatchPayloadSectionBuilder,
     registry::RegistryClient,
     self_validating_payload::{
         InvalidSelfValidatingPayload, SelfValidatingPayloadBuilder,
@@ -17,9 +16,8 @@ use ic_registry_subnet_features::BitcoinFeature;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext},
-    consensus::Payload,
     registry::RegistryClientError,
-    CountBytes, Height, NumBytes, SubnetId, Time,
+    CountBytes, Height, NumBytes, SubnetId,
 };
 use std::sync::Arc;
 use thiserror::Error;
@@ -342,29 +340,6 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
         past_payloads: &[&SelfValidatingPayload],
     ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
         self.validate_self_validating_payload_impl(payload, validation_context, past_payloads)
-    }
-}
-
-impl BatchPayloadSectionBuilder<SelfValidatingPayload> for BitcoinPayloadBuilder {
-    fn build_payload(
-        &self,
-        validation_context: &ValidationContext,
-        max_size: NumBytes,
-        priority: usize,
-        past_payloads: &[(Height, Time, Payload)],
-    ) -> (SelfValidatingPayload, NumBytes) {
-        let past_payloads = self.filter_past_payloads(past_payloads);
-        self.get_self_validating_payload(validation_context, &past_payloads, max_size, priority)
-    }
-
-    fn validate_payload(
-        &self,
-        payload: &SelfValidatingPayload,
-        validation_context: &ValidationContext,
-        past_payloads: &[(Height, Time, Payload)],
-    ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
-        let past_payloads = self.filter_past_payloads(past_payloads);
-        self.validate_self_validating_payload(payload, validation_context, &past_payloads)
     }
 }
 

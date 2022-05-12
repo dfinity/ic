@@ -1,8 +1,13 @@
 //! Payload creation/validation subcomponent
 
-use crate::consensus::{block_maker::SubnetRecords, metrics::PayloadBuilderMetrics};
+use crate::{
+    canister_http::CanisterHttpPayloadBuilderImpl,
+    consensus::{
+        block_maker::SubnetRecords, metrics::PayloadBuilderMetrics,
+        payload::BatchPayloadSectionBuilder,
+    },
+};
 use ic_interfaces::{
-    canister_http::CanisterHttpPermananentValidationError,
     consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
@@ -15,10 +20,10 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
-    batch::{BatchPayload, CanisterHttpPayload, ValidationContext},
+    batch::{BatchPayload, ValidationContext},
     consensus::Payload,
     messages::MAX_XNET_PAYLOAD_IN_BYTES,
-    CountBytes, Height, NumBytes, SubnetId, Time,
+    Height, NumBytes, SubnetId, Time,
 };
 use std::sync::Arc;
 
@@ -56,9 +61,7 @@ pub trait PayloadBuilder: Send + Sync {
 pub struct PayloadBuilderImpl {
     subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
-    ingress_selector: Arc<dyn IngressSelector>,
-    xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
-    self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
+    section_builder: Vec<BatchPayloadSectionBuilder>,
     metrics: PayloadBuilderMetrics,
     logger: ReplicaLogger,
 }
@@ -74,12 +77,19 @@ impl PayloadBuilderImpl {
         metrics: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
+        let section_builder = vec![
+            BatchPayloadSectionBuilder::Ingress(ingress_selector.clone()),
+            BatchPayloadSectionBuilder::SelfValidating(self_validating_payload_builder.clone()),
+            BatchPayloadSectionBuilder::XNet(xnet_payload_builder.clone()),
+            BatchPayloadSectionBuilder::CanisterHttp(Arc::new(
+                CanisterHttpPayloadBuilderImpl::new(),
+            )),
+        ];
+
         Self {
             subnet_id,
             registry_client,
-            ingress_selector,
-            xnet_payload_builder,
-            self_validating_payload_builder,
+            section_builder,
             metrics: PayloadBuilderMetrics::new(metrics),
             logger,
         }
@@ -98,66 +108,36 @@ impl PayloadBuilder for PayloadBuilderImpl {
         self.metrics
             .past_payloads_length
             .observe(past_payloads.len() as f64);
-        let past_ingress = self
-            .ingress_selector
-            .filter_past_payloads(past_payloads, context);
 
-        // We enforce the block_payload limit in the following way:
-        // On a block with even height, we fill up the block with xnet messages.
-        // If there is space left, we fill it is ingress messages.
-        // On odd blocks, we prioritize ingress over xnet.
-        let max_block_payload_size = self.get_max_block_payload_size_bytes(&subnet_records.stable);
-        let get_ingress_payload = |byte_limit| {
-            self.ingress_selector
-                .get_ingress_payload(&past_ingress, context, byte_limit)
-        };
-        let get_xnet_payload = |byte_limit| {
-            self.xnet_payload_builder.get_xnet_payload(
-                context,
-                &self
-                    .xnet_payload_builder
-                    .filter_past_payloads(past_payloads),
-                byte_limit,
-            )
-        };
+        // To call the section builders in a somewhat fair manner,
+        // we call them in a rotation. Note that this is not really fair,
+        // as payload builders that yield a lot always give precendence to the
+        // same next payload builder. This might give an advantage to a particular
+        // payload builder.
+        let num_sections = self.section_builder.len();
+        let mut section_select = (0..num_sections).collect::<Vec<_>>();
+        section_select.rotate_right(height.get() as usize % num_sections);
 
-        let (ingress, xnet) = if height.get() % 2 == 0 {
-            let xnet = get_xnet_payload(max_block_payload_size);
-            let ingress = get_ingress_payload(NumBytes::new(
-                max_block_payload_size
-                    .get()
-                    .saturating_sub(xnet.count_bytes() as u64),
-            ));
-            (ingress, xnet)
-        } else {
-            let ingress = get_ingress_payload(max_block_payload_size);
-            let xnet = get_xnet_payload(NumBytes::new(
-                max_block_payload_size
-                    .get()
-                    .saturating_sub(ingress.count_bytes() as u64),
-            ));
-            (ingress, xnet)
-        };
+        let max_block_payload_size = self
+            .get_max_block_payload_size_bytes(&subnet_records.stable)
+            .get();
 
-        let self_validating = self
-            .self_validating_payload_builder
-            .get_self_validating_payload(
-                context,
-                &self
-                    .self_validating_payload_builder
-                    .filter_past_payloads(past_payloads),
-                MAX_XNET_PAYLOAD_IN_BYTES,
-                0,
-            )
-            .0;
+        let mut batch_payload = BatchPayload::default();
+        let mut accumulated_size = 0;
 
-        BatchPayload {
-            ingress,
-            xnet,
-            self_validating,
-            // TODO: Use actual canister http payload builder
-            canister_http: CanisterHttpPayload::default(),
+        for section_id in section_select {
+            accumulated_size += self.section_builder[section_id]
+                .build_payload(
+                    &mut batch_payload,
+                    context,
+                    NumBytes::new(max_block_payload_size.saturating_sub(accumulated_size)),
+                    section_id,
+                    past_payloads,
+                )
+                .get();
         }
+
+        batch_payload
     }
 
     fn validate_payload(
@@ -171,9 +151,6 @@ impl PayloadBuilder for PayloadBuilderImpl {
             return Ok(());
         }
         let batch_payload = &payload.as_ref().as_data().batch;
-        let past_ingress = self
-            .ingress_selector
-            .filter_past_payloads(past_payloads, context);
 
         // Retrieve max_block_payload_size from subnet
         let max_block_payload_size = match self
@@ -198,58 +175,18 @@ impl PayloadBuilder for PayloadBuilderImpl {
             Ok(Some(subnet_record)) => self.get_max_block_payload_size_bytes(&subnet_record),
         };
 
-        // If ingress valiation is not valid, return it early.
-        self.ingress_selector.validate_ingress_payload(
-            &batch_payload.ingress,
-            &past_ingress,
-            context,
-        )?;
-
-        let xnet_size = self.xnet_payload_builder.validate_xnet_payload(
-            &batch_payload.xnet,
-            context,
-            &self
-                .xnet_payload_builder
-                .filter_past_payloads(past_payloads),
-        )?;
-
-        // The size of both payloads together must not exceed the block payload size.
-        // NOTE: We MUST NOT use xnet.count_bytes() here, as it may not be
-        // deterministic and could lead to divergence.
-        if xnet_size + NumBytes::from(batch_payload.ingress.count_bytes() as u64)
-            > max_block_payload_size
-        {
-            return Err(ValidationError::Permanent(
-                PayloadPermanentError::PayloadTooBig {
-                    expected: max_block_payload_size,
-                    received: xnet_size
-                        + NumBytes::from(batch_payload.ingress.count_bytes() as u64),
-                },
-            ));
-        }
-        self.self_validating_payload_builder
-            .validate_self_validating_payload(
-                &batch_payload.self_validating,
-                context,
-                &self
-                    .self_validating_payload_builder
-                    .filter_past_payloads(past_payloads),
-            )?;
-
-        // TODO: Implement proper [`CanisterHttpPayload`] validation
-        // This reject all non empty [`CanisterHttpPayload`]
-        let canister_http_bytes = batch_payload.canister_http.count_bytes();
-        if canister_http_bytes != 0 {
-            return Err(ValidationError::Permanent(
-                PayloadPermanentError::CanisterHttpPayloadValidationError(
-                    CanisterHttpPermananentValidationError::PayloadTooBig {
-                        expected: 0,
-                        received: canister_http_bytes,
+        let mut accumulated_size = NumBytes::new(0);
+        for builder in &self.section_builder {
+            accumulated_size += builder.validate_payload(batch_payload, context, past_payloads)?;
+            if accumulated_size >= max_block_payload_size {
+                return Err(ValidationError::Permanent(
+                    PayloadPermanentError::PayloadTooBig {
+                        expected: max_block_payload_size,
+                        received: accumulated_size,
                     },
-                ),
-            ));
+                ));
+            }
         }
-
         Ok(())
     }
 }
@@ -360,7 +297,7 @@ mod test {
     }
 
     /// Wraps a `BatchPayload` into the full `Payload` structure.
-    fn batch_payload_to_payload(height: u64, payload: BatchPayload) -> Payload {
+    fn wrap_batch_payload(height: u64, payload: BatchPayload) -> Payload {
         Payload::new(
             ic_crypto::crypto_hash,
             BlockPayload::Data(DataPayload {
@@ -444,13 +381,11 @@ mod test {
 
     /// This test executes the `get_payload` and `validate_payload` functions
     /// in `PayloadBuilderImpl`.
-    /// It first builds and validated a `BatchPayload` that consists of 3/4
-    /// `XNetPayload` and 1/4 `IngressPayload`.
-    /// Then, it builds and validates a `BatchPayload` that consists of 3/4
-    /// `XNetPayload` and 1/4 `IngressPayload`.
-    /// In the last step, the mocks are setup to return 3/4 `XNetPayload` and
-    /// 3/4 `IngressPayload`. This is too large and makes the `get_payload`
-    /// function fail.
+    /// It builds the following blocks:
+    /// - 3/4 of size is `XNetPayload`, 1/4 `IngressPayload`. Expected to pass validation.
+    /// - 1/4 of size is `XNetPayload`, 3/4 `IngressPayload`. Expected to pass validation.
+    /// - 3/4 of size is `XNetPayload`, 3/4 `IngressPayload`. Expected to fail validation.
+    /// - 6/4 of size is `XNetPayload`, Expected to pass (with warning).
     #[test]
     fn test_payload_size_validation() {
         const MAX_SIZE: u64 = 2 * 1024 * 1024;
@@ -500,11 +435,13 @@ mod test {
                 make_slice(0, THREE_QUARTER),
                 make_slice(1, ONE_QUARTER),
                 make_slice(2, THREE_QUARTER),
+                make_slice(3, 2 * THREE_QUARTER),
             ];
             let ingress = vec![
                 make_ingress(0, ONE_QUARTER),
                 make_ingress(1, THREE_QUARTER),
                 make_ingress(2, THREE_QUARTER),
+                // No ingress for third block
             ];
             let payload_builder =
                 make_test_payload_impl(registry, ingress, certified_streams, vec![]);
@@ -512,7 +449,7 @@ mod test {
             // Build first payload and then validate it
             let payload0 =
                 payload_builder.get_payload(Height::from(0), &[], &context, &subnet_records);
-            let wrapped_payload0 = batch_payload_to_payload(0, payload0);
+            let wrapped_payload0 = wrap_batch_payload(0, payload0);
             payload_builder
                 .validate_payload(&wrapped_payload0, &[], &context)
                 .unwrap();
@@ -525,7 +462,7 @@ mod test {
                 &context,
                 &subnet_records,
             );
-            let wrapped_payload1 = batch_payload_to_payload(0, payload1);
+            let wrapped_payload1 = wrap_batch_payload(0, payload1);
             payload_builder
                 .validate_payload(&wrapped_payload1, &past_payload0, &context)
                 .unwrap();
@@ -539,12 +476,10 @@ mod test {
                 &context,
                 &subnet_records,
             );
+            let wrapped_payload2 = wrap_batch_payload(1, payload2);
 
-            let pb_result = payload_builder.validate_payload(
-                &batch_payload_to_payload(1, payload2),
-                &past_payload1,
-                &context,
-            );
+            let pb_result =
+                payload_builder.validate_payload(&wrapped_payload2, &past_payload1, &context);
 
             match pb_result {
                 Err(
