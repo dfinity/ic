@@ -166,7 +166,7 @@ impl ExecutionServices {
             scheduler_config.max_instructions_per_message,
         );
 
-        let bitcoin_canister = Arc::new(BitcoinCanister::new(metrics_registry));
+        let bitcoin_canister = Arc::new(BitcoinCanister::new(metrics_registry, logger.clone()));
 
         let scheduler = Box::new(SchedulerImpl::new(
             scheduler_config,

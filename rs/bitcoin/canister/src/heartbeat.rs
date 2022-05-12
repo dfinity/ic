@@ -22,12 +22,11 @@ impl BitcoinCanister {
         &self,
         bitcoin_state: ReplicatedBitcoinState,
         bitcoin_feature: BitcoinFeature,
-        log: &ReplicaLogger,
     ) -> ReplicatedBitcoinState {
         let mut state: State = State::from(bitcoin_state);
 
         // Process all incoming responses from the adapter.
-        let height = process_adapter_responses(&mut state, log);
+        let height = process_adapter_responses(&mut state, &self.log);
 
         match bitcoin_feature {
             BitcoinFeature::Enabled => {
@@ -42,7 +41,7 @@ impl BitcoinCanister {
 
                 if !state.adapter_queues.has_in_flight_get_successors_requests() {
                     let request = get_successors_request(&mut state);
-                    info!(log, "Sending GetSuccessorsRequest: {:?}", request);
+                    info!(self.log, "Sending GetSuccessorsRequest: {:?}", request);
 
                     match state
                         .adapter_queues
@@ -50,7 +49,7 @@ impl BitcoinCanister {
                     {
                         Ok(()) => {}
                         Err(err @ BitcoinStateError::QueueFull { .. }) => {
-                            error!(log, "Could not push GetSuccessorsRequest because the adapter queues are full. Error: {:?}", err);
+                            error!(self.log, "Could not push GetSuccessorsRequest because the adapter queues are full. Error: {:?}", err);
                         }
                         // TODO(EXC-1098): Refactor the `push_request` method to not return these
                         // errors to avoid this `unreachable` statement.
@@ -181,8 +180,8 @@ mod tests {
     fn does_not_push_requests_to_adapter_if_feature_is_disabled() {
         let state = ReplicatedBitcoinState::default();
         assert_eq!(state.adapter_queues.num_requests(), 0);
-        let bitcoin_canister = BitcoinCanister::new(&MetricsRegistry::new());
-        let state = bitcoin_canister.heartbeat(state, BitcoinFeature::Disabled, &no_op_logger());
+        let bitcoin_canister = BitcoinCanister::new(&MetricsRegistry::new(), no_op_logger());
+        let state = bitcoin_canister.heartbeat(state, BitcoinFeature::Disabled);
         assert_eq!(state.adapter_queues.num_requests(), 0);
     }
 
@@ -190,8 +189,8 @@ mod tests {
     fn does_not_push_requests_to_adapter_if_feature_is_paused() {
         let state = ReplicatedBitcoinState::default();
         assert_eq!(state.adapter_queues.num_requests(), 0);
-        let bitcoin_canister = BitcoinCanister::new(&MetricsRegistry::new());
-        let state = bitcoin_canister.heartbeat(state, BitcoinFeature::Paused, &no_op_logger());
+        let bitcoin_canister = BitcoinCanister::new(&MetricsRegistry::new(), no_op_logger());
+        let state = bitcoin_canister.heartbeat(state, BitcoinFeature::Paused);
         assert_eq!(state.adapter_queues.num_requests(), 0);
     }
 
@@ -199,8 +198,8 @@ mod tests {
     fn pushes_requests_to_adapter_if_feature_is_enabled() {
         let state = ReplicatedBitcoinState::default();
         assert_eq!(state.adapter_queues.num_requests(), 0);
-        let bitcoin_canister = BitcoinCanister::new(&MetricsRegistry::new());
-        let state = bitcoin_canister.heartbeat(state, BitcoinFeature::Enabled, &no_op_logger());
+        let bitcoin_canister = BitcoinCanister::new(&MetricsRegistry::new(), no_op_logger());
+        let state = bitcoin_canister.heartbeat(state, BitcoinFeature::Enabled);
         assert_eq!(state.adapter_queues.num_requests(), 1);
     }
 }
