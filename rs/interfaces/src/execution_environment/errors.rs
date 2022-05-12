@@ -298,7 +298,7 @@ impl HypervisorError {
             HypervisorError::FunctionNotFound(..) => "FunctionNotFound",
             HypervisorError::MethodNotFound(_) => "MethodNotFound",
             HypervisorError::ContractViolation(_) => "ContractViolation",
-            HypervisorError::InstructionLimitExceeded => "InstructionsLimitExceeded",
+            HypervisorError::InstructionLimitExceeded => "InstructionLimitExceeded",
             HypervisorError::InvalidWasm(_) => "InvalidWasm",
             HypervisorError::InstrumentationFailed(_) => "InstrumentationFailed",
             HypervisorError::Trapped(_) => "Trapped",

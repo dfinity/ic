@@ -17,7 +17,7 @@ use ic_types::{
     ComputeAllocation, Cycles, ExecutionRound, Height, NumInstructions, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
-use std::ops::Div;
+use std::ops;
 use std::sync::{Arc, RwLock};
 use std::{convert::Infallible, fmt};
 use tower::{buffer::Buffer, util::BoxService};
@@ -45,6 +45,46 @@ pub enum SubnetAvailableMemoryError {
         available_total: i64,
         available_messages: i64,
     },
+}
+
+/// Tracks the execution complexity.
+///
+/// Each execution has an associated complexity, i.e. how much CPU, memory,
+/// disk or network bandwidth it takes.
+///
+/// For now, the complexity counters do not translate into Cycles, but they are rather
+/// used to prevent too complex messages to slow down the whole subnet.
+/// TODO: EXC-1029: Computation Cost (take into account memory, disk, and network complexity)
+///
+#[derive(Debug, Default)]
+pub struct ExecutionComplexity {
+    /// The CPU complexity accumulated.
+    pub cpu: NumInstructions,
+    /// The memory complexity accumulated.
+    pub memory: NumBytes,
+    /// The disk complexity accumulated.
+    pub disk: NumBytes,
+    /// The network complexity accumulated.
+    pub network: NumBytes,
+}
+
+impl ExecutionComplexity {
+    pub fn new() -> Self {
+        ExecutionComplexity::default()
+    }
+}
+
+impl ops::Add<&ExecutionComplexity> for &ExecutionComplexity {
+    type Output = ExecutionComplexity;
+
+    fn add(self, rhs: &ExecutionComplexity) -> ExecutionComplexity {
+        ExecutionComplexity {
+            cpu: self.cpu + rhs.cpu,
+            memory: self.memory + rhs.memory,
+            disk: self.disk + rhs.disk,
+            network: self.network + rhs.network,
+        }
+    }
 }
 
 /// Tracks the available memory on a subnet. The main idea is to separately track
@@ -97,7 +137,7 @@ impl AvailableMemory {
     }
 }
 
-impl Div<i64> for AvailableMemory {
+impl ops::Div<i64> for AvailableMemory {
     type Output = Self;
 
     fn div(self, rhs: i64) -> Self::Output {
@@ -338,6 +378,12 @@ pub trait OutOfInstructionsHandler {
 
 /// A trait for providing all necessary imports to a Wasm module.
 pub trait SystemApi {
+    /// Stores the total execution complexity.
+    fn set_total_execution_complexity(&mut self, complexity: ExecutionComplexity);
+
+    /// Returns the total execution complexity accumulated so far.
+    fn get_total_execution_complexity(&self) -> &ExecutionComplexity;
+
     /// Stores the execution error, so that the user can evaluate it later.
     fn set_execution_error(&mut self, error: HypervisorError);
 
@@ -355,6 +401,9 @@ pub trait SystemApi {
 
     /// Returns the subnet type the replica runs on.
     fn subnet_type(&self) -> SubnetType;
+
+    /// Returns the total instruction limit.
+    fn total_instruction_limit(&self) -> NumInstructions;
 
     /// Returns the instruction limit for the current execution slice.
     fn slice_instruction_limit(&self) -> NumInstructions;

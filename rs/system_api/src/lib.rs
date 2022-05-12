@@ -8,7 +8,7 @@ pub mod system_api_empty;
 use ic_error_types::RejectCode;
 use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{
-    ExecutionParameters,
+    ExecutionComplexity, ExecutionParameters,
     HypervisorError::{self, *},
     HypervisorResult, OutOfInstructionsHandler, SubnetAvailableMemory, SystemApi,
     TrapCode::CyclesAmountTooBigFor64Bit,
@@ -676,6 +676,9 @@ pub struct SystemApiImpl {
     sandbox_safe_system_state: SandboxSafeSystemState,
 
     out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
+
+    /// Tracks the total execution complexity.
+    total_execution_complexity: ExecutionComplexity,
 }
 
 impl SystemApiImpl {
@@ -706,6 +709,7 @@ impl SystemApiImpl {
             sandbox_safe_system_state,
             out_of_instructions_handler,
             log,
+            total_execution_complexity: ExecutionComplexity::new(),
         }
     }
 
@@ -1105,6 +1109,14 @@ impl SystemApiImpl {
 }
 
 impl SystemApi for SystemApiImpl {
+    fn set_total_execution_complexity(&mut self, complexity: ExecutionComplexity) {
+        self.total_execution_complexity = complexity
+    }
+
+    fn get_total_execution_complexity(&self) -> &ExecutionComplexity {
+        &self.total_execution_complexity
+    }
+
     fn set_execution_error(&mut self, error: HypervisorError) {
         self.execution_error = Some(error)
     }
@@ -1135,6 +1147,10 @@ impl SystemApi for SystemApiImpl {
 
     fn subnet_type(&self) -> SubnetType {
         self.execution_parameters.subnet_type
+    }
+
+    fn total_instruction_limit(&self) -> NumInstructions {
+        self.execution_parameters.total_instruction_limit
     }
 
     fn slice_instruction_limit(&self) -> NumInstructions {
