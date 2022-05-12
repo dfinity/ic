@@ -8,7 +8,8 @@ use stable_structures::{btreemap, Memory};
 /// These are declared as a trait since [`Utxos`] is declared in a different crate.
 pub trait UtxosTrait {
     /// Inserts a utxo into the map.
-    fn insert(&mut self, key: OutPoint, value: (TxOut, Height));
+    /// Returns true if there was a previous value for the key in the map, false otherwise.
+    fn insert(&mut self, key: OutPoint, value: (TxOut, Height)) -> bool;
 
     /// Returns the value associated with the given outpoint if it exists.
     fn get(&self, key: &OutPoint) -> Option<(TxOut, Height)>;
@@ -25,19 +26,21 @@ pub trait UtxosTrait {
 }
 
 impl UtxosTrait for Utxos {
-    fn insert(&mut self, key: OutPoint, value: (TxOut, Height)) {
+    fn insert(&mut self, key: OutPoint, value: (TxOut, Height)) -> bool {
         let value_encoded = value.to_bytes();
 
         if value_encoded.len() <= UTXO_VALUE_MAX_SIZE_SMALL as usize {
             self.small_utxos
                 .insert(key.to_bytes(), value_encoded)
-                .expect("Inserting small UTXO must succeed.");
+                .expect("Inserting small UTXO must succeed.")
+                .is_some()
         } else if value_encoded.len() <= UTXO_VALUE_MAX_SIZE_MEDIUM as usize {
             self.medium_utxos
                 .insert(key.to_bytes(), value_encoded)
-                .expect("Inserting medium UTXO must succeed.");
+                .expect("Inserting medium UTXO must succeed.")
+                .is_some()
         } else {
-            self.large_utxos.insert(key, value);
+            self.large_utxos.insert(key, value).is_some()
         }
     }
 

@@ -76,20 +76,6 @@ pub(crate) fn insert_utxo(
     output: TxOut,
     height: Height,
 ) {
-    // Verify that we haven't seen the outpoint before.
-    // NOTE: There was a bug where there were duplicate transactions. These transactions
-    // we overwrite.
-    //
-    // See: https://en.bitcoin.it/wiki/BIP_0030
-    //      https://bitcoinexplorer.org/tx/d5d27987d2a3dfc724e359870c6644b40e497bdc0589a033220fe15429d88599
-    //      https://bitcoinexplorer.org/tx/e3bf3d07d4b0375638d5f1db5255fe07ba2c4cb067cd81b84ee974b6585fb468
-    if utxo_set.utxos.contains_key(&outpoint) && !DUPLICATE_TX_IDS.contains(&outpoint.txid) {
-        panic!(
-            "Cannot insert outpoint {:?} because it was already inserted. Block height: {}",
-            outpoint, height
-        );
-    }
-
     // Insert the outpoint.
     if let Some(address) = Address::from_script(&output.script_pubkey, utxo_set.network) {
         // Add the address to the index if we can parse it.
@@ -99,7 +85,21 @@ pub(crate) fn insert_utxo(
             .expect("insertion must succeed");
     }
 
-    utxo_set.utxos.insert(outpoint, (output, height));
+    let outpoint_already_exists = utxo_set.utxos.insert(outpoint, (output, height));
+
+    // Verify that we aren't overwriting a previously seen outpoint.
+    // NOTE: There was a bug where there were duplicate transactions. These transactions
+    // we overwrite.
+    //
+    // See: https://en.bitcoin.it/wiki/BIP_0030
+    //      https://bitcoinexplorer.org/tx/d5d27987d2a3dfc724e359870c6644b40e497bdc0589a033220fe15429d88599
+    //      https://bitcoinexplorer.org/tx/e3bf3d07d4b0375638d5f1db5255fe07ba2c4cb067cd81b84ee974b6585fb468
+    if outpoint_already_exists && !DUPLICATE_TX_IDS.contains(&outpoint.txid) {
+        panic!(
+            "Cannot insert outpoint {:?} because it was already inserted. Block height: {}",
+            outpoint, height
+        );
+    }
 }
 
 #[cfg(test)]
@@ -107,20 +107,14 @@ mod test {
     use super::*;
     use crate::types::Address as AddressStr;
     use bitcoin::blockdata::{opcodes::all::OP_RETURN, script::Builder};
-    use bitcoin::secp256k1::rand::rngs::OsRng;
-    use bitcoin::secp256k1::Secp256k1;
-    use bitcoin::{Address, Network, PublicKey, TxOut};
-    use ic_btc_test_utils::TransactionBuilder;
+    use bitcoin::{Network, TxOut};
+    use ic_btc_test_utils::{random_p2pkh_address, TransactionBuilder};
     use std::collections::BTreeSet;
 
     #[test]
     fn coinbase_tx() {
         for network in [Network::Bitcoin, Network::Regtest, Network::Testnet].iter() {
-            let secp = Secp256k1::new();
-            let mut rng = OsRng::new().unwrap();
-
-            let address =
-                Address::p2pkh(&PublicKey::new(secp.generate_keypair(&mut rng).1), *network);
+            let address = random_p2pkh_address(*network);
 
             let coinbase_tx = TransactionBuilder::coinbase()
                 .with_output(&address, 1000)
@@ -184,12 +178,8 @@ mod test {
     #[test]
     fn spending() {
         for network in [Network::Bitcoin, Network::Regtest, Network::Testnet].iter() {
-            let secp = Secp256k1::new();
-            let mut rng = OsRng::new().unwrap();
-            let address_1 =
-                Address::p2pkh(&PublicKey::new(secp.generate_keypair(&mut rng).1), *network);
-            let address_2 =
-                Address::p2pkh(&PublicKey::new(secp.generate_keypair(&mut rng).1), *network);
+            let address_1 = random_p2pkh_address(*network);
+            let address_2 = random_p2pkh_address(*network);
 
             let mut utxo = UtxoSet::new(*network);
 
@@ -259,13 +249,7 @@ mod test {
 
     #[test]
     fn utxos_are_sorted_by_height() {
-        let secp = Secp256k1::new();
-        let mut rng = OsRng::new().unwrap();
-        let address = Address::p2pkh(
-            &PublicKey::new(secp.generate_keypair(&mut rng).1),
-            Network::Testnet,
-        )
-        .to_string();
+        let address = random_p2pkh_address(Network::Testnet).to_string();
 
         let mut utxo = UtxoSet::new(Network::Testnet);
 
@@ -290,5 +274,30 @@ mod test {
                 .collect::<Vec<_>>(),
             vec![31, 17, 4, 2, 0]
         );
+    }
+
+    #[test]
+    #[should_panic]
+    fn inserting_same_outpoint_panics() {
+        let network = Network::Testnet;
+        let mut utxo_set = UtxoSet::new(network);
+        let address = random_p2pkh_address(network);
+
+        let tx_out_1 = TransactionBuilder::coinbase()
+            .with_output(&address, 1000)
+            .build()
+            .output[0]
+            .clone();
+
+        let tx_out_2 = TransactionBuilder::coinbase()
+            .with_output(&address, 2000)
+            .build()
+            .output[0]
+            .clone();
+
+        insert_utxo(&mut utxo_set, OutPoint::null(), tx_out_1, 1);
+
+        // Should panic, as we are trying to insert a UTXO with the same outpoint.
+        insert_utxo(&mut utxo_set, OutPoint::null(), tx_out_2, 2);
     }
 }
