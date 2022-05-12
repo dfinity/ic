@@ -1,0 +1,3 @@
+@3 foo("hello", 42, "world")
+@5 bar("hello", 1, "world")
+@1 foobar("hello", 42, "world")

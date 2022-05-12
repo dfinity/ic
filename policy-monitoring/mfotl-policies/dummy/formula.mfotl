@@ -1,0 +1,7 @@
+(*
+  Policy: An alert is raised for **any non-empty** input log.
+
+  Relevant events: none
+*)
+
+TRUE

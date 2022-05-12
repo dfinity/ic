@@ -1,0 +1,13 @@
+(*
+  Policy: There are no errors. An error is a log message with CRITICAL or ERROR
+  level.
+
+  Relevant events:
+  - log(node_id:string, subnet_id:string, level:string, message:string)
+*)
+
+LET error_level(level) =
+     level = "CRITICAL"
+  OR level = "ERROR"
+IN
+log(node_id, subnet_id, level, message) AND error_level(level)

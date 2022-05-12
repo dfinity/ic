@@ -1,0 +1,29 @@
+(*
+  Policy: If two blocks at heights h and h + 1 are finalized by nodes in a subnet,
+    then the earliest finalization of the block at height h + 1 happens at most 80s
+    after the earliest finalization of the block at height h.
+
+  Relevant events:
+  - finalized(node_id:string, subnet_id:string, height:int, hash:string, replica_version:string)
+
+  Remarks:
+  - Time-stamps are assumed to be in seconds.
+  - The original analyzer rule ignored the node_id. This formalization ignores
+    it too.
+  - The "finalized" event is triggered whenever the consensus layer tries to
+    deliver a batch including the block in the event to the message routing
+    layer. The delivery may fail and hence there might be multiple such events
+    for the same block, by the same node. This is not a problem because we
+    consider the earliest delivery attempt, which is moreover a good
+    approximation of the time at which the block became finalized.
+*)
+
+LET fin(node, subnet, height, hash, replica_version) =
+  finalized(node, subnet, height, hash, replica_version)
+  AND NOT (
+    PREVIOUS ONCE EXISTS nodea. finalized(nodea, subnet, height, hash, replica_version)
+  )
+IN
+(ONCE[80001,*] fin(n1, subnet, height1, hash1, replica_version))
+AND fin(n2, subnet, height2, hash2, replica_version)
+AND height2 = height1 + 1

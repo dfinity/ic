@@ -1,0 +1,88 @@
+(*
+  Policy: No node spends more than 10% more time per day than the average node
+  [in the same subnet] in catching up state.
+
+  Definition - catching up state: either state or DKG key material is
+  unavailable when the consensus module declares consensus finalized.
+
+  Relevant events:
+  - p2p__node_added(node_id:string, subnet_id:string)
+    Example log message:
+    Jan 20 09:01:08 medium05-1-2 orchestrator[816]: {"log_entry":{"level":"INFO","utc_time":"2022-01-20T09:01:08.355Z","message":"Nodes zxdg4-ha7p6-dfvi3-eo5rs-rcvbi-pkuwu-scoy3-5lk6t-2bcvs-c3txn-xqe added","crate_":"ic_p2p","module":"download_management","line":1504,"node_id":"z3dw6-ej6yf-amnk2-4zclr-jmqtz-yhcew-273kp-tao44-7nf2y-rj5vx-yqe","subnet_id":"62e3r-apw4o-mhxv3-xidd3-ngrxx-mnunc-xhlku-wkybu-yhq5o-mg2ou-3ae"}}
+
+  - consensus_finalized(node_id:string,
+                        subnet_id:string,
+                        state_avail:int,   -- boolean
+                        key_avail:int)     -- boolean
+    Example log message:
+    Jan 20 09:04:28 medium05-1-2 orchestrator[1128]: {"log_entry":{"level":"INFO","utc_time":"2022-01-20T09:04:28.911Z","message":"Consensus finalized height: 149, state available: false, DKG key material available: true","crate_":"ic_consensus","module":"consensus","line":434,"node_id":"ycnxt-nn7hh-sow5h-fmdzh-gyy54-ilhxf-xubix-pwv2c-aie7o-whivf-lae","subnet_id":"62e3r-apw4o-mhxv3-xidd3-ngrxx-mnunc-xhlku-wkybu-yhq5o-mg2ou-3ae"}}            
+
+  - Note: There should be regular events (e.g., every hour) to drive the
+    computation forward.
+
+  Encoding of boolean parameters: 0 = false, 1 = true
+*)
+
+(* TODO(JS/YAP): Are node removals logged? *)
+LET relevant_node(node, subnet) = ONCE p2p__node_added(node, subnet) IN
+LET up_to_date(node, subnet) = consensus_finalized(node, subnet, 1, 1) IN
+LET catching_up(node, subnet) =
+  EXISTS state, key. consensus_finalized(node, subnet, state, key)
+                     AND state + key < 2
+IN
+LET enter_sync(node, subnet, start_time) =
+  catching_up(node, subnet)
+  AND NOT (PREVIOUS ((NOT up_to_date(node, subnet))
+                     SINCE catching_up(node, subnet)))
+  AND ts(start_time)
+IN
+
+(*
+  There are four cases, depending on whether entering/leaving the sync state
+  happens strictly outside of/non-strictly within the 24h window.
+*)
+
+(* Case 1: Entered state before window and has not left it yet. *)
+LET sync_before_ongoing(node, subnet, time) =
+  ((NOT up_to_date(node, subnet)) 
+  SINCE [86400000, *]  (* 24h = 24*60*60*1000 = 86400000 *)
+    catching_up(node, subnet)
+  ) AND time = 86400000
+IN
+(* Case 2: Entered state within window and has not left it yet. *)
+LET sync_within_ongoing(node, subnet, time) =
+  EXISTS start, now.
+    ((NOT up_to_date(node, subnet))
+     SINCE [0, 86400000)
+      enter_sync(node, subnet, start))
+    AND ts(now) AND time = now - start
+IN
+
+(* Cases 3&4: Sync state has been left within window. *)
+LET sync_complete_aux(node, subnet, end, start) =
+  ONCE [0,86400000)
+    up_to_date(node, subnet)
+    AND ts(end)
+    AND PREVIOUS ((NOT up_to_date(node, subnet))
+                  SINCE enter_sync(node, subnet, start))
+IN
+LET sync_complete(node, subnet, time) =
+  EXISTS end, start, now.
+    (sync_complete_aux(node, subnet, end, start)
+     AND ts(now) AND start <= now - 86400000 AND time = end - (now - 86400000))
+    OR (sync_complete_aux(node, subnet, end, start)
+     AND ts(now) AND start > now - 86400000 AND time = end - start)
+IN
+
+LET time_spent_in_sync_one_day(node, subnet, time) =
+  time <- SUM t; node, subnet
+    (sync_before_ongoing(node, subnet, t)
+     OR sync_within_ongoing(node, subnet, t)
+     OR sync_complete(node, subnet, t)
+     OR relevant_node(node, subnet) AND t = 0)
+IN
+LET sync_stats(subnet, avg, node, node_time) =
+  (avg <- AVG time; subnet time_spent_in_sync_one_day(node, subnet, time))
+  AND time_spent_in_sync_one_day(node, subnet, node_time)
+IN
+sync_stats(subnet, avg, node, node_time) AND i2f(node_time) > 1.1 * avg

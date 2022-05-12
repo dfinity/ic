@@ -1,0 +1,1 @@
+ERROR: Wrong tuple length for predicate move_block_proposal (expected: 4, actual: 2)

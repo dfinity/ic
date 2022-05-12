@@ -1,0 +1,10 @@
+@00000000 p2p__node_added(node1, subnet1)(node2, subnet1)
+@00000000 consensus_finalized(node1, subnet1, 0, 0)
+@10005000 consensus_finalized(node1, subnet1, 0, 1)
+@10010000 consensus_finalized(node1, subnet1, 1, 1)
+@20000000 consensus_finalized(node1, subnet1, 0, 0)
+@20001000 consensus_finalized(node1, subnet1, 1, 1)
+@40000000 consensus_finalized(node2, subnet1, 1, 0)
+@40023000 consensus_finalized(node2, subnet1, 1, 1)
+@96300000 consensus_finalized(node1, subnet1, 1, 0)
+@96400000

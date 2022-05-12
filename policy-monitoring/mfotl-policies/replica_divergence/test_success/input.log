@@ -1,0 +1,5 @@
+@1 p2p__node_added("NodeA", "Subnet1")
+@2 p2p__node_added("NodeB", "Subnet1")
+@3 replica_diverged("NodeB", "Subnet1", 42)
+@4 CUP_share_proposed("NodeB", "Subnet1")
+#@10 end_test()

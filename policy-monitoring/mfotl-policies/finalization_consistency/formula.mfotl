@@ -1,0 +1,11 @@
+(*
+  Policy: For each replica version, at every height, all nodes
+          in a subnet agree on the finalized block hashes.
+
+  Relevant events:
+  - finalized(node_id:string, subnet_id:string, height:int, hash:string, replica_version:string)
+*)
+
+(PREVIOUS ONCE finalized(node1, subnet, height, hash1, replica_version))
+AND finalized(node2, subnet, height, hash2, replica_version)
+AND NOT hash1 = hash2

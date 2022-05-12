@@ -1,0 +1,18 @@
+(*
+  Policy: An alert is raised if there are more than 3 reboots of machines in the
+  same data center within 30min windows. The first reboot is ignored, as every
+  machine is rebooted when a testnet starts.
+
+  Relevant events:
+  - reboot(ip_addr:string, data_center_prefix:string)
+*)
+
+LET true_reboot(ip_addr, data_center) =
+  reboot(ip_addr, data_center) AND PREV ONCE reboot(ip_addr, data_center)
+IN
+LET num_reboots(data_center, n) =
+  n <- CNT i; data_center
+    (ONCE [0, 1800000)  (* 30 min = 30*60*1000 = 1800000 *)
+      (true_reboot(ip_addr, data_center) AND tp(i)))
+IN
+num_reboots(data_center, n) AND n > 2

@@ -1,0 +1,4 @@
+@10000 move_block_proposal(node2, subnet)
+@10001 deliver_batch(node2, subnet, AAA)
+@20000 move_block_proposal(node2, subnet)
+@30000 move_block_proposal(node1, subnet)

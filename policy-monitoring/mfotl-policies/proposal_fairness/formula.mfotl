@@ -1,0 +1,84 @@
+(*
+  Policy: The num of finalized block proposals created by a node in a window
+  of 1 day [must not be] more than 2 standard deviations off the average (block
+  "fairness").
+
+  This policy is checked from the perspective of *every node* in a subnet, i.e.,
+  using the observations made by that node of block proposals created by other
+  nodes.
+
+  TODO(JS):
+  - What about the "added proposal to artifact pool" event? Is that emitted by
+    the creator itself?
+
+  Relevant events:
+  - p2p__node_added(node_id:string, subnet_id:string)
+    Example log message:
+    Jan 20 09:01:08 medium05-1-2 orchestrator[816]: {"log_entry":{"level":"INFO","utc_time":"2022-01-20T09:01:08.355Z","message":"Nodes zxdg4-ha7p6-dfvi3-eo5rs-rcvbi-pkuwu-scoy3-5lk6t-2bcvs-c3txn-xqe added","crate_":"ic_p2p","module":"download_management","line":1504,"node_id":"z3dw6-ej6yf-amnk2-4zclr-jmqtz-yhcew-273kp-tao44-7nf2y-rj5vx-yqe","subnet_id":"62e3r-apw4o-mhxv3-xidd3-ngrxx-mnunc-xhlku-wkybu-yhq5o-mg2ou-3ae"}}
+
+  - move_block_proposal(node_id:string,
+                        subnet_id:string,
+                        block_hash:string,
+                        signer:string)
+    Example log message:
+    Jan 20 09:03:22 medium05-1-2 orchestrator[817]: {"log_entry":{"level":"INFO","utc_time":"2022-01-20T09:03:22.721Z","message":"Moved proposal Signed { content: CryptoHash(0xa9643feda6a22d10b9e8453a72aaa7dd737ca35568aa197511173397979b4466), signature: BasicSignature { signature: BasicSig([166, 34, 28, 142, 115, 226, 234, 106, 174, 192, 206, 125, 78, 170, 234, 140, 61, 152, 1, 112, 100, 14, 231, 113, 209, 128, 109, 228, 154, 110, 105, 11, 62, 21, 198, 47, 2, 175, 193, 3, 241, 14, 10, 132, 48, 53, 56, 89, 233, 99, 217, 11, 255, 246, 135, 78, 80, 176, 176, 162, 16, 205, 250, 10]), signer: gvtfg-7gy73-jjgfh-6g6lv-sywtx-vk6xk-qfmrk-cabe4-uggxn-t7joz-zqe } } of rank Rank(0) to artifact pool","crate_":"ic_artifact_manager","module":"processors","line":381,"node_id":"zxdg4-ha7p6-dfvi3-eo5rs-rcvbi-pkuwu-scoy3-5lk6t-2bcvs-c3txn-xqe","subnet_id":"62e3r-apw4o-mhxv3-xidd3-ngrxx-mnunc-xhlku-wkybu-yhq5o-mg2ou-3ae"}}
+
+  - deliver_batch(node_id:string, subnet_id:string, block_hash:string)
+    Example log message:
+    Jan 20 09:03:22 medium05-1-2 orchestrator[817]: {"log_entry":{"level":"INFO","utc_time":"2022-01-20T09:03:22.743Z","message":"deliver batch 106 for block_hash \"3b6f4fd74bae8155d7f6cf8213da4f65ae9d6a28a814dccf712c8e937123d557\"","crate_":"ic_consensus","module":"batch_delivery","line":150,"node_id":"zxdg4-ha7p6-dfvi3-eo5rs-rcvbi-pkuwu-scoy3-5lk6t-2bcvs-c3txn-xqe","subnet_id":"62e3r-apw4o-mhxv3-xidd3-ngrxx-mnunc-xhlku-wkybu-yhq5o-mg2ou-3ae"}}
+
+  Assumptions:
+  - A node moves a signed proposal at most once to its artifact pool.
+  - move_block_proposal precedes deliver_batch, and they are not more than 600s
+    apart.
+    YAP: We assume that every DKG interval (set to 100 rounds in NNS and 500
+    rounds in other subnets) at least one finalization happens which translates
+    into a bound of ~500 seconds between creation and delivery.
+*)
+
+(* TODO(JS/YAP): Are node removals logged? *)
+LET relevant_node(node, subnet) = ONCE p2p__node_added(node, subnet) IN
+LET num_relevant_nodes(subnet, n) = n <- CNT node; subnet
+  ONCE p2p__node_added(node, subnet) IN
+
+LET deliver_block_proposal(reporting_node, subnet, block_hash, signer) =
+  move_block_proposal(reporting_node, subnet, block_hash, signer)
+  AND EVENTUALLY [0,600000]  (* 600s in milliseconds; 600*1000 = 600000 *)
+    deliver_batch(reporting_node, subnet, block_hash)
+IN
+LET num_created_one_day_raw(reporting_node, subnet, signer, n) =
+  n <- CNT block_hash; reporting_node, subnet, signer
+    ONCE [0, 86400000)  (* One day in milliseconds; 24*60*60*1000 = 86400000 *)
+      deliver_block_proposal(reporting_node, subnet, block_hash, signer)
+IN
+LET num_created_one_day(reporting_node, subnet, signer, n) =
+  num_created_one_day_raw(reporting_node, subnet, signer, n)
+  OR (relevant_node(reporting_node, subnet)
+      AND relevant_node(signer, subnet)
+      AND NOT num_created_one_day_raw(reporting_node, subnet, signer, _)
+      AND n = 0)
+IN
+
+LET avg_created_one_day(reporting_node, subnet, a) =
+  a <- AVG n; reporting_node, subnet
+    num_created_one_day(reporting_node, subnet, node, n)
+IN
+(* Population variance: *)
+LET sqsum_created_one_day(reporting_node, subnet, s) =
+  s <- SUM nsq; reporting_node, subnet
+    (EXISTS n. num_created_one_day(reporting_node, subnet, signer, n)
+               AND nsq = n * n)
+IN
+LET varp_created_one_day(reporting_node, subnet, v) =
+  EXISTS a, b, n.
+    avg_created_one_day(reporting_node, subnet, a)
+    AND sqsum_created_one_day(reporting_node, subnet, b)
+    AND num_relevant_nodes(subnet, n)
+    AND v = (i2f(b) / i2f(n)) - (a * a)
+IN
+
+num_created_one_day(reporting_node, subnet, creating_node, n_created)
+AND avg_created_one_day(reporting_node, subnet, avg_created)
+AND varp_created_one_day(reporting_node, subnet, var_created)
+AND (i2f(n_created) - avg_created) * (i2f(n_created) - avg_created)
+    > 4.0 * var_created  (* variance = stddev^2 *)
