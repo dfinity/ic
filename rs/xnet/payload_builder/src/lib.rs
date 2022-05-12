@@ -23,7 +23,6 @@ use ic_interfaces::{
         InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
         XNetTransientValidationError,
     },
-    payload::BatchPayloadSectionBuilder,
     registry::RegistryClient,
     validation::ValidationError,
 };
@@ -40,10 +39,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{replicated_state::ReplicatedStateMessageRouting, ReplicatedState};
 use ic_types::{
     batch::{ValidationContext, XNetPayload},
-    consensus::Payload,
     registry::{connection_endpoint::ConnectionEndpoint, RegistryClientError},
     xnet::{CertifiedStreamSlice, StreamIndex},
-    CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId, Time,
+    CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
 use ic_xnet_hyper::{ExecuteOnRuntime, TlsConnector};
 use ic_xnet_uri::XNetAuthority;
@@ -970,31 +968,6 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         self.metrics
             .observe_validate_duration(VALIDATION_STATUS_VALID, timer);
         Ok(NumBytes::new(payload_byte_size as u64))
-    }
-}
-
-impl BatchPayloadSectionBuilder<XNetPayload> for XNetPayloadBuilderImpl {
-    fn build_payload(
-        &self,
-        validation_context: &ValidationContext,
-        max_size: NumBytes,
-        _priority: usize,
-        past_payloads: &[(Height, Time, Payload)],
-    ) -> (XNetPayload, NumBytes) {
-        let past_payloads = self.filter_past_payloads(past_payloads);
-        let payload = self.get_xnet_payload(validation_context, &past_payloads, max_size);
-        let size = NumBytes::new(payload.count_bytes() as u64);
-        (payload, size)
-    }
-
-    fn validate_payload(
-        &self,
-        payload: &XNetPayload,
-        validation_context: &ValidationContext,
-        past_payloads: &[(Height, Time, Payload)],
-    ) -> Result<NumBytes, XNetPayloadValidationError> {
-        let past_payloads = self.filter_past_payloads(past_payloads);
-        self.validate_xnet_payload(payload, validation_context, &past_payloads)
     }
 }
 

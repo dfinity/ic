@@ -1,6 +1,5 @@
-use crate::{payload::BatchPayloadSectionType, validation::ValidationError};
+use crate::validation::ValidationError;
 use ic_interfaces_state_manager::StateManagerError;
-
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext},
     consensus::Payload,
@@ -24,11 +23,6 @@ pub enum SelfValidatingTransientValidationError {
 /// A SelfValidationPayload error that results from payload validation.
 pub type SelfValidatingPayloadValidationError =
     ValidationError<InvalidSelfValidatingPayload, SelfValidatingTransientValidationError>;
-
-impl BatchPayloadSectionType for SelfValidatingPayload {
-    type PermanentValidationError = InvalidSelfValidatingPayload;
-    type TransientValidationError = SelfValidatingTransientValidationError;
-}
 
 pub trait SelfValidatingPayloadBuilder: Send + Sync {
     /// Produces a `SelfValidatingPayload` of maximum byte size `byte_limit`

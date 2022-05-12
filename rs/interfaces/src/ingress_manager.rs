@@ -2,7 +2,6 @@
 use crate::{
     execution_environment::{CanisterOutOfCyclesError, IngressHistoryError},
     ingress_pool::{ChangeSet, IngressPool},
-    payload::BatchPayloadSectionType,
     validation::{ValidationError, ValidationResult},
 };
 use ic_types::{
@@ -80,11 +79,6 @@ pub enum IngressTransientError {
 
 pub type IngressPayloadValidationError =
     ValidationError<IngressPermanentError, IngressTransientError>;
-
-impl BatchPayloadSectionType for IngressPayload {
-    type PermanentValidationError = IngressPermanentError;
-    type TransientValidationError = IngressTransientError;
-}
 
 impl From<CryptoError> for IngressTransientError {
     fn from(err: CryptoError) -> IngressTransientError {

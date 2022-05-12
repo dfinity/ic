@@ -1,7 +1,7 @@
 //! Canister Http related public interfaces.
 use crate::{
     artifact_pool::UnvalidatedArtifact, consensus_pool::ConsensusPoolCache,
-    payload::BatchPayloadSectionType, validation::ValidationError,
+    validation::ValidationError,
 };
 use ic_base_types::NumBytes;
 use ic_types::{
@@ -25,11 +25,6 @@ pub enum CanisterHttpTransientValidationError {}
 
 pub type CanisterHttpPayloadValidationError =
     ValidationError<CanisterHttpPermananentValidationError, CanisterHttpTransientValidationError>;
-
-impl BatchPayloadSectionType for CanisterHttpPayload {
-    type PermanentValidationError = CanisterHttpPermananentValidationError;
-    type TransientValidationError = CanisterHttpTransientValidationError;
-}
 
 pub enum CanisterHttpChangeAction {
     AddToValidated(CanisterHttpResponseShare, CanisterHttpResponse),
