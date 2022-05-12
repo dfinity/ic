@@ -1,0 +1,8 @@
+@10000 reboot(d1m1, d1)
+@10010 reboot(d1m2, d1)
+@10020 reboot(d2m1, d2)
+@11000 reboot(d1m3, d1)
+@11010 reboot(d2m1, d2)
+@11020 reboot(d2m2, d2)
+@11810 reboot(d2m3, d2)
+@12900 reboot(d2m3, d2)

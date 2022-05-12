@@ -1,0 +1,114 @@
+(*
+  Policy: No node which participates in a subnet logs unauthorized TLS
+  connection attempts (except for connection attempts to nodes in other
+  subnets, e.g., soon after a destination node has been reassigned)
+
+  Example violation A
+  -------------------
+  t=100
+    unassign(node, subnet)
+    ...
+    assigned(node, subnet)
+    ...
+    // no unassign(node, subnet) events here
+    ...
+  t=105
+    unauthorized_connection_attempt(dest=node)
+
+  Example violation B
+  -------------------
+  t=200
+    unassign(node, subnet)
+    ...
+    // no assigned(node, subnet) events here
+    ...
+  t=551  // more than 5 min (600 s) after the last unassign(node, subnet) event
+    unauthorized_connection_attempt(node)
+
+  Example non-violation
+  ---------------------
+  t=300
+    unassign(node, subnet)
+    ...
+    // no assigned(node, subnet) events here
+    ...
+  t=549  // less than 5 min (600 s) after the last unassign(node, subnet) event
+    unauthorized_connection_attempt(node)
+
+
+  Relevant events
+  ---------------
+  - ControlPlane_accept_error(local_addr:string, flow:string, err:string)
+    Warn "ControlPlane::accept(): local_addr = {:?}, flow_tag = {:?}, error = {:?}"
+
+  // auxiliary event that helps mapping ControlPlane_accept_aborted events to local_addr
+  // TODO: use this event in the definition of unauthorized_connection_attempt
+  - ControlPlane_spawn_accept_task(local_addr:string, flow:string)
+    Info "ControlPlane::spawn_accept_task(): local_addr = {:?}, flow_tag = {:?}"
+
+  - ControlPlane_accept_aborted(flow:string)
+    Warn "ControlPlane: accept task aborted: flow_tag = {:?}"
+
+
+  - ControlPlane_tls_server_handshake_failed(node_id:string,
+                                             node_addr:string,
+                                             peer_addr:string,
+                                             flow:string,
+                                             error:string)
+    Warn "ControlPlane::tls_server_handshake() no allowed clients: failed node = {:?}/{:?}, flow_tag = {:?}, peer_addr = {:?}, error = {:?}"
+
+  // The following events should be used to detect nodes that are being reassigned
+  - local__originally_in_subnet(node_id:string, node_addr:string, subnet_id:string)
+  - registry__node_removed_from_subnet(node_id:string, node_addr:string)
+  - registry__node_added_to_subnet(node_id:string, node_addr:string, subnet_id:string)
+*)
+
+LET unauthorized_connection_attempt(type, dest_addr, sender_id, sender_addr, message, flow) =
+  (
+    type = "accept error"
+    AND ControlPlane_accept_error(sender_addr, flow, message)
+    AND dest_addr = ""
+    AND sender_id = ""
+  )
+  OR
+  (
+    type = "accept aborted"
+    AND ControlPlane_accept_aborted(flow)
+    AND dest_addr = ""
+    AND sender_id = ""
+    AND sender_addr = ""
+    AND message = ""
+  )
+  OR
+  (
+    type = "TLS server handshake failed"
+    AND ControlPlane_tls_server_handshake_failed(sender_id, sender_addr, dest_addr, flow, message)
+  )
+IN
+LET node_added_to_subnet(node_id, node_addr, subnet) =
+  registry__node_added_to_subnet(node_id, node_addr, subnet)
+IN
+LET node_removed_from_subnet(node_id, node_addr) =
+  registry__node_removed_from_subnet(node_id, node_addr)
+IN
+LET in_subnet(node_id, node_addr, subnet) =
+  ((*
+      The node was originally in this subnet, and it has not been unassigned from it.
+    *)
+    (ONCE local__originally_in_subnet(node_id, node_addr, subnet)) AND NOT (
+      ONCE node_removed_from_subnet(node_id, node_addr)
+    )
+  )
+  OR
+  ((*
+      The node was possibly not originally in this subnet, but it has been assigned to it.
+    *)
+    (
+      NOT node_removed_from_subnet(node_id, node_addr)
+      SINCE node_added_to_subnet(node_id, node_addr, subnet)
+    )
+  )
+IN
+in_subnet(dest_id, dest_addr, subnet) AND in_subnet(sender_id, sender_addr, subnet)
+AND
+unauthorized_connection_attempt(type, dest_addr, sender_id, sender_addr, message, flow)

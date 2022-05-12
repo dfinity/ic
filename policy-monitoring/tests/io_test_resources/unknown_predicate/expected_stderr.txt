@@ -1,0 +1,2 @@
+ERROR while parsing log:
+:2:4: Predicate foobar1 was not defined in the signature.

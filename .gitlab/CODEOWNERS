@@ -210,3 +210,5 @@ Capsule.toml              @dfinity-lab/teams/idx
 /experimental/nix/        @dfinity-lab/teams/idx
 /nix/overlays/haskell.nix @dfinity-lab/teams/ic-testing-verification
 
+# Log-based formal policy monitoring
+/policy-monitoring/       @dfinity-lab/teams/ic-testing-verification

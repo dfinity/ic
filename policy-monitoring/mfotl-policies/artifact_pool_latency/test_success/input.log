@@ -1,0 +1,9 @@
+@0  p2p__node_added
+    (node0.0, net0)
+    (node0.1, net0)
+    (node0.2, net0)
+    (node0.3, net0)
+    (node1.4, net1)
+@1  validated_BlockProposal_Added(node0.0, net0, hash1)
+@3  validated_BlockProposal_Moved(node0.3, net0, hash1)
+@3  validated_BlockProposal_Added(node0.1, net0, hash3)

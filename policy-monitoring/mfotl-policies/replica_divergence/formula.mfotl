@@ -1,0 +1,29 @@
+(*
+  Policy: Nodes that have diverged must eventually propose
+  a CatchUpPackageShare.
+
+  Relevant events:
+  - p2p__node_added(node_id:string, subnet_id:string)
+    Example log message:
+    Jan 20 09:01:08 medium05-1-2 orchestrator[816]: {"log_entry":{"level":"INFO","utc_time":"2022-01-20T09:01:08.355Z","message":"Nodes zxdg4-ha7p6-dfvi3-eo5rs-rcvbi-pkuwu-scoy3-5lk6t-2bcvs-c3txn-xqe added","crate_":"ic_p2p","module":"download_management","line":1504,"node_id":"z3dw6-ej6yf-amnk2-4zclr-jmqtz-yhcew-273kp-tao44-7nf2y-rj5vx-yqe","subnet_id":"62e3r-apw4o-mhxv3-xidd3-ngrxx-mnunc-xhlku-wkybu-yhq5o-mg2ou-3ae"}}
+
+  - replica_diverged(node_id:string, subnet_id:string, height:int)
+    Example log message (payload only):
+    {"log_entry":{"level":"CRITICAL","utc_time":"2021-11-25T11:40:22.215Z","message":"Replica diverged at height 10","crate_":"ic_state_manager","module":"ic_state_manager","line":2357,"node_id":"ux3rh-eqec7-sp4an-cvxzj-4mzgl-a4qba-ukccb-r5upa-njbya-rrsj4-yqe","subnet_id":"cpv7s-uecxn-abdz5-xkr3l-l5exk-f54in-66ebe-kyquf-ov2zm-wcq2m-nqe"}}
+
+  - CUP_share_proposed(node_id:string, subnet_id:string)
+    Example log message (payload only):
+    {"log_entry":{"level":"DEBUG","utc_time":"2021-11-25T11:40:22.079Z","message":"Proposing a CatchUpPackageShare at height 10","crate_":"ic_consensus","module":"catchup_package_maker","line":192,"node_id":"ctk2e-qe25c-zfjpi-s5ps2-uvvvk-uiofl-u3ab4-pryzz-tnyyv-egupe-cqe","subnet_id":"cpv7s-uecxn-abdz5-xkr3l-l5exk-f54in-66ebe-kyquf-ov2zm-wcq2m-nqe"}}
+
+  - end_test()
+    Synthetic event added as the very last event of the testnet run.
+*)
+
+(* TODO(JS/YAP): Are node removals logged? *)
+LET relevant_node(node, subnet) = ONCE p2p__node_added(node, subnet) IN
+LET diverged_eventually_consistent(node, subnet) =
+  (PREVIOUS ONCE replica_diverged(node, subnet, _))
+  AND CUP_share_proposed(node, subnet)
+IN
+end_test() AND relevant_node(node, subnet)
+AND NOT ONCE diverged_eventually_consistent(node, subnet)

@@ -1,0 +1,1 @@
+(ONCE foo("hello", 42, "world")) AND bar("hello", x, "world") AND 42 / x = 1

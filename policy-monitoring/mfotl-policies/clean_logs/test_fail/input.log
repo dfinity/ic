@@ -1,0 +1,5 @@
+@1 log("A", "S1", "INFO", "Foo")
+@2 log("B", "S1", "INFO", "Foo")
+@3 log("C", "S1", "INFO", "Foo")
+@4 log("D", "S2", "ERROR", "Foo")
+@5 log("E", "S2", "DEBUG", "Foo")

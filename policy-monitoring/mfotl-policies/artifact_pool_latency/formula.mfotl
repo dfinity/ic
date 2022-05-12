@@ -1,0 +1,59 @@
+(* How long does it take until a block proposal created at one node_id has been
+   added to validated pool of more than ⅔ of the nodes in the same subnet_id?
+
+  Signature:
+    p2p__node_added(node_id:string, subnet_id:string)
+    p2p__node_removed(node_id:string, subnet_id:string)
+    validated_BlockProposal_Added(node_id:string, subnet_id:string, hash:string)
+    validated_BlockProposal_Moved(node_id:string, subnet_id:string, hash:string)
+
+
+  Output: (block, subnet_id, time, avg_time, max_time)
+    - avg_time and max_time are specific to the subnet_id
+*)
+
+(* State predicate mapping each node_id to its current subnet_id *)
+LET subnet_map(node_id, subnet_id) =
+  NOT p2p__node_removed(node_id, subnet_id) SINCE p2p__node_added(node_id, subnet_id)
+IN
+
+(* Number of nodes per subnet_id *)
+LET subnet_size(subnet_id, n) =
+  n <- CNT node_id; subnet_id subnet_map(node_id, subnet_id)
+IN
+
+(* Has the block proposal just been added to node_id's pool? *)
+LET block_added(node_id, subnet_id, block, t_add) =
+  EVENTUALLY[0,0]
+    validated_BlockProposal_Added(node_id, subnet_id, block)
+    AND subnet_map(node_id, subnet_id)
+    AND ts(t_add)
+IN
+
+(* Has the block proposal (created in the subnet_id at time t_add) been validated
+   by more than ⅔ of the nodes? *)
+LET validated(block, subnet_id, t_add) =
+  EXISTS n_validated, n_subnet.
+    (n_validated <- CNT valid_node; block, subnet_id, t_add
+      ONCE
+        block_added(valid_node, subnet_id, block, t_add)
+        OR (EXISTS add_node.
+          (ONCE block_added(add_node, subnet_id, block, t_add))
+          AND validated_BlockProposal_Moved(valid_node, subnet_id, block)
+          AND subnet_map(valid_node, subnet_id)))
+    AND subnet_size(subnet_id, n_subnet)
+    AND n_validated > 2 * n_subnet / 3
+IN
+
+(* Compute time until ⅔ validation. *)
+LET time_per_block(block, subnet_id, time) =
+  EXISTS t_add, t_validated.
+    validated(block, subnet_id, t_add)
+    AND (NOT PREVIOUS ONCE validated(block, subnet_id, t_add))
+    AND ts(t_validated)
+    AND time = t_validated - t_add
+IN
+
+time_per_block(block, subnet_id, time)
+AND (avg_time <- AVG time; subnet_id ONCE time_per_block(block, subnet_id, time))
+AND (max_time <- MAX time; subnet_id ONCE time_per_block(block, subnet_id, time))

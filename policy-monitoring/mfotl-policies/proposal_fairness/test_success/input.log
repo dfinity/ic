@@ -1,0 +1,14 @@
+@00000000 p2p__node_added(node1, subnet)(node2, subnet) (node3, subnet)
+@10000000 move_block_proposal(node2, subnet, AAA, node1)
+@10001000 deliver_batch(node2, subnet, AAA)
+@20000000 move_block_proposal(node2, subnet, ZZZ, node1)
+@30000000 move_block_proposal(node1, subnet, BBB, node3)
+@30001000 deliver_batch(node1, subnet, BBB)
+@40000000 move_block_proposal(node1, subnet, CCC, node3)
+@40001000 deliver_batch(node1, subnet, CCC)
+@50000000 move_block_proposal(node1, subnet, DDD, node3)
+@50001000 deliver_batch(node1, subnet, DDD)
+@60000000 move_block_proposal(node1, subnet, EEE, node3)
+@60001000 deliver_batch(node1, subnet, EEE)
+@80000000
+@97000000

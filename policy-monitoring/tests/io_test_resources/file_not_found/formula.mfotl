@@ -1,0 +1,1 @@
+(ONCE foo("hello", i, "world")) AND foobar("hello", j, "world") AND NOT i = j
