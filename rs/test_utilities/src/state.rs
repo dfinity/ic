@@ -119,7 +119,7 @@ impl ReplicatedStateBuilder {
         state.metadata.own_subnet_features = self.subnet_features;
 
         for request in self.bitcoin_adapter_requests.into_iter() {
-            state.push_request_bitcoin_testnet(request).unwrap();
+            state.push_request_bitcoin(request).unwrap();
         }
 
         state

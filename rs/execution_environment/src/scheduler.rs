@@ -979,7 +979,7 @@ impl Scheduler for SchedulerImpl {
 
         // Invoke the heartbeat of the bitcoin canister.
         {
-            let bitcoin_state: BitcoinState = state.take_bitcoin_testnet_state();
+            let bitcoin_state: BitcoinState = state.take_bitcoin_state();
             let bitcoin_state = {
                 let _timer = self
                     .metrics
@@ -990,7 +990,7 @@ impl Scheduler for SchedulerImpl {
                     state.metadata.own_subnet_features.bitcoin_testnet(),
                 )
             };
-            state.put_bitcoin_testnet_state(bitcoin_state);
+            state.put_bitcoin_state(bitcoin_state);
         }
 
         // Execute subnet messages.

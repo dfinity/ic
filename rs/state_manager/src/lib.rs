@@ -829,14 +829,12 @@ impl PageMapType {
         match &self {
             PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
             PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory_blob()),
-            PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall) => {
-                Ok(layout.bitcoin_testnet()?.utxos_small())
-            }
+            PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall) => Ok(layout.bitcoin()?.utxos_small()),
             PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium) => {
-                Ok(layout.bitcoin_testnet()?.utxos_medium())
+                Ok(layout.bitcoin()?.utxos_medium())
             }
             PageMapType::Bitcoin(BitcoinPageMap::AddressOutpoints) => {
-                Ok(layout.bitcoin_testnet()?.address_outpoints())
+                Ok(layout.bitcoin()?.address_outpoints())
             }
         }
     }
@@ -855,13 +853,13 @@ impl PageMapType {
                     .map(|ex| &ex.stable_memory.page_map)
             }),
             PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall) => {
-                Some(&state.bitcoin_testnet().utxo_set.utxos_small)
+                Some(&state.bitcoin().utxo_set.utxos_small)
             }
             PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium) => {
-                Some(&state.bitcoin_testnet().utxo_set.utxos_medium)
+                Some(&state.bitcoin().utxo_set.utxos_medium)
             }
             PageMapType::Bitcoin(BitcoinPageMap::AddressOutpoints) => {
-                Some(&state.bitcoin_testnet().utxo_set.address_outpoints)
+                Some(&state.bitcoin().utxo_set.address_outpoints)
             }
         }
     }
@@ -880,13 +878,13 @@ impl PageMapType {
                     .map(|ex| &mut ex.stable_memory.page_map)
             }),
             PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall) => {
-                Some(&mut state.bitcoin_testnet_mut().utxo_set.utxos_small)
+                Some(&mut state.bitcoin_mut().utxo_set.utxos_small)
             }
             PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium) => {
-                Some(&mut state.bitcoin_testnet_mut().utxo_set.utxos_medium)
+                Some(&mut state.bitcoin_mut().utxo_set.utxos_medium)
             }
             PageMapType::Bitcoin(BitcoinPageMap::AddressOutpoints) => {
-                Some(&mut state.bitcoin_testnet_mut().utxo_set.address_outpoints)
+                Some(&mut state.bitcoin_mut().utxo_set.address_outpoints)
             }
         }
     }

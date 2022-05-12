@@ -334,21 +334,20 @@ pub struct ReplicatedState {
 
     pub root: PathBuf,
 
-    // State of the Bitcoin testnet network.
-    bitcoin_testnet: BitcoinState,
+    bitcoin: BitcoinState,
 }
 
 // We use custom impl of PartialEq because state root is not part of identity.
 impl PartialEq for ReplicatedState {
     fn eq(&self, rhs: &Self) -> bool {
         (
-            &self.bitcoin_testnet,
+            &self.bitcoin,
             &self.canister_states,
             &self.metadata,
             &self.subnet_queues,
             &self.consensus_queue,
         ) == (
-            &rhs.bitcoin_testnet,
+            &rhs.bitcoin,
             &rhs.canister_states,
             &rhs.metadata,
             &rhs.subnet_queues,
@@ -370,7 +369,7 @@ impl ReplicatedState {
             metadata: SystemMetadata::new(own_subnet_id, own_subnet_type),
             subnet_queues: CanisterQueues::default(),
             consensus_queue: Vec::new(),
-            bitcoin_testnet: BitcoinState::default(),
+            bitcoin: BitcoinState::default(),
         }
     }
 
@@ -379,7 +378,7 @@ impl ReplicatedState {
         metadata: SystemMetadata,
         subnet_queues: CanisterQueues,
         consensus_queue: Vec<Response>,
-        bitcoin_testnet: BitcoinState,
+        bitcoin: BitcoinState,
         root: PathBuf,
     ) -> Self {
         let mut res = Self {
@@ -388,7 +387,7 @@ impl ReplicatedState {
             subnet_queues,
             consensus_queue,
             root,
-            bitcoin_testnet,
+            bitcoin,
         };
         res.update_stream_responses_size_bytes();
         res
@@ -760,13 +759,13 @@ impl ReplicatedState {
     }
 
     /// Returns a reference to the `BitcoinState`.
-    pub fn bitcoin_testnet(&self) -> &BitcoinState {
-        &self.bitcoin_testnet
+    pub fn bitcoin(&self) -> &BitcoinState {
+        &self.bitcoin
     }
 
     /// Returns a mutable reference to the `BitcoinState`.
-    pub fn bitcoin_testnet_mut(&mut self) -> &mut BitcoinState {
-        &mut self.bitcoin_testnet
+    pub fn bitcoin_mut(&mut self) -> &mut BitcoinState {
+        &mut self.bitcoin
     }
 
     /// Pushes a request onto the testnet `BitcoinState` iff the bitcoin testnet
@@ -774,13 +773,13 @@ impl ReplicatedState {
     ///
     /// See documentation of `BitcoinState::push_request` for more information.
     // TODO(EXC-1097): Remove this method as it isn't being used in production.
-    pub fn push_request_bitcoin_testnet(
+    pub fn push_request_bitcoin(
         &mut self,
         request: BitcoinAdapterRequestWrapper,
     ) -> Result<(), StateError> {
         match self.metadata.own_subnet_features.bitcoin_testnet() {
             BitcoinFeature::Enabled => self
-                .bitcoin_testnet
+                .bitcoin
                 .adapter_queues
                 .push_request(request)
                 .map_err(StateError::BitcoinStateError),
@@ -798,17 +797,17 @@ impl ReplicatedState {
     /// otherwise.
     ///
     /// See documentation of `BitcoinState::push_response` for more information.
-    pub fn push_response_bitcoin_testnet(
+    pub fn push_response_bitcoin(
         &mut self,
         response: BitcoinAdapterResponse,
     ) -> Result<(), StateError> {
         match self.metadata.own_subnet_features.bitcoin_testnet() {
             BitcoinFeature::Enabled => self
-                .bitcoin_testnet
+                .bitcoin
                 .push_response(response)
                 .map_err(StateError::BitcoinStateError),
             BitcoinFeature::Paused => self
-                .bitcoin_testnet
+                .bitcoin
                 .push_response(response)
                 .map_err(StateError::BitcoinStateError),
             BitcoinFeature::Disabled => Err(StateError::BitcoinStateError(
@@ -817,12 +816,12 @@ impl ReplicatedState {
         }
     }
 
-    pub fn take_bitcoin_testnet_state(&mut self) -> BitcoinState {
-        std::mem::take(&mut self.bitcoin_testnet)
+    pub fn take_bitcoin_state(&mut self) -> BitcoinState {
+        std::mem::take(&mut self.bitcoin)
     }
 
-    pub fn put_bitcoin_testnet_state(&mut self, bitcoin_testnet: BitcoinState) {
-        self.bitcoin_testnet = bitcoin_testnet;
+    pub fn put_bitcoin_state(&mut self, bitcoin: BitcoinState) {
+        self.bitcoin = bitcoin;
     }
 }
 

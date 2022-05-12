@@ -733,7 +733,8 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         )
     }
 
-    pub fn bitcoin_testnet(&self) -> Result<BitcoinStateLayout<Permissions>, LayoutError> {
+    pub fn bitcoin(&self) -> Result<BitcoinStateLayout<Permissions>, LayoutError> {
+        // TODO(EXC-1113): Rename this path to "bitcoin", as it stores data for either network.
         BitcoinStateLayout::new(self.root.join("bitcoin").join("testnet"))
     }
 

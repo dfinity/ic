@@ -122,7 +122,7 @@ impl BitcoinPayloadBuilder {
 
                 let mut responses = vec![];
                 let mut current_payload_size: u64 = 0;
-                for (callback_id, request) in state.bitcoin_testnet().adapter_requests_iter() {
+                for (callback_id, request) in state.bitcoin().adapter_requests_iter() {
                     // We have already created a payload with the response for
                     // this callback id, so skip it.
                     if past_callback_ids.contains(callback_id) {
