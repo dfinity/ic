@@ -1959,24 +1959,20 @@ fn can_get_dirty_pages() {
     }
 
     fn update_bitcoin_page_maps(state: &mut ReplicatedState) {
-        state.bitcoin_testnet_mut().utxo_set.utxos_small.update(&[
+        state.bitcoin_mut().utxo_set.utxos_small.update(&[
             (PageIndex::new(1), &[99u8; PAGE_SIZE]),
             (PageIndex::new(100), &[99u8; PAGE_SIZE]),
         ]);
 
-        state.bitcoin_testnet_mut().utxo_set.utxos_medium.update(&[
+        state.bitcoin_mut().utxo_set.utxos_medium.update(&[
             (PageIndex::new(2), &[99u8; PAGE_SIZE]),
             (PageIndex::new(200), &[99u8; PAGE_SIZE]),
         ]);
 
-        state
-            .bitcoin_testnet_mut()
-            .utxo_set
-            .address_outpoints
-            .update(&[
-                (PageIndex::new(3), &[99u8; PAGE_SIZE]),
-                (PageIndex::new(300), &[99u8; PAGE_SIZE]),
-            ]);
+        state.bitcoin_mut().utxo_set.address_outpoints.update(&[
+            (PageIndex::new(3), &[99u8; PAGE_SIZE]),
+            (PageIndex::new(300), &[99u8; PAGE_SIZE]),
+        ]);
     }
 
     fn drop_page_map(state: &mut ReplicatedState, canister_id: CanisterId) {
@@ -2140,27 +2136,23 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
             (PageIndex::new(NEW_STABLE_PAGE), &[2u8; PAGE_SIZE]),
         ]);
         const NEW_UTXOS_SMALL_PAGE: u64 = 700;
-        state.bitcoin_testnet_mut().utxo_set.utxos_small.update(&[
+        state.bitcoin_mut().utxo_set.utxos_small.update(&[
             (PageIndex::new(1), &[1u8; PAGE_SIZE]),
             (PageIndex::new(NEW_UTXOS_SMALL_PAGE), &[2u8; PAGE_SIZE]),
         ]);
         const NEW_UTXOS_MEDIUM_PAGE: u64 = 800;
-        state.bitcoin_testnet_mut().utxo_set.utxos_medium.update(&[
+        state.bitcoin_mut().utxo_set.utxos_medium.update(&[
             (PageIndex::new(1), &[1u8; PAGE_SIZE]),
             (PageIndex::new(NEW_UTXOS_MEDIUM_PAGE), &[2u8; PAGE_SIZE]),
         ]);
         const NEW_ADDRESS_OUTPOINTS_PAGE: u64 = 900;
-        state
-            .bitcoin_testnet_mut()
-            .utxo_set
-            .address_outpoints
-            .update(&[
-                (PageIndex::new(1), &[1u8; PAGE_SIZE]),
-                (
-                    PageIndex::new(NEW_ADDRESS_OUTPOINTS_PAGE),
-                    &[2u8; PAGE_SIZE],
-                ),
-            ]);
+        state.bitcoin_mut().utxo_set.address_outpoints.update(&[
+            (PageIndex::new(1), &[1u8; PAGE_SIZE]),
+            (
+                PageIndex::new(NEW_ADDRESS_OUTPOINTS_PAGE),
+                &[2u8; PAGE_SIZE],
+            ),
+        ]);
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         wait_for_checkpoint(&state_manager, height(1));

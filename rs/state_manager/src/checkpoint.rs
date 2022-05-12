@@ -95,7 +95,7 @@ fn serialize_to_tip(
         result?;
     }
 
-    serialize_bitcoin_state_to_tip(state.bitcoin_testnet(), &tip.bitcoin_testnet()?)?;
+    serialize_bitcoin_state_to_tip(state.bitcoin(), &tip.bitcoin()?)?;
 
     Ok(())
 }
@@ -333,10 +333,10 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
         canister_states
     };
 
-    let bitcoin_testnet = {
+    let bitcoin = {
         let _timer = metrics
             .load_checkpoint_step_duration
-            .with_label_values(&["bitcoin_testnet"])
+            .with_label_values(&["bitcoin"])
             .start_timer();
 
         load_bitcoin_state(checkpoint_layout)?
@@ -348,7 +348,7 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
         subnet_queues,
         // Consensus queue needs to be empty at the end of every round.
         Vec::new(),
-        bitcoin_testnet,
+        bitcoin,
         checkpoint_layout.raw_path().into(),
     );
 
@@ -496,7 +496,7 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
 fn load_bitcoin_state<P: ReadPolicy>(
     checkpoint_layout: &CheckpointLayout<P>,
 ) -> Result<BitcoinState, CheckpointError> {
-    let layout = checkpoint_layout.bitcoin_testnet()?;
+    let layout = checkpoint_layout.bitcoin()?;
     let height = checkpoint_layout.height();
 
     let into_checkpoint_error =
@@ -1133,7 +1133,7 @@ mod tests {
 
             // Make some change in the Bitcoin state to later verify that it gets recovered.
             state
-                .push_request_bitcoin_testnet(BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
+                .push_request_bitcoin(BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
                     GetSuccessorsRequest {
                         processed_block_hashes: vec![],
                         anchor: vec![],
@@ -1152,10 +1152,7 @@ mod tests {
             )
             .unwrap();
 
-            assert_eq!(
-                recovered_state.bitcoin_testnet(),
-                original_state.bitcoin_testnet(),
-            );
+            assert_eq!(recovered_state.bitcoin(), original_state.bitcoin(),);
         });
     }
 
@@ -1174,10 +1171,9 @@ mod tests {
                 ReplicatedState::new_rooted_at(subnet_id, own_subnet_type, "NOT_USED".into());
 
             // Make some change in the Bitcoin page maps to later verify they get recovered.
-            state.bitcoin_testnet_mut().utxo_set.utxos_small = PageMap::from(&[1, 2, 3, 4][..]);
-            state.bitcoin_testnet_mut().utxo_set.utxos_medium = PageMap::from(&[5, 6, 7, 8][..]);
-            state.bitcoin_testnet_mut().utxo_set.address_outpoints =
-                PageMap::from(&[9, 10, 11, 12][..]);
+            state.bitcoin_mut().utxo_set.utxos_small = PageMap::from(&[1, 2, 3, 4][..]);
+            state.bitcoin_mut().utxo_set.utxos_medium = PageMap::from(&[5, 6, 7, 8][..]);
+            state.bitcoin_mut().utxo_set.address_outpoints = PageMap::from(&[9, 10, 11, 12][..]);
 
             let original_state = state.clone();
             let _state = make_checkpoint_and_get_state(&log, &state, HEIGHT, &layout);
@@ -1190,10 +1186,7 @@ mod tests {
             )
             .unwrap();
 
-            assert_eq!(
-                recovered_state.bitcoin_testnet(),
-                original_state.bitcoin_testnet()
-            );
+            assert_eq!(recovered_state.bitcoin(), original_state.bitcoin());
         });
     }
 }
