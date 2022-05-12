@@ -1091,10 +1091,7 @@ fn stopping_canister_rejects_ingress() {
                 user_id: user_test_id(2),
                 error: UserError::new(
                     ErrorCode::CanisterStopping,
-                    format!(
-                        "Canister {} is not running and cannot accept ingress messages.",
-                        canister_test_id(0)
-                    ),
+                    format!("Canister {} is not running", canister_test_id(0)),
                 ),
                 time: mock_time(),
             }
@@ -1189,10 +1186,7 @@ fn stopped_canister_rejects_ingress() {
                 user_id: user_test_id(2),
                 error: UserError::new(
                     ErrorCode::CanisterStopped,
-                    format!(
-                        "Canister {} is not running and cannot accept ingress messages.",
-                        canister_test_id(0)
-                    ),
+                    format!("Canister {} is not running", canister_test_id(0)),
                 ),
                 time: mock_time(),
             }
