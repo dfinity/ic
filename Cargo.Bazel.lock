@@ -1,5 +1,5 @@
 {
-  "checksum": "703db4d83716ba06443b1f6167a5c21a33ad2ea7d4df99824af10f0b7cbdd13c",
+  "checksum": "268330111735d5c12a736c49d1dcbec8dd97d907a612a3b1dc63c1f90320d316",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -15139,8 +15139,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -15151,8 +15151,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
