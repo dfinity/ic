@@ -178,7 +178,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
         let mut accumulated_size = NumBytes::new(0);
         for builder in &self.section_builder {
             accumulated_size += builder.validate_payload(batch_payload, context, past_payloads)?;
-            if accumulated_size >= max_block_payload_size {
+            if accumulated_size > max_block_payload_size {
                 return Err(ValidationError::Permanent(
                     PayloadPermanentError::PayloadTooBig {
                         expected: max_block_payload_size,
