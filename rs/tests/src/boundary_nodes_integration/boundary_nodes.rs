@@ -28,7 +28,7 @@ pub fn config(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    let (handle, _ctx) = get_ic_handle_and_ctx(env.clone(), env.logger());
+    let (handle, _ctx) = get_ic_handle_and_ctx(env.clone());
 
     env.topology_snapshot()
         .root_subnet()

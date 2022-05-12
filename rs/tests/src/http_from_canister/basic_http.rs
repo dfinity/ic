@@ -111,7 +111,7 @@ pub fn test(env: TestEnv) {
 
     // TODO: adapt the test below to use the env directly
     // instead of using the deprecated IcHandle and Context.
-    let (handle, ctx) = get_ic_handle_and_ctx(env, logger.clone());
+    let (handle, ctx) = get_ic_handle_and_ctx(env);
 
     // Install NNS canisters
     ctx.install_nns_canisters(&handle, true);
