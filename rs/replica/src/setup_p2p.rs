@@ -241,6 +241,8 @@ pub fn construct_ic_stack(
         &metrics_registry,
         btc_mainnet_client,
         btc_testnet_client,
+        subnet_id,
+        Arc::clone(&registry),
         replica_logger.clone(),
     );
     let self_validating_payload_builder = Arc::new(self_validating_payload_builder);

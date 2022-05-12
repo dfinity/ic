@@ -115,7 +115,6 @@ impl BatchPayload {
         self.ingress.is_empty() && self.xnet.stream_slices.is_empty()
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

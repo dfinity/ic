@@ -147,7 +147,9 @@ impl PayloadBuilder for PayloadBuilderImpl {
                     .self_validating_payload_builder
                     .filter_past_payloads(past_payloads),
                 MAX_XNET_PAYLOAD_IN_BYTES,
-            );
+                0,
+            )
+            .0;
 
         BatchPayload {
             ingress,

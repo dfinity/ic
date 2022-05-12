@@ -31,8 +31,14 @@ impl SelfValidatingPayloadBuilder for FakeSelfValidatingPayloadBuilder {
         _validation_context: &ValidationContext,
         _past_payloads: &[&SelfValidatingPayload],
         _byte_limit: NumBytes,
-    ) -> SelfValidatingPayload {
-        SelfValidatingPayload::new(self.0.clone())
+        _priority: usize,
+    ) -> (SelfValidatingPayload, NumBytes) {
+        let size: usize = self.0.iter().map(|response| response.count_bytes()).sum();
+
+        (
+            SelfValidatingPayload::new(self.0.clone()),
+            NumBytes::new(size as u64),
+        )
     }
 
     fn validate_self_validating_payload(

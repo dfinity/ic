@@ -2,18 +2,24 @@ use crate::metrics::BitcoinPayloadBuilderMetrics;
 use ic_btc_types_internal::{BitcoinAdapterResponse, BitcoinAdapterResponseWrapper};
 use ic_interfaces::{
     payload::BatchPayloadSectionBuilder,
-    self_validating_payload::{SelfValidatingPayloadBuilder, SelfValidatingPayloadValidationError},
+    registry::RegistryClient,
+    self_validating_payload::{
+        InvalidSelfValidatingPayload, SelfValidatingPayloadBuilder,
+        SelfValidatingPayloadValidationError, SelfValidatingTransientValidationError,
+    },
 };
 use ic_interfaces_bitcoin_adapter_client::{BitcoinAdapterClient, Options};
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
-use ic_logger::{log, ReplicaLogger};
+use ic_logger::{log, warn, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::BitcoinFeature;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext},
     consensus::Payload,
-    CountBytes, Height, NumBytes, Time,
+    registry::RegistryClientError,
+    CountBytes, Height, NumBytes, SubnetId, Time,
 };
 use std::sync::Arc;
 use thiserror::Error;
@@ -29,6 +35,9 @@ const INVALID_SELF_VALIDATING_PAYLOAD: &str = "InvalidSelfValidatingPayload";
 enum GetPayloadError {
     #[error("Error retrieving state at height {0}: {1}")]
     GetStateFailed(Height, StateManagerError),
+
+    #[error("Error retrieving registry {0}")]
+    GetRegistryFailed(RegistryClientError),
 }
 
 impl GetPayloadError {
@@ -36,6 +45,7 @@ impl GetPayloadError {
     fn log_level(&self) -> slog::Level {
         match self {
             Self::GetStateFailed(..) => slog::Level::Warning,
+            Self::GetRegistryFailed(..) => slog::Level::Warning,
         }
     }
 
@@ -43,6 +53,7 @@ impl GetPayloadError {
     fn to_label_value(&self) -> &str {
         match self {
             Self::GetStateFailed(..) => "GetStateFailed",
+            Self::GetRegistryFailed(..) => "GetRegistryFailed",
         }
     }
 }
@@ -52,6 +63,8 @@ pub struct BitcoinPayloadBuilder {
     metrics: Arc<BitcoinPayloadBuilderMetrics>,
     _bitcoin_mainnet_adapter_client: Box<dyn BitcoinAdapterClient>,
     bitcoin_testnet_adapter_client: Box<dyn BitcoinAdapterClient>,
+    subnet_id: SubnetId,
+    registry: Arc<dyn RegistryClient + Send + Sync>,
     log: ReplicaLogger,
 }
 
@@ -61,6 +74,8 @@ impl BitcoinPayloadBuilder {
         metrics_registry: &MetricsRegistry,
         bitcoin_mainnet_adapter_client: Box<dyn BitcoinAdapterClient>,
         bitcoin_testnet_adapter_client: Box<dyn BitcoinAdapterClient>,
+        subnet_id: SubnetId,
+        registry: Arc<dyn RegistryClient + Send + Sync>,
         log: ReplicaLogger,
     ) -> Self {
         Self {
@@ -68,6 +83,8 @@ impl BitcoinPayloadBuilder {
             metrics: Arc::new(BitcoinPayloadBuilderMetrics::new(metrics_registry)),
             _bitcoin_mainnet_adapter_client: bitcoin_mainnet_adapter_client,
             bitcoin_testnet_adapter_client,
+            subnet_id,
+            registry,
             log,
         }
     }
@@ -77,6 +94,7 @@ impl BitcoinPayloadBuilder {
         validation_context: &ValidationContext,
         past_payloads: &[&SelfValidatingPayload],
         byte_limit: NumBytes,
+        priority: usize,
     ) -> Result<SelfValidatingPayload, GetPayloadError> {
         // Retrieve the `ReplicatedState` required by `validation_context`.
         let state = self
@@ -85,9 +103,16 @@ impl BitcoinPayloadBuilder {
             .map_err(|e| GetPayloadError::GetStateFailed(validation_context.certified_height, e))?
             .take();
 
+        let bitcoin_feature = self
+            .registry
+            .get_features(self.subnet_id, validation_context.registry_version)
+            .map_err(GetPayloadError::GetRegistryFailed)?
+            .unwrap_or_default()
+            .bitcoin_testnet();
+
         // We should only send requests to the adapter if the bitcoin testnet
         // feature is enabled, otherwise return an empty payload.
-        match state.metadata.own_subnet_features.bitcoin_testnet() {
+        match bitcoin_feature {
             BitcoinFeature::Disabled => Ok(SelfValidatingPayload::default()),
             BitcoinFeature::Paused => Ok(SelfValidatingPayload::default()),
             BitcoinFeature::Enabled => {
@@ -137,12 +162,37 @@ impl BitcoinPayloadBuilder {
                             };
                             let response_size = response.count_bytes() as u64;
                             self.metrics.observe_adapter_response_size(response_size);
-                            // Ensure we don't exceed the byte limit by
-                            // adding a new response but also ensure we
-                            // allow at least one response to be included.
-                            if !responses.is_empty()
-                                && response_size + current_payload_size > byte_limit.get()
+
+                            // This is a special case:
+                            // If priority is 0 (i.e. highest), and we have not included a response yet, but the next block is already
+                            // oversized, we include that single block anyway and immidiately return.
+                            // We will also report `byte_limit` as the size.
+                            //
+                            // For this block to be accepted by the validator, it is crucial that the following invariant holds:
+                            // if priority == 0 then byte_size == max_block_payload_size_bytes.
+                            // Just to be 100% sure, we also check that invariant here as well.
+                            if priority == 0
+                                && responses.is_empty()
+                                && response_size > byte_limit.get()
+                                && self
+                                    .registry
+                                    .get_max_block_payload_size_bytes(
+                                        self.subnet_id,
+                                        validation_context.registry_version,
+                                    )
+                                    .unwrap_or(None)
+                                    .unwrap_or(0)
+                                    == byte_limit.get()
                             {
+                                warn!(
+                                    self.log,
+                                    "SelfValidatingPayload Size exception was triggered"
+                                );
+                                responses.push(response);
+                                return Ok(SelfValidatingPayload::new(responses));
+                            }
+
+                            if response_size + current_payload_size > byte_limit.get() {
                                 break;
                             }
                             current_payload_size += response_size;
@@ -167,6 +217,69 @@ impl BitcoinPayloadBuilder {
             }
         }
     }
+
+    fn validate_self_validating_payload_impl(
+        &self,
+        payload: &SelfValidatingPayload,
+        validation_context: &ValidationContext,
+        _past_payloads: &[&SelfValidatingPayload],
+    ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
+        let timer = Timer::start();
+
+        // TODO(EXC-786): Validate the payload. For now we rubberstamp all payloads as
+        // valid.
+
+        // An empty block is always valid.
+        if *payload == SelfValidatingPayload::default() {
+            return Ok(0.into());
+        }
+
+        // Reject nonempty payloads, if the bitcoin feature is disabled in the registry
+        let bitcoin_feature = self
+            .registry
+            .get_features(self.subnet_id, validation_context.registry_version)
+            .map_err(|err| {
+                SelfValidatingPayloadValidationError::Transient(
+                    SelfValidatingTransientValidationError::GetRegistryFailed(err),
+                )
+            })?
+            .unwrap_or_default()
+            .bitcoin_testnet();
+
+        if bitcoin_feature != BitcoinFeature::Enabled {
+            return Err(SelfValidatingPayloadValidationError::Permanent(
+                InvalidSelfValidatingPayload::Disabled,
+            ));
+        }
+
+        self.metrics
+            .observe_validate_duration(VALIDATION_STATUS_VALID, timer);
+
+        let size = NumBytes::new(payload.count_bytes() as u64);
+
+        // NOTE: Bitcoin payload is special in that the IC can not ultimately decide the size of the blocks.
+        // Rather, it is up to the bitcoin network to decide the block sizes.
+        // For that reason, the validator allows oversized blocks, if there is only one block in the payload.
+        // Exploiting this as a DOS is infeasible, since it would require the attacker to bloat the blocks on the
+        // bitcoin network.
+        if payload.num_bitcoin_blocks() == 1 {
+            Ok(size.min(NumBytes::from(
+                self.registry
+                    .get_max_block_payload_size_bytes(
+                        self.subnet_id,
+                        validation_context.registry_version,
+                    )
+                    .map_err(|err| {
+                        SelfValidatingPayloadValidationError::Transient(
+                            SelfValidatingTransientValidationError::GetRegistryFailed(err),
+                        )
+                    })?
+                    .unwrap_or_else(|| size.get()),
+            )))
+        } else {
+            Ok(size)
+        }
+    }
 }
 
 impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
@@ -175,14 +288,17 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
         validation_context: &ValidationContext,
         past_payloads: &[&SelfValidatingPayload],
         byte_limit: NumBytes,
-    ) -> SelfValidatingPayload {
+        priority: usize,
+    ) -> (SelfValidatingPayload, NumBytes) {
         let timer = Timer::start();
         let payload = match self.get_self_validating_payload_impl(
             validation_context,
             past_payloads,
             byte_limit,
+            priority,
         ) {
             Ok(payload) => {
+                // As a safety measure, the payload is validated, before submitting it.
                 match self.validate_self_validating_payload(
                     &payload,
                     validation_context,
@@ -206,7 +322,6 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
                     }
                 }
             }
-
             Err(e) => {
                 log!(self.log, e.log_level(), "{}", e);
                 self.metrics
@@ -216,23 +331,17 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
             }
         };
 
-        payload
+        let size = NumBytes::new(payload.count_bytes() as u64);
+        (payload, size.min(byte_limit))
     }
 
     fn validate_self_validating_payload(
         &self,
-        _payload: &SelfValidatingPayload,
-        _validation_context: &ValidationContext,
-        _past_payloads: &[&SelfValidatingPayload],
+        payload: &SelfValidatingPayload,
+        validation_context: &ValidationContext,
+        past_payloads: &[&SelfValidatingPayload],
     ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
-        let timer = Timer::start();
-
-        // TODO(EXC-786): Validate the payload. For now we rubberstamp all payloads as
-        // valid.
-
-        self.metrics
-            .observe_validate_duration(VALIDATION_STATUS_VALID, timer);
-        Ok(0.into())
+        self.validate_self_validating_payload_impl(payload, validation_context, past_payloads)
     }
 }
 
@@ -241,14 +350,11 @@ impl BatchPayloadSectionBuilder<SelfValidatingPayload> for BitcoinPayloadBuilder
         &self,
         validation_context: &ValidationContext,
         max_size: NumBytes,
-        _priority: usize,
+        priority: usize,
         past_payloads: &[(Height, Time, Payload)],
     ) -> (SelfValidatingPayload, NumBytes) {
         let past_payloads = self.filter_past_payloads(past_payloads);
-        let payload =
-            self.get_self_validating_payload(validation_context, &past_payloads, max_size);
-        let size = NumBytes::new(payload.count_bytes() as u64);
-        (payload, size)
+        self.get_self_validating_payload(validation_context, &past_payloads, max_size, priority)
     }
 
     fn validate_payload(
