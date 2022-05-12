@@ -1,6 +1,6 @@
 use ic_rosetta_api::convert::{
-    amount_, from_hex, from_model_account_identifier, from_operations, from_public_key,
-    principal_id_from_public_key, signed_amount, to_hex, to_model_account_identifier,
+    from_hex, from_model_account_identifier, from_public_key, operations_to_requests,
+    principal_id_from_public_key, to_hex, to_model_account_identifier,
 };
 
 use ic_rosetta_api::models::{
@@ -9,9 +9,8 @@ use ic_rosetta_api::models::{
 };
 use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
 use ic_rosetta_api::request_types::{
-    AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, RemoveHotKey, Request, RequestResult,
-    SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve, TransactionOperationResults,
-    TransactionResults,
+    AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, RemoveHotKey, SetDissolveTimestamp,
+    Spawn, Stake, StartDissolve, StopDissolve,
 };
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{convert, errors, errors::ApiError, DEFAULT_TOKEN_SYMBOL};
@@ -28,6 +27,11 @@ use std::sync::Arc;
 pub mod rosetta_api_serv;
 pub mod sample_data;
 
+use ic_rosetta_api::models::amount::{signed_amount, tokens_to_amount};
+use ic_rosetta_api::request::request_result::RequestResult;
+use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
+use ic_rosetta_api::request::transaction_results::TransactionResults;
+use ic_rosetta_api::request::Request;
 use rosetta_api_serv::RosettaApiHandle;
 use std::path::Path;
 
@@ -102,7 +106,7 @@ pub async fn prepare_multiple_txn(
 
         match request.request.clone() {
             Request::Transfer(Operation::Transfer { from, fee, .. }) => {
-                trans_fee_amount = Some(amount_(fee, token_name).unwrap());
+                trans_fee_amount = Some(tokens_to_amount(fee, token_name).unwrap());
                 all_sender_account_ids.push(to_model_account_identifier(&from));
 
                 // just a sanity check
@@ -157,7 +161,7 @@ pub async fn prepare_multiple_txn(
     let fee_icpts = Tokens::from_e8s(
         dry_run_suggested_fee
             .clone()
-            .unwrap_or_else(|| amount_(Tokens::default(), token_name).unwrap())
+            .unwrap_or_else(|| tokens_to_amount(Tokens::default(), token_name).unwrap())
             .value
             .parse()
             .unwrap(),
@@ -424,7 +428,8 @@ async fn do_multiple_txn_submit(
     // Verify consistency between requests and construction parse response.
     fn verify_operations(requests: &[RequestInfo], parse_response: ConstructionParseResponse) {
         let rs1: Vec<_> = requests.iter().map(|r| r.request.clone()).collect();
-        let rs2 = from_operations(&parse_response.operations, false, DEFAULT_TOKEN_SYMBOL).unwrap();
+        let rs2 = operations_to_requests(&parse_response.operations, false, DEFAULT_TOKEN_SYMBOL)
+            .unwrap();
         assert_eq!(rs1, rs2, "Requests differs: {:?} vs {:?}", rs1, rs2);
     }
 

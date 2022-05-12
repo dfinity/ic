@@ -52,7 +52,10 @@ use crate::ledger_client::{
     handle_start_dissolve::handle_start_dissolve, handle_stop_dissolve::handle_stop_dissolve,
 };
 use crate::models::{EnvelopePair, Object, SignedTransaction};
-use crate::request_types::{Request, RequestResult, RequestType, Status, TransactionResults};
+use crate::request::request_result::RequestResult;
+use crate::request::transaction_results::TransactionResults;
+use crate::request::Request;
+use crate::request_types::{RequestType, Status};
 use crate::store::{BlockStoreError, HashedBlock};
 use crate::transaction_id::TransactionIdentifier;
 

@@ -1,12 +1,11 @@
-use crate::convert;
-use crate::convert::to_model_account_identifier;
+use crate::convert::{self, to_model_account_identifier};
 use crate::errors::ApiError;
 use crate::models::{
     ConstructionMetadataRequestOptions, ConstructionPreprocessRequest,
     ConstructionPreprocessResponse,
 };
+use crate::request::Request;
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
-use crate::request_types::Request;
 use crate::request_types::{
     AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, RemoveHotKey, SetDissolveTimestamp,
     Spawn, Stake, StartDissolve, StopDissolve,
@@ -23,7 +22,7 @@ impl RosettaRequestHandler {
     ) -> Result<ConstructionPreprocessResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let transfers =
-            convert::from_operations(&msg.operations, true, self.ledger.token_symbol())?;
+            convert::operations_to_requests(&msg.operations, true, self.ledger.token_symbol())?;
         let options = Some(ConstructionMetadataRequestOptions {
             request_types: transfers
                 .iter()
@@ -46,6 +45,7 @@ impl RosettaRequestHandler {
     }
 }
 
+/// Return the public key required to complete a request.
 fn required_public_key(request: Request) -> Result<ledger_canister::AccountIdentifier, ApiError> {
     match request {
         Request::Transfer(Operation::Transfer { from, .. }) => Ok(from),

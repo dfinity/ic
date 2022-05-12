@@ -21,10 +21,11 @@ use crate::models::{
     AccountIdentifier, ConstructionPayloadsRequest, ConstructionPayloadsResponse, PublicKey,
     SignatureType, SigningPayload, UnsignedTransaction,
 };
+use crate::request::Request;
 use crate::request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
     AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, PublicKeyOrPrincipal, RemoveHotKey,
-    Request, RequestType, SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve,
+    RequestType, SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve,
 };
 use crate::{convert, models};
 
@@ -45,7 +46,8 @@ impl RosettaRequestHandler {
         let pks = msg.public_keys.clone().ok_or_else(|| {
             ApiError::internal_error("Expected field 'public_keys' to be populated")
         })?;
-        let transactions = convert::from_operations(&ops, false, self.ledger.token_symbol())?;
+        let transactions =
+            convert::operations_to_requests(&ops, false, self.ledger.token_symbol())?;
 
         let interval = ic_constants::MAX_INGRESS_TTL
             - ic_constants::PERMITTED_DRIFT
@@ -653,14 +655,14 @@ fn handle_follow(
     let topic = req.topic;
     let controller = req.controller;
     let neuron_index = req.neuron_index;
-    let nids = req
+    let neuron_ids = req
         .followees
         .iter()
         .map(|id| NeuronId { id: *id })
         .collect();
     let command = Command::Follow(manage_neuron::Follow {
         topic,
-        followees: nids,
+        followees: neuron_ids,
     });
     add_neuron_management_payload(
         RequestType::Follow {

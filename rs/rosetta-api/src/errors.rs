@@ -1,8 +1,8 @@
-use crate::request_types::TransactionOperationResults;
+use crate::request::transaction_operation_results::TransactionOperationResults;
+use crate::request::transaction_results::TransactionResults;
 use crate::{
     convert,
     models::{Error, Object},
-    request_types::TransactionResults,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

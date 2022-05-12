@@ -22,6 +22,7 @@ use strum::IntoEnumIterator;
 use crate::convert::{from_model_account_identifier, neuron_account_from_public_key};
 use crate::errors::ApiError;
 use crate::ledger_client::LedgerAccess;
+use crate::models::amount::tokens_to_amount;
 use crate::models::{
     AccountBalanceRequest, AccountBalanceResponse, Allow, BalanceAccountType, BlockIdentifier,
     BlockResponse, BlockTransaction, BlockTransactionResponse, Error, MempoolResponse,
@@ -133,7 +134,7 @@ impl RosettaRequestHandler {
         let block = get_block(&blocks, msg.block_identifier)?;
 
         let tokens = blocks.get_balance(&account_id, block.index)?;
-        let amount = convert::amount_(tokens, self.ledger.token_symbol())?;
+        let amount = tokens_to_amount(tokens, self.ledger.token_symbol())?;
         let b = convert::block_id(&block)?;
         Ok(AccountBalanceResponse {
             block_identifier: b,
@@ -155,11 +156,14 @@ impl RosettaRequestHandler {
         let b_id = convert::block_id(&hb)?;
         let parent_id = create_parent_block_id(&blocks, &hb)?;
 
-        let transactions = vec![convert::transaction(&hb, self.ledger.token_symbol())?];
+        let transactions = vec![convert::block_to_transaction(
+            &hb,
+            self.ledger.token_symbol(),
+        )?];
         let block = Some(models::Block::new(
             b_id,
             parent_id,
-            convert::timestamp(block.timestamp.into())?,
+            models::timestamp::from_system_time(block.timestamp.into())?,
             transactions,
         ));
 
@@ -181,7 +185,7 @@ impl RosettaRequestHandler {
             hash: Some(msg.block_identifier.hash),
         });
         let hb = get_block(&blocks, b_id)?;
-        let transaction = convert::transaction(&hb, self.ledger.token_symbol())?;
+        let transaction = convert::block_to_transaction(&hb, self.ledger.token_symbol())?;
         Ok(BlockTransactionResponse::new(transaction))
     }
 
@@ -282,7 +286,8 @@ impl RosettaRequestHandler {
             .last_verified()?
             .ok_or_else(|| ApiError::BlockchainEmpty(true, Default::default()))?;
         let tip_id = convert::block_id(&tip)?;
-        let tip_timestamp = convert::timestamp(tip.block.decode().unwrap().timestamp.into())?;
+        let tip_timestamp =
+            models::timestamp::from_system_time(tip.block.decode().unwrap().timestamp.into())?;
         // Block at index 0 has to be there if tip was present
         let genesis_block = blocks.get_verified_at(0)?;
         let genesis_block_id = convert::block_id(&genesis_block)?;
@@ -363,7 +368,7 @@ impl RosettaRequestHandler {
         for hb in block_range.into_iter().rev() {
             txs.push(BlockTransaction::new(
                 convert::block_id(&hb)?,
-                convert::transaction(&hb, self.ledger.token_symbol())?,
+                convert::block_to_transaction(&hb, self.ledger.token_symbol())?,
             ));
         }
 
@@ -505,7 +510,7 @@ impl RosettaRequestHandler {
             let hb = blocks.get_verified_at(i)?;
             txs.push(BlockTransaction::new(
                 convert::block_id(&hb)?,
-                convert::transaction(&hb, self.ledger.token_symbol())?,
+                convert::block_to_transaction(&hb, self.ledger.token_symbol())?,
             ));
         }
 
