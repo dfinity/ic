@@ -36,8 +36,9 @@ pub const PROPOSAL_MOTION_TEXT_BYTES_MAX: usize = 10000;
 /// voting power in favor of the proposal divided by the total available voting power.
 pub const MIN_NUMBER_VOTES_FOR_PROPOSAL_RATIO: f64 = 0.03;
 
-/// The maximum amount of time that a proposal's initial deadline can be increased by the
-/// wait-for-quiet algorithm.
+/// The value that determines the maximum time that a proposal's initial deadline can be
+/// increased by the wait-for-quiet algorithm.
+/// This maximum total voting period extension is 2 * WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS.
 pub const WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS: u64 = ONE_DAY_SECONDS;
 
 /// The maximum number of proposals returned by one call to the method `list_proposals`,
@@ -535,9 +536,8 @@ impl ProposalData {
     /// to the given proposal: It evaluates whether the proposal's voting result
     /// has turned (a yes-result turned into a no-result or vice versa) and, if
     /// this is the case, extends the proposal's deadline.
-    /// TODO adjust
-    /// The initial voting period is increased at most by
-    /// WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS.
+    /// The initial voting period is extended by at most
+    /// 2 * WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS.
     pub fn evaluate_wait_for_quiet(
         &mut self,
         now_seconds: u64,
@@ -574,8 +574,7 @@ impl ProposalData {
             return;
         }
 
-        // Let W be the maximum voting period extension that is defined in
-        // WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS. A proposal's voting
+        // Let W be short for WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS. A proposal's voting
         // period starts with an initial_voting_period and can be extended
         // to at most initial_voting_period + 2 * W.
         // The required_margin reflects the proposed deadline extension to be
@@ -594,7 +593,7 @@ impl ProposalData {
         //     elapsed = initial_voting_period + 2 * W
         //
         // As an example, given that W = 12h, if the initial_voting_period is
-        // 24h then the maximum deadline will be 48h.
+        // 24h then the maximum deadline will be 24h + 2 * 12h = 48h.
         //
         // The required_margin ends up being a linearly decreasing value,
         // starting at W + initial_voting_period / 2 and reducing to zero at the
