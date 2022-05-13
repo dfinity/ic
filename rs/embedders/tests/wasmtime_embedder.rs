@@ -1,10 +1,22 @@
+use ic_embedders::wasmtime_embedder::system_api_complexity;
+use ic_interfaces::execution_environment::SystemApi;
 use ic_replicated_state::Global;
-use ic_test_utilities::wasmtime_instance::WasmtimeInstanceBuilder;
+use ic_test_utilities::{
+    mock_time,
+    types::ids::{subnet_test_id, user_test_id},
+    wasmtime_instance::WasmtimeInstanceBuilder,
+};
 use ic_types::methods::{FuncRef, WasmMethod};
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
+
+    use ic_interfaces::execution_environment::HypervisorError;
+    use ic_registry_subnet_type::SubnetType;
+    use ic_replicated_state::NetworkTopology;
     use ic_test_utilities::wasmtime_instance::DEFAULT_NUM_INSTRUCTIONS;
+    use ic_types::PrincipalId;
 
     use super::*;
 
@@ -43,6 +55,226 @@ mod test {
                 );
             }
         }
+    }
+
+    #[test]
+    fn correctly_count_instructions() {
+        let data_size = 1024;
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_wat(
+                format!(
+                    r#"
+                    (module
+                        (import "ic0" "msg_arg_data_copy"
+                            (func $ic0_msg_arg_data_copy (param i32 i32 i32)))
+                        (memory 1)
+                        (func (export "canister_update test_msg_arg_data_copy")
+                            (call $ic0_msg_arg_data_copy
+                                (i32.const 0) (i32.const 0) (i32.const {DATA_SIZE}))
+                        )
+                    )
+                    "#,
+                    DATA_SIZE = data_size
+                )
+                .as_str(),
+            )
+            .with_api_type(ic_system_api::ApiType::init(
+                mock_time(),
+                vec![0; 1024],
+                user_test_id(24).get(),
+            ))
+            .build();
+
+        instance
+            .run(ic_types::methods::FuncRef::Method(
+                ic_types::methods::WasmMethod::Update("test_msg_arg_data_copy".to_string()),
+            ))
+            .unwrap();
+
+        let system_api = &instance.store_data_mut().system_api;
+        let instructions_limit = system_api.total_instruction_limit();
+        let num_instructions = instance.get_num_instructions();
+        let instructions_used = instructions_limit - num_instructions;
+
+        let call_msg_arg_data_copy_with_3_const = 4;
+        let expected_instructions = call_msg_arg_data_copy_with_3_const
+            + data_size
+            + system_api_complexity::overhead::MSG_ARG_DATA_COPY.get();
+        assert_eq!(instructions_used.get(), expected_instructions);
+    }
+
+    #[test]
+    fn instruction_limit_traps() {
+        let data_size = 1024;
+        let call_msg_arg_data_copy_with_3_const = 4;
+        let expected_instructions = call_msg_arg_data_copy_with_3_const
+            + data_size
+            + system_api_complexity::overhead::MSG_ARG_DATA_COPY.get();
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_wat(
+                format!(
+                    r#"
+                    (module
+                        (import "ic0" "msg_arg_data_copy"
+                            (func $ic0_msg_arg_data_copy (param i32 i32 i32)))
+                        (memory 1)
+                        (func (export "canister_update test_msg_arg_data_copy")
+                            (call $ic0_msg_arg_data_copy
+                                (i32.const 0) (i32.const 0) (i32.const {DATA_SIZE}))
+                        )
+                    )
+                    "#,
+                    DATA_SIZE = data_size
+                )
+                .as_str(),
+            )
+            .with_api_type(ic_system_api::ApiType::init(
+                mock_time(),
+                vec![0; 1024],
+                user_test_id(24).get(),
+            ))
+            .with_num_instructions((expected_instructions - 1).into())
+            .build();
+
+        let result = instance.run(ic_types::methods::FuncRef::Method(
+            ic_types::methods::WasmMethod::Update("test_msg_arg_data_copy".to_string()),
+        ));
+
+        assert_eq!(
+            result.err(),
+            Some(HypervisorError::InstructionLimitExceeded)
+        );
+    }
+
+    const CALL_NEW_CALL_PERFORM_WAT: &str = r#"
+    (module
+        (import "ic0" "call_new"
+            (func $ic0_call_new
+            (param $callee_src i32)         (param $callee_size i32)
+            (param $name_src i32)           (param $name_size i32)
+            (param $reply_fun i32)          (param $reply_env i32)
+            (param $reject_fun i32)         (param $reject_env i32)
+        ))
+        (import "ic0" "call_perform"
+            (func $ic0_call_perform (result i32)))
+        (memory 1)
+        (func (export "canister_update test_call_perform")
+            (call $ic0_call_new
+                (i32.const 0)   (i32.const 10)
+                (i32.const 100) (i32.const 18)
+                (i32.const 11)  (i32.const 0) ;; non-existent function
+                (i32.const 22)  (i32.const 0) ;; non-existent function
+            )
+            (drop (call $ic0_call_perform))
+        )
+    )
+    "#;
+
+    #[test]
+    fn correctly_observe_system_api_complexity() {
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_wat(CALL_NEW_CALL_PERFORM_WAT)
+            .with_api_type(ic_system_api::ApiType::update(
+                mock_time(),
+                vec![],
+                0.into(),
+                PrincipalId::new_user_test_id(0),
+                0.into(),
+                subnet_test_id(0),
+                SubnetType::Application,
+                Arc::new(NetworkTopology::default()),
+            ))
+            .build();
+
+        instance
+            .run(ic_types::methods::FuncRef::Method(
+                ic_types::methods::WasmMethod::Update("test_call_perform".to_string()),
+            ))
+            .unwrap();
+
+        let system_api = &instance.store_data_mut().system_api;
+        let instructions_limit = system_api.total_instruction_limit();
+        let num_instructions = instance.get_num_instructions();
+        let instructions_used = instructions_limit - num_instructions;
+
+        let call_new_with_8_const = 9;
+        let drop_with_call_perform = 2;
+        let expected_instructions = call_new_with_8_const
+            + drop_with_call_perform
+            + system_api_complexity::overhead::CALL_NEW.get()
+            + system_api_complexity::overhead::CALL_PERFORM.get();
+        assert_eq!(instructions_used.get(), expected_instructions);
+
+        let total_cpu_complexity = instance
+            .into_store_data()
+            .system_api
+            .get_total_execution_complexity()
+            .cpu;
+        let expected_cpu_complexity =
+            system_api_complexity::cpu::CALL_NEW + system_api_complexity::cpu::CALL_PERFORM;
+        assert_eq!(total_cpu_complexity, expected_cpu_complexity);
+    }
+
+    #[test]
+    fn complex_system_api_call_traps() {
+        let subnet_type = SubnetType::Application;
+        let expected_cpu_complexity = system_api_complexity::cpu::CALL_NEW.get()
+            + system_api_complexity::cpu::CALL_PERFORM.get();
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_wat(CALL_NEW_CALL_PERFORM_WAT)
+            .with_api_type(ic_system_api::ApiType::update(
+                mock_time(),
+                vec![],
+                0.into(),
+                PrincipalId::new_user_test_id(0),
+                0.into(),
+                subnet_test_id(0),
+                subnet_type,
+                Arc::new(NetworkTopology::default()),
+            ))
+            .with_num_instructions((expected_cpu_complexity - 1).into())
+            .with_subnet_type(subnet_type)
+            .build();
+
+        let result = instance.run(ic_types::methods::FuncRef::Method(
+            ic_types::methods::WasmMethod::Update("test_call_perform".to_string()),
+        ));
+
+        assert_eq!(
+            result.err(),
+            Some(HypervisorError::InstructionLimitExceeded)
+        );
+    }
+
+    #[test]
+    fn complex_system_api_call_does_not_trap_on_system_subnet() {
+        // The same setup as previously, but with the System subnet type
+        let subnet_type = SubnetType::System;
+        let expected_cpu_complexity = (system_api_complexity::cpu::CALL_NEW.get()
+            + system_api_complexity::cpu::CALL_PERFORM.get())
+            * 5; // times 5B instructions per message / nanos_in_sec
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_wat(CALL_NEW_CALL_PERFORM_WAT)
+            .with_api_type(ic_system_api::ApiType::update(
+                mock_time(),
+                vec![],
+                0.into(),
+                PrincipalId::new_user_test_id(0),
+                0.into(),
+                subnet_test_id(0),
+                subnet_type,
+                Arc::new(NetworkTopology::default()),
+            ))
+            .with_num_instructions((expected_cpu_complexity - 1).into())
+            .with_subnet_type(subnet_type)
+            .build();
+
+        let result = instance.run(ic_types::methods::FuncRef::Method(
+            ic_types::methods::WasmMethod::Update("test_call_perform".to_string()),
+        ));
+
+        // Should not fail on System subnet
+        assert!(result.is_ok());
     }
 
     /// The spec doesn't allow exported functions to have results.
