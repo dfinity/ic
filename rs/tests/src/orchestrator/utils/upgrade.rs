@@ -1,12 +1,12 @@
 use crate::{
-    driver::test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
+    driver::test_env_api::*,
     nns::{
         get_governance_canister, submit_bless_replica_version_proposal,
         submit_update_subnet_replica_version_proposal, vote_execute_proposal_assert_executed,
     },
-    orchestrator::utils::ssh_access::{read_remote_file, AuthMean},
     util::{block_on, runtime_from_url},
 };
+use anyhow::Result;
 use ic_canister_client::Sender;
 use ic_fondue::ic_manager::IcEndpoint;
 use ic_http_utils::file_downloader::FileDownloader;
@@ -19,9 +19,9 @@ use ic_registry_keys::make_blessed_replica_version_key;
 use ic_types::{messages::ReplicaHealthStatus, ReplicaVersion, SubnetId};
 use prost::Message;
 use slog::{info, Logger};
-use std::convert::TryFrom;
 use std::fs;
 use std::path::Path;
+use std::{convert::TryFrom, io::Read};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum UpdateImageType {
@@ -90,12 +90,12 @@ pub(crate) async fn get_blessed_replica_versions(
 }
 
 /// Reads the replica version from an unassigned node.
-pub(crate) fn fetch_unassigned_node_version(
-    node_ip: &std::net::IpAddr,
-    readonly_mean: &AuthMean,
-) -> Result<String, String> {
+pub(crate) fn fetch_unassigned_node_version(endpoint: &IcNodeSnapshot) -> Result<String> {
+    let sess = endpoint.get_ssh_session(ADMIN)?;
     let version_file = Path::new("/opt/ic/share/version.txt");
-    let mut version = read_remote_file(node_ip, "readonly", readonly_mean, version_file)?;
+    let mut chan = sess.scp_recv(version_file)?.0;
+    let mut version = String::new();
+    chan.read_to_string(&mut version)?;
     version.retain(|c| !c.is_whitespace());
     Ok(version)
 }
