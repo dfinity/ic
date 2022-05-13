@@ -3,7 +3,10 @@ use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_error_types::RejectCode;
 use ic_logger::{debug, error, fatal, trace, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::{
+    buckets::{add_bucket, decimal_buckets},
+    MetricsRegistry,
+};
 use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::{
     canister_state::QUEUE_INDEX_NONE,
@@ -17,7 +20,10 @@ use ic_replicated_state::{
     ReplicatedState, StateError,
 };
 use ic_types::{
-    messages::{Payload, RejectContext, RequestOrResponse, Response},
+    messages::{
+        Payload, RejectContext, RequestOrResponse, Response,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+    },
     xnet::{StreamIndex, StreamIndexedQueue, StreamSlice},
     SubnetId,
 };
@@ -92,8 +98,11 @@ impl StreamHandlerMetrics {
         let inducted_xnet_payload_sizes = metrics_registry.histogram(
             METRIC_INDUCTED_XNET_PAYLOAD_SIZES,
             "Successfully inducted XNet message payload sizes.",
-            // 10 B - 5 MB
-            decimal_buckets(1, 6),
+            // 10 B - 5 MB, plus 2 MiB (limit for XNet payloads)
+            add_bucket(
+                MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as f64,
+                decimal_buckets(1, 6),
+            ),
         );
         let gced_xnet_messages = metrics_registry.int_counter(
             METRIC_GCED_XNET_MESSAGES,
