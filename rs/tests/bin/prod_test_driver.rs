@@ -261,10 +261,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         ledger_tests::transaction_ledger_correctness::test,
                     )]),
                 ),
-                pot(
+                pot_with_setup(
                     "unassigned_node_upgrade_test_pot",
-                    orchestrator::unassigned_node_upgrade_test::config(),
-                    par(vec![t(
+                    orchestrator::unassigned_node_upgrade_test::config,
+                    par(vec![sys_t(
                         "unassigned_node_upgrade_test",
                         orchestrator::unassigned_node_upgrade_test::test,
                     )]),

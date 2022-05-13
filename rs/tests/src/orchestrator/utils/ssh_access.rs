@@ -16,6 +16,7 @@ use openssl::rsa::Rsa;
 use pem::{encode, Pem};
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use registry_canister::mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload;
+use reqwest::Url;
 use ssh2::Session;
 use std::io::Read;
 use std::net::{IpAddr, TcpStream};
@@ -214,10 +215,10 @@ pub(crate) fn get_updateunassignednodespayload(
 }
 
 pub(crate) async fn update_ssh_keys_for_all_unassigned_nodes(
-    nns_endpoint: &IcEndpoint,
+    nns_url: Url,
     payload: UpdateUnassignedNodesConfigPayload,
 ) {
-    let r = runtime_from_url(nns_endpoint.url.clone());
+    let r = runtime_from_url(nns_url);
     let gov_can = get_governance_canister(&r);
 
     let proposal_id = submit_external_proposal_with_test_id(

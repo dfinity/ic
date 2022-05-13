@@ -152,7 +152,7 @@ pub fn keys_for_unassigned_nodes_can_be_updated(handle: IcHandle, ctx: &ic_fondu
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
     let payload = get_updateunassignednodespayload(Some(vec![readonly_public_key]));
     block_on(update_ssh_keys_for_all_unassigned_nodes(
-        nns_endpoint,
+        nns_endpoint.url.clone(),
         payload,
     ));
 
@@ -162,7 +162,7 @@ pub fn keys_for_unassigned_nodes_can_be_updated(handle: IcHandle, ctx: &ic_fondu
     // Clear the keys in the registry
     let no_key_payload = get_updateunassignednodespayload(Some(vec![]));
     block_on(update_ssh_keys_for_all_unassigned_nodes(
-        nns_endpoint,
+        nns_endpoint.url.clone(),
         no_key_payload,
     ));
 
@@ -244,7 +244,7 @@ pub fn multiple_keys_can_access_one_account_on_unassigned_nodes(
         readonly_public_key3,
     ]));
     block_on(update_ssh_keys_for_all_unassigned_nodes(
-        nns_endpoint,
+        nns_endpoint.url.clone(),
         payload,
     ));
 
@@ -332,7 +332,7 @@ pub fn can_add_max_number_of_readonly_and_backup_keys(
     // Also do that for unassigned nodes
     let payload_for_the_unassigned = get_updateunassignednodespayload(Some(vec![public_key; 50]));
     block_on(update_ssh_keys_for_all_unassigned_nodes(
-        nns_endpoint,
+        nns_endpoint.url.clone(),
         payload_for_the_unassigned,
     ));
 }
