@@ -258,7 +258,8 @@ def get_diff_base():
         print('Looks like we are running "conventionally", i.e. not in Gitlab CI.')
         return "HEAD"
 
-    stdout, _stderr = run(["git", "merge-base", target_branch, "HEAD"])
+    stdout, _stderr = run(["git", "fetch", "origin", target_branch])
+    stdout, _stderr = run(["git", "merge-base", f"origin/{target_branch}", "HEAD"])
     diff_base = stdout.strip()
     print(f"It appears we are in Gitlab CI. {target_branch = } {diff_base = }")
     return diff_base
