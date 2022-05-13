@@ -1,5 +1,5 @@
 {
-  "checksum": "268330111735d5c12a736c49d1dcbec8dd97d907a612a3b1dc63c1f90320d316",
+  "checksum": "e4e6eaca5622d923f5dc33cfbf3453861fea278416c5e539e74be5c866c92571",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -389,7 +389,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -455,7 +455,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -1124,7 +1124,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -1796,7 +1796,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -2263,7 +2263,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -2510,7 +2510,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -3315,7 +3315,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -4635,7 +4635,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -6593,7 +6593,7 @@
               "target": "regex_syntax"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             },
             {
@@ -7452,7 +7452,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -7754,7 +7754,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -8481,7 +8481,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -9023,7 +9023,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -9854,7 +9854,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -9912,7 +9912,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -12113,7 +12113,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -12558,7 +12558,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -12826,7 +12826,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -12929,13 +12929,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "syn 1.0.93": {
+    "syn 1.0.94": {
       "name": "syn",
-      "version": "1.0.93",
+      "version": "1.0.94",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/syn/1.0.93/download",
-          "sha256": "04066589568b72ec65f42d65a1a52436e954b168773148893c020269563decf2"
+          "url": "https://crates.io/api/v1/crates/syn/1.0.94/download",
+          "sha256": "a07e33e919ebcd69113d5be0e4d70c5707004ff45188910106854f38b960df4a"
         }
       },
       "targets": [
@@ -12993,7 +12993,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "build_script_build"
             },
             {
@@ -13004,7 +13004,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.93"
+        "version": "1.0.94"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -13089,7 +13089,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             },
             {
@@ -13436,7 +13436,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -13882,7 +13882,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -14589,7 +14589,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             }
           ],
@@ -15499,7 +15499,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             },
             {
@@ -15605,7 +15605,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             },
             {
@@ -16587,7 +16587,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.93",
+              "id": "syn 1.0.94",
               "target": "syn"
             },
             {
