@@ -1,7 +1,7 @@
 mod anonymous_query_handler;
 mod canister_manager;
 mod canister_settings;
-mod execution;
+pub mod execution;
 mod execution_environment;
 mod execution_environment_metrics;
 mod history;

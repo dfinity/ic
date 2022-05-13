@@ -475,6 +475,7 @@ pub fn canister_from_exec_state(
         system_state: SystemStateBuilder::new()
             .memory_allocation(NumBytes::new(8 * 1024 * 1024 * 1024)) // 8GiB
             .canister_id(canister_id)
+            .initial_cycles(INITIAL_CYCLES)
             .build(),
         execution_state: Some(execution_state),
         scheduler_state: Default::default(),

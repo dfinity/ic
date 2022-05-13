@@ -108,8 +108,6 @@ fn validate_canister(
 ///
 /// - A result containing the size of the heap delta change if
 /// execution was successful or the relevant `CanisterHeartbeatError` error if execution fails.
-///
-///     
 #[allow(dead_code)]
 pub fn execute_heartbeat(
     canister: CanisterState,
