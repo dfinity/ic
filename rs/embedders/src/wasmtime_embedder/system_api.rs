@@ -1,7 +1,9 @@
 use crate::wasmtime_embedder::{system_api_complexity, StoreData};
 
 use ic_config::flag_status::FlagStatus;
-use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, SystemApi};
+use ic_interfaces::execution_environment::{
+    ExecutionComplexity, HypervisorError, HypervisorResult, SystemApi,
+};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions};
@@ -151,6 +153,38 @@ fn charge_for_system_api_call<S: SystemApi>(
         log,
         canister_id,
     )?;
+    Ok(())
+}
+
+/// Observe execution complexity.
+fn observe_execution_complexity<S: SystemApi>(
+    log: &ReplicaLogger,
+    caller: &mut Caller<'_, StoreData<S>>,
+    canister_id: CanisterId,
+    complexity: &ExecutionComplexity,
+) -> Result<(), Trap> {
+    let system_api = &mut caller.data_mut().system_api;
+    let total_complexity = system_api.get_total_execution_complexity() + complexity;
+    if system_api.subnet_type() != SubnetType::System {
+        // TODO: RUN-126: Implement per-round complexity that combines complexities of
+        //       multiple messages.
+        // Note: for install messages the CPU Limit will be > 1s, but it will be addressed with DTS
+        let total_instruction_limit = system_api.total_instruction_limit();
+        if total_complexity.cpu > total_instruction_limit {
+            error!(
+                log,
+                "Canister {}: Error exceeding CPU complexity limit: (observed:{}, limit:{})",
+                canister_id,
+                total_complexity.cpu,
+                total_instruction_limit,
+            );
+            return Err(process_err(
+                caller,
+                HypervisorError::InstructionLimitExceeded,
+            ));
+        }
+    }
+    system_api.set_total_execution_complexity(total_complexity);
     Ok(())
 }
 
@@ -540,7 +574,8 @@ pub(crate) fn syscalls<S: SystemApi>(
 
     linker
         .func_wrap("ic0", "call_new", {
-            move |caller: Caller<'_, StoreData<S>>,
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>,
                   callee_src: i32,
                   callee_size: i32,
                   name_src: i32,
@@ -549,6 +584,17 @@ pub(crate) fn syscalls<S: SystemApi>(
                   reply_env: i32,
                   reject_fun: i32,
                   reject_env: i32| {
+                observe_execution_complexity(
+                    &log,
+                    &mut caller,
+                    canister_id,
+                    &ExecutionComplexity {
+                        cpu: system_api_complexity::cpu::CALL_NEW,
+                        memory: 0.into(),
+                        disk: 0.into(),
+                        network: 0.into(),
+                    },
+                )?;
                 with_memory_and_system_api(caller, |system_api, memory| {
                     system_api.ic0_call_new(
                         callee_src as u32,
@@ -620,7 +666,19 @@ pub(crate) fn syscalls<S: SystemApi>(
 
     linker
         .func_wrap("ic0", "call_perform", {
+            let log = log.clone();
             move |mut caller: Caller<'_, StoreData<S>>| {
+                observe_execution_complexity(
+                    &log,
+                    &mut caller,
+                    canister_id,
+                    &ExecutionComplexity {
+                        cpu: system_api_complexity::cpu::CALL_PERFORM,
+                        memory: 0.into(),
+                        disk: 0.into(),
+                        network: 0.into(),
+                    },
+                )?;
                 with_system_api(&mut caller, |s| s.ic0_call_perform())
                     .map_err(|e| process_err(caller, e))
             }
