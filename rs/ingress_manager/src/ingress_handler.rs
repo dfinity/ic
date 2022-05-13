@@ -170,7 +170,10 @@ mod tests {
         types::messages::SignedIngressBuilder,
         FastForwardTimeSource,
     };
-    use ic_types::time::UNIX_EPOCH;
+    use ic_types::{
+        ingress::{IngressState, IngressStatus},
+        time::UNIX_EPOCH,
+    };
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -236,10 +239,11 @@ mod tests {
         ingress_hist_reader
             .expect_get_latest_status()
             .returning(|| {
-                Box::new(|_| IngressStatus::Received {
+                Box::new(|_| IngressStatus::Known {
                     receiver: canister_test_id(0).get(),
                     user_id: user_test_id(0),
                     time: mock_time(),
+                    state: IngressState::Received,
                 })
             });
 
@@ -330,10 +334,11 @@ mod tests {
             .expect_get_latest_status()
             .times(1)
             .returning(|| {
-                Box::new(|_| IngressStatus::Received {
+                Box::new(|_| IngressStatus::Known {
                     receiver: canister_test_id(0).get(),
                     user_id: user_test_id(0),
                     time: mock_time(),
+                    state: IngressState::Received,
                 })
             });
 

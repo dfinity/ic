@@ -32,7 +32,7 @@ use ic_test_utilities_registry::{
 };
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload},
-    ingress::{IngressStatus, WasmResult},
+    ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, SignedIngress},
     replica_config::ReplicaConfig,
     time::UNIX_EPOCH,
@@ -286,11 +286,17 @@ fn print_ingress_result(message_id: &MessageId, ingress_hist_reader: &dyn Ingres
     let status = (ingress_hist_reader.get_latest_status())(message_id);
     print!("ingress ");
     match status {
-        IngressStatus::Completed { result, .. } => {
+        IngressStatus::Known {
+            state: IngressState::Completed(result),
+            ..
+        } => {
             print!("Completed: ");
             print_wasm_result(result)
         }
-        IngressStatus::Failed { error, .. } => println!("Err: {}", error),
+        IngressStatus::Known {
+            state: IngressState::Failed(error),
+            ..
+        } => println!("Err: {}", error),
         _ => panic!("Ingress message has not finished processing."),
     };
 }
@@ -344,17 +350,18 @@ fn execute_ingress_message(
 
         let ingress_result = (ingress_history.get_latest_status())(msg_id);
         match ingress_result {
-            IngressStatus::Completed { result, .. } => return Ok(result),
-            IngressStatus::Failed { error, .. } => return Err(error),
-            IngressStatus::Done { .. } => {
-                return Err(UserError::new(
-                    ErrorCode::SubnetOversubscribed,
-                    "The call has completed but the reply/reject data has been pruned.",
-                ))
-            }
-            IngressStatus::Received { .. }
-            | IngressStatus::Processing { .. }
-            | IngressStatus::Unknown => (),
+            IngressStatus::Known { state, .. } => match state {
+                IngressState::Completed(result) => return Ok(result),
+                IngressState::Failed(error) => return Err(error),
+                IngressState::Done => {
+                    return Err(UserError::new(
+                        ErrorCode::SubnetOversubscribed,
+                        "The call has completed but the reply/reject data has been pruned.",
+                    ))
+                }
+                IngressState::Received | IngressState::Processing => (),
+            },
+            IngressStatus::Unknown => (),
         }
     }
     panic!(

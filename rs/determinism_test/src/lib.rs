@@ -15,7 +15,7 @@ use ic_test_utilities::types::messages::SignedIngressBuilder;
 use ic_types::{
     artifact::SignedIngress,
     batch::{Batch, BatchPayload, IngressPayload},
-    ingress::{IngressStatus, WasmResult},
+    ingress::{IngressState, IngressStatus, WasmResult},
     messages::MessageId,
     time::UNIX_EPOCH,
     CanisterId, CryptoHashOfState, Randomness, RegistryVersion,
@@ -72,18 +72,20 @@ fn wait_for_ingress_message(
 ) -> Vec<u8> {
     loop {
         let result = (ingress_history_reader.get_latest_status())(&message_id);
+
         match result {
-            IngressStatus::Completed { result, .. } => match result {
-                WasmResult::Reject(msg) => panic!("{}", msg),
-                WasmResult::Reply(bytes) => return bytes,
+            IngressStatus::Known { state, .. } => match state {
+                IngressState::Completed(WasmResult::Reject(msg)) => panic!("{}", msg),
+                IngressState::Completed(WasmResult::Reply(bytes)) => return bytes,
+                IngressState::Failed(error) => panic!("{:?}", error),
+                IngressState::Done => {
+                    panic!("The call has completed but the reply/reject data has been pruned.")
+                }
+                IngressState::Received | IngressState::Processing => {
+                    sleep(Duration::from_millis(5))
+                }
             },
-            IngressStatus::Failed { error, .. } => panic!("{:?}", error),
-            IngressStatus::Done { .. } => {
-                panic!("The call has completed but the reply/reject data has been pruned.")
-            }
-            IngressStatus::Received { .. }
-            | IngressStatus::Processing { .. }
-            | IngressStatus::Unknown => sleep(Duration::from_millis(5)),
+            IngressStatus::Unknown => sleep(Duration::from_millis(5)),
         }
     }
 }
@@ -193,16 +195,19 @@ fn install_canister(
     loop {
         let result = (ingress_history_reader.get_latest_status())(&message_id);
         match result {
-            IngressStatus::Completed { .. } => {
-                break;
-            }
-            IngressStatus::Failed { error, .. } => panic!("{:?}", error),
-            IngressStatus::Done { .. } => {
-                panic!("The call has completed but the reply/reject data has been pruned.")
-            }
-            IngressStatus::Received { .. }
-            | IngressStatus::Processing { .. }
-            | IngressStatus::Unknown => sleep(Duration::from_millis(5)),
+            IngressStatus::Known { state, .. } => match state {
+                IngressState::Completed(_) => {
+                    break;
+                }
+                IngressState::Failed(error) => panic!("{:?}", error),
+                IngressState::Done => {
+                    panic!("The call has completed but the reply/reject data has been pruned.")
+                }
+                IngressState::Received | IngressState::Processing => {
+                    sleep(Duration::from_millis(5))
+                }
+            },
+            IngressStatus::Unknown => sleep(Duration::from_millis(5)),
         }
     }
     (canister_id, nonce)

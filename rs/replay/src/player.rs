@@ -49,7 +49,7 @@ use ic_state_manager::StateManagerImpl;
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload},
     consensus::{CatchUpPackage, HasHeight, HasVersion},
-    ingress::{IngressStatus, WasmResult},
+    ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, SignedIngress, UserQuery},
     time::current_time,
     CryptoHashOfState, Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SubnetId,
@@ -386,8 +386,8 @@ impl Player {
             let get_latest_status = self.ingress_history_reader.get_latest_status();
             for msg_id in msg_ids {
                 match get_latest_status(&msg_id) {
-                    IngressStatus::Completed {
-                        result: WasmResult::Reply(bytes),
+                    IngressStatus::Known {
+                        state: IngressState::Completed(WasmResult::Reply(bytes)),
                         ..
                     } => println!("Ingress id={} response={}", &msg_id, hex::encode(bytes)),
                     status => panic!("Execution of {} has failed: {:?}", msg_id, status),

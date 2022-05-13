@@ -51,7 +51,7 @@ use ic_types::{
     consensus::certification::*,
     consensus::*,
     crypto::Signed,
-    ingress::IngressStatus,
+    ingress::{IngressState, IngressStatus},
     signature::*,
     Height, NumBytes, PrincipalId, RegistryVersion, Time, UserId,
 };
@@ -189,10 +189,11 @@ fn setup_ingress_state(now: Time, state_manager: &mut StateManagerImpl) {
             .build();
         state.metadata.ingress_history.insert(
             ingress.id(),
-            IngressStatus::Received {
+            IngressStatus::Known {
                 receiver: canister_test_id(i as u64).get(),
                 user_id: UserId::from(PrincipalId::new_user_test_id(i as u64)),
                 time: now,
+                state: IngressState::Received,
             },
             now,
             NumBytes::from(u64::MAX),

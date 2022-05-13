@@ -22,7 +22,7 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
 use ic_types::{
-    ingress::IngressStatus,
+    ingress::{IngressState, IngressStatus},
     messages::{Ingress, Payload, Request, Response},
     CanisterId, Cycles, NumBytes, NumInstructions, Time,
 };
@@ -182,11 +182,11 @@ pub(crate) fn execute_ingress_call(
 ) -> ExecuteMessageResult<CanisterState> {
     let canister_id = canister.canister_id();
     if let Err(error) = validate_canister(&canister) {
-        let status = IngressStatus::Failed {
+        let status = IngressStatus::Known {
             receiver: canister_id.get(),
             user_id: ingress.source,
-            error,
             time,
+            state: IngressState::Failed(error),
         };
 
         return ExecuteMessageResult {
@@ -201,14 +201,14 @@ pub(crate) fn execute_ingress_call(
     // messages.
     if ingress.expiry_time < time {
         error!(log, "[EXC-BUG] Executing expired ingress message.");
-        let status = IngressStatus::Failed {
+        let status = IngressStatus::Known {
             receiver: canister_id.get(),
             user_id: ingress.source,
-            error: UserError::new(
+            time,
+            state: IngressState::Failed(UserError::new(
                 ErrorCode::IngressMessageTimeout,
                 "Ingress message timed out waiting to start executing.",
-            ),
-            time,
+            )),
         };
         return ExecuteMessageResult {
             canister,
@@ -277,30 +277,30 @@ fn execute_query_method_for_ingress(
         result.map_err(|err| log_and_transform_to_user_error(log, err, &canister.canister_id()));
     let ingress_status = match result {
         Ok(wasm_result) => match wasm_result {
-            None => IngressStatus::Failed {
+            None => IngressStatus::Known {
                 receiver: canister.canister_id().get(),
                 user_id: ingress.source,
-                error: UserError::new(
+                time,
+                state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterDidNotReply,
                     format!(
                         "Canister {} did not reply to the call",
                         canister.canister_id(),
                     ),
-                ),
-                time,
+                )),
             },
-            Some(wasm_result) => IngressStatus::Completed {
+            Some(wasm_result) => IngressStatus::Known {
                 receiver: canister.canister_id().get(),
                 user_id: ingress.source,
-                result: wasm_result,
                 time,
+                state: IngressState::Completed(wasm_result),
             },
         },
-        Err(user_error) => IngressStatus::Failed {
+        Err(user_error) => IngressStatus::Known {
             receiver: canister.canister_id().get(),
             user_id: ingress.source,
-            error: user_error,
             time,
+            state: IngressState::Failed(user_error),
         },
     };
     ExecuteMessageResult {

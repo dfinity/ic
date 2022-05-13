@@ -30,7 +30,7 @@ use ic_types::{
     artifact::{Priority, StateSyncArtifactId, StateSyncAttribute},
     chunkable::ChunkId,
     crypto::CryptoHash,
-    ingress::{IngressStatus, WasmResult},
+    ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, RequestOrResponse},
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, PrincipalId,
@@ -2218,11 +2218,11 @@ fn certified_read_can_certify_ingress_history_entry() {
 
         state.set_ingress_status(
             message_test_id(1),
-            IngressStatus::Completed {
+            IngressStatus::Known {
                 receiver: canister_test_id(1).get(),
                 user_id: user_test_id(1),
-                result: WasmResult::Reply(b"done".to_vec()),
                 time: mock_time(),
+                state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
             },
             NumBytes::from(u64::MAX),
         );
@@ -2336,11 +2336,11 @@ fn certified_read_returns_none_for_non_existing_entries() {
 
         state.set_ingress_status(
             message_test_id(1),
-            IngressStatus::Completed {
+            IngressStatus::Known {
                 receiver: canister_test_id(1).get(),
                 user_id: user_test_id(1),
-                result: WasmResult::Reply(b"done".to_vec()),
                 time: mock_time(),
+                state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
             },
             NumBytes::from(u64::MAX),
         );
@@ -2367,20 +2367,21 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
         let (_, mut state) = state_manager.take_tip();
         state.set_ingress_status(
             message_test_id(1),
-            IngressStatus::Completed {
+            IngressStatus::Known {
                 receiver: canister_test_id(1).get(),
                 user_id: user_test_id(1),
-                result: WasmResult::Reply(b"done".to_vec()),
                 time: mock_time(),
+                state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
             },
             NumBytes::from(u64::MAX),
         );
         state.set_ingress_status(
             message_test_id(2),
-            IngressStatus::Processing {
+            IngressStatus::Known {
                 receiver: canister_test_id(1).get(),
                 user_id: user_test_id(1),
                 time: mock_time(),
+                state: IngressState::Processing,
             },
             NumBytes::from(u64::MAX),
         );

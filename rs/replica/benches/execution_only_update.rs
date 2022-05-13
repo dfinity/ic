@@ -19,7 +19,7 @@ use ic_test_utilities::{
 use ic_test_utilities_registry::MockRegistryClient;
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload},
-    ingress::{IngressStatus, WasmResult},
+    ingress::{IngressState, IngressStatus, WasmResult},
     messages::SignedIngress,
     Randomness, RegistryVersion,
 };
@@ -151,17 +151,18 @@ fn execute_ingress_message(
 
         let ingress_result = (ingress_history.get_latest_status())(msg_id);
         match ingress_result {
-            IngressStatus::Completed { result, .. } => return Ok(result),
-            IngressStatus::Failed { error, .. } => return Err(error),
-            IngressStatus::Done { .. } => {
-                return Err(UserError::new(
-                    ErrorCode::SubnetOversubscribed,
-                    "The call has completed but the reply/reject data has been pruned.",
-                ))
-            }
-            IngressStatus::Received { .. }
-            | IngressStatus::Processing { .. }
-            | IngressStatus::Unknown => (),
+            IngressStatus::Known { state, .. } => match state {
+                IngressState::Completed(result) => return Ok(result),
+                IngressState::Failed(error) => return Err(error),
+                IngressState::Done => {
+                    return Err(UserError::new(
+                        ErrorCode::SubnetOversubscribed,
+                        "The call has completed but the reply/reject data has been pruned.",
+                    ))
+                }
+                IngressState::Received | IngressState::Processing => (),
+            },
+            IngressStatus::Unknown => (),
         }
     }
     panic!("Ingress message did not finish executing within 30 seconds");

@@ -802,12 +802,14 @@ impl BatchProcessor for FakeBatchProcessorImpl {
             // It is safe to assume valid expiry time here
             (
                 ingress.id(),
-                ic_types::ingress::IngressStatus::Completed {
+                ic_types::ingress::IngressStatus::Known {
                     receiver: ingress.canister_id().get(),
                     user_id: ingress.sender(),
-                    // The byte content mimicks a good reply for the counter example
-                    result: ic_types::ingress::WasmResult::Reply(vec![68, 73, 68, 76, 0, 0]),
                     time,
+                    state: ic_types::ingress::IngressState::Completed(
+                        // The byte content mimicks a good reply for the counter example
+                        ic_types::ingress::WasmResult::Reply(vec![68, 73, 68, 76, 0, 0]),
+                    ),
                 },
             )
         });

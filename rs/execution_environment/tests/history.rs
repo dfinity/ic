@@ -13,7 +13,7 @@ use ic_test_utilities::{
     with_test_replica_logger,
 };
 use ic_types::{
-    ingress::{IngressStatus, WasmResult},
+    ingress::{IngressState, IngressStatus, WasmResult},
     Height,
 };
 use IngressStatus::*;
@@ -44,36 +44,38 @@ fn get_status_for_non_existing_message_id() {
 }
 
 fn received() -> IngressStatus {
-    Received {
+    Known {
         receiver: canister_test_id(0).get(),
         user_id: user_test_id(0),
         time: mock_time(),
+        state: IngressState::Received,
     }
 }
 
 fn processing() -> IngressStatus {
-    Processing {
+    Known {
         receiver: canister_test_id(0).get(),
         user_id: user_test_id(0),
         time: mock_time(),
+        state: IngressState::Processing,
     }
 }
 
 fn completed() -> IngressStatus {
-    Completed {
+    Known {
         receiver: canister_test_id(0).get(),
         user_id: user_test_id(0),
-        result: WasmResult::Reply(vec![]),
         time: mock_time(),
+        state: IngressState::Completed(WasmResult::Reply(vec![])),
     }
 }
 
 fn failed() -> IngressStatus {
-    Failed {
+    Known {
         receiver: canister_test_id(0).get(),
         user_id: user_test_id(0),
-        error: UserError::new(CanisterNotFound, ""),
         time: mock_time(),
+        state: IngressState::Failed(UserError::new(CanisterNotFound, "")),
     }
 }
 

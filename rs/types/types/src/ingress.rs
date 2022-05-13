@@ -13,45 +13,36 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::{convert::TryFrom, fmt};
 
-/// The status of an ingress message.
+/// The inner state of an ingress message.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum IngressStatus {
+pub enum IngressState {
     /// The message was successfully inducted into the input queue of
     /// the receiver and should eventually execute.
     ///
     /// Note that inducted messages can expire if they haven't executed within
     /// some time.
-    Received {
-        receiver: PrincipalId,
-        user_id: UserId,
-        time: Time,
-    },
+    Received,
     /// The message was executed and the execution yielded a
     /// successful result.
-    Completed {
-        receiver: PrincipalId,
-        user_id: UserId,
-        result: WasmResult,
-        time: Time,
-    },
+    Completed(WasmResult),
     /// The message was executed and the execution triggered an error.
-    Failed {
-        receiver: PrincipalId,
-        user_id: UserId,
-        error: UserError,
-        time: Time,
-    },
+    Failed(UserError),
     /// The message is currently being processed.
-    Processing {
-        receiver: PrincipalId,
-        user_id: UserId,
-        time: Time,
-    },
+    Processing,
     /// The call has completed but the reply/reject data has been pruned.
-    Done {
+    Done,
+}
+
+/// The status of an ingress message.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum IngressStatus {
+    /// The system has knowledge of this message, its status is
+    /// described by state
+    Known {
         receiver: PrincipalId,
         user_id: UserId,
         time: Time,
+        state: IngressState,
     },
     /// The system has no knowledge of this message.  It may have
     /// expired or it failed to induct.
@@ -61,22 +52,14 @@ pub enum IngressStatus {
 impl IngressStatus {
     pub fn user_id(&self) -> Option<UserId> {
         match self {
-            IngressStatus::Received { user_id, .. } => Some(*user_id),
-            IngressStatus::Completed { user_id, .. } => Some(*user_id),
-            IngressStatus::Failed { user_id, .. } => Some(*user_id),
-            IngressStatus::Processing { user_id, .. } => Some(*user_id),
-            IngressStatus::Done { user_id, .. } => Some(*user_id),
+            IngressStatus::Known { user_id, .. } => Some(*user_id),
             IngressStatus::Unknown => None,
         }
     }
 
     pub fn receiver(&self) -> Option<CanisterId> {
         match self {
-            IngressStatus::Received { receiver, .. } => Some(*receiver),
-            IngressStatus::Completed { receiver, .. } => Some(*receiver),
-            IngressStatus::Failed { receiver, .. } => Some(*receiver),
-            IngressStatus::Processing { receiver, .. } => Some(*receiver),
-            IngressStatus::Done { receiver, .. } => Some(*receiver),
+            IngressStatus::Known { receiver, .. } => Some(*receiver),
             IngressStatus::Unknown => None,
         }
         .map(|receiver| {
@@ -88,18 +71,14 @@ impl IngressStatus {
     /// https://sdk.dfinity.org/docs/interface-spec/index.html#state-tree-request-status
     pub fn as_str(&self) -> &'static str {
         match self {
-            IngressStatus::Received { .. } => "received",
-            IngressStatus::Completed {
-                result: WasmResult::Reply(_),
-                ..
-            } => "replied",
-            IngressStatus::Completed {
-                result: WasmResult::Reject(_),
-                ..
-            } => "rejected",
-            IngressStatus::Failed { .. } => "rejected",
-            IngressStatus::Processing { .. } => "processing",
-            IngressStatus::Done { .. } => "done",
+            IngressStatus::Known { state, .. } => match state {
+                IngressState::Received => "received",
+                IngressState::Completed(WasmResult::Reply(_)) => "replied",
+                IngressState::Completed(WasmResult::Reject(_)) => "rejected",
+                IngressState::Failed(_) => "rejected",
+                IngressState::Processing => "processing",
+                IngressState::Done => "done",
+            },
             IngressStatus::Unknown => "unknown",
         }
     }
@@ -107,12 +86,12 @@ impl IngressStatus {
     /// Returns the byte size of the payload of the ingress status
     pub fn payload_bytes(&self) -> usize {
         match self {
-            IngressStatus::Completed { result, .. } => result.count_bytes(),
-            IngressStatus::Failed { error, .. } => error.description().as_bytes().len(),
-            IngressStatus::Received { .. }
-            | IngressStatus::Processing { .. }
-            | IngressStatus::Done { .. }
-            | IngressStatus::Unknown => 0,
+            IngressStatus::Known { state, .. } => match state {
+                IngressState::Completed(result) => result.count_bytes(),
+                IngressState::Failed(error) => error.description().as_bytes().len(),
+                _ => 0,
+            },
+            IngressStatus::Unknown => 0,
         }
     }
 }
@@ -213,65 +192,50 @@ impl From<&IngressStatus> for pb_ingress::IngressStatus {
         use pb_ingress::ingress_status::Status;
 
         match item {
-            IngressStatus::Received {
+            IngressStatus::Known {
                 receiver,
                 user_id,
                 time,
-            } => Self {
-                status: Some(Status::Received(pb_ingress::IngressStatusReceived {
-                    receiver: Some(pb_types::PrincipalId::from(*receiver)),
-                    user_id: Some(crate::user_id_into_protobuf(*user_id)),
-                    time_nanos: time.as_nanos_since_unix_epoch(),
-                })),
-            },
-            IngressStatus::Completed {
-                receiver,
-                user_id,
-                result,
-                time,
-            } => Self {
-                status: Some(Status::Completed(pb_ingress::IngressStatusCompleted {
-                    receiver: Some(pb_types::PrincipalId::from(*receiver)),
-                    user_id: Some(crate::user_id_into_protobuf(*user_id)),
-                    wasm_result: Some(result.into()),
-                    time_nanos: time.as_nanos_since_unix_epoch(),
-                })),
-            },
-            IngressStatus::Failed {
-                receiver,
-                user_id,
-                error,
-                time,
-            } => Self {
-                status: Some(Status::Failed(pb_ingress::IngressStatusFailed {
-                    receiver: Some(pb_types::PrincipalId::from(*receiver)),
-                    user_id: Some(crate::user_id_into_protobuf(*user_id)),
-                    err_code: error.code() as u64,
-                    err_description: error.description().to_string(),
-                    time_nanos: time.as_nanos_since_unix_epoch(),
-                })),
-            },
-            IngressStatus::Processing {
-                receiver,
-                user_id,
-                time,
-            } => Self {
-                status: Some(Status::Processing(pb_ingress::IngressStatusProcessing {
-                    receiver: Some(pb_types::PrincipalId::from(*receiver)),
-                    user_id: Some(crate::user_id_into_protobuf(*user_id)),
-                    time_nanos: time.as_nanos_since_unix_epoch(),
-                })),
-            },
-            IngressStatus::Done {
-                receiver,
-                user_id,
-                time,
-            } => Self {
-                status: Some(Status::Done(pb_ingress::IngressStatusDone {
-                    receiver: Some(pb_types::PrincipalId::from(*receiver)),
-                    user_id: Some(crate::user_id_into_protobuf(*user_id)),
-                    time_nanos: time.as_nanos_since_unix_epoch(),
-                })),
+                state,
+            } => match state {
+                IngressState::Received => Self {
+                    status: Some(Status::Received(pb_ingress::IngressStatusReceived {
+                        receiver: Some(pb_types::PrincipalId::from(*receiver)),
+                        user_id: Some(crate::user_id_into_protobuf(*user_id)),
+                        time_nanos: time.as_nanos_since_unix_epoch(),
+                    })),
+                },
+                IngressState::Completed(result) => Self {
+                    status: Some(Status::Completed(pb_ingress::IngressStatusCompleted {
+                        receiver: Some(pb_types::PrincipalId::from(*receiver)),
+                        user_id: Some(crate::user_id_into_protobuf(*user_id)),
+                        wasm_result: Some(result.into()),
+                        time_nanos: time.as_nanos_since_unix_epoch(),
+                    })),
+                },
+                IngressState::Failed(error) => Self {
+                    status: Some(Status::Failed(pb_ingress::IngressStatusFailed {
+                        receiver: Some(pb_types::PrincipalId::from(*receiver)),
+                        user_id: Some(crate::user_id_into_protobuf(*user_id)),
+                        err_code: error.code() as u64,
+                        err_description: error.description().to_string(),
+                        time_nanos: time.as_nanos_since_unix_epoch(),
+                    })),
+                },
+                IngressState::Processing => Self {
+                    status: Some(Status::Processing(pb_ingress::IngressStatusProcessing {
+                        receiver: Some(pb_types::PrincipalId::from(*receiver)),
+                        user_id: Some(crate::user_id_into_protobuf(*user_id)),
+                        time_nanos: time.as_nanos_since_unix_epoch(),
+                    })),
+                },
+                IngressState::Done => Self {
+                    status: Some(Status::Done(pb_ingress::IngressStatusDone {
+                        receiver: Some(pb_types::PrincipalId::from(*receiver)),
+                        user_id: Some(crate::user_id_into_protobuf(*user_id)),
+                        time_nanos: time.as_nanos_since_unix_epoch(),
+                    })),
+                },
             },
             IngressStatus::Unknown => Self {
                 status: Some(Status::Unknown(pb_ingress::IngressStatusUnknown {})),
@@ -290,7 +254,7 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                 .status
                 .ok_or(ProxyDecodeError::MissingField("IngressStatus::status"))?
             {
-                Status::Received(r) => IngressStatus::Received {
+                Status::Received(r) => IngressStatus::Known {
                     receiver: try_from_option_field(
                         r.receiver,
                         "IngressStatus::Received::receiver",
@@ -300,8 +264,9 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                         r.user_id,
                         "IngressStatus::Received::user_id",
                     )?)?,
+                    state: IngressState::Received,
                 },
-                Status::Completed(c) => IngressStatus::Completed {
+                Status::Completed(c) => IngressStatus::Known {
                     receiver: try_from_option_field(
                         c.receiver,
                         "IngressStatus::Completed::receiver",
@@ -311,19 +276,19 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                         c.user_id,
                         "IngressStatus::Completed::user_id",
                     )?)?,
-                    result: try_from_option_field(
+                    state: IngressState::Completed(try_from_option_field(
                         c.wasm_result,
                         "IngressStatus::Completed::wasm_result",
-                    )?,
+                    )?),
                 },
-                Status::Failed(f) => IngressStatus::Failed {
+                Status::Failed(f) => IngressStatus::Known {
                     receiver: try_from_option_field(f.receiver, "IngressStatus::Failed::receiver")?,
                     time: Time::from_nanos_since_unix_epoch(f.time_nanos),
                     user_id: crate::user_id_try_from_protobuf(try_from_option_field(
                         f.user_id,
                         "IngressStatus::Failed::user_id",
                     )?)?,
-                    error: UserError::new(
+                    state: IngressState::Failed(UserError::new(
                         ErrorCode::try_from(f.err_code).map_err(|err| match err {
                             TryFromError::ValueOutOfRange(code) => {
                                 ProxyDecodeError::ValueOutOfRange {
@@ -333,9 +298,9 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                             }
                         })?,
                         f.err_description,
-                    ),
+                    )),
                 },
-                Status::Processing(p) => IngressStatus::Processing {
+                Status::Processing(p) => IngressStatus::Known {
                     receiver: try_from_option_field(
                         p.receiver,
                         "IngressStatus::Processing::receiver",
@@ -345,14 +310,16 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                         p.user_id,
                         "IngressStatus::Processing::user_id",
                     )?)?,
+                    state: IngressState::Processing,
                 },
-                Status::Done(p) => IngressStatus::Done {
+                Status::Done(p) => IngressStatus::Known {
                     receiver: try_from_option_field(p.receiver, "IngressStatus::Done::receiver")?,
                     time: Time::from_nanos_since_unix_epoch(p.time_nanos),
                     user_id: crate::user_id_try_from_protobuf(try_from_option_field(
                         p.user_id,
                         "IngressStatus::Done::user_id",
                     )?)?,
+                    state: IngressState::Done,
                 },
                 Status::Unknown(_) => IngressStatus::Unknown,
             },

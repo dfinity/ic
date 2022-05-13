@@ -44,7 +44,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_registry::test_subnet_record;
 use ic_types::{
-    ingress::IngressStatus,
+    ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::{MessageId, SignedIngress},
     Height, RegistryVersion, SubnetId, Time,
@@ -83,11 +83,13 @@ impl SimulatedIngressHistory {
                     if set.1.contains(ingress_id) {
                         IngressStatus::Unknown
                     } else {
-                        IngressStatus::Completed {
+                        IngressStatus::Known {
                             receiver: canister_test_id(0).get(),
                             user_id: user_test_id(0),
-                            result: ic_types::ingress::WasmResult::Reply(vec![]),
                             time: mock_time(),
+                            state: IngressState::Completed(ic_types::ingress::WasmResult::Reply(
+                                vec![],
+                            )),
                         }
                     }
                 })

@@ -46,33 +46,33 @@ fn can_prune_old_ingress_history_entries() {
     let time = mock_time();
     ingress_history.insert(
         message_id1.clone(),
-        IngressStatus::Completed {
+        IngressStatus::Known {
             receiver: canister_test_id(1).get(),
             user_id: user_test_id(1),
-            result: WasmResult::Reply(vec![]),
             time: mock_time(),
+            state: IngressState::Completed(WasmResult::Reply(vec![])),
         },
         time,
         NumBytes::from(u64::MAX),
     );
     ingress_history.insert(
         message_id2.clone(),
-        IngressStatus::Completed {
+        IngressStatus::Known {
             receiver: canister_test_id(2).get(),
             user_id: user_test_id(2),
-            result: WasmResult::Reply(vec![]),
             time: mock_time(),
+            state: IngressState::Completed(WasmResult::Reply(vec![])),
         },
         time,
         NumBytes::from(u64::MAX),
     );
     ingress_history.insert(
         message_id3.clone(),
-        IngressStatus::Completed {
+        IngressStatus::Known {
             receiver: canister_test_id(1).get(),
             user_id: user_test_id(1),
-            result: WasmResult::Reply(vec![]),
             time: mock_time(),
+            state: IngressState::Completed(WasmResult::Reply(vec![])),
         },
         time + MAX_INGRESS_TTL / 2,
         NumBytes::from(u64::MAX),
@@ -95,10 +95,11 @@ fn entries_sorted_lexicographically() {
     for i in (0..10u64).rev() {
         ingress_history.insert(
             message_test_id(i),
-            IngressStatus::Received {
+            IngressStatus::Known {
                 receiver: canister_test_id(1).get(),
                 user_id: user_test_id(1),
                 time,
+                state: IngressState::Received,
             },
             time,
             NumBytes::from(u64::MAX),
@@ -348,17 +349,17 @@ fn network_topology_ecdsa_subnets() {
 /// depending on whether `i % 2 == 0` (completed) or not (failed). Both statuses
 /// will have the same payload size.
 fn test_status_terminal(i: u64) -> IngressStatus {
-    let test_status_completed = |i| IngressStatus::Completed {
+    let test_status_completed = |i| IngressStatus::Known {
         receiver: canister_test_id(i).get(),
         user_id: user_test_id(i),
-        result: WasmResult::Reply(vec![0, 1, 2, 3, 4]),
         time: Time::from_nanos_since_unix_epoch(i),
+        state: IngressState::Completed(WasmResult::Reply(vec![0, 1, 2, 3, 4])),
     };
-    let test_status_failed = |i| IngressStatus::Failed {
+    let test_status_failed = |i| IngressStatus::Known {
         receiver: canister_test_id(i).get(),
         user_id: user_test_id(i),
-        error: UserError::new(ErrorCode::SubnetOversubscribed, "Error"),
         time: Time::from_nanos_since_unix_epoch(i),
+        state: IngressState::Failed(UserError::new(ErrorCode::SubnetOversubscribed, "Error")),
     };
 
     if i % 2 == 0 {
@@ -370,10 +371,11 @@ fn test_status_terminal(i: u64) -> IngressStatus {
 
 /// Test fixture to generate an ingress status of type done.
 fn test_status_done(i: u64) -> IngressStatus {
-    IngressStatus::Done {
+    IngressStatus::Known {
         receiver: canister_test_id(i).get(),
         user_id: user_test_id(i),
         time: Time::from_nanos_since_unix_epoch(i),
+        state: IngressState::Done,
     }
 }
 
@@ -411,7 +413,13 @@ fn ingress_history_insert_beyond_limit_will_succeed() {
                     .statuses()
                     .filter(|(_, status)| matches!(
                         status,
-                        IngressStatus::Completed { .. } | IngressStatus::Failed { .. }
+                        IngressStatus::Known {
+                            state: IngressState::Completed(_),
+                            ..
+                        } | IngressStatus::Known {
+                            state: IngressState::Failed(_),
+                            ..
+                        }
                     ))
                     .count(),
                 1
@@ -422,14 +430,24 @@ fn ingress_history_insert_beyond_limit_will_succeed() {
                     .statuses()
                     .filter(|(_, status)| matches!(
                         status,
-                        IngressStatus::Completed { .. } | IngressStatus::Failed { .. }
+                        IngressStatus::Known {
+                            state: IngressState::Completed(_),
+                            ..
+                        } | IngressStatus::Known {
+                            state: IngressState::Failed(_),
+                            ..
+                        }
                     ))
                     .count(),
                 i as usize
             );
-            assert!(!ingress_history
-                .statuses()
-                .any(|(_, status)| matches!(status, IngressStatus::Done { .. })));
+            assert!(!ingress_history.statuses().any(|(_, status)| matches!(
+                status,
+                IngressStatus::Known {
+                    state: IngressState::Done,
+                    ..
+                }
+            )));
         }
     }
 
@@ -450,7 +468,13 @@ fn ingress_history_insert_beyond_limit_will_succeed() {
                     .statuses()
                     .filter(|(_, status)| matches!(
                         status,
-                        IngressStatus::Completed { .. } | IngressStatus::Failed { .. }
+                        IngressStatus::Known {
+                            state: IngressState::Completed(_),
+                            ..
+                        } | IngressStatus::Known {
+                            state: IngressState::Failed(_),
+                            ..
+                        }
                     ))
                     .count(),
                 0
@@ -461,14 +485,24 @@ fn ingress_history_insert_beyond_limit_will_succeed() {
                     .statuses()
                     .filter(|(_, status)| matches!(
                         status,
-                        IngressStatus::Completed { .. } | IngressStatus::Failed { .. }
+                        IngressStatus::Known {
+                            state: IngressState::Completed(_),
+                            ..
+                        } | IngressStatus::Known {
+                            state: IngressState::Failed(_),
+                            ..
+                        }
                     ))
                     .count(),
                 i as usize
             );
-            assert!(!ingress_history
-                .statuses()
-                .any(|(_, status)| matches!(status, IngressStatus::Done { .. })));
+            assert!(!ingress_history.statuses().any(|(_, status)| matches!(
+                status,
+                IngressStatus::Known {
+                    state: IngressState::Done,
+                    ..
+                }
+            )));
         }
     }
 }
@@ -483,15 +517,17 @@ fn ingress_history_forget_completed_does_not_touch_other_statuses() {
     let mut ingress_history_no_limit = IngressHistoryState::default();
 
     let statuses = vec![
-        IngressStatus::Processing {
+        IngressStatus::Known {
             receiver: canister_test_id(2).get(),
             user_id: user_test_id(2),
             time: Time::from_nanos_since_unix_epoch(2),
+            state: IngressState::Processing,
         },
-        IngressStatus::Received {
+        IngressStatus::Known {
             receiver: canister_test_id(3).get(),
             user_id: user_test_id(3),
             time: Time::from_nanos_since_unix_epoch(3),
+            state: IngressState::Received,
         },
         test_status_done(4),
         IngressStatus::Unknown,
@@ -552,14 +588,28 @@ fn ingress_history_respects_limits() {
                 .filter(|(_, status)| {
                     matches!(
                         status,
-                        IngressStatus::Completed { .. } | IngressStatus::Failed { .. }
+                        IngressStatus::Known {
+                            state: IngressState::Completed(_),
+                            ..
+                        } | IngressStatus::Known {
+                            state: IngressState::Failed(_),
+                            ..
+                        }
                     )
                 })
                 .count();
 
             let done_count = ingress_history
                 .statuses()
-                .filter(|(_, status)| matches!(status, IngressStatus::Done { .. }))
+                .filter(|(_, status)| {
+                    matches!(
+                        status,
+                        IngressStatus::Known {
+                            state: IngressState::Done,
+                            ..
+                        }
+                    )
+                })
                 .count();
 
             if CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V8 {
@@ -633,10 +683,11 @@ fn ingress_history_insert_before_next_complete_time_resets_it() {
 
     let expected_fogotten = ingress_history.get(&message_test_id(11)).unwrap();
 
-    if let IngressStatus::Done {
+    if let IngressStatus::Known {
         receiver,
         user_id,
         time,
+        state: IngressState::Done,
     } = expected_fogotten
     {
         assert_eq!(receiver, &canister_test_id(11).get());

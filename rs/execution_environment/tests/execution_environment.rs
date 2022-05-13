@@ -53,7 +53,7 @@ use ic_test_utilities::{
 };
 use ic_types::{
     canister_http::CanisterHttpMethod,
-    ingress::{IngressStatus, WasmResult},
+    ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         CallbackId, MessageId, Payload, RejectContext, RequestOrResponse, Response,
         StopCanisterContext, MAX_RESPONSE_COUNT_BYTES,
@@ -436,11 +436,11 @@ fn test_ingress_message_side_effects_2() {
             };
             assert_eq!(
                 status,
-                IngressStatus::Completed {
+                IngressStatus::Known {
                     receiver: canister_test_id(42).get(),
                     user_id: user_test_id(2),
-                    result: WasmResult::Reply(b"MONOLORD".to_vec()),
                     time: mock_time(),
+                    state: IngressState::Completed(WasmResult::Reply(b"MONOLORD".to_vec())),
                 }
             );
         },
@@ -476,11 +476,11 @@ fn test_ingress_message_side_effects_3() {
         };
         assert_eq!(
             status,
-            IngressStatus::Completed {
+            IngressStatus::Known {
                 receiver: canister_test_id(42).get(),
                 user_id: user_test_id(2),
-                result: WasmResult::Reject("MONOLORD".to_string()),
-                time: mock_time()
+                time: mock_time(),
+                state: IngressState::Completed(WasmResult::Reject("MONOLORD".to_string())),
             }
         );
     });
@@ -1086,17 +1086,17 @@ fn stopping_canister_rejects_ingress() {
         };
         assert_eq!(
             status,
-            IngressStatus::Failed {
+            IngressStatus::Known {
                 receiver: canister_test_id(0).get(),
                 user_id: user_test_id(2),
-                error: UserError::new(
+                time: mock_time(),
+                state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterStopping,
                     format!("Canister {} is not running", canister_test_id(0)),
-                ),
-                time: mock_time(),
-            }
+                )),
+            },
         );
-    });
+    })
 }
 
 #[test]
@@ -1181,14 +1181,14 @@ fn stopped_canister_rejects_ingress() {
         };
         assert_eq!(
             status,
-            IngressStatus::Failed {
+            IngressStatus::Known {
                 receiver: canister_test_id(0).get(),
                 user_id: user_test_id(2),
-                error: UserError::new(
+                time: mock_time(),
+                state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterStopped,
                     format!("Canister {} is not running", canister_test_id(0)),
-                ),
-                time: mock_time(),
+                )),
             }
         );
     });
@@ -1223,11 +1223,11 @@ fn execute_stop_canister_updates_ingress_history_when_called_on_already_stopped_
         // Verify that a response to the message has been written to ingress history.
         assert_eq!(
             state.get_ingress_status(&message_test_id(0)),
-            IngressStatus::Completed {
+            IngressStatus::Known {
                 receiver: canister_test_id(0).get(),
                 user_id: user_test_id(1),
-                result: WasmResult::Reply(EmptyBlob::encode()),
                 time: mock_time(),
+                state: IngressState::Completed(WasmResult::Reply(EmptyBlob::encode())),
             }
         );
     });
@@ -1330,10 +1330,11 @@ fn execute_stop_canister_writes_failure_to_ingress_history_when_called_with_inco
         // Verify that the response has been written to ingress history.
         assert_eq!(
             state.get_ingress_status(&message_test_id(0)),
-            IngressStatus::Failed {
+            IngressStatus::Known {
                 receiver: CanisterId::ic_00().get(),
                 user_id: user_test_id(13),
-                error: UserError::new(
+                time: mock_time(),
+                state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterInvalidController,
                     format!(
                         "Only the controllers of the canister {} can control it.\n\
@@ -1343,8 +1344,7 @@ fn execute_stop_canister_writes_failure_to_ingress_history_when_called_with_inco
                         user_test_id(1).get(),
                         user_test_id(13).get()
                     )
-                ),
-                time: mock_time(),
+                )),
             }
         );
     });
@@ -1766,9 +1766,9 @@ fn starting_a_stopping_canister_succeeds() {
         for msg_id in &stop_msg_ids {
             assert_matches!(
                 state.get_ingress_status(msg_id),
-                IngressStatus::Failed {
+                IngressStatus::Known {
                     user_id: u,
-                    error: e,
+                    state: IngressState::Failed(e),
                     ..
                 } if u == user_test_id(1) && e.code() == ErrorCode::CanisterStoppingCancelled
             );
@@ -1804,14 +1804,14 @@ fn subnet_ingress_message_unknown_method() {
 
         assert_eq!(
             state.get_ingress_status(&MessageId::from([0; 32])),
-            IngressStatus::Failed {
+            IngressStatus::Known {
                 receiver: ic00::IC_00.get(),
                 user_id: sender,
-                error: UserError::new(
+                time: mock_time(),
+                state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
                     "Management canister has no method \'non_existing_method\'"
-                ),
-                time: mock_time(),
+                )),
             }
         );
     });
@@ -1912,14 +1912,14 @@ fn subnet_ingress_message_on_create_canister_fails() {
 
         assert_eq!(
             state.get_ingress_status(&MessageId::from([0; 32])),
-            IngressStatus::Failed {
+            IngressStatus::Known {
                 receiver: receiver.get(),
                 user_id: sender,
-                error: UserError::new(
+                time: mock_time(),
+                state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
                     "create_canister can only be called by other canisters, not via ingress messages."
-                ),
-                time: mock_time(),
+                )),
             }
         );
     });
@@ -2358,14 +2358,14 @@ fn install_code_fails_on_invalid_compute_allocation() {
 
         assert_eq!(
             state.get_ingress_status(&MessageId::from([0; 32])),
-            IngressStatus::Failed {
+            IngressStatus::Known {
                 receiver: ic00::IC_00.get(),
                 user_id: sender,
-                error: UserError::new(
+                time: mock_time(),
+                state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterContractViolation,
                     "ComputeAllocation expected to be in the range [0..100], got 1_000"
-                ),
-                time: mock_time(),
+                )),
             }
         );
     });
@@ -2409,14 +2409,14 @@ fn install_code_fails_on_invalid_memory_allocation() {
 
         assert_eq!(
             state.get_ingress_status(&MessageId::from([0; 32])),
-            IngressStatus::Failed {
+            IngressStatus::Known {
                 receiver: ic00::IC_00.get(),
                 user_id: sender,
-                error: UserError::new(
+                time: mock_time(),
+                state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterContractViolation,
                     "MemoryAllocation expected to be in the range [0..12_884_901_888], got 18_446_744_073_709_551_615"
-                ),
-                time: mock_time(),
+                )),
             });
     });
 }
@@ -2696,10 +2696,11 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
         };
         assert_eq!(
             status,
-            (MessageId::from([0; 32]), IngressStatus::Failed {
+            (MessageId::from([0; 32]), IngressStatus::Known {
                 receiver: canister_id.get(),
                 user_id: source,
-                error: UserError::new(
+                time: mock_time(),
+                state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterOutOfCycles,
                     format!(
                         "Canister {} is out of cycles: requested {} cycles but the available balance is {} cycles and the freezing threshold {} cycles",
@@ -2707,10 +2708,9 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
                         cycles_account_manager.execution_cost(MAX_NUM_INSTRUCTIONS),
                         available_cycles,
                         Cycles::from(0),
-                    ),
-                ),
-                time: mock_time(),
-            })
+                    ))),
+                }
+            )
         );
         // Verify the canister's cycles balance is still the same.
         assert_eq!(result.canister.system_state.balance(), Cycles::from(1000));

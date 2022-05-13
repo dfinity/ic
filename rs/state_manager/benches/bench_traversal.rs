@@ -74,36 +74,41 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
 
     for i in 1..NUM_STATUSES {
         use ic_error_types::{ErrorCode, UserError};
-        use ic_types::ingress::{IngressStatus::*, WasmResult::*};
+        use ic_types::ingress::{IngressState::*, IngressStatus::*, WasmResult::*};
 
         let status = match i % 6 {
-            0 => Received {
+            0 => Known {
                 receiver: canister_test_id(i).get(),
                 user_id,
                 time,
+                state: Received,
             },
-            1 => Completed {
+            1 => Known {
                 receiver: canister_test_id(i).get(),
                 user_id,
-                result: Reply(vec![1; 100]),
                 time,
+                state: Completed(Reply(vec![1; 100])),
             },
-            2 => Completed {
+            2 => Known {
                 receiver: canister_test_id(i).get(),
                 user_id,
-                result: Reject("bad request".to_string()),
                 time,
+                state: Completed(Reject("bad request".to_string())),
             },
-            3 => Failed {
+            3 => Known {
                 receiver: canister_test_id(i).get(),
                 user_id,
-                error: UserError::new(ErrorCode::CanisterNotFound, "canister XXX not found"),
                 time,
+                state: Failed(UserError::new(
+                    ErrorCode::CanisterNotFound,
+                    "canister XXX not found",
+                )),
             },
-            4 => Processing {
+            4 => Known {
                 receiver: canister_test_id(i).get(),
                 user_id,
                 time,
+                state: Processing,
             },
             5 => Unknown,
             _ => unreachable!(),

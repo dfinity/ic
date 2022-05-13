@@ -7,7 +7,7 @@ use ic_interfaces_state_manager::{StateManagerError, StateReader};
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry, Timer};
 use ic_replicated_state::ReplicatedState;
-use ic_types::{ingress::IngressStatus, messages::MessageId, Height, Time};
+use ic_types::{ingress::IngressState, ingress::IngressStatus, messages::MessageId, Height, Time};
 use prometheus::{Histogram, HistogramVec};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -137,26 +137,39 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
         let current_status = state.get_ingress_status(&message_id);
 
         // Guard against an invalid state transition
+        use IngressState::*;
         use IngressStatus::*;
-        match (&current_status, &status) {
-            (Unknown, _) => {}
-            (Received { .. }, Processing { .. }) => {}
-            (Received { .. }, Completed { .. }) => {}
-            (Received { .. }, Failed { .. }) => {}
-            (Processing { .. }, Processing { .. }) => {}
-            (Processing { .. }, Completed { .. }) => {}
-            (Processing { .. }, Failed { .. }) => {}
-            _ => fatal!(
+        if match (&current_status, &status) {
+            (Unknown, _) => false,
+            (Known { .. }, Unknown) => true,
+            (
+                Known {
+                    state: current_state,
+                    ..
+                },
+                Known { state, .. },
+            ) => !matches!(
+                (&current_state, &state),
+                (Received, Processing)
+                    | (Received, Completed(_))
+                    | (Received, Failed(_))
+                    | (Processing, Processing)
+                    | (Processing, Completed(_))
+                    | (Processing, Failed(_))
+            ),
+        } {
+            fatal!(
                 self.log,
                 "message (id='{}', current_status='{:?}') cannot be transitioned to '{:?}'",
                 message_id,
                 current_status,
                 status
-            ),
+            );
         }
-
         match &status {
-            Received { .. } => {
+            Known {
+                state: Received, ..
+            } => {
                 let mut map = self.received_time.write().unwrap();
                 map.insert(
                     message_id.clone(),
@@ -166,7 +179,10 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                     },
                 );
             }
-            Completed { .. } => {
+            Known {
+                state: Completed(_),
+                ..
+            } => {
                 if let Some((ic_duration, wall_duration)) =
                     self.calculate_durations(&message_id, time)
                 {
@@ -176,8 +192,9 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                         .observe(wall_duration);
                 }
             }
-            Failed {
-                error: user_error, ..
+            Known {
+                state: Failed(user_error),
+                ..
             } => {
                 if let Some((ic_duration, wall_duration)) =
                     self.calculate_durations(&message_id, time)

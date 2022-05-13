@@ -31,7 +31,7 @@ use ic_test_utilities::{
     universal_canister::UNIVERSAL_CANISTER_WASM, with_test_replica_logger,
 };
 use ic_types::{
-    ingress::{IngressStatus, WasmResult},
+    ingress::{IngressState, IngressStatus, WasmResult},
     messages::{SignedIngress, UserQuery},
     replica_config::NODE_INDEX_DEFAULT,
     time::current_time_and_expiry_time,
@@ -87,23 +87,24 @@ fn process_ingress(
         std::thread::sleep(Duration::from_millis(5));
         let ingress_result = (ingress_hist_reader.get_latest_status())(&msg_id);
         match ingress_result {
-            IngressStatus::Completed { result, .. } => {
-                // Don't forget! Signal the runtime to stop.
-                return Ok(result);
-            }
-            IngressStatus::Failed { error, .. } => {
-                // Don't forget! Signal the runtime to stop.
-                return Err(error);
-            }
-            IngressStatus::Done { .. } => {
-                return Err(UserError::new(
-                    ErrorCode::SubnetOversubscribed,
-                    "The call has completed but the reply/reject data has been pruned.",
-                ));
-            }
-            IngressStatus::Received { .. }
-            | IngressStatus::Processing { .. }
-            | IngressStatus::Unknown => (),
+            IngressStatus::Known { state, .. } => match state {
+                IngressState::Completed(result) => {
+                    // Don't forget! Signal the runtime to stop.
+                    return Ok(result);
+                }
+                IngressState::Failed(error) => {
+                    // Don't forget! Signal the runtime to stop.
+                    return Err(error);
+                }
+                IngressState::Done => {
+                    return Err(UserError::new(
+                        ErrorCode::SubnetOversubscribed,
+                        "The call has completed but the reply/reject data has been pruned.",
+                    ));
+                }
+                IngressState::Received | IngressState::Processing => (),
+            },
+            IngressStatus::Unknown => (),
         }
         if Instant::now().duration_since(start) > time_limit {
             panic!(
@@ -635,6 +636,7 @@ impl LocalTestRuntime {
         let nonce = self.get_nonce();
         let ingress_time_limit = self.ingress_time_limit;
         // Wrapping the call to process_ingress to avoid blocking current thread
+
         tokio::runtime::Handle::current()
             .spawn_blocking(move || {
                 process_ingress(
