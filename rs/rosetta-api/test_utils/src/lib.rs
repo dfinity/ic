@@ -5,7 +5,7 @@ use ic_rosetta_api::convert::{
 
 use ic_rosetta_api::models::{
     ConstructionCombineResponse, ConstructionParseResponse, ConstructionPayloadsRequestMetadata,
-    ConstructionPayloadsResponse, CurveType, OperationType, PublicKey, Signature, SignatureType,
+    ConstructionPayloadsResponse, CurveType, PublicKey, Signature, SignatureType,
 };
 use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
 use ic_rosetta_api::request_types::{
@@ -28,6 +28,7 @@ pub mod rosetta_api_serv;
 pub mod sample_data;
 
 use ic_rosetta_api::models::amount::{signed_amount, tokens_to_amount};
+use ic_rosetta_api::models::operation::OperationType;
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
 use ic_rosetta_api::request::transaction_results::TransactionResults;

@@ -1,11 +1,11 @@
 use ic_rosetta_api::models::Error as RosettaError;
 use ic_rosetta_api::models::*;
 use ic_types::CanisterId;
-//use ic_rosetta_api::models::AccountIdentifier as RosettaAccountIdentifier;
 
 use ledger_canister::{AccountIdentifier, BlockHeight};
 
 use crate::store_threshold_sig_pk;
+use ic_rosetta_api::models::operation::Operation;
 use ic_types::messages::Blob;
 use rand::{seq::SliceRandom, thread_rng};
 use reqwest::Client as HttpClient;

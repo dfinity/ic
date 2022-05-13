@@ -2646,7 +2646,7 @@ async fn test_neuron_info(ros: &RosettaApiHandle, _ledger: &Canister<'_>, neuron
                 .operations
                 .first()
                 .expect("Expected one neuron info operation."),
-            ic_rosetta_api::models::Operation {
+            ic_rosetta_api::models::operation::Operation {
                 _type: _expected_type,
                 ..
             }
@@ -2744,7 +2744,7 @@ async fn test_neuron_info_with_hotkey(
             "Expecting exactly one operation."
         );
         assert_eq!(
-            ic_rosetta_api::models::OperationType::NeuronInfo,
+            ic_rosetta_api::models::operation::OperationType::NeuronInfo,
             results.operations[0]._type,
             "Expecting one neuron info operation."
         );
@@ -3068,7 +3068,7 @@ async fn test_follow(ros: &RosettaApiHandle, _ledger: &Canister<'_>, neuron_info
                 .operations
                 .first()
                 .expect("Expected one follow operation."),
-            ic_rosetta_api::models::Operation {
+            ic_rosetta_api::models::operation::Operation {
                 _type: _expected_type,
                 ..
             }
@@ -3159,7 +3159,7 @@ async fn test_follow_with_hotkey(
                 .operations
                 .first()
                 .expect("Expected one follow operation."),
-            ic_rosetta_api::models::Operation {
+            ic_rosetta_api::models::operation::Operation {
                 _type: _expected_type,
                 ..
             }

@@ -1,9 +1,10 @@
 use crate::models::amount::{signed_amount, tokens_to_amount};
+use crate::models::operation::{OperationIdentifier, OperationType};
 use crate::models::seconds::Seconds;
 use crate::{
     convert::{principal_id_from_public_key, to_model_account_identifier},
     errors::ApiError,
-    models::{self, Object, Operation, OperationIdentifier, OperationType},
+    models::{self, operation::Operation, Object},
     transaction_id::TransactionIdentifier,
 };
 use ic_types::PrincipalId;
