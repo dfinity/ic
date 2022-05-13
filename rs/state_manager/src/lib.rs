@@ -1652,10 +1652,6 @@ impl StateManagerImpl {
         // Root hash and manifest should either be both None or both Some, but we
         // make no assumptions and need to recompute if either is missing.
         if root_hash.is_some() && manifest.is_some() {
-            compute_manifest_requests.push(ComputeManifestRequest {
-                checkpoint_ref: checkpoint_ref.clone(),
-                manifest_delta: None,
-            });
             states_metadata.insert(
                 height,
                 StateMetadata {
@@ -1665,6 +1661,11 @@ impl StateManagerImpl {
                 },
             );
         } else {
+            compute_manifest_requests.push(ComputeManifestRequest {
+                checkpoint_ref: checkpoint_ref.clone(),
+                manifest_delta: None,
+            });
+
             states_metadata.insert(
                 height,
                 StateMetadata {

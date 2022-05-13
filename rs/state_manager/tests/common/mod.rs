@@ -443,6 +443,49 @@ pub fn state_manager_test<F: FnOnce(&MetricsRegistry, StateManagerImpl)>(f: F) {
     state_manager_test_with_verifier_result(true, f)
 }
 
+pub fn state_manager_restart_test_deleting_metadata<Test>(test: Test)
+where
+    Test: FnOnce(
+        &MetricsRegistry,
+        StateManagerImpl,
+        Box<dyn Fn(StateManagerImpl, Option<Height>) -> (MetricsRegistry, StateManagerImpl)>,
+    ),
+{
+    let tmp = Builder::new().prefix("test").tempdir().unwrap();
+    let config = Config::new(tmp.path().into());
+    let own_subnet = subnet_test_id(42);
+    let verifier: Arc<dyn Verifier> = Arc::new(FakeVerifier::new());
+
+    with_test_replica_logger(|log| {
+        let make_state_manager = move |starting_height| {
+            let metrics_registry = MetricsRegistry::new();
+
+            let state_manager = StateManagerImpl::new(
+                Arc::clone(&verifier),
+                own_subnet,
+                SubnetType::Application,
+                log.clone(),
+                &metrics_registry,
+                &config,
+                starting_height,
+                ic_types::malicious_flags::MaliciousFlags::default(),
+            );
+
+            (metrics_registry, state_manager)
+        };
+
+        let (metrics_registry, state_manager) = make_state_manager(None);
+
+        let restart_fn = Box::new(move |state_manager, starting_height| {
+            drop(state_manager);
+            std::fs::remove_file(tmp.path().join("states_metadata.pbuf")).unwrap();
+            make_state_manager(starting_height)
+        });
+
+        test(&metrics_registry, state_manager, restart_fn);
+    });
+}
+
 pub fn state_manager_restart_test_with_metrics<Test>(test: Test)
 where
     Test: FnOnce(

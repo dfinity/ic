@@ -627,6 +627,18 @@ fn all_manifests_are_persisted() {
 }
 
 #[test]
+fn missing_manifests_are_recomputed() {
+    state_manager_restart_test_deleting_metadata(|_metrics, state_manager, restart_fn| {
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+
+        let (_metrics, state_manager) = restart_fn(state_manager, None);
+
+        wait_for_checkpoint(&state_manager, height(1));
+    });
+}
+
+#[test]
 fn first_manifest_after_restart_is_incremental() {
     state_manager_restart_test_with_metrics(|_metrics, state_manager, restart_fn| {
         let (_height, mut state) = state_manager.take_tip();
