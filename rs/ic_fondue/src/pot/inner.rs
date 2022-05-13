@@ -382,7 +382,7 @@ impl<M: RefUnwindSafe + UnwindSafe> FondueTest<M> {
         let res = if should_panic != didnt_panic {
             TestResult::Passed
         } else {
-            TestResult::Failed
+            TestResult::failed_with_message("")
         };
 
         info!(ctx.logger, "<<< POT::TEST DONE {}: {:?} >>>", name, res);
@@ -420,7 +420,7 @@ pub fn run_test(man: &IcManager, ctx: &Context, test: Test) -> Vec<TestResultNod
                     for t in ts.iter() {
                         igns.push(TestResultNode {
                             name: t.name.clone(),
-                            result: TestResult::Failed,
+                            result: TestResult::failed_with_message(""),
                             ..TestResultNode::default()
                         });
                     }

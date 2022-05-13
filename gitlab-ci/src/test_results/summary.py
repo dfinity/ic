@@ -19,7 +19,8 @@ def summarize(root, verbose, message):
     print_statistics(root)
     pots = root.children
     for p in pots:
-        if verbose or p.result == "Failed":
+        pot_result, _ = input.format_node_result(p.result)
+        if verbose or pot_result == "Failed":
             pot_summary(p)
             if message:
                 import notify_slack
@@ -31,17 +32,19 @@ def summarize(root, verbose, message):
 
 
 def pot_summary(p):
+    pot_result, _ = input.format_node_result(p.result)
     result_to_color = {"Failed": "red", "Passed": "green", "Skipped": "white"}
     print(
         colored(
             "Pot '{}' (duration: {}s) contains {} test(s):".format(p.name, p.duration.secs, len(p.children)),
-            result_to_color[p.result],
+            result_to_color[pot_result],
         )
     )
     for t in p.children:
-        print(colored("* {} (duration: {}s)".format(t.name, t.duration.secs), result_to_color[t.result]))
+        test_result, _ = input.format_node_result(t.result)
+        print(colored("* {} (duration: {}s)".format(t.name, t.duration.secs), result_to_color[test_result]))
     if p.group_name:
-        print(colored("Node logs: {}\n".format(create_link(p.group_name)), result_to_color[p.result]))
+        print(colored("Node logs: {}\n".format(create_link(p.group_name)), result_to_color[pot_result]))
 
 
 def create_link(group_name):
@@ -72,7 +75,7 @@ def print_statistics(root):
 
 
 def summarize_results(results):
-    d = defaultdict(int, Counter(map(lambda r: r.result, results)))
+    d = defaultdict(int, Counter(map(lambda r: input.format_node_result(r.result)[0], results)))
     return Formatter().vformat("({Passed} passed, {Skipped} skipped, {Failed} failed)", (), d)
 
 

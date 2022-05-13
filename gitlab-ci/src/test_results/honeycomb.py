@@ -38,7 +38,9 @@ def push_span(node, parent_id, ctx, depth):
     ev.add_field("trace.span_id", span_id)
     ev.add_field("trace.trace_id", ctx.trace_id)
     ev.add_field("ci_provider", "GitLab-CI")
-    ev.add_field("execution_result", node.result)
+    execution_result, execution_message = input.format_node_result(node.result)
+    ev.add_field("execution_result", execution_result)
+    ev.add_field("execution_message", execution_message)
     ev.add_field("result_depth", depth)
     ev.send()
     return span_id
