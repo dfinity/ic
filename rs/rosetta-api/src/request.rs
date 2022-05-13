@@ -1,7 +1,6 @@
 use crate::convert::principal_id_from_public_key_or_principal;
 use crate::errors::ApiError;
 use crate::models::seconds::Seconds;
-use crate::models::Operation;
 use crate::request_types::*;
 use crate::{convert, models};
 use dfn_candid::CandidOne;
@@ -11,6 +10,7 @@ use ledger_canister::Tokens;
 use on_wire::FromWire;
 use std::convert::{TryFrom, TryInto};
 
+use crate::models::operation::Operation;
 use serde::{Deserialize, Serialize};
 
 pub mod request_result;

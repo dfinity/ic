@@ -232,7 +232,7 @@ impl RosettaRequestHandler {
             ),
             Allow::new(
                 vec![OperationStatus::new("COMPLETED".to_string(), true)],
-                models::OperationType::iter()
+                models::operation::OperationType::iter()
                     .map(|op| op.to_string())
                     .collect(),
                 {

@@ -1,10 +1,11 @@
 use crate::errors::ApiError;
-use crate::models::{Object, Operation, OperationType};
+use crate::models::Object;
 use crate::request::request_result::{convert_to_request_result_metadata, RequestResult};
 use crate::request::transaction_results::TransactionResults;
 use crate::request::Request;
 use serde_json::Value;
 
+use crate::models::operation::{Operation, OperationType};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
