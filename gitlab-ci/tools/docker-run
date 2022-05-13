@@ -22,29 +22,10 @@ fi
 
 source "$REPO_ROOT/gitlab-ci/docker/docker-run-include"
 
-CONTAINER="background-${IMAGE##*:}"
-
-# on CI, clean up the container at the end
-if [ -n "${CI_JOB_ID:-}" ]; then
-    trap "docker rm -f $CONTAINER" EXIT
-fi
-
-# if there's no running container, start one
-if [ -z "$(docker ps -q --filter name="$CONTAINER")" ]; then
-    # if there's a stopped container, delete it (otherwise name conflict)
-    if [ -n "$(docker ps -aq --filter name="$CONTAINER")" ]; then
-        docker rm "$CONTAINER"
-    fi
-
-    # keep the container running for 24h
-    docker run --name "$CONTAINER" -d "${DOCKER_RUN_ARGS[@]}" "$IMAGE" sleep 86400
-fi
-
 wdir="/ic/$(git rev-parse --show-prefix)"
-
 if [[ -z "${@}" ]]; then
     set -x
-    docker exec -w "$wdir" -it "$CONTAINER" gosu "$USER" bash
+    docker run --rm "${DOCKER_RUN_ARGS[@]}" -w "$wdir" "$IMAGE" bash
 else
     set -x
 
@@ -55,5 +36,5 @@ else
     for PARAM in "$@"; do
         PARAMS="${PARAMS} \"${PARAM}\""
     done
-    docker exec -w "$wdir" "$CONTAINER" gosu "$USER" bash -c "${PARAMS}"
+    docker run --rm "${DOCKER_RUN_ARGS[@]}" -w "$wdir" "$IMAGE" bash -c "${PARAMS}"
 fi
