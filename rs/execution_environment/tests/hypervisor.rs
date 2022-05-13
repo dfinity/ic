@@ -1,5 +1,5 @@
-use crate::config;
 use candid::{Decode, Encode};
+use ic_config::execution_environment::Config;
 use ic_error_types::RejectCode;
 use ic_execution_environment::{Hypervisor, QueryExecutionType};
 use ic_ic00_types::CanisterHttpResponsePayload;
@@ -13,13 +13,12 @@ use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::execution_state::CustomSectionType;
-use ic_replicated_state::page_map::MemoryRegion;
 use ic_replicated_state::{
-    testing::CanisterQueuesTesting, CallContextAction, CallOrigin, CanisterState, Global,
-    NumWasmPages, SystemState,
+    canister_state::execution_state::CustomSectionType, page_map::MemoryRegion,
+    testing::CanisterQueuesTesting, CallContextAction, CallOrigin, CanisterState,
+    ExportedFunctions, Global, NetworkTopology, NumWasmPages, PageIndex, SubnetTopology,
+    SystemState,
 };
-use ic_replicated_state::{ExportedFunctions, NetworkTopology, PageIndex, SubnetTopology};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ApiType;
 use ic_test_utilities::execution_environment::{assert_empty_reply, ExecutionTestBuilder};
@@ -48,7 +47,8 @@ use proptest::prelude::*;
 use proptest::test_runner::{TestRng, TestRunner};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
-use std::{convert::TryFrom, sync::Arc, time::Duration};
+use std::time::Duration;
+use std::{convert::TryFrom, sync::Arc};
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 const EMPTY_PAYLOAD: Vec<u8> = Vec::new();
@@ -57,11 +57,11 @@ const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
 
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
+    pub static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
         AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into();
 }
 
-fn execution_parameters_with_unique_subnet_available_memory(
+pub fn execution_parameters_with_unique_subnet_available_memory(
     canister: &CanisterState,
     instruction_limit: NumInstructions,
     subnet_available_memory: SubnetAvailableMemory,
@@ -77,7 +77,7 @@ fn execution_parameters_with_unique_subnet_available_memory(
     }
 }
 
-fn execution_parameters(
+pub fn execution_parameters(
     canister: &CanisterState,
     instruction_limit: NumInstructions,
 ) -> ExecutionParameters {
@@ -88,15 +88,7 @@ fn execution_parameters(
     )
 }
 
-fn test_func_ref() -> FuncRef {
-    FuncRef::Method(WasmMethod::Update(String::from("test")))
-}
-
-fn test_caller() -> PrincipalId {
-    user_test_id(1).get()
-}
-
-fn setup() -> (SubnetId, SubnetType, Arc<NetworkTopology>) {
+pub fn setup() -> (SubnetId, SubnetType, Arc<NetworkTopology>) {
     let subnet_id = subnet_test_id(1);
     let subnet_id_2 = subnet_test_id(2);
     let subnet_type = SubnetType::Application;
@@ -105,7 +97,7 @@ fn setup() -> (SubnetId, SubnetType, Arc<NetworkTopology>) {
             CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfe) } => subnet_id,
             CanisterIdRange{ start: CanisterId::from(0xff), end: CanisterId::from(0xff) } => subnet_id_2,
         })
-        .unwrap(),
+            .unwrap(),
     );
     let network_topology = Arc::new(NetworkTopology {
         routing_table,
@@ -124,13 +116,41 @@ fn setup() -> (SubnetId, SubnetType, Arc<NetworkTopology>) {
     (subnet_id, subnet_type, network_topology)
 }
 
+pub fn with_hypervisor<F, R>(f: F) -> R
+where
+    F: FnOnce(Hypervisor, std::path::PathBuf) -> R,
+{
+    with_test_replica_logger(|log| {
+        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
+        let metrics_registry = MetricsRegistry::new();
+        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
+        let hypervisor = Hypervisor::new(
+            Config::default(),
+            &metrics_registry,
+            subnet_test_id(1),
+            SubnetType::Application,
+            log,
+            cycles_account_manager,
+        );
+        f(hypervisor, tmpdir.path().into())
+    })
+}
+
+fn test_func_ref() -> FuncRef {
+    FuncRef::Method(WasmMethod::Update(String::from("test")))
+}
+
+fn test_caller() -> PrincipalId {
+    user_test_id(1).get()
+}
+
 fn test_api_type_for_update(caller: Option<PrincipalId>, payload: Vec<u8>) -> ApiType {
     let caller = caller.unwrap_or_else(|| user_test_id(24).get());
     let (subnet_id, subnet_type, network_topology) = setup();
     ApiType::update(
         mock_time(),
         payload,
-        Cycles::from(0),
+        Cycles::zero(),
         caller,
         call_context_test_id(13),
         subnet_id,
@@ -144,33 +164,13 @@ fn test_api_type_for_reject(reject_context: RejectContext) -> ApiType {
     ApiType::reject_callback(
         mock_time(),
         reject_context,
-        Cycles::from(0),
+        Cycles::zero(),
         call_context_test_id(13),
         false,
         subnet_id,
         subnet_type,
         network_topology,
     )
-}
-
-pub fn with_hypervisor<F, R>(f: F) -> R
-where
-    F: FnOnce(Hypervisor, std::path::PathBuf) -> R,
-{
-    with_test_replica_logger(|log| {
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let metrics_registry = MetricsRegistry::new();
-        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let hypervisor = Hypervisor::new(
-            config(),
-            &metrics_registry,
-            subnet_test_id(1),
-            SubnetType::Application,
-            log,
-            cycles_account_manager,
-        );
-        f(hypervisor, tmpdir.path().into())
-    })
 }
 
 fn execute_update(
@@ -383,7 +383,7 @@ fn test_method_not_found_error() {
             execute_update(&hypervisor, "(module)", "test", EMPTY_PAYLOAD, tmp_path,).2,
             CallContextAction::Fail {
                 error: HypervisorError::MethodNotFound(WasmMethod::Update("test".to_string())),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -511,7 +511,7 @@ fn sys_api_call_canister_status() {
             )
             .2,
             CallContextAction::NoResponse {
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         )
     })
@@ -542,7 +542,7 @@ fn sys_api_call_arg_data_size() {
             )
             .2,
             CallContextAction::NoResponse {
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
     });
@@ -588,7 +588,7 @@ fn sys_api_call_stable_grow() {
             .2,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
     });
@@ -642,7 +642,7 @@ fn exercise_stable_memory_delta() {
             action,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
         assert_eq!(delta, NumBytes::from(0));
@@ -653,7 +653,7 @@ fn exercise_stable_memory_delta() {
             action,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
         // We wrote more than 1 page but less than 2 pages so we should expect a
@@ -710,7 +710,7 @@ fn exercise_stable_memory_delta_2() {
             action,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
         assert_eq!(delta, NumBytes::from(0));
@@ -721,7 +721,7 @@ fn exercise_stable_memory_delta_2() {
             action,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
         // We wrote exactly two pages, so we should get a 2 page delta.
@@ -777,7 +777,7 @@ fn exercise_stable_memory_delta64() {
             action,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
         assert_eq!(delta, NumBytes::from(0));
@@ -788,7 +788,7 @@ fn exercise_stable_memory_delta64() {
             action,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
         // We wrote more than 1 page but less than 2 pages so we should expect a
@@ -845,7 +845,7 @@ fn exercise_stable_memory_delta64_exact_page() {
             action,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
         assert_eq!(delta, NumBytes::from(0));
@@ -856,7 +856,7 @@ fn exercise_stable_memory_delta64_exact_page() {
             action,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
         // We wrote exactly 2 pages, so we should a 2 page delta.
@@ -896,7 +896,7 @@ fn sys_api_call_stable_grow_too_many_pages() {
             .2,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
     });
@@ -952,7 +952,7 @@ fn sys_api_call_stable64_grow() {
             .2,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
     });
@@ -1003,7 +1003,7 @@ fn sys_api_call_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::StableMemoryTooBigFor32Bit),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1054,7 +1054,7 @@ fn sys_api_call_stable_grow_by_traps_if_memory_exceeds_4gb() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::StableMemoryTooBigFor32Bit),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1113,7 +1113,7 @@ fn sys_api_call_stable_read_write() {
             .2,
             CallContextAction::Reply {
                 payload: b"efghabcd".to_vec(),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
     });
@@ -1148,7 +1148,7 @@ fn sys_api_call_stable_read_traps_when_out_of_bounds() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1186,7 +1186,7 @@ fn sys_api_call_stable_read_can_handle_overflows() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1218,7 +1218,7 @@ fn sys_api_call_stable_write_traps_when_out_of_bounds() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1256,7 +1256,7 @@ fn sys_api_call_stable_write_can_handle_overflows() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1295,7 +1295,7 @@ fn sys_api_call_stable_read_traps_when_heap_out_of_bounds() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::HeapOutOfBounds),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1332,7 +1332,7 @@ fn sys_api_call_stable_write_traps_when_heap_out_of_bounds() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::HeapOutOfBounds),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1370,7 +1370,7 @@ fn sys_api_call_stable_write_at_max_size_handled_gracefully() {
             .2,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1408,7 +1408,7 @@ fn sys_api_call_stable_read_does_not_trap_at_end_of_page() {
             .2,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1444,7 +1444,7 @@ fn sys_api_call_stable_read_traps_beyond_end_of_page() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1482,7 +1482,7 @@ fn sys_api_call_stable_read_at_max_size_handled_gracefully() {
             .2,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1519,7 +1519,7 @@ fn sys_api_call_stable64_read_traps_when_out_of_bounds() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1555,7 +1555,7 @@ fn sys_api_call_stable64_read_can_handle_overflows() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1587,7 +1587,7 @@ fn sys_api_call_stable64_write_traps_when_out_of_bounds() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1624,7 +1624,7 @@ fn sys_api_call_stable64_write_can_handle_overflows() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1663,7 +1663,7 @@ fn sys_api_call_stable64_read_traps_when_heap_out_of_bounds() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::HeapOutOfBounds),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1700,7 +1700,7 @@ fn sys_api_call_stable64_write_traps_when_heap_out_of_bounds() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::HeapOutOfBounds),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1738,7 +1738,7 @@ fn sys_api_call_stable64_read_does_not_trap_at_end_of_page() {
             .2,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1774,7 +1774,7 @@ fn sys_api_call_stable64_read_traps_beyond_end_of_page() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1816,7 +1816,7 @@ fn sys_api_call_time_with_5_nanoseconds() {
             .2,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1855,7 +1855,7 @@ fn sys_api_call_time_with_5_seconds() {
             .2,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1913,7 +1913,7 @@ fn sys_api_call_reply() {
             .2,
             CallContextAction::Reply {
                 payload: b"xxxxabcd".to_vec(),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -1942,7 +1942,7 @@ fn sys_api_call_reply_without_finishing() {
             )
             .2,
             CallContextAction::NoResponse {
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
     });
@@ -1999,7 +1999,7 @@ fn test_execute_update_msg_caller() {
             .2,
             CallContextAction::Reply {
                 payload: id.get().into_vec(),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
 
@@ -2017,7 +2017,7 @@ fn test_execute_update_msg_caller() {
             .2,
             CallContextAction::Reply {
                 payload: id.get().into_vec(),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
     });
@@ -2125,7 +2125,7 @@ fn sys_api_call_arg_data_copy() {
             .2,
             CallContextAction::Reply {
                 payload: b"xxxxyyyy".to_vec(),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
     });
@@ -2158,7 +2158,7 @@ fn sys_api_call_reject() {
             .2,
             CallContextAction::Reject {
                 payload: "panic!".to_string(),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -2374,7 +2374,7 @@ fn sys_api_call_reject_msg_size_outside_reject_callback() {
                 error: HypervisorError::ContractViolation(
                     "\"ic0_msg_reject_msg_size\" cannot be executed in update mode".to_string()
                 ),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -2435,7 +2435,7 @@ fn sys_api_call_reject_msg_copy_called_outside_reject_callback() {
                 error: HypervisorError::ContractViolation(
                     "\"ic0_msg_reject_msg_copy\" cannot be executed in update mode".to_string()
                 ),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -2489,7 +2489,7 @@ fn sys_api_call_canister_self_size() {
             .2,
             CallContextAction::Reply {
                 payload: vec![10],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
     });
@@ -2528,7 +2528,7 @@ fn sys_api_call_canister_self_copy() {
             .2,
             CallContextAction::Reply {
                 payload: canister_id.get().into_vec(),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
     });
@@ -2577,7 +2577,7 @@ fn test_call_simple_does_not_enqueue_request_if_err() {
             action,
             CallContextAction::Fail {
                 error: HypervisorError::CalledTrap("some_remote_method".to_string()),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
         assert_eq!(canister.system_state.queues().output_queues_len(), 0);
@@ -2631,7 +2631,7 @@ fn test_call_with_builder_does_not_enqueue_request_if_err() {
             action,
             CallContextAction::Fail {
                 error: HypervisorError::CalledTrap("some_remote_method".to_string()),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
         assert_eq!(canister.system_state.queues().output_queues_len(), 0);
@@ -2681,7 +2681,7 @@ fn send_cycles_from_application_to_verified_subnet_fails() {
             error: ContractViolation(
                 "Canisters on Application subnets cannot send cycles to canisters on VerifiedApplication subnets".to_string()
             ),
-            refund: Cycles::from(0)
+            refund: Cycles::zero()
         });
         assert_eq!(canister.system_state.queues().output_queues_len(), 0);
 
@@ -2836,7 +2836,7 @@ fn test_mint_cycles_non_nns_canister() {
                     canister.canister_id(),
                     CYCLES_MINTING_CANISTER_ID,
                 )),
-                refund: Cycles::from(0)
+                refund: Cycles::zero()
             }
         );
 
@@ -2862,7 +2862,7 @@ fn test_mint_cycles_cmc_canister() {
                 .build(),
         );
         let hypervisor = Hypervisor::new(
-            config(),
+            Config::default(),
             &metrics_registry,
             cycles_account_manager.get_subnet_id(),
             SubnetType::System,
@@ -2900,7 +2900,7 @@ fn test_mint_cycles_fail_on_system_canister() {
                 .build(),
         );
         let hypervisor = Hypervisor::new(
-            config(),
+            Config::default(),
             &metrics_registry,
             cycles_account_manager.get_subnet_id(),
             SubnetType::System,
@@ -2969,7 +2969,7 @@ fn test_call_simple_enqueues_request() {
             action,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
         assert_eq!(canister.system_state.queues().output_queues_len(), 1);
@@ -3023,7 +3023,7 @@ fn test_call_with_builder_enqueues_request() {
             action,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
         assert_eq!(canister.system_state.queues().output_queues_len(), 1);
@@ -3054,7 +3054,7 @@ fn sys_api_call_ic_trap() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::CalledTrap("Hi!".to_string()),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -3089,7 +3089,7 @@ fn globals_are_updated_in_execution_state_after_message_execution() {
             action,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
         assert_eq!(
@@ -3124,7 +3124,7 @@ fn comparison_of_non_canonical_nans() {
             action,
             CallContextAction::Reply {
                 payload: vec![],
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
         assert_eq!(
@@ -3163,7 +3163,7 @@ fn sys_api_call_out_of_cycles() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::InstructionLimitExceeded,
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -3200,7 +3200,7 @@ fn sys_api_call_update_available_memory_1() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::OutOfMemory,
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -3229,7 +3229,7 @@ fn sys_api_call_update_available_memory_2() {
             )
             .2,
             CallContextAction::NoResponse {
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
     });
@@ -3338,7 +3338,7 @@ fn sys_api_call_msg_cycles_available_for_ingress() {
             )
             .2,
             CallContextAction::NoResponse {
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
     });
@@ -3347,7 +3347,7 @@ fn sys_api_call_msg_cycles_available_for_ingress() {
 #[test]
 fn sys_api_call_msg_cycles_available_for_inter_canister_message() {
     with_hypervisor(|hypervisor, tmp_path| {
-        let payment = Cycles::from(50);
+        let payment = Cycles::new(50);
         assert_eq!(
             execute_update_for_request(
                 &hypervisor,
@@ -3385,7 +3385,7 @@ fn canister_metrics_are_recorded() {
         let registry = MetricsRegistry::new();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let hypervisor = Hypervisor::new(
-            config(),
+            Config::default(),
             &registry,
             subnet_test_id(1),
             SubnetType::Application,
@@ -3421,7 +3421,7 @@ fn canister_metrics_are_recorded() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::Unreachable),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
 
@@ -3446,7 +3446,7 @@ fn executing_non_existing_method_does_not_consume_cycles() {
         let registry = MetricsRegistry::new();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let hypervisor = Hypervisor::new(
-            config(),
+            Config::default(),
             &registry,
             subnet_test_id(1),
             SubnetType::Application,
@@ -3487,7 +3487,7 @@ fn executing_non_existing_method_does_not_consume_cycles() {
             action,
             CallContextAction::Fail {
                 error: HypervisorError::MethodNotFound(WasmMethod::Update("foo".to_string())),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
         assert_eq!(num_instructions_left, MAX_NUM_INSTRUCTIONS);
@@ -3598,7 +3598,7 @@ fn memory_access_between_min_and_max_ingress() {
             .2,
             CallContextAction::Fail {
                 error: HypervisorError::Trapped(TrapCode::HeapOutOfBounds),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
     });
@@ -3725,7 +3725,6 @@ fn test_non_existing_system_method(system_method: SystemMethod) {
 
         let canister = canister_from_exec_state(execution_state, canister_id);
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
-        let (_, _, network_topology) = setup();
         // Run the non-existing system method.
         let (_, cycles, res) = match system_method {
             SystemMethod::CanisterPostUpgrade => hypervisor.execute_canister_post_upgrade(
@@ -3753,12 +3752,7 @@ fn test_non_existing_system_method(system_method: SystemMethod) {
             }
             SystemMethod::CanisterInspectMessage => unimplemented!(),
             SystemMethod::Empty => unimplemented!(),
-            SystemMethod::CanisterHeartbeat => hypervisor.execute_canister_heartbeat(
-                canister,
-                network_topology,
-                mock_time(),
-                execution_parameters,
-            ),
+            SystemMethod::CanisterHeartbeat => unimplemented!("Heartbeat test already covered."),
         };
 
         assert!(
@@ -3792,11 +3786,6 @@ fn test_non_existing_canister_init() {
 #[test]
 fn test_non_existing_canister_start() {
     test_non_existing_system_method(SystemMethod::CanisterStart);
-}
-
-#[test]
-fn test_non_existing_canister_heartbeat() {
-    test_non_existing_system_method(SystemMethod::CanisterHeartbeat);
 }
 
 #[test]
@@ -4120,7 +4109,7 @@ fn cannot_execute_update_on_stopping_canister() {
                 .2,
             CallContextAction::Fail {
                 error: HypervisorError::CanisterStopped,
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
     });
@@ -4145,7 +4134,7 @@ fn cannot_execute_update_on_stopped_canister() {
                 .2,
             CallContextAction::Fail {
                 error: HypervisorError::CanisterStopped,
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             },
         );
     });
@@ -4215,13 +4204,13 @@ fn cannot_execute_callback_on_stopped_canister() {
                         call_context_test_id(0),
                         None,
                         None,
-                        Cycles::from(0),
+                        Cycles::zero(),
                         WasmClosure::new(0, 0),
                         WasmClosure::new(0, 0),
                         None
                     ),
                     Payload::Data(EMPTY_PAYLOAD),
-                    Cycles::from(0),
+                    Cycles::zero(),
                     mock_time(),
                     network_topology,
                     execution_parameters,
@@ -4260,7 +4249,7 @@ fn sys_api_call_ic_trap_preserves_some_cycles() {
             action,
             CallContextAction::Fail {
                 error: HypervisorError::CalledTrap("Trap called!".to_string()),
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
             }
         );
         // Check that ic0.trap call wasn't expensive:
@@ -4400,76 +4389,6 @@ fn canister_anonymous_query_transform_http_response() {
         )
         .unwrap();
         assert_eq!(canister_http_response, transformed_canister_http_response)
-    });
-}
-
-// Tests that canister heartbeat is executed.
-#[test]
-fn canister_heartbeat() {
-    with_hypervisor(|hypervisor, tmp_path| {
-        let wasm = wabt::wat2wasm(
-            r#"
-            (module
-              (func (export "canister_heartbeat")
-                    unreachable)
-              (memory (export "memory") 1))"#,
-        )
-        .unwrap();
-
-        let canister_id = canister_test_id(42);
-        let execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, canister_id)
-            .unwrap();
-        let canister = canister_from_exec_state(execution_state, canister_id);
-        let (_, _, network_topology) = setup();
-        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
-
-        assert_eq!(
-            hypervisor
-                .execute_canister_heartbeat(
-                    canister,
-                    network_topology,
-                    mock_time(),
-                    execution_parameters,
-                )
-                .2,
-            Err(HypervisorError::Trapped(TrapCode::Unreachable))
-        );
-    });
-}
-
-// Tests that execute_canister_heartbeat produces a heap delta.
-#[test]
-fn execute_canister_heartbeat_produces_heap_delta() {
-    with_hypervisor(|hypervisor, tmp_path| {
-        let wasm = wabt::wat2wasm(
-            r#"
-            (module
-              (func (export "canister_heartbeat")
-                (i32.store (i32.const 10) (i32.const 10))
-              )
-              (memory (export "memory") 1))"#,
-        )
-        .unwrap();
-
-        let canister_id = canister_test_id(42);
-        let execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, canister_id)
-            .unwrap();
-        let canister = canister_from_exec_state(execution_state, canister_id);
-        let (_, _, network_topology) = setup();
-        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
-
-        let (_, _, result) = hypervisor.execute_canister_heartbeat(
-            canister,
-            network_topology,
-            mock_time(),
-            execution_parameters,
-        );
-        let heap_delta = result.unwrap();
-        // the wasm module touched one memory location so that should produce one page
-        // of delta.
-        assert_eq!(heap_delta.get(), (PAGE_SIZE) as u64);
     });
 }
 
@@ -5143,7 +5062,7 @@ fn can_extract_exported_custom_sections() {
         // Custom start=0x00028de2 end=0x00028dfc (size=0x0000001a) "icp:private candid:args"
         // Custom start=0x00028e02 end=0x00028e30 (size=0x0000002e) "icp:private motoko:stable-types"
 
-        let wasm = include_bytes!("test-data/custom_sections.wasm").to_vec();
+        let wasm = include_bytes!("./test-data/custom_sections.wasm").to_vec();
         let execution_state = hypervisor
             .create_execution_state(wasm, tmp_path, canister_test_id(0))
             .unwrap();

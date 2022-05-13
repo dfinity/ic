@@ -65,10 +65,6 @@ iai = "0.1"
 [build-dependencies]
 escargot = "0.5"
 
-[[test]]
-name = "wasmtime-tests"
-path = "testgrid/wasmtime_tests.rs"
-
 [features]
 default = []
 sigsegv_handler_checksum = [

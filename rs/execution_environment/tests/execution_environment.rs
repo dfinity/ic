@@ -1,11 +1,17 @@
+use std::{collections::BTreeSet, convert::TryFrom, sync::Arc};
+
 use assert_matches::assert_matches;
 use candid::Encode;
+use lazy_static::lazy_static;
+use maplit::btreemap;
+use tempfile::TempDir;
+
 use ic_base_types::NumSeconds;
 use ic_config::{execution_environment, subnet_config::CyclesAccountManagerConfig};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::{
-    util::process_response, CanisterHeartbeatError, ExecutionEnvironment, ExecutionEnvironmentImpl,
-    Hypervisor, IngressHistoryWriterImpl,
+    util::process_response, ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor,
+    IngressHistoryWriterImpl,
 };
 use ic_ic00_types::{
     self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, EmptyBlob,
@@ -32,7 +38,6 @@ use ic_replicated_state::{
     SchedulerState, SystemState,
 };
 use ic_test_utilities::execution_environment::ExecutionEnvironmentBuilder;
-use ic_test_utilities::state::get_stopping_canister_on_nns;
 use ic_test_utilities::{
     crypto::mock_random_number_generator,
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -41,9 +46,9 @@ use ic_test_utilities::{
     mock_time,
     state::{
         get_running_canister, get_running_canister_with_args, get_running_canister_with_balance,
-        get_stopped_canister, get_stopped_canister_on_system_subnet,
-        get_stopped_canister_with_controller, get_stopping_canister, running_canister_into_stopped,
-        CanisterStateBuilder, ReplicatedStateBuilder, SystemStateBuilder,
+        get_stopped_canister, get_stopped_canister_with_controller, get_stopping_canister,
+        running_canister_into_stopped, CanisterStateBuilder, ReplicatedStateBuilder,
+        SystemStateBuilder,
     },
     types::{
         ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
@@ -62,10 +67,8 @@ use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     PrincipalId, QueueIndex, RegistryVersion, SubnetId, Time,
 };
-use lazy_static::lazy_static;
-use maplit::btreemap;
-use std::{collections::BTreeSet, convert::TryFrom, sync::Arc};
-use tempfile::TempDir;
+
+pub mod hypervisor;
 
 const CANISTER_CREATION_FEE: Cycles = Cycles::new(1_000_000_000_000);
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
@@ -2714,54 +2717,6 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
         );
         // Verify the canister's cycles balance is still the same.
         assert_eq!(result.canister.system_state.balance(), Cycles::from(1000));
-    });
-}
-
-#[test]
-fn canister_heartbeat_doesnt_run_when_canister_is_stopped() {
-    with_setup(SubnetType::System, |exec_env, _, _, routing_table| {
-        let canister = get_stopped_canister_on_system_subnet(canister_test_id(0));
-
-        let result = exec_env
-            .execute_canister_heartbeat(
-                canister,
-                MAX_NUM_INSTRUCTIONS,
-                routing_table,
-                mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            )
-            .2;
-
-        assert_eq!(
-            result,
-            Err(CanisterHeartbeatError::CanisterNotRunning {
-                status: CanisterStatusType::Stopped,
-            })
-        );
-    });
-}
-
-#[test]
-fn canister_heartbeat_doesnt_run_when_canister_is_stopping() {
-    with_setup(SubnetType::System, |exec_env, _, _, routing_table| {
-        let canister = get_stopping_canister_on_nns(canister_test_id(0));
-
-        let result = exec_env
-            .execute_canister_heartbeat(
-                canister,
-                MAX_NUM_INSTRUCTIONS,
-                routing_table,
-                mock_time(),
-                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            )
-            .2;
-
-        assert_eq!(
-            result,
-            Err(CanisterHeartbeatError::CanisterNotRunning {
-                status: CanisterStatusType::Stopping,
-            })
-        );
     });
 }
 

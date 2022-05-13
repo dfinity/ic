@@ -1,6 +1,6 @@
 // Replicated messages.
 pub(crate) mod call;
-mod heartbeat;
+pub mod heartbeat;
 mod response;
 
 // Non-replicated messages.
