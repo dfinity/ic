@@ -70,7 +70,7 @@ fn evaluate_pot_and_propagate_result(
         error!(ctx.logger, "failed to execute pot {}: {}", &name, e);
         TestResultNode {
             name,
-            result: TestResult::Failed,
+            result: TestResult::failed_with_message(""),
             ..TestResultNode::default()
         }
     });
@@ -247,12 +247,14 @@ fn evaluate_test(
     if let Err(panic_res) = t_res {
         if let Some(s) = panic_res.downcast_ref::<String>() {
             warn!(ctx.logger, "{} FAILED: {}", path, s);
+            result.result = TestResult::failed_with_message(s);
         } else if let Some(s) = panic_res.downcast_ref::<&str>() {
             warn!(ctx.logger, "{} FAILED: {}", path, s);
+            result.result = TestResult::failed_with_message(s);
         } else {
             warn!(ctx.logger, "{} FAILED (): {:?}", path, panic_res);
+            result.result = TestResult::failed_with_message("");
         }
-        result.result = TestResult::Failed;
     } else {
         info!(ctx.logger, "{} SUCCESS.", path);
         result.result = TestResult::Passed;

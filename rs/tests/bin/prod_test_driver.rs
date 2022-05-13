@@ -52,7 +52,7 @@ fn main() -> anyhow::Result<()> {
         serde_json::to_writer_pretty(&mut w, &result)?;
     }
 
-    if result.result == TestResult::Failed {
+    if let TestResult::Failed(_) = result.result {
         anyhow::bail!(format!("Test suite {} failed", result.name))
     } else {
         Ok(())
@@ -125,6 +125,15 @@ fn resolve_execution_mode(
 
 fn get_test_suites() -> HashMap<String, Suite> {
     let mut m = HashMap::new();
+    m.add_suite(suite(
+        "failure_new_3",
+        vec![pot_with_setup(
+            "basic_health_pot_single_host",
+            basic_health_test::config_single_host,
+            par(vec![sys_t("basic_health_test", basic_health_test::test)]),
+        )],
+    ));
+
     m.add_suite(
         suite(
             "pre_master",

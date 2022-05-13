@@ -347,7 +347,7 @@ impl Executor {
         let result = if pot::should_skip(&p.test) {
             Some(TestResult::Skipped)
         } else if self.signaled() {
-            Some(TestResult::Failed)
+            Some(TestResult::failed_with_message(""))
         } else {
             None
         };

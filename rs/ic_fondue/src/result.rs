@@ -34,7 +34,7 @@ impl ExecutionResult {
                 let result = if pot.is_success() {
                     TestResult::Passed
                 } else {
-                    TestResult::Failed
+                    TestResult::failed_with_message("")
                 };
                 TestResultNode {
                     name: pot.pot_name,
@@ -116,7 +116,7 @@ impl CompletedPot {
                     .iter()
                     .map(|tn| TestResultNode {
                         name: tn.clone(),
-                        result,
+                        result: result.clone(),
                         ..TestResultNode::default()
                     })
                     .collect(),
@@ -149,11 +149,17 @@ pub struct TestResultNode {
     pub children: Vec<TestResultNode>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum TestResult {
     Passed,
-    Failed,
+    Failed(String),
     Skipped,
+}
+
+impl TestResult {
+    pub fn failed_with_message(message: &str) -> TestResult {
+        TestResult::Failed(message.to_string())
+    }
 }
 
 impl Default for TestResultNode {
@@ -173,8 +179,11 @@ pub fn infer_result(tests: &[TestResultNode]) -> TestResult {
     if tests.iter().all(|t| t.result == TestResult::Skipped) {
         return TestResult::Skipped;
     }
-    if tests.iter().any(|t| t.result == TestResult::Failed) {
-        TestResult::Failed
+    if tests
+        .iter()
+        .any(|t| matches!(t.result, TestResult::Failed(_)))
+    {
+        TestResult::failed_with_message("")
     } else {
         TestResult::Passed
     }
