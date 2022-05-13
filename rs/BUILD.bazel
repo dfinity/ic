@@ -23,6 +23,7 @@ filegroup(
         "//rs/crypto/internal/crypto_lib/types:sources",
         "//rs/crypto/secrets_containers:sources",
         "//rs/crypto/sha:sources",
+        "//rs/crypto/tree_hash:sources",
         "//rs/elastic_common_schema:sources",
         "//rs/log_analyzer:sources",
         "//rs/monitoring/context_logger:sources",
