@@ -4,11 +4,11 @@ mod tests;
 
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::{ingress::v1 as pb_ingress, queues::v1 as pb_queues};
-use ic_types::CountBytes;
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response},
     QueueIndex,
 };
+use ic_types::{CountBytes, Cycles};
 use std::{
     collections::VecDeque,
     convert::{From, TryFrom, TryInto},
@@ -237,6 +237,15 @@ impl InputQueue {
         self.queue.reserved_slots()
     }
 
+    /// Returns the amount of cycles contained in the queue.
+    pub(super) fn cycles_in_queue(&self) -> Cycles {
+        let mut total_cycles = Cycles::zero();
+        for msg in self.queue.queue.iter() {
+            total_cycles += msg.cycles();
+        }
+        total_cycles
+    }
+
     /// Calculates the size in bytes, including struct and messages.
     ///
     /// Time complexity: O(num_messages).
@@ -344,6 +353,15 @@ impl OutputQueue {
     /// Returns the number of reserved slots in the queue.
     pub(super) fn reserved_slots(&self) -> usize {
         self.queue.reserved_slots()
+    }
+
+    /// Returns the amount of cycles contained in the queue.
+    pub(super) fn cycles_in_queue(&self) -> Cycles {
+        let mut total_cycles = Cycles::zero();
+        for msg in self.queue.queue.iter() {
+            total_cycles += msg.cycles();
+        }
+        total_cycles
     }
 
     /// Calculates the sum of the given stat across all enqueued messages.

@@ -241,6 +241,14 @@ impl RequestOrResponse {
             RequestOrResponse::Response(resp) => resp.response_payload.size_bytes(),
         }
     }
+
+    /// Returns the amount of cycles contained in this message.
+    pub fn cycles(&self) -> Cycles {
+        match self {
+            RequestOrResponse::Request(req) => req.payment,
+            RequestOrResponse::Response(resp) => resp.refund,
+        }
+    }
 }
 
 /// Convenience `CountBytes` implementation that returns the same value as
