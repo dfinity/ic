@@ -46,7 +46,7 @@ use ic_types::{
     canister_http::{CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequestContext},
     crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey},
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
-    ingress::{IngressStatus, WasmResult},
+    ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         is_subnet_message, AnonymousQuery, Payload, RejectContext, Request, Response,
         SignedIngressContent, StopCanisterContext,
@@ -860,11 +860,14 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 ) {
                     // Canister is out of cycles. Reject the request.
                     let canister_id = canister.canister_id();
-                    let status = IngressStatus::Failed {
+                    let status = IngressStatus::Known {
                         receiver: canister_id.get(),
                         user_id: ingress.source,
-                        error: UserError::new(ErrorCode::CanisterOutOfCycles, err.to_string()),
                         time,
+                        state: IngressState::Failed(UserError::new(
+                            ErrorCode::CanisterOutOfCycles,
+                            err.to_string(),
+                        )),
                     };
                     return ExecuteMessageResult {
                         canister,
@@ -1571,17 +1574,17 @@ impl ExecutionEnvironmentImpl {
                     );
                 }
                 let status = match result {
-                    Ok(payload) => IngressStatus::Completed {
+                    Ok(payload) => IngressStatus::Known {
                         receiver: ingress.receiver.get(),
                         user_id: ingress.source,
-                        result: WasmResult::Reply(payload),
                         time: state.time(),
+                        state: IngressState::Completed(WasmResult::Reply(payload)),
                     },
-                    Err(err) => IngressStatus::Failed {
+                    Err(err) => IngressStatus::Known {
                         receiver: ingress.receiver.get(),
                         user_id: ingress.source,
-                        error: err,
                         time: state.time(),
+                        state: IngressState::Failed(err),
                     },
                 };
 
@@ -1608,14 +1611,14 @@ impl ExecutionEnvironmentImpl {
                     self.ingress_history_writer.set_status(
                         state,
                         message_id,
-                        IngressStatus::Failed {
+                        IngressStatus::Known {
                             receiver: IC_00.get(),
                             user_id: sender,
-                            error: UserError::new(
+                            time,
+                            state: IngressState::Failed(UserError::new(
                                 ErrorCode::CanisterStoppingCancelled,
                                 format!("Canister {}'s stop request was cancelled.", canister_id),
-                            ),
-                            time,
+                            )),
                         },
                     );
                 }

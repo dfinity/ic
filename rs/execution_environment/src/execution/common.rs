@@ -6,7 +6,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::ExecResult;
 use ic_logger::{fatal, warn, ReplicaLogger};
 use ic_replicated_state::{CallContextAction, CallOrigin, CanisterState};
-use ic_types::ingress::{IngressStatus, WasmResult};
+use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{CallbackId, MessageId, Payload, RejectContext, Response};
 use ic_types::{Cycles, Time, UserId};
 
@@ -106,47 +106,48 @@ pub(crate) fn action_to_ingress_result(
     let ingress_status = match action {
         CallContextAction::NoResponse { refund } => {
             refund_amount = refund;
-            Some(IngressStatus::Failed {
+            Some(IngressStatus::Known {
                 receiver,
                 user_id,
-                error: UserError::new(
+                time,
+                state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterDidNotReply,
                     format!("Canister {} did not reply to the call", canister_id),
-                ),
-                time,
+                )),
             })
         }
         CallContextAction::Reply { payload, refund } => {
             refund_amount = refund;
-            Some(IngressStatus::Completed {
+            Some(IngressStatus::Known {
                 receiver,
                 user_id,
-                result: WasmResult::Reply(payload),
                 time,
+                state: IngressState::Completed(WasmResult::Reply(payload)),
             })
         }
         CallContextAction::Reject { payload, refund } => {
             refund_amount = refund;
-            Some(IngressStatus::Completed {
+            Some(IngressStatus::Known {
                 receiver,
                 user_id,
-                result: WasmResult::Reject(payload),
                 time,
+                state: IngressState::Completed(WasmResult::Reject(payload)),
             })
         }
         CallContextAction::Fail { error, refund } => {
             refund_amount = refund;
-            Some(IngressStatus::Failed {
+            Some(IngressStatus::Known {
                 receiver,
                 user_id,
-                error: error.into_user_error(canister_id),
                 time,
+                state: IngressState::Failed(error.into_user_error(canister_id)),
             })
         }
-        CallContextAction::NotYetResponded => Some(IngressStatus::Processing {
+        CallContextAction::NotYetResponded => Some(IngressStatus::Known {
             receiver,
             user_id,
             time,
+            state: IngressState::Processing,
         }),
         CallContextAction::AlreadyResponded => None,
     };

@@ -44,7 +44,7 @@ use ic_types::{
     Height, NodeId, Randomness, RegistryVersion,
 };
 pub use ic_types::{
-    ingress::{IngressStatus, WasmResult},
+    ingress::{IngressState, IngressStatus, WasmResult},
     messages::MessageId,
     time::Time,
     CanisterId, CryptoHashOfState, PrincipalId, SubnetId, UserId,
@@ -418,8 +418,14 @@ impl StateMachine {
 
         for _tick in 0..max_ticks {
             match self.ingress_status(&msg_id) {
-                IngressStatus::Completed { result, .. } => return Ok(result),
-                IngressStatus::Failed { error, .. } => return Err(error),
+                IngressStatus::Known {
+                    state: IngressState::Completed(result),
+                    ..
+                } => return Ok(result),
+                IngressStatus::Known {
+                    state: IngressState::Failed(error),
+                    ..
+                } => return Err(error),
                 _ => {
                     self.tick();
                 }

@@ -27,7 +27,7 @@ use ic_replicated_state::{
 };
 use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
-    ingress::{IngressStatus, WasmResult},
+    ingress::{IngressState, IngressStatus, WasmResult},
     messages::{Ingress, MessageId, Payload, Response, StopCanisterContext},
     AccumulatedPriority, CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes,
     NumInstructions, Randomness, SubnetId, Time,
@@ -647,11 +647,13 @@ impl SchedulerImpl {
                             self.ingress_history_writer.set_status(
                                 &mut state,
                                 message_id,
-                                IngressStatus::Completed {
+                                IngressStatus::Known {
                                     receiver: IC_00.get(),
                                     user_id: sender,
-                                    result: WasmResult::Reply(EmptyBlob::encode()),
                                     time,
+                                    state: IngressState::Completed(WasmResult::Reply(
+                                        EmptyBlob::encode(),
+                                    )),
                                 },
                             )
                         }
@@ -698,11 +700,11 @@ impl SchedulerImpl {
                     self.ingress_history_writer.set_status(
                         state,
                         ingress.message_id.clone(),
-                        IngressStatus::Failed {
+                        IngressStatus::Known {
                             receiver: ingress.receiver.get(),
                             user_id: ingress.source,
-                            error,
                             time: current_time,
+                            state: IngressState::Failed(error),
                         },
                     );
                     false

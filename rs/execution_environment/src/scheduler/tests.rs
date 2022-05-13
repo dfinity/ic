@@ -955,10 +955,11 @@ fn test_multiple_iterations_of_inner_loop() {
                         num_instructions_left: NumInstructions::new(0),
                         result: ExecResult::IngressResult((
                             msg.message_id,
-                            IngressStatus::Processing {
+                            IngressStatus::Known {
                                 receiver: canister.canister_id().get(),
                                 user_id: user_test_id(0),
                                 time: mock_time(),
+                                state: IngressState::Processing,
                             },
                         )),
                         heap_delta: NumBytes::from(1),
@@ -2166,11 +2167,14 @@ fn can_record_metrics_single_scheduler_thread() {
                 num_instructions_left: NumInstructions::from(0),
                 result: ExecResult::IngressResult((
                     message_test_id(0),
-                    IngressStatus::Failed {
+                    IngressStatus::Known {
                         receiver: canister_id.get(),
                         user_id: user_test_id(0),
-                        error: UserError::new(ErrorCode::CanisterOutOfCycles, "".to_string()),
                         time: mock_time(),
+                        state: IngressState::Failed(UserError::new(
+                            ErrorCode::CanisterOutOfCycles,
+                            "".to_string(),
+                        )),
                     },
                 )),
                 heap_delta: NumBytes::from(0),
@@ -2185,11 +2189,11 @@ fn can_record_metrics_single_scheduler_thread() {
                     num_instructions_left: NumInstructions::from(1),
                     result: ExecResult::IngressResult((
                         message_test_id(message_id),
-                        IngressStatus::Completed {
+                        IngressStatus::Known {
                             receiver: canister_id.get(),
                             user_id: user_test_id(0),
-                            result: WasmResult::Reply(vec![]),
                             time: mock_time(),
+                            state: IngressState::Completed(WasmResult::Reply(vec![])),
                         },
                     )),
                     heap_delta: NumBytes::from(0),
@@ -3830,11 +3834,11 @@ fn scheduler_maintains_canister_order() {
                     num_instructions_left,
                     result: ExecResult::IngressResult((
                         msg.message_id,
-                        IngressStatus::Completed {
+                        IngressStatus::Known {
                             receiver: canister.canister_id().get(),
                             user_id: user_test_id(0),
-                            result: WasmResult::Reply(vec![]),
                             time: mock_time(),
+                            state: IngressState::Completed(WasmResult::Reply(vec![])),
                         },
                     )),
                     heap_delta: NumBytes::new(0),
@@ -4201,11 +4205,11 @@ fn default_exec_env_mock(
                     num_instructions_left,
                     result: ExecResult::IngressResult((
                         msg.message_id,
-                        IngressStatus::Completed {
+                        IngressStatus::Known {
                             receiver: canister.canister_id().get(),
                             user_id: user_test_id(0),
-                            result: WasmResult::Reply(vec![]),
                             time: mock_time(),
+                            state: IngressState::Completed(WasmResult::Reply(vec![])),
                         },
                     )),
                     heap_delta: heap_delta_per_message,

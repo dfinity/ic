@@ -46,7 +46,7 @@ use ic_test_utilities::{
     with_test_replica_logger,
 };
 use ic_types::{
-    ingress::{IngressStatus, WasmResult},
+    ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, RequestOrResponse, StopCanisterContext},
     nominal_cycles::NominalCycles,
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
@@ -2494,14 +2494,14 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
         )[0],
         Response::Ingress(IngressResponse {
             message_id: message_test_id(456),
-            status: IngressStatus::Failed {
+            status: IngressStatus::Known {
                 receiver: canister_test_id(789).get(),
                 user_id: user_test_id(123),
-                error: UserError::new(
+                time: mock_time(),
+                state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
                     "Canister has been uninstalled.",
-                ),
-                time: mock_time()
+                )),
             }
         })
     );

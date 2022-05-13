@@ -22,7 +22,7 @@ use ic_test_utilities::{
     with_test_replica_logger,
 };
 use ic_types::{
-    ingress::IngressStatus,
+    ingress::{IngressState, IngressStatus},
     messages::{MessageId, SignedIngressContent},
     CanisterId,
 };
@@ -107,10 +107,11 @@ fn induct_message_with_successful_history_update() {
             .returning(move |state, _, _| {
                 state.set_ingress_status(
                     msg_id.clone(),
-                    IngressStatus::Received {
+                    IngressStatus::Known {
                         receiver: canister_id.get(),
                         user_id: user_test_id(0),
                         time: mock_time(),
+                        state: IngressState::Received,
                     },
                     NumBytes::from(u64::MAX),
                 );
@@ -168,14 +169,14 @@ fn induct_message_fails_for_stopping_canister() {
             .with(
                 always(),
                 eq(msg.id()),
-                eq(IngressStatus::Failed {
+                eq(IngressStatus::Known {
                     receiver: canister_id.get(),
                     user_id: user_test_id(2),
-                    error: UserError::new(
+                    time: mock_time(),
+                    state: IngressState::Failed(UserError::new(
                         ErrorCode::CanisterStopping,
                         format!("Canister {} is stopping", canister_id),
-                    ),
-                    time: mock_time(),
+                    )),
                 }),
             )
             .times(1)
@@ -228,14 +229,14 @@ fn induct_message_fails_for_stopped_canister() {
             .with(
                 always(),
                 eq(msg.id()),
-                eq(IngressStatus::Failed {
+                eq(IngressStatus::Known {
                     receiver: canister_id.get(),
                     user_id: user_test_id(2),
-                    error: UserError::new(
+                    time: mock_time(),
+                    state: IngressState::Failed(UserError::new(
                         ErrorCode::CanisterStopped,
                         format!("Canister {} is stopped", canister_id),
-                    ),
-                    time: mock_time(),
+                    )),
                 }),
             )
             .times(1)
@@ -306,10 +307,11 @@ fn try_to_induct_a_message_marked_as_already_inducted() {
         );
         insert_canister(&mut state, canister_id);
 
-        let status = IngressStatus::Received {
+        let status = IngressStatus::Known {
             receiver: canister_id.get(),
             user_id: user_test_id(0),
             time: mock_time(),
+            state: IngressState::Received,
         };
         state.set_ingress_status(msg.id(), status, NumBytes::from(u64::MAX));
         valid_set_rule.induct_message(&mut state, msg);
@@ -328,14 +330,14 @@ fn update_history_if_induction_failed() {
 
         let mut ingress_history_writer = MockIngressHistory::new();
         let canister_id = canister_test_id(0);
-        let status = IngressStatus::Failed {
+        let status = IngressStatus::Known {
             receiver: canister_id.get(),
             user_id: user_test_id(0),
-            error: UserError::new(
+            time: mock_time(),
+            state: IngressState::Failed(UserError::new(
                 ErrorCode::CanisterNotFound,
                 format!("Canister {} not found", canister_id),
-            ),
-            time: mock_time(),
+            )),
         };
         let status_clone = status.clone();
         ingress_history_writer
@@ -411,10 +413,11 @@ fn dont_induct_duplicate_messages() {
             .returning(|state, message_id3, _| {
                 state.set_ingress_status(
                     message_id3,
-                    IngressStatus::Received {
+                    IngressStatus::Known {
                         receiver: canister_test_id(0).get(),
                         user_id: user_test_id(0),
                         time: mock_time(),
+                        state: IngressState::Received,
                     },
                     NumBytes::from(u64::MAX),
                 );
@@ -436,19 +439,21 @@ fn dont_induct_duplicate_messages() {
         );
         state.set_ingress_status(
             message_test_id(1),
-            IngressStatus::Received {
+            IngressStatus::Known {
                 receiver: canister_id1.get(),
                 user_id: user_test_id(0),
                 time: mock_time(),
+                state: IngressState::Received,
             },
             NumBytes::from(u64::MAX),
         );
         state.set_ingress_status(
             msg1.id(),
-            IngressStatus::Received {
+            IngressStatus::Known {
                 receiver: canister_id1.get(),
                 user_id: user_test_id(0),
                 time: mock_time(),
+                state: IngressState::Received,
             },
             NumBytes::from(u64::MAX),
         );

@@ -472,7 +472,7 @@ mod tests {
         use crate::subtree_visitor::{Pattern, SubtreeVisitor};
         use ic_error_types::{ErrorCode, UserError};
         use ic_test_utilities::types::ids::{message_test_id, subnet_test_id, user_test_id};
-        use ic_types::ingress::{IngressStatus, WasmResult};
+        use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 
         let user_id = user_test_id(1);
         let canister_id = canister_test_id(1);
@@ -489,49 +489,54 @@ mod tests {
         );
         state.set_ingress_status(
             message_test_id(2),
-            IngressStatus::Processing {
+            IngressStatus::Known {
                 receiver: canister_id.get(),
                 user_id,
                 time,
+                state: IngressState::Processing,
             },
             NumBytes::from(u64::MAX),
         );
         state.set_ingress_status(
             message_test_id(3),
-            IngressStatus::Received {
+            IngressStatus::Known {
                 receiver: canister_id.get(),
                 user_id,
                 time,
+                state: IngressState::Received,
             },
             NumBytes::from(u64::MAX),
         );
         state.set_ingress_status(
             message_test_id(4),
-            IngressStatus::Failed {
+            IngressStatus::Known {
                 receiver: canister_id.get(),
                 user_id,
-                error: UserError::new(ErrorCode::SubnetOversubscribed, "subnet oversubscribed"),
                 time,
+                state: IngressState::Failed(UserError::new(
+                    ErrorCode::SubnetOversubscribed,
+                    "subnet oversubscribed",
+                )),
             },
             NumBytes::from(u64::MAX),
         );
         state.set_ingress_status(
             message_test_id(5),
-            IngressStatus::Completed {
+            IngressStatus::Known {
                 receiver: canister_id.get(),
                 user_id,
-                result: WasmResult::Reply(b"reply".to_vec()),
                 time,
+                state: IngressState::Completed(WasmResult::Reply(b"reply".to_vec())),
             },
             NumBytes::from(u64::MAX),
         );
         state.set_ingress_status(
             message_test_id(6),
-            IngressStatus::Completed {
+            IngressStatus::Known {
                 receiver: canister_id.get(),
                 user_id,
-                result: WasmResult::Reject("reject".to_string()),
                 time,
+                state: IngressState::Completed(WasmResult::Reject("reject".to_string())),
             },
             NumBytes::from(u64::MAX),
         );

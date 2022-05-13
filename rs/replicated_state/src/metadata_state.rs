@@ -21,7 +21,7 @@ use ic_registry_subnet_features::{BitcoinFeature, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     crypto::CryptoHash,
-    ingress::IngressStatus,
+    ingress::{IngressState, IngressStatus},
     messages::{MessageId, RequestOrResponse},
     node_id_into_protobuf, node_id_try_from_protobuf, subnet_id_into_protobuf,
     subnet_id_try_from_protobuf,
@@ -1078,26 +1078,25 @@ impl IngressHistoryState {
         // Store the associated expiry time for the given message id only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
-        if let IngressStatus::Completed { .. }
-        | IngressStatus::Failed { .. }
-        | IngressStatus::Done { .. } = status
-        {
-            let timeout = time + MAX_INGRESS_TTL;
+        if let IngressStatus::Known { state, .. } = &status {
+            if matches!(
+                state,
+                IngressState::Completed(_) | IngressState::Failed(_) | IngressState::Done
+            ) {
+                let timeout = time + MAX_INGRESS_TTL;
 
-            // Reset `self.next_terminal_time` in case it is after the current timout
-            // and the entry is completed or failed.
-            if self.next_terminal_time > timeout
-                && matches!(
-                    status,
-                    IngressStatus::Completed { .. } | IngressStatus::Failed { .. }
-                )
-            {
-                self.next_terminal_time = timeout;
+                // Reset `self.next_terminal_time` in case it is after the current timout
+                // and the entry is completed or failed.
+                if self.next_terminal_time > timeout
+                    && matches!(state, IngressState::Completed(_) | IngressState::Failed(_))
+                {
+                    self.next_terminal_time = timeout;
+                }
+                Arc::make_mut(&mut self.pruning_times)
+                    .entry(timeout)
+                    .or_default()
+                    .insert(message_id.clone());
             }
-            Arc::make_mut(&mut self.pruning_times)
-                .entry(timeout)
-                .or_default()
-                .insert(message_id.clone());
         }
         self.memory_usage += status.payload_bytes();
         if let Some(old) = Arc::make_mut(&mut self.statuses).insert(message_id, Arc::new(status)) {
@@ -1199,22 +1198,17 @@ impl IngressHistoryState {
 
             for id in ids.iter() {
                 match statuses.get(id).map(Arc::as_ref) {
-                    Some(&IngressStatus::Completed {
+                    Some(&IngressStatus::Known {
                         receiver,
                         user_id,
                         time,
-                        ..
-                    })
-                    | Some(&IngressStatus::Failed {
-                        receiver,
-                        user_id,
-                        time,
-                        ..
+                        state: IngressState::Completed(_) | IngressState::Failed(_),
                     }) => {
-                        let done_status = Arc::new(IngressStatus::Done {
+                        let done_status = Arc::new(IngressStatus::Known {
                             receiver,
                             user_id,
                             time,
+                            state: IngressState::Done,
                         });
                         self.memory_usage += done_status.payload_bytes();
 

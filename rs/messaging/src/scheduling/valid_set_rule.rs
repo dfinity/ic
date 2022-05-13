@@ -21,7 +21,7 @@ use ic_replicated_state::{
     ReplicatedState, StateError,
 };
 use ic_types::{
-    ingress::IngressStatus,
+    ingress::{IngressState, IngressStatus},
     messages::{is_subnet_message, HttpRequestContent, SignedIngressContent},
     time::current_time_and_expiry_time,
     SubnetId, Time,
@@ -151,10 +151,11 @@ impl ValidSetRuleImpl {
                 self.ingress_history_writer.set_status(
                     state,
                     message_id,
-                    IngressStatus::Received {
+                    IngressStatus::Known {
                         receiver: receiver.get(),
                         user_id: source,
                         time,
+                        state: IngressState::Received,
                     },
                 );
                 LABEL_VALUE_SUCCESS
@@ -186,11 +187,11 @@ impl ValidSetRuleImpl {
                 self.ingress_history_writer.set_status(
                     state,
                     message_id,
-                    IngressStatus::Failed {
+                    IngressStatus::Known {
                         receiver: receiver.get(),
                         user_id: source,
-                        error: UserError::new(error_code, err.to_string()),
                         time,
+                        state: IngressState::Failed(UserError::new(error_code, err.to_string())),
                     },
                 );
                 err.to_label_value()

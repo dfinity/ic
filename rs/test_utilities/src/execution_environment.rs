@@ -29,7 +29,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, ExecutionState, ReplicatedState};
 use ic_types::messages::MessageId;
 use ic_types::{
-    ingress::{IngressStatus, WasmResult},
+    ingress::{IngressState, IngressStatus, WasmResult},
     CanisterId, Cycles, NumInstructions, UserId,
 };
 use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
@@ -366,14 +366,27 @@ impl ExecutionTest {
             ExecResult::IngressResult((_, ingress_status)) => ingress_status,
         };
         match ingress_status {
-            IngressStatus::Received { .. }
-            | IngressStatus::Processing { .. }
-            | IngressStatus::Done { .. }
-            | IngressStatus::Unknown => {
-                unreachable!("Unexpected ingress status: {:?}", ingress_status)
+            IngressStatus::Unknown
+            | IngressStatus::Known {
+                state: IngressState::Received,
+                ..
             }
-            IngressStatus::Completed { result, .. } => Ok(result),
-            IngressStatus::Failed { error, .. } => Err(error),
+            | IngressStatus::Known {
+                state: IngressState::Processing,
+                ..
+            }
+            | IngressStatus::Known {
+                state: IngressState::Done,
+                ..
+            } => unreachable!("Unexpected ingress status: {:?}", ingress_status),
+            IngressStatus::Known {
+                state: IngressState::Completed(result),
+                ..
+            } => Ok(result),
+            IngressStatus::Known {
+                state: IngressState::Failed(error),
+                ..
+            } => Err(error),
         }
     }
 
@@ -471,14 +484,27 @@ impl ExecutionTest {
         self.state = Some(new_state);
         self.executed_instructions += self.install_code_instruction_limit - instructions_left;
         match ingress_status {
-            IngressStatus::Received { .. }
-            | IngressStatus::Processing { .. }
-            | IngressStatus::Done { .. }
-            | IngressStatus::Unknown => {
-                unreachable!("Unexpected ingress status: {:?}", ingress_status)
+            IngressStatus::Unknown
+            | IngressStatus::Known {
+                state: IngressState::Received,
+                ..
             }
-            IngressStatus::Completed { result, .. } => Ok(result),
-            IngressStatus::Failed { error, .. } => Err(error),
+            | IngressStatus::Known {
+                state: IngressState::Processing,
+                ..
+            }
+            | IngressStatus::Known {
+                state: IngressState::Done,
+                ..
+            } => unreachable!("Unexpected ingress status: {:?}", ingress_status),
+            IngressStatus::Known {
+                state: IngressState::Completed(result),
+                ..
+            } => Ok(result),
+            IngressStatus::Known {
+                state: IngressState::Failed(error),
+                ..
+            } => Err(error),
         }
     }
 

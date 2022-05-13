@@ -24,7 +24,7 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
 use ic_types::{
-    ingress::IngressStatus,
+    ingress::{IngressState, IngressStatus},
     messages::{Payload, RejectContext, Response as CanisterResponse, StopCanisterContext},
     CanisterId, ComputeAllocation, Cycles, Height, InvalidComputeAllocationError,
     InvalidMemoryAllocationError, InvalidQueryAllocationError, MemoryAllocation, NumBytes,
@@ -1811,14 +1811,14 @@ pub fn uninstall_canister(
                 CallOrigin::Ingress(user_id, message_id) => {
                     rejects.push(Response::Ingress(IngressResponse {
                         message_id: message_id.clone(),
-                        status: IngressStatus::Failed {
+                        status: IngressStatus::Known {
                             receiver: canister_id.get(),
                             user_id: *user_id,
-                            error: UserError::new(
+                            time,
+                            state: IngressState::Failed(UserError::new(
                                 ErrorCode::CanisterRejectedMessage,
                                 "Canister has been uninstalled.",
-                            ),
-                            time,
+                            )),
                         },
                     }));
                 }

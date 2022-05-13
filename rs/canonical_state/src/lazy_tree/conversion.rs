@@ -18,7 +18,7 @@ use ic_replicated_state::{
     ExecutionState, ReplicatedState,
 };
 use ic_types::{
-    ingress::{IngressStatus, WasmResult},
+    ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, EXPECTED_MESSAGE_ID_LENGTH},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
     CanisterId, PrincipalId, SubnetId,
@@ -312,25 +312,18 @@ fn status_to_tree<'a>(status: &'a IngressStatus) -> LazyTree<'a> {
     let t = FiniteMap::default().with_tree("status", string(status.as_str()));
 
     let t = match status {
-        IngressStatus::Completed {
-            result: WasmResult::Reply(b),
-            ..
-        } => t.with_tree("reply", Blob(&b[..])),
-        IngressStatus::Completed {
-            result: WasmResult::Reject(s),
-            ..
-        } => t
-            .with_tree("reject_code", num::<'a>(RejectCode::CanisterReject as u64))
-            .with_tree("reject_message", string(&s[..])),
-        IngressStatus::Failed { error, .. } => t
-            .with_tree("reject_code", num::<'a>(error.reject_code() as u64))
-            .with_tree("reject_message", string(error.description())),
-        IngressStatus::Processing { .. }
-        | IngressStatus::Received { .. }
-        | IngressStatus::Done { .. }
-        | IngressStatus::Unknown => t,
+        IngressStatus::Known { state, .. } => match state {
+            IngressState::Completed(WasmResult::Reply(b)) => t.with_tree("reply", Blob(&b[..])),
+            IngressState::Completed(WasmResult::Reject(s)) => t
+                .with_tree("reject_code", num::<'a>(RejectCode::CanisterReject as u64))
+                .with_tree("reject_message", string(&s[..])),
+            IngressState::Failed(error) => t
+                .with_tree("reject_code", num::<'a>(error.reject_code() as u64))
+                .with_tree("reject_message", string(error.description())),
+            IngressState::Processing | IngressState::Received | IngressState::Done => t,
+        },
+        IngressStatus::Unknown => t,
     };
-
     fork(t)
 }
 

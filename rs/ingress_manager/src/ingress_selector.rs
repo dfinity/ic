@@ -516,6 +516,7 @@ mod tests {
     use ic_types::{
         artifact::{IngressMessageAttribute, IngressMessageId},
         batch::IngressPayload,
+        ingress::{IngressState, IngressStatus},
         messages::{MessageId, SignedIngress},
         time::current_time_and_expiry_time,
         Height, RegistryVersion,
@@ -1094,10 +1095,11 @@ mod tests {
         ingress_hist_reader
             .expect_get_status_at_height()
             .returning(|_| {
-                Ok(Box::new(|_| IngressStatus::Received {
+                Ok(Box::new(|_| IngressStatus::Known {
                     receiver: canister_test_id(0).get(),
                     user_id: user_test_id(0),
                     time: mock_time(),
+                    state: IngressState::Received,
                 }))
             });
         setup_with_params(
@@ -1186,10 +1188,11 @@ mod tests {
                 let message_id1_cl = MessageId::from(&message_id1_cl);
                 Ok(Box::new(move |msg_id| {
                     if *msg_id == message_id1_cl {
-                        IngressStatus::Processing {
+                        IngressStatus::Known {
                             receiver: canister_test_id(0).get(),
                             user_id: user_test_id(0),
                             time: mock_time(),
+                            state: IngressState::Processing,
                         }
                     } else {
                         IngressStatus::Unknown
