@@ -1,0 +1,47 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "tree_hash",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_tree_hash",
+    edition = "2018",
+    deps = [
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/sha",
+        "//rs/protobuf",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+    ],
+)
+
+rust_test(
+    name = "tree_hash_test",
+    crate = ":tree_hash",
+    deps = [
+        "@crate_index//:maplit",
+        "@crate_index//:proptest",
+        "@crate_index//:prost",
+        "@crate_index//:serde_cbor",
+    ],
+)
+
+rust_doc_test(
+    name = "tree_hash_doc_test",
+    crate = ":tree_hash",
+    deps = [
+        "@crate_index//:maplit",
+        "@crate_index//:proptest",
+        "@crate_index//:prost",
+        "@crate_index//:serde_cbor",
+    ],
+)
