@@ -9,6 +9,7 @@ StartLimitIntervalSec=0
 
 [Service]
 User=ic-replica
+Environment=RUST_BACKTRACE=1
 ExecStartPre=+/opt/ic/bin/generate-btc-adapter-config.sh -b /boot/config/bitcoind_addr.conf -o /run/ic-node/config/ic-btc-testnet-adapter.json5
 ExecStart=/opt/ic/bin/ic-btc-adapter /run/ic-node/config/ic-btc-testnet-adapter.json5
 NotifyAccess=main
