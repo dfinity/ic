@@ -135,6 +135,14 @@ pub fn general_execution_pot() -> Pot {
                 execution::cycles_transfer::can_transfer_cycles_from_a_canister_to_another
             ),
             t(
+                "trapping_with_large_blob_does_not_cause_cycles_underflow",
+                execution::cycles_transfer::trapping_with_large_blob_does_not_cause_cycles_underflow
+            ),
+            t(
+                "rejecting_with_large_blob_does_not_cause_cycles_underflow",
+                execution::cycles_transfer::rejecting_with_large_blob_does_not_cause_cycles_underflow
+            ),
+            t(
                 "canister_accepts_ingress_by_default",
                 execution::ingress_rate_limiting::canister_accepts_ingress_by_default
             ),
