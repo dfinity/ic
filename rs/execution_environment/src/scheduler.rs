@@ -30,8 +30,8 @@ use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{Ingress, MessageId, Payload, Response, StopCanisterContext},
-    AccumulatedPriority, CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes,
-    NumInstructions, Randomness, SubnetId, Time,
+    AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation,
+    NumBytes, NumInstructions, Randomness, SubnetId, Time,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use lazy_static::lazy_static;
@@ -927,6 +927,7 @@ impl Scheduler for SchedulerImpl {
     ) -> ReplicatedState {
         let measurement_scope = MeasurementScope::root(&self.metrics.round);
 
+        let mut cycles_in_sum = Cycles::zero();
         let round_log;
         let subnet_available_memory: SubnetAvailableMemory;
         let mut csprng;
@@ -977,6 +978,11 @@ impl Scheduler for SchedulerImpl {
             );
 
             subnet_available_memory = self.exec_env.subnet_available_memory(&state).into();
+
+            for canister in state.canisters_iter_mut() {
+                cycles_in_sum += canister.system_state.balance();
+                cycles_in_sum += canister.system_state.queues().input_queue_cycles();
+            }
         }
 
         // Invoke the heartbeat of the bitcoin canister.
@@ -1107,6 +1113,7 @@ impl Scheduler for SchedulerImpl {
 
         let mut final_state;
         {
+            let mut cycles_out_sum = Cycles::zero();
             let mut total_canister_memory_usage = NumBytes::new(0);
             let _timer = self.metrics.round_finalization_duration.start_timer();
             let own_subnet_type = state.metadata.own_subnet_type;
@@ -1135,6 +1142,21 @@ impl Scheduler for SchedulerImpl {
                         FlagStatus::Disabled => NumInstructions::from(0),
                     };
                 total_canister_memory_usage += canister.memory_usage(own_subnet_type);
+                cycles_out_sum += canister.system_state.balance();
+                cycles_out_sum += canister.system_state.queues().output_queue_cycles();
+            }
+
+            // Check that amount of cycles at the beginning of the round (balances and cycles from input messages) is bigger or equal
+            // than the amount of cycles at the end of the round (balances and cycles from output messages).
+            if cycles_in_sum < cycles_out_sum {
+                warn!(
+                    round_log,
+                    "At Round {} @ time {}, the resulted state after execution does not hold the in-out cycles invariant: cycles at beginning of round {} were fewer than cycles at end of round {}",
+                    current_round,
+                    state.time(),
+                    cycles_in_sum,
+                    cycles_out_sum,
+                );
             }
 
             // Check replicated state invariants still hold after the round execution.

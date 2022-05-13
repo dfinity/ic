@@ -498,8 +498,10 @@ fn test_stats() {
 
     let mut queues = CanisterQueues::default();
     let mut expected_iq_stats = InputQueuesStats::default();
+    let mut expected_oq_stats = OutputQueuesStats::default();
     let mut expected_mu_stats = MemoryUsageStats::default();
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
+    assert_eq!(expected_oq_stats, queues.output_queues_stats);
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
     // Push 3 requests into 3 input queues.
@@ -508,6 +510,7 @@ fn test_stats() {
             .sender(*sender)
             .receiver(this)
             .method_name(&NAME[0..i + 1]) // Vary request size.
+            .payment(Cycles::new(5))
             .build()
             .into();
         msg_size[i] = msg.count_bytes();
@@ -521,8 +524,10 @@ fn test_stats() {
             response_count: 0,
             reserved_slots: 0,
             size_bytes: iq_size + msg_size[i],
+            cycles: Cycles::new(5),
         };
         assert_eq!(expected_iq_stats, queues.input_queues_stats);
+        assert_eq!(expected_oq_stats, queues.output_queues_stats);
         // Pushed a request: one more reserved slot, no reserved response bytes.
         expected_mu_stats.reserved_slots += 1;
         assert_eq!(expected_mu_stats, queues.memory_usage_stats);
@@ -540,8 +545,10 @@ fn test_stats() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: msg_size[0],
+        cycles: Cycles::new(5),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
+    assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // Memory usage stats are unchanged, as the reservation is still there.
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
@@ -549,11 +556,14 @@ fn test_stats() {
     let msg = ResponseBuilder::default()
         .respondent(this)
         .originator(other_1)
+        .refund(Cycles::new(2))
         .build();
     msg_size[3] = msg.count_bytes();
     queues.push_output_response(msg);
     // Input queue stats are unchanged.
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
+    expected_oq_stats.cycles += Cycles::new(2);
+    assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // Consumed a reservation and added a response.
     expected_mu_stats += MemoryUsageStats {
         reserved_slots: -1,
@@ -569,6 +579,7 @@ fn test_stats() {
         .receiver(other_1)
         .method_name(NAME)
         .method_payload(vec![13; MAX_RESPONSE_COUNT_BYTES])
+        .payment(Cycles::new(5))
         .build();
     msg_size[4] = msg.count_bytes();
     queues.push_output_request(msg).unwrap();
@@ -577,12 +588,15 @@ fn test_stats() {
     expected_mu_stats.reserved_slots += 1;
     expected_mu_stats.oversized_requests_extra_bytes += msg_size[4] - MAX_RESPONSE_COUNT_BYTES;
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
+    expected_oq_stats.cycles += Cycles::new(5);
+    assert_eq!(expected_oq_stats, queues.output_queues_stats);
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
     // Call `output_into_iter()` but don't consume any messages.
     queues.output_into_iter(this).peek();
     // Stats should stay unchanged.
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
+    assert_eq!(expected_oq_stats, queues.output_queues_stats);
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
     // Call `output_into_iter()` and consume a single message.
@@ -591,11 +605,15 @@ fn test_stats() {
         .next()
         .expect("could not pop a message")
     {
-        (_, _, RequestOrResponse::Response(msg)) => assert_eq!(msg.originator, other_1),
+        (_, _, RequestOrResponse::Response(msg)) => {
+            expected_oq_stats.cycles -= msg.refund;
+            assert_eq!(msg.originator, other_1)
+        }
         msg => panic!("unexpected message popped: {:?}", msg),
     }
     // No input queue changes.
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
+    assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // But we've consumed the response.
     expected_mu_stats.responses_size_bytes -= msg_size[3];
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
@@ -606,22 +624,28 @@ fn test_stats() {
         .next()
         .expect("could not pop a message")
     {
-        (_, _, RequestOrResponse::Request(msg)) => assert_eq!(msg.receiver, other_1),
+        (_, _, RequestOrResponse::Request(msg)) => {
+            expected_oq_stats.cycles -= msg.payment;
+            assert_eq!(msg.receiver, other_1)
+        }
         msg => panic!("unexpected message popped: {:?}", msg),
     }
     // No input queue changes.
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
+    assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // Oversized request was popped.
     expected_mu_stats.oversized_requests_extra_bytes -= msg_size[4] - MAX_RESPONSE_COUNT_BYTES;
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
     // Ensure no more outgoing messages.
     assert!(queues.output_into_iter(this).next().is_none());
+    expected_oq_stats.cycles = Cycles::new(0);
 
     // And enqueue a matching incoming response.
     let msg: RequestOrResponse = ResponseBuilder::default()
         .respondent(other_1)
         .originator(this)
+        .refund(Cycles::new(5))
         .build()
         .into();
     msg_size[5] = msg.count_bytes();
@@ -634,8 +658,10 @@ fn test_stats() {
         response_count: 1,
         reserved_slots: -1,
         size_bytes: msg_size[5],
+        cycles: Cycles::new(5),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
+    assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // Consumed one reservation, added some response bytes.
     expected_mu_stats += MemoryUsageStats {
         reserved_slots: -1,
@@ -658,8 +684,10 @@ fn test_stats() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: msg_size[1],
+        cycles: Cycles::new(5),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
+    assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // Memory usage stats unchanged, as the reservation is still there.
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
@@ -674,8 +702,10 @@ fn test_stats() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: msg_size[2],
+        cycles: Cycles::new(5),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
+    assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // Memory usage stats unchanged, as the reservation is still there.
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
@@ -690,8 +720,10 @@ fn test_stats() {
         response_count: 1,
         reserved_slots: 0,
         size_bytes: msg_size[5],
+        cycles: Cycles::new(5),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
+    assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // We have consumed the response.
     expected_mu_stats.responses_size_bytes -= msg_size[5];
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
@@ -739,6 +771,7 @@ fn test_stats_induct_message_to_self() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: request_size,
+        cycles: Cycles::from(0),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // We now have reservations (for the same request) in both the input and the
@@ -754,6 +787,7 @@ fn test_stats_induct_message_to_self() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: request_size,
+        cycles: Cycles::from(0),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Memory usage stats unchanged, as the reservations are still there.
@@ -786,6 +820,7 @@ fn test_stats_induct_message_to_self() {
         response_count: 1,
         reserved_slots: -1,
         size_bytes: response_size,
+        cycles: Cycles::from(0),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Consumed input queue reservation but response is still there (in input queue
@@ -801,6 +836,7 @@ fn test_stats_induct_message_to_self() {
         response_count: 1,
         reserved_slots: 0,
         size_bytes: response_size,
+        cycles: Cycles::from(0),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Zero response bytes, zero reservations.

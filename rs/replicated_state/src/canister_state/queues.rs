@@ -12,7 +12,7 @@ use ic_protobuf::{
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
     xnet::{QueueId, SessionId},
-    CanisterId, CountBytes, QueueIndex,
+    CanisterId, CountBytes, Cycles, QueueIndex,
 };
 use queue::{IngressQueue, InputQueue, OutputQueue};
 use std::{
@@ -60,6 +60,9 @@ pub struct CanisterQueues {
     /// Running `input_queues` stats.
     input_queues_stats: InputQueuesStats,
 
+    /// Running `output_queues` stats.
+    output_queues_stats: OutputQueuesStats,
+
     /// Running memory usage stats, across input and output queues.
     memory_usage_stats: MemoryUsageStats,
 
@@ -89,14 +92,18 @@ pub struct CanisterOutputQueuesIterator<'a> {
     size: usize,
 
     /// The canister's memory usage stats, to be updated as messages are popped.
-    stats: &'a mut MemoryUsageStats,
+    memory_stats: &'a mut MemoryUsageStats,
+
+    /// Canister output queue stats, to be updated as messages are popped.
+    queue_stats: &'a mut OutputQueuesStats,
 }
 
 impl<'a> CanisterOutputQueuesIterator<'a> {
     fn new(
         owner: CanisterId,
         queues: &'a mut BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
-        stats: &'a mut MemoryUsageStats,
+        memory_stats: &'a mut MemoryUsageStats,
+        queue_stats: &'a mut OutputQueuesStats,
     ) -> Self {
         let queues: VecDeque<_> = queues
             .iter_mut()
@@ -109,7 +116,8 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
             owner,
             queues,
             size,
-            stats,
+            memory_stats,
+            queue_stats,
         }
     }
 
@@ -142,7 +150,8 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
                 self.queues.push_back((receiver, queue));
             }
 
-            *self.stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
+            *self.memory_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
+            *self.queue_stats -= OutputQueuesStats::stats_delta(&msg);
             self.size -= 1;
             debug_assert_eq!(Self::compute_size(&self.queues), self.size);
 
@@ -226,6 +235,8 @@ impl CanisterQueues {
                             .pop()
                             .expect("peek() returned a message, pop() should not fail")
                             .1;
+                        let oq_stats_delta = OutputQueuesStats::stats_delta(&msg);
+                        self.output_queues_stats -= oq_stats_delta;
                         self.memory_usage_stats -=
                             MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
                     }
@@ -243,6 +254,7 @@ impl CanisterQueues {
             owner,
             &mut self.canister_queues,
             &mut self.memory_usage_stats,
+            &mut self.output_queues_stats,
         )
     }
 
@@ -432,12 +444,15 @@ impl CanisterQueues {
         }
 
         let mu_stats_delta = MemoryUsageStats::request_stats_delta(QueueOp::Push, &msg);
+        let oq_stats_delta =
+            OutputQueuesStats::stats_delta(&RequestOrResponse::Request(msg.clone()));
 
         output_queue
             .push_request(msg)
             .expect("cannot fail due to checks above");
 
         self.input_queues_stats.reserved_slots += 1;
+        self.output_queues_stats += oq_stats_delta;
         self.memory_usage_stats += mu_stats_delta;
         debug_assert!(self.stats_ok());
 
@@ -472,6 +487,8 @@ impl CanisterQueues {
     /// to push the `Response` into.
     pub fn push_output_response(&mut self, msg: Response) {
         let mu_stats_delta = MemoryUsageStats::response_stats_delta(QueueOp::Push, &msg);
+        let oq_stats_delta =
+            OutputQueuesStats::stats_delta(&RequestOrResponse::Response(msg.clone()));
 
         // As long as we are not garbage collecting output queues, we are guaranteed
         // that an output queue should exist for pushing responses because one would
@@ -484,6 +501,7 @@ impl CanisterQueues {
             .push_response(msg);
 
         self.memory_usage_stats += mu_stats_delta;
+        self.output_queues_stats += oq_stats_delta;
         debug_assert!(self.stats_ok());
     }
 
@@ -518,6 +536,8 @@ impl CanisterQueues {
             .pop()
             .expect("Message peeked above so pop should not fail.")
             .1;
+        let oq_stats_delta = OutputQueuesStats::stats_delta(&msg);
+        self.output_queues_stats -= oq_stats_delta;
         self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
 
         Ok(())
@@ -541,6 +561,16 @@ impl CanisterQueues {
     /// Returns the number of reservations across all input queues.
     pub fn input_queues_reservation_count(&self) -> usize {
         self.input_queues_stats.reserved_slots as usize
+    }
+
+    /// Returns total amount of cycles included in input queues.
+    pub fn input_queue_cycles(&self) -> Cycles {
+        self.input_queues_stats.cycles
+    }
+
+    /// Returns total amount of cycles included in the output queues.
+    pub fn output_queue_cycles(&self) -> Cycles {
+        self.output_queues_stats.cycles
     }
 
     /// Returns the total byte size of canister input queues (queues +
@@ -643,6 +673,21 @@ impl CanisterQueues {
             stats.response_count += q.calculate_stat_sum(response_count);
             stats.reserved_slots += q.reserved_slots() as isize;
             stats.size_bytes += q.calculate_size_bytes();
+            stats.cycles += q.cycles_in_queue();
+        }
+        stats
+    }
+
+    /// Computes output queues stats from scratch. Used when deserializing and
+    /// in `debug_assert!()` checks.
+    ///
+    /// Time complexity: O(num_messages).
+    fn calculate_output_queues_stats(
+        canister_queues: &BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
+    ) -> OutputQueuesStats {
+        let mut stats = OutputQueuesStats::default();
+        for (_, q) in canister_queues.values() {
+            stats.cycles += q.cycles_in_queue();
         }
         stats
     }
@@ -753,6 +798,7 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
         }
         let input_queues_stats = Self::calculate_input_queues_stats(&canister_queues);
         let memory_usage_stats = Self::calculate_memory_usage_stats(&canister_queues);
+        let output_queues_stats = Self::calculate_output_queues_stats(&canister_queues);
 
         let next_input_queue =
             match ProtoNextInputQueue::from_i32(item.next_input_queue).unwrap_or_default() {
@@ -783,6 +829,7 @@ impl TryFrom<pb_queues::CanisterQueues> for CanisterQueues {
             ingress_queue: IngressQueue::try_from(item.ingress_queue)?,
             canister_queues,
             input_queues_stats,
+            output_queues_stats,
             memory_usage_stats,
             next_input_queue,
             local_subnet_input_schedule,
@@ -811,6 +858,9 @@ pub struct InputQueuesStats {
 
     /// Byte size of input queues (queues + messages).
     size_bytes: usize,
+
+    /// Total amount of cycles contained in the input messages.
+    cycles: Cycles,
 }
 
 impl InputQueuesStats {
@@ -826,11 +876,13 @@ impl InputQueuesStats {
             (QueueOp::Push, RequestOrResponse::Response(_)) => -1,
             _ => 0,
         };
+
         InputQueuesStats {
             message_count: 1,
             response_count,
             reserved_slots,
             size_bytes: msg.count_bytes(),
+            cycles: msg.cycles(),
         }
     }
 }
@@ -841,6 +893,7 @@ impl AddAssign<InputQueuesStats> for InputQueuesStats {
         self.response_count += rhs.response_count;
         self.reserved_slots += rhs.reserved_slots;
         self.size_bytes += rhs.size_bytes;
+        self.cycles += rhs.cycles;
     }
 }
 
@@ -850,6 +903,40 @@ impl SubAssign<InputQueuesStats> for InputQueuesStats {
         self.response_count -= rhs.response_count;
         self.reserved_slots -= rhs.reserved_slots;
         self.size_bytes -= rhs.size_bytes;
+        self.cycles -= rhs.cycles;
+    }
+}
+
+/// Running stats across output queues.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OutputQueuesStats {
+    /// Total amount of cycles contained in the output queues.
+    cycles: Cycles,
+}
+
+impl OutputQueuesStats {
+    /// Calculates the change in output queue stats caused by pushing (+) or
+    /// popping (-) the given message.
+    fn stats_delta(msg: &RequestOrResponse) -> OutputQueuesStats {
+        let cycles_message = match msg {
+            RequestOrResponse::Response(response) => response.refund,
+            RequestOrResponse::Request(request) => request.payment,
+        };
+        OutputQueuesStats {
+            cycles: cycles_message,
+        }
+    }
+}
+
+impl AddAssign<OutputQueuesStats> for OutputQueuesStats {
+    fn add_assign(&mut self, rhs: OutputQueuesStats) {
+        self.cycles += rhs.cycles;
+    }
+}
+
+impl SubAssign<OutputQueuesStats> for OutputQueuesStats {
+    fn sub_assign(&mut self, rhs: OutputQueuesStats) {
+        self.cycles -= rhs.cycles;
     }
 }
 
@@ -1010,6 +1097,7 @@ enum QueueOp {
 
 pub mod testing {
     use super::{CanisterQueues, MemoryUsageStats, QueueOp};
+    use crate::canister_state::queues::OutputQueuesStats;
     use crate::{InputQueueType, StateError};
     use ic_interfaces::messages::CanisterInputMessage;
     use ic_types::{
@@ -1070,6 +1158,7 @@ pub mod testing {
                 Some((_, canister_out_queue)) => {
                     let ret = canister_out_queue.pop();
                     if let Some((_, msg)) = &ret {
+                        self.output_queues_stats -= OutputQueuesStats::stats_delta(msg);
                         self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, msg);
                     }
                     ret
