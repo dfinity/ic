@@ -190,7 +190,9 @@ pub fn operations_to_requests(
                     neuron_index,
                     spawned_neuron_index,
                     percentage_to_spawn,
-                    controller,
+                    controller
+                        .map(principal_id_from_public_key_or_principal)
+                        .transpose()?,
                 )?;
             }
             OperationType::MergeMaturity => {
