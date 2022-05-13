@@ -145,7 +145,7 @@ if [ -z ${IMG_ID:-} ]; then
         fi
     else
         if [[ "${DISK_IMAGE:0:1}" == / || "${DISK_IMAGE:0:2}" == ~[/a-z] ]]; then
-            image=$disk_image
+            image=$DISK_IMAGE
         else
             image=$CURRENT/$DISK_IMAGE
         fi
@@ -214,9 +214,8 @@ info "$vm_name will get IPv6: $ipv6"
 if [[ -z ${CONFIG_IMAGE:-} ]]; then
     info "Building an example config image ..."
     CONFIG_IMAGE=$TEMPDIR/config.img
-    $REPO_ROOT/ic-os/boundary-guestos/scripts/build-bootstrap-config-image.sh $CONFIG_IMAGE --accounts_ssh_authorized_keys $REPO_ROOT/testnet/config/ssh_authorized_keys
+    $REPO_ROOT/ic-os/boundary-guestos/scripts/build-bootstrap-config-image.sh $CONFIG_IMAGE --accounts_ssh_authorized_keys $REPO_ROOT/testnet/config/ssh_authorized_keys --hostname "test-boundary-guestos-vm-$(whoami)" --deployment-type dev
 else
-
     if [[ "${CONFIG_IMAGE:0:1}" == / || "${CONFIG_IMAGE:0:2}" == ~[/a-z] ]]; then
         cp $CONFIG_IMAGE $TEMPDIR/config.img
     else
