@@ -39,6 +39,45 @@
     <div class="w3-btn w3-green w3-large">
       {{latest_approx_mainnet_query_performance}} querys/s
     </div>
+
+    <h1>Energy consumption</h1>
+
+    <div>
+      The following is an approximation of mainnet power consumption.
+      The peak power consumption of our nodes is <span class="w3-tag w3-light-grey exp_value">{{watts_per_node}}W</span>.
+    </div>
+    
+    <div>
+      If we assume a power usage effectiveness (PUE)
+      <sup>
+        <a href="https://en.wikipedia.org/wiki/Power_usage_effectiveness">1,</a>
+        <a href="https://energyinnovation.org/2020/03/17/how-much-energy-do-data-centers-really-use/">2</a>,
+      </sup>
+      of, <span class="w3-tag w3-light-grey exp_value">{{pue}}</span>
+      that leads to a total power consumption of <span class="w3-tag w3-light-grey exp_value">{{watts_per_node_total}}W</span>
+      including cooling and other data center operations csosts.
+    </div>
+    
+    <div>
+      Given a total of <span class="w3-tag w3-light-grey exp_value">{{num_nodes}}</span> nodes
+      and <span class="w3-tag w3-light-grey exp_value">{{num_boundary_nodes}}</span> in mainnet, that results in a
+      worst case of <span class="w3-tag w3-light-grey exp_value">{{watts_ic}}W</span> to operate all IC nodes for mainnet.
+      That's a worst case analysis for power consumption of nodes because we would normally expect them to throttle
+      when not fully utilized and thereby reducing power consumption.
+    </div>
+    
+    <div>
+      Given the maximum rate of upates and queries that we can
+      currently support in the IC, one update call would consume
+      <span class="w3-tag w3-light-grey exp_value">{{joules_per_update_at_capacity}}J</span> (Joules) and one query call
+      <span class="w3-tag w3-light-grey exp_value">{{joules_per_query_at_capacity}}J</span>. Those numbers are for a
+      hypothetical fully utilized IC.
+    </div>
+    
+    <div>
+      With the current approximate rate of <span class="w3-tag w3-light-grey exp_value">{{transaction_current}}</span> transactions/s,
+      the IC needs <span class="w3-tag w3-light-grey exp_value">{{joules_per_transaction_current}}J</span> per transaction.
+    </div>
     
     <h1>CD performance results</h1>
 
@@ -53,9 +92,21 @@
 
     <div id="plot-exp1-query" class="plot"></div>
     <script>
+      const plot_exp1_links = new Map();
+      {{#each plot_exp1_query.data}}
+        plot_exp1_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+      
       window.addEventListener("load", function(event) {
           plot = document.getElementById('plot-exp1-query');
           Plotly.newPlot(plot, {{{plot_exp1_query.plot}}},  {{{plot_exp1_query.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp1_links.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
       }, false);
     </script>
 
@@ -74,9 +125,20 @@
 
     <div id="plot-exp1-update" class="plot"></div>
     <script>
+      const plot_exp1_update_links = new Map();
+      {{#each plot_exp1_update.data}}
+        plot_exp1_update_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
       window.addEventListener("load", function(event) {
           plot = document.getElementById('plot-exp1-update');
           Plotly.newPlot( plot, {{{plot_exp1_update.plot}}},  {{{plot_exp1_update.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp1_update_links.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
       }, false);
     </script>
 
@@ -105,9 +167,20 @@
 
     <div id="plot-exp2-update" class="plot"></div>
     <script>
+      const plot_exp2_update_links = new Map();
+      {{#each plot_exp2_update.data}}
+        plot_exp2_update_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
       window.addEventListener("load", function(event) {
           plot = document.getElementById('plot-exp2-update');
           Plotly.newPlot( plot, {{{ plot_exp2_update.plot }}},  {{{plot_exp2_update.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp2_update_links.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
 
       }, false);
     </script>
@@ -127,9 +200,20 @@
 
     <div id="plot-exp2-query" class="plot"></div>
     <script>
+      const plot_exp2_query_links = new Map();
+      {{#each plot_exp2_query.data}}
+        plot_exp2_query_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
       window.addEventListener("load", function(event) {
           plot = document.getElementById('plot-exp2-query');
           Plotly.newPlot( plot, {{{ plot_exp2_query.plot }}},  {{{plot_exp2_query.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp2_query_links.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
 
       }, false);
     </script>

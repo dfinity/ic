@@ -312,7 +312,7 @@ class BaseExperiment:
 
     def get_mainnet_nns_url():
         """Get NNS url for mainnet."""
-        return "2001:920:401a:1708:5000:4fff:fe92:48f1"
+        return "2001:920:401a:1710:5000:d7ff:fe6f:fde7"
 
     def _get_nns_url(self):
         """
