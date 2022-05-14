@@ -675,9 +675,13 @@ fn free_pages(mut pages: Vec<PagePtr>) {
 
 // A platform-specific function that creates the backing file of the page allocator.
 // On Linux it uses `memfd_create` to create an in-memory file.
-// On MacOS it uses an ordinary temporary file.
+// On MacOS and WSL it uses an ordinary temporary file.
 #[cfg(target_os = "linux")]
 fn create_backing_file() -> RawFd {
+    if *ic_sys::IS_WSL {
+        return create_backing_file_portable();
+    }
+
     match nix::sys::memfd::memfd_create(
         &std::ffi::CString::default(),
         nix::sys::memfd::MemFdCreateFlag::empty(),
@@ -691,8 +695,13 @@ fn create_backing_file() -> RawFd {
         }
     }
 }
+
 #[cfg(not(target_os = "linux"))]
 fn create_backing_file() -> RawFd {
+    create_backing_file_portable()
+}
+
+fn create_backing_file_portable() -> RawFd {
     use std::os::unix::io::IntoRawFd;
     match tempfile::tempfile() {
         Ok(file) => file.into_raw_fd(),
