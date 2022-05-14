@@ -26,6 +26,7 @@ use std::time::{Duration, SystemTime};
 pub mod account_identifier;
 pub mod tokens;
 #[rustfmt::skip]
+#[allow(clippy::all)]
 #[path = "../gen/ic_ledger.pb.v1.rs"]
 pub mod protobuf;
 pub mod range_utils;

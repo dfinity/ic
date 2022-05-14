@@ -1,4 +1,5 @@
 #[rustfmt::skip]
+#[allow(clippy::all)]
 pub mod v1 {
     include!("../../gen/registry/registry.dc.v1.rs");
     use std::fmt;

@@ -1,4 +1,5 @@
 #[rustfmt::skip]
+#[allow(clippy::all)]
 pub mod v2 {
     include!("../../gen/registry/registry.node_rewards.v2.rs");
     use std::iter::Extend;
@@ -248,6 +249,7 @@ pub mod v2 {
 
 /// DEPRECATED
 #[rustfmt::skip]
+#[allow(clippy::all)]
 pub mod v1 {
     include!("../../gen/registry/registry.node_rewards.v1.rs");
     use std::collections::{BTreeMap, HashMap};
