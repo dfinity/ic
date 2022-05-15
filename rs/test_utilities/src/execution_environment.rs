@@ -206,8 +206,6 @@ pub struct ExecutionTest {
     subnet_available_memory: SubnetAvailableMemory,
     // The number of instructions executed so far.
     executed_instructions: NumInstructions,
-    // The number of heap delta bytes produced so far.
-    produced_heap_delta: NumBytes,
 
     // Read-only fields.
     instruction_limit: NumInstructions,
@@ -219,6 +217,7 @@ pub struct ExecutionTest {
     // The actual implementation.
     exec_env: ExecutionEnvironmentImpl,
     cycles_account_manager: Arc<CyclesAccountManager>,
+    metrics_registry: MetricsRegistry,
 }
 
 impl ExecutionTest {
@@ -241,8 +240,12 @@ impl ExecutionTest {
         self.executed_instructions
     }
 
-    pub fn produced_heap_delta(&self) -> NumBytes {
-        self.produced_heap_delta
+    pub fn subnet_available_memory(&self) -> AvailableMemory {
+        self.subnet_available_memory.get()
+    }
+
+    pub fn metrics_registry(&self) -> &MetricsRegistry {
+        &self.metrics_registry
     }
 
     /// Sends a `create_canister` message to the IC management canister.
@@ -278,6 +281,26 @@ impl ExecutionTest {
     ) -> Result<(), UserError> {
         let args = InstallCodeArgs::new(
             CanisterInstallMode::Install,
+            canister_id,
+            wasm_binary,
+            vec![],
+            None,
+            None,
+            None,
+        );
+        let result = self.install_code(args)?;
+        assert_eq!(WasmResult::Reply(EmptyBlob::encode()), result);
+        Ok(())
+    }
+
+    /// Installs the given canister with the given Wasm binary.
+    pub fn upgrade_canister(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_binary: Vec<u8>,
+    ) -> Result<(), UserError> {
+        let args = InstallCodeArgs::new(
+            CanisterInstallMode::Upgrade,
             canister_id,
             wasm_binary,
             vec![],
@@ -356,9 +379,9 @@ impl ExecutionTest {
             self.subnet_available_memory.clone(),
         );
         state.put_canister_state(exec_result.canister);
+        state.metadata.heap_delta_estimate += exec_result.heap_delta;
         self.state = Some(state);
         self.executed_instructions += self.instruction_limit - exec_result.num_instructions_left;
-        self.produced_heap_delta += exec_result.heap_delta;
         let ingress_status = match exec_result.result {
             ExecResult::ResponseResult(_) | ExecResult::Empty => {
                 unreachable!("Unexpected execution result {:?}", exec_result.result)
@@ -403,15 +426,13 @@ impl ExecutionTest {
             self.subnet_available_memory.clone(),
         );
         state.put_canister_state(canister);
+        if let Ok(heap_delta) = result {
+            state.metadata.heap_delta_estimate += heap_delta;
+        }
         self.state = Some(state);
         self.executed_instructions += self.instruction_limit - num_instructions_left;
-        match result {
-            Ok(heap_delta) => {
-                self.produced_heap_delta += heap_delta;
-                Ok(())
-            }
-            Err(err) => Err(err),
-        }
+        result?;
+        Ok(())
     }
 
     /// Executes an anonymous query in the given canister.
@@ -707,7 +728,6 @@ impl ExecutionTestBuilder {
             state: Some(state),
             message_id: 0,
             executed_instructions: NumInstructions::from(0),
-            produced_heap_delta: NumBytes::from(0),
             subnet_available_memory: SubnetAvailableMemory::from(AvailableMemory::new(
                 self.subnet_available_memory,
                 self.subnet_available_memory,
@@ -719,6 +739,7 @@ impl ExecutionTestBuilder {
             user_id: user_test_id(1),
             exec_env,
             cycles_account_manager,
+            metrics_registry,
         }
     }
 }
