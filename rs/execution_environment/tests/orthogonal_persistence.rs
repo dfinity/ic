@@ -1,135 +1,9 @@
-use ic_config::execution_environment::Config;
-use ic_execution_environment::{Hypervisor, QueryExecutionType};
-use ic_interfaces::execution_environment::AvailableMemory;
-use ic_interfaces::{
-    execution_environment::{ExecutionMode, ExecutionParameters},
-    messages::RequestOrIngress,
-};
-use ic_logger::ReplicaLogger;
-use ic_metrics::MetricsRegistry;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallContextAction, CanisterState, NetworkTopology, SubnetTopology};
-use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder, mock_time, state::SystemStateBuilder,
-    types::ids::subnet_test_id, types::ids::user_test_id, types::messages::IngressBuilder,
-    with_test_replica_logger,
-};
-use ic_types::{
-    ingress::WasmResult, CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions,
-};
-use maplit::btreemap;
+use ic_test_utilities::execution_environment::{ExecutionTest, ExecutionTestBuilder};
+use ic_types::{ingress::WasmResult, CanisterId};
 use proptest::{
     prelude::*,
     test_runner::{TestRng, TestRunner},
 };
-use std::{convert::TryFrom, sync::Arc};
-
-fn execution_parameters() -> ExecutionParameters {
-    ExecutionParameters {
-        total_instruction_limit: NumInstructions::new(1_000_000_000),
-        slice_instruction_limit: NumInstructions::new(1_000_000_000),
-        canister_memory_limit: NumBytes::new(u64::MAX / 2),
-        subnet_available_memory: AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into(),
-        compute_allocation: ComputeAllocation::default(),
-        subnet_type: SubnetType::Application,
-        execution_mode: ExecutionMode::Replicated,
-    }
-}
-
-struct HypervisorTest {
-    hypervisor: Hypervisor,
-    canister: CanisterState,
-    network_topology: Arc<NetworkTopology>,
-}
-
-impl HypervisorTest {
-    fn init(wast: &str, log: ReplicaLogger) -> Self {
-        let subnet_id = subnet_test_id(1);
-        let subnet_type = SubnetType::Application;
-        let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
-            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
-        }).unwrap());
-        let network_topology = Arc::new(NetworkTopology {
-            routing_table,
-            subnets: btreemap!(
-                subnet_id => SubnetTopology {
-                    subnet_type,
-                    ..SubnetTopology::default()
-                }
-            ),
-            ..NetworkTopology::default()
-        });
-        let registry = MetricsRegistry::new();
-        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let hypervisor = Hypervisor::new(
-            Config::default(),
-            &registry,
-            subnet_id,
-            subnet_type,
-            log,
-            cycles_account_manager,
-        );
-        let wasm_binary = wabt::wat2wasm(wast).unwrap();
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let system_state = SystemStateBuilder::default()
-            .memory_allocation(NumBytes::new(8 * 1024 * 1024 * 1024)) // 8GiB
-            .build();
-        let execution_state = hypervisor
-            .create_execution_state(
-                wasm_binary,
-                tmpdir.path().to_path_buf(),
-                system_state.canister_id(),
-            )
-            .unwrap();
-
-        let canister = CanisterState {
-            system_state,
-            execution_state: Some(execution_state),
-            scheduler_state: Default::default(),
-        };
-
-        Self {
-            hypervisor,
-            canister,
-            network_topology,
-        }
-    }
-
-    fn update(&mut self, method_name: &str, method_payload: Vec<u8>) -> CallContextAction {
-        let ingress = IngressBuilder::new()
-            .method_name(method_name.to_string())
-            .method_payload(method_payload)
-            .source(user_test_id(24))
-            .build();
-
-        let (canister, _, action, _) = self.hypervisor.execute_update(
-            self.canister.clone(),
-            RequestOrIngress::Ingress(ingress),
-            mock_time(),
-            self.network_topology.clone(),
-            execution_parameters(),
-        );
-        self.canister = canister;
-        action
-    }
-
-    fn query(&mut self, method_name: &str, method_payload: Vec<u8>) -> Option<WasmResult> {
-        let (canister, _, result) = self.hypervisor.execute_query(
-            QueryExecutionType::Replicated,
-            method_name,
-            method_payload.as_slice(),
-            user_test_id(24).get(),
-            self.canister.clone(),
-            None,
-            mock_time(),
-            execution_parameters(),
-        );
-
-        self.canister = canister;
-        result.unwrap()
-    }
-}
 
 fn make_module_wat(heap_size: usize) -> String {
     format!(
@@ -206,26 +80,22 @@ fn random_writes(heap_size: usize, num_writes: usize) -> impl Strategy<Value = V
     prop::collection::vec(write_strategy, 1..num_writes)
 }
 
-fn write_bytes(t: &mut HypervisorTest, dst: u32, bytes: &[u8]) {
+fn write_bytes(test: &mut ExecutionTest, canister_id: CanisterId, dst: u32, bytes: &[u8]) {
     println!("write_bytes(dst: {}, bytes: {:?})", dst, bytes);
     let mut payload = dst.to_le_bytes().to_vec();
     payload.extend(bytes.iter());
-    let action = t.update("write_bytes", payload);
-    assert_eq!(
-        action,
-        CallContextAction::Reply {
-            payload: vec![],
-            refund: Cycles::from(0),
-        }
-    );
+    let result = test.ingress(canister_id, "write_bytes", payload).unwrap();
+    assert_eq!(WasmResult::Reply(vec![]), result);
 }
 
-fn dump_heap(t: &mut HypervisorTest) -> Vec<u8> {
+fn dump_heap(test: &mut ExecutionTest, canister_id: CanisterId) -> Vec<u8> {
     println!("dump_heap()");
-    if let Some(WasmResult::Reply(canister_heap)) = t.query("dump_heap", vec![]) {
-        canister_heap
-    } else {
-        panic!("expected a payload")
+    let result = test.ingress(canister_id, "dump_heap", vec![]).unwrap();
+    match result {
+        WasmResult::Reply(canister_heap) => canister_heap,
+        WasmResult::Reject(error) => {
+            panic!("failed to dump heap: {}", error)
+        }
     }
 }
 
@@ -263,20 +133,19 @@ fn test_orthogonal_persistence() {
         .run(
             &random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES),
             |writes| {
-                with_test_replica_logger(|log| {
-                    let mut heap = vec![0; TEST_HEAP_SIZE_BYTES];
-                    let wat = make_module_wat(TEST_NUM_PAGES);
-                    let mut t = HypervisorTest::init(&wat, log);
+                let mut test = ExecutionTestBuilder::new().build();
+                let mut heap = vec![0; TEST_HEAP_SIZE_BYTES];
+                let wat = make_module_wat(TEST_NUM_PAGES);
+                let canister_id = test.canister_from_wat(wat).unwrap();
 
-                    for w in &writes {
-                        buf_apply_write(&mut heap, w);
-                        write_bytes(&mut t, w.dst, &w.bytes);
-                        // verify the heap
-                        let canister_heap = dump_heap(&mut t);
-                        prop_assert_eq!(&heap[..], &canister_heap[..]);
-                    }
-                    Ok(())
-                })
+                for w in &writes {
+                    buf_apply_write(&mut heap, w);
+                    write_bytes(&mut test, canister_id, w.dst, &w.bytes);
+                    // verify the heap
+                    let canister_heap = dump_heap(&mut test, canister_id);
+                    prop_assert_eq!(&heap[..], &canister_heap[..]);
+                }
+                Ok(())
             },
         )
         .unwrap();
