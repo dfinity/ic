@@ -677,7 +677,8 @@ fn can_get_canister_information() {
                 num_cycles.get(),
                 ComputeAllocation::default().as_percent(),
                 None,
-                2592000
+                2592000,
+                0f64,
             )
         );
 
@@ -727,7 +728,8 @@ fn can_get_canister_information() {
                     num_cycles.get(),
                     ComputeAllocation::default().as_percent(),
                     None,
-                    2592000
+                    259200,
+                    0f64,
                 ),
                 CanisterStatusResultV2::decode(&res).unwrap(),
                 2 * BALANCE_EPSILON,

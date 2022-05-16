@@ -863,6 +863,11 @@ impl CanisterManager {
             .copied()
             .collect::<Vec<PrincipalId>>();
 
+        let canister_memory_usage = canister.memory_usage(self.config.own_subnet_type);
+        let compute_allocation = canister.scheduler_state.compute_allocation;
+        let memory_allocation = canister.memory_allocation();
+        let freeze_threshold = canister.system_state.freeze_threshold;
+
         Ok(CanisterStatusResultV2::new(
             canister.status(),
             canister
@@ -871,11 +876,16 @@ impl CanisterManager {
                 .map(|es| es.wasm_binary.binary.module_hash().to_vec()),
             *controller,
             controllers,
-            canister.memory_usage(self.config.own_subnet_type),
+            canister_memory_usage,
             canister.system_state.balance().get(),
-            canister.scheduler_state.compute_allocation.as_percent(),
-            Some(canister.memory_allocation().bytes().get()),
-            canister.system_state.freeze_threshold.get(),
+            compute_allocation.as_percent(),
+            Some(memory_allocation.bytes().get()),
+            freeze_threshold.get(),
+            self.cycles_account_manager.idle_cycles_burned_rate(
+                memory_allocation,
+                canister_memory_usage,
+                compute_allocation,
+            ),
         ))
     }
 

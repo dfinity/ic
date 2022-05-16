@@ -132,6 +132,30 @@ impl CyclesAccountManager {
         self.config.xnet_byte_transmission_fee * Cycles::from(payload_size.get())
     }
 
+    // Returns the idle resource consumption rate in cycles per second.
+    pub fn idle_cycles_burned_rate(
+        &self,
+        memory_allocation: MemoryAllocation,
+        memory_usage: NumBytes,
+        compute_allocation: ComputeAllocation,
+    ) -> f64 {
+        let one_gib = 1 << 30;
+
+        let memory_fee = {
+            let memory = match memory_allocation {
+                MemoryAllocation::Reserved(bytes) => bytes,
+                MemoryAllocation::BestEffort => memory_usage,
+            };
+            (memory.get() as f64 * self.config.gib_storage_per_second_fee.get() as f64)
+                / one_gib as f64
+        };
+
+        let compute_fee = compute_allocation.as_percent() as f64
+            * self.config.compute_percent_allocated_per_second_fee.get() as f64;
+
+        memory_fee + compute_fee
+    }
+
     /// Returns the freezing threshold for this canister in Cycles.
     pub fn freeze_threshold_cycles(
         &self,
