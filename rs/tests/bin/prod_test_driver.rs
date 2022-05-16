@@ -478,6 +478,15 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_same_subnet,
                 )])
             ),
+            /* TODO: Enable when https://gitlab.com/dfinity-lab/public/ic/-/merge_requests/4860 and https://gitlab.com/dfinity-lab/public/ic/-/merge_requests/4971 are completed.
+            pot_with_setup(
+                "tecdsa_signature_life_cycle",
+                tecdsa::tecdsa_signature_test::config_without_ecdsa_on_nns,
+                seq(vec![t(
+                    "test_threshold_ecdsa_life_cycle",
+                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_life_cycle,
+                )])
+            ), */
             /* This test is WIP (#CON-779)
             pot_with_setup(
                 "tecdsa_signature_from_other_subnet_pot",

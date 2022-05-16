@@ -31,7 +31,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::info;
 
-const DKG_INTERVAL: u64 = 14;
+use super::tecdsa_signature_test::DKG_INTERVAL;
+
 const NODES_COUNT: usize = 4;
 const REMOVE_NODES_COUNT: usize = (NODES_COUNT / 3) + 1;
 
@@ -64,7 +65,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         assert_endpoints_reachability(endpoints.as_slice(), EndpointsStatus::AllReachable).await;
         let agent = assert_create_agent(endpoints[0].url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
-        let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx).await;
+        let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
+            .await
+            .unwrap();
         (uni_can.canister_id(), public_key)
     });
 
@@ -105,7 +108,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     block_on(async {
         let agent = assert_create_agent(endpoints[0].url.as_str()).await;
         let uni_can = UniversalCanister::from_canister_id(&agent, canister_id);
-        let public_key_ = get_public_key(make_key(KEY_ID1), &uni_can, ctx).await;
+        let public_key_ = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
+            .await
+            .unwrap();
         assert_eq!(public_key, public_key_);
         let signature = get_signature(
             &message_hash,
