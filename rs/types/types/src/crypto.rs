@@ -311,6 +311,8 @@ pub enum CryptoError {
     },
     /// Root subnet public key not found at given registry version.
     RootSubnetPublicKeyNotFound { registry_version: RegistryVersion },
+    /// Internal error.
+    InternalError { internal_error: String },
 }
 
 impl From<ThresholdSigPublicKeyBytesConversionError> for CryptoError {
@@ -542,7 +544,9 @@ impl fmt::Debug for CryptoError {
                 f,
                 "Cannot find root subnet public key at registry version {:?}",
                 registry_version
-            )
+            ),
+            CryptoError::InternalError { internal_error } =>
+                write!(f, "Internal error {}", internal_error),
         }
     }
 }

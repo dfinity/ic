@@ -449,7 +449,7 @@ mod verify_dealing_error_conversions {
 }
 
 mod retain_active_keys_error_conversions {
-    use crate::api::ni_dkg_errors::CspDkgUpdateFsEpochError;
+    use crate::api::ni_dkg_errors::{CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError};
     use ic_types::crypto::error::InternalError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
 
@@ -465,6 +465,18 @@ mod retain_active_keys_error_conversions {
                     DkgKeyRemovalError::FsKeyNotInSecretKeyStoreError(e)
                 }
                 CspDkgUpdateFsEpochError::InternalError(e) => {
+                    DkgKeyRemovalError::InternalError(InternalError {
+                        internal_error: e.internal_error,
+                    })
+                }
+            }
+        }
+    }
+
+    impl From<CspDkgRetainThresholdKeysError> for DkgKeyRemovalError {
+        fn from(dkg_retain_threshold_keys_error: CspDkgRetainThresholdKeysError) -> Self {
+            match dkg_retain_threshold_keys_error {
+                CspDkgRetainThresholdKeysError::InternalError(e) => {
                     DkgKeyRemovalError::InternalError(InternalError {
                         internal_error: e.internal_error,
                     })

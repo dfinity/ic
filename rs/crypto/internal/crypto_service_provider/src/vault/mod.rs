@@ -1,8 +1,8 @@
 use crate::api::CspThresholdSignError;
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
-    CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError, CspTlsKeygenError,
-    CspTlsSignError,
+    CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspThresholdSignatureKeygenError,
+    CspTlsKeygenError, CspTlsSignError,
 };
 use ic_types::crypto::CryptoError;
 
@@ -175,6 +175,16 @@ impl From<CspMultiSignatureKeygenError> for CryptoError {
                 CryptoError::InvalidArgument {
                     message: internal_error,
                 }
+            }
+        }
+    }
+}
+
+impl From<CspSecretKeyStoreContainsError> for CryptoError {
+    fn from(e: CspSecretKeyStoreContainsError) -> Self {
+        match e {
+            CspSecretKeyStoreContainsError::InternalError { internal_error } => {
+                CryptoError::InternalError { internal_error }
             }
         }
     }

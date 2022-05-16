@@ -25,7 +25,8 @@ use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateDealingError, CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError,
     CspDkgCreateReshareTranscriptError, CspDkgCreateTranscriptError, CspDkgLoadPrivateKeyError,
-    CspDkgUpdateFsEpochError, CspDkgVerifyDealingError, CspDkgVerifyReshareDealingError,
+    CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError, CspDkgVerifyDealingError,
+    CspDkgVerifyReshareDealingError,
 };
 use ic_crypto_internal_threshold_sig_ecdsa::{
     CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
@@ -238,7 +239,10 @@ mock! {
             receiver_index: u32,
         ) -> Result<(), CspDkgLoadPrivateKeyError>;
 
-        fn retain_threshold_keys_if_present(&self, active_keys: BTreeSet<CspPublicCoefficients>);
+        fn retain_threshold_keys_if_present(
+            &self,
+            active_keys: BTreeSet<CspPublicCoefficients>
+        ) -> Result<(), CspDkgRetainThresholdKeysError>;
     }
 
     pub trait DistributedKeyGenerationCspClient {
@@ -328,8 +332,8 @@ mock! {
     }
 
     pub trait CspSecretKeyStoreChecker {
-        fn sks_contains(&self, id: &KeyId) -> bool;
-        fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> bool;
+        fn sks_contains(&self, id: &KeyId) -> Result<bool, CryptoError>;
+        fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> Result<bool, CryptoError>;
     }
 
     #[async_trait]

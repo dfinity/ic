@@ -281,11 +281,15 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
         }
     }
 
-    fn retain_threshold_keys_if_present(&self, active_key_ids: BTreeSet<KeyId>) {
+    fn retain_threshold_keys_if_present(
+        &self,
+        active_key_ids: BTreeSet<KeyId>,
+    ) -> Result<(), ni_dkg_errors::CspDkgRetainThresholdKeysError> {
         debug!(self.logger; crypto.method_name => "retain_threshold_keys_if_present");
         self.sks_write_lock().retain(
             |key_id, _| active_key_ids.contains(key_id),
             NIDKG_THRESHOLD_SCOPE,
-        )
+        );
+        Ok(())
     }
 }

@@ -90,6 +90,11 @@ pub enum CspThresholdSignatureKeygenError {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CspSecretKeyStoreContainsError {
+    InternalError { internal_error: String },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspTlsKeygenError {
     InternalError { internal_error: String },
 }
@@ -354,7 +359,10 @@ pub trait NiDkgCspVault {
     /// secret key store, that key will be ignored.
     /// # Arguments
     /// * `active_key_ids` identifies threshold keys that should be retained
-    fn retain_threshold_keys_if_present(&self, active_key_ids: BTreeSet<KeyId>);
+    fn retain_threshold_keys_if_present(
+        &self,
+        active_key_ids: BTreeSet<KeyId>,
+    ) -> Result<(), ni_dkg_errors::CspDkgRetainThresholdKeysError>;
 }
 
 /// Operations of `CspVault` related to querying the secret key store (cf.
@@ -363,7 +371,7 @@ pub trait SecretKeyStoreCspVault {
     /// Checks whether the secret key store contains a key with the given
     /// `key_id`. # Arguments
     /// * `key_id` identifies the key whose presence should be checked.
-    fn sks_contains(&self, key_id: &KeyId) -> bool;
+    fn sks_contains(&self, key_id: &KeyId) -> Result<bool, CspSecretKeyStoreContainsError>;
 
     // TODO(CRP-1326): remove this method.
     fn insert_secret_key(
