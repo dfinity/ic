@@ -23,7 +23,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal::unix::{signal, SignalKind};
-use tokio::task;
 
 #[cfg(target_os = "linux")]
 mod jemalloc_metrics;
@@ -253,8 +252,9 @@ async fn run() -> io::Result<()> {
     setup::create_consensus_pool_dir(&config);
 
     let crypto = Arc::new(crypto);
+    let rt_handle = tokio::runtime::Handle::current();
     let _metrics = MetricsRuntimeImpl::new(
-        tokio::runtime::Handle::current(),
+        rt_handle.clone(),
         config.metrics.clone(),
         metrics_registry.clone(),
         registry.clone(),
@@ -285,7 +285,7 @@ async fn run() -> io::Result<()> {
         _xnet_endpoint,
     ) = ic_replica::setup_p2p::construct_ic_stack(
         logger.clone(),
-        tokio::runtime::Handle::current(),
+        rt_handle.clone(),
         config.clone(),
         subnet_config,
         node_id,
@@ -301,7 +301,7 @@ async fn run() -> io::Result<()> {
 
     let malicious_behaviour = &config.malicious_behaviour;
 
-    task::spawn(ic_http_handler::start_server(
+    rt_handle.spawn(ic_http_handler::start_server(
         metrics_registry.clone(),
         config.http_handler.clone(),
         ingress_message_filter,
@@ -318,7 +318,7 @@ async fn run() -> io::Result<()> {
         config.artifact_pool.backup.map(|config| config.spool_path),
         subnet_type,
         malicious_behaviour.malicious_flags.clone(),
-        tokio::runtime::Handle::current(),
+        rt_handle.clone(),
     ));
 
     tokio::time::sleep(Duration::from_millis(5000)).await;

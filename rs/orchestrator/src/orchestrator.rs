@@ -80,6 +80,7 @@ impl Orchestrator {
 
         let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
             logger.clone(),
+            tokio::runtime::Handle::current(),
             Some(node_id),
             &config,
         ));
@@ -319,6 +320,7 @@ impl Orchestrator {
 
         let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
             logger.clone(),
+            tokio::runtime::Handle::current(),
             Some(node_id),
             &config,
         ));

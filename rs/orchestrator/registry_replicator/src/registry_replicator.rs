@@ -63,6 +63,7 @@ pub struct RegistryReplicator {
 impl RegistryReplicator {
     pub fn new(
         logger: ReplicaLogger,
+        rt_handle: tokio::runtime::Handle,
         node_id: Option<NodeId>,
         local_store_path: PathBuf,
         poll_delay: Duration,
@@ -70,6 +71,7 @@ impl RegistryReplicator {
         // Initialize registry client and start polling/caching *local* store for
         // updates
         let registry_client = Self::initialize_registry_client(create_data_provider(
+            rt_handle,
             &DataProviderConfig::LocalStore(local_store_path.clone()),
             // We set the NNS public key to `None` and thus disable registry data signature
             // verification while reading from the local store. The verfication happens in
@@ -95,6 +97,7 @@ impl RegistryReplicator {
 
     pub fn new_from_config(
         logger: ReplicaLogger,
+        rt_handle: tokio::runtime::Handle,
         node_id: Option<NodeId>,
         config: &Config,
     ) -> Self {
@@ -113,7 +116,7 @@ impl RegistryReplicator {
         let poll_delay =
             std::time::Duration::from_millis(config.nns_registry_replicator.poll_delay_duration_ms);
 
-        Self::new(logger, node_id, local_store_path, poll_delay)
+        Self::new(logger, rt_handle, node_id, local_store_path, poll_delay)
     }
 
     /// initialize a new registry client and start polling the given data

@@ -73,6 +73,7 @@ async fn main() -> Result<()> {
     };
 
     let data_provider = create_data_provider(
+        tokio::runtime::Handle::current(),
         &DataProviderConfig::RegistryCanisterUrl(config.nns.urls.clone()),
         nns_public_key,
     );

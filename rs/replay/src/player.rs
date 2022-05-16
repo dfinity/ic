@@ -115,6 +115,7 @@ impl Player {
         // up the execution state before.
         if start_height == 0 {
             let data_provider = create_data_provider(
+                tokio::runtime::Handle::current(),
                 &DataProviderConfig::LocalStore(registry_local_store_path.into()),
                 None,
             );
@@ -130,7 +131,11 @@ impl Player {
             }
         }
 
-        let data_provider = create_data_provider(data_provided_config, None);
+        let data_provider = create_data_provider(
+            tokio::runtime::Handle::current(),
+            data_provided_config,
+            None,
+        );
         let registry = Arc::new(RegistryClientImpl::new(data_provider, None));
         registry
             .poll_once()
@@ -184,7 +189,11 @@ impl Player {
     pub async fn new(cfg: Config, subnet_id: SubnetId) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
         let metrics_registry = MetricsRegistry::new();
-        let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
+        let registry = setup_registry(
+            tokio::runtime::Handle::current(),
+            cfg.clone(),
+            Some(&metrics_registry),
+        );
 
         let mut replica_version = Default::default();
         let consensus_pool = if cfg.artifact_pool.consensus_pool_path.exists() {
@@ -833,10 +842,12 @@ fn write_records_to_local_store(
 }
 
 fn setup_registry(
+    rt_handle: tokio::runtime::Handle,
     config: Config,
     metrics_registry: Option<&MetricsRegistry>,
 ) -> std::sync::Arc<RegistryClientImpl> {
     let data_provider = create_data_provider(
+        rt_handle,
         &config
             .registry_client
             .data_provider

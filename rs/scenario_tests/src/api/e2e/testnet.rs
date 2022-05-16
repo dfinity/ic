@@ -58,6 +58,7 @@ pub fn registry_client(
         parse_threshold_sig_key(&PathBuf::from(&path)).expect("Unable to parse public key file")
     });
     let data_provider = create_data_provider(
+        tokio::runtime::Handle::current(),
         &DataProviderConfig::RegistryCanisterUrl(vec![nns_url]),
         nns_public_key,
     );
