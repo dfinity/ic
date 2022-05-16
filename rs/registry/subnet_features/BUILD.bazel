@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "subnet_features",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_registry_subnet_features",
+    edition = "2018",
+    deps = [
+        "//rs/protobuf",
+        "//rs/types/ic00_types",
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+    ],
+)
+
+rust_test(
+    name = "subnet_features_test",
+    crate = ":subnet_features",
+)
