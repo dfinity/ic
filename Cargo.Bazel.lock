@@ -1,5 +1,5 @@
 {
-  "checksum": "40b78a2fb9e8ce4efa8a1cd30f3aab3ab6efd47eeb045c338946ecd8c171273c",
+  "checksum": "a805e4831182e51c274f10448bc342f692911c16ef2d78eaf5de5fd79957e8d9",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -3557,6 +3557,10 @@
               "target": "features"
             },
             {
+              "id": "float-cmp 0.9.0",
+              "target": "float_cmp"
+            },
+            {
               "id": "futures 0.3.21",
               "target": "futures"
             },
@@ -4149,6 +4153,53 @@
         "version": "1.0.23"
       },
       "license": "MIT/Apache-2.0"
+    },
+    "float-cmp 0.9.0": {
+      "name": "float-cmp",
+      "version": "0.9.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/float-cmp/0.9.0/download",
+          "sha256": "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "float_cmp",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "float_cmp",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default",
+          "num-traits",
+          "ratio"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "num-traits 0.2.15",
+              "target": "num_traits"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.9.0"
+      },
+      "license": "MIT"
     },
     "fnv 1.0.7": {
       "name": "fnv",
@@ -15139,8 +15190,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -15163,8 +15214,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
