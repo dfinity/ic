@@ -125,14 +125,6 @@ fn resolve_execution_mode(
 
 fn get_test_suites() -> HashMap<String, Suite> {
     let mut m = HashMap::new();
-    m.add_suite(suite(
-        "failure_new_3",
-        vec![pot_with_setup(
-            "basic_health_pot_single_host",
-            basic_health_test::config_single_host,
-            par(vec![sys_t("basic_health_test", basic_health_test::test)]),
-        )],
-    ));
 
     m.add_suite(
         suite(
@@ -512,7 +504,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     orchestrator::update_registry_idkg_key::test,
                 )]),
             ),
-            /* Temporarily disable the test (JIRA: VER-1616)
             pot(
                 "workload_counter_canister_pot",
                 workload_counter_canister_test::config(),
@@ -521,7 +512,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     workload_counter_canister_test::short_test,
                 )]),
             ),
-            */
         ],
     ));
 
