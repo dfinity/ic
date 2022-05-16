@@ -25,6 +25,7 @@ use std::sync::Arc;
 use strum::IntoEnumIterator;
 
 mod keygen_utils;
+mod parallelism;
 
 const REG_V1: RegistryVersion = RegistryVersion::new(1);
 const NODE_ID: u64 = 42;
