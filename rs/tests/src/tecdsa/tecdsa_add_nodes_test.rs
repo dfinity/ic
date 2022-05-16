@@ -33,7 +33,8 @@ use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use std::time::{Duration, Instant};
 
-const DKG_INTERVAL: u64 = 29;
+use super::tecdsa_signature_test::DKG_INTERVAL;
+
 const NODES_COUNT: usize = 4;
 const UNASSIGNED_NODES_COUNT: i32 = 3;
 
@@ -76,7 +77,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         nns_endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(nns_endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
-        let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx).await;
+        let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
+            .await
+            .unwrap();
         (uni_can.canister_id(), public_key)
     });
 
@@ -114,7 +117,9 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     block_on(async {
         let agent = assert_create_agent(nns_endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::from_canister_id(&agent, canister_id);
-        let public_key_ = get_public_key(make_key(KEY_ID1), &uni_can, ctx).await;
+        let public_key_ = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
+            .await
+            .unwrap();
         assert_eq!(public_key, public_key_);
         let signature = get_signature(
             &message_hash,

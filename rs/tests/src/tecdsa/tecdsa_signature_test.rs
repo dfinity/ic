@@ -14,18 +14,19 @@ Success:: An agent can complete the signing process and result signature verifie
 
 end::catalog[] */
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
+use std::time::Duration;
 
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
-use crate::nns::vote_and_execute_proposal;
-use crate::util::*;
+use crate::nns::{get_subnet_list_from_registry, vote_and_execute_proposal};
+use crate::util::{self, *};
 use candid::Encode;
 use candid::Principal;
 use canister_test::Canister;
 use canister_test::Cycles;
 use ic_agent::AgentError;
-use ic_base_types::SubnetId;
+use ic_base_types::{NodeId, SubnetId};
 use ic_canister_client::Sender;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
@@ -38,16 +39,24 @@ use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{governance::submit_external_update_proposal, ids::TEST_NEURON_1_ID};
+use ic_registry_common::registry::RegistryCanister;
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::Height;
+use ic_types::p2p::{self};
+use ic_types::{Height, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
+use registry_canister::mutations::do_create_subnet::{
+    CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest,
+};
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use secp256k1::{Message, PublicKey, Secp256k1, Signature};
 use slog::{debug, info};
 
 pub(crate) const KEY_ID1: &str = "secp256k1";
 pub(crate) const KEY_ID2: &str = "some_other_key";
+/// The default DKG interval takes too long before the keys are created and
+/// passed to execution.
+pub(crate) const DKG_INTERVAL: u64 = 19;
 
 pub(crate) fn make_key(name: &str) -> EcdsaKeyId {
     EcdsaKeyId {
@@ -92,22 +101,52 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
     }
 }
 
-/// Creates one system subnet and two application subnets.
-pub fn config(test_env: TestEnv) {
+/// Creates one system subnet without ECDSA enabled and one application subnet
+/// with ECDSA enabled.
+pub fn config_without_ecdsa_on_nns(test_env: TestEnv) {
     use crate::driver::test_env_api::*;
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(19))
                 .with_features(SubnetFeatures {
-                    ecdsa_signatures: true,
+                    ecdsa_signatures: false,
                     ..SubnetFeatures::default()
                 })
                 .add_nodes(4),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(19))
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .with_features(SubnetFeatures {
+                    ecdsa_signatures: true,
+                    ..SubnetFeatures::default()
+                })
+                .add_nodes(4),
+        )
+        .with_unassigned_nodes(4)
+        .setup_and_start(&test_env)
+        .expect("Could not start IC!");
+
+    // Currently, we make the assumption that the first subnets is the root
+    // subnet. This might not hold in the future.
+    test_env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("Failed to install NNS canisters");
+}
+
+/// Creates one system subnet and two application subnets.
+pub fn config(test_env: TestEnv) {
+    use crate::driver::test_env_api::*;
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .with_features(SubnetFeatures {
                     ecdsa_signatures: true,
                     ..SubnetFeatures::default()
@@ -116,13 +155,23 @@ pub fn config(test_env: TestEnv) {
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(19))
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .with_features(SubnetFeatures {
                     ecdsa_signatures: true,
                     ..SubnetFeatures::default()
                 })
                 .add_nodes(4),
         )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .with_features(SubnetFeatures {
+                    ecdsa_signatures: true,
+                    ..SubnetFeatures::default()
+                })
+                .add_nodes(4),
+        )
+        .with_unassigned_nodes(4)
         .setup_and_start(&test_env)
         .expect("Could not start IC!");
 
@@ -188,7 +237,7 @@ pub(crate) async fn get_public_key(
     key_id: EcdsaKeyId,
     uni_can: &UniversalCanister<'_>,
     ctx: &ic_fondue::pot::Context,
-) -> PublicKey {
+) -> Result<PublicKey, AgentError> {
     let public_key_request = ECDSAPublicKeyArgs {
         canister_id: None,
         derivation_path: vec![],
@@ -216,13 +265,13 @@ pub(crate) async fn get_public_key(
                     debug!(ctx.logger, "ecdsa_public_key returns {}, try again...", err);
                     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 } else {
-                    panic!("ecdsa_public_key failed after {} tries.", count);
+                    return Err(err);
                 }
             }
         }
     };
     info!(ctx.logger, "ecdsa_public_key returns {:?}", public_key);
-    PublicKey::from_slice(&public_key).expect("Response is not a valid public key")
+    Ok(PublicKey::from_slice(&public_key).expect("Response is not a valid public key"))
 }
 
 async fn execute_update_subnet_proposal(
@@ -234,6 +283,26 @@ async fn execute_update_subnet_proposal(
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
         NeuronId(TEST_NEURON_1_ID),
         NnsFunction::UpdateConfigOfSubnet,
+        proposal_payload,
+        "<proposal created by threshold ecdsa test>".to_string(),
+        "".to_string(),
+    )
+    .await;
+
+    let proposal_result = vote_and_execute_proposal(governance, proposal_id).await;
+    println!("{:?}", proposal_result);
+    assert_eq!(proposal_result.status(), ProposalStatus::Executed);
+}
+
+async fn execute_create_subnet_proposal(
+    governance: &Canister<'_>,
+    proposal_payload: CreateSubnetPayload,
+) {
+    let proposal_id: ProposalId = submit_external_update_proposal(
+        governance,
+        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+        NeuronId(TEST_NEURON_1_ID),
+        NnsFunction::CreateSubnet,
         proposal_payload,
         "<proposal created by threshold ecdsa test>".to_string(),
         "".to_string(),
@@ -304,6 +373,62 @@ async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, ke
     execute_update_subnet_proposal(governance, proposal_payload).await;
 }
 
+async fn create_new_subnet_with_keys(
+    governance: &Canister<'_>,
+    node_ids: Vec<NodeId>,
+    keys: Vec<EcdsaKeyRequest>,
+    replica_version: ReplicaVersion,
+) {
+    let config = ic_prep_lib::subnet_configuration::get_default_config_params(
+        SubnetType::Application,
+        node_ids.len(),
+    );
+    let gossip = p2p::build_default_gossip_config();
+    let scheduler = ic_config::subnet_config::SchedulerConfig::application_subnet();
+    let payload = CreateSubnetPayload {
+        node_ids,
+        subnet_id_override: None,
+        ingress_bytes_per_block_soft_cap: config.ingress_bytes_per_block_soft_cap,
+        max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
+        max_ingress_messages_per_block: config.max_ingress_messages_per_block,
+        max_block_payload_size: config.max_block_payload_size,
+        replica_version_id: replica_version.to_string(),
+        unit_delay_millis: ic_prep_lib::subnet_configuration::duration_to_millis(config.unit_delay),
+        initial_notary_delay_millis: ic_prep_lib::subnet_configuration::duration_to_millis(
+            config.initial_notary_delay,
+        ),
+        dkg_interval_length: DKG_INTERVAL,
+        dkg_dealings_per_block: config.dkg_dealings_per_block as u64,
+        gossip_max_artifact_streams_per_peer: gossip.max_artifact_streams_per_peer,
+        gossip_max_chunk_wait_ms: gossip.max_chunk_wait_ms,
+        gossip_max_duplicity: gossip.max_duplicity,
+        gossip_max_chunk_size: gossip.max_chunk_size,
+        gossip_receive_check_cache_size: gossip.receive_check_cache_size,
+        gossip_pfn_evaluation_period_ms: gossip.pfn_evaluation_period_ms,
+        gossip_registry_poll_period_ms: gossip.registry_poll_period_ms,
+        gossip_retransmission_request_ms: gossip.retransmission_request_ms,
+        advert_best_effort_percentage: gossip.advert_config.map(|gac| gac.best_effort_percentage),
+        start_as_nns: false,
+        subnet_type: SubnetType::Application,
+        is_halted: false,
+        max_instructions_per_message: scheduler.max_instructions_per_message.get(),
+        max_instructions_per_round: scheduler.max_instructions_per_round.get(),
+        max_instructions_per_install_code: scheduler.max_instructions_per_install_code.get(),
+        features: SubnetFeatures {
+            ecdsa_signatures: true,
+            ..SubnetFeatures::default()
+        },
+        max_number_of_canisters: 4,
+        ssh_readonly_access: vec![],
+        ssh_backup_access: vec![],
+        ecdsa_config: Some(EcdsaInitialConfig {
+            quadruples_to_create_in_advance: 4,
+            keys,
+        }),
+    };
+    execute_create_subnet_proposal(governance, payload).await;
+}
+
 /// Tests whether a call to `sign_with_ecdsa` is responded with a signature
 /// that is verifiable with the result from `ecdsa_public_key`.
 pub fn test_threshold_ecdsa_signature_same_subnet(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
@@ -326,7 +451,9 @@ pub fn test_threshold_ecdsa_signature_same_subnet(handle: IcHandle, ctx: &ic_fon
         let agent = assert_create_agent(app_endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
         let message_hash = [0xabu8; 32];
-        let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx).await;
+        let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
+            .await
+            .unwrap();
         let signature = get_signature(
             &message_hash,
             Cycles::from(7_000_000_000u64),
@@ -370,7 +497,9 @@ pub fn test_threshold_ecdsa_signature_from_other_subnet(
         let agent = assert_create_agent(endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
         let message_hash = [0xabu8; 32];
-        let public_key = get_public_key(make_key(KEY_ID2), &uni_can, ctx).await;
+        let public_key = get_public_key(make_key(KEY_ID2), &uni_can, ctx)
+            .await
+            .unwrap();
         let signature = get_signature(
             &message_hash,
             ECDSA_SIGNATURE_FEE,
@@ -453,7 +582,9 @@ pub fn test_threshold_ecdsa_signature_from_nns_without_cycles(
         let agent = assert_create_agent(nns_endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
         let message_hash = [0xabu8; 32];
-        let public_key = get_public_key(make_key(KEY_ID2), &uni_can, ctx).await;
+        let public_key = get_public_key(make_key(KEY_ID2), &uni_can, ctx)
+            .await
+            .unwrap();
         let signature = get_signature(
             &message_hash,
             Cycles::zero(),
@@ -464,5 +595,189 @@ pub fn test_threshold_ecdsa_signature_from_nns_without_cycles(
         .await
         .unwrap();
         verify_signature(&message_hash, &public_key, &signature);
+    });
+}
+
+pub fn test_threshold_ecdsa_life_cycle(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    let mut rng = ctx.rng.clone();
+    rt.block_on(async move {
+        let nns_endpoint = get_random_system_node_endpoint(&handle, &mut rng);
+        let app_endpoint = get_random_application_node_endpoint(&handle, &mut rng);
+        nns_endpoint.assert_ready(ctx).await;
+        app_endpoint.assert_ready(ctx).await;
+        let agent = assert_create_agent(nns_endpoint.url.as_str()).await;
+        let uni_can = UniversalCanister::new(&agent).await;
+
+        info!(
+            ctx.logger,
+            "1. Verifying that signature and public key requests fail before signing is enabled."
+        );
+
+        let message_hash = [0xabu8; 32];
+        assert_eq!(
+            get_public_key(make_key(KEY_ID2), &uni_can, ctx)
+                .await
+                .unwrap_err(),
+            AgentError::ReplicaError {
+                reject_code: 4,
+                reject_message: "This API is not enabled on this subnet".to_string()
+            }
+        );
+        assert_eq!(
+            get_signature(
+                &message_hash,
+                ECDSA_SIGNATURE_FEE,
+                make_key(KEY_ID2),
+                &uni_can,
+                ctx,
+            )
+            .await
+            .unwrap_err(),
+            AgentError::ReplicaError {
+                reject_code: 4,
+                reject_message: "This API is not enabled on this subnet".to_string()
+            }
+        );
+
+        info!(ctx.logger, "2. Enabling signing and verifying that it works.");
+
+        let nns = runtime_from_url(nns_endpoint.url.clone());
+        let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
+        enable_ecdsa_signing(
+            &governance,
+            app_endpoint.subnet.as_ref().unwrap().id,
+            make_key(KEY_ID2),
+        )
+        .await;
+
+        let public_key = get_public_key(make_key(KEY_ID2), &uni_can, ctx)
+            .await
+            .unwrap();
+        let signature = get_signature(
+            &message_hash,
+            ECDSA_SIGNATURE_FEE,
+            make_key(KEY_ID2),
+            &uni_can,
+            ctx,
+        )
+        .await
+        .unwrap();
+        verify_signature(&message_hash, &public_key, &signature);
+
+        info!(
+            ctx.logger,
+            "3. Sharing key with new app subnet, disabling signing on old app subnet, and then verifying signing no longer works."
+        );
+
+        let registry_client = RegistryCanister::new_with_query_timeout(
+            vec![nns_endpoint.url.clone()],
+            Duration::from_secs(10),
+        );
+        let original_subnets: HashSet<_> = get_subnet_list_from_registry(&registry_client)
+            .await
+            .into_iter()
+            .collect();
+        let unassigned_nodes_endpoints = util::get_unassinged_nodes_endpoints(&handle);
+        let unassigned_node_ids: Vec<NodeId> = unassigned_nodes_endpoints
+            .iter()
+            .map(|ep| ep.node_id)
+            .collect();
+        util::assert_all_ready(unassigned_nodes_endpoints.as_slice(), ctx).await;
+
+        let replica_version = crate::nns::get_software_version(nns_endpoint)
+            .await
+            .expect("could not obtain replica software version");
+        create_new_subnet_with_keys(
+            &governance,
+            unassigned_node_ids,
+            vec![EcdsaKeyRequest {
+                key_id: make_key(KEY_ID2),
+                subnet_id: Some(app_endpoint.subnet.as_ref().unwrap().id.get()),
+            }],
+            replica_version,
+        )
+        .await;
+        let new_subnets: HashSet<_> = get_subnet_list_from_registry(&registry_client)
+            .await
+            .into_iter()
+            .collect();
+        let new_subnet_id = *new_subnets
+            .symmetric_difference(&original_subnets)
+            .next()
+            .unwrap();
+
+        let disable_signing_payload = UpdateSubnetPayload {
+            subnet_id: app_endpoint.subnet.as_ref().unwrap().id,
+            ecdsa_key_signing_disable: Some(vec![make_key(KEY_ID2)]),
+            ..empty_subnet_update()
+        };
+        execute_update_subnet_proposal(&governance, disable_signing_payload).await;
+
+        // Try several times because signing won't fail until new registry data
+        // is picked up.
+        let mut sig_result;
+        for _ in 0..20 {
+            sig_result = get_signature(
+                &message_hash,
+                ECDSA_SIGNATURE_FEE,
+                make_key(KEY_ID2),
+                &uni_can,
+                ctx,
+            )
+            .await;
+            if sig_result.is_err() {
+                break;
+            } else {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+        }
+        assert_eq!(
+            get_signature(
+                &message_hash,
+                ECDSA_SIGNATURE_FEE,
+                make_key(KEY_ID2),
+                &uni_can,
+                ctx,
+            )
+            .await
+            .unwrap_err(),
+            AgentError::ReplicaError {
+                reject_code: 4,
+                reject_message: "This API is not enabled on this subnet".to_string()
+            }
+        );
+
+        info!(ctx.logger, "4. Enabling signing on new subnet then verifying that signing works and public key is unchanged.");
+
+        let proposal_payload = UpdateSubnetPayload {
+            subnet_id: new_subnet_id,
+            ecdsa_key_signing_enable: Some(vec![make_key(KEY_ID2)]),
+            ..empty_subnet_update()
+        };
+        execute_update_subnet_proposal(&governance, proposal_payload).await;
+
+        let newly_assigned_endpoint =
+            unassigned_nodes_endpoints[0].recreate_with_subnet(ic_fondue::ic_manager::IcSubnet {
+                id: new_subnet_id,
+                type_of: SubnetType::Application,
+            });
+
+        newly_assigned_endpoint.assert_ready(ctx).await;
+
+        let new_public_key = get_public_key(make_key(KEY_ID2), &uni_can, ctx)
+            .await
+            .unwrap();
+        assert_eq!(public_key, new_public_key);
+        let new_signature = get_signature(
+            &message_hash,
+            ECDSA_SIGNATURE_FEE,
+            make_key(KEY_ID2),
+            &uni_can,
+            ctx,
+        )
+        .await
+        .unwrap();
+        verify_signature(&message_hash, &public_key, &new_signature);
     });
 }

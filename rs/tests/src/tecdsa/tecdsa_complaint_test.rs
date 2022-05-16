@@ -15,12 +15,14 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::Height;
 
+use super::tecdsa_signature_test::DKG_INTERVAL;
+
 pub fn enable_ecdsa_signatures_feature() -> InternetComputer {
     let malicious_behaviour =
         MaliciousBehaviour::new(true).set_maliciously_corrupt_ecdsa_dealings();
     InternetComputer::new().add_subnet(
         Subnet::new(SubnetType::System)
-            .with_dkg_interval_length(Height::from(19))
+            .with_dkg_interval_length(Height::from(DKG_INTERVAL))
             .add_nodes(3)
             .add_malicious_nodes(1, malicious_behaviour)
             .with_features(SubnetFeatures {
@@ -43,7 +45,9 @@ pub fn test_threshold_ecdsa_complaint(handle: IcHandle, ctx: &ic_fondue::pot::Co
         let agent = assert_create_agent(endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
         let message_hash = [0xabu8; 32];
-        let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx).await;
+        let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
+            .await
+            .unwrap();
         let signature = get_signature(
             &message_hash,
             Cycles::zero(),
