@@ -205,7 +205,10 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
         )
     }
 
-    fn retain_threshold_keys_if_present(&self, active_keys: BTreeSet<CspPublicCoefficients>) {
+    fn retain_threshold_keys_if_present(
+        &self,
+        active_keys: BTreeSet<CspPublicCoefficients>,
+    ) -> Result<(), ni_dkg_errors::CspDkgRetainThresholdKeysError> {
         debug!(self.logger; crypto.method_name => "retain_threshold_keys_if_present");
         let active_key_ids: BTreeSet<KeyId> =
             active_keys.iter().map(key_id_from_csp_pub_coeffs).collect();

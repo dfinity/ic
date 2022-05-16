@@ -3,9 +3,9 @@ use crate::secret_key_store::{Scope, SecretKeyStoreError};
 use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSecretKey, CspSignature};
 use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
-    CspMultiSignatureError, CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError,
-    CspTlsKeygenError, CspTlsSignError, IDkgProtocolCspVault, MultiSignatureCspVault,
-    NiDkgCspVault, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
+    CspMultiSignatureError, CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError,
+    CspThresholdSignatureKeygenError, CspTlsKeygenError, CspTlsSignError, IDkgProtocolCspVault,
+    MultiSignatureCspVault, NiDkgCspVault, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
     ThresholdSignatureCspVault,
 };
 use crate::vault::remote_csp_vault::TarpcCspVaultClient;
@@ -14,7 +14,7 @@ use core::future::Future;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError, CspDkgLoadPrivateKeyError,
-    CspDkgUpdateFsEpochError,
+    CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
 };
 use ic_crypto_internal_threshold_sig_ecdsa::{
     CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
@@ -209,12 +209,16 @@ impl ThresholdSignatureCspVault for RemoteCspVault {
 }
 
 impl SecretKeyStoreCspVault for RemoteCspVault {
-    fn sks_contains(&self, key_id: &KeyId) -> bool {
+    fn sks_contains(&self, key_id: &KeyId) -> Result<bool, CspSecretKeyStoreContainsError> {
         thread_universal_block_on(
             self.tarpc_csp_client
                 .sks_contains(context_with_timeout(self.rpc_timeout), *key_id),
         )
-        .unwrap_or(false)
+        .unwrap_or_else(|e| {
+            Err(CspSecretKeyStoreContainsError::InternalError {
+                internal_error: e.to_string(),
+            })
+        })
     }
 
     fn insert_secret_key(
@@ -318,12 +322,21 @@ impl NiDkgCspVault for RemoteCspVault {
         })
     }
 
-    fn retain_threshold_keys_if_present(&self, active_key_ids: BTreeSet<KeyId>) {
+    fn retain_threshold_keys_if_present(
+        &self,
+        active_key_ids: BTreeSet<KeyId>,
+    ) -> Result<(), CspDkgRetainThresholdKeysError> {
         thread_universal_block_on(self.tarpc_csp_client.retain_threshold_keys_if_present(
             context_with_timeout(self.rpc_timeout),
             active_key_ids,
         ))
-        .unwrap_or(());
+        .unwrap_or_else(|e| {
+            Err(CspDkgRetainThresholdKeysError::InternalError(
+                InternalError {
+                    internal_error: e.to_string(),
+                },
+            ))
+        })
     }
 }
 

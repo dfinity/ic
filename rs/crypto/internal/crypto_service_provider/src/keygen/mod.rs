@@ -59,11 +59,11 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
 impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
     CspSecretKeyStoreChecker for Csp<R, S, C>
 {
-    fn sks_contains(&self, key_id: &KeyId) -> bool {
-        self.csp_vault.sks_contains(key_id)
+    fn sks_contains(&self, key_id: &KeyId) -> Result<bool, CryptoError> {
+        Ok(self.csp_vault.sks_contains(key_id)?)
     }
 
-    fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> bool {
+    fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> Result<bool, CryptoError> {
         // we calculate the key_id first to minimize locking time:
         let key_id = tls_cert_hash_as_key_id(cert);
         self.sks_contains(&key_id)

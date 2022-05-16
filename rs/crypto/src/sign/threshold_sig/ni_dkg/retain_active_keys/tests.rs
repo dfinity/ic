@@ -28,7 +28,7 @@ fn should_call_csp_with_correct_parameters() {
     csp.expect_retain_threshold_keys_if_present()
         .withf(move |active_keys| *active_keys == expected_active_keys)
         .times(1)
-        .return_const(());
+        .return_const(Ok(()));
     csp.expect_update_forward_secure_epoch()
         .withf(move |algorithm_id, epoch_| {
             *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381 && *epoch_ == epoch(REG_V1)
@@ -49,7 +49,7 @@ fn should_return_error_from_csp() {
     csp.expect_retain_threshold_keys_if_present()
         .withf(move |active_keys| *active_keys == expected_active_keys)
         .times(1)
-        .return_const(());
+        .return_const(Ok(()));
     let key_not_found_err = key_not_found_err();
     csp.expect_update_forward_secure_epoch()
         .times(1)

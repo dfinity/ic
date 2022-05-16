@@ -424,6 +424,13 @@ pub enum CspDkgCreateReshareTranscriptError {
     SizeError(SizeError),
 }
 
+/// A call to retain existing threshold keys failed.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CspDkgRetainThresholdKeysError {
+    // An internal error, e.g. an RPC error.
+    InternalError(InternalError),
+}
+
 impl From<CspDkgCreateTranscriptError> for CspDkgCreateReshareTranscriptError {
     fn from(error: CspDkgCreateTranscriptError) -> Self {
         match error {

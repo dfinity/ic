@@ -26,7 +26,7 @@ pub fn should_insert_secret_key_into_key_store(csp_vault: Arc<dyn CspVault>) {
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
     assert_eq!(key_id, tls_cert_hash_as_key_id(&cert));
-    assert!(csp_vault.sks_contains(&key_id));
+    assert!(csp_vault.sks_contains(&key_id).expect("SKS call failed"));
 }
 
 pub fn should_return_der_encoded_self_signed_certificate(csp_vault: Arc<dyn CspVault>) {
@@ -202,7 +202,7 @@ pub fn should_fail_to_sign_if_secret_key_in_store_has_invalid_encoding(
     key_id: KeyId,
     csp_vault: Arc<dyn CspVault>,
 ) {
-    assert!(csp_vault.sks_contains(&key_id));
+    assert!(csp_vault.sks_contains(&key_id).expect("SKS call failed"));
     let result = csp_vault.tls_sign(&random_message(), &key_id);
     assert_eq!(
         result.unwrap_err(),

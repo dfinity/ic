@@ -57,10 +57,10 @@ pub trait CspKeyGenerator {
 /// key.
 pub trait CspSecretKeyStoreChecker {
     /// Checks whether the store contains a key with the given `id`.
-    fn sks_contains(&self, key_id: &KeyId) -> bool;
+    fn sks_contains(&self, key_id: &KeyId) -> Result<bool, CryptoError>;
 
     /// Checks whether the store contains a private key for the given `cert`.
-    fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> bool;
+    fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> Result<bool, CryptoError>;
 }
 
 /// A trait that exposes the information about node public keys and key

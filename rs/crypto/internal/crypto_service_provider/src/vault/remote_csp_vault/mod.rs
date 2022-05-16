@@ -2,8 +2,8 @@ use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
-    CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError, CspTlsKeygenError,
-    CspTlsSignError,
+    CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspThresholdSignatureKeygenError,
+    CspTlsKeygenError, CspTlsSignError,
 };
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_ecdsa::{
@@ -117,10 +117,12 @@ pub trait TarpcCspVault {
     ) -> Result<(), ni_dkg_errors::CspDkgLoadPrivateKeyError>;
 
     // Corresponds to `NiDkgCspVault.retain_threshold_keys_if_present()`.
-    async fn retain_threshold_keys_if_present(active_key_ids: BTreeSet<KeyId>);
+    async fn retain_threshold_keys_if_present(
+        active_key_ids: BTreeSet<KeyId>,
+    ) -> Result<(), ni_dkg_errors::CspDkgRetainThresholdKeysError>;
 
     // Corresponds to `SecretKeyStoreCspVault.sks_contains()`.
-    async fn sks_contains(key_id: KeyId) -> bool;
+    async fn sks_contains(key_id: KeyId) -> Result<bool, CspSecretKeyStoreContainsError>;
 
     // Corresponds to `TlsHandshakeCspVault.gen_tls_key_pair()`.
     async fn gen_tls_key_pair(

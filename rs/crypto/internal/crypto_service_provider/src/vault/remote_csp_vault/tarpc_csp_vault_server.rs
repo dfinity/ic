@@ -3,9 +3,9 @@ use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
-    CspMultiSignatureError, CspMultiSignatureKeygenError, CspThresholdSignatureKeygenError,
-    CspTlsKeygenError, CspTlsSignError, IDkgProtocolCspVault, MultiSignatureCspVault,
-    NiDkgCspVault, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
+    CspMultiSignatureError, CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError,
+    CspThresholdSignatureKeygenError, CspTlsKeygenError, CspTlsSignError, IDkgProtocolCspVault,
+    MultiSignatureCspVault, NiDkgCspVault, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
     ThresholdSignatureCspVault,
 };
 use crate::vault::local_csp_vault::LocalCspVault;
@@ -14,7 +14,7 @@ use crate::{TlsHandshakeCspVault, CANISTER_SKS_DATA_FILENAME, SKS_DATA_FILENAME}
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError, CspDkgLoadPrivateKeyError,
-    CspDkgUpdateFsEpochError,
+    CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
 };
 use ic_crypto_internal_threshold_sig_ecdsa::{
     CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
@@ -191,13 +191,17 @@ impl TarpcCspVault for TarpcCspVaultServerWorker {
         self,
         _: context::Context,
         active_key_ids: BTreeSet<KeyId>,
-    ) {
+    ) -> Result<(), CspDkgRetainThresholdKeysError> {
         self.local_csp_vault
             .retain_threshold_keys_if_present(active_key_ids)
     }
 
     // SecretKeyStoreCspVault-methods.
-    async fn sks_contains(self, _: context::Context, key_id: KeyId) -> bool {
+    async fn sks_contains(
+        self,
+        _: context::Context,
+        key_id: KeyId,
+    ) -> Result<bool, CspSecretKeyStoreContainsError> {
         self.local_csp_vault.sks_contains(&key_id)
     }
 

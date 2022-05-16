@@ -74,7 +74,8 @@ fn test_retention() {
             vec![internal_public_coefficients.clone()]
                 .into_iter()
                 .collect();
-        csp.retain_threshold_keys_if_present(active_keys);
+        csp.retain_threshold_keys_if_present(active_keys)
+            .expect("Retaining threshold keys failed");
 
         // The key should still be there:
         csp.threshold_sign(
@@ -94,7 +95,8 @@ fn test_retention() {
             "Public coefficients should be different - the different one has no entries after all!"
         );
         let active_keys = vec![different_public_coefficients].into_iter().collect();
-        csp.retain_threshold_keys_if_present(active_keys);
+        csp.retain_threshold_keys_if_present(active_keys)
+            .expect("Retaining threshold keys failed");
 
         // The key should be unavailable
         csp.threshold_sign(

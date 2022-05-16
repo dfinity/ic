@@ -968,5 +968,8 @@ pub trait NiDkgCspClient {
     /// There is no guarantee that there are secret keys matching all the listed
     /// public coefficients.  If this method is requested to retain a key that
     /// is not in the secret key store, that key will be ignored.
-    fn retain_threshold_keys_if_present(&self, active_keys: BTreeSet<CspPublicCoefficients>);
+    fn retain_threshold_keys_if_present(
+        &self,
+        active_keys: BTreeSet<CspPublicCoefficients>,
+    ) -> Result<(), ni_dkg_errors::CspDkgRetainThresholdKeysError>;
 }

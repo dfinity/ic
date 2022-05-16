@@ -173,7 +173,7 @@ pub(crate) fn ensure_node_signing_key_material_is_set_up_correctly(
     }
     let csp_key = CspPublicKey::try_from(pubkey_proto)?;
     let key_id = public_key_hash_as_key_id(&csp_key);
-    if !csp.sks_contains(&key_id) {
+    if !csp.sks_contains(&key_id)? {
         return Err(CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::Ed25519,
             key_id,
@@ -199,7 +199,7 @@ pub(crate) fn ensure_committee_signing_key_material_is_set_up_correctly(
     ensure_committe_signing_key_pop_is_well_formed(&pubkey_proto)?;
     let csp_key = CspPublicKey::try_from(pubkey_proto)?;
     let key_id = public_key_hash_as_key_id(&csp_key);
-    if !csp.sks_contains(&key_id) {
+    if !csp.sks_contains(&key_id)? {
         return Err(CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::MultiBls12_381,
             key_id,
@@ -264,7 +264,7 @@ pub(crate) fn ensure_dkg_dealing_encryption_key_material_is_set_up_correctly(
         }
     })?;
     let key_id = forward_secure_key_id(&csp_key);
-    if !csp.sks_contains(&key_id) {
+    if !csp.sks_contains(&key_id)? {
         return Err(CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::Groth20_Bls12_381,
             key_id,
@@ -299,7 +299,7 @@ pub(crate) fn ensure_idkg_dealing_encryption_key_material_is_set_up_correctly(
         })?;
 
     let key_id = mega_key_id(&idkg_dealing_encryption_pk);
-    if !csp.sks_contains(&key_id) {
+    if !csp.sks_contains(&key_id)? {
         return Err(CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::MegaSecp256k1,
             key_id,
@@ -321,7 +321,7 @@ pub(crate) fn ensure_tls_key_material_is_set_up_correctly(
             }
         })?;
 
-    if !csp.sks_contains_tls_key(&public_key_cert) {
+    if !csp.sks_contains_tls_key(&public_key_cert)? {
         return Err(CryptoError::TlsSecretKeyNotFound {
             certificate_der: public_key_cert.as_der().clone(),
         });

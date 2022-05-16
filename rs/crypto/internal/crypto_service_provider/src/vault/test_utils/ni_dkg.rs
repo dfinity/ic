@@ -170,7 +170,8 @@ pub fn test_retention(csp_vault_factory: fn() -> Arc<dyn CspVault>) {
             .map(key_id_from_csp_pub_coeffs)
             .collect();
         node.csp_vault
-            .retain_threshold_keys_if_present(active_key_ids);
+            .retain_threshold_keys_if_present(active_key_ids)
+            .expect("Retaining threshold keys failed");
 
         // The key should still be there:
         node.csp_vault
@@ -195,7 +196,8 @@ pub fn test_retention(csp_vault_factory: fn() -> Arc<dyn CspVault>) {
             .map(key_id_from_csp_pub_coeffs)
             .collect();
         node.csp_vault
-            .retain_threshold_keys_if_present(active_key_ids);
+            .retain_threshold_keys_if_present(active_key_ids)
+            .expect("Retaining threshold keys failed");
 
         // The key should be unavailable
         node.csp_vault
