@@ -156,6 +156,7 @@ async fn main() -> Result<()> {
         .collect::<Result<Vec<Url>, _>>()
         .expect("unable to parse nns url");
     let data_provider = create_data_provider(
+        tokio::runtime::Handle::current(),
         &DataProviderConfig::RegistryCanisterUrl(nns_urls.clone()),
         nns_public_key,
     );

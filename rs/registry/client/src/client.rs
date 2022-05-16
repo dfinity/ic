@@ -165,6 +165,7 @@ impl Drop for RegistryClientImpl {
 /// `ThresholdSigPublicKey` can be provided to verify certified updates provided
 /// by the registry canister.
 pub fn create_data_provider(
+    rt_handle: tokio::runtime::Handle,
     data_provider_config: &DataProviderConfig,
     optional_nns_public_key: Option<ThresholdSigPublicKey>,
 ) -> Arc<dyn RegistryDataProvider> {
@@ -172,8 +173,12 @@ pub fn create_data_provider(
         DataProviderConfig::RegistryCanisterUrl(url) => {
             let registry_canister = RegistryCanister::new(url.clone());
             match optional_nns_public_key {
-                Some(nns_pk) => Arc::new(CertifiedNnsDataProvider::new(registry_canister, nns_pk)),
-                None => Arc::new(NnsDataProvider::new(registry_canister)),
+                Some(nns_pk) => Arc::new(CertifiedNnsDataProvider::new(
+                    rt_handle,
+                    registry_canister,
+                    nns_pk,
+                )),
+                None => Arc::new(NnsDataProvider::new(rt_handle, registry_canister)),
             }
         }
         DataProviderConfig::ProtobufFile(path) => {

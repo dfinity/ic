@@ -986,9 +986,9 @@ fn parse_initial_ecdsa_config_options(
 
     Some(EcdsaInitialConfig {
         quadruples_to_create_in_advance,
-        keys: ecdsa_keys_to_request.as_ref().map_or_else(
-            || vec![],
-            |json| {
+        keys: ecdsa_keys_to_request
+            .as_ref()
+            .map_or_else(std::vec::Vec::new, |json| {
                 let raw: Vec<BTreeMap<String, String>> = serde_json::from_str(json).unwrap();
 
                 raw.iter()
@@ -1009,8 +1009,7 @@ fn parse_initial_ecdsa_config_options(
                         EcdsaKeyRequest { key_id, subnet_id }
                     })
                     .collect()
-            },
-        ),
+            }),
     })
 }
 
@@ -3080,8 +3079,13 @@ async fn main() {
             print_and_get_last_value::<NodeOperatorRecord>(key, &registry_canister).await;
         }
         SubCommand::GetNodeOperatorList => {
-            let registry_client =
-                RegistryClientImpl::new(Arc::new(NnsDataProvider::new(registry_canister)), None);
+            let registry_client = RegistryClientImpl::new(
+                Arc::new(NnsDataProvider::new(
+                    tokio::runtime::Handle::current(),
+                    registry_canister,
+                )),
+                None,
+            );
 
             // maximum number of retries, let the user ctrl+c if necessary
             registry_client
@@ -3539,7 +3543,10 @@ async fn get_firewall_rules_for_node(
     nns_url: Url,
 ) {
     let registry_client = RegistryClientImpl::new(
-        Arc::new(NnsDataProvider::new(RegistryCanister::new(vec![nns_url]))),
+        Arc::new(NnsDataProvider::new(
+            tokio::runtime::Handle::current(),
+            RegistryCanister::new(vec![nns_url]),
+        )),
         None,
     );
     let subnet_id_result = registry_client.get_listed_subnet_for_node_id(
@@ -3810,7 +3817,13 @@ async fn get_recovery_cup(registry_canister: RegistryCanister, cmd: GetRecoveryC
         let local_store = Arc::new(LocalStoreImpl::new(local_store_path));
         RegistryClientImpl::new(local_store, None)
     } else {
-        RegistryClientImpl::new(Arc::new(NnsDataProvider::new(registry_canister)), None)
+        RegistryClientImpl::new(
+            Arc::new(NnsDataProvider::new(
+                tokio::runtime::Handle::current(),
+                registry_canister,
+            )),
+            None,
+        )
     };
     // maximum number of retries, let the user ctrl+c if necessary
     registry_client

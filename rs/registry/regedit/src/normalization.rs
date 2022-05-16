@@ -183,8 +183,8 @@ mod tests {
 
     use crate::tests::run_ic_prep;
 
-    #[test]
-    fn normalization() {
+    #[tokio::test]
+    async fn normalization() {
         let (_guard, ic_prep_dir) = run_ic_prep();
         let src_spec = SourceSpec::LocalStore(ic_prep_dir.registry_local_store_path());
 

@@ -9,16 +9,22 @@ use std::sync::Arc;
 
 pub struct NnsDataProvider {
     registry_canister: Arc<RegistryCanister>,
+    rt_handle: tokio::runtime::Handle,
 }
 
 pub struct CertifiedNnsDataProvider {
     registry_canister: Arc<RegistryCanister>,
     nns_public_key: Arc<ThresholdSigPublicKey>,
+    rt_handle: tokio::runtime::Handle,
 }
 
 impl NnsDataProvider {
-    pub fn new(registry_canister: RegistryCanister) -> NnsDataProvider {
+    pub fn new(
+        rt_handle: tokio::runtime::Handle,
+        registry_canister: RegistryCanister,
+    ) -> NnsDataProvider {
         NnsDataProvider {
+            rt_handle,
             registry_canister: Arc::new(registry_canister),
         }
     }
@@ -29,8 +35,9 @@ impl RegistryDataProvider for NnsDataProvider {
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+        let rt_handle = self.rt_handle.clone();
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on({
+            rt_handle.block_on({
                 let registry_canister = Arc::clone(&self.registry_canister);
                 async move {
                     match registry_canister.get_changes_since(version.get()).await {
@@ -68,8 +75,13 @@ impl RegistryDataProvider for NnsDataProvider {
 }
 
 impl CertifiedNnsDataProvider {
-    pub fn new(registry_canister: RegistryCanister, nns_public_key: ThresholdSigPublicKey) -> Self {
+    pub fn new(
+        rt_handle: tokio::runtime::Handle,
+        registry_canister: RegistryCanister,
+        nns_public_key: ThresholdSigPublicKey,
+    ) -> Self {
         Self {
+            rt_handle,
             registry_canister: Arc::new(registry_canister),
             nns_public_key: Arc::new(nns_public_key),
         }
@@ -81,8 +93,9 @@ impl RegistryDataProvider for CertifiedNnsDataProvider {
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+        let rt_handle = self.rt_handle.clone();
         let (records, _version, _time) = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on({
+            rt_handle.block_on({
                 let registry_canister = Arc::clone(&self.registry_canister);
                 let nns_public_key = Arc::clone(&self.nns_public_key);
                 async move {

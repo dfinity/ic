@@ -22,8 +22,8 @@ use tempfile::TempDir;
 const NODE_INDEX: NodeIndex = 100;
 const SUBNET_ID: u64 = 0;
 
-#[test]
-fn adding_deleting_values_shows_up_in_diff() {
+#[tokio::test]
+async fn adding_deleting_values_shows_up_in_diff() {
     let (_guard, ic_prep_dir) = run_ic_prep();
     let registry_spec = local_store_latest_snapshot(ic_prep_dir.registry_local_store_path());
     let projection = universal_projection();
