@@ -508,6 +508,7 @@ nns-backup-hourly:
   variables:
     SUITE_NAME: "nns_backup_hourly"
     cd_target_env: "HOURLY"
+  allow_failure: true
   script:
     - *run-farm-based-test
 
