@@ -1659,20 +1659,6 @@ mod tests {
     use ic_test_utilities::with_test_replica_logger;
     use std::{panic, path::PathBuf};
 
-    // We test if the binding links to the required LMDB version.
-    #[test]
-    fn test_lmdb_version() {
-        println!(
-            "LMDB VERSION {}.{}.{}",
-            lmdb_sys::MDB_VERSION_MAJOR,
-            lmdb_sys::MDB_VERSION_MINOR,
-            lmdb_sys::MDB_VERSION_PATCH
-        );
-        assert_eq!(lmdb_sys::MDB_VERSION_MAJOR, 0);
-        assert_eq!(lmdb_sys::MDB_VERSION_MINOR, 9);
-        assert_eq!(lmdb_sys::MDB_VERSION_PATCH, 70);
-    }
-
     #[test]
     fn test_encode_decode_key() {
         let height = Height::from(10);
