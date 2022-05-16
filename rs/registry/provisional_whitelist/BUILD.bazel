@@ -1,0 +1,22 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "provisional_whitelist",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_registry_provisional_whitelist",
+    edition = "2018",
+    deps = [
+        "//rs/protobuf",
+        "//rs/types/base_types",
+    ],
+)

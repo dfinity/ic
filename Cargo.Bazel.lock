@@ -1,5 +1,5 @@
 {
-  "checksum": "e4e6eaca5622d923f5dc33cfbf3453861fea278416c5e539e74be5c866c92571",
+  "checksum": "40b78a2fb9e8ce4efa8a1cd30f3aab3ab6efd47eeb045c338946ecd8c171273c",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -602,13 +602,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "axum 0.5.5": {
+    "axum 0.5.6": {
       "name": "axum",
-      "version": "0.5.5",
+      "version": "0.5.6",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/axum/0.5.5/download",
-          "sha256": "00f1e8a972137fad81e2a1a60b86ff17ce0338f8017264e45a9723d0083c39a1"
+          "url": "https://crates.io/api/v1/crates/axum/0.5.6/download",
+          "sha256": "ab2504b827a8bef941ba3dd64bdffe9cf56ca182908a147edd6189c95fbcae7d"
         }
       },
       "targets": [
@@ -661,7 +661,7 @@
               "target": "hyper"
             },
             {
-              "id": "itoa 1.0.1",
+              "id": "itoa 1.0.2",
               "target": "itoa"
             },
             {
@@ -725,7 +725,7 @@
           ],
           "selects": {}
         },
-        "version": "0.5.5"
+        "version": "0.5.6"
       },
       "license": "MIT"
     },
@@ -2305,7 +2305,7 @@
         "deps": {
           "common": [
             {
-              "id": "os_str_bytes 6.0.0",
+              "id": "os_str_bytes 6.0.1",
               "target": "os_str_bytes"
             }
           ],
@@ -2752,7 +2752,7 @@
               "target": "plotters"
             },
             {
-              "id": "rayon 1.5.2",
+              "id": "rayon 1.5.3",
               "target": "rayon"
             },
             {
@@ -3220,7 +3220,7 @@
               "target": "itoa"
             },
             {
-              "id": "ryu 1.0.9",
+              "id": "ryu 1.0.10",
               "target": "ryu"
             },
             {
@@ -5064,7 +5064,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.1",
+              "id": "tokio-util 0.7.2",
               "target": "tokio_util"
             },
             {
@@ -5348,7 +5348,7 @@
               "target": "fnv"
             },
             {
-              "id": "itoa 1.0.1",
+              "id": "itoa 1.0.2",
               "target": "itoa"
             }
           ],
@@ -5618,7 +5618,7 @@
               "target": "httpdate"
             },
             {
-              "id": "itoa 1.0.1",
+              "id": "itoa 1.0.2",
               "target": "itoa"
             },
             {
@@ -5979,13 +5979,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "itoa 1.0.1": {
+    "itoa 1.0.2": {
       "name": "itoa",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/itoa/1.0.1/download",
-          "sha256": "1aab8fc367588b89dcee83ab0fd66b72b50b72fa1904d7095045ace2b0c81c35"
+          "url": "https://crates.io/api/v1/crates/itoa/1.0.2/download",
+          "sha256": "112c678d4050afce233f4f2852bb2eb519230b3cf12f33585275537d7e41578d"
         }
       },
       "targets": [
@@ -6008,7 +6008,7 @@
           "**"
         ],
         "edition": "2018",
-        "version": "1.0.1"
+        "version": "1.0.2"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -7853,13 +7853,13 @@
       },
       "license": "MIT"
     },
-    "os_str_bytes 6.0.0": {
+    "os_str_bytes 6.0.1": {
       "name": "os_str_bytes",
-      "version": "6.0.0",
+      "version": "6.0.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/os_str_bytes/6.0.0/download",
-          "sha256": "8e22443d1643a904602595ba1cd8f7d896afe56d26712531c5ff73a15b2fbf64"
+          "url": "https://crates.io/api/v1/crates/os_str_bytes/6.0.1/download",
+          "sha256": "029d8d0b2f198229de29dca79676f2738ff952edf3fde542eb8bf94d8c21b435"
         }
       },
       "targets": [
@@ -7885,7 +7885,7 @@
           "raw_os_str"
         ],
         "edition": "2018",
-        "version": "6.0.0"
+        "version": "6.0.1"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -10911,13 +10911,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "rayon 1.5.2": {
+    "rayon 1.5.3": {
       "name": "rayon",
-      "version": "1.5.2",
+      "version": "1.5.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rayon/1.5.2/download",
-          "sha256": "fd249e82c21598a9a426a4e00dd7adc1d640b22445ec8545feef801d1a74c221"
+          "url": "https://crates.io/api/v1/crates/rayon/1.5.3/download",
+          "sha256": "bd99e5772ead8baa5215278c9b15bf92087709e9c1b2d1f97cdb5a183c933a7d"
         }
       },
       "targets": [
@@ -10962,18 +10962,18 @@
               "target": "either"
             },
             {
-              "id": "rayon 1.5.2",
+              "id": "rayon 1.5.3",
               "target": "build_script_build"
             },
             {
-              "id": "rayon-core 1.9.2",
+              "id": "rayon-core 1.9.3",
               "target": "rayon_core"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.5.2"
+        "version": "1.5.3"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -10991,13 +10991,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "rayon-core 1.9.2": {
+    "rayon-core 1.9.3": {
       "name": "rayon-core",
-      "version": "1.9.2",
+      "version": "1.9.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rayon-core/1.9.2/download",
-          "sha256": "9f51245e1e62e1f1629cbfec37b5793bbabcaeb90f30e94d2ba03564687353e4"
+          "url": "https://crates.io/api/v1/crates/rayon-core/1.9.3/download",
+          "sha256": "258bcdb5ac6dad48491bb2992db6b7cf74878b0384908af124823d118c99683f"
         }
       },
       "targets": [
@@ -11050,14 +11050,14 @@
               "target": "num_cpus"
             },
             {
-              "id": "rayon-core 1.9.2",
+              "id": "rayon-core 1.9.3",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.9.2"
+        "version": "1.9.3"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -11554,13 +11554,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "ryu 1.0.9": {
+    "ryu 1.0.10": {
       "name": "ryu",
-      "version": "1.0.9",
+      "version": "1.0.10",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ryu/1.0.9/download",
-          "sha256": "73b4b750c782965c211b42f022f59af1fbceabdd026623714f104152f1ec149f"
+          "url": "https://crates.io/api/v1/crates/ryu/1.0.10/download",
+          "sha256": "f3f6f92acf49d1b98f7a81226834412ada05458b7364277387724a237f062695"
         }
       },
       "targets": [
@@ -11583,7 +11583,7 @@
           "**"
         ],
         "edition": "2018",
-        "version": "1.0.9"
+        "version": "1.0.10"
       },
       "license": "Apache-2.0 OR BSL-1.0"
     },
@@ -12176,11 +12176,11 @@
         "deps": {
           "common": [
             {
-              "id": "itoa 1.0.1",
+              "id": "itoa 1.0.2",
               "target": "itoa"
             },
             {
-              "id": "ryu 1.0.9",
+              "id": "ryu 1.0.10",
               "target": "ryu"
             },
             {
@@ -13540,7 +13540,7 @@
         "deps": {
           "common": [
             {
-              "id": "itoa 1.0.1",
+              "id": "itoa 1.0.2",
               "target": "itoa"
             }
           ],
@@ -13947,13 +13947,13 @@
       },
       "license": "MIT"
     },
-    "tokio-util 0.7.1": {
+    "tokio-util 0.7.2": {
       "name": "tokio-util",
-      "version": "0.7.1",
+      "version": "0.7.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio-util/0.7.1/download",
-          "sha256": "0edfdeb067411dba2044da6d1cb2df793dd35add7888d73c16e3381ded401764"
+          "url": "https://crates.io/api/v1/crates/tokio-util/0.7.2/download",
+          "sha256": "f988a1a1adc2fb21f9c12aa96441da33a1728193ae0b95d2be22dbd17fcb4e5c"
         }
       },
       "targets": [
@@ -14010,7 +14010,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.7.1"
+        "version": "0.7.2"
       },
       "license": "MIT"
     },
@@ -14111,7 +14111,7 @@
               "target": "async_stream"
             },
             {
-              "id": "axum 0.5.5",
+              "id": "axum 0.5.6",
               "target": "axum"
             },
             {
@@ -14172,7 +14172,7 @@
               "target": "tokio_stream"
             },
             {
-              "id": "tokio-util 0.7.1",
+              "id": "tokio-util 0.7.2",
               "target": "tokio_util"
             },
             {
@@ -14303,7 +14303,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.1",
+              "id": "tokio-util 0.7.2",
               "target": "tokio_util"
             },
             {
