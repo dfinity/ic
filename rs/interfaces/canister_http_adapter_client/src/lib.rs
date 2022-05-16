@@ -16,10 +16,12 @@ pub enum TryReceiveError {
 }
 
 /// Abstract interface for non-blocking channel.
-pub trait NonBlockingChannel<Request, Response> {
-    fn send(&mut self, request: Request) -> Result<(), SendError<Request>>;
-    fn try_receive(&mut self) -> Result<Response, TryReceiveError>;
+pub trait NonBlockingChannel<Request> {
+    type Response;
+
+    fn send(&self, request: Request) -> Result<(), SendError<Request>>;
+    fn try_receive(&mut self) -> Result<Self::Response, TryReceiveError>;
 }
 
 pub type CanisterHttpAdapterClient =
-    Box<dyn NonBlockingChannel<CanisterHttpRequest, CanisterHttpResponse> + Send>;
+    Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
