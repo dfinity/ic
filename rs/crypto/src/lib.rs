@@ -38,7 +38,7 @@ use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, KeyManager, MultiSigVerifier,
-    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
+    ThresholdSigVerifierByPublicKey,
 };
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::{new_logger, ReplicaLogger};
@@ -108,7 +108,6 @@ pub trait CryptoComponentForVerificationOnly:
     MultiSigVerifier<FinalizationContent>
     + BasicSigVerifier<Block>
     + BasicSigVerifierByPublicKey<MessageId>
-    + ThresholdSigVerifier<CatchUpContent>
     + ThresholdSigVerifierByPublicKey<CatchUpContent>
     + ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes>
     + Send
@@ -122,7 +121,6 @@ impl<T> CryptoComponentForVerificationOnly for T where
     T: MultiSigVerifier<FinalizationContent>
         + BasicSigVerifier<Block>
         + BasicSigVerifierByPublicKey<MessageId>
-        + ThresholdSigVerifier<CatchUpContent>
         + ThresholdSigVerifierByPublicKey<CatchUpContent>
         + ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes>
         + Send
