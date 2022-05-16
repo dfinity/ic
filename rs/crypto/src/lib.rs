@@ -334,6 +334,10 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
     pub fn get_node_id(&self) -> NodeId {
         self.node_id
     }
+
+    pub fn registry_client(&self) -> &Arc<dyn RegistryClient> {
+        &self.registry_client
+    }
 }
 
 fn key_from_registry(
