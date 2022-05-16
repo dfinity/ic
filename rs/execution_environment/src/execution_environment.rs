@@ -1,3 +1,4 @@
+use crate::execution::heartbeat::execute_heartbeat;
 use crate::{
     canister_manager::{
         CanisterManager, CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
@@ -920,7 +921,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
     fn execute_canister_heartbeat(
         &self,
-        mut canister: CanisterState,
+        canister: CanisterState,
         instructions_limit: NumInstructions,
         network_topology: Arc<NetworkTopology>,
         time: Time,
@@ -930,57 +931,23 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         NumInstructions,
         Result<NumBytes, CanisterHeartbeatError>,
     ) {
-        if canister.status() != CanisterStatusType::Running {
-            let status = canister.status();
-            return (
-                canister,
-                instructions_limit,
-                Err(CanisterHeartbeatError::CanisterNotRunning { status }),
-            );
-        }
-
-        let memory_usage = canister.memory_usage(self.own_subnet_type);
-        let compute_allocation = canister.scheduler_state.compute_allocation;
-        if let Err(err) = self.cycles_account_manager.withdraw_execution_cycles(
-            &mut canister.system_state,
-            memory_usage,
-            compute_allocation,
-            instructions_limit,
-        ) {
-            return (
-                canister,
-                instructions_limit,
-                Err(CanisterHeartbeatError::OutOfCycles(err)),
-            );
-        }
-
         let execution_parameters = self.execution_parameters(
             &canister,
             instructions_limit,
             subnet_available_memory,
             ExecutionMode::Replicated,
         );
-
-        let (mut canister, num_instructions_left, result) = self
-            .hypervisor
-            .execute_canister_heartbeat(canister, network_topology, time, execution_parameters);
-
-        // Clone the `cycles_account_manager` to avoid having to require 'static
-        // lifetime bound on `self`.
-        let cycles_account_manager = Arc::clone(&self.cycles_account_manager);
-
-        // Refund the canister with any cycles left after message execution.
-        cycles_account_manager.refund_execution_cycles(
-            &mut canister.system_state,
-            num_instructions_left,
-            instructions_limit,
-        );
-        let result = match result {
-            Ok(heap_delta) => Ok(heap_delta),
-            Err(err) => Err(CanisterHeartbeatError::CanisterExecutionFailed(err)),
-        };
-
-        (canister, num_instructions_left, result)
+        execute_heartbeat(
+            canister,
+            network_topology,
+            execution_parameters,
+            self.own_subnet_id,
+            self.own_subnet_type,
+            time,
+            &self.hypervisor,
+            &self.cycles_account_manager,
+        )
+        .into_parts()
     }
 
     fn max_canister_memory_size(&self) -> NumBytes {

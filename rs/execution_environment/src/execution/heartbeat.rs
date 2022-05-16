@@ -36,6 +36,20 @@ impl HeartbeatResult {
             heap_delta_result,
         }
     }
+
+    pub fn into_parts(
+        self,
+    ) -> (
+        CanisterState,
+        NumInstructions,
+        Result<NumBytes, CanisterHeartbeatError>,
+    ) {
+        (
+            self.canister_state,
+            self.instructions_left,
+            self.heap_delta_result,
+        )
+    }
 }
 
 // Validates a canister before executing the heartbeat.
