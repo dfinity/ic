@@ -12,12 +12,7 @@ use bitcoin::{
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
 use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Instant};
 use thiserror::Error;
 use tokio::sync::Mutex;
 
@@ -105,20 +100,24 @@ struct PeerInfo {
 struct GetHeadersRequest {
     /// The locator hashes sent to the BTC node to assess what headers should be returned by the node.
     locators: Locators,
-    /// Contains the time as which the `getheaders` request was sent.
-    sent_at: Instant,
+    /// Contains the time as which the `getheaders` request was sent. When assigned `None`,
+    /// the request has yet to be sent.
+    sent_at: Option<Instant>,
 }
 
 impl GetHeadersRequest {
     fn with_locators(locators: Locators) -> Self {
         Self {
             locators,
-            sent_at: Instant::now(),
+            sent_at: Some(Instant::now()),
         }
     }
 
     fn has_timed_out(&self) -> bool {
-        self.sent_at.elapsed().as_secs() >= GETHEADERS_REQUEST_TIMEOUT_SECS
+        match self.sent_at {
+            Some(sent_at) => sent_at.elapsed().as_secs() >= GETHEADERS_REQUEST_TIMEOUT_SECS,
+            None => true,
+        }
     }
 }
 
@@ -128,7 +127,7 @@ struct GetDataRequestInfo {
     /// This field stores the socket address of the Bitcoin node to which the request was sent.
     socket: SocketAddr,
     /// This field contains the time at which the getdata request was sent.  
-    sent_at: Instant,
+    sent_at: Option<Instant>,
 }
 
 /// The BlockChainManager struct handles interactions that involve the headers.
@@ -394,12 +393,16 @@ impl BlockchainManager {
         }
 
         let block_hash = block.block_hash();
-        let time_taken = self
-            .getdata_request_info
-            .get(&block_hash)
-            .map(|i| i.sent_at.elapsed())
-            .unwrap_or_default();
+        //Remove the corresponding `getdata` request from peer_info and getdata_request_info.
+        let request = match self.getdata_request_info.remove(&block_hash) {
+            Some(request) => request,
+            None => {
+                // Exit early. If the block is not in the `getdata_request_info`, the block is no longer wanted.
+                return Err(ReceivedBlockMessageError::UnknownBlock);
+            }
+        };
 
+        let time_taken = request.sent_at.map(|i| i.elapsed()).unwrap_or_default();
         trace!(
             self.logger,
             "Received block message from {} : Took {:?}sec. Block {:?}",
@@ -407,13 +410,6 @@ impl BlockchainManager {
             time_taken,
             block_hash
         );
-
-        //Remove the corresponding `getdata` request from peer_info and getdata_request_info.
-        let maybe_request = self.getdata_request_info.remove(&block_hash);
-        if maybe_request.is_none() {
-            // Exit early. If the block is not in the `getdata_request_info`, the block is no longer wanted.
-            return Err(ReceivedBlockMessageError::UnknownBlock);
-        }
 
         match self.blockchain.lock().await.add_block(block.clone()) {
             Ok(block_height) => {
@@ -470,8 +466,8 @@ impl BlockchainManager {
         // Removing all the `getdata` requests that have been sent to the peer before.
         for request in self.getdata_request_info.values_mut() {
             if request.socket == *addr {
-                request.sent_at =
-                    Instant::now() - Duration::from_secs(2 * GETDATA_REQUEST_TIMEOUT_SECS);
+                // Setting to `None` to ensure this `getdata` request is retried in `sync_blocks`.
+                request.sent_at = None;
             }
         }
 
@@ -503,17 +499,19 @@ impl BlockchainManager {
 
     async fn sync_blocks(&mut self, channel: &mut impl Channel) {
         // Timeout requests so they may be retried again.
-        let mut retry_queue = self
-            .getdata_request_info
-            .iter()
-            .filter_map(|(block_hash, request)| {
-                if request.sent_at.elapsed().as_secs() > GETDATA_REQUEST_TIMEOUT_SECS {
-                    Some(*block_hash)
-                } else {
-                    None
+        let mut retry_queue: LinkedHashSet<BlockHash> = LinkedHashSet::new();
+        for (block_hash, request) in self.getdata_request_info.iter_mut() {
+            match request.sent_at {
+                Some(sent_at) => {
+                    if sent_at.elapsed().as_secs() > GETDATA_REQUEST_TIMEOUT_SECS {
+                        retry_queue.insert(*block_hash);
+                    }
                 }
-            })
-            .collect::<LinkedHashSet<_>>();
+                None => {
+                    retry_queue.insert(*block_hash);
+                }
+            }
+        }
 
         // If nothing to be synced, then there is nothing to do at this point.
         if retry_queue.is_empty() && self.block_sync_queue.is_empty() {
@@ -598,7 +596,7 @@ impl BlockchainManager {
                     inv,
                     GetDataRequestInfo {
                         socket: peer.socket,
-                        sent_at: Instant::now(),
+                        sent_at: Some(Instant::now()),
                     },
                 );
             }
@@ -758,7 +756,6 @@ pub mod test {
     use ic_logger::replica_logger::no_op_logger;
     use std::net::SocketAddr;
     use std::str::FromStr;
-    use std::time::Duration;
 
     /// Tests `BlockchainManager::send_getheaders(...)` to ensure the manager's outgoing command
     /// queue
@@ -1172,7 +1169,7 @@ pub mod test {
             test_state.block_1.block_hash(),
             GetDataRequestInfo {
                 socket: addr,
-                sent_at: Instant::now() - Duration::from_secs(GETDATA_REQUEST_TIMEOUT_SECS + 1),
+                sent_at: None,
             },
         );
 
@@ -1184,7 +1181,14 @@ pub mod test {
             .getdata_request_info
             .get(&block_1_hash)
             .expect("missing request info for block hash 1");
-        assert!(request.sent_at.elapsed().as_secs() < GETDATA_REQUEST_TIMEOUT_SECS);
+        assert!(
+            request
+                .sent_at
+                .expect("should be some instant")
+                .elapsed()
+                .as_secs()
+                < GETDATA_REQUEST_TIMEOUT_SECS
+        );
         let getdata_command = channel
             .pop_back()
             .expect("there should `getdata` request in the channel");
@@ -1223,7 +1227,7 @@ pub mod test {
             test_state.block_1.block_hash(),
             GetDataRequestInfo {
                 socket: addr,
-                sent_at: Instant::now(),
+                sent_at: Some(Instant::now()),
             },
         );
 
@@ -1238,7 +1242,14 @@ pub mod test {
             .getdata_request_info
             .get(&block_1_hash)
             .expect("missing request info for block hash 1");
-        assert!(request.sent_at.elapsed().as_secs() < GETDATA_REQUEST_TIMEOUT_SECS);
+        assert!(
+            request
+                .sent_at
+                .expect("should be some instant")
+                .elapsed()
+                .as_secs()
+                < GETDATA_REQUEST_TIMEOUT_SECS
+        );
         assert_eq!(request.socket, addr2);
         let getdata_command = channel
             .pop_back()
@@ -1305,7 +1316,7 @@ pub mod test {
             block_1_hash,
             GetDataRequestInfo {
                 socket: addr,
-                sent_at: Instant::now() - Duration::from_secs(GETDATA_REQUEST_TIMEOUT_SECS + 1),
+                sent_at: None,
             },
         );
 
@@ -1317,7 +1328,14 @@ pub mod test {
             .getdata_request_info
             .get(&block_1_hash)
             .expect("missing request info for block hash 1");
-        assert!(request.sent_at.elapsed().as_secs() < GETDATA_REQUEST_TIMEOUT_SECS);
+        assert!(
+            request
+                .sent_at
+                .expect("should be some instant")
+                .elapsed()
+                .as_secs()
+                < GETDATA_REQUEST_TIMEOUT_SECS
+        );
         let getdata_command = channel
             .pop_back()
             .expect("there should `getdata` request in the channel");
@@ -1446,7 +1464,7 @@ pub mod test {
             next_headers[4].block_hash(),
             GetDataRequestInfo {
                 socket: SocketAddr::from_str("127.0.0.1:8333").expect("should be valid addr"),
-                sent_at: Instant::now(),
+                sent_at: Some(Instant::now()),
             },
         );
 
@@ -1713,8 +1731,7 @@ pub mod test {
                 .getheaders_requests
                 .get_mut(&addr)
                 .unwrap_or_else(|| panic!("{} should have a request", addr));
-            request.sent_at =
-                Instant::now() - Duration::from_secs(2 * GETHEADERS_REQUEST_TIMEOUT_SECS);
+            request.sent_at = None;
         }
 
         blockchain_manager.handle_getheaders_timeouts(&mut channel);
