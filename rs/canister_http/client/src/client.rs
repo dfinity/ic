@@ -28,15 +28,15 @@ use tonic::{transport::Channel, Code};
 use tower::util::Oneshot;
 
 /// The interface provides two non-blocking function - "send" and "try_receive".
-pub struct CanisterHttpAdapterClient<Response> {
+pub struct CanisterHttpAdapterClientImpl {
     rt_handle: Handle,
     grpc_channel: Channel,
-    tx: Sender<Response>,
-    rx: Receiver<Response>,
+    tx: Sender<CanisterHttpResponse>,
+    rx: Receiver<CanisterHttpResponse>,
     anonymous_query_service: AnonymousQueryService,
 }
 
-impl<Response> CanisterHttpAdapterClient<Response> {
+impl CanisterHttpAdapterClientImpl {
     pub fn new(
         rt_handle: Handle,
         grpc_channel: Channel,
@@ -54,14 +54,13 @@ impl<Response> CanisterHttpAdapterClient<Response> {
     }
 }
 
-impl NonBlockingChannel<CanisterHttpRequest, CanisterHttpResponse>
-    for CanisterHttpAdapterClient<CanisterHttpResponse>
-{
+impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
+    type Response = CanisterHttpResponse;
     /// Enqueues a request that will be send to the canister http adapter iff we don't have
     /// more than 'inflight_requests' requests waiting to be consumed by the
     /// client.
     fn send(
-        &mut self,
+        &self,
         canister_http_request: CanisterHttpRequest,
     ) -> Result<(), SendError<CanisterHttpRequest>> {
         // Accept the request iff we can secure capacity for sending the response back.
@@ -167,7 +166,7 @@ impl NonBlockingChannel<CanisterHttpRequest, CanisterHttpResponse>
     }
 
     /// Returns an available canister http response.
-    fn try_receive(&mut self) -> Result<CanisterHttpResponse, TryReceiveError> {
+    fn try_receive(&mut self) -> Result<Self::Response, TryReceiveError> {
         self.rx.try_recv().map_err(|e| match e {
             TryRecvError::Empty => TryReceiveError::Empty,
             TryRecvError::Disconnected => {
@@ -498,7 +497,7 @@ mod tests {
         let base_service = BoxService::new(ServiceBuilder::new().service(mock_anon_svc));
         let svc = ServiceBuilder::new().buffer(1).service(base_service);
 
-        let mut client = CanisterHttpAdapterClient::new(
+        let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
@@ -550,7 +549,7 @@ mod tests {
         let base_service = BoxService::new(ServiceBuilder::new().service(mock_anon_svc));
         let svc = ServiceBuilder::new().buffer(1).service(base_service);
 
-        let mut client = CanisterHttpAdapterClient::new(
+        let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
@@ -600,7 +599,7 @@ mod tests {
         let base_service = BoxService::new(ServiceBuilder::new().service(mock_anon_svc));
         let svc = ServiceBuilder::new().buffer(1).service(base_service);
 
-        let mut client = CanisterHttpAdapterClient::new(
+        let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
@@ -678,7 +677,7 @@ mod tests {
         let base_service = BoxService::new(ServiceBuilder::new().service(mock_anon_svc));
         let svc = ServiceBuilder::new().buffer(1).service(base_service);
 
-        let mut client = CanisterHttpAdapterClient::new(
+        let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
@@ -750,7 +749,7 @@ mod tests {
         let base_service = BoxService::new(ServiceBuilder::new().service(mock_anon_svc));
         let svc = ServiceBuilder::new().buffer(1).service(base_service);
 
-        let mut client = CanisterHttpAdapterClient::new(
+        let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
@@ -819,7 +818,7 @@ mod tests {
         let base_service = BoxService::new(ServiceBuilder::new().service(mock_anon_svc));
         let svc = ServiceBuilder::new().buffer(1).service(base_service);
 
-        let mut client = CanisterHttpAdapterClient::new(
+        let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
@@ -872,7 +871,7 @@ mod tests {
         let svc = ServiceBuilder::new().buffer(1).service(base_service);
 
         // Create a client with a capacity of 2.
-        let mut client = CanisterHttpAdapterClient::new(
+        let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
