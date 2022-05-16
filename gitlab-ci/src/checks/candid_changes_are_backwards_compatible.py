@@ -4,10 +4,12 @@ import contextlib
 import difflib
 import os
 import pprint
+import random
 import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 import traceback
 
 
@@ -251,6 +253,40 @@ def inspect_all_files(candid_file_paths, *, also_reverse, diff_base):
     return any_defective_files
 
 
+def retry(
+    f,
+    args,
+    *,
+    kwargs=None,
+    max_attempts=10,
+    is_permanent_failure=lambda e: False,
+    first_delay_s=0.01,
+    delay_growth_factor=2.0,
+    max_jitter_factor=0.3,
+    max_delay_s=5 * 60.0,
+):
+    if not kwargs:
+        kwargs = {}
+
+    attempts = 0
+    next_delay_s = first_delay_s
+    while True:
+        attempts += 1
+        try:
+            return f(*args, **kwargs)
+        except Exception as e:
+            if is_permanent_failure(e):
+                raise
+            if attempts == max_attempts:
+                print("Error: Too many failed retry attempts!", file=sys.stderr)
+                raise
+            print(f"Transient failure. Will retry in {next_delay_s} s.", file=sys.stderr)
+            time.sleep(next_delay_s)
+            sign = random.choice([-1, +1])
+            jitter = 1.0 + sign * max_jitter_factor * random.random()
+            next_delay_s = min(jitter * delay_growth_factor * next_delay_s, max_delay_s)
+
+
 def get_diff_base():
     try:
         target_branch = os.environ["CI_MERGE_REQUEST_TARGET_BRANCH_NAME"]
@@ -258,7 +294,7 @@ def get_diff_base():
         print('Looks like we are running "conventionally", i.e. not in Gitlab CI.')
         return "HEAD"
 
-    stdout, _stderr = run(["git", "fetch", "origin", target_branch])
+    retry(run, (["git", "fetch", "origin", target_branch],))
     stdout, _stderr = run(["git", "merge-base", f"origin/{target_branch}", "HEAD"])
     diff_base = stdout.strip()
     print(f"It appears we are in Gitlab CI. {target_branch = } {diff_base = }")

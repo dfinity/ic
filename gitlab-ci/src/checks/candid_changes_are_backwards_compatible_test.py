@@ -238,3 +238,56 @@ class CommandLineTest(unittest.TestCase):
         with env("CI_MERGE_REQUEST_TITLE", "Best change evar [override-also-reverse]"):
             # Does not explode.
             run_against("example.did", also_reverse=True)
+
+
+class RetryTest(unittest.TestCase):
+    def test_ok(self):
+        candid_changes_are_backwards_compatible.retry(self.assertTrue, (True,))
+
+    def test_one_transient_failure(self):
+        n = 0
+
+        def flake():
+            nonlocal n
+            n += 1
+            if n == 1:
+                raise Exception
+            return f"ok: {n}"
+
+        stderr = io.StringIO()
+        result = None
+        with contextlib.redirect_stderr(stderr):
+            result = candid_changes_are_backwards_compatible.retry(flake, ())
+
+        self.assertEqual(result, "ok: 2")
+
+        self.assertEqual(
+            stderr.getvalue().count("Transient failure. Will retry in "),
+            1,
+        )
+
+    def test_too_many_failures(self):
+        class MyException(Exception):
+            pass
+
+        def raise_my_exception():
+            raise MyException
+
+        max_attempts = 4
+
+        nothing = result = object()
+        stderr = io.StringIO()
+        with self.assertRaises(MyException):
+            with contextlib.redirect_stderr(stderr):
+                result = candid_changes_are_backwards_compatible.retry(
+                    raise_my_exception,
+                    (),
+                    max_attempts=max_attempts,
+                )
+
+        self.assertEqual(result, nothing)
+
+        self.assertEqual(
+            stderr.getvalue().count("Transient failure. Will retry in "),
+            max_attempts - 1,
+        )
