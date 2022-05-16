@@ -1476,12 +1476,34 @@ fn test_request_nonexistent_canister(method: Method) {
 #[test]
 fn get_running_canister_status_from_another_canister() {
     let controller = canister_test_id(1);
+    let freezing_threshold = 123;
+    let memory_allocation = NumBytes::new(100);
     let canister = CanisterStateBuilder::new()
         .with_status(CanisterStatusType::Running)
         .with_controller(controller)
         .with_cycles(INITIAL_CYCLES)
-        .with_freezing_threshold(123)
+        .with_freezing_threshold(freezing_threshold)
+        .with_memory_allocation(memory_allocation)
         .build();
+
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let idle_cycles_burned_per_second = cycles_account_manager.idle_cycles_burned_rate(
+        MemoryAllocation::BestEffort,
+        memory_allocation,
+        ComputeAllocation::zero(),
+    );
+
+    assert_eq!(
+        (idle_cycles_burned_per_second * freezing_threshold as f64) as u128,
+        cycles_account_manager
+            .freeze_threshold_cycles(
+                NumSeconds::new(freezing_threshold),
+                MemoryAllocation::BestEffort,
+                memory_allocation,
+                ComputeAllocation::zero()
+            )
+            .get()
+    );
     test_canister_status_helper(
         canister,
         CanisterStatusResultV2::new(
@@ -1492,8 +1514,9 @@ fn get_running_canister_status_from_another_canister() {
             NumBytes::from(0),
             INITIAL_CYCLES.get(),
             ComputeAllocation::default().as_percent(),
-            None,
-            123,
+            Some(100),
+            freezing_threshold,
+            idle_cycles_burned_per_second,
         ),
     )
 }
@@ -1518,6 +1541,7 @@ fn get_stopped_canister_status_from_another_canister() {
             ComputeAllocation::default().as_percent(),
             None,
             123,
+            0f64,
         ),
     );
 }
@@ -1542,6 +1566,7 @@ fn get_stopping_canister_status_from_another_canister() {
             ComputeAllocation::default().as_percent(),
             None,
             123,
+            0f64,
         ),
     );
 }
