@@ -145,6 +145,15 @@ pub enum TransactionManagerRequest {
 #[derive(Clone)]
 pub struct AdapterState {
     /// The field contains instant of the latest received request.
+    /// None means that we haven't reveived a request yet and the adapter should be in idle mode!
+    ///
+    /// !!! BE CAREFUL HERE !!! since the adapter should ALWAYS be idle when starting up.
+    /// This is important because most subnets will have bitcoin integration disabled and we don't want
+    /// to unnecessary download bitcoin data.
+    /// In a previous iteration we set this value to at least 'idle_seconds' in the past on startup.
+    /// This way the adapter would always be in idle when starting since 'elapsed()' is greater than 'idle_seconds'.
+    /// On MacOS this approach caused issues since on MacOS Instant::now() is time since boot and when substracting
+    /// 'idle_seconds' we encountered an underflow and paniced.
     last_received_at: Arc<RwLock<Option<Instant>>>,
     /// The field contains how long the adapter should wait to before becoming idle.
     idle_seconds: u64,
