@@ -41,10 +41,10 @@ use crate::{
 use core::time;
 use ic_fondue::ic_manager::IcHandle;
 use ic_registry_subnet_type::SubnetType;
+use ic_replay::player::ReplayError;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use std::convert::TryFrom;
-use std::io::{Read, Write};
 use std::net::IpAddr;
 use std::thread;
 
@@ -122,32 +122,19 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     backup.sync_ic_json5_file();
     backup.rsync_spool();
 
-    info!(
-        log,
-        "nns_backup_test: Let's hijack the stdout from the replay tool for later analysis."
-    );
-    let mut shh = shh::stdout().unwrap();
-
-    backup.replay(&replica_version);
+    let upgrade_height = match backup.replay(&replica_version) {
+        Err(ReplayError::UpgradeDetected((h, _))) => h,
+        Err(ReplayError::StateDivergence(height)) => panic!(
+            "State computation diverged pre-upgrade at height {}",
+            height
+        ),
+        _ => panic!("No upgrade was detected"),
+    };
 
     info!(
         log,
         "nns_backup_test: Check that the replay correctly recognized an upgrade."
     );
-    let mut buffer = String::new();
-    shh.read_to_string(&mut buffer).unwrap();
-    info!(
-        log,
-        "nns_backup_test: Drop shh here to enable writing to stdout again (1)."
-    );
-    drop(shh);
-    std::io::stdout().write_all(buffer.as_bytes()).unwrap();
-    if !buffer.contains("Please use the replay tool of version") {
-        panic!("The replay tool did not report an upgrade.");
-    }
-    if buffer.contains("does not correspond") {
-        panic!("State computation diverged pre-upgrade.");
-    }
 
     for _ in 0..20 {
         info!(
@@ -155,30 +142,14 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
             "nns_backup_test: Let's pull some more artefacts and replay with the new version."
         );
         backup.rsync_spool();
-        let mut shh = shh::stdout().unwrap();
-        backup.replay(&test_version);
-
-        let mut buffer = String::new();
-        shh.read_to_string(&mut buffer).unwrap();
-        info!(
-            log,
-            "nns_backup_test: Drop shh here to enable writing to stdout again (2)."
-        );
-        drop(shh);
-        std::io::stdout().write_all(buffer.as_bytes()).unwrap();
-
-        if buffer.contains("does not correspond") {
-            panic!("State computation diverged post-upgrade.");
-        }
-
-        info!(
-            log,
-            "nns_backup_test: Continue until we were able to find at least one CUP."
-        );
-        if buffer.contains("Found a CUP") {
-            info!(log, "nns_backup_test: found a cup, test ends");
-            return;
-        }
+        match backup.replay(&test_version) {
+            Ok((height, _)) => {
+                if height > upgrade_height {
+                    return;
+                }
+            }
+            e => panic!("Unexpected error {:?}", e),
+        };
         thread::sleep(time::Duration::from_secs(10));
     }
 
