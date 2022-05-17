@@ -6,7 +6,7 @@ use crate::{
     },
     util::{block_on, runtime_from_url},
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use ic_canister_client::Sender;
 use ic_fondue::ic_manager::IcEndpoint;
 use ic_http_utils::file_downloader::FileDownloader;
@@ -121,6 +121,26 @@ pub(crate) fn assert_assigned_replica_version(
     }
 
     panic!("Couldn't detect the replica version {}", expected_version)
+}
+
+/// Waits until the endpoint is healthy and running the given replica version.
+/// Panics if the timeout is reached while waiting.
+pub(crate) fn assert_assigned_replica_version_v2(
+    node: &IcNodeSnapshot,
+    expected_version: &str,
+    logger: Logger,
+) {
+    retry(
+        logger,
+        secs(600),
+        secs(10),
+        || match get_assigned_replica_version_v2(node) {
+            Ok(ver) if ver == expected_version => Ok(()),
+            Ok(ver) => bail!("Replica version: {:?}", ver),
+            Err(err) => bail!("Error reading replica version: {:?}", err),
+        },
+    )
+    .expect("Can't fetch expected replica version");
 }
 
 /// Gets the replica version from the endpoint if it is healthy.
