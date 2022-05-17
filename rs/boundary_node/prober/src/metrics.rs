@@ -36,7 +36,7 @@ impl MetricParams {
 pub struct WithMetrics<T>(pub T, pub MetricParams);
 
 #[async_trait]
-impl<T: Load<ServiceContext> + Send + Sync> Load<ServiceContext> for WithMetrics<T> {
+impl<T: Load> Load for WithMetrics<T> {
     async fn load(&self) -> Result<ServiceContext, Error> {
         let start_time = Instant::now();
 
@@ -58,7 +58,7 @@ impl<T: Load<ServiceContext> + Send + Sync> Load<ServiceContext> for WithMetrics
 }
 
 #[async_trait]
-impl<T: Create + Send + Sync> Create for WithMetrics<T> {
+impl<T: Create> Create for WithMetrics<T> {
     async fn create(&self, agent: &Agent, wallet_id: &str) -> Result<Principal, Error> {
         let start_time = Instant::now();
 
@@ -98,7 +98,7 @@ impl<T: Create + Send + Sync> Create for WithMetrics<T> {
 }
 
 #[async_trait]
-impl<T: Install + Send + Sync> Install for WithMetrics<T> {
+impl<T: Install> Install for WithMetrics<T> {
     async fn install(
         &self,
         agent: &Agent,
@@ -144,7 +144,7 @@ impl<T: Install + Send + Sync> Install for WithMetrics<T> {
 }
 
 #[async_trait]
-impl<T: Probe + Send + Sync> Probe for WithMetrics<T> {
+impl<T: Probe> Probe for WithMetrics<T> {
     async fn probe(&self, agent: &Agent, canister_id: Principal) -> Result<(), Error> {
         let start_time = Instant::now();
 
@@ -183,7 +183,7 @@ impl<T: Probe + Send + Sync> Probe for WithMetrics<T> {
 }
 
 #[async_trait]
-impl<T: Stop + Send + Sync> Stop for WithMetrics<T> {
+impl<T: Stop> Stop for WithMetrics<T> {
     async fn stop(
         &self,
         agent: &Agent,
@@ -229,7 +229,7 @@ impl<T: Stop + Send + Sync> Stop for WithMetrics<T> {
 }
 
 #[async_trait]
-impl<T: Delete + Send + Sync> Delete for WithMetrics<T> {
+impl<T: Delete> Delete for WithMetrics<T> {
     async fn delete(
         &self,
         agent: &Agent,
@@ -275,7 +275,7 @@ impl<T: Delete + Send + Sync> Delete for WithMetrics<T> {
 }
 
 #[async_trait]
-impl<T: Run + Send + Sync> Run for WithMetrics<T> {
+impl<T: Run> Run for WithMetrics<T> {
     async fn run(&mut self) -> Result<(), Error> {
         let start_time = Instant::now();
 
