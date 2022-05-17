@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "certification_version",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_certification_version",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:strum_macros",
+    ],
+    deps = [
+        "@crate_index//:strum",
+    ],
+)
+
+rust_test(
+    name = "certification_version_test",
+    crate = ":certification_version",
+)

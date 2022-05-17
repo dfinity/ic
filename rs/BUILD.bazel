@@ -17,6 +17,7 @@ filegroup(
         "//rs/bitcoin/types/internal:sources",
         "//rs/bitcoin/types/public:sources",
         "//rs/bitcoin/validation:sources",
+        "//rs/canonical_state/certification_version:sources",
         "//rs/constants:sources",
         "//rs/criterion_time:sources",
         "//rs/crypto/internal/crypto_lib/sha2:sources",
