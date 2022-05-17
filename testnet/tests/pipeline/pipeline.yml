@@ -501,16 +501,6 @@ system-tests-hourly:
   script:
     - *run-farm-based-test
 
-nns-backup-hourly:
-  extends:
-    - .system-tests
-    - .with-monitoring
-  variables:
-    SUITE_NAME: "nns_backup_hourly"
-    cd_target_env: "HOURLY"
-  script:
-    - *run-farm-based-test
-
 system-tests-nightly:
   extends:
     - .system-tests

@@ -521,19 +521,12 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     workload_counter_canister_test::short_test,
                 )]),
             ),
+            pot(
+                "nns_backup_pot",
+                orchestrator::nns_backup::config(),
+                par(vec![t("nns_backup_test", orchestrator::nns_backup::test)]),
+        )
         ],
-    ));
-
-    // This test grabs stdout of the entire process and thus possibly interferes
-    // with other tests.
-    // (JIRA: VER-1630)
-    m.add_suite(suite(
-        "nns_backup_hourly",
-        vec![pot(
-            "nns_backup_pot",
-            orchestrator::nns_backup::config(),
-            par(vec![t("nns_backup_test", orchestrator::nns_backup::test)]),
-        )],
     ));
 
     // The tests in this suite require canisters to be build prior to
