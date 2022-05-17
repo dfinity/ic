@@ -284,7 +284,6 @@ def generate_gitlab_yaml(
 
         if "CI_PIPELINE_ID" in os.environ:
             fout.write("  PARENT_PIPELINE_ID: %s\n" % (os.getenv("CI_PIPELINE_ID")))
-            fout.write("  FARM_SHARD: %s\n" % random.randint(1, 3))
             fout.write("  CDPRNET: cdpr0%s\n" % (random.randint(1, 5)))
             fout.write("  GIT_REVISION: $CI_COMMIT_SHA\n")
             if disable_caching:
