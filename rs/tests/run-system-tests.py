@@ -30,7 +30,6 @@ import time
 from pathlib import Path
 from typing import Dict
 from typing import List
-from typing import Optional
 from typing import Tuple
 
 import requests
@@ -47,6 +46,10 @@ TIMEOUT_DEFAULT_SEC = 50 * 60
 SLACK_CHANNEL_NOTIFY = "test-failure-alerts"
 
 
+class GetImageShaException(Exception):
+    pass
+
+
 def try_kill_pgid(pgid: int) -> None:
     # If the process has already exited, then ProcessLookupError will be raised.
     # We simply ignore this specific exception.
@@ -57,20 +60,19 @@ def try_kill_pgid(pgid: int) -> None:
 
 
 def notify_slack(slack_message: str, ci_project_dir: str) -> int:
-    notify_slack_command = " ".join(
-        [
-            f"python3 {ci_project_dir}/gitlab-ci/src/notify_slack/notify_slack.py",
-            f'"{slack_message}"',
-            f'--channel="{SLACK_CHANNEL_NOTIFY}"',
-        ]
-    )
+    notify_slack_command = [
+        "python3",
+        f"{ci_project_dir}/gitlab-ci/src/notify_slack/notify_slack.py",
+        slack_message,
+        f'--channel="{SLACK_CHANNEL_NOTIFY}"',
+    ]
     returncode = run_command(command=notify_slack_command)
     return returncode
 
 
 def run_help_command():
     # Help command is supposed to be run only locally.
-    help_command = "/usr/bin/time cargo run --bin prod-test-driver -- --help"
+    help_command = ["/usr/bin/time", "cargo", "run", "--bin", "prod-test-driver", "--", "--help"]
     run_command(command=help_command)
 
 
@@ -133,21 +135,29 @@ def get_ic_os_image_sha(img_base_url) -> Tuple[str, str]:
     img_url = f"{img_base_url}disk-img.tar.gz"
     img_sha256_url = f"{img_base_url}SHA256SUMS"
     result = requests.get(f"{img_sha256_url}")
-    img_sha256 = result.text.split(" ")[0]
+    logging.debug(f"GET {img_sha256_url} responded with status_code={result.status_code}.")
+    # Temporary disable exception until boundary-os-diskimg job is fixed.
+    # if result.status_code != 200:
+    #     raise GetImageShaException(f"Unexpected status_code={result.status_code} for the GET {img_sha256_url}")
+    try:
+        img_sha256, _ = result.text.split(" ")
+    except Exception:
+        # Temporary disable exception and return a dummy value, until boundary-os-diskimg job is fixed.
+        # raise GetImageShaException(f"Couldn't extract img_sha256 from {result.text}.")
+        return "dummy_img_sha256", img_url
     return img_sha256, img_url
 
 
-def run_command(command: str, env: Optional[Dict] = None) -> int:
-    # Run shell subprocess with live stdout, stderr.
-    process = subprocess.run(command, shell=True, env=env)
+def run_command(command: List[str], **kwargs) -> int:
+    process = subprocess.run(command, **kwargs)
     return process.returncode
 
 
-def run_command_with_timeout(command: str, env: Optional[Dict] = None, timeout=None) -> int:
+def run_command_with_timeout(command: List[str], timeout=None, **kwargs) -> int:
     # As the command below launches more than one subprocess, we need to use Popen to have control over child processes.
     # In particular, we use a new_session to kill the whole group of processes at once.
     try:
-        p = subprocess.Popen(command, env=env, start_new_session=True, shell=True)
+        p = subprocess.Popen(command, start_new_session=True, **kwargs)
         pgid = os.getpgid(p.pid)
         p.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -164,13 +174,13 @@ def generate_default_job_id() -> str:
 
 
 def build_test_driver(shell_wrapper: str) -> int:
-    test_driver_build_cmd = " ".join([shell_wrapper, "cargo build --bin prod-test-driver"])
+    test_driver_build_cmd = [shell_wrapper, "cargo", "build", "--bin", "prod-test-driver"]
     logging.info("Building prod-test-driver binary...")
     status_code = run_command(command=test_driver_build_cmd)
     return status_code
 
 
-def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_folder: bool) -> int:
+def main(runner_args: List[str], folders_to_remove: List[str], keep_tmp_artifacts_folder: bool) -> int:
     # From this path the script was started.
     base_path = os.getcwd()
     # Set path to the script path (in case script is launched from non-parent dir).
@@ -182,9 +192,9 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
     TEST_ES_HOSTNAMES = os.getenv("TEST_ES_HOSTNAMES", default=None)
     SHELL_WRAPPER = os.getenv("SHELL_WRAPPER", default="/usr/bin/time")
     SSH_KEY_DIR = os.getenv("SSH_KEY_DIR", default=None)
-    IC_VERSION_ID = os.getenv("IC_VERSION_ID", default=None)
+    IC_VERSION_ID = os.getenv("IC_VERSION_ID", default="")
     JOB_ID = os.getenv("CI_JOB_ID", default=None)
-    ADDITIONAL_ARGS = os.getenv("ADDITIONAL_ARGS", default="")
+    ADDITIONAL_ARGS = os.getenv("ADDITIONAL_ARGS", default=[])
     CI_PARENT_PIPELINE_SOURCE = os.getenv("CI_PARENT_PIPELINE_SOURCE", default="")
     CI_PIPELINE_SOURCE = os.getenv("CI_PIPELINE_SOURCE", default="")
     ROOT_PIPELINE_ID = os.getenv("ROOT_PIPELINE_ID", default="")
@@ -222,7 +232,7 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
         f"is_slack_test_failure_notify={is_slack_test_failure_notify}, is_slack_timeout_notify={is_slack_timeout_notify}"
     )
 
-    if IC_VERSION_ID is None:
+    if not IC_VERSION_ID:
         exit_with_log(
             "You must specify GuestOS image version via IC_VERSION_ID. You have two options:\n1) To obtain a GuestOS "
             "image version for your commit, please push your branch to origin and create an MR. See "
@@ -254,7 +264,8 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
         logging.info("SSH_KEY_DIR variable is not set, generating keys.")
         SSH_KEY_DIR = tempfile.mkdtemp(prefix="tmp_ssh_keys_")
         folders_to_remove.append(SSH_KEY_DIR)
-        gen_key_command = f"ssh-keygen -t ed25519 -N '' -f {SSH_KEY_DIR}/admin"
+        gen_key_command = ["ssh-keygen", "-t", "ed25519", "-N", "", "-f", f"{SSH_KEY_DIR}/admin"]
+        logging.debug(f"gen_key_command: {gen_key_command}")
         gen_key_returncode = run_command(command=gen_key_command)
         if gen_key_returncode == 0:
             logging.info("ssh keys generated successfully.")
@@ -264,7 +275,7 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
     if is_local_run:
         JOB_ID = generate_default_job_id()
         RUN_CMD = "cargo"
-        ADDITIONAL_ARGS = "run --bin prod-test-driver --"
+        ADDITIONAL_ARGS = ["run", "--bin", "prod-test-driver", "--"]
         artifacts_tmp_dir = tempfile.mkdtemp(prefix="tmp_artifacts_")
         if not keep_tmp_artifacts_folder:
             folders_to_remove.append(artifacts_tmp_dir)
@@ -276,12 +287,12 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
         results_tmp_dir = tempfile.mkdtemp(prefix="tmp_results_")
         folders_to_remove.append(results_tmp_dir)
         RESULT_FILE = f"{results_tmp_dir}/test-results.json"
-        SUMMARY_ARGS = f"--test_results {RESULT_FILE} --verbose "
+        SUMMARY_ARGS = ["--test_results", RESULT_FILE, "--verbose"]
     else:
         ARTIFACT_DIR = f"{CI_PROJECT_DIR}/artifacts"
         RUN_CMD = f"{ARTIFACT_DIR}/prod-test-driver"
         RESULT_FILE = f"{CI_PROJECT_DIR}/test-results.json"
-        SUMMARY_ARGS = f"--test_results {RESULT_FILE} "
+        SUMMARY_ARGS = ["--test_results", RESULT_FILE]
 
     canisters_path = os.path.join(CI_PROJECT_DIR, f"{ARTIFACT_DIR}/canisters")
     release_path = os.path.join(CI_PROJECT_DIR, f"{ARTIFACT_DIR}/release")
@@ -308,6 +319,7 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
         f"CI_PIPELINE_SOURCE={CI_PIPELINE_SOURCE}, ROOT_PIPELINE_ID={ROOT_PIPELINE_ID}, CI_JOB_URL={CI_JOB_URL}, "
         f"CI_PROJECT_URL={CI_PROJECT_URL}, DEV_IMG_URL={IC_OS_DEV_IMG_URL}, CI_COMMIT_SHA={CI_COMMIT_SHA}, ARTIFACT_DIR={ARTIFACT_DIR}, "
         f"DEV_IMG_SHA256={IC_OS_DEV_IMG_SHA256}, CI_PARENT_PIPELINE_SOURCE={CI_PARENT_PIPELINE_SOURCE}, CI_JOB_NAME={CI_JOB_NAME}, "
+        f"BOUNDARY_NODE_IMG_URL={BOUNDARY_NODE_IMG_URL}, BOUNDARY_NODE_IMG_SHA256={BOUNDARY_NODE_IMG_SHA256}, "
         f"SYSTEM_TESTS_TIMEOUT_SEC={SYSTEM_TESTS_TIMEOUT_SEC}"
     )
 
@@ -330,13 +342,17 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
         )
     else:
         logging.info(f"Downloading dependencies built from commit: {GREEN}{IC_VERSION_ID}{NC}")
-        RCLONE_ARGS = f"--git-rev {IC_VERSION_ID} --out={ARTIFACT_DIR} --unpack --mark-executable"
-        clone_artifacts_canisters_cmd = (
-            f"{CI_PROJECT_DIR}/gitlab-ci/src/artifacts/rclone_download.py --remote-path=canisters {RCLONE_ARGS}"
-        )
-        clone_artifacts_release_cmd = (
-            f"{CI_PROJECT_DIR}/gitlab-ci/src/artifacts/rclone_download.py --remote-path=release {RCLONE_ARGS}"
-        )
+        RCLONE_ARGS = ["--git-rev", IC_VERSION_ID, f"--out={ARTIFACT_DIR}", "--unpack", "--mark-executable"]
+        clone_artifacts_canisters_cmd = [
+            f"{CI_PROJECT_DIR}/gitlab-ci/src/artifacts/rclone_download.py",
+            "--remote-path=canisters",
+        ] + RCLONE_ARGS
+        clone_artifacts_release_cmd = [
+            f"{CI_PROJECT_DIR}/gitlab-ci/src/artifacts/rclone_download.py",
+            "--remote-path=release",
+        ] + RCLONE_ARGS
+        logging.debug(f"clone_artifacts_canisters_cmd: {clone_artifacts_canisters_cmd}")
+        logging.debug(f"clone_artifacts_release_cmd: {clone_artifacts_release_cmd}")
         download_canisters_returncode = run_command(command=clone_artifacts_canisters_cmd)
         download_release_returncode = run_command(command=clone_artifacts_release_cmd)
         if download_canisters_returncode != 0:
@@ -347,12 +363,14 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
     logging.debug("ARTIFACTS_DIR content:")
     os.system(f"ls -R {ARTIFACT_DIR}")
 
-    run_test_driver_cmd = " ".join(
+    run_test_driver_cmd = (
         [
             SHELL_WRAPPER,
             RUN_CMD,
-            ADDITIONAL_ARGS,
-            runner_args,
+        ]
+        + ADDITIONAL_ARGS
+        + runner_args
+        + [
             f"--job-id={JOB_ID}",
             f"--initial-replica-version={IC_VERSION_ID}",
             f"--ic-os-img-url={IC_OS_DEV_IMG_URL}",
@@ -366,7 +384,7 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
             f"--journalbeat-hosts={TEST_ES_HOSTNAMES}",
         ]
     )
-
+    logging.debug(f"run_test_driver_cmd: {run_test_driver_cmd}")
     # We launch prod-test-driver with a timeout. This enables us to send slack notification before the global CI timeout kills the whole job.
     testrun_returncode = run_command_with_timeout(
         command=run_test_driver_cmd, env=env_dict, timeout=SYSTEM_TESTS_TIMEOUT_SEC
@@ -397,15 +415,14 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
 
     if is_honeycomb_push:
         logging.info("Pushing results to honeycomb.")
-        honeycomb_cmd = " ".join(
-            [
-                f"python3 {CI_PROJECT_DIR}/gitlab-ci/src/test_results/honeycomb.py",
-                f"--test_results={RESULT_FILE}",
-                f"--trace_id={ROOT_PIPELINE_ID}",
-                f"--parent_id={JOB_ID}",
-                "--type=system-tests",
-            ]
-        )
+        honeycomb_cmd = [
+            "python3",
+            f"{CI_PROJECT_DIR}/gitlab-ci/src/test_results/honeycomb.py",
+            f"--test_results={RESULT_FILE}",
+            f"--trace_id={ROOT_PIPELINE_ID}",
+            f"--parent_id={JOB_ID}",
+            "--type=system-tests",
+        ]
         honeycomb_returncode = run_command(command=honeycomb_cmd)
         if honeycomb_returncode == 0:
             logging.info("Successfully pushed results to honeycomb.")
@@ -420,14 +437,18 @@ def main(runner_args: str, folders_to_remove: List[str], keep_tmp_artifacts_fold
                 f"IC_VERSION_ID: \`{IC_VERSION_ID}\`.",  # noqa
             ]
         )
-        SUMMARY_ARGS += f'--slack_message "{msg}"'
+        SUMMARY_ARGS.append(f'--slack_message "{msg}"')
 
     logging.debug(f"SUMMARY_ARGS={SUMMARY_ARGS}")
 
     # NOTE: redirect stdout to stderr, to show the output in gitlab CI.
     # This hack should be reworked by importing the script and passing the logger.
-    run_summary_cmd = f"python3 {CI_PROJECT_DIR}/gitlab-ci/src/test_results/summary.py {SUMMARY_ARGS} 1>&2"
-    summary_run_returncode = run_command(command=run_summary_cmd, env=env_dict)
+    run_summary_cmd = [
+        "python3",
+        f"{CI_PROJECT_DIR}/gitlab-ci/src/test_results/summary.py",
+    ] + SUMMARY_ARGS
+    logging.debug(f"run_summary_cmd={run_summary_cmd}")
+    summary_run_returncode = run_command(command=run_summary_cmd, env=env_dict, stdout=sys.stderr.fileno())
     if summary_run_returncode == 0:
         logging.info("Summary created successfully.")
     else:
@@ -442,7 +463,7 @@ if __name__ == "__main__":
     in_nix_shell = "IN_NIX_SHELL" in os.environ
     if is_local_run and not in_nix_shell:
         exit_with_log("This script must be run from the nix-shell.")
-    runner_args = " ".join(sys.argv[1:])
+    runner_args = sys.argv[1:]
     logging.debug(f"Input arguments are: {runner_args}")
     if any([i in runner_args for i in ["-h", "--help"]]):
         run_help_command()
@@ -454,13 +475,14 @@ if __name__ == "__main__":
     if "--keep_artifacts" in runner_args:
         keep_tmp_artifacts_folder = True
         # Delete the flag from the arguments, as it is not intended for `prod-test-driver`
-        runner_args = runner_args.replace("--keep_artifacts", "")
-    if "--working-dir" not in runner_args:
+        runner_args.remove("--keep_artifacts")
+    if not any(["--working-dir" in arg for arg in runner_args]):
         # create working dir
         working_dir = tempfile.mkdtemp(prefix="tmp_working_dir_")
-        runner_args += f" --working-dir={working_dir}"
+        runner_args.append(f"--working-dir={working_dir}")
         folders_to_remove.append(working_dir)
     testrun_returncode = 1
+    logging.debug(f"runner_args arguments are: {runner_args}")
     try:
         testrun_returncode = main(runner_args, folders_to_remove, keep_tmp_artifacts_folder)
     except Exception as e:
