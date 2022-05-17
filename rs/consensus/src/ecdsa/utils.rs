@@ -42,16 +42,27 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
     }
 
     fn xnet_reshare_in_progress(&self) -> bool {
-        if !self.tip.payload.is_summary() {
-            let tip_ecdsa_payload = &self.tip.payload.as_ref().as_data().ecdsa;
-            if let Some(payload) = tip_ecdsa_payload {
-                return matches!(
-                    payload.key_transcript.next_in_creation,
+        if self.tip.payload.is_summary() {
+            let ecdsa = &self.tip.payload.as_ref().as_summary().ecdsa;
+            if let Some(ecdsa_payload) = ecdsa {
+                matches!(
+                    ecdsa_payload.key_transcript.next_in_creation,
                     KeyTranscriptCreation::XnetReshareOfUnmaskedParams(_)
-                );
+                )
+            } else {
+                false
+            }
+        } else {
+            let ecdsa = &self.tip.payload.as_ref().as_data().ecdsa;
+            if let Some(ecdsa_payload) = ecdsa {
+                matches!(
+                    ecdsa_payload.key_transcript.next_in_creation,
+                    KeyTranscriptCreation::XnetReshareOfUnmaskedParams(_)
+                )
+            } else {
+                false
             }
         }
-        false
     }
 
     fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
