@@ -1742,7 +1742,7 @@ impl ExecutionEnvironmentImpl {
                 derivation_path,
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
-            });
+            })?;
         Ok(())
     }
 

@@ -1,3 +1,4 @@
+use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::EcdsaKeyId;
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::{
@@ -14,6 +15,8 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{From, TryFrom},
 };
+
+const MAX_ECDSA_QUEUE_SIZE: usize = 1_000;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SubnetCallContextManager {
@@ -32,10 +35,22 @@ impl SubnetCallContextManager {
         self.setup_initial_dkg_contexts.insert(callback_id, context);
     }
 
-    pub fn push_sign_with_ecdsa_request(&mut self, context: SignWithEcdsaContext) {
-        let callback_id = CallbackId::new(self.next_callback_id);
-        self.next_callback_id += 1;
-        self.sign_with_ecdsa_contexts.insert(callback_id, context);
+    pub fn push_sign_with_ecdsa_request(
+        &mut self,
+        context: SignWithEcdsaContext,
+    ) -> Result<(), UserError> {
+        if self.sign_with_ecdsa_contexts.len() >= MAX_ECDSA_QUEUE_SIZE {
+            Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "sign_with_ecdsa request could not be handled, the ECDSA signature queue is full."
+                    .to_string(),
+            ))
+        } else {
+            let callback_id = CallbackId::new(self.next_callback_id);
+            self.next_callback_id += 1;
+            self.sign_with_ecdsa_contexts.insert(callback_id, context);
+            Ok(())
+        }
     }
 
     pub fn push_http_request(&mut self, context: CanisterHttpRequestContext) {
