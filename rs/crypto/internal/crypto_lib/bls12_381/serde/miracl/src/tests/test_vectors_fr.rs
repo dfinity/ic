@@ -2,7 +2,7 @@
 use crate::{miracl_fr_from_bytes, miracl_fr_to_bytes};
 use ic_crypto_internal_types::curves::bls12_381::conversions::fr_bytes_from_vec;
 use ic_crypto_internal_types::curves::test_vectors::bls12_381 as test_vectors;
-use miracl_core::bls12381::{big::BIG, rom::CURVE_ORDER};
+use miracl_core_bls12381::bls12381::{big::BIG, rom::CURVE_ORDER};
 
 /// Copy a BIG, reduced modulo the curve order
 fn reduced_mod(value: &BIG) -> BIG {

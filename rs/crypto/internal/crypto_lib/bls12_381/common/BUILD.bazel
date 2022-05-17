@@ -1,0 +1,44 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs/crypto:__subpackages__"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "common",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_internal_bls12381_common",
+    edition = "2018",
+    deps = [
+        "//rs/crypto/internal/crypto_lib/bls12_381/serde/miracl",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/sha",
+        "@crate_index//:bls12_381",
+        "@crate_index//:hex",
+        "@crate_index//:miracl_core_bls12381",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:rand_core",
+    ] + select({
+        "@rules_rust//rust/platform:wasm32-unknown-unknown": ["@wasm_crate_index//:getrandom"],
+        "//conditions:default": ["@crate_index//:getrandom"],
+    }),
+)
+
+rust_test(
+    name = "common_test",
+    crate = ":common",
+    proc_macro_deps = [
+        "@crate_index//:proptest-derive",
+    ],
+    deps = [
+        "@crate_index//:proptest",
+    ],
+)

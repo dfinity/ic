@@ -5,7 +5,7 @@ authors = ["The Internet Computer Project Developers"]
 edition = "2018"
 
 [dependencies]
-miracl_core = { version = "4.1.2", package = "miracl_core_bls12381" }
+miracl_core_bls12381 = { version = "4.1.2", package = "miracl_core_bls12381" }
 ic-crypto-internal-types = { path = "../../../types" }
 
 [dev-dependencies]

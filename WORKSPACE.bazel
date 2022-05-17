@@ -19,6 +19,15 @@ load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "spli
 
 crates_repository(
     name = "crate_index",
+    annotations = {
+        "miracl_core_bls12381": [crate.annotation(
+            rustc_flags = [
+                "-C",
+                "opt-level=3",
+            ],
+        )],
+    },
+    isolated = True,
     lockfile = "//:Cargo.Bazel.lock",
     packages = {
         # Keep sorted.
@@ -36,6 +45,16 @@ crates_repository(
         "bitflags": crate.spec(version = "1.2.1"),
         "byte-unit": crate.spec(version = "1.0.1"),
         "bytes": crate.spec(version = "1.0.1"),
+        "bls12_381": crate.spec(
+            default_features = False,
+            features = [
+                "groups",
+                "pairings",
+                "alloc",
+                "experimental",
+            ],
+            version = "0.5.0",
+        ),
         "candid": crate.spec(version = "0.7.13"),
         "candid_derive": crate.spec(version = "0.4.5"),
         "chrono": crate.spec(version = "0.4.19"),
@@ -58,9 +77,14 @@ crates_repository(
         "futures": crate.spec(version = "0.3.21"),
         "hex": crate.spec(version = "0.4.3"),
         "hyper": crate.spec(version = "0.14.18"),
+        "getrandom": crate.spec(
+            package = "getrandom",
+            version = "0.2",
+        ),
         "lazy_static": crate.spec(version = "1.4.0"),
         "libc": crate.spec(version = "0.2.91"),
         "maplit": crate.spec(version = "1.0.2"),
+        "miracl_core_bls12381": crate.spec(version = "4.1.2"),
         "nix": crate.spec(version = "0.23.0"),
         "num-traits": crate.spec(version = "0.2.12"),
         "openssl": crate.spec(version = "0.10.29"),
@@ -73,6 +97,8 @@ crates_repository(
         "prost": crate.spec(version = "0.9.0"),
         "prost-build": crate.spec(version = "0.9.0"),
         "rand": crate.spec(version = "0.8.3"),
+        "rand_chacha": crate.spec(version = "0.2.2"),
+        "rand_core": crate.spec(version = "0.5.1"),
         "regex": crate.spec(version = "1.3.9"),
         "scoped_threadpool": crate.spec(version = "0.1.0"),
         "serde_bytes": crate.spec(version = "0.11.6"),
@@ -121,6 +147,27 @@ crates_repository(
 load("@crate_index//:defs.bzl", "crate_repositories")
 
 crate_repositories()
+
+# We need another repository for customizing packages for Wasm targest.
+# TODO: remove the second lock file once https://github.com/bazelbuild/rules_rust/issues/1337 is fixed.
+crates_repository(
+    name = "wasm_crate_index",
+    isolated = True,
+    lockfile = "//:Wasm.Cargo.Bazel.lock",
+    packages = {
+        "getrandom": crate.spec(
+            features = ["custom"],
+            version = "0.2",
+        ),
+    },
+    splicing_config = splicing_config(
+        resolver_version = "2",
+    ),
+)
+
+load("@wasm_crate_index//:defs.bzl", wasm_crate_repositories = "crate_repositories")
+
+wasm_crate_repositories()
 
 http_archive(
     name = "rules_proto",

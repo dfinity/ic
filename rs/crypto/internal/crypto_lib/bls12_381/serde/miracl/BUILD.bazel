@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs/crypto:__subpackages__"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "miracl",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_internal_bls12381_serde_miracl",
+    edition = "2018",
+    deps = [
+        "//rs/crypto/internal/crypto_lib/types",
+        "@crate_index//:miracl_core_bls12381",
+    ],
+)
+
+rust_test(
+    name = "miracl_test",
+    crate = ":miracl",
+    deps = ["@crate_index//:hex"],
+)

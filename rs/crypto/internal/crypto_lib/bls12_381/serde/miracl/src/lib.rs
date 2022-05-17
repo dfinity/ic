@@ -9,7 +9,7 @@ mod tests;
 pub use ic_crypto_internal_types::curves::bls12_381::{
     Fr as FrBytes, G1 as G1Bytes, G2 as G2Bytes,
 };
-use miracl_core::bls12381::{
+use miracl_core_bls12381::bls12381::{
     big::BIG, big::MODBYTES as BIG_SIZE, ecp::ECP, ecp2::ECP2, fp::FP, fp2::FP2, rom::CURVE_ORDER,
 };
 use std::cmp::Ordering;
@@ -111,7 +111,7 @@ pub fn miracl_g1_from_bytes_unchecked(bytes: &[u8; G1Bytes::SIZE]) -> Result<ECP
     other_bits[G1Bytes::FLAG_BYTE_OFFSET] &= G1Bytes::NON_FLAG_BITS;
     if infinity_bit == 0 {
         let x_coordinate = BIG::frombytes(&other_bits);
-        use miracl_core::bls12381::rom;
+        use miracl_core_bls12381::bls12381::rom;
         if BIG::comp(&x_coordinate, &BIG::new_ints(&rom::MODULUS)) >= 0 {
             return Err(());
         }
@@ -228,7 +228,7 @@ pub fn miracl_g2_from_bytes_unchecked(bytes: &[u8; G2Bytes::SIZE]) -> Result<ECP
 
     if infinity_bit == 0 {
         let x_coordinate = {
-            use miracl_core::bls12381::rom;
+            use miracl_core_bls12381::bls12381::rom;
             let field_order = BIG::new_ints(&rom::MODULUS);
             let x1 = BIG::frombytearray(&other_bits, G2Bytes::X1_BYTES_OFFSET);
             if BIG::comp(&x1, &field_order) >= 0 {
