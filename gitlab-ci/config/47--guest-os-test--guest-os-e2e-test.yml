@@ -131,8 +131,6 @@ e2e-workload-test:
     paths:
       - "test-results.json"
       - "working_dir/"
-  # Include the parent pipeline source so that hotfix pipelines have their own lock.
-  resource_group: $CI_JOB_NAME-$CI_PARENT_PIPELINE_SOURCE-$FARM_SHARD
   script:
     - *run-farm-based-test
 
