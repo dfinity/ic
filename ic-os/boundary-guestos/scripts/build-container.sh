@@ -17,7 +17,7 @@ function build_docker_return_id() {
     DOCKER_ID=$(
         # Account for two different output formats of docker command:
         # "classic" docker and "buildkit" docker
-        docker build $* 2>&1 | tee /dev/fd/2 | sed -e 's/Successfully built //' -e t -e 's/.*writing image sha256:\([0-9a-f]\+\).*/\1/' -e t -e d
+        docker build $* 2>&1 | tee >(cat 1>&2) | sed -e 's/Successfully built //' -e t -e 's/.*writing image sha256:\([0-9a-f]\+\).*/\1/' -e t -e d
     )
 
     echo "${DOCKER_ID}"
