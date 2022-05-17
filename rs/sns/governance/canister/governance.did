@@ -65,8 +65,11 @@ type Command_1 = variant {
 };
 type Command_2 = variant {
   Split : Split;
+  Follow : Follow;
   DisburseMaturity : DisburseMaturity;
   Configure : Configure;
+  RegisterVote : RegisterVote;
+  MakeProposal : Proposal;
   ClaimOrRefreshNeuron : ClaimOrRefresh;
   RemoveNeuronPermissions : RemoveNeuronPermissions;
   AddNeuronPermissions : AddNeuronPermissions;

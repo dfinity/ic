@@ -61,9 +61,12 @@ prost-build = "0.9.0"
 criterion = "0.3"
 futures = "0.3.13"
 ic-base-types = { path = "../../types/base_types", features = ["test"] }
+ic-canister-client = { path = "../../canister_client" }
 ic-config = { path = "../../config" }
+ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-sns-governance = { path = ".", features = ["test"] }
 ic-sns-governance-protobuf-generator = { path = "./protobuf_generator" }
+ic-sns-test-utils = { path = "../test_utils" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 lazy_static = "1.4.0"
 ledger-canister = { path = "../../rosetta-api/ledger_canister", features = ["test"] }
@@ -71,6 +74,7 @@ maplit = "1.0.2"
 pretty_assertions = "1.0"
 proptest = "1.0"
 tempfile = "3.1.0"
+tokio = { version = "1.18.0", features = [ "full" ] }
 
 [features]
 test = ["ic-base-types/test", "ledger-canister/test"]

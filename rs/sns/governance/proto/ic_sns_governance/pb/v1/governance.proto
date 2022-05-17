@@ -764,6 +764,9 @@ message Governance {
       ManageNeuron.AddNeuronPermissions add_neuron_permissions = 7;
       ManageNeuron.RemoveNeuronPermissions remove_neuron_permissions = 8;
       ManageNeuron.Configure configure = 9;
+      ManageNeuron.Follow follow = 1001;
+      Proposal make_proposal = 1002;
+      ManageNeuron.RegisterVote register_vote = 1003;
     }
   }
 
