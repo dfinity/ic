@@ -9,11 +9,7 @@ use url::Url;
 const RND_SEED_DEFAULT: u64 = 42;
 
 #[derive(Parser, Debug)]
-#[clap(
-    name = "prod-test-driver",
-    override_help = "Production Test Driver.",
-    version
-)]
+#[clap(name = "prod-test-driver", version)]
 pub struct CliArgs {
     #[clap(
         long = "log-base-dir",
