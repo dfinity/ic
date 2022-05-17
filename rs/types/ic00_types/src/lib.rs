@@ -259,6 +259,10 @@ impl CanisterStatusResultV2 {
         PrincipalId::try_from(self.controller.as_slice()).unwrap()
     }
 
+    pub fn controllers(&self) -> Vec<PrincipalId> {
+        self.settings.controllers()
+    }
+
     pub fn memory_size(&self) -> NumBytes {
         NumBytes::from(self.memory_size.0.to_u64().unwrap())
     }
