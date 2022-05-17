@@ -21,8 +21,8 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::{
-    nns::NnsExt,
     orchestrator::utils::{
         backup::Backup,
         ssh_access::{
@@ -30,16 +30,13 @@ use crate::{
             wait_until_authentication_is_granted, AuthMean,
         },
         upgrade::{
-            assert_assigned_replica_version, bless_replica_version, get_assigned_replica_version,
-            update_subnet_replica_version, UpdateImageType,
+            assert_assigned_replica_version_v2, bless_replica_version,
+            get_assigned_replica_version_v2, update_subnet_replica_version, UpdateImageType,
         },
     },
-    util::{
-        assert_endpoints_reachability, block_on, get_random_nns_node_endpoint, EndpointsStatus,
-    },
+    util::block_on,
 };
 use core::time;
-use ic_fondue::ic_manager::IcHandle;
 use ic_registry_subnet_type::SubnetType;
 use ic_replay::player::ReplayError;
 use ic_types::{Height, ReplicaVersion};
@@ -50,38 +47,46 @@ use std::thread;
 
 const DKG_INTERVAL: u64 = 19;
 
-pub fn config() -> InternetComputer {
-    InternetComputer::new().add_subnet(
-        Subnet::fast_single_node(SubnetType::System)
-            .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
-    )
+pub fn config(env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::fast_single_node(SubnetType::System)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
+        )
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test")
 }
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let mut rng = ctx.rng.clone();
-    let log = ctx.logger.clone();
+pub fn test(env: TestEnv) {
+    let log = env.logger();
 
-    ctx.install_nns_canisters(&handle, true);
+    // choose a node from the nns subnet
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap();
+    nns_node.await_status_is_healthy().unwrap();
 
-    block_on(async {
-        let all_nodes: Vec<_> = handle.as_permutation(&mut rng).collect();
-        assert_endpoints_reachability(&all_nodes, EndpointsStatus::AllReachable).await
-    });
+    nns_node
+        .install_nns_canisters()
+        .expect("NNS canisters not installed");
+    info!(log, "NNS canisters are installed.");
 
-    let nns_node = get_random_nns_node_endpoint(&handle, &mut rng);
-    let node_ip: IpAddr = nns_node.ip_address().unwrap();
-    let subnet_id = nns_node.subnet_id().unwrap();
-    let replica_version = get_assigned_replica_version(nns_node).unwrap();
+    let node_ip: IpAddr = nns_node.get_ip_addr();
+    let subnet_id = env.topology_snapshot().root_subnet_id();
+    let replica_version = get_assigned_replica_version_v2(&nns_node).unwrap();
 
     // Update the registry with two new pairs of keys.
     let (backup_private_key, backup_public_key) = generate_key_strings();
     let payload = get_updatesubnetpayload_with_keys(subnet_id, None, Some(vec![backup_public_key]));
-    block_on(update_subnet_record(nns_node, payload));
+    block_on(update_subnet_record(nns_node.get_public_url(), payload));
 
     let backup_mean = AuthMean::PrivateKey(backup_private_key.clone());
     wait_until_authentication_is_granted(&node_ip, "backup", &backup_mean);
 
-    let backup = Backup::new(node_ip, backup_private_key, subnet_id, ctx.logger.clone());
+    let backup = Backup::new(node_ip, backup_private_key, subnet_id, env.logger());
 
     info!(
         log,
@@ -91,10 +96,11 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
 
     info!(log, "nns_backup_test: Bless the test replica version");
     block_on(bless_replica_version(
-        nns_node,
+        &nns_node,
         &replica_version,
         UpdateImageType::ImageTest,
-        &ctx.logger,
+        UpdateImageType::ImageTest,
+        &log,
     ));
 
     info!(
@@ -103,7 +109,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     );
     let test_version = format!("{}-test", replica_version);
     block_on(update_subnet_replica_version(
-        nns_node,
+        &nns_node,
         &ReplicaVersion::try_from(test_version.clone()).unwrap(),
         subnet_id,
     ));
@@ -112,7 +118,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         log,
         "nns_backup_test: Wait until the upgrade happens and the backup keys are made available"
     );
-    assert_assigned_replica_version(nns_node, &test_version, &ctx.logger);
+    assert_assigned_replica_version_v2(&nns_node, &test_version, env.logger());
     wait_until_authentication_is_granted(&node_ip, "backup", &backup_mean);
 
     info!(

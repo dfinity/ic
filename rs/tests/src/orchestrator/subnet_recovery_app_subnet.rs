@@ -31,7 +31,7 @@ use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::ADMIN;
 use crate::nns::NnsExt;
 use crate::orchestrator::node_reassignment_test::{can_read_msg, store_message};
-use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
+use crate::orchestrator::utils::upgrade::{assert_assigned_replica_version, can_install_canister};
 use crate::util::*;
 use ic_cup_explorer::get_catchup_content;
 use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType};
@@ -299,11 +299,4 @@ pub fn test(env: TestEnv) {
         new_app_can_id,
         new_msg
     )));
-}
-
-fn can_install_canister(url: &url::Url) -> bool {
-    block_on(async {
-        let agent = assert_create_agent(url.as_str()).await;
-        UniversalCanister::try_new(&agent).await.is_ok()
-    })
 }

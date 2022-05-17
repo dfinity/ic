@@ -181,8 +181,8 @@ pub(crate) fn get_updatesubnetpayload_with_keys(
     }
 }
 
-pub(crate) async fn update_subnet_record(nns_endpoint: &IcEndpoint, payload: UpdateSubnetPayload) {
-    let r = runtime_from_url(nns_endpoint.url.clone());
+pub(crate) async fn update_subnet_record(nns_url: Url, payload: UpdateSubnetPayload) {
+    let r = runtime_from_url(nns_url);
     let gov_can = get_governance_canister(&r);
 
     let proposal_id =

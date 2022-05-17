@@ -117,7 +117,7 @@ pub fn keys_in_the_subnet_record_can_be_updated(handle: IcHandle, ctx: &ic_fondu
         Some(vec![readonly_public_key]),
         Some(vec![backup_public_key]),
     );
-    block_on(update_subnet_record(nns_endpoint, payload));
+    block_on(update_subnet_record(nns_endpoint.url.clone(), payload));
 
     let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
@@ -131,7 +131,10 @@ pub fn keys_in_the_subnet_record_can_be_updated(handle: IcHandle, ctx: &ic_fondu
     // Clear the keys in the registry
     let no_key_payload =
         get_updatesubnetpayload_with_keys(app_subnet_id, Some(vec![]), Some(vec![]));
-    block_on(update_subnet_record(nns_endpoint, no_key_payload));
+    block_on(update_subnet_record(
+        nns_endpoint.url.clone(),
+        no_key_payload,
+    ));
 
     // Check that the access for these keys are also removed.
     wait_until_authentication_fails(&node_ip, "backup", &backup_mean);
@@ -201,7 +204,7 @@ pub fn multiple_keys_can_access_one_account(handle: IcHandle, ctx: &ic_fondue::p
             backup_public_key3,
         ]),
     );
-    block_on(update_subnet_record(nns_endpoint, payload));
+    block_on(update_subnet_record(nns_endpoint.url.clone(), payload));
 
     let readonly_mean1 = AuthMean::PrivateKey(readonly_private_key1);
     let readonly_mean2 = AuthMean::PrivateKey(readonly_private_key2);
@@ -278,7 +281,7 @@ pub fn updating_readonly_does_not_remove_backup_keys(
     let (backup_private_key, backup_public_key) = generate_key_strings();
     let payload1 =
         get_updatesubnetpayload_with_keys(app_subnet_id, None, Some(vec![backup_public_key]));
-    block_on(update_subnet_record(nns_endpoint, payload1));
+    block_on(update_subnet_record(nns_endpoint.url.clone(), payload1));
 
     // Check that the backup key can authenticate.
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
@@ -288,7 +291,7 @@ pub fn updating_readonly_does_not_remove_backup_keys(
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
     let payload2 =
         get_updatesubnetpayload_with_keys(app_subnet_id, Some(vec![readonly_public_key]), None);
-    block_on(update_subnet_record(nns_endpoint, payload2));
+    block_on(update_subnet_record(nns_endpoint.url.clone(), payload2));
 
     // Check that the readonly key can authenticate now and the backup key can still
     // authenticate too.
@@ -298,7 +301,7 @@ pub fn updating_readonly_does_not_remove_backup_keys(
 
     // Now send a proposal that only removes the readonly keys.
     let payload3 = get_updatesubnetpayload_with_keys(app_subnet_id, Some(vec![]), None);
-    block_on(update_subnet_record(nns_endpoint, payload3));
+    block_on(update_subnet_record(nns_endpoint.url.clone(), payload3));
 
     // Wait until the readonly key loses its access and ensure backup key still has
     // access.
@@ -327,7 +330,10 @@ pub fn can_add_max_number_of_readonly_and_backup_keys(
         Some(vec![public_key.clone(); MAX_NUM_SSH_KEYS]),
         Some(vec![public_key.clone(); MAX_NUM_SSH_KEYS]),
     );
-    block_on(update_subnet_record(nns_endpoint, payload_for_subnet));
+    block_on(update_subnet_record(
+        nns_endpoint.url.clone(),
+        payload_for_subnet,
+    ));
 
     // Also do that for unassigned nodes
     let payload_for_the_unassigned = get_updateunassignednodespayload(Some(vec![public_key; 50]));

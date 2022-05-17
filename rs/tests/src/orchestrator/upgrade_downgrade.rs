@@ -78,14 +78,14 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
     let branch_version = format!("{}-test", original_branch_version);
 
     // Bless both replica versions
-    block_on(bless_replica_version_v2(
+    block_on(bless_replica_version(
         &nns_node,
         &mainnet_version,
         UpdateImageType::Image,
         UpdateImageType::Image,
         &logger,
     ));
-    block_on(bless_replica_version_v2(
+    block_on(bless_replica_version(
         &nns_node,
         &original_branch_version,
         UpdateImageType::ImageTest,
@@ -198,7 +198,7 @@ fn upgrade_to(
         "Upgrading subnet {} to {}", subnet_id, target_version
     );
     use std::convert::TryFrom;
-    block_on(update_subnet_replica_version_v2(
+    block_on(update_subnet_replica_version(
         nns_node,
         &ic_types::ReplicaVersion::try_from(target_version).unwrap(),
         subnet_id,

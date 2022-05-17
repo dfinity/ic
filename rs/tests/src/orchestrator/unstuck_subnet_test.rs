@@ -13,10 +13,10 @@ Success:: The subnet is unstuck as we can write a message to it.
 
 end::catalog[] */
 
-use super::utils::upgrade::{bless_replica_version_v2, update_subnet_replica_version_v2};
+use super::utils::upgrade::{bless_replica_version, update_subnet_replica_version};
 use crate::orchestrator::node_reassignment_test::{can_read_msg, store_message};
-use crate::orchestrator::utils::upgrade::UpdateImageType;
-use crate::util::{assert_create_agent, block_on, create_delay};
+use crate::orchestrator::utils::upgrade::{can_install_canister, UpdateImageType};
+use crate::util::block_on;
 use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
@@ -28,8 +28,6 @@ use crate::{
 use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
-use ic_utils::interfaces::ManagementCanister;
-use reqwest::Url;
 use slog::info;
 use ssh2::Session;
 use std::convert::TryFrom;
@@ -73,7 +71,7 @@ pub fn test(test_env: TestEnv) {
     let target_version = get_assigned_replica_version_v2(&nns_node).unwrap();
     info!(logger, "Target version: {}", target_version);
 
-    block_on(bless_replica_version_v2(
+    block_on(bless_replica_version(
         &nns_node,
         &target_version,
         UpdateImageType::ImageTest,
@@ -82,7 +80,7 @@ pub fn test(test_env: TestEnv) {
     ));
 
     let subnet_id = test_env.topology_snapshot().root_subnet_id();
-    block_on(update_subnet_replica_version_v2(
+    block_on(update_subnet_replica_version(
         &nns_node,
         &ReplicaVersion::try_from(format!("{}-test", target_version))
             .expect("Wrong format of the version"),
@@ -104,7 +102,7 @@ pub fn test(test_env: TestEnv) {
 
     info!(logger, "Check that creation of canisters is impossible...");
     retry(test_env.logger(), secs(60), secs(5), || {
-        if block_on(is_canister_creation_possible(&nns_node.get_public_url())) {
+        if can_install_canister(&nns_node.get_public_url()) {
             bail!("Waiting for a failure creating a canister!")
         } else {
             Ok(())
@@ -197,15 +195,4 @@ fn execute_bash_command(sess: &Session, command: String) -> String {
     let mut out = String::new();
     channel.read_to_string(&mut out).unwrap();
     out
-}
-
-async fn is_canister_creation_possible(url: &Url) -> bool {
-    let agent = assert_create_agent(url.as_str()).await;
-    let mgr = ManagementCanister::create(&agent);
-    let canister_id = mgr
-        .create_canister()
-        .as_provisional_create_with_amount(None)
-        .call_and_wait(create_delay(500, 60))
-        .await;
-    canister_id.is_ok()
 }

@@ -521,10 +521,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     workload_counter_canister_test::short_test,
                 )]),
             ),
-            pot(
+            pot_with_setup(
                 "nns_backup_pot",
-                orchestrator::nns_backup::config(),
-                par(vec![t("nns_backup_test", orchestrator::nns_backup::test)]),
+                orchestrator::nns_backup::config,
+                par(vec![sys_t("nns_backup_test", orchestrator::nns_backup::test)]),
         )
         ],
     ));
