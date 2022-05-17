@@ -15,9 +15,9 @@ build-determinism-binaries:
       set -eux
       VERSION=$(git rev-parse HEAD)
 
-      curl -s "https://download.dfinity.systems/ic/$VERSION/release/SHA256SUMS" \
+      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/release/SHA256SUMS" \
           -o SHA256SUMS-cargo-build-release-linux-native
-      curl -s "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/release/SHA256SUMS" \
+      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/release/SHA256SUMS" \
           -o SHA256SUMS-docker-build-ic
 
       echo "cargo-build-release-linux-native:"
@@ -56,9 +56,9 @@ build-determinism-canisters:
       set -eux
       VERSION=$(git rev-parse HEAD)
 
-      curl -s "https://download.dfinity.systems/ic/$VERSION/canisters/SHA256SUMS" \
+      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/canisters/SHA256SUMS" \
           -o SHA256SUMS-cargo-build-canisters
-      curl -s "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/canisters/SHA256SUMS" \
+      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/canisters/SHA256SUMS" \
           -o SHA256SUMS-docker-build-ic
 
       echo "cargo-build-release-linux-native:"
@@ -100,9 +100,9 @@ build-determinism-guest-update-img:
       set -eux
       VERSION=$(git rev-parse HEAD)
 
-      curl -s "https://download.dfinity.systems/ic/$VERSION/guest-os/update-img/SHA256SUMS" \
+      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/guest-os/update-img/SHA256SUMS" \
           -o SHA256SUMS-guest-os-updateimg-build
-      curl -s "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/guest-os/update-img/SHA256SUMS" \
+      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/guest-os/update-img/SHA256SUMS" \
           -o SHA256SUMS-docker-build-ic
 
       echo "guest-os-updateimg-build:"
@@ -128,9 +128,9 @@ build-determinism-guest-update-img:
               diffoscope python3-tlsh libguestfs-tools python3-guestfs squashfs-tools
 
           mkdir guest-os-updateimg-build docker-build-ic artifacts
-          curl -s "https://download.dfinity.systems/ic/$VERSION/guest-os/update-img/update-img.tar.gz" \
+          curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/guest-os/update-img/update-img.tar.gz" \
               -o guest-os-updateimg-build/update-img.tar.gz
-          curl -s "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/guest-os/update-img/update-img.tar.gz" \
+          curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/guest-os/update-img/update-img.tar.gz" \
               -o docker-build-ic/update-img.tar.gz
 
           cd guest-os-updateimg-build
@@ -168,9 +168,9 @@ build-determinism-host-update-img:
       set -eux
       VERSION=$(git rev-parse HEAD)
 
-      curl -s "https://download.dfinity.systems/ic/$VERSION/host-os/update-img/SHA256SUMS" \
+      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/host-os/update-img/SHA256SUMS" \
           -o SHA256SUMS-host-os-updateimg
-      curl -s "https://download.dfinity.systems/ic/$VERSION/host-os/update-img-determinism/SHA256SUMS" \
+      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/host-os/update-img-determinism/SHA256SUMS" \
           -o SHA256SUMS-host-os-updateimg-determinism
 
       echo "host-os-updateimg:"
@@ -196,9 +196,9 @@ build-determinism-host-update-img:
               diffoscope python3-tlsh libguestfs-tools python3-guestfs squashfs-tools
 
           mkdir host-os-updateimg host-os-updateimg-determinism artifacts
-          curl -s "https://download.dfinity.systems/ic/$VERSION/host-os/update-img/host-update-img.tar.gz" \
+          curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/host-os/update-img/host-update-img.tar.gz" \
               -o host-os-updateimg/host-update-img.tar.gz
-          curl -s "https://download.dfinity.systems/ic/$VERSION/host-os/update-img-determinism/host-update-img.tar.gz" \
+          curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/host-os/update-img-determinism/host-update-img.tar.gz" \
               -o host-os-updateimg-determinism/host-update-img.tar.gz
 
           cd host-os-updateimg
