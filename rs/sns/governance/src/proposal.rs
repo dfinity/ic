@@ -48,6 +48,9 @@ pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
 /// The maximum number of unsettled proposals (proposals for which ballots are still stored).
 pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 700;
 
+/// The maximum number of GenericNervousSystemFunctions the system allows.
+pub const MAX_NUMBER_OF_GENERIC_NERVOUS_SYSTEM_FUNCTIONS: usize = 200_000;
+
 impl Proposal {
     /// Returns whether a proposal is allowed to be submitted when
     /// the heap growth potential is low.
@@ -393,20 +396,24 @@ pub fn validate_and_render_add_generic_nervous_system_function(
 ) -> Result<String, String> {
     let validated_function = ValidGenericNervousSystemFunction::try_from(add)?;
     if existing_functions.contains_key(&validated_function.id) {
-        Err(format!(
+        return Err(format!(
             "There is already a NervousSystemFunction with id: {}",
             validated_function.id
-        ))
-    } else {
-        Ok(format!(
-            r"Proposal to add new NervousSystemFunction:
+        ));
+    }
+
+    if existing_functions.len() >= MAX_NUMBER_OF_GENERIC_NERVOUS_SYSTEM_FUNCTIONS {
+        return Err("Reached maximum number of allowed GenericNervousSystemFunctions".to_string());
+    }
+
+    Ok(format!(
+        r"Proposal to add new NervousSystemFunction:
 
 ## Function:
 
 {:?}",
-            add
-        ))
-    }
+        add
+    ))
 }
 
 /// Validates and renders a proposal with action RemoveNervousSystemFunction.
@@ -1135,7 +1142,7 @@ mod test {
             _ => panic!("Proposal.action is not AddGenericNervousSystemFunction"),
         }
 
-        // Make sure not seeting the target method name is invalid.
+        // Make sure not setting the target method name is invalid.
         match proposal.clone().action.as_mut().unwrap() {
             proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
                 match nervous_system_function.function_type.as_mut() {
@@ -1232,6 +1239,49 @@ mod test {
 
         functions_map.insert(1000, (*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER).clone());
 
+        assert_is_err(validate_and_render_add_generic_nervous_system_function(
+            &nervous_system_function,
+            &functions_map,
+        ));
+    }
+
+    #[test]
+    fn add_nervous_system_function_cant_exceed_maximum() {
+        let mut functions_map = BTreeMap::new();
+
+        // Fill up the functions_map with the allowed number of functions
+        for i in 0..MAX_NUMBER_OF_GENERIC_NERVOUS_SYSTEM_FUNCTIONS {
+            let nervous_system_function = NervousSystemFunction {
+                id: i as u64 + 1000, // Valid ids for GenericNervousSystemFunction start at 1000
+                name: "a".to_string(),
+                description: None,
+                function_type: Some(FunctionType::GenericNervousSystemFunction(
+                    GenericNervousSystemFunction {
+                        target_canister_id: Some(CanisterId::from_u64(i as u64).get()),
+                        target_method_name: Some("test_method".to_string()),
+                        validator_canister_id: Some(CanisterId::from_u64(i as u64).get()),
+                        validator_method_name: Some("test_validator_method".to_string()),
+                    },
+                )),
+            };
+            functions_map.insert(i as u64, nervous_system_function);
+        }
+
+        let nervous_system_function = NervousSystemFunction {
+            id: u64::MAX, // id that is not taken
+            name: "a".to_string(),
+            description: None,
+            function_type: Some(FunctionType::GenericNervousSystemFunction(
+                GenericNervousSystemFunction {
+                    target_canister_id: Some(CanisterId::from(u64::MAX).get()),
+                    target_method_name: Some("test_method".to_string()),
+                    validator_canister_id: Some(CanisterId::from_u64(u64::MAX).get()),
+                    validator_method_name: Some("test_validator_method".to_string()),
+                },
+            )),
+        };
+
+        // Attempting to insert another GenericNervousSystemFunction should fail validation
         assert_is_err(validate_and_render_add_generic_nervous_system_function(
             &nervous_system_function,
             &functions_map,
