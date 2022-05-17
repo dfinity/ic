@@ -16,7 +16,6 @@ use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_interfaces::{
     certification::CertificationPool,
     certification::Verifier,
-    consensus_pool::ConsensusPoolCache,
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::{MessageRouting, MessageRoutingError},
     registry::{RegistryClient, RegistryTransportRecord},
@@ -69,6 +68,19 @@ use tempfile::TempDir;
 
 // Amount of time we are waiting for execution, after batches are delivered.
 const WAIT_DURATION: Duration = Duration::from_millis(500);
+
+/// Represents the height and the hash of the last execution state
+pub type StateParams = (Height, String);
+
+#[derive(Clone, Debug)]
+pub enum ReplayError {
+    /// Can't proceed because the state has diverged.
+    StateDivergence(Height),
+    /// Can't proceed because an upgrade was detected.
+    UpgradeDetected(StateParams),
+}
+
+pub type ReplayResult = Result<StateParams, ReplayError>;
 
 /// The main ic-replay component that sets up consensus and execution
 /// environment to replay past blocks.
@@ -334,16 +346,11 @@ impl Player {
     /// block has been replayed. Note that this will advance the executed
     /// batch height but not advance finalized block height in consensus
     /// pool.
-    pub fn replay<F: FnMut(&Player, Time) -> Vec<SignedIngress>>(&self, extra: F) {
+    pub fn replay<F: FnMut(&Player, Time) -> Vec<SignedIngress>>(&self, extra: F) -> ReplayResult {
         if let (Some(consensus_pool), Some(certification_pool)) =
             (&self.consensus_pool, &self.certification_pool)
         {
-            verify_cup_and_state(
-                self.registry.clone(),
-                self.subnet_id,
-                &*self.state_manager,
-                &*consensus_pool.get_cache(),
-            );
+            self.verified_latest_state()?;
             let pool_reader = &PoolReader::new(consensus_pool);
             let finalized_height = pool_reader.get_finalized_height();
             let target_height = Some(
@@ -401,6 +408,7 @@ impl Player {
             .get_latest_registry_version(latest_context_time)
             .unwrap_or_else(|_| self.registry.get_latest_version());
         println!("Latest registry version: {}", registry_version);
+        self.verified_latest_state()
     }
 
     // Blocks until the state at the given height is committed.
@@ -428,18 +436,6 @@ impl Player {
             height,
             self.state_manager.latest_state_height()
         );
-    }
-
-    /// Return latest height and state hash according to state manager.
-    pub fn get_latest_state_height_and_hash(&self) -> (Height, String) {
-        let height = self.state_manager.latest_state_height();
-        self.wait_for_state(height);
-        let hash_raw = self
-            .state_manager
-            .get_state_hash_at(height)
-            .expect("Should have already panicked.");
-        let hash = hex::encode(&hash_raw.get().0);
-        (height, hash)
     }
 
     /// Fetch registry records from the given `nns_url`, and update the local
@@ -706,23 +702,23 @@ impl Player {
     }
 
     /// Restores the execution state starting from the given height.
-    pub fn restore(&mut self, start_height: u64) {
+    pub fn restore(&mut self, start_height: u64) -> ReplayResult {
         let target_height = self.replay_target_height.map(Height::from);
-        let backup_dir = self.backup_dir.as_ref().expect("No backup path found");
+        let backup_dir = self
+            .backup_dir
+            .as_ref()
+            .expect("No backup path found")
+            .clone();
         let start_height = Height::from(start_height);
-        let mut height_to_batches = backup::heights_to_artifacts_metadata(backup_dir, start_height)
-            .unwrap_or_else(|err| panic!("File scanning failed: {:?}", err));
+        let mut height_to_batches =
+            backup::heights_to_artifacts_metadata(&backup_dir, start_height)
+                .unwrap_or_else(|err| panic!("File scanning failed: {:?}", err));
         println!(
             "Restoring the replica state of subnet {:?} starting from the height {:?}",
             backup_dir, start_height
         );
         // Assert consistent initial state
-        backup::assert_consistency_and_clean_up(
-            &*self.state_manager,
-            self.consensus_pool.as_mut().unwrap(),
-            self.registry.clone(),
-            self.subnet_id,
-        );
+        self.assert_consistency_and_clean_up()?;
         // We start with the specified height and restore heights until we run out of
         // heights on the backup spool or bump into a newer replica version.
         loop {
@@ -731,7 +727,6 @@ impl Player {
                 self.consensus_pool.as_mut().unwrap(),
                 &mut height_to_batches,
                 self.subnet_id,
-                &self.replica_version,
                 self.state_manager.latest_state_height(),
             );
 
@@ -744,7 +739,7 @@ impl Player {
             if let Some(height) = target_height {
                 if last_batch_height >= height {
                     println!("Target height {} reached.", height);
-                    return;
+                    return self.verified_latest_state();
                 }
             }
 
@@ -754,15 +749,10 @@ impl Player {
                 backup::ExitPoint::CUPHeightWasFinalized(cup_height) => {
                     backup::insert_cup_at_height(
                         self.consensus_pool.as_mut().unwrap(),
-                        backup_dir,
+                        &backup_dir,
                         cup_height,
                     );
-                    backup::assert_consistency_and_clean_up(
-                        &*self.state_manager,
-                        self.consensus_pool.as_mut().unwrap(),
-                        self.registry.clone(),
-                        self.subnet_id,
-                    );
+                    self.assert_consistency_and_clean_up()?;
                 }
                 // When we run into an NNS block referencing a newer registry version, we need to dump
                 // all changes from the registry canister into the local store and apply them.
@@ -790,10 +780,101 @@ impl Player {
                         "Restored the state at the height {:?}",
                         self.state_manager.latest_state_height()
                     );
-                    return;
+                    return self.verified_latest_state();
                 }
             }
         }
+    }
+
+    // Checks that the restored catch-up package contains the same state hash as
+    // the one computed by the state manager from the restored artifacts and drops
+    // all states below the last CUP.
+    fn assert_consistency_and_clean_up(&mut self) -> Result<StateParams, ReplayError> {
+        let params = self.verified_latest_state()?;
+        let pool = self.consensus_pool.as_mut().expect("no consensus_pool");
+        let cache = pool.get_cache();
+        let purge_height = cache.catch_up_package().height();
+        println!("Removing all states below height {:?}", purge_height);
+        self.state_manager.remove_states_below(purge_height);
+        use ic_interfaces::{
+            consensus_pool::{ChangeAction, MutableConsensusPool},
+            time_source::SysTimeSource,
+        };
+        pool.apply_changes(
+            &SysTimeSource::new(),
+            ChangeAction::PurgeValidatedBelow(purge_height).into(),
+        );
+        Ok(params)
+    }
+
+    /// Checks that the catch-up package inside the consensus pool contains the same state hash as
+    /// the one computed by the state manager. Additionally, it verifies the CUP's signature. If
+    /// all checks have passed, returns the latest state height and hash.
+    pub fn verified_latest_state(&self) -> Result<StateParams, ReplayError> {
+        let pool = self
+            .consensus_pool
+            .as_ref()
+            .expect("no consensus_pool")
+            .get_cache();
+        let last_cup_with_proto = pool.cup_with_protobuf();
+        let last_cup = last_cup_with_proto.cup;
+        let params = (
+            last_cup.height(),
+            hex::encode(last_cup.clone().content.state_hash.get().0),
+        );
+        // We cannot verify the genesis CUP with this subnet's public key. And there is no state.
+        if last_cup.height() == Height::from(0) {
+            return Ok(params);
+        }
+
+        // Verify the CUP signature.
+        let protobuf = last_cup_with_proto.protobuf;
+        let crypto =
+            ic_crypto::CryptoComponentFatClient::new_for_verification_only(self.registry.clone());
+        crypto
+            .verify_combined_threshold_sig_by_public_key(
+                &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature)),
+                &CatchUpContentProtobufBytes(protobuf.content),
+                self.subnet_id,
+                last_cup.content.block.get_value().context.registry_version,
+            )
+            .expect("Verification of the signature on the CUP failed");
+
+        if last_cup.height() < self.state_manager.latest_state_height() {
+            // In subnet recovery mode we persist states but do not create newer CUPs, hence we cannot
+            // assume anymore that every CUP has a corresponding checkpoint. So if we know that the
+            // latest checkpoint is above the latest CUP height, we should not compare state hashes.
+            return Ok(params);
+        }
+
+        // Verify state hash against the state hash in the CUP
+        if get_state_hash(&*self.state_manager, last_cup.height()).expect("No hash for CUP found")
+            != last_cup.content.state_hash
+        {
+            println!(
+                "The state hash of the CUP at height {:?} differs from the local state's hash",
+                last_cup.height()
+            );
+            return Err(ReplayError::StateDivergence(last_cup.height()));
+        }
+
+        match ic_consensus::consensus::utils::lookup_replica_version(
+            &*self.registry,
+            self.subnet_id,
+            &ic_logger::replica_logger::no_op_logger(),
+            last_cup.content.registry_version(),
+        ) {
+            Some(replica_version) if replica_version != self.replica_version => {
+                println!(
+                    "⚠️  Please use the replay tool of version {} to continue backup recovery from height {:?}",
+                    replica_version, last_cup.height()
+                );
+                return Err(ReplayError::UpgradeDetected(params));
+            }
+            _ => {}
+        }
+
+        Ok(params)
     }
 }
 
@@ -849,49 +930,6 @@ fn setup_registry(
         panic!("fetch_and_start_polling failed: {}", e);
     }
     registry
-}
-
-/// Checks that the catch-up package inside the consensus pool contains the same state hash as
-/// the one computed by the state manager. Additionally, it verifies the CUP's signature.
-pub(crate) fn verify_cup_and_state<T>(
-    registry: Arc<dyn RegistryClient>,
-    subnet_id: SubnetId,
-    state_manager: &dyn StateManager<State = T>,
-    pool: &dyn ConsensusPoolCache,
-) {
-    let last_cup_with_proto = pool.cup_with_protobuf();
-    let last_cup = last_cup_with_proto.cup;
-    // We cannot verify the genesis CUP with this subnet's public key. And there is no state.
-    if last_cup.height() == Height::from(0) {
-        return;
-    }
-
-    // Verify the CUP signature.
-    let protobuf = last_cup_with_proto.protobuf;
-    let crypto = ic_crypto::CryptoComponentFatClient::new_for_verification_only(registry.clone());
-    crypto
-        .verify_combined_threshold_sig_by_public_key(
-            &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature)),
-            &CatchUpContentProtobufBytes(protobuf.content),
-            subnet_id,
-            last_cup.content.block.get_value().context.registry_version,
-        )
-        .expect("Verification of the signature on the CUP failed");
-
-    if last_cup.height() < state_manager.latest_state_height() {
-        // In subnet recovery mode we persist states but do not create newer CUPs, hence we cannot
-        // assume anymore that every CUP has a corresponding checkpoint. So if we know that the
-        // latest checkpoint is above the latest CUP height, we should not compare state hashes.
-        return;
-    }
-
-    // Verify state hash against the state hash in the CUP
-    assert_eq!(
-        get_state_hash(state_manager, last_cup.height()).expect("No hash for CUP found"),
-        last_cup.content.state_hash,
-        "The state hash of the CUP at height {:?} differs from the local state's hash",
-        last_cup.height()
-    );
 }
 
 // Returns the state hash for the given height once it is computed. For non-checkpoints heights
