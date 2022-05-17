@@ -126,14 +126,20 @@ class Collector:
         shutil.copyfile(src_path, bin_path)
 
         if binary not in DONT_STRIP:
-            self._strip(bin_path)
+            self._strip_and_clean(bin_path)
+        else:
+            self._clean(bin_path)
 
         self._adjust_paths(bin_path)
         self._strip_refs(bin_path)
 
         sh("pigz", "-c", "--no-name", bin_path, pipe_to=path.join(self.out_dir, f"{binary}.gz"))
 
-    def _strip(self, in_path: str):
+    def _clean(self, in_path: str):
+        if ENV.is_linux:
+            sh("objcopy", "-D", "-R", ".comment", "-R", ".note.gnu.build-id", in_path)
+
+    def _strip_and_clean(self, in_path: str):
         if ENV.is_linux:
             sh("objcopy", "-D", "--strip-debug", "-R", ".comment", "-R", ".note.gnu.build-id", in_path)
         elif ENV.is_macos:
