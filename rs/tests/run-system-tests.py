@@ -136,15 +136,12 @@ def get_ic_os_image_sha(img_base_url) -> Tuple[str, str]:
     img_sha256_url = f"{img_base_url}SHA256SUMS"
     result = requests.get(f"{img_sha256_url}")
     logging.debug(f"GET {img_sha256_url} responded with status_code={result.status_code}.")
-    # Temporary disable exception until boundary-os-diskimg job is fixed.
-    # if result.status_code != 200:
-    #     raise GetImageShaException(f"Unexpected status_code={result.status_code} for the GET {img_sha256_url}")
+    if result.status_code != 200:
+        raise GetImageShaException(f"Unexpected status_code={result.status_code} for the GET {img_sha256_url}")
     try:
         img_sha256, _ = result.text.split(" ")
     except Exception:
-        # Temporary disable exception and return a dummy value, until boundary-os-diskimg job is fixed.
-        # raise GetImageShaException(f"Couldn't extract img_sha256 from {result.text}.")
-        return "dummy_img_sha256", img_url
+        raise GetImageShaException(f"Couldn't extract img_sha256 from {result.text}.")
     return img_sha256, img_url
 
 

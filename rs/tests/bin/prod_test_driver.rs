@@ -7,9 +7,9 @@ use ic_tests::driver::ic::VmAllocationStrategy;
 use ic_tests::driver::pot_dsl::*;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::{
-    api_test, basic_health_test, consensus, execution, ledger_tests, message_routing, networking,
-    nns_tests, orchestrator, rosetta_test, spec_compliance, tecdsa, wasm_generator_test,
-    workload_counter_canister_test,
+    api_test, basic_health_test, boundary_nodes_integration, consensus, execution, ledger_tests,
+    message_routing, networking, nns_tests, orchestrator, rosetta_test, spec_compliance, tecdsa,
+    wasm_generator_test, workload_counter_canister_test,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -156,7 +156,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         sys_t("basic_http", http_from_canister::basic_http::test),
                     ]),
                 ),*/
-                /* Temporary disable the test until boundary-os-diskimg job is fixed.
                 pot_with_setup(
                     "boundary_nodes_pot",
                     boundary_nodes_integration::boundary_nodes::config,
@@ -165,7 +164,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         sys_t("boundary_nodes_nginx_test", boundary_nodes_integration::boundary_nodes::nginx_test),
                     ]),
                 ),
-                */
                 pot(
                     "firewall_pot",
                     networking::firewall::config(),
