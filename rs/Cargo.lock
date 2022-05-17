@@ -404,7 +404,7 @@ checksum = "936fcf2c692b37c696cd0002c57752b2d9478402450c9ca4a463f6afae16d6f5"
 dependencies = [
  "doc-comment",
  "escargot",
- "predicates",
+ "predicates 1.0.4",
  "predicates-core",
  "predicates-tree",
  "wait-timeout",
@@ -908,14 +908,18 @@ dependencies = [
  "futures",
  "garcon",
  "glob 0.3.0",
+ "humantime 2.1.0",
  "hyper",
  "ic-agent 0.15.0",
  "ic-utils 0.15.0",
+ "indoc",
+ "mockall 0.11.1",
  "opentelemetry 0.17.0",
  "opentelemetry-prometheus",
  "prometheus 0.13.0",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tower",
  "tracing",
@@ -2201,6 +2205,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "524cbf6897b527295dff137cec09ecf3a05f4fddffd7dfcd1585403449e74198"
 
 [[package]]
+name = "difflib"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6184e33543162437515c2e2b48714794e37845ec9851711914eec9d308f6ebe8"
+
+[[package]]
 name = "digest"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2300,6 +2310,12 @@ name = "downcast"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4bb454f0228b18c7f4c3b0ebbee346ed9c52e7443b0999cd543ff3571205701d"
+
+[[package]]
+name = "downcast"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
 
 [[package]]
 name = "dtoa"
@@ -3324,9 +3340,9 @@ dependencies = [
 
 [[package]]
 name = "humantime"
-version = "2.0.1"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c1ad908cc71012b7bea4d0c53ba96a8cba9962f048fa68d143376143d863b7a"
+checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "humantime-serde"
@@ -3334,7 +3350,7 @@ version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac34a56cfd4acddb469cc7fff187ed5ac36f498ba085caf8bbc725e3ff474058"
 dependencies = [
- "humantime 2.0.1",
+ "humantime 2.1.0",
  "serde",
 ]
 
@@ -5251,7 +5267,7 @@ dependencies = [
  "fs_extra",
  "futures",
  "hex",
- "humantime 2.0.1",
+ "humantime 2.1.0",
  "ic-agent 0.11.1",
  "ic-base-types",
  "ic-config",
@@ -6087,7 +6103,7 @@ dependencies = [
  "futures-util",
  "gflags",
  "gflags-derive",
- "humantime 2.0.1",
+ "humantime 2.1.0",
  "humantime-serde",
  "hyper",
  "ic-async-utils",
@@ -6611,7 +6627,7 @@ dependencies = [
  "libc",
  "nix 0.23.0",
  "pprof",
- "predicates",
+ "predicates 1.0.4",
  "prometheus 0.12.0",
  "prost",
  "rand 0.7.3",
@@ -6696,7 +6712,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "maplit",
- "predicates",
+ "predicates 1.0.4",
  "prometheus 0.12.0",
  "prost",
  "rand 0.4.6",
@@ -7827,6 +7843,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "indoc"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05a0bd019339e5d968b37855180087b7b9d512c5046fbd244cf8c95687927d6e"
+
+[[package]]
 name = "infer"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8444,7 +8466,7 @@ dependencies = [
  "chrono",
  "derivative",
  "fnv",
- "humantime 2.0.1",
+ "humantime 2.1.0",
  "libc",
  "log",
  "log-mdc",
@@ -8762,11 +8784,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "01458f8a19b10cb28195290942e3149161c75acf67ebc8fbf714ab67a2b943bc"
 dependencies = [
  "cfg-if 0.1.10",
- "downcast",
+ "downcast 0.10.0",
  "fragile",
  "lazy_static",
  "mockall_derive 0.7.2",
- "predicates",
+ "predicates 1.0.4",
  "predicates-tree",
 ]
 
@@ -8777,11 +8799,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41cabea45a7fc0e37093f4f30a5e2b62602253f91791c057d5f0470c63260c3d"
 dependencies = [
  "cfg-if 0.1.10",
- "downcast",
+ "downcast 0.10.0",
  "fragile",
  "lazy_static",
  "mockall_derive 0.8.3",
- "predicates",
+ "predicates 1.0.4",
+ "predicates-tree",
+]
+
+[[package]]
+name = "mockall"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5641e476bbaf592a3939a7485fa079f427b4db21407d5ebfd5bba4e07a1f6f4c"
+dependencies = [
+ "cfg-if 1.0.0",
+ "downcast 0.11.0",
+ "fragile",
+ "lazy_static",
+ "mockall_derive 0.11.1",
+ "predicates 2.1.1",
  "predicates-tree",
 ]
 
@@ -8804,6 +8841,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c461918bf7f59eefb1459252756bf2351a995d6bd510d0b2061bd86bcdabfa6"
 dependencies = [
  "cfg-if 0.1.10",
+ "proc-macro2 1.0.36",
+ "quote 1.0.17",
+ "syn 1.0.93",
+]
+
+[[package]]
+name = "mockall_derive"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "262d56735932ee0240d515656e5a7667af3af2a5b0af4da558c4cff2b2aeb0c7"
+dependencies = [
+ "cfg-if 1.0.0",
  "proc-macro2 1.0.36",
  "quote 1.0.17",
  "syn 1.0.93",
@@ -9844,6 +9893,20 @@ checksum = "347a1b6f0b21e636bc9872fb60b83b8e185f6f5516298b8238699f7f9a531030"
 dependencies = [
  "difference",
  "float-cmp 0.6.0",
+ "normalize-line-endings",
+ "predicates-core",
+ "regex",
+]
+
+[[package]]
+name = "predicates"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5aab5be6e4732b473071984b3164dbbfb7a3674d30ea5ff44410b6bcd960c3c"
+dependencies = [
+ "difflib",
+ "float-cmp 0.9.0",
+ "itertools 0.10.0",
  "normalize-line-endings",
  "predicates-core",
  "regex",
@@ -12097,7 +12160,7 @@ dependencies = [
  "anyhow",
  "fnv",
  "futures",
- "humantime 2.0.1",
+ "humantime 2.1.0",
  "opentelemetry 0.16.0",
  "pin-project",
  "rand 0.8.4",
@@ -12232,7 +12295,7 @@ dependencies = [
  "futures",
  "garcon",
  "hex",
- "humantime 2.0.1",
+ "humantime 2.1.0",
  "hyper",
  "hyper-rustls",
  "ic-agent 0.11.1",

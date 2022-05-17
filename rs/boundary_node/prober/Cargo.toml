@@ -13,14 +13,18 @@ clap = { version = "3.1.8", features = ["derive"] }
 futures = "0.3.21"
 garcon = "0.2.3"
 glob = "0.3.0"
+humantime = "2.1.0"
 hyper = "0.14.18"
 ic-agent = "0.15.0"
 ic-utils = "0.15.0"
+indoc = "1.0.6"
+mockall = "0.11.0"
 opentelemetry = "0.17.0"
 opentelemetry-prometheus = "0.10.0"
 prometheus = "0.13.0"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.79"
+tempfile = "3.3.0"
 tokio = { version = "1.17.0", features = ["full"] }
 tower = "0.4.12"
 tracing = "0.1.34"
