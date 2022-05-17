@@ -424,6 +424,8 @@ pub struct KeyTranscriptCreation {
     pub reshare_of_unmasked: ::core::option::Option<ReshareOfUnmaskedParams>,
     #[prost(message, optional, tag="5")]
     pub xnet_reshare_of_unmasked: ::core::option::Option<ReshareOfUnmaskedParams>,
+    #[prost(message, optional, tag="6")]
+    pub xnet_reshare_initial_dealings: ::core::option::Option<super::super::registry::subnet::v1::InitialIDkgDealings>,
     #[prost(message, optional, tag="9")]
     pub created: ::core::option::Option<UnmaskedTranscript>,
 }

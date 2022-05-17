@@ -196,7 +196,7 @@ pub(crate) mod pre_signer;
 pub(crate) mod signer;
 pub(crate) mod utils;
 
-pub use payload_builder::get_initial_dealings;
+pub use payload_builder::make_ecdsa_genesis_summary;
 pub(crate) use payload_builder::{create_data_payload, create_summary_payload};
 pub(crate) use payload_verifier::{validate_payload, PermanentError, TransientError};
 

@@ -135,7 +135,7 @@ fn make_boot_strap_summary(
     registry_version: RegistryVersion,
     subnet_id: SubnetId,
     height: Height,
-    log: &ReplicaLogger,
+    log: Option<&ReplicaLogger>,
 ) -> Result<ecdsa::Summary, EcdsaPayloadError> {
     let mut summary_payload = ecdsa::EcdsaPayload {
         signature_agreements: BTreeMap::new(),
@@ -161,14 +161,19 @@ fn make_boot_strap_summary(
                     .idkg_transcripts
                     .insert(transcript.transcript_id, transcript);
                 summary_payload.key_transcript.next_in_creation =
-                    ecdsa::KeyTranscriptCreation::XnetReshareOfUnmaskedParams(params);
+                    ecdsa::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((
+                        Box::new(dealings),
+                        params,
+                    ));
             }
             None => {
                 // Leave the feature disabled if the initial dealings are incorrect.
-                warn!(
-                    log,
-                    "make_ecdsa_genesis_summary(): failed to unpack initial dealings"
-                );
+                if let Some(log) = log {
+                    warn!(
+                        log,
+                        "make_ecdsa_genesis_summary(): failed to unpack initial dealings"
+                    );
+                }
                 return Err(EcdsaPayloadError::InitialIDkgDealingsNotUnmaskedParams(
                     Box::new(dealings),
                 ));
@@ -178,28 +183,32 @@ fn make_boot_strap_summary(
     Ok(Some(summary_payload))
 }
 
+/// Builds the ECDSA summary to be included in the genesis CUP.
 pub fn make_ecdsa_genesis_summary(
     registry: &dyn RegistryClient,
+    registry_version: RegistryVersion,
     subnet_id: SubnetId,
     height: Height,
-    log: &ReplicaLogger,
-) -> Option<ecdsa::Summary> {
-    let registry_version = registry.get_latest_version();
+    log: Option<&ReplicaLogger>,
+) -> ecdsa::Summary {
     let ecdsa_enabled = match registry.get_features(subnet_id, registry_version) {
         Ok(Some(features)) => features.ecdsa_signatures,
         Ok(None) => false,
         Err(err) => {
-            warn!(
-                log,
-                "make_ecdsa_genesis_summary(): failed to read registry: {:?}", err
-            );
+            if let Some(log) = log {
+                warn!(
+                    log,
+                    "make_ecdsa_genesis_summary(): failed to read registry: {:?}", err
+                );
+            }
             false
         }
     };
     if !ecdsa_enabled {
         return None;
     }
-    make_boot_strap_summary(registry, registry_version, subnet_id, height, log).ok()
+
+    make_boot_strap_summary(registry, registry_version, subnet_id, height, log).unwrap_or(None)
 }
 
 /// Return true if ecdsa is enabled in subnet features in the subnet record.
@@ -220,11 +229,11 @@ pub(crate) fn ecdsa_feature_is_enabled(
 }
 
 /// Returns the initial dealings from the registry CUP record.
-pub fn get_initial_dealings(
+fn get_initial_dealings(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
-    log: &ReplicaLogger,
+    log: Option<&ReplicaLogger>,
 ) -> Option<InitialIDkgDealings> {
     let record = registry_client
         .get_cup_contents(subnet_id, registry_version)
@@ -239,16 +248,22 @@ pub fn get_initial_dealings(
                 .as_ref()
                 .map(InitialIDkgDealings::try_from)
                 .transpose()
-                .map_err(|err| warn!(log, "Failed to convert initial dealings proto: {:?}", err))
+                .map_err(|err| {
+                    if let Some(log) = log {
+                        warn!(log, "Failed to convert initial dealings proto: {:?}", err)
+                    }
+                })
                 .ok()
                 .flatten()
         })
         .collect::<Vec<_>>();
     if ret.len() > 1 {
-        warn!(
-            log,
-            "Resharing of multiple initial ECDSA keys not supported"
-        );
+        if let Some(log) = log {
+            warn!(
+                log,
+                "Resharing of multiple initial ECDSA keys not supported"
+            );
+        }
     }
     ret.into_iter().next()
 }
@@ -278,7 +293,7 @@ pub(crate) fn create_summary_payload(
                 registry_version,
                 subnet_id,
                 height,
-                &log,
+                Some(&log),
             );
         } else {
             return Ok(None);
@@ -1009,7 +1024,7 @@ fn update_next_key_transcript_helper(
                 new_transcript = Some(transcript);
             }
         }
-        (None, ecdsa::KeyTranscriptCreation::XnetReshareOfUnmaskedParams(config)) => {
+        (None, ecdsa::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((_, config))) => {
             // Check if the unmasked transcript has been created
             if let Some(transcript) =
                 transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
@@ -2105,7 +2120,10 @@ mod tests {
             transcript,
         );
         payload.key_transcript.next_in_creation =
-            ecdsa::KeyTranscriptCreation::XnetReshareOfUnmaskedParams(params);
+            ecdsa::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((
+                Box::new(dummy_initial_idkg_dealing_for_tests()),
+                params,
+            ));
         let result = update_next_key_transcript_helper(
             &subnet_nodes,
             &subnet_nodes,
@@ -2127,7 +2145,9 @@ mod tests {
         let cur_height = Height::new(50);
         let unmasked_transcript = {
             let param = match &payload.key_transcript.next_in_creation {
-                ecdsa::KeyTranscriptCreation::XnetReshareOfUnmaskedParams(param) => param.clone(),
+                ecdsa::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((_, param)) => {
+                    param.clone()
+                }
                 _ => panic!(
                     "Unexpected state: {:?}",
                     payload.key_transcript.next_in_creation

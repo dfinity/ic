@@ -216,6 +216,17 @@ impl EcdsaPayload {
             },
         )
     }
+
+    /// Returns the initial DKG dealings being used to bootstrap the target subnet,
+    /// if we are in the process of initial key creation.
+    pub fn initial_dkg_dealings(&self) -> Option<InitialIDkgDealings> {
+        match &self.key_transcript.next_in_creation {
+            KeyTranscriptCreation::XnetReshareOfUnmaskedParams((initial_dealings, _)) => {
+                Some(initial_dealings.as_ref().clone())
+            }
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -233,7 +244,7 @@ impl EcdsaKeyTranscript {
             KeyTranscriptCreation::RandomTranscriptParams(params) => params.as_ref().get_refs(),
             KeyTranscriptCreation::ReshareOfMaskedParams(params) => params.as_ref().get_refs(),
             KeyTranscriptCreation::ReshareOfUnmaskedParams(params) => params.as_ref().get_refs(),
-            KeyTranscriptCreation::XnetReshareOfUnmaskedParams(params) => {
+            KeyTranscriptCreation::XnetReshareOfUnmaskedParams((_, params)) => {
                 params.as_ref().get_refs()
             }
             KeyTranscriptCreation::Created(unmasked) => vec![*unmasked.as_ref()],
@@ -252,7 +263,7 @@ impl EcdsaKeyTranscript {
             KeyTranscriptCreation::ReshareOfUnmaskedParams(params) => {
                 params.as_mut().update(height)
             }
-            KeyTranscriptCreation::XnetReshareOfUnmaskedParams(params) => {
+            KeyTranscriptCreation::XnetReshareOfUnmaskedParams((_, params)) => {
                 params.as_mut().update(height)
             }
             KeyTranscriptCreation::Created(unmasked) => unmasked.as_mut().update(height),
@@ -268,7 +279,7 @@ impl EcdsaKeyTranscript {
             KeyTranscriptCreation::RandomTranscriptParams(x) => Some(x.as_ref()),
             KeyTranscriptCreation::ReshareOfMaskedParams(x) => Some(x.as_ref()),
             KeyTranscriptCreation::ReshareOfUnmaskedParams(x) => Some(x.as_ref()),
-            KeyTranscriptCreation::XnetReshareOfUnmaskedParams(x) => Some(x.as_ref()),
+            KeyTranscriptCreation::XnetReshareOfUnmaskedParams((_, x)) => Some(x.as_ref()),
             KeyTranscriptCreation::Created(_) => None,
         }
     }
@@ -299,7 +310,7 @@ pub enum KeyTranscriptCreation {
     // Configuration to create next key transcript by resharing the current key transcript.
     ReshareOfUnmaskedParams(ReshareOfUnmaskedParams),
     // Bootstrapping from xnet initial dealings.
-    XnetReshareOfUnmaskedParams(ReshareOfUnmaskedParams),
+    XnetReshareOfUnmaskedParams((Box<InitialIDkgDealings>, ReshareOfUnmaskedParams)),
     // Created
     Created(UnmaskedTranscript),
 }
@@ -312,6 +323,7 @@ impl From<&KeyTranscriptCreation> for pb::KeyTranscriptCreation {
             reshare_of_masked: None,
             reshare_of_unmasked: None,
             xnet_reshare_of_unmasked: None,
+            xnet_reshare_initial_dealings: None,
             created: None,
         };
         match key_transcript_in_creation {
@@ -330,8 +342,9 @@ impl From<&KeyTranscriptCreation> for pb::KeyTranscriptCreation {
                 ret.state = pb::KeyTranscriptCreationState::ReshareOfUnmaskedParams as i32;
                 ret.reshare_of_unmasked = Some(params.into());
             }
-            KeyTranscriptCreation::XnetReshareOfUnmaskedParams(params) => {
+            KeyTranscriptCreation::XnetReshareOfUnmaskedParams((initial_dealings, params)) => {
                 ret.state = pb::KeyTranscriptCreationState::XnetReshareOfUnmaskedParams as i32;
+                ret.xnet_reshare_initial_dealings = Some(initial_dealings.as_ref().into());
                 ret.xnet_reshare_of_unmasked = Some(params.into());
             }
             KeyTranscriptCreation::Created(params) => {
@@ -375,13 +388,25 @@ impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
         } else if proto.state
             == (pb::KeyTranscriptCreationState::XnetReshareOfUnmaskedParams as i32)
         {
+            let initial_dealings_proto = proto
+                .xnet_reshare_initial_dealings
+                .as_ref()
+                .ok_or("pb::KeyTranscriptCreation:: Missing xnet initial dealings")?;
+            let initial_dealings: InitialIDkgDealings =
+                initial_dealings_proto.try_into().map_err(|err| {
+                    format!(
+                        "pb::KeyTranscriptCreation:: failed to convert initial dealings: {:?}",
+                        err
+                    )
+                })?;
             let param_proto = proto
                 .xnet_reshare_of_unmasked
                 .as_ref()
                 .ok_or("pb::KeyTranscriptCreation:: Missing xnet reshare transcript")?;
-            Ok(KeyTranscriptCreation::XnetReshareOfUnmaskedParams(
+            Ok(KeyTranscriptCreation::XnetReshareOfUnmaskedParams((
+                Box::new(initial_dealings),
                 param_proto.try_into()?,
-            ))
+            )))
         } else if proto.state == (pb::KeyTranscriptCreationState::Created as i32) {
             let param_proto = proto
                 .created
