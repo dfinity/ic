@@ -253,7 +253,7 @@ fn evaluate_test(
             result.result = TestResult::failed_with_message(s);
         } else {
             warn!(ctx.logger, "{} FAILED (): {:?}", path, panic_res);
-            result.result = TestResult::failed_with_message("");
+            result.result = TestResult::failed_with_message(format!("{:?}", panic_res).as_str());
         }
     } else {
         info!(ctx.logger, "{} SUCCESS.", path);
