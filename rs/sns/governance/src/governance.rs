@@ -565,6 +565,9 @@ impl Governance {
     /// until the lock is released.
     ///
     /// ***** IMPORTANT *****
+    /// Remember to use the question mark operator (or otherwise handle
+    /// Err). Otherwise, failed attempts to acquire will be ignored.
+    ///
     /// The return value MUST be allocated to a variable with a name that is NOT
     /// "_" !
     ///
@@ -854,15 +857,6 @@ impl Governance {
             disburse_amount_e8s -= transaction_fee_e8s
         }
 
-        // Add the neuron's id to the set of neurons with ongoing operations.
-        let _neuron_lock = self.lock_neuron_for_command(
-            id,
-            NeuronInFlightCommand {
-                timestamp: self.env.now(),
-                command: Some(InFlightCommand::Disburse(disburse.clone())),
-            },
-        )?;
-
         // We need to do 2 transfers:
         // 1 - Burn the neuron management fees.
         // 2 - Transfer the disburse_amount to the target account
@@ -1013,11 +1007,6 @@ impl Governance {
 
         let staked_amount = split.amount_e8s - transaction_fee_e8s;
 
-        // Add the parent neuron's id to the set of neurons with ongoing operations.
-        // This ensures, in particular, that the parent neuron is not already
-        // undergoing a ledger update.
-        let _parent_lock = self.lock_neuron_for_command(parent_nid, in_flight_command.clone())?;
-
         // Before we do the transfer, we need to save the child neuron in the map
         // otherwise a trap after the transfer is successful but before this
         // method finishes would cause the funds to be lost.
@@ -1106,6 +1095,8 @@ impl Governance {
         caller: &PrincipalId,
         merge_maturity: &manage_neuron::MergeMaturity,
     ) -> Result<MergeMaturityResponse, GovernanceError> {
+        let now = self.env.now();
+
         let neuron = self.get_neuron_result(id)?.clone();
         let nid = neuron.id.as_ref().expect("Neurons must have an id");
         let subaccount = neuron.subaccount()?;
@@ -1139,17 +1130,6 @@ impl Governance {
                 ),
             ));
         }
-
-        let now = self.env.now();
-        let in_flight_command = NeuronInFlightCommand {
-            timestamp: now,
-            command: Some(InFlightCommand::MergeMaturity(merge_maturity.clone())),
-        };
-
-        // Add the neuron's id to the set of neurons with ongoing operations.
-        // This ensures, in particular, that no other operation can change the
-        // maturity while we mint and merge the new stake from the maturity.
-        let _neuron_lock = self.lock_neuron_for_command(nid, in_flight_command.clone())?;
 
         // Do the transfer, this is a minting transfer, from the governance canister's
         // (which is also the minting canister) main account into the neuron's
@@ -1240,15 +1220,6 @@ impl Governance {
             .expect("Overflow while processing maturity to disburse.")
             .checked_div(100)
             .expect("Error when processing maturity to disburse.");
-
-        // Add the neuron's id to the set of neurons with ongoing operations.
-        let _neuron_lock = self.lock_neuron_for_command(
-            id,
-            NeuronInFlightCommand {
-                timestamp: self.env.now(),
-                command: Some(InFlightCommand::DisburseMaturity(disburse_maturity.clone())),
-            },
-        )?;
 
         let transaction_fee_e8s = self.transaction_fee_e8s();
         if maturity_to_disburse < transaction_fee_e8s {
@@ -2480,6 +2451,8 @@ impl Governance {
         caller: &PrincipalId,
         configure: &manage_neuron::Configure,
     ) -> Result<(), GovernanceError> {
+        let now = self.env.now();
+
         self.proto
             .neurons
             .get(&id.to_string())
@@ -2487,13 +2460,6 @@ impl Governance {
             .and_then(|neuron| {
                 neuron.check_authorized(caller, NeuronPermissionType::ConfigureDissolveState)
             })?;
-
-        let now_seconds = self.env.now();
-        let lock_command = NeuronInFlightCommand {
-            timestamp: now_seconds,
-            command: Some(InFlightCommand::Configure(configure.clone())),
-        };
-        let _lock = self.lock_neuron_for_command(id, lock_command)?;
 
         let max_dissolve_delay_seconds = self
             .proto
@@ -2509,7 +2475,7 @@ impl Governance {
             .get_mut(&id.to_string())
             .ok_or_else(|| Self::neuron_not_found_error(id))?;
 
-        neuron.configure(now_seconds, configure, max_dissolve_delay_seconds)?;
+        neuron.configure(now, configure, max_dissolve_delay_seconds)?;
         Ok(())
     }
 
@@ -2523,28 +2489,18 @@ impl Governance {
     async fn claim_or_refresh_neuron_by_memo_and_controller(
         &mut self,
         caller: &PrincipalId,
-        memo_and_controller: MemoAndController,
-        claim_or_refresh: &ClaimOrRefresh,
-    ) -> Result<NeuronId, GovernanceError> {
+        memo_and_controller: &MemoAndController,
+    ) -> Result<(), GovernanceError> {
         let controller = memo_and_controller.controller.unwrap_or(*caller);
         let memo = memo_and_controller.memo;
         let nid = NeuronId::from(ledger::compute_neuron_staking_subaccount(controller, memo));
         match self.get_neuron_result(&nid) {
             Ok(neuron) => {
                 let nid = neuron.id.as_ref().expect("Neuron must have an id").clone();
-                self.refresh_neuron(nid, claim_or_refresh).await
+                self.refresh_neuron(&nid).await
             }
-            Err(_) => self.claim_neuron(nid, claim_or_refresh, &controller).await,
+            Err(_) => self.claim_neuron(nid, &controller).await,
         }
-    }
-
-    /// Refreshes the stake of a neuron specified by its id.
-    async fn refresh_neuron_by_id(
-        &mut self,
-        id: NeuronId,
-        claim_or_refresh: &ClaimOrRefresh,
-    ) -> Result<NeuronId, GovernanceError> {
-        self.refresh_neuron(id, claim_or_refresh).await
     }
 
     /// Refreshes the stake of a neuron specified by its id.
@@ -2553,28 +2509,10 @@ impl Governance {
     /// - the neuron is not in the set of neurons with ongoing operations
     /// - the neuron's balance on the ledger account is at least
     ///   neuron_minimum_stake_e8s as defined in the nervous system parameters
-    async fn refresh_neuron(
-        &mut self,
-        nid: NeuronId,
-        claim_or_refresh: &ClaimOrRefresh,
-    ) -> Result<NeuronId, GovernanceError> {
+    async fn refresh_neuron(&mut self, nid: &NeuronId) -> Result<(), GovernanceError> {
         let now = self.env.now();
         let subaccount = nid.subaccount()?;
         let account = neuron_account_id(subaccount);
-
-        // Add the neuron's id to the set of neurons with ongoing operations.
-        // This ensures, in particular, that the neuron doesn't undergo
-        // concurrent changes while we're checking the balance and refreshing
-        // the stake.
-        let _neuron_lock = self.lock_neuron_for_command(
-            &nid,
-            NeuronInFlightCommand {
-                timestamp: self.env.now(),
-                command: Some(InFlightCommand::ClaimOrRefreshNeuron(
-                    claim_or_refresh.clone(),
-                )),
-            },
-        )?;
 
         // Get the balance of the neuron from the ledger canister.
         let balance = self.ledger.account_balance(account).await?;
@@ -2593,7 +2531,7 @@ impl Governance {
                 ),
             ));
         }
-        let neuron = self.get_neuron_result_mut(&nid)?;
+        let neuron = self.get_neuron_result_mut(nid)?;
         match neuron.cached_neuron_stake_e8s.cmp(&balance.get_e8s()) {
             Ordering::Greater => {
                 println!(
@@ -2617,7 +2555,7 @@ impl Governance {
             Ordering::Equal => (),
         };
 
-        Ok(nid)
+        Ok(())
     }
 
     /// Attempts to claim a new neuron. If successful, returns the neuron id and
@@ -2638,9 +2576,8 @@ impl Governance {
     async fn claim_neuron(
         &mut self,
         nid: NeuronId,
-        claim_or_refresh: &ClaimOrRefresh,
         claimer: &PrincipalId,
-    ) -> Result<NeuronId, GovernanceError> {
+    ) -> Result<(), GovernanceError> {
         let now = self.env.now();
 
         // We need to create the neuron before checking the balance so that we record
@@ -2666,17 +2603,6 @@ impl Governance {
 
         // This also verifies that there are not too many neurons already.
         self.add_neuron(neuron.clone())?;
-
-        // Add the neuron's id to the set of neurons with ongoing operations.
-        let _neuron_lock = self.lock_neuron_for_command(
-            &nid,
-            NeuronInFlightCommand {
-                timestamp: now,
-                command: Some(InFlightCommand::ClaimOrRefreshNeuron(
-                    claim_or_refresh.clone(),
-                )),
-            },
-        )?;
 
         // Get the balance of the neuron's subaccount from ledger canister.
         let subaccount = nid.subaccount()?;
@@ -2708,7 +2634,7 @@ impl Governance {
             Ok(neuron) => {
                 // Adjust the stake.
                 neuron.update_stake(balance.get_e8s(), now);
-                Ok(nid)
+                Ok(())
             }
             Err(err) => {
                 // This should not be possible, but let's be defensive and provide a
@@ -2900,78 +2826,97 @@ impl Governance {
     pub async fn manage_neuron_internal(
         &mut self,
         caller: &PrincipalId,
-        mgmt: &ManageNeuron,
+        manage_neuron: &ManageNeuron,
     ) -> Result<ManageNeuronResponse, GovernanceError> {
-        // We run claim or refresh before we check whether a neuron exists because it
-        // may not in the case of the neuron being claimed
-        if let Some(manage_neuron::Command::ClaimOrRefresh(claim_or_refresh)) = &mgmt.command {
-            // Note that we return here, so the rest of this method is not executed
-            // in this case.
-            return match &claim_or_refresh.by {
-                Some(By::MemoAndController(memo_and_controller)) => self
-                    .claim_or_refresh_neuron_by_memo_and_controller(
-                        caller,
-                        memo_and_controller.clone(),
-                        claim_or_refresh,
-                    )
-                    .await
-                    .map(ManageNeuronResponse::claim_or_refresh_neuron_response),
+        let now = self.env.now();
 
-                Some(By::NeuronId(_)) => {
-                    let id = NeuronId::from(Self::bytes_to_subaccount(&mgmt.subaccount)?);
-                    self.refresh_neuron_by_id(id, claim_or_refresh)
-                        .await
-                        .map(ManageNeuronResponse::claim_or_refresh_neuron_response)
-                }
-                None => Err(GovernanceError::new_with_message(
+        let neuron_id = get_neuron_id_from_manage_neuron(manage_neuron, caller)?;
+        let command = manage_neuron
+            .command
+            .as_ref()
+            .ok_or_else(|| -> GovernanceError {
+                GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
-                    "Need to provide a way by which to claim or refresh the neuron.",
-                )),
-            };
-        }
+                    "ManageNeuron lacks a value in its command field.",
+                )
+            })?;
 
-        let id = NeuronId::from(Self::bytes_to_subaccount(&mgmt.subaccount)?);
+        // All operations on a neuron exclude each other.
+        let _hold = self.lock_neuron_for_command(
+            &neuron_id,
+            NeuronInFlightCommand {
+                timestamp: now,
+                command: Some(command.into()),
+            },
+        )?;
 
-        match &mgmt.command {
-            Some(manage_neuron::Command::Configure(c)) => self
-                .configure_neuron(&id, caller, c)
+        use manage_neuron::Command as C;
+        match command {
+            C::Configure(c) => self
+                .configure_neuron(&neuron_id, caller, c)
                 .map(|_| ManageNeuronResponse::configure_response()),
-            Some(manage_neuron::Command::Disburse(d)) => self
-                .disburse_neuron(&id, caller, d)
+            C::Disburse(d) => self
+                .disburse_neuron(&neuron_id, caller, d)
                 .await
                 .map(ManageNeuronResponse::disburse_response),
-            Some(manage_neuron::Command::MergeMaturity(m)) => self
-                .merge_maturity(&id, caller, m)
+            C::MergeMaturity(m) => self
+                .merge_maturity(&neuron_id, caller, m)
                 .await
                 .map(ManageNeuronResponse::merge_maturity_response),
-            Some(manage_neuron::Command::DisburseMaturity(d)) => self
-                .disburse_maturity(&id, caller, d)
+            C::DisburseMaturity(d) => self
+                .disburse_maturity(&neuron_id, caller, d)
                 .await
                 .map(ManageNeuronResponse::disburse_maturity_response),
-            Some(manage_neuron::Command::Split(s)) => self
-                .split_neuron(&id, caller, s)
+            C::Split(s) => self
+                .split_neuron(&neuron_id, caller, s)
                 .await
                 .map(ManageNeuronResponse::split_response),
-            Some(manage_neuron::Command::Follow(f)) => self
-                .follow(&id, caller, f)
+            C::Follow(f) => self
+                .follow(&neuron_id, caller, f)
                 .map(|_| ManageNeuronResponse::follow_response()),
-            Some(manage_neuron::Command::MakeProposal(p)) => self
-                .make_proposal(&id, caller, p)
+            C::MakeProposal(p) => self
+                .make_proposal(&neuron_id, caller, p)
                 .await
                 .map(ManageNeuronResponse::make_proposal_response),
-            Some(manage_neuron::Command::RegisterVote(v)) => self
-                .register_vote(&id, caller, v)
+            C::RegisterVote(v) => self
+                .register_vote(&neuron_id, caller, v)
                 .map(|_| ManageNeuronResponse::register_vote_response()),
-            Some(manage_neuron::Command::AddNeuronPermissions(p)) => self
-                .add_neuron_permissions(&id, caller, p)
+            C::AddNeuronPermissions(p) => self
+                .add_neuron_permissions(&neuron_id, caller, p)
                 .map(|_| ManageNeuronResponse::add_neuron_permissions_response()),
-            Some(manage_neuron::Command::RemoveNeuronPermissions(r)) => self
-                .remove_neuron_permissions(&id, caller, r)
+            C::RemoveNeuronPermissions(r) => self
+                .remove_neuron_permissions(&neuron_id, caller, r)
                 .map(|_| ManageNeuronResponse::remove_neuron_permissions_response()),
-            Some(manage_neuron::Command::ClaimOrRefresh(_)) => {
-                panic!("This should have already returned")
+            C::ClaimOrRefresh(claim_or_refresh) => self
+                .claim_or_refresh_neuron(&neuron_id, claim_or_refresh)
+                .await
+                .map(|_| ManageNeuronResponse::claim_or_refresh_neuron_response(neuron_id)),
+        }
+    }
+
+    /// Calls dfn_core::api::caller.
+    async fn claim_or_refresh_neuron(
+        &mut self,
+        neuron_id: &NeuronId,
+        claim_or_refresh: &ClaimOrRefresh,
+    ) -> Result<(), GovernanceError> {
+        let locator = &claim_or_refresh.by.as_ref().ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "Need to provide a way by which to claim or refresh the neuron.",
+            )
+        })?;
+
+        match locator {
+            By::MemoAndController(memo_and_controller) => {
+                self.claim_or_refresh_neuron_by_memo_and_controller(
+                    &dfn_core::api::caller(),
+                    memo_and_controller,
+                )
+                .await
             }
-            None => panic!(),
+
+            By::NeuronId(_) => self.refresh_neuron(neuron_id).await,
         }
     }
 
@@ -3318,14 +3263,48 @@ impl TimeWarp {
     }
 }
 
+fn get_neuron_id_from_manage_neuron(
+    manage_neuron: &ManageNeuron,
+    caller: &PrincipalId,
+) -> Result<NeuronId, GovernanceError> {
+    if let Some(manage_neuron::Command::ClaimOrRefresh(ClaimOrRefresh {
+        by: Some(By::MemoAndController(memo_and_controller)),
+    })) = &manage_neuron.command
+    {
+        return Ok(get_neuron_id_from_memo_and_controller(
+            memo_and_controller,
+            caller,
+        ));
+    }
+
+    Ok(NeuronId::from(Governance::bytes_to_subaccount(
+        &manage_neuron.subaccount,
+    )?))
+}
+
+fn get_neuron_id_from_memo_and_controller(
+    memo_and_controller: &MemoAndController,
+    caller: &PrincipalId,
+) -> NeuronId {
+    let controller = memo_and_controller.controller.unwrap_or(*caller);
+    let memo = memo_and_controller.memo;
+    NeuronId::from(ledger::compute_neuron_staking_subaccount(controller, memo))
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::pb::v1::{
+        manage_neuron_response,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-        ProposalData, ProposalId, Tally, WaitForQuietState,
+        NeuronPermissionType, ProposalData, ProposalId, Tally, WaitForQuietState,
     };
+    use async_trait::async_trait;
+    use ic_canister_client::Sender;
+    use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
+    use ic_sns_test_utils::itest_helpers::UserInfo;
     use proptest::prelude::{prop_assert, proptest};
+    use std::sync::Arc;
 
     fn basic_governance_proto() -> GovernanceProto {
         // Test subject.
@@ -3341,6 +3320,196 @@ mod test {
                 "We have not tried to corrupt the test subject yet but it is already invalid???",
             )
             .into_inner()
+    }
+
+    #[tokio::test]
+    async fn test_neuron_operations_exclude_one_another() {
+        // Step -1: Define helpers.
+
+        struct TestEnvironment {}
+
+        #[async_trait]
+        impl Environment for TestEnvironment {
+            fn now(&self) -> u64 {
+                1_234_567_890
+            }
+
+            fn random_u64(&mut self) -> u64 {
+                unimplemented!()
+            }
+
+            fn random_byte_array(&mut self) -> [u8; 32] {
+                unimplemented!()
+            }
+
+            async fn call_canister(
+                &self,
+                _canister_id: CanisterId,
+                _method_name: &str,
+                _arg: Vec<u8>,
+            ) -> Result<Vec<u8>, (Option<i32>, String)> {
+                unimplemented!()
+            }
+
+            fn heap_growth_potential(&self) -> crate::types::HeapGrowthPotential {
+                unimplemented!()
+            }
+
+            fn canister_id(&self) -> CanisterId {
+                unimplemented!()
+            }
+        }
+
+        struct TestLedger {
+            transfer_funds_arrived: Arc<tokio::sync::Notify>,
+            transfer_funds_continue: Arc<tokio::sync::Notify>,
+        }
+
+        #[async_trait]
+        impl Ledger for TestLedger {
+            async fn transfer_funds(
+                &self,
+                _amount_e8s: u64,
+                _fee_e8s: u64,
+                _from_subaccount: Option<Subaccount>,
+                _to: AccountIdentifier,
+                _memo: u64,
+            ) -> Result<u64, NervousSystemError> {
+                self.transfer_funds_arrived.notify_one();
+                self.transfer_funds_continue.notified().await;
+                Ok(1)
+            }
+
+            async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+                unimplemented!()
+            }
+
+            async fn account_balance(
+                &self,
+                _account: AccountIdentifier,
+            ) -> Result<Tokens, NervousSystemError> {
+                Ok(Tokens::new(1, 0).unwrap())
+            }
+        }
+
+        let local_set = tokio::task::LocalSet::new();
+        local_set
+            .run_until(async move {
+                // Step 0: Prepare the world.
+                let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+                let principal_id = user.sender.get_principal_id();
+                // Not sure why user.neuron_id can't be used...
+                let neuron_id = crate::pb::v1::NeuronId {
+                    id: user.subaccount.to_vec(),
+                };
+
+                let mut governance_proto = basic_governance_proto();
+
+                // Step 0.1: Add a neuron (so that we can operate on it).
+                governance_proto.neurons.insert(
+                    neuron_id.to_string(),
+                    Neuron {
+                        id: Some(neuron_id.clone()),
+                        cached_neuron_stake_e8s: 10_000,
+                        permissions: vec![NeuronPermission {
+                            principal: Some(principal_id),
+                            permission_type: NeuronPermissionType::all(),
+                        }],
+                        ..Default::default()
+                    },
+                );
+
+                // Lets us know that a transfer is in progress.
+                let transfer_funds_arrived = Arc::new(tokio::sync::Notify::new());
+
+                // Lets us tell ledger that it can proceed with the transfer.
+                let transfer_funds_continue = Arc::new(tokio::sync::Notify::new());
+
+                // Step 0.3: Create Governance that we will be sending manage_neuron calls to.
+                let mut governance = Governance::new(
+                    ValidGovernanceProto::try_from(governance_proto).unwrap(),
+                    Box::new(TestEnvironment {}),
+                    Box::new(TestLedger {
+                        transfer_funds_arrived: transfer_funds_arrived.clone(),
+                        transfer_funds_continue: transfer_funds_continue.clone(),
+                    }),
+                );
+
+                // Step 1: Execute code under test.
+
+                // This lets us (later) make a second manage_neuron method call
+                // while one is in flight, which is essential for this test.
+                let raw_governance = &mut governance as *mut Governance;
+
+                // Step 1.1: Begin an async that is supposed to interfere with a
+                // later manage_neuron call.
+                let disburse = ManageNeuron {
+                    subaccount: user.subaccount.to_vec(),
+                    command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
+                        amount: None,
+                        to_account: Some(
+                            AccountIdentifier::new(user.sender.get_principal_id(), None).into(),
+                        ),
+                    })),
+                };
+                let disburse_future = {
+                    let raw_disburse = &disburse as *const ManageNeuron;
+                    let raw_principal_id = &principal_id as *const PrincipalId;
+                    tokio::task::spawn_local(unsafe {
+                        raw_governance.as_mut().unwrap().manage_neuron(
+                            raw_disburse.as_ref().unwrap(),
+                            raw_principal_id.as_ref().unwrap(),
+                        )
+                    })
+                };
+
+                transfer_funds_arrived.notified().await;
+                // It is now guaranteed that disburse is now in mid flight.
+
+                // Step 1.2: Begin another manage_neuron call.
+                let configure = ManageNeuron {
+                    subaccount: user.subaccount.to_vec(),
+                    command: Some(manage_neuron::Command::Configure(
+                        manage_neuron::Configure {
+                            operation: Some(
+                                manage_neuron::configure::Operation::IncreaseDissolveDelay(
+                                    manage_neuron::IncreaseDissolveDelay {
+                                        additional_dissolve_delay_seconds: 42,
+                                    },
+                                ),
+                            ),
+                        },
+                    )),
+                };
+                let configure_result = unsafe {
+                    raw_governance
+                        .as_mut()
+                        .unwrap()
+                        .manage_neuron(&configure, &principal_id)
+                        .await
+                };
+
+                // Step 3: Inspect results.
+
+                // Assert that configure_result is NeuronLocked.
+                match &configure_result.command.as_ref().unwrap() {
+                    manage_neuron_response::Command::Error(err) => {
+                        assert_eq!(
+                            err.error_type,
+                            ErrorType::NeuronLocked as i32,
+                            "err: {:#?}",
+                            err,
+                        );
+                    }
+                    _ => panic!("configure_result: {:#?}", configure_result),
+                }
+
+                // Allow disburse to complete.
+                transfer_funds_continue.notify_one();
+                let disburse_result = disburse_future.await;
+                assert!(disburse_result.is_ok(), "{:#?}", disburse_result);
+            })
+            .await;
     }
 
     #[test]

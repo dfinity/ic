@@ -6,9 +6,10 @@ use crate::pb::v1::manage_neuron_response::{DisburseMaturityResponse, MergeMatur
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::Empty;
 use crate::pb::v1::{
-    manage_neuron_response, nervous_system_function::FunctionType, DefaultFollowees,
-    GovernanceError, ManageNeuronResponse, NervousSystemFunction, NervousSystemParameters,
-    NeuronId, NeuronPermissionList, NeuronPermissionType, ProposalId, RewardEvent, Vote,
+    governance::neuron_in_flight_command, manage_neuron, manage_neuron_response,
+    nervous_system_function::FunctionType, DefaultFollowees, GovernanceError, ManageNeuronResponse,
+    NervousSystemFunction, NervousSystemParameters, NeuronId, NeuronPermissionList,
+    NeuronPermissionType, ProposalId, RewardEvent, Vote,
 };
 
 use async_trait::async_trait;
@@ -31,6 +32,27 @@ const PROPOSAL_EXECUTE_SNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
 
 /// The number of e8s per governance token;
 pub const E8S_PER_TOKEN: u64 = TOKEN_SUBDIVIDABLE_BY;
+
+impl From<&manage_neuron::Command> for neuron_in_flight_command::Command {
+    #[rustfmt::skip]
+    fn from(src: &manage_neuron::Command) -> neuron_in_flight_command::Command {
+        use manage_neuron::Command as S;
+        use neuron_in_flight_command::Command as D;
+        match src.clone() {
+            S::Configure              (x) => D::Configure              (x),
+            S::Disburse               (x) => D::Disburse               (x),
+            S::Follow                 (x) => D::Follow                 (x),
+            S::MakeProposal           (x) => D::MakeProposal           (x),
+            S::RegisterVote           (x) => D::RegisterVote           (x),
+            S::Split                  (x) => D::Split                  (x),
+            S::ClaimOrRefresh         (x) => D::ClaimOrRefreshNeuron   (x),
+            S::MergeMaturity          (x) => D::MergeMaturity          (x),
+            S::DisburseMaturity       (x) => D::DisburseMaturity       (x),
+            S::AddNeuronPermissions   (x) => D::AddNeuronPermissions   (x),
+            S::RemoveNeuronPermissions(x) => D::RemoveNeuronPermissions(x),
+        }
+    }
+}
 
 /// Some constants that define upper bound (ceiling) and lower bounds (floor) for some of
 /// the nervous system parameters as well as the default values for the nervous system
