@@ -3,9 +3,9 @@ use crate::{miracl_g1_from_bytes, miracl_g1_to_bytes};
 use ic_crypto_internal_types::curves::bls12_381::conversions::g1_bytes_from_vec;
 use ic_crypto_internal_types::curves::bls12_381::G1;
 use ic_crypto_internal_types::curves::test_vectors::bls12_381 as test_vectors;
-use miracl_core::bls12381::big::BIG;
-use miracl_core::bls12381::ecp::ECP;
-use miracl_core::bls12381::rom::CURVE_ORDER;
+use miracl_core_bls12381::bls12381::big::BIG;
+use miracl_core_bls12381::bls12381::ecp::ECP;
+use miracl_core_bls12381::bls12381::rom::CURVE_ORDER;
 
 /// When much of this was written, ECP lacked Debug, pretty-printing,
 /// and Eq, and Miracl's `.equals` took mutable arguments.

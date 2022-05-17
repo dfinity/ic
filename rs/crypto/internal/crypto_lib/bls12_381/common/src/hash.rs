@@ -4,7 +4,7 @@ use crate::serde::pairing::g1_from_bytes;
 use bls12_381::{G1Projective, Scalar};
 use ic_crypto_internal_bls12381_serde_miracl::miracl_g1_to_bytes;
 use ic_crypto_sha::Sha256;
-use miracl_core::bls12381::ecp::ECP;
+use miracl_core_bls12381::bls12381::ecp::ECP;
 use rand_chacha::ChaChaRng;
 use rand_core::RngCore;
 use rand_core::SeedableRng;
@@ -36,12 +36,12 @@ fn hash_to_field_bls12381(
     dst: &[u8],
     msg: &[u8],
     ctr: usize,
-) -> [miracl_core::bls12381::fp::FP; 2] {
-    use miracl_core::bls12381::big::BIG;
-    use miracl_core::bls12381::dbig::DBIG;
-    use miracl_core::bls12381::fp::FP;
-    use miracl_core::bls12381::rom;
-    use miracl_core::hmac;
+) -> [miracl_core_bls12381::bls12381::fp::FP; 2] {
+    use miracl_core_bls12381::bls12381::big::BIG;
+    use miracl_core_bls12381::bls12381::dbig::DBIG;
+    use miracl_core_bls12381::bls12381::fp::FP;
+    use miracl_core_bls12381::bls12381::rom;
+    use miracl_core_bls12381::hmac;
 
     let mut uu: [FP; 2] = [FP::new(), FP::new()];
 
@@ -83,8 +83,8 @@ pub type MiraclG1 = ECP;
 /// # Returns
 /// The G1 point as a MIRACL object
 pub fn hash_to_miracl_g1(dst: &[u8], msg: &[u8]) -> MiraclG1 {
-    use miracl_core::bls12381::ecp;
-    use miracl_core::hmac;
+    use miracl_core_bls12381::bls12381::ecp;
+    use miracl_core_bls12381::hmac;
     let u = hash_to_field_bls12381(hmac::MC_SHA2, ecp::HASH_TYPE, dst, msg, 2);
 
     // Note: `map2point` implements the function `map_to_curve` specified in the
