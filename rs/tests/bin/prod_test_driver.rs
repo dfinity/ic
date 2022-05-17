@@ -574,18 +574,18 @@ fn get_test_suites() -> HashMap<String, Suite> {
     m.add_suite(suite(
         "upgrade_compatibility",
         vec![
-            pot(
+            pot_with_setup(
                 "upgrade_downgrade_app_subnet",
-                orchestrator::upgrade_downgrade::config(),
-                par(vec![t(
+                orchestrator::upgrade_downgrade::config,
+                par(vec![sys_t(
                     "upgrade_downgrade_app_subnet",
                     orchestrator::upgrade_downgrade::upgrade_downgrade_app_subnet,
                 )]),
             ),
-            pot(
+            pot_with_setup(
                 "upgrade_downgrade_nns_subnet",
-                orchestrator::upgrade_downgrade::config(),
-                par(vec![t(
+                orchestrator::upgrade_downgrade::config,
+                par(vec![sys_t(
                     "upgrade_downgrade_nns_subnet",
                     orchestrator::upgrade_downgrade::upgrade_downgrade_nns_subnet,
                 )]),
