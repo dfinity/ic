@@ -1,5 +1,5 @@
 {
-  "checksum": "a805e4831182e51c274f10448bc342f692911c16ef2d78eaf5de5fd79957e8d9",
+  "checksum": "3b87341d0e75c0b6644683dedd3974cdd68faeec7e7f2f1fd5b054a5ab5d11c2",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -381,7 +381,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -389,7 +389,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -447,7 +447,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -455,7 +455,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -510,7 +510,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ],
@@ -1116,7 +1116,7 @@
               "target": "either"
             },
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -1124,7 +1124,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -1788,7 +1788,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -1796,7 +1796,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -2030,7 +2030,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.125",
+              "id": "libc 0.2.126",
               "target": "libc"
             },
             {
@@ -2255,7 +2255,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -2263,7 +2263,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -2502,7 +2502,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -2510,7 +2510,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -2587,19 +2587,19 @@
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ],
             "aarch64-linux-android": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ],
             "cfg(all(target_arch = \"aarch64\", target_os = \"linux\"))": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ]
@@ -3315,7 +3315,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -3581,7 +3581,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "libc 0.2.125",
+              "id": "libc 0.2.126",
               "target": "libc"
             },
             {
@@ -3806,7 +3806,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ],
@@ -4132,7 +4132,7 @@
               "target": "crc32fast"
             },
             {
-              "id": "libc 0.2.125",
+              "id": "libc 0.2.126",
               "target": "libc"
             },
             {
@@ -4678,7 +4678,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -4686,7 +4686,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -5037,7 +5037,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ]
@@ -5311,7 +5311,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.125",
+              "id": "libc 0.2.126",
               "target": "libc"
             }
           ],
@@ -6346,13 +6346,13 @@
       },
       "license": "Apache-2.0/MIT"
     },
-    "libc 0.2.125": {
+    "libc 0.2.126": {
       "name": "libc",
-      "version": "0.2.125",
+      "version": "0.2.126",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/libc/0.2.125/download",
-          "sha256": "5916d2ae698f6de9bfb891ad7a8d65c09d232dc58cc4ac433c7da3b2fd84bc2b"
+          "url": "https://crates.io/api/v1/crates/libc/0.2.126/download",
+          "sha256": "349d5a591cd28b49e1d1037471617a32ddcda5731b99419008085f72d5a53836"
         }
       },
       "targets": [
@@ -6394,14 +6394,14 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.125",
+              "id": "libc 0.2.126",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.2.125"
+        "version": "0.2.126"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -6632,7 +6632,7 @@
               "target": "fnv"
             },
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -6644,7 +6644,7 @@
               "target": "regex_syntax"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             },
             {
@@ -6981,7 +6981,7 @@
           "selects": {
             "cfg(target_os = \"wasi\")": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               },
               {
@@ -6991,7 +6991,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ],
@@ -7113,7 +7113,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "libc 0.2.125",
+              "id": "libc 0.2.126",
               "target": "libc"
             }
           ],
@@ -7399,7 +7399,7 @@
             ],
             "cfg(not(windows))": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ]
@@ -7495,7 +7495,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -7503,7 +7503,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -7547,7 +7547,7 @@
           "selects": {
             "cfg(any(target_os = \"macos\", target_os = \"ios\", target_os = \"freebsd\"))": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ]
@@ -7718,7 +7718,7 @@
               "target": "foreign_types"
             },
             {
-              "id": "libc 0.2.125",
+              "id": "libc 0.2.126",
               "target": "libc"
             },
             {
@@ -7797,7 +7797,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -7805,7 +7805,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -7859,7 +7859,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.125",
+              "id": "libc 0.2.126",
               "target": "libc"
             },
             {
@@ -8152,7 +8152,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ],
@@ -8238,7 +8238,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ],
@@ -8524,7 +8524,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -8532,7 +8532,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -9066,7 +9066,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -9074,7 +9074,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -9155,7 +9155,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -9251,13 +9251,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "proc-macro2 1.0.38": {
+    "proc-macro2 1.0.39": {
       "name": "proc-macro2",
-      "version": "1.0.38",
+      "version": "1.0.39",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/proc-macro2/1.0.38/download",
-          "sha256": "9027b48e9d4c9175fa2218adf3557f91c1137021739951d4932f5f8268ac48aa"
+          "url": "https://crates.io/api/v1/crates/proc-macro2/1.0.39/download",
+          "sha256": "c54b25569025b7fc9651de43004ae593a75ad88543b17178aa5e1b9c4f15f56f"
         }
       },
       "targets": [
@@ -9298,18 +9298,18 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "build_script_build"
             },
             {
-              "id": "unicode-xid 0.2.3",
-              "target": "unicode_xid"
+              "id": "unicode-ident 1.0.0",
+              "target": "unicode_ident"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.38"
+        "version": "1.0.39"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -9369,7 +9369,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "libc 0.2.125",
+              "id": "libc 0.2.126",
               "target": "libc"
             }
           ],
@@ -9442,7 +9442,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "libc 0.2.125",
+              "id": "libc 0.2.126",
               "target": "libc"
             },
             {
@@ -9897,7 +9897,7 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -9905,7 +9905,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -9955,7 +9955,7 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -9963,7 +9963,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -10193,7 +10193,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             }
           ],
@@ -10292,7 +10292,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ],
@@ -10375,7 +10375,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ]
@@ -10758,7 +10758,7 @@
           "selects": {
             "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ],
@@ -10831,7 +10831,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ],
@@ -12152,7 +12152,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -12164,7 +12164,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -12351,7 +12351,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.125",
+              "id": "libc 0.2.126",
               "target": "libc"
             }
           ],
@@ -12601,7 +12601,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -12609,7 +12609,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -12689,7 +12689,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ],
@@ -12869,7 +12869,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -12877,7 +12877,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -12980,13 +12980,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "syn 1.0.94": {
+    "syn 1.0.95": {
       "name": "syn",
-      "version": "1.0.94",
+      "version": "1.0.95",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/syn/1.0.94/download",
-          "sha256": "a07e33e919ebcd69113d5be0e4d70c5707004ff45188910106854f38b960df4a"
+          "url": "https://crates.io/api/v1/crates/syn/1.0.95/download",
+          "sha256": "fbaf6116ab8924f39d52792136fb74fd60a80194cf1b1c6ffa6453eef1c3f942"
         }
       },
       "targets": [
@@ -13036,7 +13036,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -13044,18 +13044,18 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "build_script_build"
             },
             {
-              "id": "unicode-xid 0.2.3",
-              "target": "unicode_xid"
+              "id": "unicode-ident 1.0.0",
+              "target": "unicode_ident"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.94"
+        "version": "1.0.95"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -13132,7 +13132,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -13140,7 +13140,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             },
             {
@@ -13201,7 +13201,7 @@
           "selects": {
             "cfg(any(unix, target_os = \"wasi\"))": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ],
@@ -13479,7 +13479,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -13487,7 +13487,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -13529,7 +13529,7 @@
         "deps": {
           "common": [
             {
-              "id": "libc 0.2.125",
+              "id": "libc 0.2.126",
               "target": "libc"
             }
           ],
@@ -13598,7 +13598,7 @@
           "selects": {
             "cfg(target_family = \"unix\")": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               },
               {
@@ -13818,7 +13818,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               },
               {
@@ -13925,7 +13925,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -13933,7 +13933,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -14632,7 +14632,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -14640,7 +14640,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             }
           ],
@@ -14875,6 +14875,39 @@
         "data_glob": [
           "**"
         ]
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "unicode-ident 1.0.0": {
+      "name": "unicode-ident",
+      "version": "1.0.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/unicode-ident/1.0.0/download",
+          "sha256": "d22af068fba1eb5edcb4aea19d382b2a3deb4c8f9d475c589b6ada9e0fd493ee"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "unicode_ident",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "unicode_ident",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "1.0.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -15190,8 +15223,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -15214,8 +15247,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -15235,7 +15268,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "libc 0.2.125",
+                "id": "libc 0.2.126",
                 "target": "libc"
               }
             ]
@@ -15542,7 +15575,7 @@
               "target": "log"
             },
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -15550,7 +15583,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             },
             {
@@ -15648,7 +15681,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -15656,7 +15689,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             },
             {
@@ -15828,7 +15861,7 @@
               "target": "either"
             },
             {
-              "id": "libc 0.2.125",
+              "id": "libc 0.2.126",
               "target": "libc"
             }
           ],
@@ -16630,7 +16663,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.38",
+              "id": "proc-macro2 1.0.39",
               "target": "proc_macro2"
             },
             {
@@ -16638,7 +16671,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.94",
+              "id": "syn 1.0.95",
               "target": "syn"
             },
             {
