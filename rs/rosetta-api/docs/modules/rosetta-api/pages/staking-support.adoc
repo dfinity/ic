@@ -415,7 +415,7 @@ The command has two forms: one form accepts an https://smartcontracts.org/docs/i
 | 1.3.0
 
 | Idempotent?
-| yes
+| no
 
 | Minimal access level
 | controller
@@ -440,7 +440,9 @@ This operation transfers all the maturity from the existing neuron to the staked
   "account": { "address": "907ff6c714a545110b42982b72aa39c5b7742d610e234a9d40bf8cf624e7a70d" },
   "metadata": {
     "neuron_index": 0,
-    "controller": "sp3em-jkiyw-tospm-2huim-jor4p-et4s7-ay35f-q7tnm-hi4k2-pyicb-xae",
+    "controller": {
+      "principal": "sp3em-jkiyw-tospm-2huim-jor4p-et4s7-ay35f-q7tnm-hi4k2-pyicb-xae"
+    },
     "spawned_neuron_index": 1
   }
 }
