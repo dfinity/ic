@@ -7,11 +7,10 @@ use prost::Message;
 use std::path::{Path, PathBuf};
 use std::{convert::TryFrom, fmt};
 
-/// Adds the k/v entry to the given data provider and into a file named `key` in
-/// the given directory.
+/// Adds the k/v entry to the given data provider.
 pub fn write_registry_entry<P: AsRef<Path> + fmt::Debug, M: Message>(
     data_provider: &ProtoRegistryDataProvider,
-    path: P,
+    _path: P,
     key: &str,
     registry_version: RegistryVersion,
     record: M,
@@ -20,9 +19,8 @@ pub fn write_registry_entry<P: AsRef<Path> + fmt::Debug, M: Message>(
     M: Message + std::clone::Clone,
 {
     data_provider
-        .add(key, registry_version, Some(record.clone()))
+        .add(key, registry_version, Some(record))
         .expect("Could not add key to registry data provider.");
-    write_proto_to_file(key, record, path)
 }
 
 /// Writes a protobuf registry entry to a file on disk, in the given path.
@@ -40,23 +38,6 @@ where
     pb.encode(&mut buf).expect("Error serializing proto");
     let file_path = PathBuf::from(parent_dir.as_ref()).join(key);
     std::fs::write(file_path, buf).expect("Unable to write pb to file.");
-}
-
-/// Writes a protobuf registry entry to a file on disk, in the given path.
-/// The file name is the key of the entry in the registry (with .pb added to the
-/// end). This allows this tool to also generate the data necessary for the
-/// registry canister.
-///
-/// # Panics
-///
-/// Panics if the parent_dir doesn't exist, or if the serialization fails.
-pub(crate) fn write_proto_to_file<P, M>(key: &str, pb: M, parent_dir: P)
-where
-    P: AsRef<Path> + fmt::Debug,
-    M: Message + std::clone::Clone,
-{
-    let file_name = format!("{}.pb", key);
-    write_proto_to_file_raw(&file_name, pb, parent_dir);
 }
 
 pub fn store_threshold_sig_pk<P: AsRef<Path>>(pk: &PbPublicKey, path: P) {
