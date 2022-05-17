@@ -3483,7 +3483,6 @@ fn execute_ecdsa_signing(
             RequestOrResponse::Request(
                 RequestBuilder::new()
                     .sender(sender)
-                    //.receiver(receiver)
                     .method_name(Method::SignWithECDSA)
                     .method_payload(Encode!(&request_payload).unwrap())
                     .payment(payment)
@@ -3565,5 +3564,76 @@ fn ecdsa_signature_fee_ignored_for_nns() {
             .next()
             .unwrap();
         assert_eq!(context.request.payment, payment)
+    });
+}
+
+#[test]
+fn ecdsa_signature_queue_fills_up() {
+    with_test_replica_logger(|log| {
+        let fee = Cycles::from(1_000u64);
+        let payment = Cycles::from(2_000u64);
+
+        let nns_subnet = subnet_test_id(2);
+        let sender_subnet = subnet_test_id(1);
+        let (mut state, exec_env) = ExecutionEnvironmentBuilder::new()
+            .with_log(log)
+            .with_sender_subnet_id(sender_subnet)
+            .with_nns_subnet_id(nns_subnet)
+            .with_sender_canister(canister_test_id(1))
+            .with_sender_canister(canister_test_id(2))
+            .with_sender_canister(canister_test_id(3))
+            .with_ecdsa_signature_fee(fee)
+            .build();
+
+        state.metadata.own_subnet_features.ecdsa_signatures = true;
+
+        let request_payload = ic00::SignWithECDSAArgs {
+            message_hash: [1; 32].to_vec(),
+            derivation_path: vec![],
+            key_id: make_key("secp256k1"),
+        };
+
+        for i in 0..1_005 {
+            state
+                .subnet_queues_mut()
+                .push_input(
+                    QUEUE_INDEX_NONE,
+                    RequestOrResponse::Request(
+                        RequestBuilder::new()
+                            .sender(canister_test_id((i % 3) + 1))
+                            .method_name(Method::SignWithECDSA)
+                            .method_payload(Encode!(&request_payload).unwrap())
+                            .payment(payment)
+                            .build(),
+                    ),
+                    InputQueueType::RemoteSubnet,
+                )
+                .unwrap();
+
+            let msg = state.subnet_queues_mut().pop_input().unwrap();
+            state = exec_env
+                .execute_subnet_message(
+                    msg,
+                    state,
+                    MAX_NUM_INSTRUCTIONS,
+                    &mut mock_random_number_generator(),
+                    &None,
+                    &ProvisionalWhitelist::Set(BTreeSet::new()),
+                    MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                    MAX_NUMBER_OF_CANISTERS,
+                )
+                .0
+        }
+
+        let (_refund, response) = state
+            .subnet_queues_mut()
+            .pop_canister_output(&canister_test_id(1))
+            .unwrap();
+
+        assert_eq!(
+            get_reject_message(response),
+            "sign_with_ecdsa request could not be handled, the ECDSA signature queue is full."
+                .to_string()
+        )
     });
 }
