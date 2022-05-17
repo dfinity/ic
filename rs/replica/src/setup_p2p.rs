@@ -2,7 +2,6 @@ use ic_btc_adapter_client::{setup_bitcoin_adapter_clients, BitcoinAdapterClients
 use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
 use ic_consensus::certification::VerifierImpl;
-use ic_consensus::ecdsa::get_initial_dealings;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
@@ -126,19 +125,12 @@ pub fn construct_ic_stack(
         }
     };
 
-    let initial_dealings = get_initial_dealings(
-        subnet_id,
-        registry.as_ref(),
-        registry.get_latest_version(),
-        &replica_logger,
-    );
     let artifact_pools = init_artifact_pools(
         subnet_id,
         artifact_pool_config,
         metrics_registry.clone(),
         replica_logger.clone(),
         catch_up_package,
-        initial_dealings,
     );
 
     let cycles_account_manager = Arc::new(CyclesAccountManager::new(

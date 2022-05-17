@@ -43,7 +43,6 @@ use ic_transport::transport::create_transport;
 use ic_types::{
     artifact::{Advert, ArtifactKind, ArtifactTag, FileTreeSyncAttribute},
     consensus::catchup::CUPWithOriginalProtobuf,
-    crypto::canister_threshold_sig::idkg::InitialIDkgDealings,
     crypto::CryptoHash,
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     malicious_flags::MaliciousFlags,
@@ -421,7 +420,6 @@ pub fn init_artifact_pools(
     registry: MetricsRegistry,
     log: ReplicaLogger,
     catch_up_package: CUPWithOriginalProtobuf,
-    ecdsa_initial_dealings: Option<InitialIDkgDealings>,
 ) -> ArtifactPools {
     ensure_persistent_pool_replica_version_compatibility(config.persistent_pool_db_path());
 
@@ -430,6 +428,11 @@ pub fn init_artifact_pools(
         registry.clone(),
         log.clone(),
     )));
+
+    let mut ecdsa_pool = EcdsaPoolImpl::new(config.clone(), log.clone(), registry.clone());
+    ecdsa_pool.add_initial_dealings(&catch_up_package);
+    let ecdsa_pool = Arc::new(RwLock::new(ecdsa_pool));
+
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
         subnet_id,
         catch_up_package,
@@ -439,16 +442,11 @@ pub fn init_artifact_pools(
     )));
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
     let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(
-        config.clone(),
-        log.clone(),
+        config,
+        log,
         registry.clone(),
     )));
     let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(registry.clone())));
-    let mut ecdsa_pool = EcdsaPoolImpl::new(config, log, registry.clone());
-    if let Some(dealings) = ecdsa_initial_dealings {
-        ecdsa_pool.add_initial_dealings(dealings);
-    };
-    let ecdsa_pool = Arc::new(RwLock::new(ecdsa_pool));
     let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(registry)));
     ArtifactPools {
         ingress_pool,

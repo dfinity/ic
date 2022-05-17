@@ -95,7 +95,6 @@ fn execute_test(
                 registry.clone(),
                 subnet_id,
             )),
-            None,
         );
 
         let (_, p2p_runner) = create_networking_stack(
@@ -256,7 +255,6 @@ fn execute_test_chunking_pool(
                 registry.clone(),
                 subnet_id,
             )),
-            None,
         );
 
         let (_a, p2p_runner) = create_networking_stack(

@@ -5,6 +5,7 @@
 use crate::consensus::{
     crypto::ConsensusCrypto, dkg_key_manager::DkgKeyManager, pool_reader::PoolReader,
 };
+use crate::ecdsa::make_ecdsa_genesis_summary;
 use ic_crypto::crypto_hash;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
@@ -1360,8 +1361,9 @@ pub fn make_registry_cup(
         }
     };
     let dkg_summary = make_genesis_summary(registry, subnet_id, Some(registry_version));
-    let ecdsa_summary = None;
     let cup_height = Height::new(cup_contents.height);
+    let ecdsa_summary =
+        make_ecdsa_genesis_summary(registry, registry_version, subnet_id, cup_height, logger);
 
     let low_dkg_id = dkg_summary
         .current_transcript(&NiDkgTag::LowThreshold)

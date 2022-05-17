@@ -154,6 +154,7 @@ message KeyTranscriptCreation {
   ReshareOfMaskedParams reshare_of_masked = 3;
   ReshareOfUnmaskedParams reshare_of_unmasked = 4;
   ReshareOfUnmaskedParams xnet_reshare_of_unmasked = 5;
+  registry.subnet.v1.InitialIDkgDealings xnet_reshare_initial_dealings = 6;
   UnmaskedTranscript created = 9;
 }
 

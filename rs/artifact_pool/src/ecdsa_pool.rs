@@ -19,11 +19,12 @@ use ic_interfaces::gossip_pool::{EcdsaGossipPool, GossipPool};
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
+use ic_types::consensus::catchup::CUPWithOriginalProtobuf;
 use ic_types::consensus::ecdsa::{
     EcdsaComplaint, EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash,
     EcdsaMessageType, EcdsaOpening, EcdsaSigShare, EcdsaSignedDealing,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::InitialIDkgDealings;
+use ic_types::consensus::BlockPayload;
 use ic_types::crypto::{BasicSig, BasicSigOf};
 use ic_types::signature::BasicSignature;
 use ic_types::Height;
@@ -237,8 +238,21 @@ impl EcdsaPoolImpl {
         }
     }
 
-    // Populates the validated pool with the initial dealings.
-    pub fn add_initial_dealings(&mut self, initial_dealings: InitialIDkgDealings) {
+    // Populates the validated pool with the initial dealings from the CUP.
+    pub fn add_initial_dealings(&mut self, catch_up_package: &CUPWithOriginalProtobuf) {
+        let block = catch_up_package.cup.content.block.get_value().clone();
+        let mut initial_dealings = None;
+        if block.payload.is_summary() {
+            let block_payload = BlockPayload::from(block.payload);
+            if let Some(ecdsa_summary) = block_payload.into_summary().ecdsa {
+                initial_dealings = ecdsa_summary.initial_dkg_dealings();
+            }
+        }
+        if initial_dealings.is_none() {
+            return;
+        }
+        let initial_dealings = initial_dealings.as_ref().unwrap();
+
         let mut change_set = Vec::new();
         for dealing in initial_dealings.dealings().values() {
             let ecdsa_dealing = EcdsaDealing {
