@@ -22,6 +22,7 @@ filegroup(
         "//rs/criterion_time:sources",
         "//rs/crypto/internal/crypto_lib/bls12_381/common:sources",
         "//rs/crypto/internal/crypto_lib/bls12_381/serde/miracl:sources",
+        "//rs/crypto/internal/crypto_lib/hmac:sources",
         "//rs/crypto/internal/crypto_lib/sha2:sources",
         "//rs/crypto/internal/crypto_lib/types:sources",
         "//rs/crypto/internal/test_vectors:sources",

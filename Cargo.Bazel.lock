@@ -1,5 +1,5 @@
 {
-  "checksum": "2ad985a7058ea0cc9f4bdd2c88d7163ac56ca9a9c517d5323bba18900e3afe6a",
+  "checksum": "cdcb8ed74af65cb471232d196778e2af681964a31dcf8986022f83efeabf542f",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -3816,6 +3816,10 @@
             {
               "id": "wsl 0.1.0",
               "target": "wsl"
+            },
+            {
+              "id": "wycheproof 0.4.0",
+              "target": "wycheproof"
             },
             {
               "id": "zeroize 1.5.5",
@@ -15588,8 +15592,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -15600,8 +15604,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -16949,6 +16953,60 @@
         "version": "0.1.0"
       },
       "license": "MIT"
+    },
+    "wycheproof 0.4.0": {
+      "name": "wycheproof",
+      "version": "0.4.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/wycheproof/0.4.0/download",
+          "sha256": "183c789620c674b79dac33cd3aadb6c8006b66cba6a680402235aaebc743e3df"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wycheproof",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "wycheproof",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "base64 0.13.0",
+              "target": "base64"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "serde 1.0.137",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.81",
+              "target": "serde_json"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.4.0"
+      },
+      "license": "Apache-2.0"
     },
     "zeroize 1.5.5": {
       "name": "zeroize",
