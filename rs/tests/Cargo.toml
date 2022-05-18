@@ -102,6 +102,7 @@ serde_bytes = "0.11"
 serde_cbor = "0.11.1"
 serde_json = "1.0"
 serde_millis =  "0.1"
+shh = "1.0.1"
 slog = { version = "2.5.2", features = ["max_level_trace", "release_max_level_trace"] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"

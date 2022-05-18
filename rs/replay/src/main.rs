@@ -18,6 +18,6 @@ fn main() {
     } else if std::env::args().any(|arg| arg == RUN_AS_SANDBOX_LAUNCHER_FLAG) {
         sandbox_launcher_main();
     } else {
-        let _ = crate::replay(ReplayToolArgs::parse());
+        crate::replay(ReplayToolArgs::parse());
     }
 }
