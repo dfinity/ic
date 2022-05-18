@@ -284,12 +284,12 @@ def main(runner_args: List[str], folders_to_remove: List[str], keep_tmp_artifact
         results_tmp_dir = tempfile.mkdtemp(prefix="tmp_results_")
         folders_to_remove.append(results_tmp_dir)
         RESULT_FILE = f"{results_tmp_dir}/test-results.json"
-        SUMMARY_ARGS = ["--test_results", RESULT_FILE, "--verbose"]
+        SUMMARY_ARGS = [f"--test_results={RESULT_FILE}", "--verbose"]
     else:
         ARTIFACT_DIR = f"{CI_PROJECT_DIR}/artifacts"
         RUN_CMD = f"{ARTIFACT_DIR}/prod-test-driver"
         RESULT_FILE = f"{CI_PROJECT_DIR}/test-results.json"
-        SUMMARY_ARGS = ["--test_results", RESULT_FILE]
+        SUMMARY_ARGS = [f"--test_results={RESULT_FILE}"]
 
     canisters_path = os.path.join(CI_PROJECT_DIR, f"{ARTIFACT_DIR}/canisters")
     release_path = os.path.join(CI_PROJECT_DIR, f"{ARTIFACT_DIR}/release")
@@ -339,7 +339,7 @@ def main(runner_args: List[str], folders_to_remove: List[str], keep_tmp_artifact
         )
     else:
         logging.info(f"Downloading dependencies built from commit: {GREEN}{IC_VERSION_ID}{NC}")
-        RCLONE_ARGS = ["--git-rev", IC_VERSION_ID, f"--out={ARTIFACT_DIR}", "--unpack", "--mark-executable"]
+        RCLONE_ARGS = [f"--git-rev={IC_VERSION_ID}", f"--out={ARTIFACT_DIR}", "--unpack", "--mark-executable"]
         clone_artifacts_canisters_cmd = [
             f"{CI_PROJECT_DIR}/gitlab-ci/src/artifacts/rclone_download.py",
             "--remote-path=canisters",
@@ -434,7 +434,7 @@ def main(runner_args: List[str], folders_to_remove: List[str], keep_tmp_artifact
                 f"IC_VERSION_ID: \`{IC_VERSION_ID}\`.",  # noqa
             ]
         )
-        SUMMARY_ARGS.append(f'--slack_message "{msg}"')
+        SUMMARY_ARGS.append(f'--slack_message="{msg}"')
 
     logging.debug(f"SUMMARY_ARGS={SUMMARY_ARGS}")
 
