@@ -125,6 +125,10 @@ e2e-workload-test:
       artifacts: false
     - job: guest-os-diskimg-dev-malicious
       artifacts: false
+    - job: boundary-os-diskimg
+      artifacts: false
+    - job: boundary-os-diskimg-dev
+      artifacts: false
     - artifacts-upload-to-s3
   artifacts:
     when: always
