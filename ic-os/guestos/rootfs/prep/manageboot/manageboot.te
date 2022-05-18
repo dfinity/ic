@@ -24,6 +24,14 @@ application_domain(ic_manageboot_t, ic_manageboot_exec_t)
 # it is now running same domain, but with root privileges).
 sudo_role_template(ic_manageboot, system_r, ic_manageboot_t)
 domtrans_pattern(ic_manageboot_sudo_t, ic_manageboot_exec_t, ic_manageboot_t)
+# Under certain circumstances, sudo signals its children.
+allow ic_manageboot_sudo_t ic_manageboot_t : process { signal };
+# Use inherited file descriptor (/dev/null for stdin). Maybe actually
+# replica should explicitly set this to /dev/null.
+allow ic_manageboot_sudo_t init_t : fd { use };
+allow ic_manageboot_t init_t : fd { use };
+# It is not clear why it wants the pgid of init process. Allow it for now.
+allow ic_manageboot_sudo_t init_t : process { getpgid };
 
 ### writing upgrades
 
@@ -52,6 +60,11 @@ fs_getattr_tmpfs(ic_manageboot_t)
 # needs random number generator
 dev_read_urand(ic_manageboot_t)
 
+# tar extraction is done as root, but the path to the file has not been
+# made accessible to the root user account explicitly. It needs privileges
+# to perform DAC override in order to read the input file.
+allow ic_manageboot_t self : capability { dac_read_search };
+
 ### triggering reboot
 
 # The "reboot" command wants to read /sys/kernel/kexec_loaded
@@ -74,6 +87,20 @@ allow ic_manageboot_t initrc_var_run_t : file { lock open read };
 # the caller to set power status in order to trigger reboot.
 require { type power_unit_t; class service { start status }; }
 allow ic_manageboot_t power_unit_t : service { start status };
+
+# reboot command also wants to read efi vars
+require { type efivarfs_t; }
+read_files_pattern(ic_manageboot_t, efivarfs_t, efivarfs_t)
+
+# reboot command also wants sys_resource capability
+allow ic_manageboot_t self : capability { sys_resource };
+
+# Reboot wants to read information from /proc/1/environ, /proc/cmdline
+# and /proc/sys/kernel/...
+require { type init_t, proc_t, sysctl_t, sysctl_kernel_t; }
+read_files_pattern(ic_manageboot_t, proc_t, init_t)
+read_files_pattern(ic_manageboot_t, proc_t, proc_t)
+read_files_pattern(ic_manageboot_t, sysctl_t, sysctl_kernel_t)
 
 ### Miscellaneous operational requirements
 
