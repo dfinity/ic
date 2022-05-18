@@ -40,6 +40,7 @@ filegroup(
         "//rs/registry/subnet_features:sources",
         "//rs/registry/subnet_type:sources",
         "//rs/rust_canisters/on_wire:sources",
+        "//rs/stable-structures:sources",
         "//rs/sys:sources",
         "//rs/test_utilities/compare_dirs:sources",
         "//rs/types/base_types:sources",
