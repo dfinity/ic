@@ -54,8 +54,8 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     lvm2 \
     net-tools \
     nftables \
-    nginx-module-njs=1.21.3+0.7.0-1~focal \
     nginx=1.21.3-1~focal \
+    nginx-module-njs=1.21.3+0.7.0-1~focal \
     opensc \
     openssh-client openssh-server \
     parted \
@@ -71,4 +71,5 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     systemd systemd-sysv systemd-journal-remote \
     udev \
     usbutils \
-    vim
+    vim \
+    zstd
