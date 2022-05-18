@@ -14,6 +14,7 @@ ic-error-types = { path = "../../types/error_types" }
 ic-ic00-types = { path="../../types/ic00_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-canister-http-adapter-client = { path = "../../interfaces/canister_http_adapter_client" }
+ic-logger = { path = "../../monitoring/logger" }
 ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../../types/types" }
 slog = "2.7.0"

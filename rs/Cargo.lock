@@ -3943,6 +3943,7 @@ dependencies = [
  "ic-ic00-types",
  "ic-interfaces",
  "ic-interfaces-canister-http-adapter-client",
+ "ic-logger",
  "ic-protobuf",
  "ic-test-utilities",
  "ic-types 0.8.0",

@@ -6,6 +6,8 @@ pub enum SendError<Request> {
     /// Channel is full. Some responses must be consumes before new
     /// requests are send.
     Full(Request),
+    /// No connection to adapter.
+    BrokenConnection,
 }
 
 /// The error type that can be returned on "try_receive".
