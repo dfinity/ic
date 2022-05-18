@@ -15,7 +15,7 @@ setup-os-iso:
       echo "Build ID: ${VERSION}"
 
       # NOTE: This is currently hardcoded to a specific blessed version of guestOS
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=guest-os --blessed-only --out=guestos --git-rev 0ef2aebde4ff735a1a93efa342dcf966b6df5061
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=guest-os --out=guestos --git-rev="${VERSION}"
       "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=host-os --out=hostos --git-rev="${VERSION}"
 
       BUILD_OUT="ic-os/setupos/build-out"
