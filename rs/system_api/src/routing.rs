@@ -108,9 +108,12 @@ pub(super) fn resolve_destination(
         | Ok(Ic00Method::BitcoinGetUtxos)
         | Ok(Ic00Method::BitcoinSendTransaction)
         | Ok(Ic00Method::BitcoinGetCurrentFees) => {
-            // TODO(EXC-939): Route requests to the appropriate subnet.
-            // For now, we return our own subnet ID.
-            Ok(own_subnet)
+            // TODO(EXC-939): Route requests across all the bitcoin subnets, not only
+            // the first subnet.
+            Ok(*network_topology
+                .bitcoin_testnet_subnets()
+                .first()
+                .unwrap_or(&own_subnet))
         }
         Ok(Ic00Method::ECDSAPublicKey) => {
             let key_id = Decode!(payload, ECDSAPublicKeyArgs)?.key_id;

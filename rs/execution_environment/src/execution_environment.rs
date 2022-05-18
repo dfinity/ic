@@ -756,9 +756,12 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 (Some((res, msg.take_cycles())), instructions_limit)
             }
 
-            // TODO(EXC-940): Send Bitcoin requests to the Bitcoin canister.
-            Ok(Ic00Method::BitcoinGetUtxos)
-            | Ok(Ic00Method::BitcoinSendTransaction)
+            Ok(Ic00Method::BitcoinGetUtxos) => {
+                let res = crate::bitcoin::get_utxos(payload, &mut state);
+                (Some((res, msg.take_cycles())), instructions_limit)
+            }
+
+            Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinGetCurrentFees)
             | Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(

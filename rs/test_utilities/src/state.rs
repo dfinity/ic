@@ -13,6 +13,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    bitcoin_state::BitcoinState,
     canister_state::{
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         testing::new_canister_queues_for_test,
@@ -49,6 +50,7 @@ pub struct ReplicatedStateBuilder {
     batch_time: Time,
     time_of_last_allocation_charge: Time,
     subnet_features: SubnetFeatures,
+    bitcoin_state: BitcoinState,
     bitcoin_adapter_requests: Vec<BitcoinAdapterRequestWrapper>,
 }
 
@@ -95,6 +97,11 @@ impl ReplicatedStateBuilder {
         self
     }
 
+    pub fn with_bitcoin_state(mut self, state: BitcoinState) -> Self {
+        self.bitcoin_state = state;
+        self
+    }
+
     pub fn build(self) -> ReplicatedState {
         let mut state =
             ReplicatedState::new_rooted_at(self.subnet_id, self.subnet_type, "Initial".into());
@@ -117,6 +124,7 @@ impl ReplicatedStateBuilder {
         state.metadata.batch_time = self.batch_time;
         state.metadata.time_of_last_allocation_charge = self.time_of_last_allocation_charge;
         state.metadata.own_subnet_features = self.subnet_features;
+        state.put_bitcoin_state(self.bitcoin_state);
 
         for request in self.bitcoin_adapter_requests.into_iter() {
             state.push_request_bitcoin(request).unwrap();
@@ -135,6 +143,7 @@ impl Default for ReplicatedStateBuilder {
             batch_time: mock_time(),
             time_of_last_allocation_charge: mock_time(),
             subnet_features: SubnetFeatures::default(),
+            bitcoin_state: BitcoinState::default(),
             bitcoin_adapter_requests: Vec::new(),
         }
     }

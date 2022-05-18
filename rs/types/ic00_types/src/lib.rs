@@ -5,6 +5,7 @@ mod provisional;
 use candid::{CandidType, Decode, Deserialize, Encode};
 use float_cmp::ApproxEq;
 use ic_base_types::{CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SubnetId};
+use ic_btc_types::UtxosFilter;
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
@@ -1002,3 +1003,21 @@ pub struct BitcoinGetBalanceArgs {
 }
 
 impl Payload<'_> for BitcoinGetBalanceArgs {}
+
+/// Struct used for encoding/decoding
+/// record {
+///  address : bitcoin_address;
+///  network: bitcoin_network;
+///  filter: opt variant {
+///    min_confirmations: nat32;
+///    page: blob;
+///  };
+/// };
+#[derive(CandidType, Deserialize)]
+pub struct BitcoinGetUtxosArgs {
+    pub address: String,
+    pub network: BitcoinNetwork,
+    pub filter: Option<UtxosFilter>,
+}
+
+impl Payload<'_> for BitcoinGetUtxosArgs {}

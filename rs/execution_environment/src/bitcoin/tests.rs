@@ -2,11 +2,12 @@ use crate::{ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor, IngressH
 use bitcoin::{Address, Network};
 use candid::Encode;
 use ic_btc_test_utils::{random_p2pkh_address, BlockBuilder, TransactionBuilder};
-use ic_btc_types::Satoshi;
+use ic_btc_types::{GetUtxosResponse, OutPoint, Satoshi, Utxo, UtxosFilter};
 use ic_config::execution_environment;
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    self as ic00, BitcoinGetBalanceArgs, BitcoinNetwork, Method, Payload as Ic00Payload,
+    self as ic00, BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, BitcoinNetwork, Method,
+    Payload as Ic00Payload,
 };
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_interfaces::{execution_environment::AvailableMemory, messages::CanisterInputMessage};
@@ -14,26 +15,35 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::BitcoinFeature;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{bitcoin_state::BitcoinState, ReplicatedState};
-use ic_replicated_state::{NetworkTopology, SubnetTopology};
+use ic_replicated_state::{
+    bitcoin_state::BitcoinState,
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting},
+    ReplicatedState,
+};
+use ic_replicated_state::{
+    canister_state::QUEUE_INDEX_NONE, InputQueueType, NetworkTopology, SubnetTopology,
+};
 use ic_test_utilities::{
     crypto::mock_random_number_generator,
     cycles_account_manager::CyclesAccountManagerBuilder,
     mock_time,
+    state::{CanisterStateBuilder, ReplicatedStateBuilder},
     types::{
-        ids::{message_test_id, subnet_test_id, user_test_id},
-        messages::IngressBuilder,
+        ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
+        messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
     },
     with_test_replica_logger,
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::MessageId,
+    messages::{MessageId, Payload, RejectContext, RequestOrResponse},
     CanisterId, NumInstructions, SubnetId, UserId,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
+use std::str::FromStr;
 use std::{collections::BTreeSet, convert::TryFrom, sync::Arc};
 use tempfile::TempDir;
 
@@ -160,6 +170,70 @@ fn execute_get_balance(
     state
 }
 
+fn execute_get_utxos(
+    exec_env: &ExecutionEnvironmentImpl,
+    bitcoin_get_utxos_args: BitcoinGetUtxosArgs,
+    bitcoin_feature: &str,
+    bitcoin_state: BitcoinState,
+    expected_payload: Payload,
+) {
+    let mut state = ReplicatedStateBuilder::new()
+        .with_subnet_id(subnet_test_id(1))
+        .with_canister(
+            CanisterStateBuilder::new()
+                .with_canister_id(canister_test_id(0))
+                .build(),
+        )
+        .with_subnet_features(SubnetFeatures::from_str(bitcoin_feature).unwrap())
+        .with_bitcoin_state(bitcoin_state)
+        .build();
+
+    state
+        .subnet_queues_mut()
+        .push_input(
+            QUEUE_INDEX_NONE,
+            RequestOrResponse::Request(
+                RequestBuilder::new()
+                    .sender(canister_test_id(0))
+                    .receiver(ic00::IC_00)
+                    .method_name(Method::BitcoinGetUtxos)
+                    .method_payload(bitcoin_get_utxos_args.encode())
+                    .build(),
+            ),
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
+
+    let mut state = exec_env
+        .execute_subnet_message(
+            state.subnet_queues_mut().pop_input().unwrap(),
+            state,
+            MAX_NUM_INSTRUCTIONS,
+            &mut mock_random_number_generator(),
+            &None,
+            &ProvisionalWhitelist::Set(BTreeSet::new()),
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            MAX_NUMBER_OF_CANISTERS,
+        )
+        .0;
+
+    let subnet_id = subnet_test_id(1);
+    assert_eq!(
+        state
+            .subnet_queues_mut()
+            .pop_canister_output(&canister_test_id(0))
+            .unwrap()
+            .1,
+        RequestOrResponse::Response(
+            ResponseBuilder::new()
+                .originator(canister_test_id(0))
+                .respondent(CanisterId::new(subnet_id.get()).unwrap())
+                .response_payload(expected_payload)
+                .build()
+        )
+    );
+}
+
 #[test]
 fn get_balance_feature_not_enabled() {
     with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
@@ -190,7 +264,7 @@ fn get_balance_feature_not_enabled() {
                 time: mock_time(),
                 state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
-                    "The bitcoin_get_balance API is not enabled on this subnet.",
+                    "The bitcoin API is not enabled on this subnet.",
                 )),
             }
         );
@@ -518,6 +592,124 @@ fn get_balance_rejects_large_min_confirmations() {
                     "bitcoin_get_balance failed: The requested min_confirmations is too large. Given: 1000, max supported: 2"
                 )),
             }
+        );
+    });
+}
+
+#[test]
+fn get_utxos_rejects_if_feature_not_enabled() {
+    with_setup(SubnetType::Application, |exec_env, _, _, _| {
+        let network = BitcoinNetwork::Testnet;
+        let address = String::from("not an address");
+
+        let bitcoin_get_utxos_args = BitcoinGetUtxosArgs {
+            address,
+            network,
+            filter: None,
+        };
+
+        execute_get_utxos(
+            &exec_env,
+            bitcoin_get_utxos_args,
+            "None", // Bitcoin feature is disabled.
+            BitcoinState::default(),
+            Payload::Reject(RejectContext {
+                code: RejectCode::CanisterReject,
+                message: String::from("The bitcoin API is not enabled on this subnet."),
+            }),
+        );
+    });
+}
+
+#[test]
+fn get_utxos_rejects_if_address_is_malformed() {
+    with_setup(SubnetType::Application, |exec_env, _, _, _| {
+        let bitcoin_get_utxos_args = BitcoinGetUtxosArgs {
+            address: String::from("not an address"),
+            network: BitcoinNetwork::Testnet,
+            filter: None,
+        };
+
+        execute_get_utxos(
+            &exec_env,
+            bitcoin_get_utxos_args,
+            "bitcoin_testnet", // Bitcoin testnet is enabled.
+            BitcoinState::default(),
+            Payload::Reject(RejectContext {
+                code: RejectCode::CanisterReject,
+                message: String::from("bitcoin_get_utxos failed: Malformed address."),
+            }),
+        );
+    });
+}
+
+#[test]
+fn get_utxos_rejects_large_min_confirmations() {
+    with_setup(SubnetType::Application, |exec_env, _, _, _| {
+        let bitcoin_get_utxos_args = BitcoinGetUtxosArgs {
+            address: random_p2pkh_address(Network::Testnet).to_string(),
+            network: BitcoinNetwork::Testnet,
+            filter: Some(UtxosFilter::MinConfirmations(1000)),
+        };
+
+        execute_get_utxos(
+            &exec_env,
+            bitcoin_get_utxos_args,
+            "bitcoin_testnet", // Bitcoin testnet is enabled.
+            BitcoinState::default(),
+            Payload::Reject(RejectContext {
+                code: RejectCode::CanisterReject,
+                message: String::from("bitcoin_get_utxos failed: The requested min_confirmations is too large. Given: 1000, max supported: 1")
+            }),
+        );
+    });
+}
+
+#[test]
+fn get_utxos_of_valid_request_succeeds() {
+    with_setup(SubnetType::Application, |exec_env, _, _, _| {
+        let address = random_p2pkh_address(Network::Testnet);
+
+        let coinbase_tx = TransactionBuilder::coinbase()
+            .with_output(&address, 1000)
+            .build();
+        let block_0 = BlockBuilder::genesis()
+            .with_transaction(coinbase_tx.clone())
+            .build();
+
+        let bitcoin_state = BitcoinState::from(ic_btc_canister::state::State::new(
+            2,
+            Network::Testnet,
+            block_0.clone(),
+        ));
+
+        let bitcoin_get_utxos_args = BitcoinGetUtxosArgs {
+            address: address.to_string(),
+            network: BitcoinNetwork::Testnet,
+            filter: Some(UtxosFilter::MinConfirmations(1)),
+        };
+
+        execute_get_utxos(
+            &exec_env,
+            bitcoin_get_utxos_args,
+            "bitcoin_testnet", // Bitcoin testnet is enabled.
+            bitcoin_state,
+            Payload::Data(
+                Encode!(&GetUtxosResponse {
+                    utxos: vec![Utxo {
+                        outpoint: OutPoint {
+                            txid: coinbase_tx.txid().to_vec(),
+                            vout: 0
+                        },
+                        value: 1000,
+                        height: 0,
+                    }],
+                    tip_block_hash: block_0.block_hash().to_vec(),
+                    tip_height: 0,
+                    next_page: None,
+                })
+                .unwrap(),
+            ),
         );
     });
 }
