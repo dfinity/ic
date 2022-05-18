@@ -1,5 +1,6 @@
 [Unit]
 Description=Boundary Node Prober
+After=setup-prober.service
 
 [Service]
 User=prober

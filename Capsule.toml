@@ -40,6 +40,7 @@ input = [
         "artifacts/canisters/genesis-token-canister.wasm.gz",
         "artifacts/canisters/governance-canister.wasm.gz",
         "artifacts/canisters/governance-mem-test-canister.wasm.gz",
+        "artifacts/canisters/http_counter.wasm.gz",
         "artifacts/canisters/identity-canister.wasm.gz",
         "artifacts/canisters/inter_canister_error_handling.wasm.gz",
         "artifacts/canisters/json.wasm.gz",

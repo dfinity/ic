@@ -4,7 +4,6 @@ import shutil
 from os import environ
 from os import getenv
 from os import path
-from tempfile import NamedTemporaryFile
 from typing import Optional
 
 from ci import cwd
@@ -14,7 +13,7 @@ from ci import mkdir_p
 from ci import sh
 from ci import show_sccache_stats
 
-CANISTERS = [
+BIN_CANISTERS = [
     "cycles-minting-canister",
     "genesis-token-canister",
     "governance-canister",
@@ -45,6 +44,7 @@ CANISTERS = [
     "wasm",
     "xnet-test-canister",
 ]
+LIB_CANISTERS = ["http_counter"]
 
 # message max size is 3MB on system subnets and 2MB on other subnets
 CANISTERS_MAX_SIZE_IN_BYTES = {
@@ -160,21 +160,40 @@ def run(artifacts_dir=default_artifacts_dir):
             "wasm32-unknown-unknown",
             "--profile",
             CANISTER_BUILD_PROFILE,
-            *flatten([["--bin", b] for b in CANISTERS]),
+            *flatten([["--bin", b] for b in BIN_CANISTERS]),
         )
 
-    with cwd("rs/nns/handlers/lifeline"):
-        with NamedTemporaryFile() as tmp:
-            sh("cargo", "run", "--bin", "lifeline", "--", tmp.name)
-            sh("ic-cdk-optimizer", "-o", f"{artifacts_dir}/lifeline.wasm", tmp.name)
+        sh(
+            "cargo",
+            "build",
+            "--target",
+            "wasm32-unknown-unknown",
+            "--profile",
+            CANISTER_BUILD_PROFILE,
+            *flatten([["--package", p] for p in LIB_CANISTERS]),
+        )
+
+        sh(
+            "cargo",
+            "run",
+            "--bin",
+            "lifeline",
+            "--",
+            f"{ENV.cargo_target_dir}/wasm32-unknown-unknown/{CANISTER_BUILD_PROFILE}/lifeline.wasm",
+        )
 
     logging.info("Building of Wasm canisters finished")
 
-    for canister in [
-        "ledger-canister_notify-method",
-        "governance-canister_test",
-        "sns-governance-canister_test",
-    ] + CANISTERS:
+    for canister in (
+        [
+            "ledger-canister_notify-method",
+            "governance-canister_test",
+            "sns-governance-canister_test",
+            "lifeline",
+        ]
+        + BIN_CANISTERS
+        + LIB_CANISTERS
+    ):
         _optimize_wasm(artifacts_dir, canister)
 
     for can, filepath in CANISTER_COPY_LIST.items():
