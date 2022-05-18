@@ -1,5 +1,5 @@
 {
-  "checksum": "ef74f38c599c1c389e5f69693d154f5e0ee3a93c749a5a64def2ff0a06f239ff",
+  "checksum": "2ad985a7058ea0cc9f4bdd2c88d7163ac56ca9a9c517d5323bba18900e3afe6a",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -2433,6 +2433,48 @@
       },
       "license": "BSD-2-Clause"
     },
+    "cmake 0.1.48": {
+      "name": "cmake",
+      "version": "0.1.48",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/cmake/0.1.48/download",
+          "sha256": "e8ad8cef104ac57b68b89df3208164d228503abbdce70f6880ffa3d970e7443a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "cmake",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "cmake",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.0.73",
+              "target": "cc"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.1.48"
+      },
+      "license": "MIT/Apache-2.0"
+    },
     "codespan-reporting 0.11.1": {
       "name": "codespan-reporting",
       "version": "0.11.1",
@@ -3692,11 +3734,11 @@
               "target": "proptest"
             },
             {
-              "id": "prost 0.9.0",
+              "id": "prost 0.10.3",
               "target": "prost"
             },
             {
-              "id": "prost-build 0.9.0",
+              "id": "prost-build 0.10.3",
               "target": "prost_build"
             },
             {
@@ -9983,69 +10025,13 @@
       },
       "license": "Apache-2.0"
     },
-    "prost 0.9.0": {
-      "name": "prost",
-      "version": "0.9.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/prost/0.9.0/download",
-          "sha256": "444879275cb4fd84958b1a1d5420d15e6fcf7c235fe47f053c9c2a80aceb6001"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "prost",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "prost",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "default",
-          "prost-derive",
-          "std"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bytes 1.1.0",
-              "target": "bytes"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "prost-derive 0.9.0",
-              "target": "prost_derive"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.9.0"
-      },
-      "license": "Apache-2.0"
-    },
-    "prost-build 0.9.0": {
+    "prost-build 0.10.3": {
       "name": "prost-build",
-      "version": "0.9.0",
+      "version": "0.10.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/prost-build/0.9.0/download",
-          "sha256": "62941722fb675d463659e49c4f3fe1fe792ff24fe5bbaa9c08cd3b98a1c354f5"
+          "url": "https://crates.io/api/v1/crates/prost-build/0.10.3/download",
+          "sha256": "65a1118354442de7feb8a2a76f3d80ef01426bd45542c8c1fdffca41a758f846"
         }
       },
       "targets": [
@@ -10079,6 +10065,9 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": [
+          "default"
+        ],
         "deps": {
           "common": [
             {
@@ -10086,7 +10075,7 @@
               "target": "bytes"
             },
             {
-              "id": "heck 0.3.3",
+              "id": "heck 0.4.0",
               "target": "heck"
             },
             {
@@ -10110,15 +10099,15 @@
               "target": "petgraph"
             },
             {
-              "id": "prost 0.9.0",
+              "id": "prost 0.10.3",
               "target": "prost"
             },
             {
-              "id": "prost-build 0.9.0",
+              "id": "prost-build 0.10.3",
               "target": "build_script_build"
             },
             {
-              "id": "prost-types 0.9.0",
+              "id": "prost-types 0.10.1",
               "target": "prost_types"
             },
             {
@@ -10133,7 +10122,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.9.0"
+        "version": "0.10.3"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -10142,9 +10131,30 @@
         "deps": {
           "common": [
             {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "cmake 0.1.48",
+              "target": "cmake"
+            },
+            {
               "id": "which 4.2.5",
               "target": "which"
             }
+          ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+            "PROTOC_NO_VENDOR": "1"
+          },
+          "selects": {}
+        },
+        "tools": {
+          "common": [
+            "@com_google_protobuf//:protoc"
           ],
           "selects": {}
         }
@@ -10209,71 +10219,13 @@
       },
       "license": "Apache-2.0"
     },
-    "prost-derive 0.9.0": {
-      "name": "prost-derive",
-      "version": "0.9.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/prost-derive/0.9.0/download",
-          "sha256": "f9cc1a3263e07e0bf68e96268f37665207b49560d98739662cdfaae215c720fe"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "prost_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "prost_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "anyhow 1.0.57",
-              "target": "anyhow"
-            },
-            {
-              "id": "itertools 0.10.3",
-              "target": "itertools"
-            },
-            {
-              "id": "proc-macro2 1.0.39",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.18",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.95",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.9.0"
-      },
-      "license": "Apache-2.0"
-    },
-    "prost-types 0.9.0": {
+    "prost-types 0.10.1": {
       "name": "prost-types",
-      "version": "0.9.0",
+      "version": "0.10.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/prost-types/0.9.0/download",
-          "sha256": "534b7a0e836e3c482d2693070f982e39e7611da9695d4d1f5a4b186b51faef0a"
+          "url": "https://crates.io/api/v1/crates/prost-types/0.10.1/download",
+          "sha256": "2d0a014229361011dc8e69c8a1ec6c2e8d0f2af7c91e3ea3f5b2170298461e68"
         }
       },
       "targets": [
@@ -10302,14 +10254,14 @@
               "target": "bytes"
             },
             {
-              "id": "prost 0.9.0",
+              "id": "prost 0.10.3",
               "target": "prost"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.9.0"
+        "version": "0.10.1"
       },
       "license": "Apache-2.0"
     },
@@ -15636,8 +15588,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -15648,8 +15600,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -17131,6 +17083,7 @@
     "cfg(any(target_arch = \"aarch64\", target_arch = \"x86_64\", target_arch = \"x86\"))": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
+      "aarch64-apple-ios-sim",
       "aarch64-linux-android",
       "aarch64-unknown-linux-gnu",
       "i686-apple-darwin",
@@ -17148,6 +17101,7 @@
     "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
+      "aarch64-apple-ios-sim",
       "i686-apple-darwin",
       "x86_64-apple-darwin",
       "x86_64-apple-ios"
@@ -17155,6 +17109,7 @@
     "cfg(any(target_os = \"macos\", target_os = \"ios\", target_os = \"freebsd\"))": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
+      "aarch64-apple-ios-sim",
       "i686-apple-darwin",
       "i686-unknown-freebsd",
       "x86_64-apple-darwin",
@@ -17164,6 +17119,7 @@
     "cfg(any(unix, target_os = \"wasi\"))": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
+      "aarch64-apple-ios-sim",
       "aarch64-linux-android",
       "aarch64-unknown-linux-gnu",
       "arm-unknown-linux-gnueabi",
@@ -17184,6 +17140,7 @@
     "cfg(not(target_os = \"redox\"))": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
+      "aarch64-apple-ios-sim",
       "aarch64-linux-android",
       "aarch64-unknown-linux-gnu",
       "arm-unknown-linux-gnueabi",
@@ -17207,6 +17164,7 @@
     "cfg(not(windows))": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
+      "aarch64-apple-ios-sim",
       "aarch64-linux-android",
       "aarch64-unknown-linux-gnu",
       "arm-unknown-linux-gnueabi",
@@ -17237,6 +17195,7 @@
     "cfg(target_family = \"unix\")": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
+      "aarch64-apple-ios-sim",
       "aarch64-linux-android",
       "aarch64-unknown-linux-gnu",
       "arm-unknown-linux-gnueabi",
@@ -17276,6 +17235,7 @@
     "cfg(unix)": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
+      "aarch64-apple-ios-sim",
       "aarch64-linux-android",
       "aarch64-unknown-linux-gnu",
       "arm-unknown-linux-gnueabi",
