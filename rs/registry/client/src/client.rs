@@ -7,11 +7,11 @@ pub use ic_interfaces::registry::{
     RegistryDataProvider, RegistryTransportRecord, POLLING_PERIOD, ZERO_REGISTRY_VERSION,
 };
 use ic_metrics::MetricsRegistry;
-use ic_registry_common::local_store::LocalStoreImpl;
 use ic_registry_common::{
     data_provider::{CertifiedNnsDataProvider, NnsDataProvider},
     registry::RegistryCanister,
 };
+use ic_registry_local_store::LocalStoreImpl;
 pub use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
     registry::{RegistryClientError, RegistryDataProviderError},

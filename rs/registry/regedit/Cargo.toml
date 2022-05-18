@@ -11,6 +11,7 @@ ic-protobuf = { path = "../../protobuf" }
 ic-registry-client = { path = "../client" }
 ic-registry-client-helpers = { path = "../helpers" }
 ic-registry-common = { path = "../common" }
+ic-registry-local-store = { path = "../local_store" }
 ic-registry-keys = { path = "../keys" }
 ic-registry-subnet-type = { path = "../subnet_type" }
 ic-base-types = { path = "../../types/base_types" }

@@ -27,11 +27,9 @@ use ic_nns_test_utils::{governance::get_proposal_info, ids::TEST_NEURON_1_ID};
 use ic_prep_lib::subnet_configuration::{self, duration_to_millis};
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_client_helpers::deserialize_registry_value;
-use ic_registry_common::{
-    local_store::{LocalStoreImpl, LocalStoreReader},
-    registry::RegistryCanister,
-};
+use ic_registry_common::registry::RegistryCanister;
 use ic_registry_keys::{get_node_record_node_id, make_subnet_list_record_key};
+use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{p2p, CanisterId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId};

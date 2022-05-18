@@ -3481,6 +3481,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-registry-common",
  "ic-registry-keys",
+ "ic-registry-local-store",
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
@@ -5899,6 +5900,7 @@ dependencies = [
  "ic-nns-governance",
  "ic-nns-test-utils",
  "ic-registry-common",
+ "ic-registry-local-store",
  "ic-registry-proto-data-provider",
  "ic-registry-transport",
  "ic-sys",
@@ -6117,6 +6119,7 @@ dependencies = [
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-common",
+ "ic-registry-local-store",
  "ic-test-utilities",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
@@ -6184,6 +6187,7 @@ dependencies = [
  "ic-registry-client",
  "ic-registry-common",
  "ic-registry-keys",
+ "ic-registry-local-store",
  "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",
@@ -6288,6 +6292,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-registry-common",
  "ic-registry-keys",
+ "ic-registry-local-store",
  "ic-registry-provisional-whitelist",
  "ic-registry-subnet-type",
  "prost",
@@ -6314,6 +6319,7 @@ dependencies = [
  "ic-registry-common",
  "ic-registry-common-proto",
  "ic-registry-keys",
+ "ic-registry-local-store",
  "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",
@@ -6423,6 +6429,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-registry-local-store"
+version = "0.8.0"
+dependencies = [
+ "bytes",
+ "ic-interfaces",
+ "ic-registry-common-proto",
+ "ic-registry-transport",
+ "ic-types 0.8.0",
+ "ic-utils 0.8.0",
+ "prost",
+ "prost-types",
+ "rand 0.7.3",
+ "tempfile",
+]
+
+[[package]]
 name = "ic-registry-proto-data-provider"
 version = "0.8.0"
 dependencies = [
@@ -6457,6 +6479,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-registry-common",
  "ic-registry-keys",
+ "ic-registry-local-store",
  "ic-registry-routing-table",
  "ic-types 0.8.0",
  "prost",
@@ -6554,6 +6577,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-registry-common",
  "ic-registry-keys",
+ "ic-registry-local-store",
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-replica",
@@ -6610,6 +6634,7 @@ dependencies = [
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-common",
+ "ic-registry-local-store",
  "ic-registry-proto-data-provider",
  "ic-registry-subnet-type",
  "ic-replica-setup-ic-network",
@@ -9437,6 +9462,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-registry-common",
  "ic-registry-keys",
+ "ic-registry-local-store",
  "ic-registry-proto-data-provider",
  "ic-registry-replicator",
  "ic-registry-routing-table",
@@ -12331,6 +12357,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-registry-common",
  "ic-registry-keys",
+ "ic-registry-local-store",
  "ic-registry-provisional-whitelist",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",

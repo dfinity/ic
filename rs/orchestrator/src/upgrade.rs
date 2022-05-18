@@ -9,7 +9,7 @@ use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
-use ic_registry_common::local_store::LocalStoreImpl;
+use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::consensus::{CatchUpPackage, HasHeight};
 use ic_types::{Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId};

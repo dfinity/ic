@@ -20,10 +20,10 @@ use std::{
 use ic_interfaces::registry::{RegistryClient, RegistryClientResult, ZERO_REGISTRY_VERSION};
 use ic_protobuf::registry::node::v1::ConnectionEndpoint as PbConnectionEndpoint;
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_common::local_store::{
+use ic_registry_common::registry::RegistryCanister;
+use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
-use ic_registry_common::registry::RegistryCanister;
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, registry::RegistryClientError, RegistryVersion,
     SubnetId,
@@ -332,7 +332,7 @@ mod tests {
 
     use super::*;
     use ic_registry_client_helpers::subnet::SubnetListRegistry;
-    use ic_registry_common::local_store::compact_delta_to_changelog;
+    use ic_registry_local_store::compact_delta_to_changelog;
     use ic_types::PrincipalId;
     use tempfile::TempDir;
 
@@ -371,7 +371,8 @@ mod tests {
     fn get_mainnet_delta_00_6d_c1() -> (TempDir, LocalStoreImpl) {
         let tempdir = TempDir::new().unwrap();
         let store = LocalStoreImpl::new(tempdir.path());
-        let mainnet_delta_raw = include_bytes!("../../common/artifacts/mainnet_delta_00-6d-c1.pb");
+        let mainnet_delta_raw =
+            include_bytes!("../../local_store/artifacts/mainnet_delta_00-6d-c1.pb");
         let changelog = compact_delta_to_changelog(&mainnet_delta_raw[..])
             .expect("")
             .1;

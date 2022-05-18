@@ -1,13 +1,13 @@
 use std::path::Path;
 
-use ic_registry_common::local_store::{
+use ic_registry_local_store::{
     compact_delta_to_changelog, Changelog, LocalStoreImpl, LocalStoreWriter,
 };
 use ic_types::RegistryVersion;
 
 pub fn get_mainnet_delta_6d_c1() -> Changelog {
     let mainnet_delta_raw =
-        include_bytes!("../../../registry/common/artifacts/mainnet_delta_00-6d-c1.pb");
+        include_bytes!("../../../registry/local_store/artifacts/mainnet_delta_00-6d-c1.pb");
     compact_delta_to_changelog(&mainnet_delta_raw[..])
         .expect("Could not read mainnet delta 00-6d-c1")
         .1
