@@ -13,6 +13,7 @@ ic-registry-common = { path = "../common" }
 ic-registry-common-proto = { path = "../proto" }
 ic-registry-client-fake = { path = "../fake" }
 ic-registry-client-helpers = { path = "../helpers" }
+ic-registry-local-store = { path = "../local_store" }
 ic-registry-proto-data-provider = { path = "../proto_data_provider" }
 ic-registry-provisional-whitelist = { path = "../provisional_whitelist" }
 ic-registry-routing-table = { path = "../routing_table" }

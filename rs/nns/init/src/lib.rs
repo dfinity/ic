@@ -6,9 +6,7 @@ use canister_test::Wasm;
 use ic_canister_client::Sender;
 use ic_interfaces::registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_nns_constants::NNS_CANISTER_WASMS;
-use ic_registry_common::local_store::{
-    ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreReader,
-};
+use ic_registry_local_store::{ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreReader};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
@@ -89,8 +87,8 @@ pub fn read_initial_mutations_from_local_store_dir(
 mod test {
     use super::*;
     use ic_base_types::RegistryVersion;
-    use ic_registry_common::local_store::Changelog;
-    use ic_registry_common::local_store::LocalStoreWriter;
+    use ic_registry_local_store::Changelog;
+    use ic_registry_local_store::LocalStoreWriter;
     use tempfile::TempDir;
 
     /// In this test, a directory written by the `LocalStore::store` function is

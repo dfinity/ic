@@ -12,7 +12,7 @@ use anyhow::Result;
 use args::{CliArgs, Command, RegistrySpec, SourceSpec, VersionSpec};
 use clap::Parser;
 use ic_base_types::RegistryVersion;
-use ic_registry_common::local_store::{LocalStoreImpl, LocalStoreWriter};
+use ic_registry_local_store::{LocalStoreImpl, LocalStoreWriter};
 use normalization::NormalizedSnapshot;
 use serde_json::Value;
 use snapshot::Snapshot;

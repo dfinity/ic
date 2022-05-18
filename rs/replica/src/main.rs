@@ -35,7 +35,7 @@ use jemallocator::Jemalloc;
 #[cfg(target_os = "linux")]
 static ALLOC: Jemalloc = Jemalloc;
 
-use ic_registry_common::local_store::LocalStoreImpl;
+use ic_registry_local_store::LocalStoreImpl;
 #[cfg(feature = "profiler")]
 use pprof::{protos::Message, ProfilerGuard};
 #[cfg(feature = "profiler")]

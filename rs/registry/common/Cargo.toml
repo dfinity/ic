@@ -11,8 +11,8 @@ ic-crypto-utils-threshold-sig = { path = "../../crypto/utils/threshold_sig" }
 ic-interfaces = { path = "../../interfaces" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
-ic-registry-transport = { path = "../transport" }
 ic-registry-common-proto = { path = "../proto" }
+ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 bytes = "1.0.1"

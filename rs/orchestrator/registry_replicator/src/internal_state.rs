@@ -13,12 +13,12 @@ use ic_registry_client_helpers::{
     routing_table::RoutingTableRegistry,
     subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
-use ic_registry_common::local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore};
 use ic_registry_common::registry::RegistryCanister;
 use ic_registry_keys::{
     make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
     ROOT_SUBNET_ID_KEY,
 };
+use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{NodeId, RegistryVersion, SubnetId};

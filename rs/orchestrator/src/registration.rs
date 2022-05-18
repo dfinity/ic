@@ -17,7 +17,7 @@ use ic_interfaces::{
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_registry_common::local_store::LocalStore;
+use ic_registry_local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
 use ic_types::{messages::MessageId, NodeId};
 use prost::Message;

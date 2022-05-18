@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::{anyhow, ensure, Result};
 use ic_base_types::RegistryVersion;
-use ic_registry_common::local_store::{ChangelogEntry, KeyMutation};
+use ic_registry_local_store::{ChangelogEntry, KeyMutation};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use thiserror::Error;

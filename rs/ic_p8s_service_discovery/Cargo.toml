@@ -26,6 +26,7 @@ ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-common = { path = "../registry/common" }
+ic-registry-local-store = { path = "../registry/local_store" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils/" }
 lazy_static = "1.4.0"
