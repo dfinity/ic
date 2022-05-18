@@ -12,7 +12,6 @@ use ic_registry_common::{
     data_provider::{CertifiedNnsDataProvider, NnsDataProvider},
     registry::RegistryCanister,
 };
-use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 pub use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
     registry::{RegistryClientError, RegistryDataProviderError},
@@ -180,12 +179,6 @@ pub fn create_data_provider(
                 )),
                 None => Arc::new(NnsDataProvider::new(rt_handle, registry_canister)),
             }
-        }
-        DataProviderConfig::ProtobufFile(path) => {
-            Arc::new(ProtoRegistryDataProvider::load_from_file(path))
-        }
-        DataProviderConfig::Bootstrap { .. } => {
-            panic!("The Bootstrap Registry Data Provider is deprecated!")
         }
         DataProviderConfig::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)),
     }

@@ -89,13 +89,6 @@ pub const SAMPLE_CONFIG: &str = r#"
         //   * EXAMPLE: registry_canister_url: "https://registry.ic.org/",
         //     fetch updates from node at given url
         //     DEPRECATED (use local_store)
-        //   * EXAMPLE: protobuf_file: "/tmp/registry.proto"
-        //     read the registry from a file during boot
-        //     DEPRECATED (use local_store)
-        //   * EXAMPLE: bootstrap:{registry_canister_url: ["<url>"],initial_registry_file:"<path>"}
-        //     used to bootstrap the NNS subnetwork. V1 is read from `initial_registry_file`,
-        //     all request beyond V1 are forwarded to registry_canister_url
-        //     DEPRECATED (use local_store)
         //   * EXAMPLE: local_store: "/tmp/local_store"
         //     read registry from the registry's local store.
         //
