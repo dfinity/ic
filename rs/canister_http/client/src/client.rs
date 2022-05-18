@@ -26,6 +26,23 @@ use tokio::{
 use tonic::{transport::Channel, Code};
 use tower::util::Oneshot;
 
+/// This client is returend if we fail to make connection to canister http adapter.
+pub struct BrokenCanisterHttpClient {}
+
+impl NonBlockingChannel<CanisterHttpRequest> for BrokenCanisterHttpClient {
+    type Response = CanisterHttpResponse;
+    fn send(
+        &self,
+        _canister_http_request: CanisterHttpRequest,
+    ) -> Result<(), SendError<CanisterHttpRequest>> {
+        Err(SendError::BrokenConnection)
+    }
+
+    fn try_receive(&mut self) -> Result<CanisterHttpResponse, TryReceiveError> {
+        Err(TryReceiveError::Empty)
+    }
+}
+
 /// The interface provides two non-blocking function - "send" and "try_receive".
 pub struct CanisterHttpAdapterClientImpl {
     rt_handle: Handle,
