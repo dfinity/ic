@@ -47,7 +47,6 @@ guest-os-diskimg-dev-malicious:
       BUILD_EXTRA_SUFFIX: "-dev-malicious"
 
 boundary-os-diskimg:
-  allow_failure: true # TODO(levsha): remove when https://github.com/dfinity/icx-proxy/releases will be fixed.
   extends:
     - .ubuntu-nix-docker-protected
     - .rules-parent-pipeline-autorun-on-trigger
