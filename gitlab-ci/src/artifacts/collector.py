@@ -49,7 +49,7 @@ RUST_BINARIES = [
     "vsock_agent",
 ]
 
-DONT_STRIP = ["replica", "canister_sandbox"]
+DONT_STRIP = ["replica", "canister_sandbox", "ic-crypto-csp"]
 
 STRIP_REFS = {
     "x86_64-unknown-linux-gnu": [
