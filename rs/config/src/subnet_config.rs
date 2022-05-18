@@ -196,7 +196,6 @@ impl SchedulerConfig {
     }
 
     pub fn verified_application_subnet() -> Self {
-        let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
@@ -205,7 +204,7 @@ impl SchedulerConfig {
             instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
-            max_instructions_per_install_code,
+            max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
