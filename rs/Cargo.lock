@@ -5390,6 +5390,7 @@ dependencies = [
  "candid",
  "float-cmp 0.9.0",
  "ic-base-types",
+ "ic-btc-types",
  "ic-error-types",
  "ic-protobuf",
  "num-traits",

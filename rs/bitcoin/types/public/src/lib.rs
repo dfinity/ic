@@ -49,10 +49,17 @@ pub struct GetUtxosResponse {
 }
 
 /// Errors when processing a `get_utxos` request.
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Clone, Copy)]
 pub enum GetUtxosError {
     MalformedAddress,
     MinConfirmationsTooLarge { given: u32, max: u32 },
+}
+
+impl std::fmt::Display for GetUtxosError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Format the error in the same way we format `GetBalanceError`.
+        GetBalanceError::from(*self).fmt(f)
+    }
 }
 
 #[derive(CandidType, Debug, Deserialize, PartialEq)]
@@ -61,7 +68,7 @@ pub struct GetBalanceRequest {
     pub min_confirmations: Option<u32>,
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Clone, Copy)]
 pub enum GetBalanceError {
     MalformedAddress,
     MinConfirmationsTooLarge { given: u32, max: u32 },
