@@ -1,0 +1,22 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "dfn_json",
+    srcs = glob(["src/**"]),
+    edition = "2018",
+    deps = [
+        "//rs/rust_canisters/on_wire",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
+)

@@ -39,6 +39,7 @@ filegroup(
         "//rs/registry/provisional_whitelist:sources",
         "//rs/registry/subnet_features:sources",
         "//rs/registry/subnet_type:sources",
+        "//rs/rust_canisters/dfn_json:sources",
         "//rs/rust_canisters/on_wire:sources",
         "//rs/stable-structures:sources",
         "//rs/sys:sources",
