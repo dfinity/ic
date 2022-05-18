@@ -203,6 +203,7 @@ members = [
   "test_utilities/compare_dirs",
   "test_utilities/registry",
   "tests",
+  "tests/test_canisters/http_counter",
   "transport",
   "transport_test_client",
   "tree_deserializer",

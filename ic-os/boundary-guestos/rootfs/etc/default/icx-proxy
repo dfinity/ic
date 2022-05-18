@@ -1,0 +1,15 @@
+RUST_BACKTRACE=1
+OPTIONS=" \
+--address 127.0.0.1:9500 \
+--replica https://{{DOMAIN}}.{{TLD}}/ \
+--replica-resolve {{DOMAIN}}.{{TLD}}=127.0.0.1:443 \
+--dns-alias personhood.{{DOMAIN}}.{{TLD}}:g3wsl-eqaaa-aaaan-aaaaa-cai \
+--dns-alias personhood.raw.{{DOMAIN}}.{{TLD}}:g3wsl-eqaaa-aaaan-aaaaa-cai \
+--dns-alias identity.{{DOMAIN}}.{{TLD}}:rdmx6-jaaaa-aaaaa-aaadq-cai \
+--dns-alias identity.raw.{{DOMAIN}}.{{TLD}}:rdmx6-jaaaa-aaaaa-aaadq-cai \
+--dns-alias identity.mainnet.dfinity.network:rdmx6-jaaaa-aaaaa-aaadq-cai \
+--dns-alias nns.{{DOMAIN}}.{{TLD}}:qoctq-giaaa-aaaaa-aaaea-cai \
+--dns-alias nns.raw.{{DOMAIN}}.{{TLD}}:qoctq-giaaa-aaaaa-aaaea-cai \
+--dns-alias nns.mainnet.dfinity.network:qoctq-giaaa-aaaaa-aaaea-cai \
+--dns-alias dscvr.{{DOMAIN}}.{{TLD}}:h5aet-waaaa-aaaab-qaamq-cai \
+--dns-alias dscvr.raw.{{DOMAIN}}.{{TLD}}:h5aet-waaaa-aaaab-qaamq-cai "

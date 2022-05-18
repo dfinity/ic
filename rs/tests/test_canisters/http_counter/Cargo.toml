@@ -1,0 +1,16 @@
+[package]
+name = "http_counter"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["cdylib"]
+
+[target.wasm32-unknown-unknown.dependencies]
+candid = "0.7"
+ic-cdk = "0.5"
+ic-cdk-macros = "0.5"
+ic-certified-map = { git = "https://github.com/dfinity/cdk-rs", rev = "2112e912e156b271389a51777680de542bb43980" }
+serde = "1"

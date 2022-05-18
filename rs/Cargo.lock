@@ -3312,6 +3312,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "http_counter"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ic-cdk 0.5.0",
+ "ic-cdk-macros",
+ "ic-certified-map",
+ "serde",
+]
+
+[[package]]
 name = "httparse"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
