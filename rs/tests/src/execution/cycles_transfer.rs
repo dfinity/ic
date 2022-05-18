@@ -2,6 +2,7 @@
 end::catalog[] */
 
 use crate::{types::RejectCode, util::*};
+use ic_agent::AgentError;
 use ic_fondue::ic_manager::IcHandle;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm};
@@ -87,18 +88,20 @@ pub fn cannot_send_cycles_from_application_to_verified_subnets(
             // Bob sends Alice some cycles and Alice accepts half of them.
             let result = bob
                 .update(
-                    wasm()
-                        .call_with_cycles(
-                            alice.canister_id(),
-                            "update",
-                            call_args()
-                                .other_side(wasm().accept_cycles128(accept_cycles.into_parts())),
-                            Cycles::from(cycles_to_send).into_parts(),
-                        )
-                        .reply(),
+                    wasm().call_with_cycles(
+                        alice.canister_id(),
+                        "update",
+                        call_args()
+                            .other_side(wasm().accept_cycles128(accept_cycles.into_parts()))
+                            .on_reject(wasm().reject_message().reject()),
+                        Cycles::from(cycles_to_send).into_parts(),
+                    ),
                 )
                 .await;
-            assert_reject(result, RejectCode::CanisterError);
+            assert_eq!(result.unwrap_err(), AgentError::ReplicaError {
+                reject_code: RejectCode::CanisterReject as u64,
+                reject_message: format!("Canister {} violated contract: Canisters on Application subnets cannot send cycles to canister {} on a Verified Application subnet", bob.canister_id(), alice.canister_id())
+            });
         }
     })
 }
