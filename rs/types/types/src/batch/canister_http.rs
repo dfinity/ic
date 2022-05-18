@@ -1,8 +1,8 @@
 use crate::{
     canister_http::{
-        CanisterHttpHeader, CanisterHttpPayload as CanisterHttpResponsePayload, CanisterHttpReject,
-        CanisterHttpRequestId, CanisterHttpResponse, CanisterHttpResponseContent,
-        CanisterHttpResponseMetadata, CanisterHttpResponseWithConsensus,
+        CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponse,
+        CanisterHttpResponseContent, CanisterHttpResponseMetadata,
+        CanisterHttpResponseWithConsensus,
     },
     crypto::{CombinedMultiSig, CombinedMultiSigOf, CryptoHash, CryptoHashOf, Signed},
     signature::MultiSignature,
@@ -121,20 +121,7 @@ impl From<&CanisterHttpResponseContent> for canister_http_pb::CanisterHttpRespon
     fn from(content: &CanisterHttpResponseContent) -> Self {
         let inner = match content {
             CanisterHttpResponseContent::Success(payload) => {
-                canister_http_pb::canister_http_response_content::Status::Success(
-                    canister_http_pb::CanisterHttpResponsePayload {
-                        status: payload.status as u32,
-                        headers: payload
-                            .headers
-                            .iter()
-                            .map(|header| canister_http_pb::HttpHeader {
-                                name: header.name.clone(),
-                                value: header.value.as_bytes().to_vec(),
-                            })
-                            .collect(),
-                        body: payload.body.clone(),
-                    },
-                )
+                canister_http_pb::canister_http_response_content::Status::Success(payload.clone())
             }
             CanisterHttpResponseContent::Reject(error) => {
                 canister_http_pb::canister_http_response_content::Status::Reject(
@@ -161,22 +148,8 @@ impl TryFrom<canister_http_pb::CanisterHttpResponseContent> for CanisterHttpResp
                 .status
                 .ok_or("Error: canister_http_content does not contain any value ")?
             {
-                canister_http_pb::canister_http_response_content::Status::Success(mut payload) => {
-                    CanisterHttpResponseContent::Success(CanisterHttpResponsePayload {
-                        status: payload.status as u64,
-                        headers: payload
-                            .headers
-                            .drain(..)
-                            .map(|header| {
-                                Ok(CanisterHttpHeader {
-                                    name: header.name,
-                                    value: String::from_utf8(header.value)
-                                        .map_err(|err| format!("{:?}", err))?,
-                                })
-                            })
-                            .collect::<Result<Vec<CanisterHttpHeader>, String>>()?,
-                        body: payload.body,
-                    })
+                canister_http_pb::canister_http_response_content::Status::Success(payload) => {
+                    CanisterHttpResponseContent::Success(payload)
                 }
                 canister_http_pb::canister_http_response_content::Status::Reject(error) => {
                     CanisterHttpResponseContent::Reject(CanisterHttpReject {
@@ -193,6 +166,7 @@ impl TryFrom<canister_http_pb::CanisterHttpResponseContent> for CanisterHttpResp
 #[cfg(test)]
 mod tests {
     use super::*;
+    use candid::Encode;
     /// Tests, whether a roundtrip of protobuf conversions generates the same
     /// `CanisterHttpPayload`
     #[test]
@@ -201,17 +175,17 @@ mod tests {
             content: CanisterHttpResponse {
                 id: CanisterHttpRequestId::new(1),
                 timeout: Time::from_nanos_since_unix_epoch(1234),
-                content: CanisterHttpResponseContent::Success(CanisterHttpResponsePayload {
-                    status: 200,
-                    headers: [("test_header1", "value1"), ("test_header2", "value2")]
-                        .iter()
-                        .map(|(name, value)| CanisterHttpHeader {
-                            name: name.to_string(),
-                            value: value.to_string(),
-                        })
-                        .collect(),
-                    body: b"Test data in body".to_vec(),
-                }),
+                content: CanisterHttpResponseContent::Success(
+                    Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
+                        status: 200,
+                        headers: vec![ic_ic00_types::HttpHeader {
+                            name: "test_header1".to_string(),
+                            value: "value1".to_string()
+                        }],
+                        body: b"Test data in body".to_vec(),
+                    })
+                    .unwrap(),
+                ),
             },
             proof: Signed {
                 content: CanisterHttpResponseMetadata {

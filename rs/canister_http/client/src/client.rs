@@ -1,4 +1,4 @@
-use candid::{Decode, Encode};
+use candid::Encode;
 use futures::future::TryFutureExt;
 use ic_canister_http_service::{
     canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest,
@@ -9,9 +9,8 @@ use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces_canister_http_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
 use ic_types::{
     canister_http::{
-        CanisterHttpHeader, CanisterHttpPayload, CanisterHttpReject, CanisterHttpRequest,
-        CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponse,
-        CanisterHttpResponseContent,
+        CanisterHttpReject, CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpRequestId,
+        CanisterHttpResponse, CanisterHttpResponseContent,
     },
     messages::{AnonymousQuery, AnonymousQueryResponse, Request},
     CanisterId, Time,
@@ -139,18 +138,26 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             )
                             .await?
                         }
-                        None => CanisterHttpPayload {
-                            status: adapter_response.status.into(),
+                        None => Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
+                            status: adapter_response.status as u64,
                             headers: adapter_response
                                 .headers
                                 .into_iter()
-                                .map(|HttpHeader { name, value }| CanisterHttpHeader {
-                                    name,
-                                    value,
+                                .map(|HttpHeader { name, value }| {
+                                    ic_ic00_types::HttpHeader { name, value }
                                 })
                                 .collect(),
                             body: adapter_response.content,
-                        },
+                        })
+                        .map_err(|encode_error| {
+                            (
+                                RejectCode::SysFatal,
+                                format!(
+                                    "Failed to parse adapter http response to 'http_response' candid: {}",
+                                    encode_error
+                                ),
+                            )
+                        })?,
                     };
 
                     Ok(transform_response)
@@ -184,7 +191,7 @@ async fn transform_adapter_response(
     adapter_response: CanisterHttpSendResponse,
     transform_canister: CanisterId,
     transform_method: String,
-) -> Result<CanisterHttpPayload, (RejectCode, String)> {
+) -> Result<Vec<u8>, (RejectCode, String)> {
     // TODO: Protobuf to conversion via from/into trait to avoid having ic00 as a dependency.
     // CanisterHttpResponsePayload type is part of the public API and need to encode the adapter response into the public API candid.
     let method_payload = Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
@@ -219,37 +226,7 @@ async fn transform_adapter_response(
                 reject_code,
                 reject_message,
             } => Err((reject_code, reject_message)),
-            AnonymousQueryResponse::Replied { reply } => {
-                let transform_response = Decode!(
-                    &reply.arg.to_vec(),
-                    ic_ic00_types::CanisterHttpResponsePayload
-                )
-                .map_err(|decode_error| {
-                    (
-                        RejectCode::SysFatal,
-                        format!(
-                            "Failed to decode transform function '{}' response into 'http_response' candid: {}",
-                            transform_method,
-                            decode_error
-                        ),
-                    )
-                })?;
-                // TODO: Implement from/into trait to avoid pulling ic00
-                Ok(CanisterHttpPayload {
-                    status: transform_response.status,
-                    headers: transform_response
-                        .headers
-                        .into_iter()
-                        .map(
-                            |ic_ic00_types::HttpHeader { name, value }| CanisterHttpHeader {
-                                name,
-                                value,
-                            },
-                        )
-                        .collect(),
-                    body: transform_response.body,
-                })
-            }
+            AnonymousQueryResponse::Replied { reply } => Ok(reply.arg.to_vec()),
         },
         Err(err) => Err((
             RejectCode::SysFatal,
@@ -273,7 +250,7 @@ fn grpc_status_code_to_reject(code: Code) -> RejectCode {
 fn build_canister_http_success(
     request_id: CanisterHttpRequestId,
     request_timeout: Time,
-    transform_response: CanisterHttpPayload,
+    transform_response: Vec<u8>,
 ) -> CanisterHttpResponse {
     CanisterHttpResponse {
         id: request_id,
@@ -453,14 +430,19 @@ mod tests {
         CanisterHttpResponse {
             id: CallbackId::from(request_id),
             timeout: request_timeout,
-            content: CanisterHttpResponseContent::Success(CanisterHttpPayload {
-                status,
-                headers: headers
-                    .into_iter()
-                    .map(|HttpHeader { name, value }| CanisterHttpHeader { name, value })
-                    .collect(),
-                body,
-            }),
+            content: CanisterHttpResponseContent::Success(
+                Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
+                    status,
+                    headers: headers
+                        .into_iter()
+                        .map(|HttpHeader { name, value }| {
+                            ic_ic00_types::HttpHeader { name, value }
+                        })
+                        .collect(),
+                    body,
+                })
+                .unwrap(),
+            ),
         }
     }
 
@@ -707,76 +689,6 @@ mod tests {
                             200,
                             adapter_headers,
                             adapter_body
-                        )
-                    );
-                    break;
-                }
-            }
-        }
-        assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
-    }
-
-    // Tests a bad anonymous query response. The response can not be correctly decoded. Results in a fatal error.
-    #[tokio::test]
-    async fn test_client_bad_transform_encode() {
-        let adapter_body = "<html>
-            <body>
-            <h1>Hello, World!</h1>
-            </body>
-            </html>"
-            .to_string()
-            .as_bytes()
-            .to_vec();
-        let adapter_headers = vec![HttpHeader {
-            name: "Content-Type".to_string(),
-            value: "text/html; charset=utf-8".to_string(),
-        }];
-
-        // Adapter mock setup. Not relevant for client response in this test case.
-        let mock_grpc_channel = setup_adapter_mock(Ok(CanisterHttpSendResponse {
-            status: 200,
-            headers: adapter_headers.clone(),
-            content: adapter_body.clone(),
-        }))
-        .await;
-        // Asynchronous query handler mock setup. Return an response that can't be decoded to 'http_response'.
-        let mock_anon_svc =
-            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Replied {
-                reply: ic_types::messages::AnonymousQueryResponseReply {
-                    arg: Blob("INVALID ENCODING".to_string().as_bytes().to_vec()),
-                },
-            });
-        let base_service = BoxService::new(ServiceBuilder::new().service(mock_anon_svc));
-        let svc = ServiceBuilder::new().buffer(1).service(base_service);
-
-        let mut client = CanisterHttpAdapterClientImpl::new(
-            tokio::runtime::Handle::current(),
-            mock_grpc_channel,
-            svc,
-            100,
-        );
-
-        // Specify a transform_method name such that the client calls the anonymous query handler.
-        assert_eq!(
-            client.send(build_mock_canister_http_request(
-                420,
-                mock_time(),
-                Some("transform".to_string())
-            )),
-            Ok(())
-        );
-        // Yield to execute the request on the client.
-        loop {
-            match client.try_receive() {
-                Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
-                Ok(r) => {
-                    assert_eq!(
-                        r,
-                        build_mock_canister_http_response_reject(
-                420,
-                mock_time(),
-                RejectCode::SysFatal,
-                "Failed to decode transform function 'transform' response into 'http_response' candid: Cannot parse header 494e56414c494420454e434f44494e47".to_string(),
                         )
                     );
                     break;
