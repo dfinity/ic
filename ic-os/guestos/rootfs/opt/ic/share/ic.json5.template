@@ -180,6 +180,7 @@
 
     firewall: {
         config_file: "/run/ic-node/nftables-ruleset/nftables.conf",
+        // The field firewall_config is deprecated and to be removed once IC-1026 is staged
         firewall_config: "table filter {\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
@@ -233,6 +234,7 @@ table ip6 filter {\n\
     type filter hook output priority 0; policy accept;\n\
   }\n\
 }\n",
+        // The fields ipv4_prefixes, ipv6_prefixes are deprecated and to be removed once IC-1026 is staged
         ipv4_prefixes: [],
         ipv6_prefixes: [
             "2001:438:fffd:11c::/64",
@@ -301,7 +303,129 @@ table ip6 filter {\n\
             "2a0b:21c0:b002:2::/64",
             "2a0f:cd00:0002::/56",
             "fd00:2:1:1::/64",
-        ]
+        ],
+        file_template: "table filter {\n\
+  chain INPUT {\n\
+    type filter hook input priority 0; policy drop;\n\
+    iif lo accept\n\
+    icmp type parameter-problem accept\n\
+    icmp type echo-request accept\n\
+    icmp type echo-reply accept\n\
+    <<IPv4_RULES>>\n\
+  }\n\
+\n\
+  chain FORWARD {\n\
+    type filter hook forward priority 0; policy drop;\n\
+  }\n\
+\n\
+  chain OUTPUT {\n\
+    type filter hook output priority 0; policy accept;\n\
+  }\n\
+}\n\
+\n\
+table ip6 filter {\n\
+  chain INPUT {\n\
+    type filter hook input priority 0; policy drop;\n\
+    iif lo accept\n\
+    ct state { invalid } drop\n\
+    ct state { established, related } accept\n\
+    icmpv6 type destination-unreachable accept\n\
+    icmpv6 type packet-too-big accept\n\
+    icmpv6 type time-exceeded accept\n\
+    icmpv6 type parameter-problem accept\n\
+    icmpv6 type echo-request accept\n\
+    icmpv6 type echo-reply accept\n\
+    icmpv6 type nd-router-advert accept\n\
+    icmpv6 type nd-neighbor-solicit accept\n\
+    icmpv6 type nd-neighbor-advert accept\n\
+    <<IPv6_RULES>>\n\
+  }\n\
+\n\
+  chain FORWARD {\n\
+    type filter hook forward priority 0; policy drop;\n\
+  }\n\
+\n\
+  chain OUTPUT {\n\
+    type filter hook output priority 0; policy accept;\n\
+  }\n\
+}\n",
+        ipv4_rule_template: "ip saddr {<<IPv4_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv6_rule_template: "ip6 saddr {<<IPv6_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        default_rules: [{
+          ipv4_prefixes: [],
+          ipv6_prefixes: [
+            "2001:438:fffd:11c::/64",
+            "2001:470:1:c76::/64",
+            "2001:4d78:400:10a::/64",
+            "2001:4d78:40d::/48",
+            "2001:920:401a:1706::/64",
+            "2001:920:401a:1708::/64",
+            "2001:920:401a:1710::/64",
+            "2401:3f00:1000:22::/64",
+            "2401:3f00:1000:23::/64",
+            "2401:3f00:1000:24::/64",
+            "2600:2c01:21::/64",
+            "2600:3000:1300:1300::/64",
+            "2600:3000:6100:200::/64",
+            "2600:3004:1200:1200::/56",
+            "2600:3006:1400:1500::/64",
+            "2600:c02:b002:15::/64",
+            "2600:c0d:3002:4::/64",
+            "2602:ffe4:801:16::/64",
+            "2602:ffe4:801:17::/64",
+            "2602:ffe4:801:18::/64",
+            "2604:1380:4091:3000::/64",
+            "2604:1380:40e1:4700::/64",
+            "2604:1380:40f1:1700::/64",
+            "2604:1380:45d1:bf00::/64",
+            "2604:1380:45e1:a600::/64",
+            "2604:1380:45f1:9400::/64",
+            "2604:1380:4601:6200::/64",
+            "2604:1380:4601:6201::/64",
+            "2604:1380:4601:6202::/64",
+            "2604:1380:4641:6101::/64",
+            "2604:1380:4641:6102::/64",
+            "2604:1380:4091:3001::/64",
+            "2604:1380:4091:3002::/64",
+            "2604:1380:45e1:a601::/64",
+            "2604:1380:45e1:a602::/64",
+            "2604:1380:4641:6100::/64",
+            "2604:3fc0:2001::/48",
+            "2604:3fc0:3002::/48",
+            "2604:6800:258:1::/64",
+            "2604:7e00:30:3::/64",
+            "2604:7e00:50::/64",
+            "2604:b900:4001:76::/64",
+            "2607:f1d0:10:1::/64",
+            "2607:f6f0:3004::/48",
+            "2607:f758:1220::/64",
+            "2607:f758:c300::/64",
+            "2607:fb58:9005::/48",
+            "2607:ff70:3:2::/64",
+            "2610:190:6000:1::/64",
+            "2610:190:df01:5::/64",
+            "2a00:fa0:3::/48",
+            "2a00:fb01:400:100::/56",
+            "2a00:fb01:400::/56",
+            "2a00:fc0:5000:300::/64",
+            "2a01:138:900a::/48",
+            "2a01:2a8:a13c:1::/64",
+            "2a01:2a8:a13d:1::/64",
+            "2a01:2a8:a13e:1::/64",
+            "2a02:418:3002:0::/64",
+            "2a02:41b:300e::/48",
+            "2a02:800:2:2003::/64",
+            "2a04:9dc0:0:108::/64",
+            "2a05:d01c:e2c:a700::/56",
+            "2a0b:21c0:b002:2::/64",
+            "2a0f:cd00:0002::/56",
+            "fd00:2:1:1::/64",
+          ],
+          ports: [22, 2497, 4100, 8080, 9090, 9091, 9100, 19531],
+          action: 1,
+          comment: "Default rule from template",
+        }],
+        ports_for_node_whitelist: [2497, 4100, 8080],
     },
 
     registration: {
