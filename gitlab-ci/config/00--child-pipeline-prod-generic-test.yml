@@ -20,6 +20,10 @@ prod-generic-test:
     - generic-guest-os-diskimg
     - cargo-build-canisters
     - cargo-build-release-linux-native
+    - job: boundary-os-diskimg
+      artifacts: false
+    - job: boundary-os-diskimg-dev
+      artifacts: false
     - artifacts-upload-to-s3
   resource_group: $CDPRNET
   artifacts:
