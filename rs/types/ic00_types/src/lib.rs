@@ -977,3 +977,28 @@ impl ComputeInitialEcdsaDealingsResponse {
         }
     }
 }
+
+/// `(variant {
+///     mainnet;
+///     testnet;
+/// })`
+#[derive(CandidType, Deserialize, Copy, Clone, PartialEq)]
+pub enum BitcoinNetwork {
+    Mainnet,
+    Testnet,
+}
+
+/// Struct used for encoding/decoding
+/// (record {
+///   address : bitcoin_address;
+///   network: bitcoin_network;
+///   min_confirmations: opt nat32;
+/// });
+#[derive(CandidType, Deserialize)]
+pub struct BitcoinGetBalanceArgs {
+    pub address: String,
+    pub network: BitcoinNetwork,
+    pub min_confirmations: Option<u32>,
+}
+
+impl Payload<'_> for BitcoinGetBalanceArgs {}

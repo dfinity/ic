@@ -67,6 +67,23 @@ pub enum GetBalanceError {
     MinConfirmationsTooLarge { given: u32, max: u32 },
 }
 
+impl std::fmt::Display for GetBalanceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MalformedAddress => {
+                write!(f, "Malformed address.")
+            }
+            Self::MinConfirmationsTooLarge { given, max } => {
+                write!(
+                    f,
+                    "The requested min_confirmations is too large. Given: {}, max supported: {}",
+                    given, max
+                )
+            }
+        }
+    }
+}
+
 impl From<GetUtxosError> for GetBalanceError {
     fn from(err: GetUtxosError) -> Self {
         match err {

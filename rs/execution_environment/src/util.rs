@@ -1,4 +1,5 @@
 use crate::types::Response;
+use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecResult, ExecuteMessageResult, IngressHistoryWriter,
 };
@@ -50,4 +51,11 @@ pub fn process_response(
         res.result = ExecResult::Empty;
     }
     res
+}
+
+pub fn candid_error_to_user_error(error: candid::Error) -> UserError {
+    UserError::new(
+        ErrorCode::CanisterContractViolation,
+        format!("Error decoding candid: {}", error),
+    )
 }

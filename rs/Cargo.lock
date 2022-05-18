@@ -5199,6 +5199,7 @@ name = "ic-execution-environment"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
+ "bitcoin 0.27.1",
  "candid",
  "criterion",
  "escargot",
@@ -5206,6 +5207,8 @@ dependencies = [
  "iai",
  "ic-base-types",
  "ic-btc-canister",
+ "ic-btc-test-utils",
+ "ic-btc-types",
  "ic-canister-sandbox-replica-controller",
  "ic-config",
  "ic-crypto",
@@ -5222,6 +5225,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",
+ "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-state-layout",
