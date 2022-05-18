@@ -375,9 +375,7 @@ impl CanisterQueues {
     /// Returns `true` if at least one output queue is not empty; false
     /// otherwise.
     pub fn has_output(&self) -> bool {
-        self.canister_queues
-            .iter()
-            .any(|(_, (_, queue))| queue.num_messages() > 0)
+        self.output_queues_stats.message_count > 0
     }
 
     /// Extracts the next ingress, priority, or normal message (round-robin).
@@ -568,6 +566,11 @@ impl CanisterQueues {
         self.input_queues_stats.cycles
     }
 
+    /// Returns the number of canister messages enqueued in output queues.
+    pub fn output_queues_message_count(&self) -> usize {
+        self.output_queues_stats.message_count
+    }
+
     /// Returns total amount of cycles included in the output queues.
     pub fn output_queue_cycles(&self) -> Cycles {
         self.output_queues_stats.cycles
@@ -687,6 +690,7 @@ impl CanisterQueues {
     ) -> OutputQueuesStats {
         let mut stats = OutputQueuesStats::default();
         for (_, q) in canister_queues.values() {
+            stats.message_count += q.num_messages();
             stats.cycles += q.cycles_in_queue();
         }
         stats
@@ -910,6 +914,9 @@ impl SubAssign<InputQueuesStats> for InputQueuesStats {
 /// Running stats across output queues.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OutputQueuesStats {
+    /// Count of messages in output queues.
+    message_count: usize,
+
     /// Total amount of cycles contained in the output queues.
     cycles: Cycles,
 }
@@ -923,6 +930,7 @@ impl OutputQueuesStats {
             RequestOrResponse::Request(request) => request.payment,
         };
         OutputQueuesStats {
+            message_count: 1,
             cycles: cycles_message,
         }
     }
@@ -930,12 +938,14 @@ impl OutputQueuesStats {
 
 impl AddAssign<OutputQueuesStats> for OutputQueuesStats {
     fn add_assign(&mut self, rhs: OutputQueuesStats) {
+        self.message_count += rhs.message_count;
         self.cycles += rhs.cycles;
     }
 }
 
 impl SubAssign<OutputQueuesStats> for OutputQueuesStats {
     fn sub_assign(&mut self, rhs: OutputQueuesStats) {
+        self.message_count -= rhs.message_count;
         self.cycles -= rhs.cycles;
     }
 }

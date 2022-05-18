@@ -15,8 +15,8 @@ use ic_types::time::current_time_and_expiry_time;
 use proptest::prelude::*;
 use std::convert::TryInto;
 
-#[test]
 /// Can push one request to the output queues.
+#[test]
 fn can_push_output_request() {
     let this = canister_test_id(13);
     let mut queues = CanisterQueues::default();
@@ -25,10 +25,10 @@ fn can_push_output_request() {
         .unwrap();
 }
 
-#[test]
-#[should_panic(expected = "pushing response into inexistent output queue")]
 /// Cannot push response to output queues without pushing an input request
 /// first.
+#[test]
+#[should_panic(expected = "pushing response into inexistent output queue")]
 fn cannot_push_output_response_without_input_request() {
     let this = canister_test_id(13);
     let mut queues = CanisterQueues::default();
@@ -67,8 +67,8 @@ fn enqueuing_unexpected_response_does_not_panic() {
         .unwrap_err();
 }
 
-#[test]
 /// Can push response to output queues after pushing input request.
+#[test]
 fn can_push_output_response_after_input_request() {
     let this = canister_test_id(13);
     let other = canister_test_id(14);
@@ -92,8 +92,8 @@ fn can_push_output_response_after_input_request() {
     );
 }
 
-#[test]
 /// Can push one request to the induction pool.
+#[test]
 fn can_push_input_request() {
     let this = canister_test_id(13);
     let mut queues = CanisterQueues::default();
@@ -106,9 +106,9 @@ fn can_push_input_request() {
         .unwrap();
 }
 
-#[test]
 /// Cannot push response to the induction pool without pushing output
 /// request first.
+#[test]
 fn cannot_push_input_response_without_output_request() {
     let this = canister_test_id(13);
     let mut queues = CanisterQueues::default();
@@ -121,9 +121,9 @@ fn cannot_push_input_response_without_output_request() {
         .unwrap_err();
 }
 
-#[test]
 /// Can push response to input queues after pushing request to output
 /// queues.
+#[test]
 fn can_push_input_response_after_output_request() {
     let this = canister_test_id(13);
     let other = canister_test_id(14);
@@ -149,8 +149,8 @@ fn can_push_input_response_after_output_request() {
         .unwrap();
 }
 
-#[test]
 /// Enqueues 10 ingress messages and pops them.
+#[test]
 fn test_message_picking_ingress_only() {
     let this = canister_test_id(13);
 
@@ -183,8 +183,8 @@ fn test_message_picking_ingress_only() {
     assert!(queues.pop_input().is_none());
 }
 
-#[test]
 /// Enqueues 3 requests for the same canister and consumes them.
+#[test]
 fn test_message_picking_round_robin_on_one_queue() {
     let this = canister_test_id(13);
     let other = canister_test_id(14);
@@ -218,9 +218,9 @@ fn test_message_picking_round_robin_on_one_queue() {
     assert!(queues.pop_input().is_none());
 }
 
-#[test]
 /// Enqueues 3 requests and 1 response, then pops them and verifies the
 /// expected order.
+#[test]
 fn test_message_picking_round_robin() {
     let this = canister_test_id(13);
     let other_1 = canister_test_id(1);
@@ -338,9 +338,9 @@ fn test_message_picking_round_robin() {
     assert!(queues.pop_input().is_none());
 }
 
-#[test]
 /// Enqueues 4 input requests across 3 canisters and consumes them, ensuring
 /// correct round-robin scheduling.
+#[test]
 fn test_input_scheduling() {
     let this = canister_test_id(13);
     let other_1 = canister_test_id(1);
@@ -401,8 +401,8 @@ fn test_input_scheduling() {
     assert!(!queues.has_input());
 }
 
-#[test]
 /// Enqueues 6 output requests across 3 canisters and consumes them.
+#[test]
 fn test_output_into_iter() {
     let this = canister_test_id(13);
     let other_1 = canister_test_id(1);
@@ -450,10 +450,10 @@ fn test_output_into_iter() {
     assert_eq!(0, queues.output_message_count());
 }
 
-#[test]
 /// Tests that an encode-decode roundtrip yields a result equal to the
 /// original (and the queue size metrics of an organically constructed
 /// `CanisterQueues` match those of a deserialized one).
+#[test]
 fn encode_roundtrip() {
     let mut queues = CanisterQueues::default();
 
@@ -484,9 +484,9 @@ fn encode_roundtrip() {
     assert_eq!(queues, decoded);
 }
 
-#[test]
 /// Enqueues requests and responses into input and output queues, verifying that
 /// input queue and memory usage stats are accurate along the way.
+#[test]
 fn test_stats() {
     let this = canister_test_id(13);
     let other_1 = canister_test_id(1);
@@ -562,7 +562,10 @@ fn test_stats() {
     queues.push_output_response(msg);
     // Input queue stats are unchanged.
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    expected_oq_stats.cycles += Cycles::new(2);
+    expected_oq_stats += OutputQueuesStats {
+        message_count: 1,
+        cycles: Cycles::new(2),
+    };
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // Consumed a reservation and added a response.
     expected_mu_stats += MemoryUsageStats {
@@ -588,7 +591,10 @@ fn test_stats() {
     expected_mu_stats.reserved_slots += 1;
     expected_mu_stats.oversized_requests_extra_bytes += msg_size[4] - MAX_RESPONSE_COUNT_BYTES;
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    expected_oq_stats.cycles += Cycles::new(5);
+    expected_oq_stats += OutputQueuesStats {
+        message_count: 1,
+        cycles: Cycles::new(5),
+    };
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
@@ -606,7 +612,10 @@ fn test_stats() {
         .expect("could not pop a message")
     {
         (_, _, RequestOrResponse::Response(msg)) => {
-            expected_oq_stats.cycles -= msg.refund;
+            expected_oq_stats -= OutputQueuesStats {
+                message_count: 1,
+                cycles: msg.refund,
+            };
             assert_eq!(msg.originator, other_1)
         }
         msg => panic!("unexpected message popped: {:?}", msg),
@@ -625,7 +634,10 @@ fn test_stats() {
         .expect("could not pop a message")
     {
         (_, _, RequestOrResponse::Request(msg)) => {
-            expected_oq_stats.cycles -= msg.payment;
+            expected_oq_stats -= OutputQueuesStats {
+                message_count: 1,
+                cycles: msg.payment,
+            };
             assert_eq!(msg.receiver, other_1)
         }
         msg => panic!("unexpected message popped: {:?}", msg),
@@ -639,7 +651,10 @@ fn test_stats() {
 
     // Ensure no more outgoing messages.
     assert!(queues.output_into_iter(this).next().is_none());
-    expected_oq_stats.cycles = Cycles::new(0);
+    expected_oq_stats = OutputQueuesStats {
+        message_count: 0,
+        cycles: Cycles::new(0),
+    };
 
     // And enqueue a matching incoming response.
     let msg: RequestOrResponse = ResponseBuilder::default()
@@ -729,9 +744,9 @@ fn test_stats() {
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 }
 
-#[test]
 /// Enqueues requests and responses into input and output queues, verifying that
 /// input queue and memory usage stats are accurate along the way.
+#[test]
 fn test_stats_induct_message_to_self() {
     let this = canister_test_id(13);
     let iq_size: usize = InputQueue::new(DEFAULT_QUEUE_CAPACITY).calculate_size_bytes();
