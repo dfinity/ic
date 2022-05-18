@@ -14,8 +14,8 @@ use ic_interfaces::{execution_environment::AvailableMemory, messages::CanisterIn
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_registry_subnet_features::BitcoinFeature;
 use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     bitcoin_state::BitcoinState,
@@ -238,7 +238,10 @@ fn execute_get_utxos(
 fn get_balance_feature_not_enabled() {
     with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
         // Disable bitcoin testnet feature.
-        state.metadata.own_subnet_features.bitcoin_testnet_feature = Some(BitcoinFeature::Disabled);
+        state.metadata.own_subnet_features.bitcoin = Some(BitcoinFeature {
+            network: BitcoinNetwork::Testnet,
+            status: BitcoinFeatureStatus::Disabled,
+        });
         let sender = user_test_id(1);
         let receiver = ic00::IC_00;
         let network = BitcoinNetwork::Testnet;
@@ -274,7 +277,10 @@ fn get_balance_feature_not_enabled() {
 #[test]
 fn get_balance_mainnet_rejected() {
     with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
-        state.metadata.own_subnet_features.bitcoin_testnet_feature = Some(BitcoinFeature::Enabled);
+        state.metadata.own_subnet_features.bitcoin = Some(BitcoinFeature {
+            network: BitcoinNetwork::Mainnet,
+            status: BitcoinFeatureStatus::Enabled,
+        });
         let sender = user_test_id(1);
         let receiver = ic00::IC_00;
         let network = BitcoinNetwork::Mainnet;
@@ -310,7 +316,10 @@ fn get_balance_mainnet_rejected() {
 #[test]
 fn get_balance_api_rejects_malformed_address() {
     with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
-        state.metadata.own_subnet_features.bitcoin_testnet_feature = Some(BitcoinFeature::Enabled);
+        state.metadata.own_subnet_features.bitcoin = Some(BitcoinFeature {
+            network: BitcoinNetwork::Testnet,
+            status: BitcoinFeatureStatus::Enabled,
+        });
         let sender = user_test_id(1);
         let receiver = ic00::IC_00;
         let network = BitcoinNetwork::Testnet;
@@ -372,7 +381,10 @@ fn state_with_balance(
 #[test]
 fn get_balance_single_request_succeeds() {
     with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
-        state.metadata.own_subnet_features.bitcoin_testnet_feature = Some(BitcoinFeature::Enabled);
+        state.metadata.own_subnet_features.bitcoin = Some(BitcoinFeature {
+            network: BitcoinNetwork::Testnet,
+            status: BitcoinFeatureStatus::Enabled,
+        });
         let sender = user_test_id(1);
         let receiver = ic00::IC_00;
         let (network, btc_network) = (BitcoinNetwork::Testnet, Network::Testnet);
@@ -415,7 +427,10 @@ fn get_balance_single_request_succeeds() {
 #[test]
 fn get_balance_repeated_request_succeeded() {
     with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
-        state.metadata.own_subnet_features.bitcoin_testnet_feature = Some(BitcoinFeature::Enabled);
+        state.metadata.own_subnet_features.bitcoin = Some(BitcoinFeature {
+            network: BitcoinNetwork::Testnet,
+            status: BitcoinFeatureStatus::Enabled,
+        });
         let sender = user_test_id(1);
         let receiver = ic00::IC_00;
         let (network, btc_network) = (BitcoinNetwork::Testnet, Network::Testnet);
@@ -470,7 +485,10 @@ fn get_balance_repeated_request_succeeded() {
 #[test]
 fn get_balance_with_min_confirmations_1() {
     with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
-        state.metadata.own_subnet_features.bitcoin_testnet_feature = Some(BitcoinFeature::Enabled);
+        state.metadata.own_subnet_features.bitcoin = Some(BitcoinFeature {
+            network: BitcoinNetwork::Testnet,
+            status: BitcoinFeatureStatus::Enabled,
+        });
         let sender = user_test_id(1);
         let receiver = ic00::IC_00;
         let (network, btc_network) = (BitcoinNetwork::Testnet, Network::Testnet);
@@ -513,7 +531,10 @@ fn get_balance_with_min_confirmations_1() {
 #[test]
 fn get_balance_with_min_confirmations_2() {
     with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
-        state.metadata.own_subnet_features.bitcoin_testnet_feature = Some(BitcoinFeature::Enabled);
+        state.metadata.own_subnet_features.bitcoin = Some(BitcoinFeature {
+            network: BitcoinNetwork::Testnet,
+            status: BitcoinFeatureStatus::Enabled,
+        });
         let sender = user_test_id(1);
         let receiver = ic00::IC_00;
         let (network, btc_network) = (BitcoinNetwork::Testnet, Network::Testnet);
@@ -556,7 +577,10 @@ fn get_balance_with_min_confirmations_2() {
 #[test]
 fn get_balance_rejects_large_min_confirmations() {
     with_setup(SubnetType::Application, |exec_env, mut state, _, _| {
-        state.metadata.own_subnet_features.bitcoin_testnet_feature = Some(BitcoinFeature::Enabled);
+        state.metadata.own_subnet_features.bitcoin = Some(BitcoinFeature {
+            network: BitcoinNetwork::Testnet,
+            status: BitcoinFeatureStatus::Enabled,
+        });
         let sender = user_test_id(1);
         let receiver = ic00::IC_00;
         let (network, btc_network) = (BitcoinNetwork::Testnet, Network::Testnet);

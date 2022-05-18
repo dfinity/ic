@@ -2,13 +2,15 @@ use crate::{blocktree::BlockDoesNotExtendTree, state::State, store, BitcoinCanis
 use bitcoin::{
     hash_types::{BlockHash, TxMerkleNode},
     hashes::Hash,
+    Network,
 };
+use ic_btc_types::Network as BitcoinNetwork;
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, Block, GetSuccessorsRequest,
     Transaction,
 };
-use ic_logger::{debug, error, info, ReplicaLogger};
-use ic_registry_subnet_features::BitcoinFeature;
+use ic_logger::{debug, error, ReplicaLogger};
+use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus};
 use ic_replicated_state::bitcoin_state::{
     BitcoinState as ReplicatedBitcoinState, BitcoinStateError,
 };
@@ -23,13 +25,22 @@ impl BitcoinCanister {
         bitcoin_state: ReplicatedBitcoinState,
         bitcoin_feature: BitcoinFeature,
     ) -> ReplicatedBitcoinState {
+        // Possibly reset the state if the feature has been disabled or if the configured
+        // network has changed.
+        let bitcoin_state = maybe_reset_state(bitcoin_state, bitcoin_feature);
+
+        if bitcoin_feature.status == BitcoinFeatureStatus::Disabled {
+            // Exit early if the feature is disabled to avoid needless type conversions below.
+            return bitcoin_state;
+        }
+
         let mut state: State = State::from(bitcoin_state);
 
         // Process all incoming responses from the adapter.
         let height = process_adapter_responses(&mut state, &self.log);
 
-        match bitcoin_feature {
-            BitcoinFeature::Enabled => {
+        match bitcoin_feature.status {
+            BitcoinFeatureStatus::Enabled | BitcoinFeatureStatus::Syncing => {
                 let network_label = state.utxos.network.to_string();
                 self.metrics.observe_chain_height(height, &network_label);
                 self.metrics
@@ -41,7 +52,6 @@ impl BitcoinCanister {
 
                 if !state.adapter_queues.has_in_flight_get_successors_requests() {
                     let request = get_successors_request(&mut state);
-                    info!(self.log, "Sending GetSuccessorsRequest: {:?}", request);
 
                     match state
                         .adapter_queues
@@ -53,12 +63,12 @@ impl BitcoinCanister {
                         }
                         // TODO(EXC-1098): Refactor the `push_request` method to not return these
                         // errors to avoid this `unreachable` statement.
-                        Err(BitcoinStateError::TestnetFeatureNotEnabled)
+                        Err(BitcoinStateError::FeatureNotEnabled)
                         | Err(BitcoinStateError::NonMatchingResponse { .. }) => unreachable!(),
                     }
                 }
             }
-            BitcoinFeature::Paused | BitcoinFeature::Disabled => {
+            BitcoinFeatureStatus::Paused | BitcoinFeatureStatus::Disabled => {
                 // Don't send requests to the adapter.
             }
         }
@@ -122,6 +132,26 @@ fn process_adapter_responses(state: &mut State, log: &ReplicaLogger) -> u32 {
     store::main_chain_height(state)
 }
 
+fn maybe_reset_state(
+    state: ReplicatedBitcoinState,
+    feature: BitcoinFeature,
+) -> ReplicatedBitcoinState {
+    let feature_network = match feature.network {
+        BitcoinNetwork::Mainnet => Network::Bitcoin,
+        BitcoinNetwork::Testnet => Network::Testnet,
+    };
+
+    // If the bitcoin feature is set for a different network than what's in the state
+    // or if the feature has been disabled, reset the state.
+    if state.utxo_set.network != feature_network || feature.status == BitcoinFeatureStatus::Disabled
+    {
+        ReplicatedBitcoinState::new(feature.network)
+    } else {
+        // Return state as-is.
+        state
+    }
+}
+
 fn to_btc_transaction(transaction: &Transaction) -> bitcoin::Transaction {
     bitcoin::Transaction {
         version: transaction.version,
@@ -181,7 +211,22 @@ mod tests {
         let state = ReplicatedBitcoinState::default();
         assert_eq!(state.adapter_queues.num_requests(), 0);
         let bitcoin_canister = BitcoinCanister::new(&MetricsRegistry::new(), no_op_logger());
-        let state = bitcoin_canister.heartbeat(state, BitcoinFeature::Disabled);
+        let state = bitcoin_canister.heartbeat(
+            state,
+            BitcoinFeature {
+                network: BitcoinNetwork::Testnet,
+                status: BitcoinFeatureStatus::Disabled,
+            },
+        );
+        assert_eq!(state.adapter_queues.num_requests(), 0);
+
+        let state = bitcoin_canister.heartbeat(
+            state,
+            BitcoinFeature {
+                network: BitcoinNetwork::Mainnet,
+                status: BitcoinFeatureStatus::Disabled,
+            },
+        );
         assert_eq!(state.adapter_queues.num_requests(), 0);
     }
 
@@ -190,7 +235,22 @@ mod tests {
         let state = ReplicatedBitcoinState::default();
         assert_eq!(state.adapter_queues.num_requests(), 0);
         let bitcoin_canister = BitcoinCanister::new(&MetricsRegistry::new(), no_op_logger());
-        let state = bitcoin_canister.heartbeat(state, BitcoinFeature::Paused);
+        let state = bitcoin_canister.heartbeat(
+            state,
+            BitcoinFeature {
+                network: BitcoinNetwork::Testnet,
+                status: BitcoinFeatureStatus::Paused,
+            },
+        );
+        assert_eq!(state.adapter_queues.num_requests(), 0);
+
+        let state = bitcoin_canister.heartbeat(
+            state,
+            BitcoinFeature {
+                network: BitcoinNetwork::Mainnet,
+                status: BitcoinFeatureStatus::Paused,
+            },
+        );
         assert_eq!(state.adapter_queues.num_requests(), 0);
     }
 
@@ -199,7 +259,73 @@ mod tests {
         let state = ReplicatedBitcoinState::default();
         assert_eq!(state.adapter_queues.num_requests(), 0);
         let bitcoin_canister = BitcoinCanister::new(&MetricsRegistry::new(), no_op_logger());
-        let state = bitcoin_canister.heartbeat(state, BitcoinFeature::Enabled);
+        let state = bitcoin_canister.heartbeat(
+            state,
+            BitcoinFeature {
+                network: BitcoinNetwork::Testnet,
+                status: BitcoinFeatureStatus::Enabled,
+            },
+        );
         assert_eq!(state.adapter_queues.num_requests(), 1);
+    }
+
+    #[test]
+    fn state_is_reset_if_feature_is_disabled() {
+        let mut state = ReplicatedBitcoinState::new(BitcoinNetwork::Mainnet);
+        // Mutate the state in some way to later verify that the state has been reset.
+        state.stable_height = 17;
+
+        let bitcoin_canister = BitcoinCanister::new(&MetricsRegistry::new(), no_op_logger());
+        let state = bitcoin_canister.heartbeat(
+            state,
+            BitcoinFeature {
+                network: BitcoinNetwork::Mainnet,
+                status: BitcoinFeatureStatus::Disabled,
+            },
+        );
+        assert_eq!(state, ReplicatedBitcoinState::new(BitcoinNetwork::Mainnet));
+
+        let state = bitcoin_canister.heartbeat(
+            state,
+            BitcoinFeature {
+                network: BitcoinNetwork::Testnet,
+                status: BitcoinFeatureStatus::Disabled,
+            },
+        );
+        assert_eq!(state, ReplicatedBitcoinState::new(BitcoinNetwork::Testnet));
+    }
+
+    #[test]
+    fn state_is_reset_if_network_is_changed() {
+        let mut state = ReplicatedBitcoinState::new(BitcoinNetwork::Mainnet);
+        // Mutate the state in some way to later verify that the state has been reset.
+        state.stable_height = 17;
+
+        let bitcoin_canister = BitcoinCanister::new(&MetricsRegistry::new(), no_op_logger());
+        let new_state = bitcoin_canister.heartbeat(
+            state.clone(),
+            BitcoinFeature {
+                network: BitcoinNetwork::Mainnet,
+                status: BitcoinFeatureStatus::Paused,
+            },
+        );
+
+        // State is unchanged.
+        assert_eq!(new_state.stable_height, state.stable_height);
+
+        // Change the network, but keep the feature paused.
+        let state = bitcoin_canister.heartbeat(
+            state,
+            BitcoinFeature {
+                network: BitcoinNetwork::Testnet,
+                status: BitcoinFeatureStatus::Paused,
+            },
+        );
+
+        // The state has been reset.
+        assert_eq!(
+            state,
+            State::from(ReplicatedBitcoinState::new(BitcoinNetwork::Testnet)).into()
+        );
     }
 }

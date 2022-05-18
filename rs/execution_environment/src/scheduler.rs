@@ -997,10 +997,8 @@ impl Scheduler for SchedulerImpl {
                     .metrics
                     .round_bitcoin_canister_heartbeat_duration
                     .start_timer();
-                self.bitcoin_canister.heartbeat(
-                    bitcoin_state,
-                    state.metadata.own_subnet_features.bitcoin_testnet(),
-                )
+                self.bitcoin_canister
+                    .heartbeat(bitcoin_state, state.metadata.own_subnet_features.bitcoin())
             };
             state.put_bitcoin_state(bitcoin_state);
         }

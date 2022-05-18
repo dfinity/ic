@@ -1,5 +1,5 @@
 use candid::CandidType;
-use ic_ic00_types::EcdsaKeyId;
+use ic_ic00_types::{BitcoinNetwork, EcdsaKeyId};
 use ic_protobuf::{proxy::ProxyDecodeError, registry::subnet::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, str::FromStr};
@@ -19,14 +19,16 @@ pub struct SubnetFeatures {
     /// performing http(s) requests to the web2.
     pub http_requests: bool,
 
-    /// Whether or not this subnet supports the Bitcoin testnet.
-    pub bitcoin_testnet_feature: Option<BitcoinFeature>,
+    /// Determines whether or not the bitcoin feature is enabled on the subnet.
+    pub bitcoin: Option<BitcoinFeature>,
 }
 
 impl SubnetFeatures {
-    pub fn bitcoin_testnet(&self) -> BitcoinFeature {
-        self.bitcoin_testnet_feature
-            .unwrap_or(BitcoinFeature::Disabled)
+    pub fn bitcoin(&self) -> BitcoinFeature {
+        self.bitcoin.unwrap_or(BitcoinFeature {
+            network: BitcoinNetwork::Mainnet,
+            status: BitcoinFeatureStatus::Disabled,
+        })
     }
 }
 
@@ -36,7 +38,16 @@ impl From<SubnetFeatures> for pb::SubnetFeatures {
             ecdsa_signatures: features.ecdsa_signatures,
             canister_sandboxing: features.canister_sandboxing,
             http_requests: features.http_requests,
-            bitcoin_testnet_feature: features.bitcoin_testnet_feature.map(|f| f.into()),
+            bitcoin_testnet_feature: None,
+            bitcoin: features
+                .bitcoin
+                .map(|bitcoin_feature| pb::BitcoinFeatureInfo {
+                    network: match bitcoin_feature.network {
+                        BitcoinNetwork::Testnet => 1,
+                        BitcoinNetwork::Mainnet => 2,
+                    },
+                    status: bitcoin_feature.status.into(),
+                }),
         }
     }
 }
@@ -47,7 +58,28 @@ impl From<pb::SubnetFeatures> for SubnetFeatures {
             ecdsa_signatures: features.ecdsa_signatures,
             canister_sandboxing: features.canister_sandboxing,
             http_requests: features.http_requests,
-            bitcoin_testnet_feature: features.bitcoin_testnet_feature.map(BitcoinFeature::from),
+            bitcoin: match features.bitcoin {
+                Some(bitcoin) => Some(BitcoinFeature {
+                    network: match bitcoin.network {
+                        1 => BitcoinNetwork::Testnet,
+                        2 => BitcoinNetwork::Mainnet,
+                        // If an invalid value is provided, assume mainnet.
+                        _ => BitcoinNetwork::Mainnet,
+                    },
+                    status: bitcoin.status.into(),
+                }),
+                None => {
+                    // For backward-compatibility, check if the legacy `bitcoin_testnet_feature`
+                    // field is populated and load that instead.
+                    // TODO(EXC-1114): Remove this logic once this commit is released.
+                    features
+                        .bitcoin_testnet_feature
+                        .map(|legacy_bitcoin_feature| BitcoinFeature {
+                            network: BitcoinNetwork::Testnet,
+                            status: BitcoinFeatureStatus::from(legacy_bitcoin_feature),
+                        })
+                }
+            },
         }
     }
 }
@@ -69,24 +101,70 @@ impl FromStr for SubnetFeatures {
                 "canister_sandboxing" => features.canister_sandboxing = true,
                 "http_requests" => features.http_requests = true,
                 "bitcoin_testnet" => {
-                    if features.bitcoin_testnet_feature.is_some() {
+                    if features.bitcoin.is_some() {
                         // Feature was already set. Return an error.
-                        return Err(String::from(
-                            "Cannot set bitcoin_testnet feature more than once",
-                        ));
+                        return Err(String::from("Cannot set bitcoin feature more than once"));
                     }
 
-                    features.bitcoin_testnet_feature = Some(BitcoinFeature::Enabled);
+                    features.bitcoin = Some(BitcoinFeature {
+                        network: BitcoinNetwork::Testnet,
+                        status: BitcoinFeatureStatus::Enabled,
+                    });
+                }
+                "bitcoin_testnet_syncing" => {
+                    if features.bitcoin.is_some() {
+                        // Feature was already set. Return an error.
+                        return Err(String::from("Cannot set bitcoin feature more than once"));
+                    }
+
+                    features.bitcoin = Some(BitcoinFeature {
+                        network: BitcoinNetwork::Testnet,
+                        status: BitcoinFeatureStatus::Syncing,
+                    });
                 }
                 "bitcoin_testnet_paused" => {
-                    if features.bitcoin_testnet_feature.is_some() {
+                    if features.bitcoin.is_some() {
                         // Feature was already set. Return an error.
-                        return Err(String::from(
-                            "Cannot set bitcoin_testnet feature more than once",
-                        ));
+                        return Err(String::from("Cannot set bitcoin feature more than once"));
                     }
 
-                    features.bitcoin_testnet_feature = Some(BitcoinFeature::Paused);
+                    features.bitcoin = Some(BitcoinFeature {
+                        network: BitcoinNetwork::Testnet,
+                        status: BitcoinFeatureStatus::Paused,
+                    });
+                }
+                "bitcoin_mainnet" => {
+                    if features.bitcoin.is_some() {
+                        // Feature was already set. Return an error.
+                        return Err(String::from("Cannot set bitcoin feature more than once"));
+                    }
+
+                    features.bitcoin = Some(BitcoinFeature {
+                        network: BitcoinNetwork::Mainnet,
+                        status: BitcoinFeatureStatus::Enabled,
+                    });
+                }
+                "bitcoin_mainnet_syncing" => {
+                    if features.bitcoin.is_some() {
+                        // Feature was already set. Return an error.
+                        return Err(String::from("Cannot set bitcoin feature more than once"));
+                    }
+
+                    features.bitcoin = Some(BitcoinFeature {
+                        network: BitcoinNetwork::Mainnet,
+                        status: BitcoinFeatureStatus::Syncing,
+                    });
+                }
+                "bitcoin_mainnet_paused" => {
+                    if features.bitcoin.is_some() {
+                        // Feature was already set. Return an error.
+                        return Err(String::from("Cannot set bitcoin feature more than once"));
+                    }
+
+                    features.bitcoin = Some(BitcoinFeature {
+                        network: BitcoinNetwork::Mainnet,
+                        status: BitcoinFeatureStatus::Paused,
+                    });
                 }
                 _ => return Err(format!("Unknown feature {:?} in {:?}", feature, string)),
             }
@@ -97,28 +175,37 @@ impl FromStr for SubnetFeatures {
 }
 
 #[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize)]
-pub enum BitcoinFeature {
+pub struct BitcoinFeature {
+    pub network: BitcoinNetwork,
+    pub status: BitcoinFeatureStatus,
+}
+
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize)]
+pub enum BitcoinFeatureStatus {
     Disabled,
     Paused,
+    Syncing,
     Enabled,
 }
 
-impl From<BitcoinFeature> for i32 {
-    fn from(bitcoin_feature: BitcoinFeature) -> i32 {
-        match bitcoin_feature {
-            BitcoinFeature::Disabled => 0,
-            BitcoinFeature::Paused => 1,
-            BitcoinFeature::Enabled => 2,
+impl From<BitcoinFeatureStatus> for i32 {
+    fn from(status: BitcoinFeatureStatus) -> i32 {
+        match status {
+            BitcoinFeatureStatus::Disabled => 0,
+            BitcoinFeatureStatus::Paused => 1,
+            BitcoinFeatureStatus::Enabled => 2,
+            BitcoinFeatureStatus::Syncing => 3,
         }
     }
 }
 
-impl From<i32> for BitcoinFeature {
+impl From<i32> for BitcoinFeatureStatus {
     fn from(input: i32) -> Self {
         match input {
             0 => Self::Disabled,
             1 => Self::Paused,
             2 => Self::Enabled,
+            3 => Self::Syncing,
             // An unknown enumeration value. Consider the feature disabled.
             // An alternative would be to return an error, but this would result in
             // unnecessary complications to the callers.
@@ -159,7 +246,7 @@ impl TryFrom<pb::EcdsaConfig> for EcdsaConfig {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BitcoinFeature, SubnetFeatures};
+    use super::*;
     use std::str::FromStr;
 
     #[test]
@@ -192,15 +279,18 @@ mod tests {
                 ecdsa_signatures: true,
                 canister_sandboxing: true,
                 http_requests: true,
-                bitcoin_testnet_feature: Some(BitcoinFeature::Enabled),
+                bitcoin: Some(BitcoinFeature {
+                    network: BitcoinNetwork::Testnet,
+                    status: BitcoinFeatureStatus::Enabled
+                })
             }
         );
     }
 
     #[test]
-    fn test_bitcoin_testnet_paused() {
+    fn test_bitcoin_mainnet_paused() {
         let result =
-            SubnetFeatures::from_str("canister_sandboxing,http_requests,bitcoin_testnet_paused")
+            SubnetFeatures::from_str("canister_sandboxing,http_requests,bitcoin_mainnet_paused")
                 .unwrap();
         assert_eq!(
             result,
@@ -208,16 +298,53 @@ mod tests {
                 ecdsa_signatures: false,
                 canister_sandboxing: true,
                 http_requests: true,
-                bitcoin_testnet_feature: Some(BitcoinFeature::Paused),
+                bitcoin: Some(BitcoinFeature {
+                    network: BitcoinNetwork::Mainnet,
+                    status: BitcoinFeatureStatus::Paused
+                })
             }
         );
     }
 
     #[test]
-    fn test_set_bitcoin_testnet_multiple_times_returns_error() {
+    fn test_bitcoin_mainnet() {
+        let result =
+            SubnetFeatures::from_str("canister_sandboxing,http_requests,bitcoin_mainnet").unwrap();
+        assert_eq!(
+            result,
+            SubnetFeatures {
+                ecdsa_signatures: false,
+                canister_sandboxing: true,
+                http_requests: true,
+                bitcoin: Some(BitcoinFeature {
+                    network: BitcoinNetwork::Mainnet,
+                    status: BitcoinFeatureStatus::Enabled
+                })
+            }
+        );
+    }
+
+    #[test]
+    fn test_set_bitcoin_multiple_times_returns_error() {
         assert!(SubnetFeatures::from_str(
             "canister_sandboxing,http_requests,bitcoin_testnet_paused,bitcoin_testnet",
         )
         .is_err());
+    }
+
+    #[test]
+    fn test_bitcoin_to_from_proto() {
+        for feature in [
+            "bitcoin_mainnet",
+            "bitcoin_mainnet_paused",
+            "bitcoin_testnet",
+            "bitcoin_testnet_paused",
+        ] {
+            let subnet_feature = SubnetFeatures::from_str(feature).unwrap();
+            assert_eq!(
+                subnet_feature,
+                SubnetFeatures::from(pb::SubnetFeatures::from(subnet_feature))
+            );
+        }
     }
 }

@@ -4,6 +4,7 @@ mod tests;
 
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use ic_base_types::CanisterId;
+use ic_btc_types::Network as BitcoinNetwork;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_constants::MAX_INGRESS_TTL;
 use ic_ic00_types::EcdsaKeyId;
@@ -17,7 +18,7 @@ use ic_protobuf::{
     },
 };
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
-use ic_registry_subnet_features::{BitcoinFeature, SubnetFeatures};
+use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     crypto::CryptoHash,
@@ -160,8 +161,11 @@ impl NetworkTopology {
         self.subnets
             .iter()
             .filter(|(_, subnet_topology)| {
-                subnet_topology.subnet_features.bitcoin_testnet_feature
-                    == Some(BitcoinFeature::Enabled)
+                subnet_topology.subnet_features.bitcoin()
+                    == BitcoinFeature {
+                        network: BitcoinNetwork::Testnet,
+                        status: BitcoinFeatureStatus::Enabled,
+                    }
             })
             .map(|(subnet_id, _)| *subnet_id)
             .collect()

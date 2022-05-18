@@ -1,4 +1,5 @@
 use crate::{BitcoinState, BitcoinStateError};
+use ic_btc_types::Network;
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
     GetSuccessorsRequest, GetSuccessorsResponse, SendTransactionRequest, SendTransactionResponse,
@@ -7,7 +8,7 @@ use ic_btc_types_internal::{
 #[test]
 fn can_push_requests_until_capacity_reached() {
     let capacity = 3;
-    let mut bitcoin_state = BitcoinState::new(capacity);
+    let mut bitcoin_state = BitcoinState::new_with_queue_capacity(Network::Testnet, capacity);
 
     // Enqueue 3 requests, it should succeed.
     for i in 0..3 {

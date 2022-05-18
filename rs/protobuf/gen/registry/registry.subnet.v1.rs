@@ -318,6 +318,16 @@ pub struct GossipAdvertConfig {
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BitcoinFeatureInfo {
+    /// The network for which the bitcoin feature is enabled.
+    #[prost(enumeration="super::super::super::bitcoin::v1::Network", tag="1")]
+    pub network: i32,
+    /// The status of the feature.
+    #[prost(enumeration="BitcoinFeatureStatus", tag="2")]
+    pub status: i32,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetFeatures {
     /// This feature flag controls, whether canisters of this subnet are capable of
     /// issuing threshold ecdsa signatures.
@@ -332,9 +342,14 @@ pub struct SubnetFeatures {
     #[prost(bool, tag="3")]
     pub http_requests: bool,
     /// Whether or not the subnet is capable of serving requests to the bitcoin testnet canister.
-    /// Note that in the near future an identical feature will be introduced for the bitcoin mainnet.
+    /// TODO(EXC-1114): This field is kept temporarily for backward compatibility and can safely
+    /// be removed once this commit is released.
     #[prost(enumeration="BitcoinFeature", optional, tag="5")]
     pub bitcoin_testnet_feature: ::core::option::Option<i32>,
+    /// Controls whether the bitcoin feature is enabled and which bitcoin network is
+    /// supported.
+    #[prost(message, optional, tag="6")]
+    pub bitcoin: ::core::option::Option<BitcoinFeatureInfo>,
 }
 /// Per subnet ECDSA configuration
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -376,14 +391,25 @@ pub enum SubnetType {
     /// additional features.
     VerifiedApplication = 4,
 }
+/// TODO(EXC-1114): This type is kept temporarily for backward compatibility and can safely
+/// be removed once this commit is released.
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum BitcoinFeature {
+    Unspecified = 0,
+    Paused = 1,
+    Enabled = 2,
+}
+/// The status of the bitcoin feature.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum BitcoinFeatureStatus {
     /// The bitcoin feature is disabled.
     ///
     /// The subnet does not sync the bitcoin chain and requests to the bitcoin
-    /// canister are forwarded to another subnet where the feature is enabled.
+    /// API are forwarded to another subnet where the feature is enabled.
     ///
     /// WARNING: Transitioning into this state deletes any bitcoin state present
     /// on the subnet, and full sync from genesis would then be required when
@@ -392,14 +418,19 @@ pub enum BitcoinFeature {
     /// The bitcoin feature is paused.
     ///
     /// The subnet does not sync the bitcoin chain and requests to the bitcoin
-    /// canister are forwarded to another subnet where the feature is enabled.
+    /// API are forwarded to another subnet where the feature is enabled.
     ///
     /// Transitioning into this state does _not_ delete any bitcoin state that's
     /// present on the subnet.
     Paused = 1,
     /// The bitcoin feature is enabled.
     ///
-    /// The subnet syncs the bitcoin chain and handles requests to the bitcoin
-    /// canister.
+    /// The subnet syncs the bitcoin chain and handles requests to the bitcoin API.
     Enabled = 2,
+    /// The bitcoin feature is syncing.
+    ///
+    /// The subnet syncs the bitcoin chain but does *not* handle requests to the bitcoin
+    /// API. Requests to the bitcoin API are forwarded to another subnet where the
+    /// feature is enabled.
+    Syncing = 3,
 }

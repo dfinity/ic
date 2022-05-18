@@ -7,6 +7,7 @@ edition = "2018"
 bitcoin = "0.27.1"
 cvt = "0.1.1"
 debug_stub_derive = "0.3.0"
+ic-btc-types = { path = "../bitcoin/types/public" }
 ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-base-types = { path = "../types/base_types" }
 ic-certification-version = { path = "../canonical_state/certification_version" }

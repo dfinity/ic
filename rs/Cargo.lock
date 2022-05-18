@@ -3815,6 +3815,7 @@ dependencies = [
 name = "ic-btc-consensus"
 version = "0.1.0"
 dependencies = [
+ "ic-btc-types",
  "ic-btc-types-internal",
  "ic-interfaces",
  "ic-interfaces-bitcoin-adapter-client",
@@ -6776,6 +6777,7 @@ dependencies = [
  "debug_stub_derive",
  "ic-base-types",
  "ic-btc-test-utils",
+ "ic-btc-types",
  "ic-btc-types-internal",
  "ic-certification-version",
  "ic-config",
@@ -7223,6 +7225,7 @@ dependencies = [
  "crossbeam-channel 0.5.1",
  "hex",
  "ic-base-types",
+ "ic-btc-types",
  "ic-btc-types-internal",
  "ic-canonical-state",
  "ic-config",
@@ -12356,6 +12359,7 @@ dependencies = [
  "hyper-rustls",
  "ic-agent 0.11.1",
  "ic-base-types",
+ "ic-btc-types",
  "ic-canister-client",
  "ic-certified-vars",
  "ic-config",

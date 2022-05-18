@@ -27,6 +27,7 @@ garcon = "0.2"
 humantime = "2.0"
 ic-base-types = { path = "../types/base_types" }
 hex = "0.4.2"
+ic-btc-types = { path = "../bitcoin/types/public" }
 ic-canister-client = { path = "../canister_client" }
 ic-certified-vars = { path = "../certified_vars" }
 ic-cup-explorer = { path = "../cup_explorer" }

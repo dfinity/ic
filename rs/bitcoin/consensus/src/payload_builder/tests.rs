@@ -103,82 +103,116 @@ fn bitcoin_payload_builder_test(
     });
 }
 
-#[test]
-fn can_successfully_create_bitcoin_payload_if_feature_enabled() {
-    // Create a mock bitcoin adapter client that returns a dummy response
-    // for each request.
-    let bitcoin_mainnet_adapter_client = MockBitcoinAdapterClient::new();
-    let mut bitcoin_testnet_adapter_client = MockBitcoinAdapterClient::new();
-    bitcoin_testnet_adapter_client
-        .expect_send_request()
-        .times(1)
-        .returning(|_, _| {
-            Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                GetSuccessorsResponse {
-                    blocks: vec![],
-                    next: vec![],
-                },
-            ))
-        });
-
-    let subnet_features = SubnetFeatures::from_str("bitcoin_testnet").unwrap();
-    let registry_client = mock_registry_client(MAX_BLOCK_PAYLOAD_SIZE, subnet_features);
-
-    // Create a mock state manager that returns a `ReplicatedState` with
-    // bitcoin testnet feature enabled and some bitcoin adapter requests.
-    let state_manager = mock_state_manager(
-        subnet_features,
-        vec![BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
-            GetSuccessorsRequest {
-                processed_block_hashes: vec![vec![10; 32]],
-                anchor: vec![10; 32],
-            },
-        )],
-    );
-
-    bitcoin_payload_builder_test(
-        bitcoin_mainnet_adapter_client,
-        bitcoin_testnet_adapter_client,
-        state_manager,
-        registry_client,
-        |validation_context, bitcoin_payload_builder| {
-            let expected_payload = FakeSelfValidatingPayloadBuilder::new()
-                .with_responses(vec![BitcoinAdapterResponse {
-                    response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                        GetSuccessorsResponse {
-                            blocks: vec![],
-                            next: vec![],
-                        },
-                    ),
-                    callback_id: 0,
-                }])
-                .build();
-
-            let payload = bitcoin_payload_builder
-                .get_self_validating_payload(
-                    &validation_context,
-                    &[],
-                    SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
-                    0,
-                )
-                .0;
-            assert_eq!(payload, expected_payload);
-        },
-    );
+struct TestEntry<'a> {
+    features: &'a str,
+    mainnet_adapter_client: MockBitcoinAdapterClient,
+    testnet_adapter_client: MockBitcoinAdapterClient,
 }
 
 #[test]
-fn bitcoin_payload_builder_does_not_send_requests_if_feature_is_not_enabled() {
-    let bitcoin_enabled = SubnetFeatures::from_str("bitcoin_testnet_paused").unwrap();
+fn can_successfully_create_bitcoin_payload_if_feature_enabled_or_syncing() {
+    // Create a mock bitcoin adapter client that returns a dummy response
+    // for each request.
+    fn mock_adapter() -> MockBitcoinAdapterClient {
+        let mut adapter_client = MockBitcoinAdapterClient::new();
+        adapter_client
+            .expect_send_request()
+            .times(1)
+            .returning(|_, _| {
+                Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
+                    GetSuccessorsResponse {
+                        blocks: vec![],
+                        next: vec![],
+                    },
+                ))
+            });
+        adapter_client
+    }
+
+    for test in [
+        TestEntry {
+            features: "bitcoin_testnet",
+            mainnet_adapter_client: MockBitcoinAdapterClient::new(),
+            testnet_adapter_client: mock_adapter(),
+        },
+        TestEntry {
+            features: "bitcoin_testnet_syncing",
+            mainnet_adapter_client: MockBitcoinAdapterClient::new(),
+            testnet_adapter_client: mock_adapter(),
+        },
+        TestEntry {
+            features: "bitcoin_mainnet",
+            mainnet_adapter_client: mock_adapter(),
+            testnet_adapter_client: MockBitcoinAdapterClient::new(),
+        },
+        TestEntry {
+            features: "bitcoin_mainnet_syncing",
+            mainnet_adapter_client: mock_adapter(),
+            testnet_adapter_client: MockBitcoinAdapterClient::new(),
+        },
+    ] {
+        let subnet_features = SubnetFeatures::from_str(test.features).unwrap();
+        let registry_client = mock_registry_client(MAX_BLOCK_PAYLOAD_SIZE, subnet_features);
+
+        // Create a mock state manager that returns a `ReplicatedState` with
+        // bitcoin testnet feature enabled and some bitcoin adapter requests.
+        let state_manager = mock_state_manager(
+            subnet_features,
+            vec![BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
+                GetSuccessorsRequest {
+                    processed_block_hashes: vec![vec![10; 32]],
+                    anchor: vec![10; 32],
+                },
+            )],
+        );
+
+        bitcoin_payload_builder_test(
+            test.mainnet_adapter_client,
+            test.testnet_adapter_client,
+            state_manager,
+            registry_client,
+            |validation_context, bitcoin_payload_builder| {
+                let expected_payload = FakeSelfValidatingPayloadBuilder::new()
+                    .with_responses(vec![BitcoinAdapterResponse {
+                        response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
+                            GetSuccessorsResponse {
+                                blocks: vec![],
+                                next: vec![],
+                            },
+                        ),
+                        callback_id: 0,
+                    }])
+                    .build();
+
+                let payload = bitcoin_payload_builder
+                    .get_self_validating_payload(
+                        &validation_context,
+                        &[],
+                        SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
+                        0,
+                    )
+                    .0;
+                assert_eq!(payload, expected_payload);
+            },
+        );
+    }
+}
+
+#[test]
+fn bitcoin_payload_builder_does_not_send_requests_if_feature_is_paused_or_disabled() {
+    let bitcoin_testnet_paused = SubnetFeatures::from_str("bitcoin_testnet_paused").unwrap();
+    let bitcoin_mainnet_paused = SubnetFeatures::from_str("bitcoin_mainnet_paused").unwrap();
     let bitcoin_disabled = SubnetFeatures::default();
 
     let state_managers = vec![
-        mock_state_manager(bitcoin_enabled, vec![]),
+        mock_state_manager(bitcoin_testnet_paused, vec![]),
+        mock_state_manager(bitcoin_mainnet_paused, vec![]),
         mock_state_manager(bitcoin_disabled, vec![]),
     ];
 
     let registry_clients = vec![
-        mock_registry_client(MAX_BLOCK_PAYLOAD_SIZE, bitcoin_enabled),
+        mock_registry_client(MAX_BLOCK_PAYLOAD_SIZE, bitcoin_testnet_paused),
+        mock_registry_client(MAX_BLOCK_PAYLOAD_SIZE, bitcoin_mainnet_paused),
         mock_registry_client(MAX_BLOCK_PAYLOAD_SIZE, bitcoin_disabled),
     ];
 
@@ -215,71 +249,86 @@ fn bitcoin_payload_builder_does_not_send_requests_if_feature_is_not_enabled() {
 fn includes_only_successful_responses_in_the_payload() {
     // Create a mock bitcoin adapter client that returns a successful response
     // for the first request and an error for the second.
-    let bitcoin_mainnet_adapter_client = MockBitcoinAdapterClient::new();
-    let mut bitcoin_testnet_adapter_client = MockBitcoinAdapterClient::new();
-    bitcoin_testnet_adapter_client
-        .expect_send_request()
-        .times(1)
-        .returning(|_, _| {
-            Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                GetSuccessorsResponse {
-                    blocks: vec![],
-                    next: vec![],
-                },
-            ))
-        });
-    bitcoin_testnet_adapter_client
-        .expect_send_request()
-        .times(1)
-        .returning(|_, _| Err(RpcError::ConnectionBroken));
+    fn mock_adapter() -> MockBitcoinAdapterClient {
+        let mut adapter_client = MockBitcoinAdapterClient::new();
+        adapter_client
+            .expect_send_request()
+            .times(1)
+            .returning(|_, _| {
+                Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
+                    GetSuccessorsResponse {
+                        blocks: vec![],
+                        next: vec![],
+                    },
+                ))
+            });
+        adapter_client
+            .expect_send_request()
+            .times(1)
+            .returning(|_, _| Err(RpcError::ConnectionBroken));
+        adapter_client
+    }
 
     // Create a mock state manager that returns a `ReplicatedState` with
-    // bitcoin testnet feature enabled and some bitcoin adapter requests.
-    let subnet_features = SubnetFeatures::from_str("bitcoin_testnet").unwrap();
-    let state_manager = mock_state_manager(
-        subnet_features,
-        vec![
-            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequest {
-                processed_block_hashes: vec![vec![10; 32]],
-                anchor: vec![10; 32],
-            }),
-            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequest {
-                processed_block_hashes: vec![vec![20; 32]],
-                anchor: vec![20; 32],
-            }),
-        ],
-    );
-
-    let registry_client = mock_registry_client(MAX_BLOCK_PAYLOAD_SIZE, subnet_features);
-
-    bitcoin_payload_builder_test(
-        bitcoin_mainnet_adapter_client,
-        bitcoin_testnet_adapter_client,
-        state_manager,
-        registry_client,
-        |validation_context, bitcoin_payload_builder| {
-            let expected_payload = FakeSelfValidatingPayloadBuilder::new()
-                .with_responses(vec![BitcoinAdapterResponse {
-                    response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                        GetSuccessorsResponse {
-                            blocks: vec![],
-                            next: vec![],
-                        },
-                    ),
-                    callback_id: 0,
-                }])
-                .build();
-            let payload = bitcoin_payload_builder
-                .get_self_validating_payload(
-                    &validation_context,
-                    &[],
-                    SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
-                    0,
-                )
-                .0;
-            assert_eq!(payload, expected_payload);
+    // bitcoin testnet/mainnet feature enabled and some bitcoin adapter requests.
+    for test in [
+        TestEntry {
+            features: "bitcoin_testnet",
+            mainnet_adapter_client: MockBitcoinAdapterClient::new(),
+            testnet_adapter_client: mock_adapter(),
         },
-    );
+        TestEntry {
+            features: "bitcoin_mainnet",
+            mainnet_adapter_client: mock_adapter(),
+            testnet_adapter_client: MockBitcoinAdapterClient::new(),
+        },
+    ] {
+        let subnet_features = SubnetFeatures::from_str(test.features).unwrap();
+        let state_manager = mock_state_manager(
+            subnet_features,
+            vec![
+                BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequest {
+                    processed_block_hashes: vec![vec![10; 32]],
+                    anchor: vec![10; 32],
+                }),
+                BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequest {
+                    processed_block_hashes: vec![vec![20; 32]],
+                    anchor: vec![20; 32],
+                }),
+            ],
+        );
+
+        let registry_client = mock_registry_client(MAX_BLOCK_PAYLOAD_SIZE, subnet_features);
+
+        bitcoin_payload_builder_test(
+            test.mainnet_adapter_client,
+            test.testnet_adapter_client,
+            state_manager,
+            registry_client,
+            |validation_context, bitcoin_payload_builder| {
+                let expected_payload = FakeSelfValidatingPayloadBuilder::new()
+                    .with_responses(vec![BitcoinAdapterResponse {
+                        response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
+                            GetSuccessorsResponse {
+                                blocks: vec![],
+                                next: vec![],
+                            },
+                        ),
+                        callback_id: 0,
+                    }])
+                    .build();
+                let payload = bitcoin_payload_builder
+                    .get_self_validating_payload(
+                        &validation_context,
+                        &[],
+                        SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
+                        0,
+                    )
+                    .0;
+                assert_eq!(payload, expected_payload);
+            },
+        );
+    }
 }
 
 #[test]
