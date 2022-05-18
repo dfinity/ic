@@ -127,14 +127,14 @@ impl CountBytes for CanisterHttpResponse {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CanisterHttpResponseContent {
-    Success(CanisterHttpPayload),
+    Success(Vec<u8>),
     Reject(CanisterHttpReject),
 }
 
 impl CountBytes for CanisterHttpResponseContent {
     fn count_bytes(&self) -> usize {
         match self {
-            CanisterHttpResponseContent::Success(payload) => payload.count_bytes(),
+            CanisterHttpResponseContent::Success(payload) => payload.len(),
             CanisterHttpResponseContent::Reject(err) => err.count_bytes(),
         }
     }
@@ -182,25 +182,6 @@ impl TryFrom<pb_metadata::HttpMethod> for CanisterHttpMethod {
                 err: "Unspecified HttpMethod".to_string(),
             }),
         }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct CanisterHttpPayload {
-    pub status: u64,
-    pub headers: Vec<CanisterHttpHeader>,
-    pub body: Vec<u8>,
-}
-
-impl CountBytes for CanisterHttpPayload {
-    fn count_bytes(&self) -> usize {
-        size_of::<u64>()
-            + self
-                .headers
-                .iter()
-                .map(|header| header.name.len() + header.value.len())
-                .sum::<usize>()
-            + self.body.len()
     }
 }
 

@@ -20,16 +20,11 @@ message CanisterHttpResponse {
 }
 
 message CanisterHttpResponseContent {
+  reserved 1;
   oneof status {
-    CanisterHttpResponsePayload success = 1;
     CanisterHttpReject reject = 2;
+    bytes success = 3;
   }
-}
-
-message CanisterHttpResponsePayload {
-  uint32 status = 1;
-  repeated HttpHeader headers = 2;
-  bytes body = 3;
 }
 
 message CanisterHttpReject {

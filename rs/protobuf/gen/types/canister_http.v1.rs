@@ -29,7 +29,7 @@ pub struct CanisterHttpResponse {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseContent {
-    #[prost(oneof="canister_http_response_content::Status", tags="1, 2")]
+    #[prost(oneof="canister_http_response_content::Status", tags="2, 3")]
     pub status: ::core::option::Option<canister_http_response_content::Status>,
 }
 /// Nested message and enum types in `CanisterHttpResponseContent`.
@@ -37,21 +37,11 @@ pub mod canister_http_response_content {
     #[derive(serde::Serialize, serde::Deserialize)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Status {
-        #[prost(message, tag="1")]
-        Success(super::CanisterHttpResponsePayload),
         #[prost(message, tag="2")]
         Reject(super::CanisterHttpReject),
+        #[prost(bytes, tag="3")]
+        Success(::prost::alloc::vec::Vec<u8>),
     }
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterHttpResponsePayload {
-    #[prost(uint32, tag="1")]
-    pub status: u32,
-    #[prost(message, repeated, tag="2")]
-    pub headers: ::prost::alloc::vec::Vec<HttpHeader>,
-    #[prost(bytes="vec", tag="3")]
-    pub body: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
