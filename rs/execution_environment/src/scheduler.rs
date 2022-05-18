@@ -297,8 +297,8 @@ fn filter_canisters(
 /// Given a list of 8 executable canisters and 3 cpu cores, then we have the
 /// following assignment:
 /// * Core 1 takes `CanisterId1`, `CanisterId4`, `CanisterId7`
-/// * Core 2 takes CanisterId2`, `CanisterId5`, `CanisterId8`
-/// * Core 3 takes CanisterId3`, `CanisterId6`
+/// * Core 2 takes `CanisterId2`, `CanisterId5`, `CanisterId8`
+/// * Core 3 takes `CanisterId3`, `CanisterId6`
 fn partition_canisters_to_cores(
     scheduler_cores: usize,
     executable_canister_ids: &[CanisterId],
@@ -833,9 +833,13 @@ impl SchedulerImpl {
         // Get a list of canisters in the map before we iterate over the map.
         // This is because we cannot hold an immutable reference to the map
         // while trying to simultaneously mutate it.
-        let canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
+        let canisters_with_outputs: Vec<CanisterId> = canisters
+            .iter()
+            .filter(|(_, canister)| canister.has_output())
+            .map(|(canister_id, _)| *canister_id)
+            .collect();
 
-        for source_canister_id in canister_ids {
+        for source_canister_id in canisters_with_outputs {
             // Remove the source canister from the map so that we can
             // `get_mut()` on the map further below for the destination canister.
             // Borrow rules do not allow us to hold multiple mutable references.
