@@ -11,7 +11,10 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_sha2",
     edition = "2018",
-    visibility = ["//rs/crypto/sha:__pkg__"],
+    visibility = [
+        "//rs/crypto/internal:__subpackages__",
+        "//rs/crypto/sha:__pkg__",
+    ],
     deps = select({
         "@rules_rust//rust/platform:wasm32-unknown-unknown": ["@crate_index//:sha2"],
         "//conditions:default": ["@crate_index//:openssl"],
