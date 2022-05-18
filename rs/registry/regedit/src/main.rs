@@ -17,7 +17,8 @@ use normalization::NormalizedSnapshot;
 use serde_json::Value;
 use snapshot::Snapshot;
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let cmd: Command = CliArgs::parse().validate()?;
 
     let out = execute_command(cmd)?;
