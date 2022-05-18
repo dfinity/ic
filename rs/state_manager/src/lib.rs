@@ -1749,24 +1749,26 @@ impl StateManagerImpl {
 
         for entry in PageMapType::list_all(tip_state) {
             if let Some(page_map) = entry.get_mut(tip_state) {
-                let path = &entry.path(&tip_layout).unwrap_or_else(|err| {
-                    fatal!(
-                        self.log,
-                        "Failed to access layout @TIP {}: {}",
-                        tip_layout.raw_path().display(),
-                        err
-                    )
-                });
+                if !page_map.round_delta_is_empty() {
+                    let path = &entry.path(&tip_layout).unwrap_or_else(|err| {
+                        fatal!(
+                            self.log,
+                            "Failed to access layout @TIP {}: {}",
+                            tip_layout.raw_path().display(),
+                            err
+                        )
+                    });
 
-                page_map.persist_round_delta(path).unwrap_or_else(|err| {
-                    fatal!(
-                        self.log,
-                        "Failed to persist page delta to file {}: {}",
-                        path.display(),
-                        err
-                    )
-                });
-                page_map.strip_round_delta();
+                    page_map.persist_round_delta(path).unwrap_or_else(|err| {
+                        fatal!(
+                            self.log,
+                            "Failed to persist page delta to file {}: {}",
+                            path.display(),
+                            err
+                        )
+                    });
+                    page_map.strip_round_delta();
+                }
             }
         }
     }
