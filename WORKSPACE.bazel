@@ -2,10 +2,10 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
     name = "rules_rust",
-    sha256 = "e074f1e203607c5fcd549929d956170346f8807d2bbaeb98b2ed213c37e0870f",
+    sha256 = "edb87c0d2ba70823fe3df7862676d695599314a4634b9758bd55f0e8f19c2751",
     urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_rust/releases/download/0.3.1/rules_rust-v0.3.1.tar.gz",
-        "https://github.com/bazelbuild/rules_rust/releases/download/0.3.1/rules_rust-v0.3.1.tar.gz",
+        "https://mirror.bazel.build/github.com/bazelbuild/rules_rust/releases/download/0.4.0/rules_rust-v0.4.0.tar.gz",
+        "https://github.com/bazelbuild/rules_rust/releases/download/0.4.0/rules_rust-v0.4.0.tar.gz",
     ],
 )
 
@@ -14,6 +14,22 @@ load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_regi
 rules_rust_dependencies()
 
 rust_register_toolchains(version = "1.60.0")
+
+http_archive(
+    name = "rules_proto",
+    sha256 = "66bfdf8782796239d3875d37e7de19b1d94301e8972b3cbd2446b332429b4df1",
+    strip_prefix = "rules_proto-4.0.0",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/rules_proto/archive/refs/tags/4.0.0.tar.gz",
+        "https://github.com/bazelbuild/rules_proto/archive/refs/tags/4.0.0.tar.gz",
+    ],
+)
+
+load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies", "rules_proto_toolchains")
+
+rules_proto_dependencies()
+
+rules_proto_toolchains()
 
 load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "splicing_config")
 
@@ -25,6 +41,13 @@ crates_repository(
                 "-C",
                 "opt-level=3",
             ],
+        )],
+        "prost-build": [crate.annotation(
+            build_script_env = {
+                "PROTOC_NO_VENDOR": "1",
+                "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+            },
+            build_script_tools = ["@com_google_protobuf//:protoc"],
         )],
     },
     isolated = True,
@@ -94,8 +117,8 @@ crates_repository(
         ),
         "proptest": crate.spec(version = "0.9.4"),
         "proptest-derive": crate.spec(version = "0.1.0"),
-        "prost": crate.spec(version = "0.9.0"),
-        "prost-build": crate.spec(version = "0.9.0"),
+        "prost": crate.spec(version = "0.10.3"),
+        "prost-build": crate.spec(version = "0.10.3"),
         "rand": crate.spec(version = "0.8.3"),
         "rand_chacha": crate.spec(version = "0.2.2"),
         "rand_core": crate.spec(version = "0.5.1"),
@@ -128,7 +151,7 @@ crates_repository(
             features = ["full"],
             version = "1.18.1",
         ),
-        "tonic": crate.spec(version = "0.7.1"),
+        "tonic": crate.spec(version = "0.7.2"),
         "uuid": crate.spec(
             features = ["v4"],
             version = "0.8.1",
@@ -168,22 +191,6 @@ crates_repository(
 load("@wasm_crate_index//:defs.bzl", wasm_crate_repositories = "crate_repositories")
 
 wasm_crate_repositories()
-
-http_archive(
-    name = "rules_proto",
-    sha256 = "66bfdf8782796239d3875d37e7de19b1d94301e8972b3cbd2446b332429b4df1",
-    strip_prefix = "rules_proto-4.0.0",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_proto/archive/refs/tags/4.0.0.tar.gz",
-        "https://github.com/bazelbuild/rules_proto/archive/refs/tags/4.0.0.tar.gz",
-    ],
-)
-
-load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies", "rules_proto_toolchains")
-
-rules_proto_dependencies()
-
-rules_proto_toolchains()
 
 http_archive(
     name = "buildifier_prebuilt",

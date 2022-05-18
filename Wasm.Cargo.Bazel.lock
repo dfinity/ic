@@ -1,5 +1,5 @@
 {
-  "checksum": "cbe38ec68eb2f79c5c73b7b171add6ecc03938b098ef49fb27164c7c5ad9365c",
+  "checksum": "f20bb8c606158096fd528c66003845728084fbb3552513651c24ee5cfe6b3f2a",
   "crates": {
     "cfg-if 1.0.0": {
       "name": "cfg-if",
@@ -237,6 +237,7 @@
     "cfg(unix)": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
+      "aarch64-apple-ios-sim",
       "aarch64-linux-android",
       "aarch64-unknown-linux-gnu",
       "arm-unknown-linux-gnueabi",
