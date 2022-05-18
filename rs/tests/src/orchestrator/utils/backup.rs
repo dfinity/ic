@@ -1,9 +1,6 @@
 use crate::orchestrator::utils::ssh_access::{read_remote_file, AuthMean};
-use ic_replay::{
-    cmd::{ClapSubnetId, ReplayToolArgs, RestoreFromBackupCmd, SubCommand},
-    player::ReplayError,
-};
-use ic_types::{Height, SubnetId};
+use ic_replay::cmd::{ClapSubnetId, ReplayToolArgs, RestoreFromBackupCmd, SubCommand};
+use ic_types::SubnetId;
 use slog::{info, Logger};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
@@ -43,7 +40,7 @@ impl Backup {
         }
     }
 
-    pub fn replay(&self, replica_version: &str) -> Result<(Height, String), ReplayError> {
+    pub fn replay(&self, replica_version: &str) {
         let start_height = self.get_start_height(replica_version);
         info!(
             self.logger,
@@ -63,7 +60,7 @@ impl Backup {
         };
         self.print_contents_of_dir(&self.local_store_path());
         self.print_contents_of_dir(&self.backup_dir);
-        ic_replay::replay(args)
+        ic_replay::replay(args);
     }
 
     pub fn rsync_local_store(&self) {
