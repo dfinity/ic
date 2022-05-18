@@ -460,6 +460,16 @@ impl PageMap {
         self.page_delta.iter().map(|(index, _)| index).collect()
     }
 
+    /// Whether there are any page deltas
+    pub fn page_delta_is_empty(&self) -> bool {
+        self.page_delta.is_empty()
+    }
+
+    /// Whether there are any round deltas
+    pub fn round_delta_is_empty(&self) -> bool {
+        self.round_delta.is_empty()
+    }
+
     /// Returns the length of the modified prefix in host pages.
     ///
     /// Also, the following property holds:
