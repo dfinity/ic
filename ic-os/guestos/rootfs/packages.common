@@ -46,6 +46,7 @@ sudo
 udev
 usbutils
 xfsprogs
+zstd
 
 # This is unclear -- why is this here? This should "probably" be dev tool.
 protobuf-compiler

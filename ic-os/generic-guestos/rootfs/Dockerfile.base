@@ -22,15 +22,16 @@ ENV TZ=UTC
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
+    apt-transport-https \
     attr \
     build-essential \
-    apt-transport-https \
     ca-certificates \
     checkpolicy \
     chrony \
     cryptsetup \
     curl \
     fdisk \
+    gnupg2 \
     initramfs-tools \
     inotify-tools \
     iproute2 \
@@ -56,7 +57,7 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     udev \
     usbutils \
     vim \
-    gnupg2
+    zstd
 
 RUN curl --retry 10 --fail http://nginx.org/keys/nginx_signing.key -L -o - | apt-key add - && \
     echo "deb [arch=amd64] https://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list && \
