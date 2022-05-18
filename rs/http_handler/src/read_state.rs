@@ -232,6 +232,7 @@ async fn verify_paths(
                     }
                 }
             }
+            [b"subnet"] => {}
             [b"subnet", _subnet_id, b"public_key"] => {}
             [b"subnet", _subnet_id, b"canister_ranges"] => {}
             [b"request_status", request_id] | [b"request_status", request_id, ..] => {
