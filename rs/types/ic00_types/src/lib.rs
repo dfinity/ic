@@ -19,6 +19,7 @@ use strum_macros::{Display, EnumIter, EnumString};
 pub const IC_00: CanisterId = CanisterId::ic_00();
 pub const MAX_CONTROLLERS: usize = 10;
 pub use http::{CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader, HttpMethod};
+pub use ic_btc_types::Network as BitcoinNetwork;
 pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
 
 /// Methods exported by ic:00.
@@ -977,16 +978,6 @@ impl ComputeInitialEcdsaDealingsResponse {
             }),
         }
     }
-}
-
-/// `(variant {
-///     mainnet;
-///     testnet;
-/// })`
-#[derive(CandidType, Deserialize, Copy, Clone, PartialEq)]
-pub enum BitcoinNetwork {
-    Mainnet,
-    Testnet,
 }
 
 /// Struct used for encoding/decoding

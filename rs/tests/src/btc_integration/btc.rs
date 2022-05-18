@@ -19,7 +19,8 @@ use crate::{
     driver::ic::{InternetComputer, Subnet},
     driver::universal_vm::UniversalVm,
 };
-use ic_registry_subnet_features::{BitcoinFeature, SubnetFeatures};
+use ic_btc_types::Network;
+use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
 
@@ -52,7 +53,10 @@ docker run -v bitcoind-data:/bitcoin/.bitcoin --name=bitcoind-node -d \
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_features(SubnetFeatures {
-                    bitcoin_testnet_feature: Some(BitcoinFeature::Enabled),
+                    bitcoin: Some(BitcoinFeature {
+                        network: Network::Testnet,
+                        status: BitcoinFeatureStatus::Enabled,
+                    }),
                     ..SubnetFeatures::default()
                 })
                 .add_nodes(1),

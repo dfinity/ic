@@ -6,7 +6,7 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, BitcoinNetwork, Method as Ic00Method, Payload,
 };
-use ic_registry_subnet_features::BitcoinFeature;
+use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_replicated_state::ReplicatedState;
 
 /// Handles a `bitcoin_get_balance` request.
@@ -89,7 +89,7 @@ pub fn get_utxos(payload: &[u8], state: &mut ReplicatedState) -> Result<Vec<u8>,
 }
 
 fn verify_feature_is_enabled(state: &mut ReplicatedState) -> Result<(), UserError> {
-    if state.metadata.own_subnet_features.bitcoin_testnet() != BitcoinFeature::Enabled {
+    if state.metadata.own_subnet_features.bitcoin().status != BitcoinFeatureStatus::Enabled {
         return Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             "The bitcoin API is not enabled on this subnet.",

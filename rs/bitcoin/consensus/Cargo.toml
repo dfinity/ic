@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
+ic-btc-types = { path = "../types/public" }
 ic-btc-types-internal = { path = "../types/internal" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-bitcoin-adapter-client = { path = "../../interfaces/bitcoin_adapter_client" }

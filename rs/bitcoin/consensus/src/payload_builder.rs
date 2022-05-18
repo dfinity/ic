@@ -1,4 +1,5 @@
 use crate::metrics::BitcoinPayloadBuilderMetrics;
+use ic_btc_types::Network;
 use ic_btc_types_internal::{BitcoinAdapterResponse, BitcoinAdapterResponseWrapper};
 use ic_interfaces::{
     registry::RegistryClient,
@@ -12,7 +13,7 @@ use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{log, warn, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_registry_subnet_features::BitcoinFeature;
+use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext},
@@ -59,7 +60,7 @@ impl GetPayloadError {
 pub struct BitcoinPayloadBuilder {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: Arc<BitcoinPayloadBuilderMetrics>,
-    _bitcoin_mainnet_adapter_client: Box<dyn BitcoinAdapterClient>,
+    bitcoin_mainnet_adapter_client: Box<dyn BitcoinAdapterClient>,
     bitcoin_testnet_adapter_client: Box<dyn BitcoinAdapterClient>,
     subnet_id: SubnetId,
     registry: Arc<dyn RegistryClient + Send + Sync>,
@@ -79,7 +80,7 @@ impl BitcoinPayloadBuilder {
         Self {
             state_manager,
             metrics: Arc::new(BitcoinPayloadBuilderMetrics::new(metrics_registry)),
-            _bitcoin_mainnet_adapter_client: bitcoin_mainnet_adapter_client,
+            bitcoin_mainnet_adapter_client,
             bitcoin_testnet_adapter_client,
             subnet_id,
             registry,
@@ -106,14 +107,20 @@ impl BitcoinPayloadBuilder {
             .get_features(self.subnet_id, validation_context.registry_version)
             .map_err(GetPayloadError::GetRegistryFailed)?
             .unwrap_or_default()
-            .bitcoin_testnet();
+            .bitcoin();
 
-        // We should only send requests to the adapter if the bitcoin testnet
-        // feature is enabled, otherwise return an empty payload.
-        match bitcoin_feature {
-            BitcoinFeature::Disabled => Ok(SelfValidatingPayload::default()),
-            BitcoinFeature::Paused => Ok(SelfValidatingPayload::default()),
-            BitcoinFeature::Enabled => {
+        // We should only send requests to the adapter if the bitcoin feature
+        // is enabled or syncing, otherwise return an empty payload.
+        match bitcoin_feature.status {
+            BitcoinFeatureStatus::Disabled | BitcoinFeatureStatus::Paused => {
+                Ok(SelfValidatingPayload::default())
+            }
+            BitcoinFeatureStatus::Enabled | BitcoinFeatureStatus::Syncing => {
+                let adapter_client = match bitcoin_feature.network {
+                    Network::Mainnet => &self.bitcoin_mainnet_adapter_client,
+                    Network::Testnet => &self.bitcoin_testnet_adapter_client,
+                };
+
                 let past_callback_ids: std::collections::HashSet<u64> = past_payloads
                     .iter()
                     .flat_map(|x| x.get())
@@ -135,7 +142,7 @@ impl BitcoinPayloadBuilder {
                     }
 
                     let timer = Timer::start();
-                    let result = self.bitcoin_testnet_adapter_client.send_request(
+                    let result = adapter_client.send_request(
                         request.request.clone(),
                         Options {
                             timeout: Some(std::time::Duration::from_millis(50)),
@@ -242,12 +249,17 @@ impl BitcoinPayloadBuilder {
                 )
             })?
             .unwrap_or_default()
-            .bitcoin_testnet();
+            .bitcoin();
 
-        if bitcoin_feature != BitcoinFeature::Enabled {
-            return Err(SelfValidatingPayloadValidationError::Permanent(
-                InvalidSelfValidatingPayload::Disabled,
-            ));
+        match bitcoin_feature.status {
+            BitcoinFeatureStatus::Disabled | BitcoinFeatureStatus::Paused => {
+                return Err(SelfValidatingPayloadValidationError::Permanent(
+                    InvalidSelfValidatingPayload::Disabled,
+                ));
+            }
+            BitcoinFeatureStatus::Enabled | BitcoinFeatureStatus::Syncing => {
+                // Continue with payload validation.
+            }
         }
 
         self.metrics

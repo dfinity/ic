@@ -43,6 +43,7 @@ bench = false
 assert_matches = "1.3.0"
 criterion = "0.3"
 criterion-time = { path = "../criterion_time" }
+ic-btc-types = { path = "../bitcoin/types/public" }
 ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }

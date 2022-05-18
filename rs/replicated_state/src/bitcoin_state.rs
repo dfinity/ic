@@ -1,5 +1,6 @@
 use crate::page_map::PageMap;
 use bitcoin::{blockdata::constants::genesis_block, Block, Network, OutPoint, TxOut};
+use ic_btc_types::Network as BitcoinNetwork;
 use ic_btc_types_internal::{
     BitcoinAdapterRequest, BitcoinAdapterRequestWrapper, BitcoinAdapterResponse,
 };
@@ -26,8 +27,8 @@ const REQUEST_QUEUE_CAPACITY: u32 = 500;
 /// Errors that can be returned when handling the `BitcoinState`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BitcoinStateError {
-    /// Bitcoin testnet feature not enabled.
-    TestnetFeatureNotEnabled,
+    /// Bitcoin feature not enabled.
+    FeatureNotEnabled,
     /// No corresponding request found when trying to push a response.
     NonMatchingResponse { callback_id: u64 },
     /// Enqueueing a request failed due to full queue to the Bitcoin adapter.
@@ -39,8 +40,8 @@ impl std::error::Error for BitcoinStateError {}
 impl std::fmt::Display for BitcoinStateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BitcoinStateError::TestnetFeatureNotEnabled => {
-                write!(f, "Bitcoin testnet feature not enabled.")
+            BitcoinStateError::FeatureNotEnabled => {
+                write!(f, "Bitcoin feature not enabled.")
             }
             BitcoinStateError::NonMatchingResponse { callback_id } => {
                 write!(
@@ -155,10 +156,13 @@ pub struct UtxoSet {
     pub network: Network,
 }
 
-impl Default for UtxoSet {
-    fn default() -> Self {
+impl UtxoSet {
+    fn new(network: BitcoinNetwork) -> Self {
         Self {
-            network: Network::Testnet,
+            network: match network {
+                BitcoinNetwork::Mainnet => Network::Bitcoin,
+                BitcoinNetwork::Testnet => Network::Testnet,
+            },
             utxos_small: PageMap::default(),
             utxos_medium: PageMap::default(),
             utxos_large: BTreeMap::default(),
@@ -222,15 +226,31 @@ pub struct BitcoinState {
 
 impl Default for BitcoinState {
     fn default() -> Self {
-        Self::new(REQUEST_QUEUE_CAPACITY)
+        Self::new(BitcoinNetwork::Testnet)
     }
 }
 
 impl BitcoinState {
-    pub fn new(requests_queue_capacity: u32) -> Self {
+    pub fn new(network: BitcoinNetwork) -> Self {
+        Self {
+            adapter_queues: AdapterQueues::new(REQUEST_QUEUE_CAPACITY),
+            utxo_set: UtxoSet::new(network),
+            unstable_blocks: UnstableBlocks::new(
+                STABILITY_THRESHOLD,
+                genesis_block(match network {
+                    BitcoinNetwork::Mainnet => Network::Bitcoin,
+                    BitcoinNetwork::Testnet => Network::Testnet,
+                }),
+            ),
+            stable_height: 0,
+        }
+    }
+
+    #[cfg(test)]
+    fn new_with_queue_capacity(network: BitcoinNetwork, requests_queue_capacity: u32) -> Self {
         Self {
             adapter_queues: AdapterQueues::new(requests_queue_capacity),
-            utxo_set: UtxoSet::default(),
+            utxo_set: UtxoSet::new(network),
             unstable_blocks: UnstableBlocks::default(),
             stable_height: 0,
         }

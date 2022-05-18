@@ -1112,8 +1112,9 @@ mod tests {
 
     #[test]
     fn can_recover_bitcoin_state() {
+        use ic_btc_types::Network as BitcoinNetwork;
         use ic_btc_types_internal::{BitcoinAdapterRequestWrapper, GetSuccessorsRequest};
-        use ic_registry_subnet_features::BitcoinFeature;
+        use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus};
 
         with_test_replica_logger(|log| {
             let tmp = Builder::new().prefix("test").tempdir().unwrap();
@@ -1128,8 +1129,10 @@ mod tests {
                 ReplicatedState::new_rooted_at(subnet_id, own_subnet_type, "NOT_USED".into());
 
             // Enable the bitcoin feature to be able to mutate its state.
-            state.metadata.own_subnet_features.bitcoin_testnet_feature =
-                Some(BitcoinFeature::Enabled);
+            state.metadata.own_subnet_features.bitcoin = Some(BitcoinFeature {
+                network: BitcoinNetwork::Testnet,
+                status: BitcoinFeatureStatus::Enabled,
+            });
 
             // Make some change in the Bitcoin state to later verify that it gets recovered.
             state

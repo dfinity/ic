@@ -1,6 +1,7 @@
 //! Types used to support the candid API.
 
 use candid::{CandidType, Deserialize};
+use serde::Serialize;
 use serde_bytes::ByteBuf;
 
 pub type Address = String;
@@ -8,6 +9,12 @@ pub type Satoshi = u64;
 pub type BlockHash = Vec<u8>;
 pub type Height = u32;
 pub type Page = ByteBuf;
+
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize)]
+pub enum Network {
+    Mainnet,
+    Testnet,
+}
 
 /// A reference to a transaction output.
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq, Hash)]

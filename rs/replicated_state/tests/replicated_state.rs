@@ -702,7 +702,7 @@ fn push_request_bitcoin_respects_bitcoin_feature_flag() {
     assert_eq!(
         state.push_request_bitcoin(request.clone()),
         Err(StateError::BitcoinStateError(
-            BitcoinStateError::TestnetFeatureNotEnabled
+            BitcoinStateError::FeatureNotEnabled
         ))
     );
 
@@ -712,7 +712,7 @@ fn push_request_bitcoin_respects_bitcoin_feature_flag() {
     assert_eq!(
         state.push_request_bitcoin(request.clone()),
         Err(StateError::BitcoinStateError(
-            BitcoinStateError::TestnetFeatureNotEnabled
+            BitcoinStateError::FeatureNotEnabled
         ))
     );
 
@@ -737,7 +737,7 @@ fn push_response_bitcoin_respects_bitcoin_feature_flag() {
     assert_eq!(
         state.push_response_bitcoin(response.clone()),
         Err(StateError::BitcoinStateError(
-            BitcoinStateError::TestnetFeatureNotEnabled
+            BitcoinStateError::FeatureNotEnabled
         ))
     );
 

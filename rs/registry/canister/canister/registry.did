@@ -31,7 +31,11 @@ type AddOrRemoveDataCentersProposalPayload = record {
   data_centers_to_add : vec DataCenterRecord;
   data_centers_to_remove : vec text;
 };
-type BitcoinFeature = variant { Paused; Enabled; Disabled };
+type BitcoinFeature = record {
+  status : BitcoinFeatureStatus;
+  network : Network;
+};
+type BitcoinFeatureStatus = variant { Paused; Enabled; Disabled; Syncing };
 type BlessReplicaVersionPayload = record {
   node_manager_sha256_hex : text;
   release_package_url : text;
@@ -109,6 +113,7 @@ type FirewallRulesScope = variant {
   Global;
 };
 type Gps = record { latitude : float32; longitude : float32 };
+type Network = variant { Mainnet; Testnet };
 type NodeOperatorRecord = record {
   ipv6 : opt text;
   node_operator_principal_id : vec nat8;
@@ -161,7 +166,7 @@ type SetFirewallConfigPayload = record {
 type SubnetFeatures = record {
   canister_sandboxing : bool;
   http_requests : bool;
-  bitcoin_testnet_feature : opt BitcoinFeature;
+  bitcoin : opt BitcoinFeature;
   ecdsa_signatures : bool;
 };
 type SubnetType = variant { application; verified_application; system };

@@ -18,7 +18,7 @@ use ic_interfaces::{
     execution_environment::CanisterOutOfCyclesError, messages::CanisterInputMessage,
 };
 use ic_registry_routing_table::RoutingTable;
-use ic_registry_subnet_features::BitcoinFeature;
+use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     ingress::IngressStatus,
@@ -777,18 +777,15 @@ impl ReplicatedState {
         &mut self,
         request: BitcoinAdapterRequestWrapper,
     ) -> Result<(), StateError> {
-        match self.metadata.own_subnet_features.bitcoin_testnet() {
-            BitcoinFeature::Enabled => self
+        match self.metadata.own_subnet_features.bitcoin().status {
+            BitcoinFeatureStatus::Enabled | BitcoinFeatureStatus::Syncing => self
                 .bitcoin
                 .adapter_queues
                 .push_request(request)
                 .map_err(StateError::BitcoinStateError),
-            BitcoinFeature::Paused => Err(StateError::BitcoinStateError(
-                BitcoinStateError::TestnetFeatureNotEnabled,
-            )),
-            BitcoinFeature::Disabled => Err(StateError::BitcoinStateError(
-                BitcoinStateError::TestnetFeatureNotEnabled,
-            )),
+            BitcoinFeatureStatus::Paused | BitcoinFeatureStatus::Disabled => Err(
+                StateError::BitcoinStateError(BitcoinStateError::FeatureNotEnabled),
+            ),
         }
     }
 
@@ -801,17 +798,15 @@ impl ReplicatedState {
         &mut self,
         response: BitcoinAdapterResponse,
     ) -> Result<(), StateError> {
-        match self.metadata.own_subnet_features.bitcoin_testnet() {
-            BitcoinFeature::Enabled => self
+        match self.metadata.own_subnet_features.bitcoin().status {
+            BitcoinFeatureStatus::Enabled
+            | BitcoinFeatureStatus::Syncing
+            | BitcoinFeatureStatus::Paused => self
                 .bitcoin
                 .push_response(response)
                 .map_err(StateError::BitcoinStateError),
-            BitcoinFeature::Paused => self
-                .bitcoin
-                .push_response(response)
-                .map_err(StateError::BitcoinStateError),
-            BitcoinFeature::Disabled => Err(StateError::BitcoinStateError(
-                BitcoinStateError::TestnetFeatureNotEnabled,
+            BitcoinFeatureStatus::Disabled => Err(StateError::BitcoinStateError(
+                BitcoinStateError::FeatureNotEnabled,
             )),
         }
     }
