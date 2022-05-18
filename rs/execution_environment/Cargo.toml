@@ -5,9 +5,11 @@ edition = "2018"
 
 [dependencies]
 candid = "0.7.14"
-ic-canister-sandbox-replica-controller = { path = "../canister_sandbox/replica_controller" }
+hex = "0.4.2"
 ic-base-types = { path = "../types/base_types" }
 ic-btc-canister = { path = "../bitcoin/canister" }
+ic-btc-types = { path = "../bitcoin/types/public" }
+ic-canister-sandbox-replica-controller = { path = "../canister_sandbox/replica_controller" }
 ic-config = { path = "../config" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-sha = { path = "../crypto/sha" }
@@ -23,6 +25,7 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
+ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-layout = { path = "../state_layout" }
@@ -31,25 +34,28 @@ ic-system-api = { path = "../system_api" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
-hex = "0.4.2"
 lazy_static = "1.4.0"
 memory_tracker = { path = "../memory_tracker" }
 nix = "0.23.0"
-num-traits = "0.2.12"
 num-rational = "0.2.2"
-scoped_threadpool = "0.1.*"
+num-traits = "0.2.12"
 prometheus = { version = "0.12.0", features = [ "process" ] }
 rand = "0.7.3"
+scoped_threadpool = "0.1.*"
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_cbor = "0.11.1"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 strum = "0.23.0"
 threadpool = "1.8.1"
-tower = { version = "0.4.11", features = ["limit", "buffer", "timeout"] }
 tokio = { version = "1.17.0", features = ["sync"] }
+tower = { version = "0.4.11", features = ["limit", "buffer", "timeout"] }
 
 [dev-dependencies]
 assert_matches = "1.3.0"
+bitcoin = "0.27.1"
+criterion = { version = "0.3", features = ["html_reports"] }
+iai = "0.1"
+ic-btc-test-utils = { path = "../bitcoin/test-utils" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-wasm-types = { path = "../types/wasm_types" }
 libflate = "1.1.2"
@@ -59,8 +65,6 @@ proptest = "0.9.4"
 tempfile = "3.1.0"
 tokio = "1.15.0"
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
-criterion = { version = "0.3", features = ["html_reports"] }
-iai = "0.1"
 
 [build-dependencies]
 escargot = "0.5"

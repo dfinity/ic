@@ -8,6 +8,7 @@ use crate::{
     execution::common::action_to_result,
     execution_environment_metrics::ExecutionEnvironmentMetrics,
     hypervisor::Hypervisor,
+    util::candid_error_to_user_error,
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;
@@ -151,13 +152,6 @@ pub struct ExecutionEnvironmentImpl {
     cycles_account_manager: Arc<CyclesAccountManager>,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
-}
-
-fn candid_error_to_user_error(error: candid::Error) -> UserError {
-    UserError::new(
-        ErrorCode::CanisterContractViolation,
-        format!("Error decoding candid: {}", error),
-    )
 }
 
 /// Errors when executing `canister_heartbeat`.
@@ -757,9 +751,13 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 (Some((res, Cycles::zero())), instructions_limit)
             }
 
+            Ok(Ic00Method::BitcoinGetBalance) => {
+                let res = crate::bitcoin::get_balance(payload, &mut state);
+                (Some((res, msg.take_cycles())), instructions_limit)
+            }
+
             // TODO(EXC-940): Send Bitcoin requests to the Bitcoin canister.
-            Ok(Ic00Method::BitcoinGetBalance)
-            | Ok(Ic00Method::BitcoinGetUtxos)
+            Ok(Ic00Method::BitcoinGetUtxos)
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinGetCurrentFees)
             | Err(ParseError::VariantNotFound) => {
