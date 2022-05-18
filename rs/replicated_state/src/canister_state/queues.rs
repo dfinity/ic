@@ -365,11 +365,7 @@ impl CanisterQueues {
     /// Returns `true` if `ingress_queue` or at least one of the `input_queues`
     /// is not empty; `false` otherwise.
     pub fn has_input(&self) -> bool {
-        !self.ingress_queue.is_empty()
-            || self
-                .canister_queues
-                .iter()
-                .any(|(_, (queue, _))| queue.num_messages() > 0)
+        !self.ingress_queue.is_empty() || self.input_queues_stats.message_count > 0
     }
 
     /// Returns `true` if at least one output queue is not empty; false
