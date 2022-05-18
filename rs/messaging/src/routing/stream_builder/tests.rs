@@ -7,7 +7,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::QUEUE_INDEX_NONE,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
-    CanisterState, InputQueueType, ReplicatedState, Stream,
+    CanisterState, InputQueueType, ReplicatedState, Stream, SubnetTopology,
 };
 use ic_test_utilities::{
     metrics::{
@@ -830,7 +830,7 @@ fn build_streams_with_oversized_payloads() {
             )]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES)
         );
-        assert_eq_critical_errors(3, 0, &metrics_registry);
+        assert_eq_critical_errors(2, 0, &metrics_registry);
     });
 }
 
@@ -1064,4 +1064,95 @@ fn assert_eq_critical_errors(
         ]),
         fetch_int_counter_vec(metrics_registry, "critical_errors")
     );
+}
+
+/// Tests that requests sending cycles from Application to VerifiedApplication
+/// subnets are rejected.
+#[test]
+fn build_streams_sending_cycles_from_app_to_verified_app_subnets() {
+    with_test_replica_logger(|log| {
+        let local_canister = canister_test_id(0);
+        let remote_canister = canister_test_id(1);
+        let method_name: String = ['a'; 13].iter().collect();
+
+        // Request that sends cycles.
+        let remote_request = Request {
+            sender: local_canister,
+            receiver: remote_canister,
+            sender_reply_callback: CallbackId::from(1),
+            payment: Cycles::new(1),
+            method_name,
+            method_payload: vec![],
+        };
+
+        // Reject for sending cycles from app to verified app subnets.
+        let remote_request_reject = Response {
+            originator: local_canister,
+            respondent: remote_canister,
+            originator_reply_callback: CallbackId::from(1),
+            refund: Cycles::new(1),
+            response_payload: Payload::Reject(RejectContext::new(
+                RejectCode::CanisterError,
+                format!("Canister {} violated contract: Canisters on Application subnets cannot send cycles to canister {} on a Verified Application subnet", local_canister, remote_canister),
+            )),
+        };
+
+        let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+
+        // Map local canister to `LOCAL_SUBNET` and remote canister to `REMOTE_SUBNET`.
+        provided_state.metadata.network_topology.routing_table = Arc::new(
+            RoutingTable::try_from(btreemap! {
+                CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
+                CanisterIdRange{ start: remote_canister, end: remote_canister } => REMOTE_SUBNET,
+            })
+            .unwrap(),
+        );
+
+        // Make the LOCAL_SUBNET an Application subnet.
+        provided_state.metadata.network_topology.subnets.insert(
+            LOCAL_SUBNET,
+            SubnetTopology {
+                subnet_type: SubnetType::Application,
+                ..SubnetTopology::default()
+            },
+        );
+        // Make the REMOTE_SUBNET a VerifiedApplication subnet.
+        provided_state.metadata.network_topology.subnets.insert(
+            REMOTE_SUBNET,
+            SubnetTopology {
+                subnet_type: SubnetType::VerifiedApplication,
+                ..SubnetTopology::default()
+            },
+        );
+
+        // Provided_canister_states with message sending cycles as output.
+        let provided_canister_states =
+            canister_states_with_outputs::<RequestOrResponse>(vec![remote_request.into()]);
+        provided_state.put_canister_states(provided_canister_states);
+
+        // Expecting all canister outputs to have been consumed.
+        let mut expected_state = consume_output_queues(&provided_state);
+
+        // Expecting a reject response for the remote request.
+        let local_canister = expected_state.canister_state_mut(&local_canister).unwrap();
+        push_input(local_canister, remote_request_reject.into());
+
+        // Act
+        let result_state = stream_builder.build_streams(provided_state);
+
+        assert_eq!(expected_state.canister_states, result_state.canister_states);
+        assert_eq!(expected_state.metadata, result_state.metadata);
+        assert_eq!(expected_state, result_state);
+
+        assert_routed_messages_eq(
+            metric_vec(&[(
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                    (LABEL_STATUS, LABEL_VALUE_STATUS_INVALID_CYCLE_TRANSFER),
+                ],
+                1,
+            )]),
+            &metrics_registry,
+        );
+    });
 }

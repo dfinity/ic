@@ -162,11 +162,11 @@ pub(crate) fn into_request(
     }: RequestInPrep,
     call_context_id: CallContextId,
     own_subnet_id: SubnetId,
-    own_subnet_type: SubnetType,
+    _own_subnet_type: SubnetType,
     sandbox_safe_system_state: &mut SandboxSafeSystemState,
     logger: &ReplicaLogger,
 ) -> HypervisorResult<Request> {
-    let (destination_canister, destination_subnet) = if callee == IC_00.get() {
+    let destination_canister = if callee == IC_00.get() {
         // This is a request to ic:00. Update `callee` to be the appropriate
         // subnet.
         let destination_subnet = routing::resolve_destination(
@@ -184,45 +184,10 @@ pub(crate) fn into_request(
             );
             own_subnet_id
         });
-        (
-            CanisterId::new(destination_subnet.get()).unwrap(),
-            destination_subnet,
-        )
+        CanisterId::new(destination_subnet.get()).unwrap()
     } else {
-        let destination_canister =
-            CanisterId::new(callee).map_err(HypervisorError::InvalidCanisterId)?;
-        let destination_subnet = network_topology
-            .routing_table
-            .route(destination_canister.get())
-            .unwrap_or(own_subnet_id);
-        (destination_canister, destination_subnet)
+        CanisterId::new(callee).map_err(HypervisorError::InvalidCanisterId)?
     };
-
-    let destination_subnet_type = match network_topology.subnets.get(&destination_subnet) {
-        None => own_subnet_type,
-        Some(subnet_topology) => subnet_topology.subnet_type,
-    };
-
-    // are on, apply the desired constraints.
-    match (own_subnet_type, destination_subnet_type) {
-        (SubnetType::Application, SubnetType::Application)
-        | (SubnetType::VerifiedApplication, SubnetType::VerifiedApplication)
-        | (SubnetType::System, SubnetType::System) => {}
-
-        (SubnetType::Application, SubnetType::System)
-        | (SubnetType::VerifiedApplication, SubnetType::Application)
-        | (SubnetType::VerifiedApplication, SubnetType::System)
-        | (SubnetType::System, SubnetType::Application)
-        | (SubnetType::System, SubnetType::VerifiedApplication) => {}
-
-        (SubnetType::Application, SubnetType::VerifiedApplication) => {
-            if cycles != Cycles::from(0) {
-                return Err(HypervisorError::ContractViolation(
-                    "Canisters on Application subnets cannot send cycles to canisters on VerifiedApplication subnets".to_string(),
-                ));
-            }
-        }
-    }
 
     let payload_size = (method_name.len() + method_payload.len()) as u64;
     {
@@ -233,13 +198,6 @@ pub(crate) fn into_request(
                 payload_size, max_size_remote_subnet
             )));
         }
-    }
-
-    if destination_subnet != own_subnet_id && payload_size > max_size_remote_subnet.get() {
-        return Err(HypervisorError::ContractViolation(format!(
-            "RequestInPrep: size of message {} destined to another subnet cannot exceed {}",
-            payload_size, max_size_remote_subnet
-        )));
     }
 
     let callback_id = sandbox_safe_system_state.register_callback(Callback::new(
