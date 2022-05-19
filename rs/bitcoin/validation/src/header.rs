@@ -3,7 +3,7 @@ use bitcoin::{util::uint::Uint256, BlockHash, BlockHeader, Network};
 use crate::{
     constants::{
         checkpoints, latest_checkpoint_height, max_target, no_pow_retargeting, pow_limit_bits,
-        DIFFICULTY_ADJUSTMENT_INTERVAL, TEN_MINUTES,
+        BLOCKS_IN_ONE_YEAR, DIFFICULTY_ADJUSTMENT_INTERVAL, TEN_MINUTES,
     },
     BlockHeight,
 };
@@ -25,6 +25,8 @@ pub enum ValidateHeaderError {
     /// Used when the target in the header is greater than the max possible
     /// value.
     TargetDifficultyAboveMax,
+    /// The next height is less than the tip height - 52_596 (one year worth of blocks).
+    HeightTooLow,
     /// Used when the predecessor of the input header is not found in the
     /// HeaderStore.
     PrevHeaderNotFound,
@@ -46,6 +48,7 @@ pub fn validate_header(
     store: &impl HeaderStore,
     header: &BlockHeader,
 ) -> Result<(), ValidateHeaderError> {
+    let chain_height = store.get_height();
     let (prev_header, prev_height) = match store.get_header(&header.prev_blockhash) {
         Some(result) => result,
         None => {
@@ -53,11 +56,15 @@ pub fn validate_header(
         }
     };
 
+    if !is_header_within_one_year_of_tip(prev_height, chain_height) {
+        return Err(ValidateHeaderError::HeightTooLow);
+    }
+
     if !is_timestamp_valid(store, header) {
         return Err(ValidateHeaderError::HeaderIsOld);
     }
 
-    if !is_checkpoint_valid(network, prev_height, header, store.get_height()) {
+    if !is_checkpoint_valid(network, prev_height, header, chain_height) {
         return Err(ValidateHeaderError::DoesNotMatchCheckpoint);
     }
 
@@ -101,6 +108,18 @@ fn is_checkpoint_valid(
 
     let checkpoint_height = latest_checkpoint_height(network, chain_height);
     next_height > checkpoint_height
+}
+
+/// This validates that the header has a height that is within 1 year of the tip height.
+fn is_header_within_one_year_of_tip(prev_height: BlockHeight, chain_height: BlockHeight) -> bool {
+    // perhaps checked_add would be preferable here, if the next height would cause an overflow,
+    // we should know about it instead of being swallowed.
+    let header_height = prev_height
+        .checked_add(1)
+        .expect("next height causes an overflow");
+
+    let height_one_year_ago = chain_height.saturating_sub(BLOCKS_IN_ONE_YEAR);
+    header_height >= height_one_year_ago
 }
 
 /// Validates if a header's timestamp is valid.
@@ -577,5 +596,43 @@ mod test {
             result,
             Err(ValidateHeaderError::TargetDifficultyAboveMax)
         ));
+    }
+
+    #[test]
+    fn test_is_header_within_one_year_of_tip_next_height_is_above_the_minimum() {
+        assert!(
+            is_header_within_one_year_of_tip(700_000, 650_000),
+            "next height is above the one year minimum"
+        );
+        assert!(
+            is_header_within_one_year_of_tip(700_000, 750_000),
+            "next height is within the one year range"
+        );
+        assert!(
+            !is_header_within_one_year_of_tip(700_000, 800_000),
+            "next height is below the one year minimum"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "next height causes an overflow")]
+    fn test_is_header_within_one_year_of_tip_should_panic_as_next_height_is_too_high() {
+        is_header_within_one_year_of_tip(BlockHeight::MAX, 0);
+    }
+
+    #[test]
+    fn test_is_header_within_one_year_of_tip_chain_height_is_less_than_one_year() {
+        assert!(
+            is_header_within_one_year_of_tip(1, 0),
+            "chain height is less than one year"
+        );
+        assert!(
+            is_header_within_one_year_of_tip(1, BLOCKS_IN_ONE_YEAR + 2),
+            "chain height difference is exactly one year"
+        );
+        assert!(
+            !is_header_within_one_year_of_tip(1, BLOCKS_IN_ONE_YEAR + 3),
+            "chain height difference is one year + 1 block"
+        );
     }
 }
