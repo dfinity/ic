@@ -109,10 +109,11 @@ fn is_checkpoint_valid(
 fn is_timestamp_valid(store: &impl HeaderStore, header: &BlockHeader) -> bool {
     let mut times = vec![];
     let mut current_header = header;
+    let initial_hash = store.get_initial_hash();
     for _ in 0..11 {
         if let Some((prev_header, _)) = store.get_header(&current_header.prev_blockhash) {
             times.push(prev_header.time);
-            if prev_header.block_hash() == store.get_initial_hash() {
+            if current_header.prev_blockhash == initial_hash {
                 break;
             }
             current_header = prev_header;
@@ -193,11 +194,12 @@ fn find_next_difficulty_in_chain(
         Network::Testnet | Network::Regtest => {
             let mut current_header = prev_header;
             let mut current_height = prev_height;
+            let mut current_hash = prev_header.block_hash();
             let initial_header_hash = store.get_initial_hash();
 
             // Keep traversing the blockchain backwards from the recent block to initial
             // header hash.
-            while current_header.block_hash() != initial_header_hash {
+            while current_hash != initial_header_hash {
                 if current_header.bits != pow_limit_bits
                     || current_height % DIFFICULTY_ADJUSTMENT_INTERVAL == 0
                 {
@@ -205,10 +207,12 @@ fn find_next_difficulty_in_chain(
                 }
 
                 // Traverse to the previous header
-                // TODO: unwrap needs to be removed
-                let header_info = store.get_header(&current_header.prev_blockhash).unwrap();
+                let header_info = store
+                    .get_header(&current_header.prev_blockhash)
+                    .expect("previous header should be in the header store");
                 current_header = header_info.0;
                 current_height = header_info.1;
+                current_hash = current_header.prev_blockhash;
             }
             pow_limit_bits
         }
