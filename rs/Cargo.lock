@@ -6137,6 +6137,7 @@ dependencies = [
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-common",
+ "ic-registry-local-registry",
  "ic-registry-local-store",
  "ic-test-utilities",
  "ic-types 0.8.0",
@@ -6444,6 +6445,24 @@ dependencies = [
  "ic-types 0.8.0",
  "rand 0.7.3",
  "serde",
+]
+
+[[package]]
+name = "ic-registry-local-registry"
+version = "0.8.0"
+dependencies = [
+ "ic-interfaces",
+ "ic-protobuf",
+ "ic-registry-client-fake",
+ "ic-registry-client-helpers",
+ "ic-registry-common",
+ "ic-registry-local-store",
+ "ic-registry-transport",
+ "ic-types 0.8.0",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "url",
 ]
 
 [[package]]
@@ -12388,6 +12407,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-registry-common",
  "ic-registry-keys",
+ "ic-registry-local-registry",
  "ic-registry-local-store",
  "ic-registry-provisional-whitelist",
  "ic-registry-subnet-features",

@@ -146,6 +146,7 @@ members = [
   "registry/common",
   "registry/fake",
   "registry/helpers",
+  "registry/local_registry",
   "registry/local_store",
   "registry/keys",
   "registry/proto",

@@ -23,6 +23,7 @@ ic-p8s-service-discovery-log = { path = "./log" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-metrics-exporter = { path = "../monitoring/metrics_exporter" }
 ic-protobuf = { path = "../protobuf" }
+ic-registry-local-registry = { path = "../registry/local_registry" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-common = { path = "../registry/common" }

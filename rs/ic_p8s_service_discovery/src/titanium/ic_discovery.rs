@@ -20,7 +20,7 @@ use std::{
 
 use ic_interfaces::registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::node::v1::{ConnectionEndpoint as pbConnectionEndpoint, NodeRecord};
-use ic_registry_client::local_registry::{LocalRegistry, LocalRegistryError};
+use ic_registry_local_registry::{LocalRegistry, LocalRegistryError};
 use ic_types::{
     registry::{
         connection_endpoint::{ConnectionEndpoint, ConnectionEndpointTryFromProtoError},
