@@ -1,0 +1,25 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "routing_table",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_registry_routing_table",
+    edition = "2018",
+    deps = [
+        "//rs/protobuf",
+        "//rs/types/base_types",
+        "@crate_index//:serde",
+    ],
+)
+
+# TODO(IC-1207): add rust_test after unblocking ic-test-utilities.
