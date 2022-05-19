@@ -39,6 +39,7 @@ filegroup(
         "//rs/protobuf:sources",
         "//rs/protobuf/generator:sources",
         "//rs/registry/provisional_whitelist:sources",
+        "//rs/registry/routing_table:sources",
         "//rs/registry/subnet_features:sources",
         "//rs/registry/subnet_type:sources",
         "//rs/rust_canisters/dfn_json:sources",
