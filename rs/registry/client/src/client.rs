@@ -7,11 +7,6 @@ pub use ic_interfaces::registry::{
     RegistryDataProvider, RegistryTransportRecord, POLLING_PERIOD, ZERO_REGISTRY_VERSION,
 };
 use ic_metrics::MetricsRegistry;
-use ic_registry_common::{
-    data_provider::{CertifiedNnsDataProvider, NnsDataProvider},
-    registry::RegistryCanister,
-};
-use ic_registry_local_store::LocalStoreImpl;
 pub use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
     registry::{RegistryClientError, RegistryDataProviderError},
@@ -155,32 +150,6 @@ impl RegistryClientImpl {
 impl Drop for RegistryClientImpl {
     fn drop(&mut self) {
         self.cancelled.fetch_or(true, Ordering::Relaxed);
-    }
-}
-
-/// Instantiate a data provider from a `DataProviderConfig`. In case of
-/// `DataProviderConfig::Bootstrap` and
-/// `DataProviderConfig::RegistryCanisterUrl`, a corresponding
-/// `ThresholdSigPublicKey` can be provided to verify certified updates provided
-/// by the registry canister.
-pub fn create_data_provider(
-    rt_handle: tokio::runtime::Handle,
-    data_provider_config: &DataProviderConfig,
-    optional_nns_public_key: Option<ThresholdSigPublicKey>,
-) -> Arc<dyn RegistryDataProvider> {
-    match data_provider_config {
-        DataProviderConfig::RegistryCanisterUrl(url) => {
-            let registry_canister = RegistryCanister::new(url.clone());
-            match optional_nns_public_key {
-                Some(nns_pk) => Arc::new(CertifiedNnsDataProvider::new(
-                    rt_handle,
-                    registry_canister,
-                    nns_pk,
-                )),
-                None => Arc::new(NnsDataProvider::new(rt_handle, registry_canister)),
-            }
-        }
-        DataProviderConfig::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)),
     }
 }
 

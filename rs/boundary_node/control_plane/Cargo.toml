@@ -12,6 +12,7 @@ native-tls = "0.2.7"
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-crypto-utils-threshold-sig = { path = "../../crypto/utils/threshold_sig" }
 ic-metrics = { path = "../../monitoring/metrics" }
+ic-registry-common = { path = "../../registry/common" }
 ic-registry-client = { path = "../../registry/client" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-types = { path = "../../types/types" }

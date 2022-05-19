@@ -54,16 +54,14 @@ use url::Url;
 use boundary_node_control_plane::{CanisterRoute, NodeRoute, Routes, SubnetRoute};
 use ic_crypto_utils_basic_sig::conversions::pem::der_to_pem;
 use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
-use ic_registry_client::client::{
-    create_data_provider, DataProviderConfig, RegistryClient, RegistryClientImpl,
-    RegistryDataProvider,
-};
+use ic_registry_client::client::{RegistryClient, RegistryClientImpl, RegistryDataProvider};
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
+use ic_registry_common::create_nns_data_provider;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
@@ -155,9 +153,9 @@ async fn main() -> Result<()> {
         .map(Url::parse)
         .collect::<Result<Vec<Url>, _>>()
         .expect("unable to parse nns url");
-    let data_provider = create_data_provider(
+    let data_provider = create_nns_data_provider(
         tokio::runtime::Handle::current(),
-        &DataProviderConfig::RegistryCanisterUrl(nns_urls.clone()),
+        nns_urls.clone(),
         nns_public_key,
     );
     let client = make_https_client();

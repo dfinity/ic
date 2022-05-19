@@ -9,9 +9,7 @@ ic-config = { path = "../../config" }
 ic-interfaces = { path = "../../interfaces" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
-ic-registry-common = { path = "../common" }
 ic-registry-common-proto = { path = "../proto" }
-ic-registry-client-fake = { path = "../fake" }
 ic-registry-client-helpers = { path = "../helpers" }
 ic-registry-local-store = { path = "../local_store" }
 ic-registry-proto-data-provider = { path = "../proto_data_provider" }

@@ -31,9 +31,11 @@ use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::{
     replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord,
 };
-use ic_registry_client::client::{create_data_provider, RegistryClientImpl};
+use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::deserialize_registry_value;
-use ic_registry_common::registry::registry_deltas_to_registry_transport_records;
+use ic_registry_common::{
+    create_nns_data_provider, registry::registry_deltas_to_registry_transport_records,
+};
 use ic_registry_keys::{make_blessed_replica_version_key, make_subnet_record_key};
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -845,14 +847,16 @@ fn setup_registry(
     config: Config,
     metrics_registry: Option<&MetricsRegistry>,
 ) -> std::sync::Arc<RegistryClientImpl> {
-    let data_provider = create_data_provider(
-        rt_handle,
-        &config
-            .registry_client
-            .data_provider
-            .expect("Data provider required"),
-        None,
-    );
+    let data_provider = match config
+        .registry_client
+        .data_provider
+        .expect("Data provider required")
+    {
+        DataProviderConfig::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)),
+        DataProviderConfig::RegistryCanisterUrl(urls) => {
+            create_nns_data_provider(rt_handle, urls, None)
+        }
+    };
 
     let registry = Arc::new(RegistryClientImpl::new(data_provider, metrics_registry));
     if let Err(e) = registry.fetch_and_start_polling() {
