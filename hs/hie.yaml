@@ -1,0 +1,37 @@
+cradle:
+  stack:
+    - path: "analyzer/src"
+      component: "analyzer:lib"
+
+    - path: "analyzer/bin/Analyze.hs"
+      component: "analyzer:exe:analyze"
+
+    - path: "analyzer/bin/Paths_analyzer.hs"
+      component: "analyzer:exe:analyze"
+
+    - path: "analyzer/test"
+      component: "analyzer:test:analyzer-tests"
+
+    - path: "consensus-model/src"
+      component: "consensus-model:lib"
+
+    - path: "consensus-model/bin/Replay.hs"
+      component: "consensus-model:exe:replay"
+
+    - path: "consensus-model/bin/Bisimilar.hs"
+      component: "consensus-model:exe:replay"
+
+    - path: "consensus-model/bin/Paths_consensus_model.hs"
+      component: "consensus-model:exe:replay"
+
+    - path: "consensus-model/test"
+      component: "consensus-model:test:consensus-model-tests"
+
+    - path: "simple-ltl/src"
+      component: "simple-ltl:lib"
+
+    - path: "simple-ltl/test"
+      component: "simple-ltl:test:test"
+
+    - path: "simple-ltl/test/Bench.hs"
+      component: "simple-ltl:bench:bench"

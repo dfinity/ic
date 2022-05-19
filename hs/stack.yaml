@@ -1,0 +1,68 @@
+# Resolver to choose a 'specific' stackage snapshot or a compiler version.
+# A snapshot resolver dictates the compiler version and the set of packages
+# to be used for project dependencies. For example:
+#
+# resolver: lts-3.5
+# resolver: nightly-2015-09-21
+# resolver: ghc-7.10.2
+#
+# The location of a snapshot can be provided as a file or url. Stack assumes
+# a snapshot provided as a file might change, whereas a url resource does not.
+#
+# resolver: ./custom-snapshot.yaml
+# resolver: https://example.com/snapshots/2018-01-01.yaml
+resolver:
+  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/18/27.yaml
+
+# User packages to be built.
+# Various formats can be used as shown in the example below.
+#
+# packages:
+# - some-directory
+# - https://example.com/foo/bar/baz-0.0.2.tar.gz
+#   subdirs:
+#   - auto-update
+#   - wai
+packages:
+- simple-ltl
+- analyzer
+- consensus-model
+
+# Dependency packages to be pulled from upstream that are not in the resolver.
+# These entries can reference officially published versions as well as
+# forks / in-progress versions pinned to a git hash. For example:
+#
+extra-deps:
+- git: https://github.com/nomeata/haskell-candid.git
+  commit: 26b6aacbe04fa59b977a0e8e3038e9ddb8f5196c
+- constraints-0.12@sha256:7edf1e72a92d0a6761da634f08be9123dfcc0dcec11c269cbf465a09721c3481,2322
+- crc-0.1.1.1@sha256:e3f496fa0c1483c936971b2e67221d36421329511b6f6278fde30b918fa69e14,1938
+- hex-text-0.1.0.4@sha256:0ea54d08f85324498b2db3480f05efc17eb03177c564fce81dadef53752db2c5,1277
+- leb128-cereal-1.2@sha256:ba8770629aa1fa8524cbbea3b4065b21def815a766ab6c74174aa57f8c124ead,1883
+- row-types-0.4.0.0@sha256:adf9dcf41e44e61c443a02cb9927740ea211e4cf60e68fb9d7b312da7bdd33be,3579
+#
+# extra-deps: []
+
+# Override default flag values for local packages and extra-deps
+# flags: {}
+
+# Extra package databases containing global packages
+# extra-package-dbs: []
+
+# Control whether we use the GHC we find on the path
+# system-ghc: true
+#
+# Require a specific version of stack, using version ranges
+# require-stack-version: -any # Default
+# require-stack-version: ">=2.7"
+#
+# Override the architecture used by stack, especially useful on Windows
+# arch: i386
+# arch: x86_64
+#
+# Extra directories used by stack for building
+# extra-include-dirs: [/path/to/dir]
+# extra-lib-dirs: [/path/to/dir]
+#
+# Allow a newer minor version of GHC than the snapshot specifies
+# compiler-check: newer-minor

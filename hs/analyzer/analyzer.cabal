@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.2.
+-- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
 
@@ -8,24 +8,22 @@ name:           analyzer
 version:        0.0.1
 synopsis:       Event analyzer
 category:       System, Data, Nix
-homepage:       https://gitlab.com/dfinity-lab/core/ic#readme
-bug-reports:    https://gitlab.com/dfinity-lab/core/ic
 license:        BSD3
 build-type:     Simple
 
 source-repository head
   type: git
-  location: https://gitlab.com/dfinity-lab/core/ic
+  location: https://gitlab.com/dfinity-lab/core/ic.git
 
 library
   exposed-modules:
       Analyzer
       Analyzer.Ekg
       Analyzer.Event
+      Analyzer.Multiplex
       Analyzer.Report
       Analyzer.Rules
       Analyzer.Types
-      Analyzer.Multiplex
   other-modules:
       Paths_analyzer
   hs-source-dirs:
@@ -82,6 +80,7 @@ executable analyze
     , deepseq
     , directory
     , ed25519
+    , filepath
     , hedgehog
     , lens
     , listsafe
@@ -104,15 +103,39 @@ test-suite analyzer-tests
   main-is: Main.hs
   other-modules:
       Basic
+      Paths_analyzer
   hs-source-dirs:
       test
   build-depends:
       HUnit
+    , aeson
     , analyzer
-    , base
-    , pipes
+    , arrows
+    , base >=4.9 && <5
+    , bytestring
+    , candid
+    , constraints
+    , containers
+    , cryptohash
+    , deepseq
+    , directory
+    , ed25519
+    , filepath
     , hedgehog
+    , lens
+    , listsafe
+    , monad-par
+    , mtl
+    , multiset
+    , pcre-heavy
+    , pipes
+    , pretty-show
+    , simple-ltl
     , tasty
     , tasty-hedgehog
     , tasty-hunit
+    , text
+    , time
+    , transformers
+    , unordered-containers
   default-language: Haskell2010

@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.2.
+-- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
 
@@ -9,8 +9,6 @@ version:        0.0.1
 synopsis:       Various Haskell notes
 description:    Various Haskell notes.
 category:       System, Data, Nix
-homepage:       https://gitlab.com/dfinity-lab/core/ic#readme
-bug-reports:    https://gitlab.com/dfinity-lab/core/ic
 author:         John Wiegley
 maintainer:     johnw@newartisans.com
 license:        BSD3
@@ -18,7 +16,7 @@ build-type:     Simple
 
 source-repository head
   type: git
-  location: https://gitlab.com/dfinity-lab/core/ic
+  location: https://gitlab.com/dfinity-lab/core/ic.git
 
 library
   exposed-modules:
@@ -68,7 +66,6 @@ executable replay
   main-is: Replay.hs
   other-modules:
       Bisimilar
-      Schedule
       Paths_consensus_model
   hs-source-dirs:
       bin

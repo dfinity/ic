@@ -1,0 +1,14 @@
+devcontainer-build:
+  extends:
+    - .ubuntu-nix-docker
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - .devcontainer/*
+  needs: []
+  stage: test
+  script:
+    - |
+      set -euo pipefail
+
+      devcontainer build . --image-name ic-devenv

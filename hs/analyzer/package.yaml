@@ -15,7 +15,9 @@ dependencies:
   - containers
   - cryptohash
   - deepseq
+  - directory
   - ed25519
+  - filepath
   - hedgehog
   - HUnit
   - lens

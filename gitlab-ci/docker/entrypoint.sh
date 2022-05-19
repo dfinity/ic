@@ -5,6 +5,8 @@ DOCKER_GROUP=docker
 KVM_DEV=/dev/kvm
 KVM_GROUP=kvm
 
+. /opt/nvm/nvm.sh
+
 eval $(cat /entrypoint_user)
 
 grep -q $DOCKER_GROUP /etc/group

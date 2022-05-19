@@ -26,7 +26,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         zip unzip rclone rsync bc csmith gcc lld lld-10 libc++-10-dev libcsmith-dev sqlite3 libsqlite3-dev libselinux-dev libunwind-dev \
         qemu-system-x86 ovmf iproute2 dosfstools mtools fakeroot faketime android-sdk-ext4-utils \
         policycoreutils python3 python3-requests python3-pip python3-gflags python3-cbor pipenv shellcheck bazel-5.0.0 \
-        sudo docker-ce-cli ripgrep patchelf asciidoctor plantuml graphviz cpio nodejs npm gosu pigz \
+        sudo docker-ce-cli ripgrep patchelf asciidoctor plantuml graphviz cpio nodejs npm gosu pigz zsh hub less \
         ca-certificates curl git isolinux p7zip-full syslinux xorriso && \
     gem install asciidoctor-diagram rouge && \
     ln -s $(which bazel-5.0.0) /usr/bin/bazel
@@ -68,10 +68,7 @@ ARG nvm_version=v0.39.1
 ARG node_version=17
 ENV NVM_DIR=/opt/nvm
 RUN mkdir $NVM_DIR && \
-    curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash && \
-    bash $NVM_DIR/nvm.sh && \
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && \
-    nvm install ${node_version}
+    curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash
 
 # CARGO_HOME is also where the crates.io registry and git checkouts are cached.
 # We bind mount this on the CI runners, so the image needs to be able to function properly
@@ -94,6 +91,8 @@ RUN curl --fail \
          --output /usr/bin/didc-linux64 \
   && \
     chmod +x /usr/bin/didc-linux64
+
+RUN . /opt/nvm/nvm.sh && nvm install ${node_version} && npm install -g @vscode/dev-container-cli
 
 USER ${UID}
 
