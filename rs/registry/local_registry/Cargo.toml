@@ -1,0 +1,20 @@
+[package]
+name = "ic-registry-local-registry"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-interfaces = { path = "../../interfaces" }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-common = { path = "../common" }
+ic-registry-client-fake = { path = "../fake" }
+ic-registry-client-helpers = { path = "../helpers" }
+ic-registry-local-store = { path = "../local_store" }
+ic-registry-transport = { path = "../transport" }
+ic-types = { path = "../../types/types" }
+thiserror = "1.0"
+tokio = { version = "1.15.0", features = ["full"] }
+url = { version = "2.1.1", features = ["serde"] }
+
+[dev-dependencies]
+tempfile = "3.0"
