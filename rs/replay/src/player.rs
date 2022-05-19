@@ -19,7 +19,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::{MessageRouting, MessageRoutingError},
-    registry::{RegistryClient, RegistryTransportRecord},
+    registry::{RegistryClient, RegistryDataProvider, RegistryTransportRecord},
 };
 use ic_interfaces_state_manager::{
     PermanentStateHashError, StateHashError, StateManager, StateReader,
@@ -111,31 +111,30 @@ impl Player {
             .as_ref()
             .expect("No registry provider found");
 
+        let local_store_from_config =
+            if let DataProviderConfig::LocalStore(path) = data_provided_config {
+                path
+            } else {
+                panic!("The replica config must point to a registry local store");
+            };
+
         // In the special case where we start from the Genesis height, we want to clean
         // up the execution state before.
         if start_height == 0 {
-            let data_provider = create_data_provider(
-                tokio::runtime::Handle::current(),
-                &DataProviderConfig::LocalStore(registry_local_store_path.into()),
-                None,
-            );
+            let data_provider = Arc::new(LocalStoreImpl::new(registry_local_store_path));
             // Because we use the LocalStoreImpl, we know that we get the
             // registry in one chunk when calling get_update_since().
             let records = data_provider
                 .get_updates_since(RegistryVersion::from(0))
                 .expect("Couldn't get the initial registry contents");
-            if let DataProviderConfig::LocalStore(path) = data_provided_config {
-                write_records_to_local_store(path, RegistryVersion::from(0), records);
-            } else {
-                panic!("The replica config must point to a registry local store");
-            }
+            write_records_to_local_store(
+                local_store_from_config,
+                RegistryVersion::from(0),
+                records,
+            );
         }
 
-        let data_provider = create_data_provider(
-            tokio::runtime::Handle::current(),
-            data_provided_config,
-            None,
-        );
+        let data_provider = Arc::new(LocalStoreImpl::new(local_store_from_config));
         let registry = Arc::new(RegistryClientImpl::new(data_provider, None));
         registry
             .poll_once()
