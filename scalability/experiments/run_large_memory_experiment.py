@@ -43,9 +43,7 @@ from common import workload_experiment  # noqa
 CANISTER = "memory-test-canister.wasm"
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_integer("rps", 160, "Targeted requests per second.")
 gflags.DEFINE_integer("payload_size", 5000000, "Payload size to pass to memory test canister")
-gflags.DEFINE_integer("iter_duration", 60, "Duration in seconds for which to execute workload in each round.")
 
 
 class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
@@ -54,14 +52,6 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
     def __init__(self):
         """Construct experiment 2."""
         super().__init__(num_workload_gen=1)
-        self.init()
-        if self.use_updates:
-            self.request_type = "call"
-        self.init_experiment()
-
-    def init_experiment(self):
-        """Install counter canister."""
-        super().init_experiment()
         self.install_canister(
             self.target_nodes[0], canister=os.path.join(self.artifacts_path, f"../canisters/{CANISTER}")
         )
@@ -193,5 +183,5 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
 if __name__ == "__main__":
     misc.parse_command_line_args()
     exp = LargeMemoryExperiment()
-    datapoints = [FLAGS.rps]
+    datapoints = [FLAGS.target_rps]
     exp.run_iterations(datapoints)

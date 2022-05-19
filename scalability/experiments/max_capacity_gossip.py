@@ -10,7 +10,6 @@ import run_gossip_experiment  # noqa
 
 FLAGS = gflags.FLAGS
 
-gflags.DEFINE_integer("target_rps", 500, "Targeted requests per second.")
 gflags.DEFINE_integer("increment_rps", 20, "Increment of requests per second per round.")
 gflags.DEFINE_integer("initial_rps", 100, "Starting number for requests per second.")
 gflags.DEFINE_integer(

@@ -16,6 +16,7 @@ class ExperimentMock(WorkloadExperiment):
     def __init__(self):
         """Construct experiment 1."""
         super().__init__()
+        self.install_canister("some canister")
 
     def run_experiment_internal(self, config):
         """Mock similar to experiment 1."""
@@ -45,29 +46,24 @@ class Test_Experiment(TestCase):
 
         misc.parse_command_line_args()
 
-        exp = ExperimentMock()
-
         # Mock functions that won't work without a proper IC deployment
-        exp._WorkloadExperiment__get_targets = Mock(return_value=["1.1.1.1", "2.2.2.2"])
-        exp._WorkloadExperiment__get_subnet_for_target = MagicMock()
-        exp.get_subnet_to_instrument = MagicMock()
+        ExperimentMock._WorkloadExperiment__get_targets = Mock(return_value=["1.1.1.1", "2.2.2.2"])
+        ExperimentMock._WorkloadExperiment__get_subnet_for_target = MagicMock()
+        ExperimentMock.get_subnet_to_instrument = MagicMock()
         BaseExperiment._get_subnet_info = Mock(return_value="{}")
-        exp._BaseExperiment__get_topology = Mock(return_value="{}")
-        exp._BaseExperiment__store_hardware_info = MagicMock()
-        exp.get_iter_logs_from_targets = MagicMock()
-        exp.install_canister = MagicMock()
-        exp.run_workload_generator = MagicMock()
-        exp._BaseExperiment__init_metrics = MagicMock()
-        exp._WorkloadExperiment__kill_workload_generator = MagicMock()
+        ExperimentMock._BaseExperiment__get_topology = Mock(return_value="{}")
+        ExperimentMock._BaseExperiment__store_hardware_info = MagicMock()
+        ExperimentMock.get_iter_logs_from_targets = MagicMock()
+        ExperimentMock.install_canister = MagicMock()
+        ExperimentMock.run_workload_generator = MagicMock()
+        ExperimentMock._BaseExperiment__init_metrics = MagicMock()
+        ExperimentMock._WorkloadExperiment__kill_workload_generator = MagicMock()
         BaseExperiment._turn_off_replica = MagicMock()
-        exp._WorkloadExperiment__check_workload_generator_installed = Mock(return_value=True)
-        exp.get_ic_version = MagicMock(return_value="deadbeef")
-        exp._WorkloadExperiment__wait_for_quiet = MagicMock(return_value=None)
+        ExperimentMock._WorkloadExperiment__check_workload_generator_installed = Mock(return_value=True)
+        ExperimentMock.get_ic_version = MagicMock(return_value="deadbeef")
+        ExperimentMock._WorkloadExperiment__wait_for_quiet = MagicMock(return_value=None)
 
-        exp.init()
-        exp.init_experiment()
-        exp.install_canister("some canister")
-
+        exp = ExperimentMock()
         exp.start_experiment()
         exp.run_experiment({})
 

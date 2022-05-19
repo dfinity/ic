@@ -28,7 +28,6 @@ FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("num_canisters_per_subnet", 5, "Number of canisters per subnetwork")
 
 # Configuration for load
-gflags.DEFINE_integer("iter_duration", 600, "Duration of each iteration of the Xnet benchmark")
 gflags.DEFINE_integer("payload_size", 1024, "Payload size for Xnet messages")
 gflags.DEFINE_integer("initial_rate", 500, "Initial total rate at which to send Xnet messages")
 gflags.DEFINE_integer("rate_increment", 250, "Increment for total rate in each iteration")
@@ -55,14 +54,10 @@ class XnetExperiment(base_experiment.BaseExperiment):
     def __init__(self):
         """Construct Xnet experiment."""
         super().__init__()
-        self.init()
-        self.init_experiment()
-        self.canister = CANISTER
-
-    def init_experiment(self):
-        """Install counter canister."""
+        super().init()
         super().init_experiment()
 
+        self.canister = CANISTER
         self.host_each_subnet = []
         self.canisters_per_host = {}
 

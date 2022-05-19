@@ -47,6 +47,7 @@ gflags.DEFINE_string(
 
 gflags.DEFINE_boolean("simulate_machine_failures", False, "Simulate machine failures while testing.")
 gflags.DEFINE_string("nns_url", "", "Use the following NNS URL instead of getting it from the testnet configuration")
+gflags.DEFINE_integer("iter_duration", 300, "Duration in seconds to run each iteration of the experiment.")
 
 
 class BaseExperiment:

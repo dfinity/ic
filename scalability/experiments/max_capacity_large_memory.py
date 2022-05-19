@@ -16,7 +16,6 @@ gflags.DEFINE_integer(
 )
 gflags.DEFINE_integer("increment_rps", 5, "Increment of requests per second per round.")
 
-gflags.DEFINE_integer("target_rps", 500, "Targeted requests per second.")
 
 # Maximum failure rate and median query duration limit to consider
 # for rps to choose as rps_max. If failure rate or latency is higher,

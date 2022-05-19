@@ -108,7 +108,7 @@ Make sure you have *two* testnets reserved, then:
 
 # Run against mainnet
 
-Use `--testnet mercury`. Also need to specify `--target_subnet_id` to determine machines to run against as well as `--canister`. 
+Use `--testnet mercury`. Also need to specify `--mainnet_target_subnet_id` to determine machines to run against as well as `--canister`. 
 The latter is a coma separated list of canister that have to be pre-installed on mainnet (since a wallet is needed, deploying canisters is different on mainnet and currently not supported by the suite).
 
 There is also a flag `--no_instrument=True` to disable instrumenting the target machine (for which we don't have SSH access on mainnet). 
