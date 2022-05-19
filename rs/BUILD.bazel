@@ -46,6 +46,7 @@ filegroup(
         "//rs/stable-structures:sources",
         "//rs/sys:sources",
         "//rs/test_utilities/compare_dirs:sources",
+        "//rs/tree_deserializer:sources",
         "//rs/types/base_types:sources",
         "//rs/types/base_types/protobuf_generator:sources",
         "//rs/types/error_types:sources",

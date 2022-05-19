@@ -1,0 +1,40 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "tree_deserializer",
+    srcs = glob(["src/**"]),
+    crate_name = "tree_deserializer",
+    edition = "2018",
+    deps = [
+        "//rs/crypto/tree_hash",
+        "@crate_index//:leb128",
+        "@crate_index//:serde",
+    ],
+)
+
+rust_test(
+    name = "tree_deserializer_test",
+    crate = ":tree_deserializer",
+    proc_macro_deps = [
+        "@crate_index//:proptest-derive",
+    ],
+    deps = [
+        "@crate_index//:maplit",
+        "@crate_index//:proptest",
+    ],
+)
+
+rust_doc_test(
+    name = "tree_deserializer_doc_test",
+    crate = ":tree_deserializer",
+)
