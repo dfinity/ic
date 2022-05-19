@@ -1,12 +1,12 @@
-#[cfg(target_arch = "x86_64")]
+#[cfg(not(target_arch = "wasm32"))]
 use crate::pb::v1::{neuron::DissolveState, neuron::Followees, Topic};
-#[cfg(target_arch = "x86_64")]
+#[cfg(not(target_arch = "wasm32"))]
 use ledger_canister::Subaccount;
-#[cfg(target_arch = "x86_64")]
+#[cfg(not(target_arch = "wasm32"))]
 use rand::rngs::StdRng;
-#[cfg(target_arch = "x86_64")]
+#[cfg(not(target_arch = "wasm32"))]
 use rand_core::{RngCore, SeedableRng};
-#[cfg(target_arch = "x86_64")]
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
 use crate::pb::v1::{Governance, NetworkEconomics, Neuron};
@@ -18,7 +18,7 @@ use ic_nns_common::types::NeuronId;
 pub struct GovernanceCanisterInitPayloadBuilder {
     pub proto: Governance,
     voters_to_add_to_all_neurons: Vec<PrincipalId>,
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(not(target_arch = "wasm32"))]
     rng: StdRng,
 }
 
@@ -33,7 +33,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 ..Default::default()
             },
             voters_to_add_to_all_neurons: Vec::new(),
-            #[cfg(target_arch = "x86_64")]
+            #[cfg(not(target_arch = "wasm32"))]
             rng: StdRng::seed_from_u64(0),
         }
     }
@@ -42,16 +42,16 @@ impl GovernanceCanisterInitPayloadBuilder {
     // Moving forward we should only actually assign the ids to neurons
     // on the canister and should come up with a naming scheme to layout
     // the following graph on initialization that doesn't rely on ids.
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn new_neuron_id(&mut self) -> NeuronId {
         let random_id = self.rng.next_u64();
 
         NeuronId(random_id)
     }
 
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(target_arch = "wasm32")]
     pub fn new_neuron_id(&mut self) -> NeuronId {
-        unimplemented!("Not implemented for non-x86_64");
+        unimplemented!("Not implemented for wasm32");
     }
 
     pub fn get_balance(&self) -> u64 {
@@ -71,7 +71,7 @@ impl GovernanceCanisterInitPayloadBuilder {
         self
     }
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn make_subaccount(&mut self) -> Subaccount {
         let mut bytes = [0u8; 32];
         self.rng.fill_bytes(&mut bytes);
@@ -80,7 +80,7 @@ impl GovernanceCanisterInitPayloadBuilder {
 
     /// Initializes the governance canister with a few neurons to be used
     /// in tests.
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn with_test_neurons(&mut self) -> &mut Self {
         use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 
@@ -165,7 +165,7 @@ impl GovernanceCanisterInitPayloadBuilder {
     /// version doesn't include this method.
     ///
     /// An example is available at `rs/nns/governance/test/init.rs`.
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn add_all_neurons_from_csv_file(&mut self, csv_file: &Path) -> &mut Self {
         use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 

@@ -12,7 +12,7 @@ pub(crate) fn sigsegv_memory_tracker_handler(
     move |signum: i32, siginfo_ptr: *const libc::siginfo_t, ucontext_ptr: *const libc::c_void| {
         use nix::sys::signal::Signal;
 
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
         let access_kind = {
             let ucontext_ptr = ucontext_ptr as *const libc::ucontext_t;
             let error_register = libc::REG_ERR as usize;
@@ -25,7 +25,7 @@ pub(crate) fn sigsegv_memory_tracker_handler(
                 Some(AccessKind::Write)
             }
         };
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
         let access_kind: Option<AccessKind> = {
             // Prevent a warning about unused parameter.
             let _use_ucontext_ptr = ucontext_ptr;
