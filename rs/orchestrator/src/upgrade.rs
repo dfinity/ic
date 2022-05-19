@@ -2,7 +2,6 @@ use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::error::{OrchestratorError, OrchestratorResult};
 use crate::registry_helper::RegistryHelper;
 use crate::replica_process::ReplicaProcess;
-use crate::utils;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
@@ -17,16 +16,7 @@ use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::process::exit;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use tokio::process::Command;
-
-/// The maximum number of binaries to persist at any given time
-const MAX_RELEASE_PACKAGES_TO_STORE: usize = 5;
-
-/// Release packages will not be deleted for this time after being created.
-/// Safeguards against deleting newly created packages before Orchestrator
-/// has had the chance to start the binaries within them.
-const MIN_RELEASE_PACKAGE_AGE: Duration = Duration::from_secs(60);
 
 /// Provides function to continuously check the Registry to determine if this
 /// node should upgrade to a new release package, and if so, downloads and
@@ -226,7 +216,7 @@ impl Upgrade {
                 let new_local_store = LocalStoreImpl::new(local_store_location);
                 self.registry_replicator
                     .stop_polling_and_set_local_registry_data(&new_local_store);
-                utils::reexec_current_process(&self.logger);
+                reexec_current_process(&self.logger);
             }
         }
         Ok(())
@@ -281,6 +271,8 @@ impl Upgrade {
         }
     }
 
+    // Executes the node upgrade by unpacking the downloaded image (if it didn't happen yet)
+    // and rebooting the node.
     async fn execute_upgrade<T>(
         &mut self,
         replica_version: &ReplicaVersion,
@@ -298,6 +290,9 @@ impl Upgrade {
         // If we ever retry this function, it means we encountered an issue somewhere.
         // To be safe, we should re-do all the steps.
         self.prepared_upgrade_version = None;
+        // We could successfuly unpack the file above, so we do not need the image anymore.
+        std::fs::remove_file(self.image_path())
+            .map_err(|e| OrchestratorError::IoError("Couldn't delete the image".to_string(), e))?;
 
         info!(self.logger, "Attempting to reboot");
         let mut script = self.ic_binary_dir.clone();
@@ -349,7 +344,7 @@ impl Upgrade {
             // If we fail, restart the current process instead.
             if let Err(e) = self.stop_replica() {
                 warn!(self.logger, "Failed to stop replica with error {:?}", e);
-                utils::reexec_current_process(&self.logger);
+                reexec_current_process(&self.logger);
             }
         }
     }
@@ -404,7 +399,7 @@ impl Upgrade {
     }
 
     // Downloads release package associated with the given version to
-    // `[self.release_content_dir]/[replica_version]/base-os.tar.gz`.
+    // `[self.release_content_dir]/guest-os.tar.gz`.
     //
     // Garbage collects old release packages while keeping
     // `self.MAX_RELEASE_PACKAGES_TO_STORE` youngest entries and files younger
@@ -416,19 +411,16 @@ impl Upgrade {
         &self,
         replica_version: ReplicaVersion,
     ) -> OrchestratorResult<()> {
-        self.gc_release_packages();
-        let version_dir = self.make_version_dir(&replica_version)?;
         let replica_version_record = self.registry.get_replica_version_record(
             replica_version.clone(),
             self.registry.get_latest_version(),
         )?;
-        let tar_gz_path = version_dir.join("base-os.tar.gz");
         let start_time = std::time::Instant::now();
         let file_downloader = FileDownloader::new(Some(self.logger.clone()));
         file_downloader
             .download_file(
                 &replica_version_record.release_package_url,
-                &tar_gz_path,
+                &self.image_path(),
                 Some(replica_version_record.release_package_sha256_hex),
             )
             .await
@@ -458,15 +450,12 @@ impl Upgrade {
         // clear it here.
         self.prepared_upgrade_version = None;
 
-        let image_path = self
-            .make_version_dir(&replica_version)?
-            .join("base-os.tar.gz");
         let mut script = self.ic_binary_dir.clone();
         script.push("manageboot.sh");
         let mut c = Command::new(script.clone().into_os_string());
         let out = c
             .arg("upgrade-install")
-            .arg(image_path)
+            .arg(self.image_path())
             .output()
             .await
             .map_err(|e| OrchestratorError::file_command_error(e, &c))?;
@@ -481,24 +470,8 @@ impl Upgrade {
         }
     }
 
-    // Make a dir to store a release package for the given replica version
-    fn make_version_dir(&self, replica_version: &ReplicaVersion) -> OrchestratorResult<PathBuf> {
-        let version_dir = self.release_content_dir.join(replica_version.as_ref());
-        std::fs::create_dir_all(&version_dir)
-            .map_err(|e| OrchestratorError::dir_create_error(&version_dir, e))?;
-        Ok(version_dir)
-    }
-
-    // Delete old release packages so that `release_content_dir` doesn't grow
-    // unbounded
-    fn gc_release_packages(&self) {
-        utils::gc_dir(
-            &self.logger,
-            &self.release_content_dir,
-            MAX_RELEASE_PACKAGES_TO_STORE,
-            MIN_RELEASE_PACKAGE_AGE,
-        )
-        .unwrap_or(());
+    fn image_path(&self) -> PathBuf {
+        self.release_content_dir.join("guest-os.tar.gz")
     }
 }
 
@@ -608,4 +581,16 @@ fn remove_node_state(replica_config_file: PathBuf, cup_path: PathBuf) -> Result<
         .map_err(|err| format!("Couldn't delete the CUP at {:?}: {:?}", cup_path, err))?;
 
     Ok(())
+}
+
+// Re-execute the current process, exactly as it was originally called.
+fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
+    let args: Vec<String> = std::env::args().collect();
+    info!(
+        logger,
+        "Restarting the current process with the same arguments it was originally executed with: {:?}",
+        &args[..]
+    );
+    let error = exec::Command::new(&args[0]).args(&args[1..]).exec();
+    OrchestratorError::ExecError(PathBuf::new(), error)
 }
