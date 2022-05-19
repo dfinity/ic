@@ -10,7 +10,12 @@ lazy_static! {
 }
 
 /// The size of an OS memory page.
+#[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
+pub const PAGE_SIZE: usize = 16384;
+
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 pub const PAGE_SIZE: usize = 4096;
+
 pub struct PageIndexTag;
 /// 0-based index of an OS page in the Wasm instance memory.
 /// Do not confuse this with a 64KiB Wasm memory page, which
@@ -66,5 +71,10 @@ mod test {
         assert_eq!(&page_bytes, unsafe {
             page_bytes_from_ptr(&page_bytes, raw_ptr)
         });
+    }
+
+    #[test]
+    fn test_page_size() {
+        assert_eq!(sysconf_page_size(), PAGE_SIZE);
     }
 }

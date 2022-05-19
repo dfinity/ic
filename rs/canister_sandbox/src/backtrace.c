@@ -135,8 +135,6 @@ dump_memory(uintptr_t around, char* pos, char* limit)
     return pos;
 }
 
-extern const char* const sys_siglist[];
-
 void handler(int signo, siginfo_t* info, void* detail)
 {
     // Async-signal safety: This handler is safe _except_ for the fact that it
@@ -163,7 +161,7 @@ void handler(int signo, siginfo_t* info, void* detail)
         pos = push_string("Terminating on signal ", pos, limit);
         pos = push_decimal(signo, pos, limit);
         pos = push_string(" (", pos, limit);
-        pos = push_string(sys_siglist[signo], pos, limit);
+        pos = push_string(strsignal(signo), pos, limit);
         pos = push_string(") at 0x", pos, limit);
         pos = push_hex((uintptr_t)info->si_addr, pos, limit);
         *pos++ = '\n';
