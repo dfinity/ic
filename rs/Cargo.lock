@@ -4633,6 +4633,7 @@ dependencies = [
  "strum_macros 0.23.1",
  "tarpc",
  "tempfile",
+ "threadpool",
  "tokio",
  "tokio-openssl",
  "tokio-serde",
