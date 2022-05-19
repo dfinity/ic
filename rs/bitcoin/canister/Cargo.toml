@@ -31,6 +31,10 @@ prost-build = "0.9.0"
 name = "build-utxo-set"
 path = "src/examples/build_utxo_set.rs"
 
+[[example]]
+name = "explore-utxos"
+path = "src/examples/explore_utxos.rs"
+
 [dev-dependencies]
 ic-btc-test-utils = { path = "../test-utils" }
 bitcoin = {version = "0.27.1", features = ["rand"]} # needed for generating secp256k1 keys.
