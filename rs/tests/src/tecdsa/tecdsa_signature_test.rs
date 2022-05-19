@@ -39,7 +39,7 @@ use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{governance::submit_external_update_proposal, ids::TEST_NEURON_1_ID};
-use ic_registry_common::registry::RegistryCanister;
+use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::p2p::{self};

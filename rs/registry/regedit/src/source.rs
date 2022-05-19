@@ -3,8 +3,8 @@ use anyhow::Result;
 use ic_registry_client::client::{
     RegistryDataProvider, RegistryTransportRecord, RegistryVersion, ZERO_REGISTRY_VERSION,
 };
-use ic_registry_common::create_nns_data_provider;
 use ic_registry_local_store::LocalStoreImpl;
+use ic_registry_nns_data_provider::create_nns_data_provider;
 use std::sync::Arc;
 
 pub type Changelog = (Vec<RegistryTransportRecord>, RegistryVersion);

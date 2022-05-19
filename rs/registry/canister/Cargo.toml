@@ -49,7 +49,7 @@ ic-canister-client = { path = "../../canister_client" }
 ic-config = { path = "../../config" }
 ic-crypto = { path = "../../crypto" }
 ic-interfaces = { path = "../../interfaces" }
-ic-registry-common = { path = "../common" }
+ic-registry-nns-data-provider = { path = "../nns_data_provider" }
 ic-replica-tests = { path = "../../replica_tests" }
 ic-registry-client-fake = { path = "../fake" }
 ic-registry-proto-data-provider = { path = "../proto_data_provider"}

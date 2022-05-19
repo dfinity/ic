@@ -20,10 +20,10 @@ use std::{
 use ic_interfaces::registry::{RegistryClient, RegistryClientResult, ZERO_REGISTRY_VERSION};
 use ic_protobuf::registry::node::v1::ConnectionEndpoint as PbConnectionEndpoint;
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_common::registry::RegistryCanister;
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
+use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, registry::RegistryClientError, RegistryVersion,
     SubnetId,

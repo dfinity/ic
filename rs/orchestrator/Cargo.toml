@@ -26,7 +26,6 @@ ic-metrics-exporter = { path = "../monitoring/metrics_exporter" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-registry-common = { path = "../registry/common" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-keys = { path = "../registry/keys" }

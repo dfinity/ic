@@ -33,7 +33,7 @@ ic-nns-init = { path = "../nns/init" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-registry-common = { path = "../registry/common" }
+ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }

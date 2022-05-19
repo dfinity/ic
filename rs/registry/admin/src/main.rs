@@ -68,8 +68,6 @@ use ic_protobuf::registry::{
 };
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
-use ic_registry_common::data_provider::NnsDataProvider;
-use ic_registry_common::registry::RegistryCanister;
 use ic_registry_keys::{
     get_node_record_node_id, is_node_record_key, make_blessed_replica_version_key,
     make_crypto_node_key, make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
@@ -82,6 +80,8 @@ use ic_registry_keys::{
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
+use ic_registry_nns_data_provider::data_provider::NnsDataProvider;
+use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;

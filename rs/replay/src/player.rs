@@ -33,12 +33,12 @@ use ic_protobuf::registry::{
 };
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::deserialize_registry_value;
-use ic_registry_common::{
-    create_nns_data_provider, registry::registry_deltas_to_registry_transport_records,
-};
 use ic_registry_keys::{make_blessed_replica_version_key, make_subnet_record_key};
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
+};
+use ic_registry_nns_data_provider::{
+    create_nns_data_provider, registry::registry_deltas_to_registry_transport_records,
 };
 use ic_registry_transport::{
     deserialize_get_changes_since_response, deserialize_get_latest_version_response,

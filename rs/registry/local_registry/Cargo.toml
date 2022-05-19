@@ -6,7 +6,7 @@ edition = "2018"
 [dependencies]
 ic-interfaces = { path = "../../interfaces" }
 ic-protobuf = { path = "../../protobuf" }
-ic-registry-common = { path = "../common" }
+ic-registry-nns-data-provider = { path = "../nns_data_provider" }
 ic-registry-client-fake = { path = "../fake" }
 ic-registry-client-helpers = { path = "../helpers" }
 ic-registry-local-store = { path = "../local_store" }

@@ -38,9 +38,9 @@ ic-consensus-message = { path = "../consensus/message" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-logger = { path = "../monitoring/logger" }
-ic-registry-common = { path = "../registry/common" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-fake = { path = "../registry/fake" }
+ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replica-setup-ic-network = { path = "../replica/setup_ic_network" }
 ic-test-utilities = { path = "../test_utilities" }

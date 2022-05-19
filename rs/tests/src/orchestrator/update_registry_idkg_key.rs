@@ -30,8 +30,8 @@ use crate::nns::NnsExt;
 use crate::util::{block_on, get_random_application_node_endpoint, get_random_nns_node_endpoint};
 use ic_base_types::NodeId;
 use ic_fondue::{ic_manager::IcHandle, pot::Context};
-use ic_registry_common::registry::RegistryCanister;
 use ic_registry_keys::make_crypto_node_key;
+use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::crypto::KeyPurpose;
 

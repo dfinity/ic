@@ -6,7 +6,7 @@ use ic_protobuf::registry::{
     node::{ConnectionEndpoint, NodeRecord},
     subnet::{SubnetListRecord, SubnetRecord},
 };
-use ic_registry_common::{
+use ic_registry_nns_data_provider::{
     keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key},
     proto_registry_data_provider::ProtoRegistryDataProvider,
 };

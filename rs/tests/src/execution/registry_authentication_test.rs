@@ -30,7 +30,7 @@ use ic_nns_test_utils::itest_helpers::{
 use ic_nns_test_utils::{
     itest_helpers::install_registry_canister, registry::invariant_compliant_mutation_as_atomic_req,
 };
-use ic_registry_common::registry::RegistryCanister;
+use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_registry_transport::upsert;
