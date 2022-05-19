@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "metrics",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_metrics",
+    edition = "2018",
+    deps = [
+        "@crate_index//:libc",
+        "@crate_index//:prometheus",
+    ] + select({
+        "@rules_rust//rust/platform:linux": [
+            "@crate_index//:procfs",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+# TODO(IC-1207): add rust_test after unblocking ic-logger.

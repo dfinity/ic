@@ -111,6 +111,10 @@ crates_repository(
         "nix": crate.spec(version = "0.23.0"),
         "num-traits": crate.spec(version = "0.2.12"),
         "openssl": crate.spec(version = "0.10.29"),
+        "procfs": crate.spec(
+            default_features = False,
+            version = "^0.9",
+        ),
         "prometheus": crate.spec(
             features = ["process"],
             version = "0.13.0",
