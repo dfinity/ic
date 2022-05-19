@@ -16,7 +16,6 @@ FLAGS = gflags.FLAGS
 gflags.DEFINE_integer(
     "max_block_payload_size", 4 * 1024 * 1024, "The maximum block payload size allow on the subnet in unit of bytes."
 )
-gflags.DEFINE_float("target_rps", 1, "Requests per second.")
 
 # Maximum failure rate and median query duration limit to consider
 # for rps to choose as rps_max. If failure rate or latency is higher,

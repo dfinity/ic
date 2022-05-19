@@ -45,7 +45,6 @@ class ManyCanistersExperiment(base_experiment.BaseExperiment):
     def __init__(self):
         """Construct experiment 3."""
         super().__init__()
-        self.init()
         self.num_canisters = self.get_num_canisters()
 
     def get_num_canisters(self):

@@ -164,7 +164,7 @@ benchmark-response-payload:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER timeout 1h pipenv run experiments/run_response_payload_size_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2
+      $SHELL_WRAPPER timeout 90m pipenv run experiments/run_response_payload_size_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -336,7 +336,7 @@ system-baseline-query-performance-test-nightly:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER timeout 1h pipenv run experiments/run_system_baseline_experiment.py --testnet "$TESTNET" --wg_subnet 2 --wg_testnet $TESTNET --iter_duration 300 --rps=600  --use_updates=False
+      $SHELL_WRAPPER timeout 1h pipenv run experiments/run_system_baseline_experiment.py --testnet "$TESTNET" --wg_subnet 2 --wg_testnet $TESTNET --iter_duration 300 --target_rps=600  --use_updates=False
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -370,7 +370,7 @@ system-baseline-update-performance-test-nightly:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER timeout 1h pipenv run experiments/run_system_baseline_experiment.py --testnet "$TESTNET" --wg_subnet 2 --wg_testnet $TESTNET --iter_duration 300 --rps=60 --use_updates=True
+      $SHELL_WRAPPER timeout 1h pipenv run experiments/run_system_baseline_experiment.py --testnet "$TESTNET" --wg_subnet 2 --wg_testnet $TESTNET --iter_duration 300 --target_rps=60 --use_updates=True
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -404,7 +404,7 @@ heavy-memory-update-performance-test-nightly:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
       
-      $SHELL_WRAPPER timeout 1h pipenv run experiments/run_large_memory_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2 --iter_duration 300 --rps=15 --use_updates=True
+      $SHELL_WRAPPER timeout 1h pipenv run experiments/run_large_memory_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2 --iter_duration 300 --target_rps=15 --use_updates=True
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"

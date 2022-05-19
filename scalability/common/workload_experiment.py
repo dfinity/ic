@@ -25,7 +25,7 @@ gflags.DEFINE_string(
 gflags.MarkFlagAsRequired("wg_testnet")
 gflags.DEFINE_integer("subnet", 1, "Subnet from which to choose the target machine.")
 gflags.DEFINE_integer("wg_subnet", 0, "Subnet in which to run the workload generator.")
-gflags.DEFINE_string("target_subnet_id", "", "Subnet ID that is running the canister specified by canister_id.")
+gflags.DEFINE_string("mainnet_target_subnet_id", "", "Subnet ID that is running the canister specified by canister_id.")
 gflags.DEFINE_boolean("target_all", False, "Target all nodes, even when running query calls.")
 gflags.DEFINE_string("targets", "", "Set load target IP adresses from this coma-separated list directly.")
 gflags.DEFINE_string(
@@ -36,6 +36,8 @@ gflags.DEFINE_integer(
     0,
     "The node idx to use within the subnetwork to target for query calls. Only relevant when running against mainnet.",
 )
+gflags.DEFINE_integer("target_rps", 10, "Requests per second the workload generator should execute.")
+
 
 # When failure rate reaches this level, there is no point keep running, so stop following experiments.
 STOP_FAILURE_RATE = 0.4
@@ -53,11 +55,15 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
 
     def __init__(self, num_workload_gen=NUM_WORKLOAD_GEN, request_type="query"):
         """Init."""
+        self.wg_testnet = FLAGS.wg_testnet
+        self.num_workload_gen = num_workload_gen
+        self.use_updates = FLAGS.use_updates
+
         super().__init__(request_type)
 
-        self.wg_testnet = FLAGS.wg_testnet
-        self.use_updates = FLAGS.use_updates
-        self.num_workload_gen = num_workload_gen
+        if self.use_updates:
+            self.request_type = "call"
+        print(f"Update calls: {self.use_updates} {self.request_type}")
 
         print(
             (
@@ -65,12 +71,13 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
                 f" with workload generators on {self.wg_testnet} subnet {FLAGS.wg_subnet}"
             )
         )
+        self.init()
 
     def get_mainnet_targets(self) -> List[str]:
         """Get target if running in mainnet."""
         # If we want boundary nodes, we can see here:
         # http://prometheus.dfinity.systems:9090/graph?g0.expr=nginx_up&g0.tab=1&g0.stacked=0&g0.range_input=1h
-        r = json.loads(self._get_subnet_info(FLAGS.target_subnet_id))
+        r = json.loads(self._get_subnet_info(FLAGS.mainnet_target_subnet_id))
         node_ips = []
         for node_id in r["records"][0]["value"]["membership"]:
             node_ips.append(self.get_node_ip_address(node_id))
@@ -82,7 +89,6 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
     def init(self):
         """More init."""
         self.target_nodes = self.get_mainnet_targets() if self.testnet == "mercury" else self.__get_targets()
-        super().init()
 
         # Determine which machines run workload generators.
         # For that, we need to query the NNS of the workload generator subnetwork
@@ -109,12 +115,15 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
 
         self.machines = workload_generator_machines[: self.num_workload_gen]
         self.subnet_id = (
-            FLAGS.target_subnet_id
-            if FLAGS.target_subnet_id is not None and len(FLAGS.target_subnet_id) > 0
+            FLAGS.mainnet_target_subnet_id
+            if FLAGS.mainnet_target_subnet_id is not None and len(FLAGS.mainnet_target_subnet_id) > 0
             else self.__get_subnet_for_target()
         )
 
         print(f"Running against an IC {self.target_nodes} from {self.machines}")
+
+        super().init()
+        self.init_experiment()
 
     def init_experiment(self):
         """Initialize the experiment."""
@@ -152,8 +161,8 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
 
     def __get_subnet_for_target(self):
         """Determine the subnet ID of the node we are targeting."""
-        if len(FLAGS.target_subnet_id) > 0:
-            return FLAGS.target_subnet_id
+        if len(FLAGS.mainnet_target_subnet_id) > 0:
+            return FLAGS.mainnet_target_subnet_id
         target = self.target_nodes[0]
         res = subprocess.check_output(
             [self._get_ic_admin_path(), "--nns-url", self._get_nns_url(), "get-subnet-list"], encoding="utf-8"
@@ -167,7 +176,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
                         colored(
                             (
                                 f"Node {target} is in subnet {subnet} "
-                                f"(to speed up suite for this deployment in the future, use --target_subnet_id={subnet})"
+                                f"(to speed up suite for this deployment in the future, use --mainnet_target_subnet_id={subnet})"
                             ),
                             "yellow",
                         )
@@ -249,7 +258,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         """Get target if running in mainnet."""
         # If we want boundary nodes, we can see here:
         # http://prometheus.dfinity.systems:9090/graph?g0.expr=nginx_up&g0.tab=1&g0.stacked=0&g0.range_input=1h
-        r = json.loads(self._get_subnet_info(FLAGS.target_subnet_id))
+        r = json.loads(self._get_subnet_info(FLAGS.mainnet_target_subnet_id))
         node_ips = []
         for node_id in r["records"][0]["value"]["membership"]:
             node_ips.append(self.get_node_ip_address(node_id))

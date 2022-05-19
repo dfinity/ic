@@ -27,8 +27,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common import workload_experiment  # noqa
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_integer("iter_duration", 60, "Duration to run the workload in seconds.")
-gflags.DEFINE_integer("rps", 50, "Load in requests per second to issue, default is 50.")
 gflags.DEFINE_integer("max_nodes", 50, "Add machines until given number of nodes is reached.")
 gflags.DEFINE_integer("subnet_to_grow", 1, "Index of the subnet to grow.")
 
@@ -39,16 +37,6 @@ class GossipExperiment(workload_experiment.WorkloadExperiment):
     def __init__(self):
         """Initiate the Gossip experiment."""
         super().__init__(num_workload_gen=1)
-        self.init()
-        self.use_updates = FLAGS.use_updates
-        if self.use_updates:
-            self.request_type = "call"
-        print(f"Update calls: {self.use_updates} {self.request_type}")
-        self.init_experiment()
-
-    def init_experiment(self):
-        """Install counter canister."""
-        super().init_experiment()
         self.install_canister(self.target_nodes[0])
 
     def run_experiment_internal(self, config):

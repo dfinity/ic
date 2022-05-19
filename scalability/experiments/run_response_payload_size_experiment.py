@@ -17,8 +17,6 @@ import common.workload_experiment as workload_experiment  # noqa
 CANISTER = "response-payload-test-canister.wasm"
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_integer("iter_duration", 300, "Duration in seconds for which to execute workload in each round.")
-gflags.DEFINE_integer("rps", 10, "Requests per second the workload generator should execute.")
 gflags.DEFINE_integer("initial_response_size_kb", 250, "Initial response payload size in kb.")
 gflags.DEFINE_integer("response_size_increment_kb", 250, "Increment of response payload size in kb per iteration.")
 gflags.DEFINE_integer("max_size_increment_kb", 2 * 1024, "Maximum response payload size to test.")
@@ -29,11 +27,7 @@ class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
 
     def __init__(self):
         """Install canister."""
-        super().__init__(1)
-
-    def init_experiment(self):
-        """Install canister."""
-        super().init_experiment()
+        super().__init__(num_workload_gen=1)
         self.install_canister(
             self.target_nodes[0], canister=os.path.join(self.artifacts_path, f"../canisters/{CANISTER}")
         )
@@ -43,7 +37,7 @@ class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
         return self.run_workload_generator(
             self.machines,
             self.target_nodes,
-            FLAGS.rps,
+            FLAGS.target_rps,
             outdir=self.iter_outdir,
             payload=codecs.encode(
                 json.dumps({"response_size_bytes": config["response_payload_size"]}).encode("utf-8"), "hex"

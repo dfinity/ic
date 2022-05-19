@@ -11,7 +11,6 @@ import run_system_baseline_experiment  # noqa
 FLAGS = gflags.FLAGS
 
 gflags.DEFINE_integer("initial_rps", 100, "Starting number for requests per second.")
-gflags.DEFINE_integer("target_rps", 4400, "Targeted requests per second.")
 gflags.DEFINE_integer("increment_rps", 50, "Increment of requests per second per round.")
 gflags.DEFINE_integer(
     "max_rps", 40000, "Maximum requests per second to be sent. Experiment will wrap up beyond this number."

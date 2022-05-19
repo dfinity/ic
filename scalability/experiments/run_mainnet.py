@@ -8,8 +8,8 @@ import gflags
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_bool("use_updates", False, "Issue update calls instead of query calls")
-gflags.DEFINE_string("target_subnet_id", None, "")
-gflags.MarkFlagAsRequired("target_subnet_id")
+gflags.DEFINE_string("mainnet_target_subnet_id", None, "")
+gflags.MarkFlagAsRequired("mainnet_target_subnet_id")
 gflags.DEFINE_string("testnet", "mercury", "")
 
 
@@ -18,8 +18,8 @@ class Mainnet:
 
     def __init__(self):
         """Initialize."""
-        if FLAGS.testnet == "mercury" and FLAGS.target_subnet_id is None:
-            raise Exception("--target_subnet_id has to be set when running against mainnet")
+        if FLAGS.testnet == "mercury" and FLAGS.mainnet_target_subnet_id is None:
+            raise Exception("--mainnet_target_subnet_id has to be set when running against mainnet")
 
         # Testnets you have booked and the number of subnetworks each (including NNS)
         self.testnets = {
@@ -96,7 +96,7 @@ class Mainnet:
             "mercury",
             "--canister_id",
             canister,
-            "--target_subnet_id",
+            "--mainnet_target_subnet_id",
             subnet,
             "--wg_testnet",
             wg_testnet,
@@ -129,7 +129,7 @@ class Mainnet:
             "mercury",
             "--canister_id",
             canister,
-            "--target_subnet_id",
+            "--mainnet_target_subnet_id",
             subnet,
             "--wg_testnet",
             wg_testnet,

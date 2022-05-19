@@ -40,9 +40,7 @@ import common.misc as misc  # noqa
 import common.workload_experiment as workload_experiment  # noqa
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_integer("rps", 50, "Load in requests per second to issue")
 gflags.DEFINE_integer("num_workload_generators", 2, "Number of workload generators to run")
-gflags.DEFINE_integer("iter_duration", 300, "Duration in seconds for which to execute workload in each round.")
 
 
 class BaselineExperiment(workload_experiment.WorkloadExperiment):
@@ -54,12 +52,6 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
             num_workload_gen=FLAGS.num_workload_generators,
             request_type="call" if FLAGS.use_updates else "query",
         )
-        self.init()
-        self.init_experiment()
-
-    def init_experiment(self):
-        """Install counter canister."""
-        super().init_experiment()
         self.install_canister(self.target_nodes[0])
 
     def run_experiment_internal(self, config):
@@ -213,4 +205,4 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
 if __name__ == "__main__":
     misc.parse_command_line_args()
     exp = BaselineExperiment()
-    exp.run_iterations([FLAGS.rps])
+    exp.run_iterations([FLAGS.target_rps])
