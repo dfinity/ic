@@ -2,14 +2,17 @@ use crate::error::{OrchestratorError, OrchestratorResult};
 use ic_consensus::dkg::make_registry_cup;
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::ReplicaLogger;
-use ic_protobuf::registry::firewall::v1::FirewallConfig;
+use ic_protobuf::registry::firewall::v1::{FirewallConfig, FirewallRuleSet};
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::firewall::FirewallRegistry;
+use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_keys::FirewallRulesScope;
 use ic_types::consensus::CatchUpPackage;
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
+use std::net::IpAddr;
 use std::sync::Arc;
 
 /// Calls the Registry and converts errors into `OrchestratorError`
@@ -109,6 +112,7 @@ impl RegistryHelper {
             .ok_or(OrchestratorError::MakeRegistryCupError(subnet_id, version))
     }
 
+    // TODO: Remove after staging IC-1026
     pub(crate) fn get_firewall_config(
         &self,
         version: RegistryVersion,
@@ -118,6 +122,48 @@ impl RegistryHelper {
             _ => Err(OrchestratorError::InvalidConfigurationError(
                 "Invalid firewall configuration".to_string(),
             )),
+        }
+    }
+
+    pub(crate) fn get_firewall_rules(
+        &self,
+        version: RegistryVersion,
+        scope: &FirewallRulesScope,
+    ) -> OrchestratorResult<FirewallRuleSet> {
+        match self.registry_client.get_firewall_rules(version, scope) {
+            Ok(Some(firewall_rules)) => Ok(firewall_rules),
+            _ => Err(OrchestratorError::InvalidConfigurationError(
+                "Invalid firewall rules".to_string(),
+            )),
+        }
+    }
+
+    pub(crate) fn get_all_nodes_ip_addresses(
+        &self,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Vec<IpAddr>> {
+        match self.registry_client.get_all_nodes_ip_addresses(version) {
+            Ok(Some(ip_addrs)) => Ok(ip_addrs),
+            _ => Err(OrchestratorError::InvalidConfigurationError(
+                "Cannot fetch IP addresses of nodes".to_string(),
+            )),
+        }
+    }
+
+    pub(crate) fn get_subnet_id_from_node_id(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Option<SubnetId>> {
+        match self
+            .registry_client
+            .get_subnet_id_from_node_id(node_id, version)
+        {
+            Ok(result) => Ok(result),
+            _ => Err(OrchestratorError::InvalidConfigurationError(format!(
+                "Cannot find subnet ID for node {}",
+                node_id
+            ))),
         }
     }
 

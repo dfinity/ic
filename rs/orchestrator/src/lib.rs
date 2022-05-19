@@ -37,6 +37,7 @@ mod catch_up_package_provider;
 mod crypto_helper;
 mod error;
 mod firewall;
+mod firewall_deprecated;
 mod metrics;
 pub mod orchestrator;
 mod registration;

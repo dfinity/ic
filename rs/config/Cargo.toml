@@ -8,6 +8,7 @@ base64 = "0.11.0"
 ic-base-types = { path = "../types/base_types" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-types = { path = "../types/types" }
+ic-protobuf = { path = "../protobuf" }
 json5 = "0.4.1"
 serde = { version = "1.0.99", features = ["derive"] }
 slog = "2.5.2"

@@ -15,6 +15,7 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::networking::firewall::FEATURE_ACTIVATED;
 use crate::nns::{
     submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed, NnsExt,
 };
@@ -23,11 +24,8 @@ use crate::util::{
 };
 use ic_fondue::ic_manager::IcHandle;
 use ic_nns_governance::pb::v1::NnsFunction;
-use ic_registry_keys::FirewallRulesScope;
 use ic_registry_subnet_type::SubnetType;
-use registry_canister::mutations::firewall::{
-    compute_firewall_ruleset_hash, AddFirewallRulesPayload,
-};
+use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
 use reqwest::blocking::Client;
 use slog::info;
 use std::time::{Duration, Instant};
@@ -36,8 +34,6 @@ use url::Url;
 const WAIT_TIMEOUT: Duration = Duration::from_secs(60);
 const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 
-pub const FEATURE_ACTIVATED: bool = false;
-
 pub fn config() -> InternetComputer {
     InternetComputer::new()
         .add_subnet(Subnet::fast(SubnetType::System, 1))
@@ -45,10 +41,11 @@ pub fn config() -> InternetComputer {
 }
 
 pub fn change_to_firewall_rules_takes_effect(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    if !FEATURE_ACTIVATED {
-        // If IC-1026 is not activated, this test should not run
+    if FEATURE_ACTIVATED {
+        // If IC-1026 is activated, this test should not run
         return;
     }
+
     let log = ctx.logger.clone();
     let mut rng = ctx.rng.clone();
     let http_client = reqwest::blocking::ClientBuilder::new()
@@ -75,7 +72,7 @@ pub fn change_to_firewall_rules_takes_effect(handle: IcHandle, ctx: &ic_fondue::
     let governance = crate::nns::get_governance_canister(&nns);
     let proposal_id = block_on(submit_external_proposal_with_test_id(
         &governance,
-        NnsFunction::AddFirewallRules,
+        NnsFunction::SetFirewallConfig,
         proposal_payload,
     ));
     block_on(vote_execute_proposal_assert_executed(
@@ -108,23 +105,15 @@ fn get_request_succeeds(log: &slog::Logger, c: &Client, url: &Url) -> bool {
     }
 }
 
-fn prepare_proposal_payload() -> AddFirewallRulesPayload {
+fn prepare_proposal_payload() -> SetFirewallConfigPayload {
     let cfg = util::get_config();
     let firewall_config = cfg.firewall.unwrap();
-    //let ipv6_prefixes = firewall_config.ipv6_prefixes;
-    //let firewall_config = firewall_config.firewall_config.replace("9090, ", "");
-    let mut rule = firewall_config.default_rules[0].clone();
-    rule.ports = rule
-        .ports
-        .into_iter()
-        .filter(|port| *port != 9090)
-        .collect();
-    let rules = vec![rule];
-    AddFirewallRulesPayload {
-        scope: FirewallRulesScope::ReplicaNodes,
-        rules: rules.clone(),
-        positions: vec![0],
-        expected_hash: compute_firewall_ruleset_hash(&rules),
+    let ipv6_prefixes = firewall_config.ipv6_prefixes;
+    let firewall_config = firewall_config.firewall_config.replace("9090, ", "");
+    SetFirewallConfigPayload {
+        firewall_config,
+        ipv4_prefixes: vec![],
+        ipv6_prefixes,
     }
 }
 
