@@ -100,8 +100,20 @@ EOF
     ) >"${TARGET_DIR}/enp2s0.network"
 }
 
+function setup_dev_nftables() {
+    if [ $(cat /boot/config/deployment_type) == "dev" ]; then
+        pushd /etc
+        cp ./ivp4-dev-ruleset.contents ./ipv4-dev.ruleset
+        popd
+    else
+        echo "" >./ipv4-dev.ruleset
+    fi
+}
+
 if [ -e "$1" ]; then
     read_variables "$1"
 fi
 mkdir -p "$2"
+
+setup_dev_nftables
 generate_config_files "$2"
