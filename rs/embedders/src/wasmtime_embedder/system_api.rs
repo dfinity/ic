@@ -2,7 +2,7 @@ use crate::wasmtime_embedder::{system_api_complexity, StoreData};
 
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, HypervisorError, HypervisorResult, SystemApi,
+    ExecutionComplexity, HypervisorError, HypervisorResult, PerformanceCounterType, SystemApi,
 };
 use ic_logger::{error, info, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
@@ -26,6 +26,7 @@ fn process_err<S: SystemApi>(
 }
 
 /// Gets the global variable that stores the number of instructions from `caller`.
+#[inline(always)]
 fn get_num_instructions_global<S: SystemApi>(
     caller: &mut Caller<'_, StoreData<S>>,
     log: &ReplicaLogger,
@@ -46,6 +47,7 @@ fn get_num_instructions_global<S: SystemApi>(
     }
 }
 
+#[inline(always)]
 fn load_value<S: SystemApi>(
     global: &Global,
     mut caller: &mut Caller<'_, StoreData<S>>,
@@ -69,6 +71,7 @@ fn load_value<S: SystemApi>(
     }
 }
 
+#[inline(always)]
 fn store_value<S: SystemApi>(
     global: &Global,
     num_instructions: NumInstructions,
@@ -105,6 +108,9 @@ fn store_value<S: SystemApi>(
 /// not introduce new error types in these paths as these error paths should
 /// be extremely rare and we do not want to increase the complexity of the
 /// code to handle hypothetical bugs.
+//
+// Note: marked not for inlining as we don't want to spill this code into every system API call.
+#[inline(never)]
 fn charge_for_system_api_call<S: SystemApi>(
     log: &ReplicaLogger,
     canister_id: CanisterId,
@@ -186,6 +192,43 @@ fn observe_execution_complexity<S: SystemApi>(
     }
     system_api.set_total_execution_complexity(total_complexity);
     Ok(())
+}
+
+/// A helper to pass wasmtime counters to the System API
+fn ic0_performance_counter_helper<S: SystemApi>(
+    log: &ReplicaLogger,
+    canister_id: CanisterId,
+    caller: &mut Caller<'_, StoreData<S>>,
+    counter_type: u32,
+) -> Result<u64, Trap> {
+    let performance_counter_type = match counter_type {
+        0 => {
+            let num_instructions_global = get_num_instructions_global(caller, log, canister_id)?;
+            let current_instructions =
+                load_value(&num_instructions_global, caller, log, canister_id)?.get();
+
+            let instructions_limit = caller.data().system_api.total_instruction_limit().get();
+            let instructions_used = instructions_limit
+                .checked_sub(current_instructions)
+                .unwrap_or(instructions_limit);
+
+            PerformanceCounterType::Instructions(instructions_used.into())
+        }
+        _ => {
+            return Err(process_err(
+                caller,
+                HypervisorError::ContractViolation(format!(
+                    "Error getting performance counter type {}",
+                    counter_type
+                )),
+            ));
+        }
+    };
+    caller
+        .data()
+        .system_api
+        .ic0_performance_counter(performance_counter_type)
+        .map_err(|e| process_err(caller, e))
 }
 
 pub(crate) fn syscalls<S: SystemApi>(
@@ -811,6 +854,22 @@ pub(crate) fn syscalls<S: SystemApi>(
                 with_system_api(&mut caller, |s| s.ic0_time())
                     .map_err(|e| process_err(caller, e))
                     .map(|s| s.as_nanos_since_unix_epoch())
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("ic0", "performance_counter", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, counter_type: u32| {
+                charge_for_system_api_call(
+                    &log,
+                    canister_id,
+                    &mut caller,
+                    system_api_complexity::overhead::PERFORMANCE_COUNTER,
+                    0,
+                )?;
+                ic0_performance_counter_helper(&log, canister_id, &mut caller, counter_type)
             }
         })
         .unwrap();

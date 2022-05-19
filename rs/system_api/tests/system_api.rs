@@ -2,7 +2,7 @@ use ic_base_types::NumSeconds;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     AvailableMemory, CanisterOutOfCyclesError, ExecutionParameters, HypervisorError,
-    HypervisorResult, SubnetAvailableMemory, SystemApi, TrapCode,
+    HypervisorResult, PerformanceCounterType, SubnetAvailableMemory, SystemApi, TrapCode,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
@@ -106,6 +106,9 @@ fn test_canister_init_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(
+        api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
+    );
     assert_api_supported(api.ic0_canister_cycle_balance());
     assert_api_supported(api.ic0_canister_cycles_balance128(0, &mut []));
     assert_api_not_supported(api.ic0_msg_cycles_available());
@@ -166,6 +169,9 @@ fn test_canister_update_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(
+        api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
+    );
     assert_api_supported(api.ic0_canister_cycle_balance());
     assert_api_supported(api.ic0_canister_cycles_balance128(0, &mut []));
     assert_api_supported(api.ic0_msg_cycles_available());
@@ -226,6 +232,9 @@ fn test_canister_replicated_query_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(
+        api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
+    );
     assert_api_supported(api.ic0_canister_cycle_balance());
     assert_api_supported(api.ic0_canister_cycles_balance128(0, &mut []));
     assert_api_not_supported(api.ic0_msg_cycles_available());
@@ -286,6 +295,9 @@ fn test_canister_pure_query_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(
+        api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
+    );
     assert_api_supported(api.ic0_canister_cycle_balance());
     assert_api_supported(api.ic0_canister_cycles_balance128(0, &mut []));
     assert_api_not_supported(api.ic0_msg_cycles_available());
@@ -358,6 +370,9 @@ fn test_canister_stateful_query_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(
+        api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
+    );
     assert_api_supported(api.ic0_canister_cycle_balance());
     assert_api_supported(api.ic0_canister_cycles_balance128(0, &mut []));
     assert_api_not_supported(api.ic0_msg_cycles_available());
@@ -418,6 +433,9 @@ fn test_reply_api_support_on_nns() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(
+        api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
+    );
     assert_api_supported(api.ic0_canister_cycle_balance());
     assert_api_supported(api.ic0_canister_cycles_balance128(0, &mut []));
     assert_api_supported(api.ic0_msg_cycles_available());
@@ -478,6 +496,9 @@ fn test_reply_api_support_non_nns() {
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(
+        api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
+    );
     assert_api_supported(api.ic0_canister_cycle_balance());
     assert_api_supported(api.ic0_canister_cycles_balance128(0, &mut []));
     assert_api_supported(api.ic0_msg_cycles_available());
@@ -541,6 +562,9 @@ fn test_reject_api_support_on_nns() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(
+        api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
+    );
     assert_api_supported(api.ic0_canister_cycle_balance());
     assert_api_supported(api.ic0_canister_cycles_balance128(0, &mut []));
     assert_api_supported(api.ic0_msg_cycles_available());
@@ -604,6 +628,9 @@ fn test_reject_api_support_non_nns() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(
+        api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
+    );
     assert_api_supported(api.ic0_canister_cycle_balance());
     assert_api_supported(api.ic0_canister_cycles_balance128(0, &mut []));
     assert_api_supported(api.ic0_msg_cycles_available());
@@ -664,6 +691,9 @@ fn test_pre_upgrade_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(
+        api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
+    );
     assert_api_supported(api.ic0_canister_cycle_balance());
     assert_api_supported(api.ic0_canister_cycles_balance128(0, &mut []));
     assert_api_not_supported(api.ic0_msg_cycles_available());
@@ -724,6 +754,9 @@ fn test_start_support() {
     assert_api_not_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_not_supported(api.ic0_time());
+    assert_api_supported(
+        api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
+    );
     assert_api_not_supported(api.ic0_canister_cycle_balance());
     assert_api_not_supported(api.ic0_canister_cycles_balance128(0, &mut []));
     assert_api_not_supported(api.ic0_msg_cycles_available());
@@ -784,6 +817,9 @@ fn test_cleanup_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(
+        api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
+    );
     assert_api_supported(api.ic0_canister_cycle_balance());
     assert_api_supported(api.ic0_canister_cycles_balance128(0, &mut []));
     assert_api_not_supported(api.ic0_msg_cycles_available());
@@ -849,6 +885,9 @@ fn test_inspect_message_support() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(
+        api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
+    );
     assert_api_supported(api.ic0_canister_cycle_balance());
     assert_api_supported(api.ic0_canister_cycles_balance128(0, &mut []));
     assert_api_not_supported(api.ic0_msg_cycles_available());
@@ -910,6 +949,9 @@ fn test_canister_heartbeat_support() {
     assert_api_supported(api.ic0_stable64_grow(1));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(
+        api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
+    );
     assert_api_supported(api.ic0_canister_cycle_balance());
     assert_api_supported(api.ic0_canister_cycles_balance128(0, &mut []));
     assert_api_not_supported(api.ic0_msg_cycles_available());
@@ -970,6 +1012,9 @@ fn test_canister_heartbeat_support_nns() {
     assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
+    assert_api_supported(
+        api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
+    );
     assert_api_supported(api.ic0_canister_cycle_balance());
     assert_api_supported(api.ic0_canister_cycles_balance128(0, &mut []));
     assert_api_not_supported(api.ic0_msg_cycles_available());

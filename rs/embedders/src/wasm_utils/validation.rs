@@ -410,6 +410,16 @@ fn get_valid_system_apis(
             )],
         ),
         (
+            "performance_counter",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValueType::I32],
+                    return_type: vec![ValueType::I64],
+                },
+            )],
+        ),
+        (
             "trap",
             vec![(
                 API_VERSION_IC0,

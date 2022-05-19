@@ -146,6 +146,114 @@ mod test {
         );
     }
 
+    #[test]
+    fn correctly_report_performance_counter() {
+        let data_size = 1024;
+
+        let wasm_const = 1;
+        let wasm_call_msg_arg_data_copy_with_3_const = 1 + 3 * wasm_const;
+        let wasm_call_performance_counter_with_const = 1 + wasm_const;
+        let wasm_drop_const = 1 + wasm_const;
+        let wasm_global_set = 1;
+        // Note: the instrumentation is a stack machine, which counts and subtracts
+        // the number of instructions for the whole block. The "dynamic" part of
+        // System API calls gets added when the API is actually called.
+        //
+        // High-level, the test function is:
+        //   data_copy1()
+        //   perf_counter1()
+        //   data_copy2()
+        //   perf_counter2()
+        //
+        // So, the first perf counter will catch the whole test func static part
+        // + first data copy and performance counter dynamic part.
+        // The second perf counter will catch on top the second data copy dynamic part.
+        let expected_instructions_counter1 = (wasm_call_msg_arg_data_copy_with_3_const
+                + data_size
+                + system_api_complexity::overhead::MSG_ARG_DATA_COPY.get())
+                + wasm_drop_const
+                + wasm_call_performance_counter_with_const
+                + system_api_complexity::overhead::PERFORMANCE_COUNTER.get()
+                + wasm_global_set
+                + wasm_drop_const
+                + wasm_drop_const
+                + wasm_call_msg_arg_data_copy_with_3_const // No data size
+                + wasm_call_performance_counter_with_const
+                + wasm_global_set;
+        // Includes dynamic part for second data copy and performance counter calls
+        let expected_instructions_counter2 = expected_instructions_counter1
+            + (data_size + system_api_complexity::overhead::MSG_ARG_DATA_COPY.get())
+            + system_api_complexity::overhead::PERFORMANCE_COUNTER.get();
+        let expected_instructions = expected_instructions_counter2;
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_wat(
+                format!(
+                    r#"
+                    (module
+                        (import "ic0" "msg_arg_data_copy"
+                            (func $ic0_msg_arg_data_copy (param i32 i32 i32)))
+                        (import "ic0" "performance_counter"
+                            (func $ic0_performance_counter (param i32) (result i64)))
+                        (memory 1)
+                        (global $performance_counter1 (export "performance_counter1")
+                            (mut i64) (i64.const 0))
+                        (global $performance_counter2 (export "performance_counter2")
+                            (mut i64) (i64.const 0))
+
+                        (func (export "canister_update test_performance_counter")
+                            ;; do a system call and a bit of instructions
+                            (call $ic0_msg_arg_data_copy
+                                (i32.const 0) (i32.const 0) (i32.const {DATA_SIZE}))
+                            (drop (i32.const 0))
+                            (call $ic0_performance_counter (i32.const 0))
+                            (global.set $performance_counter1)
+                            
+                            ;; do one more system call and a bit more instructions
+                            (drop (i32.const 0))
+                            (drop (i32.const 0))
+                            (call $ic0_msg_arg_data_copy
+                               (i32.const 0) (i32.const 0) (i32.const {DATA_SIZE}))
+
+                            (call $ic0_performance_counter (i32.const 0))
+                            (global.set $performance_counter2)
+                        )
+                    )
+                    "#,
+                    DATA_SIZE = data_size
+                )
+                .as_str(),
+            )
+            .with_api_type(ic_system_api::ApiType::init(
+                mock_time(),
+                vec![0; 1024],
+                user_test_id(24).get(),
+            ))
+            .with_num_instructions((expected_instructions * 2).into())
+            .build();
+
+        let res = instance
+            .run(ic_types::methods::FuncRef::Method(
+                ic_types::methods::WasmMethod::Update("test_performance_counter".to_string()),
+            ))
+            .unwrap();
+        let performance_counter1 = match res.exported_globals[0] {
+            Global::I64(c) => c as u64,
+            _ => panic!("Error getting performance_counter1"),
+        };
+        let performance_counter2 = match res.exported_globals[1] {
+            Global::I64(c) => c as u64,
+            _ => panic!("Error getting performance_counter2"),
+        };
+        let system_api = &instance.store_data_mut().system_api;
+        let instructions_limit = system_api.total_instruction_limit();
+        let num_instructions = instance.get_num_instructions();
+        let instructions_used = instructions_limit - num_instructions;
+        assert_eq!(performance_counter1, expected_instructions_counter1);
+        assert_eq!(performance_counter2, expected_instructions_counter2);
+
+        assert_eq!(instructions_used.get(), expected_instructions);
+    }
+
     const CALL_NEW_CALL_PERFORM_WAT: &str = r#"
     (module
         (import "ic0" "call_new"

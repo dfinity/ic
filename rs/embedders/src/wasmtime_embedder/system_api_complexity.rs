@@ -34,6 +34,7 @@ pub mod overhead {
     pub const STABLE_WRITE: NumInstructions = NumInstructions::new(20);
     pub const STABLE64_READ: NumInstructions = NumInstructions::new(20);
     pub const STABLE64_WRITE: NumInstructions = NumInstructions::new(20);
+    pub const PERFORMANCE_COUNTER: NumInstructions = NumInstructions::new(200);
 }
 
 ///
