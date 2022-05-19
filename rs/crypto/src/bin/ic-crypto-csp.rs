@@ -49,7 +49,20 @@ async fn main() {
         )
     );
 
+    // We abort the whole program with a core dump if a single thread panics.
+    // This way we can capture all the context if a critical error happens.
+    abort_on_panic();
+
     ic_crypto_internal_csp::run_csp_vault_server(sks_dir, systemd_socket_listener, logger).await;
+}
+
+/// Aborts the whole program with a core dump if a single thread panics.
+pub fn abort_on_panic() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        default_hook(panic_info);
+        std::process::abort();
+    }));
 }
 
 fn get_ic_config(replica_config_file: PathBuf) -> Config {
