@@ -21,7 +21,7 @@
         - '.bazelrc'
         - 'WORKSPACE.bazel'
         - 'toolchains/*'
-        - 'Cargo*.lock'
+        - '**/Cargo*.lock'
       when: always
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[bazel\]/'
       when: always
