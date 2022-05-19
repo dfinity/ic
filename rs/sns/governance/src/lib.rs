@@ -124,7 +124,7 @@ fn field_err(field_name: &str, field_value: impl Debug, defect: &str) -> Result<
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use std::fmt::Debug;
 

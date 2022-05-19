@@ -763,52 +763,20 @@ impl ProposalRewardStatus {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
-    use crate::pb::v1::Empty;
-    use crate::test::{assert_is_err, assert_is_ok};
-    use async_trait::async_trait;
+    use crate::{
+        pb::v1::Empty,
+        tests::{assert_is_err, assert_is_ok},
+        types::tests::NativeEnvironment,
+    };
     use futures::FutureExt;
     use ic_base_types::PrincipalId;
     use lazy_static::lazy_static;
     use std::convert::TryFrom;
 
-    struct FakeEnv {}
-
-    #[async_trait]
-    impl Environment for FakeEnv {
-        fn now(&self) -> u64 {
-            unimplemented!()
-        }
-
-        fn random_u64(&mut self) -> u64 {
-            unimplemented!()
-        }
-
-        fn random_byte_array(&mut self) -> [u8; 32] {
-            unimplemented!()
-        }
-
-        async fn call_canister(
-            &self,
-            _canister_id: CanisterId,
-            _method_name: &str,
-            _arg: Vec<u8>,
-        ) -> Result<Vec<u8>, (Option<i32>, String)> {
-            unimplemented!()
-        }
-
-        fn heap_growth_potential(&self) -> crate::types::HeapGrowthPotential {
-            unimplemented!()
-        }
-
-        fn canister_id(&self) -> CanisterId {
-            unimplemented!()
-        }
-    }
-
     lazy_static! {
-        static ref FAKE_ENV: Box<dyn Environment> = Box::new(FakeEnv {});
+        static ref FAKE_ENV: Box<dyn Environment> = Box::new(NativeEnvironment::default());
         static ref DEFAULT_PARAMS: NervousSystemParameters =
             NervousSystemParameters::with_default_values();
         static ref EMPTY_FUNCTIONS: BTreeMap<u64, NervousSystemFunction> = BTreeMap::new();

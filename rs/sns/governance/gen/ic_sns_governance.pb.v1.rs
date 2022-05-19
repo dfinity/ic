@@ -775,7 +775,7 @@ pub mod governance {
         /// purposes.
         #[prost(uint64, tag="1")]
         pub timestamp: u64,
-        #[prost(oneof="neuron_in_flight_command::Command", tags="2, 3, 4, 5, 6, 7, 8, 9, 1001, 1002, 1003")]
+        #[prost(oneof="neuron_in_flight_command::Command", tags="2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12")]
         pub command: ::core::option::Option<neuron_in_flight_command::Command>,
     }
     /// Nested message and enum types in `NeuronInFlightCommand`.
@@ -799,11 +799,11 @@ pub mod governance {
             RemoveNeuronPermissions(super::super::manage_neuron::RemoveNeuronPermissions),
             #[prost(message, tag="9")]
             Configure(super::super::manage_neuron::Configure),
-            #[prost(message, tag="1001")]
+            #[prost(message, tag="10")]
             Follow(super::super::manage_neuron::Follow),
-            #[prost(message, tag="1002")]
+            #[prost(message, tag="11")]
             MakeProposal(super::super::Proposal),
-            #[prost(message, tag="1003")]
+            #[prost(message, tag="12")]
             RegisterVote(super::super::manage_neuron::RegisterVote),
         }
     }

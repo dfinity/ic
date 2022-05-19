@@ -1000,11 +1000,6 @@ impl Governance {
         let child_nid = self.new_neuron_id(caller, split.memo)?;
         let to_subaccount = child_nid.subaccount()?;
 
-        let in_flight_command = NeuronInFlightCommand {
-            timestamp: creation_timestamp_seconds,
-            command: Some(InFlightCommand::Split(split.clone())),
-        };
-
         let staked_amount = split.amount_e8s - transaction_fee_e8s;
 
         // Before we do the transfer, we need to save the child neuron in the map
@@ -1026,7 +1021,11 @@ impl Governance {
         };
 
         // Add the child neuron's id to the set of neurons with ongoing operations.
-        let _child_lock = self.lock_neuron_for_command(&child_nid, in_flight_command.clone())?;
+        let in_flight_command = NeuronInFlightCommand {
+            timestamp: creation_timestamp_seconds,
+            command: Some(InFlightCommand::Split(split.clone())),
+        };
+        let _child_lock = self.lock_neuron_for_command(&child_nid, in_flight_command)?;
 
         // We need to add the "embryo neuron" to the governance proto only after
         // acquiring the lock. Indeed, in case there is already a pending
@@ -1636,7 +1635,8 @@ impl Governance {
                 self.perform_manage_nervous_system_parameters(params)
             }
             proposal::Action::UpgradeSnsControlledCanister(params) => {
-                self.perform_upgrade_sns_controlled_canister(params).await
+                self.perform_upgrade_sns_controlled_canister(proposal_id, params)
+                    .await
             }
             proposal::Action::ExecuteGenericNervousSystemFunction(call) => {
                 self.perform_execute_generic_nervous_system_function(call)
@@ -1790,8 +1790,11 @@ impl Governance {
     /// to upgrade a SNS canister
     async fn perform_upgrade_sns_controlled_canister(
         &mut self,
+        proposal_id: u64,
         upgrade: UpgradeSnsControlledCanister,
     ) -> Result<(), GovernanceError> {
+        err_if_another_upgrade_is_in_progress(&self.proto.proposals, proposal_id)?;
+
         let target_canister_id = get_canister_id(&upgrade.canister_id)?;
 
         let target_is_root = target_canister_id == self.proto.root_canister_id_or_panic();
@@ -2558,8 +2561,7 @@ impl Governance {
         Ok(())
     }
 
-    /// Attempts to claim a new neuron. If successful, returns the neuron id and
-    /// otherwise an error.
+    /// Attempts to claim a new neuron.
     ///
     /// Preconditions:
     /// - adding the new neuron won't exceed the `max_number_of_neurons`
@@ -2573,10 +2575,15 @@ impl Governance {
     /// ask the user to transfer however much is missing to stake a neuron and they
     /// can then disburse if they so choose. We need to do something more involved
     /// if we've reached the max, TODO.
+    ///
+    /// # Arguments
+    /// * `neuron_id` ID of the neuron being claimed/created.
+    /// * `principal_id` ID to whom default permissions will be granted for the new neuron
+    ///   being claimed/created.
     async fn claim_neuron(
         &mut self,
-        nid: NeuronId,
-        claimer: &PrincipalId,
+        neuron_id: NeuronId,
+        principal_id: &PrincipalId,
     ) -> Result<(), GovernanceError> {
         let now = self.env.now();
 
@@ -2587,9 +2594,9 @@ impl Governance {
         // we know that any concurrent call to mutate the same neuron will need to wait
         // for this one to finish before proceeding.
         let neuron = Neuron {
-            id: Some(nid.clone()),
+            id: Some(neuron_id.clone()),
             permissions: vec![NeuronPermission::new(
-                claimer,
+                principal_id,
                 self.neuron_claimer_permissions().permissions,
             )],
             cached_neuron_stake_e8s: 0,
@@ -2605,7 +2612,7 @@ impl Governance {
         self.add_neuron(neuron.clone())?;
 
         // Get the balance of the neuron's subaccount from ledger canister.
-        let subaccount = nid.subaccount()?;
+        let subaccount = neuron_id.subaccount()?;
         let account = neuron_account_id(subaccount);
         let balance = self.ledger.account_balance(account).await?;
         let min_stake = self
@@ -2617,7 +2624,7 @@ impl Governance {
             // To prevent this method from creating non-staked
             // neurons, we must also remove the neuron that was
             // previously created.
-            self.remove_neuron(&nid, neuron)?;
+            self.remove_neuron(&neuron_id, neuron)?;
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
@@ -2630,7 +2637,7 @@ impl Governance {
         }
 
         // Ok, we are able to stake the neuron.
-        match self.get_neuron_result_mut(&nid) {
+        match self.get_neuron_result_mut(&neuron_id) {
             Ok(neuron) => {
                 // Adjust the stake.
                 neuron.update_stake(balance.get_e8s(), now);
@@ -2644,7 +2651,7 @@ impl Governance {
                     "When attempting to stake a neuron with ID {} and stake {:?},\
                      the neuron disappeared while the operation was in flight.\
                      The returned error was: {}",
-                    nid,
+                    neuron_id,
                     balance.get_e8s(),
                     err
                 )
@@ -3245,6 +3252,39 @@ impl Governance {
     }
 }
 
+fn err_if_another_upgrade_is_in_progress(
+    id_to_proposal_data: &BTreeMap</* proposal ID */ u64, ProposalData>,
+    executing_proposal_id: u64,
+) -> Result<(), GovernanceError> {
+    let upgrade_action_id: u64 =
+        (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into();
+
+    for (other_proposal_id, proposal_data) in id_to_proposal_data {
+        if *other_proposal_id == executing_proposal_id {
+            continue;
+        }
+
+        if proposal_data.action != upgrade_action_id {
+            continue;
+        }
+
+        if proposal_data.status() != ProposalDecisionStatus::ProposalStatusAdopted {
+            continue;
+        }
+
+        return Err(GovernanceError::new_with_message(
+            ErrorType::ResourceExhausted,
+            format!(
+                "Another upgrade is currently in progress (proposal ID {}). \
+                 Please, try again later.",
+                other_proposal_id,
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
 ///
 /// Specifically, the time that Governance sees is the real time + delta.
@@ -3292,19 +3332,50 @@ fn get_neuron_id_from_memo_and_controller(
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
-    use crate::pb::v1::{
-        manage_neuron_response,
-        nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-        NeuronPermissionType, ProposalData, ProposalId, Tally, WaitForQuietState,
+    use crate::{
+        pb::v1::{
+            manage_neuron_response,
+            nervous_system_function::{FunctionType, GenericNervousSystemFunction},
+            Motion, NeuronPermissionType, ProposalData, ProposalId, Tally, WaitForQuietState,
+        },
+        types::tests::NativeEnvironment,
     };
     use async_trait::async_trait;
     use ic_canister_client::Sender;
     use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
     use ic_sns_test_utils::itest_helpers::UserInfo;
+    use maplit::btreemap;
     use proptest::prelude::{prop_assert, proptest};
     use std::sync::Arc;
+
+    struct DoNothingLedger {}
+
+    #[async_trait]
+    impl Ledger for DoNothingLedger {
+        async fn transfer_funds(
+            &self,
+            _amount_e8s: u64,
+            _fee_e8s: u64,
+            _from_subaccount: Option<Subaccount>,
+            _to: AccountIdentifier,
+            _memo: u64,
+        ) -> Result<u64, NervousSystemError> {
+            unimplemented!();
+        }
+
+        async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+            unimplemented!()
+        }
+
+        async fn account_balance(
+            &self,
+            _account: AccountIdentifier,
+        ) -> Result<Tokens, NervousSystemError> {
+            unimplemented!()
+        }
+    }
 
     fn basic_governance_proto() -> GovernanceProto {
         // Test subject.
@@ -3324,42 +3395,7 @@ mod test {
 
     #[tokio::test]
     async fn test_neuron_operations_exclude_one_another() {
-        // Step -1: Define helpers.
-
-        struct TestEnvironment {}
-
-        #[async_trait]
-        impl Environment for TestEnvironment {
-            fn now(&self) -> u64 {
-                1_234_567_890
-            }
-
-            fn random_u64(&mut self) -> u64 {
-                unimplemented!()
-            }
-
-            fn random_byte_array(&mut self) -> [u8; 32] {
-                unimplemented!()
-            }
-
-            async fn call_canister(
-                &self,
-                _canister_id: CanisterId,
-                _method_name: &str,
-                _arg: Vec<u8>,
-            ) -> Result<Vec<u8>, (Option<i32>, String)> {
-                unimplemented!()
-            }
-
-            fn heap_growth_potential(&self) -> crate::types::HeapGrowthPotential {
-                unimplemented!()
-            }
-
-            fn canister_id(&self) -> CanisterId {
-                unimplemented!()
-            }
-        }
-
+        // Step 0: Define helpers.
         struct TestLedger {
             transfer_funds_arrived: Arc<tokio::sync::Notify>,
             transfer_funds_continue: Arc<tokio::sync::Notify>,
@@ -3392,10 +3428,10 @@ mod test {
             }
         }
 
-        let local_set = tokio::task::LocalSet::new();
+        let local_set = tokio::task::LocalSet::new(); // Because we are working with !Send data.
         local_set
             .run_until(async move {
-                // Step 0: Prepare the world.
+                // Step 1: Prepare the world.
                 let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
                 let principal_id = user.sender.get_principal_id();
                 // Not sure why user.neuron_id can't be used...
@@ -3405,7 +3441,7 @@ mod test {
 
                 let mut governance_proto = basic_governance_proto();
 
-                // Step 0.1: Add a neuron (so that we can operate on it).
+                // Step 1.1: Add a neuron (so that we can operate on it).
                 governance_proto.neurons.insert(
                     neuron_id.to_string(),
                     Neuron {
@@ -3425,23 +3461,23 @@ mod test {
                 // Lets us tell ledger that it can proceed with the transfer.
                 let transfer_funds_continue = Arc::new(tokio::sync::Notify::new());
 
-                // Step 0.3: Create Governance that we will be sending manage_neuron calls to.
+                // Step 1.3: Create Governance that we will be sending manage_neuron calls to.
                 let mut governance = Governance::new(
                     ValidGovernanceProto::try_from(governance_proto).unwrap(),
-                    Box::new(TestEnvironment {}),
+                    Box::new(NativeEnvironment::default()),
                     Box::new(TestLedger {
                         transfer_funds_arrived: transfer_funds_arrived.clone(),
                         transfer_funds_continue: transfer_funds_continue.clone(),
                     }),
                 );
 
-                // Step 1: Execute code under test.
+                // Step 2: Execute code under test.
 
                 // This lets us (later) make a second manage_neuron method call
                 // while one is in flight, which is essential for this test.
                 let raw_governance = &mut governance as *mut Governance;
 
-                // Step 1.1: Begin an async that is supposed to interfere with a
+                // Step 2.1: Begin an async that is supposed to interfere with a
                 // later manage_neuron call.
                 let disburse = ManageNeuron {
                     subaccount: user.subaccount.to_vec(),
@@ -3466,7 +3502,7 @@ mod test {
                 transfer_funds_arrived.notified().await;
                 // It is now guaranteed that disburse is now in mid flight.
 
-                // Step 1.2: Begin another manage_neuron call.
+                // Step 2.2: Begin another manage_neuron call.
                 let configure = ManageNeuron {
                     subaccount: user.subaccount.to_vec(),
                     command: Some(manage_neuron::Command::Configure(
@@ -3652,6 +3688,281 @@ mod test {
                 .unwrap()
                 .current_deadline_timestamp_seconds;
             prop_assert!(new_deadline >= current_deadline_timestamp_seconds);
+        }
+    }
+
+    #[test]
+    fn test_disallow_concurrent_upgrade_execution() {
+        // Step 1: Prepare the world.
+        use ProposalDecisionStatus as Status;
+
+        let upgrade_action_id: u64 =
+            (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into();
+
+        // Step 1.1: First proposal, which will block the next one.
+        let execution_in_progress_proposal = ProposalData {
+            action: upgrade_action_id,
+            id: Some(1_u64.into()),
+            decided_timestamp_seconds: 123,
+            latest_tally: Some(Tally {
+                yes: 1,
+                no: 0,
+                total: 1,
+                timestamp_seconds: 1,
+            }),
+            ..Default::default()
+        };
+        assert_eq!(
+            execution_in_progress_proposal.status(),
+            Status::ProposalStatusAdopted
+        );
+
+        // Step 1.2: Second proposal. This one will be thwarted by the first.
+        let to_be_processed_proposal = ProposalData {
+            action: upgrade_action_id,
+            id: Some(2_u64.into()),
+            ballots: btreemap! {
+                "neuron 1".to_string() => Ballot {
+                    vote: Vote::Yes as i32,
+                    voting_power: 9001,
+                    cast_timestamp_seconds: 1,
+                },
+            },
+            wait_for_quiet_state: Some(WaitForQuietState::default()),
+            proposal: Some(Proposal {
+                title: "Doomed".to_string(),
+                action: Some(proposal::Action::UpgradeSnsControlledCanister(
+                    UpgradeSnsControlledCanister {
+                        ..Default::default()
+                    },
+                )),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert_eq!(
+            to_be_processed_proposal.status(),
+            Status::ProposalStatusOpen
+        );
+
+        // Step 1.3: Init Governance.
+        let mut governance = Governance::new(
+            GovernanceProto {
+                proposals: btreemap! {
+                    1 => execution_in_progress_proposal,
+                    2 => to_be_processed_proposal,
+                },
+                ..basic_governance_proto()
+            }
+            .try_into()
+            .unwrap(),
+            Box::new(NativeEnvironment::default()),
+            Box::new(DoNothingLedger {}),
+        );
+
+        // Step 2: Execute code under test.
+        governance.process_proposal(2);
+
+        // Step 2.1: Wait for result.
+        let now = || std::time::Instant::now();
+
+        let start = now();
+        // In practice, the exit condition of the following loop occurs in much
+        // less than 1 s (on my Macbook Pro 2019 Intel). The reason for this
+        // generous limit is twofold: 1. avoid flakes in CI, while at the same
+        // time 2. do not run forever if something goes wrong.
+        let give_up = || now() < start + std::time::Duration::from_secs(30);
+        let final_proposal_data = loop {
+            let result = governance
+                .get_proposal(&GetProposal {
+                    proposal_id: Some(ProposalId { id: 2 }),
+                })
+                .result
+                .unwrap();
+            let proposal_data = match result {
+                get_proposal_response::Result::Proposal(p) => p,
+                _ => panic!("get_proposal result: {:#?}", result),
+            };
+
+            if proposal_data.status().is_final() {
+                break proposal_data;
+            }
+
+            if give_up() {
+                panic!("Proposal took too long to terminate (in the failed state).")
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        };
+
+        // Step 3: Inspect results.
+        assert_eq!(
+            final_proposal_data.status(),
+            Status::ProposalStatusFailed,
+            "The second upgrade proposal did not fail. final_proposal_data: {:#?}",
+            final_proposal_data,
+        );
+        assert_eq!(
+            final_proposal_data
+                .failure_reason
+                .as_ref()
+                .unwrap()
+                .error_type,
+            ErrorType::ResourceExhausted as i32,
+            "The second upgrade proposal failed, but failure_reason was not as expected. \
+             final_proposal_data: {:#?}",
+            final_proposal_data,
+        );
+    }
+
+    #[test]
+    fn test_allow_canister_upgrades_while_motion_proposal_execution_is_in_progress() {
+        // Step 1: Prepare the world.
+        use ProposalDecisionStatus as Status;
+
+        let motion_action_id: u64 = (&Action::Motion(Motion::default())).into();
+
+        let proposal_id = 1_u64;
+        let proposal = ProposalData {
+            action: motion_action_id,
+            id: Some(proposal_id.into()),
+            decided_timestamp_seconds: 1,
+            latest_tally: Some(Tally {
+                yes: 1,
+                no: 0,
+                total: 1,
+                timestamp_seconds: 1,
+            }),
+            ..Default::default()
+        };
+        assert_eq!(proposal.status(), Status::ProposalStatusAdopted);
+
+        // Step 2: Run code under test.
+        let some_other_proposal_id = 99_u64;
+        let result = err_if_another_upgrade_is_in_progress(
+            &btreemap! {
+                proposal_id => proposal,
+            },
+            some_other_proposal_id,
+        );
+
+        // Step 3: Inspect result.
+        assert!(result.is_ok(), "{:#?}", result);
+    }
+
+    #[test]
+    fn test_allow_canister_upgrades_while_another_upgrade_proposal_is_open() {
+        // Step 1: Prepare the world.
+        use ProposalDecisionStatus as Status;
+
+        let upgrade_action_id: u64 =
+            (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into();
+
+        let proposal_id = 1_u64;
+        let proposal = ProposalData {
+            action: upgrade_action_id,
+            id: Some(proposal_id.into()),
+            latest_tally: Some(Tally {
+                yes: 0,
+                no: 0,
+                total: 1,
+                timestamp_seconds: 1,
+            }),
+            ..Default::default()
+        };
+        assert_eq!(proposal.status(), Status::ProposalStatusOpen);
+
+        // Step 2: Run code under test.
+        let some_other_proposal_id = 99_u64;
+        let result = err_if_another_upgrade_is_in_progress(
+            &btreemap! {
+                proposal_id => proposal,
+            },
+            some_other_proposal_id,
+        );
+
+        // Step 3: Inspect result.
+        assert!(result.is_ok(), "{:#?}", result);
+    }
+
+    #[test]
+    fn test_allow_canister_upgrades_after_another_upgrade_proposal_has_executed() {
+        // Step 1: Prepare the world.
+        use ProposalDecisionStatus as Status;
+
+        let upgrade_action_id: u64 =
+            (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into();
+
+        let proposal_id = 1_u64;
+        let proposal = ProposalData {
+            action: upgrade_action_id,
+            id: Some(proposal_id.into()),
+            decided_timestamp_seconds: 1,
+            executed_timestamp_seconds: 1,
+            latest_tally: Some(Tally {
+                yes: 1,
+                no: 0,
+                total: 1,
+                timestamp_seconds: 1,
+            }),
+            ..Default::default()
+        };
+        assert_eq!(proposal.status(), Status::ProposalStatusExecuted);
+
+        // Step 2: Run code under test.
+        let some_other_proposal_id = 99_u64;
+        let result = err_if_another_upgrade_is_in_progress(
+            &btreemap! {
+                proposal_id => proposal,
+            },
+            some_other_proposal_id,
+        );
+
+        // Step 3: Inspect result.
+        assert!(result.is_ok(), "{:#?}", result);
+    }
+
+    #[test]
+    fn test_allow_canister_upgrades_proposal_does_not_block_itself_but_does_block_others() {
+        // Step 1: Prepare the world.
+        use ProposalDecisionStatus as Status;
+
+        let upgrade_action_id: u64 =
+            (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into();
+
+        let proposal_id = 1_u64;
+        let proposal = ProposalData {
+            action: upgrade_action_id,
+            id: Some(proposal_id.into()),
+            decided_timestamp_seconds: 1,
+            latest_tally: Some(Tally {
+                yes: 1,
+                no: 0,
+                total: 1,
+                timestamp_seconds: 1,
+            }),
+            ..Default::default()
+        };
+        assert_eq!(proposal.status(), Status::ProposalStatusAdopted);
+
+        let proposals = btreemap! {
+            proposal_id => proposal,
+        };
+
+        // Step 2 & 3: Run code under test, and inspect results.
+        let result = err_if_another_upgrade_is_in_progress(&proposals, proposal_id);
+        assert!(result.is_ok(), "{:#?}", result);
+
+        // Other upgrades should be blocked by proposal 1 though.
+        let some_other_proposal_id = 99_u64;
+        match err_if_another_upgrade_is_in_progress(&proposals, some_other_proposal_id) {
+            Ok(_) => panic!("Some other upgrade proposal was not blocked."),
+            Err(err) => assert_eq!(
+                err.error_type,
+                ErrorType::ResourceExhausted as i32,
+                "{:#?}",
+                err,
+            ),
         }
     }
 }
