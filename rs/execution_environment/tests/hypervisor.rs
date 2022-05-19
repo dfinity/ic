@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_config::execution_environment::Config;
 use ic_error_types::{ErrorCode, RejectCode};
@@ -13,11 +14,11 @@ use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::CanisterStatus;
 use ic_replicated_state::{
     canister_state::execution_state::CustomSectionType, page_map::MemoryRegion,
-    testing::CanisterQueuesTesting, CallContextAction, CallOrigin, CanisterState,
-    ExportedFunctions, Global, NetworkTopology, NumWasmPages, PageIndex, SubnetTopology,
-    SystemState,
+    testing::CanisterQueuesTesting, CallContextAction, CanisterState, ExportedFunctions, Global,
+    NetworkTopology, NumWasmPages, PageIndex, SubnetTopology, SystemState,
 };
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ApiType;
@@ -30,16 +31,15 @@ use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     metrics::{fetch_histogram_stats, HistogramStats},
     mock_time,
-    state::{
-        canister_from_exec_state, get_stopped_canister, get_stopping_canister, SystemStateBuilder,
-    },
+    state::{canister_from_exec_state, SystemStateBuilder},
     types::ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
     with_test_replica_logger,
 };
+use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
     ingress::WasmResult,
-    messages::{CallbackId, Payload, RejectContext, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
-    methods::{Callback, FuncRef, WasmClosure, WasmMethod},
+    messages::{RejectContext, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
+    methods::{FuncRef, WasmClosure, WasmMethod},
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     PrincipalId, SubnetId, Time, UserId,
 };
@@ -55,7 +55,6 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000
 const EMPTY_PAYLOAD: Vec<u8> = Vec::new();
 const MEMORY_ALLOCATION: NumBytes = NumBytes::new(10_000_000);
 const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
-const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
 
 lazy_static! {
     pub static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
@@ -1797,213 +1796,179 @@ fn ic0_canister_self_copy_works() {
 }
 
 #[test]
-fn test_call_simple_does_not_enqueue_request_if_err() {
-    with_hypervisor(|hypervisor, tmp_path| {
-        let (canister, _, action, _) = execute_update(
-            &hypervisor,
-            r#"(module
-                  (import "ic0" "call_simple"
-                    (func $ic0_call_simple
-                        (param i32 i32)
-                        (param $method_name_src i32)    (param $method_name_len i32)
-                        (param $reply_fun i32)          (param $reply_env i32)
-                        (param $reject_fun i32)         (param $reject_env i32)
-                        (param $data_src i32)           (param $data_len i32)
-                        (result i32)))
-                  (import "ic0" "trap" (func $ic_trap (param i32) (param i32)))
-                  (func $test
-                    (call $ic0_call_simple
-                        (i32.const 100) (i32.const 10)  ;; callee canister id = 777
-                        (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
-                        (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
-                        (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
-                        (i32.const 19) (i32.const 3)    ;; refers to "XYZ" on the heap
-                        )
-                    drop
-
-                    ;; call_simple and then fail.
-                    (call $ic_trap (i32.const 0) (i32.const 18)))
-
-                  (export "canister_update test" (func $test))
-                  (memory $memory 1)
-                  (export "memory" (memory $memory))
-                  (data (i32.const 0) "some_remote_method XYZ")
-                  (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
-                )"#,
-            "test",
-            EMPTY_PAYLOAD,
-            tmp_path,
-        );
-
-        assert_eq!(
-            action,
-            CallContextAction::Fail {
-                error: HypervisorError::CalledTrap("some_remote_method".to_string()),
-                refund: Cycles::zero(),
-            }
-        );
-        assert_eq!(canister.system_state.queues().output_queues_len(), 0);
-    });
+fn ic0_call_simple_has_no_effect_on_trap() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "call_simple"
+                (func $ic0_call_simple
+                    (param i32 i32)
+                    (param $method_name_src i32)    (param $method_name_len i32)
+                    (param $reply_fun i32)          (param $reply_env i32)
+                    (param $reject_fun i32)         (param $reject_env i32)
+                    (param $data_src i32)           (param $data_len i32)
+                    (result i32))
+            )
+            (import "ic0" "trap" (func $ic_trap (param i32) (param i32)))
+            (func (export "canister_update test")
+                (call $ic0_call_simple
+                    (i32.const 100) (i32.const 10)  ;; callee canister id = 777
+                    (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
+                    (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
+                    (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
+                    (i32.const 19) (i32.const 3)    ;; refers to "XYZ" on the heap
+                    )
+                drop
+                (call $ic_trap (i32.const 0) (i32.const 18))
+            )
+            (memory 1)
+            (data (i32.const 0) "some_remote_method XYZ")
+            (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+    assert_eq!(0, test.xnet_messages().len());
 }
 
 #[test]
-fn test_call_with_builder_does_not_enqueue_request_if_err() {
-    with_hypervisor(|hypervisor, tmp_path| {
-        let (canister, _, action, _) = execute_update(
-            &hypervisor,
-            r#"(module
-                  (import "ic0" "call_new"
-                    (func $ic0_call_new
-                        (param i32 i32)
-                        (param $method_name_src i32)    (param $method_name_len i32)
-                        (param $reply_fun i32)          (param $reply_env i32)
-                        (param $reject_fun i32)         (param $reject_env i32)
-                    ))
-                  (import "ic0" "call_data_append" (func $ic0_call_data_append (param $src i32) (param $size i32)))
-                  (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
-                  (import "ic0" "trap" (func $ic_trap (param i32) (param i32)))
-                  (func $test
-                    (call $ic0_call_new
-                        (i32.const 100) (i32.const 10)  ;; callee canister id = 777
-                        (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
-                        (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
-                        (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
-                    )
-                    (call $ic0_call_data_append
-                        (i32.const 19) (i32.const 3)    ;; refers to "XYZ" on the heap
-                    )
-                    (call $ic0_call_perform)
-                    drop
-
-                    ;; call_simple and then fail.
-                    (call $ic_trap (i32.const 0) (i32.const 18)))
-
-                  (export "canister_update test" (func $test))
-                  (memory $memory 1)
-                  (export "memory" (memory $memory))
-                  (data (i32.const 0) "some_remote_method XYZ")
-                  (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
-                )"#,
-            "test",
-            EMPTY_PAYLOAD,
-            tmp_path,
-        );
-
-        assert_eq!(
-            action,
-            CallContextAction::Fail {
-                error: HypervisorError::CalledTrap("some_remote_method".to_string()),
-                refund: Cycles::zero(),
-            }
-        );
-        assert_eq!(canister.system_state.queues().output_queues_len(), 0);
-    });
+fn ic0_call_perform_has_no_effect_on_trap() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "call_new"
+                (func $ic0_call_new
+                    (param i32 i32)
+                    (param $method_name_src i32)    (param $method_name_len i32)
+                    (param $reply_fun i32)          (param $reply_env i32)
+                    (param $reject_fun i32)         (param $reject_env i32)
+                )
+            )
+            (import "ic0" "call_data_append"
+                (func $ic0_call_data_append (param $src i32) (param $size i32))
+            )
+            (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+            (import "ic0" "trap" (func $ic_trap (param i32) (param i32)))
+            (func (export "canister_update test")
+                (call $ic0_call_new
+                    (i32.const 100) (i32.const 10)  ;; callee canister id = 777
+                    (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
+                    (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
+                    (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
+                )
+                (call $ic0_call_data_append
+                    (i32.const 19) (i32.const 3)    ;; refers to "XYZ" on the heap
+                )
+                (drop (call $ic0_call_perform))
+                (call $ic_trap (i32.const 0) (i32.const 18))
+            )
+            (memory 1)
+            (data (i32.const 0) "some_remote_method XYZ")
+            (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+    assert_eq!(0, test.xnet_messages().len());
 }
 
 #[test]
-fn test_call_add_cycles_deducts_cycles() {
-    with_hypervisor(|hypervisor, tmp_path| {
-        let (canister, _instructions_left, action, _) = execute_update(
-            &hypervisor,
-            r#"(module
-                  (import "ic0" "call_new"
-                    (func $ic0_call_new
-                        (param i32 i32)
-                        (param $method_name_src i32)    (param $method_name_len i32)
-                        (param $reply_fun i32)          (param $reply_env i32)
-                        (param $reject_fun i32)         (param $reject_env i32)
-                    ))
-                  (import "ic0" "call_cycles_add" (func $ic0_call_cycles_add (param $amount i64)))
-                  (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
-                  (func $test
-                    (call $ic0_call_new
-                        (i32.const 100) (i32.const 10)  ;; callee canister id = 777
-                        (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
-                        (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
-                        (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
-                    )
-                    (call $ic0_call_cycles_add
-                        (i64.const 10000000000)         ;; amount of cycles used to be transferred
-                    )
-                    (call $ic0_call_perform)
-                    drop)
-
-                  (export "canister_update test" (func $test))
-                  (memory $memory 1)
-                  (export "memory" (memory $memory))
-                  (data (i32.const 0) "some_remote_method XYZ")
-                  (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
-                )"#,
-            "test",
-            EMPTY_PAYLOAD,
-            tmp_path,
-        );
-
-        assert_eq!(action, CallContextAction::NotYetResponded);
-        assert_eq!(canister.system_state.queues().output_queues_len(), 1);
-
-        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let messaging_fee = cycles_account_manager.xnet_call_performed_fee()
-            + cycles_account_manager
-                .xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES)
-            + cycles_account_manager.execution_cost(MAX_NUM_INSTRUCTIONS);
-
-        // Amount of cycles used to be transferred.
-        let amount_cycles = Cycles::new(10_000_000_000);
-        assert_balance_equals(
-            INITIAL_CYCLES - amount_cycles - messaging_fee,
-            canister.system_state.balance(),
-            BALANCE_EPSILON,
-        );
-    });
+fn ic0_call_cycles_add_deducts_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "call_new"
+                (func $ic0_call_new
+                    (param i32 i32)
+                    (param $method_name_src i32)    (param $method_name_len i32)
+                    (param $reply_fun i32)          (param $reply_env i32)
+                    (param $reject_fun i32)         (param $reject_env i32)
+                )
+            )
+            (import "ic0" "call_cycles_add" (func $ic0_call_cycles_add (param i64)))
+            (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+            (func (export "canister_update test")
+                (call $ic0_call_new
+                    (i32.const 100) (i32.const 10)  ;; callee canister id = 777
+                    (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
+                    (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
+                    (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
+                )
+                (call $ic0_call_cycles_add
+                    (i64.const 10000000000)         ;; amount of cycles used to be transferred
+                )
+                (call $ic0_call_perform)
+                drop
+            )
+            (memory 1)
+            (data (i32.const 0) "some_remote_method XYZ")
+            (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
+        )"#;
+    let initial_cycles = Cycles::new(100_000_000_000);
+    let canister_id = test
+        .canister_from_cycles_and_wat(initial_cycles, wat)
+        .unwrap();
+    let ingress_status = test.ingress_raw(canister_id, "test", vec![]);
+    let ingress_state = match ingress_status {
+        IngressStatus::Known { state, .. } => state,
+        IngressStatus::Unknown => unreachable!("Expected known ingress status"),
+    };
+    assert_eq!(IngressState::Processing, ingress_state);
+    assert_eq!(1, test.xnet_messages().len());
+    let mgr = test.cycles_account_manager();
+    let messaging_fee = mgr.xnet_call_performed_fee()
+        + mgr.xnet_call_bytes_transmitted_fee(test.xnet_messages()[0].payload_size_bytes())
+        + mgr.xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES)
+        + mgr.execution_cost(MAX_NUM_INSTRUCTIONS);
+    let transferred_cycles = Cycles::new(10_000_000_000);
+    assert_eq!(
+        initial_cycles - messaging_fee - transferred_cycles - test.execution_cost(),
+        test.canister_state(canister_id).system_state.balance(),
+    );
 }
 
 #[test]
-fn test_call_add_cycles_no_effect_when_perform_not_called() {
-    with_hypervisor(|hypervisor, tmp_path| {
-        let (canister, _, _, _) = execute_update(
-            &hypervisor,
-            r#"(module
-                  (import "ic0" "call_new"
-                    (func $ic0_call_new
-                        (param i32 i32)
-                        (param $method_name_src i32)    (param $method_name_len i32)
-                        (param $reply_fun i32)          (param $reply_env i32)
-                        (param $reject_fun i32)         (param $reject_env i32)
-                    ))
-                  (import "ic0" "call_cycles_add" (func $ic0_call_cycles_add (param $amount i64)))
-                  (func $test
-                    (call $ic0_call_new
-                        (i32.const 100) (i32.const 10)  ;; callee canister id = 777
-                        (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
-                        (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
-                        (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
-                    )
-                    (call $ic0_call_cycles_add
-                        (i64.const 10000000000)         ;; amount of cycles used to be transferred
-                    ))
+fn ic0_call_cycles_add_has_no_effect_without_ic0_call_perform() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "call_new"
+                (func $call_new
+                    (param i32 i32)
+                    (param $method_name_src i32) (param $method_name_len i32)
+                    (param $reply_fun i32)       (param $reply_env i32)
+                    (param $reject_fun i32)      (param $reject_env i32)
+                )
+            )
+            (import "ic0" "call_cycles_add" (func $call_cycles_add (param i64)))
+            (func (export "canister_update test")
+                (call $call_new
+                    (i32.const 100) (i32.const 10)  ;; callee canister id = 777
+                    (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
+                    (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
+                    (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
+                )
+                (call $call_cycles_add
+                    (i64.const 10000000000)         ;; amount of cycles used to be transferred
+                )
+            )
+            (memory 1)
+            (data (i32.const 0) "some_remote_method XYZ")
+            (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
+        )"#;
 
-                  (export "canister_update test" (func $test))
-                  (memory $memory 1)
-                  (export "memory" (memory $memory))
-                  (data (i32.const 0) "some_remote_method XYZ")
-                  (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
-                )"#,
-            "test",
-            EMPTY_PAYLOAD,
-            tmp_path,
-        );
-
-        assert_eq!(canister.system_state.queues().output_queues_len(), 0);
-
-        //Cycles deducted by `ic0.call_cycles_add` are refunded.
-        //Call `ic0.call_perform` never called.
-        assert_balance_equals(
-            INITIAL_CYCLES,
-            canister.system_state.balance(),
-            BALANCE_EPSILON,
-        );
-    });
+    let initial_cycles = Cycles::new(100_000_000_000);
+    let canister_id = test
+        .canister_from_cycles_and_wat(initial_cycles, wat)
+        .unwrap();
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+    assert_eq!(0, test.xnet_messages().len());
+    // Cycles deducted by `ic0.call_cycles_add` are refunded.
+    assert_eq!(
+        initial_cycles - test.execution_cost(),
+        test.canister_state(canister_id).system_state.balance(),
+    );
 }
 
 const MINT_CYCLES: &str = r#"
@@ -2750,136 +2715,62 @@ fn changes_to_stable_memory_in_canister_post_upgrade_are_rolled_back_on_failure(
 
 #[test]
 fn cannot_execute_update_on_stopping_canister() {
-    with_hypervisor(|hypervisor, _| {
-        let canister = get_stopping_canister(canister_test_id(0));
-        let (_, _, network_topology) = setup();
-        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
-
-        assert_eq!(
-            hypervisor
-                .execute_update(
-                    canister,
-                    RequestOrIngress::Ingress(IngressBuilder::new().build()),
-                    mock_time(),
-                    network_topology,
-                    execution_parameters,
-                )
-                .2,
-            CallContextAction::Fail {
-                error: HypervisorError::CanisterStopped,
-                refund: Cycles::zero(),
-            },
-        );
-    });
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    test.stop_canister(canister_id);
+    assert_matches!(
+        test.canister_state(canister_id).system_state.status,
+        CanisterStatus::Stopping {
+            call_context_manager: _,
+            stop_contexts: _
+        }
+    );
+    let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
+    assert_eq!(ErrorCode::CanisterStopping, err.code());
 }
 
 #[test]
 fn cannot_execute_update_on_stopped_canister() {
-    with_hypervisor(|hypervisor, _| {
-        let canister = get_stopped_canister(canister_test_id(0));
-        let (_, _, network_topology) = setup();
-        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
-
-        assert_eq!(
-            hypervisor
-                .execute_update(
-                    canister,
-                    RequestOrIngress::Ingress(IngressBuilder::new().build()),
-                    mock_time(),
-                    network_topology,
-                    execution_parameters,
-                )
-                .2,
-            CallContextAction::Fail {
-                error: HypervisorError::CanisterStopped,
-                refund: Cycles::zero(),
-            },
-        );
-    });
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        CanisterStatus::Stopped,
+        test.canister_state(canister_id).system_state.status
+    );
+    let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
+    assert_eq!(ErrorCode::CanisterStopped, err.code());
 }
 
 #[test]
 fn cannot_execute_query_on_stopping_canister() {
-    with_hypervisor(|hypervisor, _| {
-        let canister = get_stopping_canister(canister_test_id(0));
-        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
-
-        assert_eq!(
-            hypervisor
-                .execute_query(
-                    QueryExecutionType::Replicated,
-                    "query_test",
-                    &[],
-                    user_test_id(0).get(),
-                    canister,
-                    None,
-                    mock_time(),
-                    execution_parameters,
-                )
-                .2,
-            Err(HypervisorError::CanisterStopped)
-        );
-    });
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    test.stop_canister(canister_id);
+    assert_matches!(
+        test.canister_state(canister_id).system_state.status,
+        CanisterStatus::Stopping {
+            call_context_manager: _,
+            stop_contexts: _
+        }
+    );
+    let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
+    assert_eq!(ErrorCode::CanisterStopping, err.code());
 }
 
 #[test]
 fn cannot_execute_query_on_stopped_canister() {
-    with_hypervisor(|hypervisor, _| {
-        let canister = get_stopped_canister(canister_test_id(0));
-        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
-
-        assert_eq!(
-            hypervisor
-                .execute_query(
-                    QueryExecutionType::Replicated,
-                    "query_test",
-                    &[],
-                    user_test_id(0).get(),
-                    canister,
-                    None,
-                    mock_time(),
-                    execution_parameters,
-                )
-                .2,
-            Err(HypervisorError::CanisterStopped)
-        );
-    });
-}
-
-#[test]
-fn cannot_execute_callback_on_stopped_canister() {
-    with_hypervisor(|hypervisor, _| {
-        let canister = get_stopped_canister(canister_test_id(0));
-        let (_, _, network_topology) = setup();
-        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
-
-        assert_eq!(
-            hypervisor
-                .execute_callback(
-                    canister,
-                    &CallOrigin::CanisterUpdate(canister_test_id(0), CallbackId::from(0)),
-                    Callback::new(
-                        call_context_test_id(0),
-                        None,
-                        None,
-                        Cycles::zero(),
-                        WasmClosure::new(0, 0),
-                        WasmClosure::new(0, 0),
-                        None
-                    ),
-                    Payload::Data(EMPTY_PAYLOAD),
-                    Cycles::zero(),
-                    mock_time(),
-                    network_topology,
-                    execution_parameters,
-                )
-                .2,
-            CallContextAction::Fail {
-                error: HypervisorError::CanisterStopped,
-                refund: Cycles::from(0),
-            }
-        );
-    });
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        CanisterStatus::Stopped,
+        test.canister_state(canister_id).system_state.status
+    );
+    let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
+    assert_eq!(ErrorCode::CanisterStopped, err.code());
 }
 
 #[test]
