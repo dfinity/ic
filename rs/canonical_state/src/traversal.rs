@@ -183,7 +183,7 @@ mod tests {
         );
 
         // Test new certification version.
-        state.metadata.certification_version = 2;
+        state.metadata.certification_version = CertificationVersion::V2;
         let visitor = TracingVisitor::new(NoopVisitor);
         assert_eq!(
             vec![
@@ -309,7 +309,7 @@ mod tests {
         );
 
         // Test new certification version.
-        state.metadata.certification_version = 2;
+        state.metadata.certification_version = CertificationVersion::V2;
         let visitor = TracingVisitor::new(NoopVisitor);
         assert_eq!(
             vec![
@@ -350,7 +350,7 @@ mod tests {
         );
 
         // Test new certification version.
-        state.metadata.certification_version = 6;
+        state.metadata.certification_version = CertificationVersion::V6;
         let visitor = TracingVisitor::new(NoopVisitor);
         assert_eq!(
             vec![
@@ -449,7 +449,7 @@ mod tests {
                 edge("header"),
                 E::VisitBlob(encode_stream_header(
                     &header,
-                    CertificationVersion::try_from(state.metadata.certification_version).unwrap(),
+                    state.metadata.certification_version,
                 )),
                 edge("messages"),
                 E::StartSubtree,
@@ -683,7 +683,7 @@ mod tests {
         );
 
         let visitor = TracingVisitor::new(NoopVisitor);
-        state.metadata.certification_version = 2;
+        state.metadata.certification_version = CertificationVersion::V2;
         assert_eq!(
             vec![
                 E::StartSubtree,
@@ -723,7 +723,7 @@ mod tests {
 
         let patter = Pattern::match_only("subnet", Pattern::all());
         let visitor = SubtreeVisitor::new(&patter, TracingVisitor::new(NoopVisitor));
-        state.metadata.certification_version = 3;
+        state.metadata.certification_version = CertificationVersion::V3;
         assert_eq!(
             vec![
                 E::StartSubtree,

@@ -1,5 +1,6 @@
 use crate::message_routing::LatencyMetrics;
 use ic_base_types::NumBytes;
+use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_error_types::RejectCode;
 use ic_logger::{debug, error, fatal, trace, ReplicaLogger};
@@ -664,7 +665,7 @@ impl StreamHandlerImpl {
                         }
 
                         RequestOrResponse::Response(_) => {
-                            if state.metadata.certification_version >= 9
+                            if state.metadata.certification_version >= CertificationVersion::V9
                                 || self.testing_flag_generate_reject_signals
                             {
                                 debug!(self.log, "Canister {} has been migrated, generating reject signal for {:?}", msg.receiver(), msg);

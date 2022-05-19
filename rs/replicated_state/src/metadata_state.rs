@@ -84,7 +84,7 @@ pub struct SystemMetadata {
 
     /// The version of certification procedure that should be used for this
     /// state.
-    pub certification_version: u32,
+    pub certification_version: CertificationVersion,
 
     /// When canisters execute and modify their heap, we track the actual delta
     /// they produced. From time to time, when consensus tells us that it is
@@ -383,7 +383,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
             network_topology: Some((&item.network_topology).into()),
             subnet_call_context_manager: Some((&item.subnet_call_context_manager).into()),
             state_sync_version: item.state_sync_version,
-            certification_version: item.certification_version,
+            certification_version: item.certification_version as u32,
             heap_delta_estimate: item.heap_delta_estimate.get(),
             own_subnet_features: Some(item.own_subnet_features.into()),
             time_of_last_allocation_charge_nanos: Some(TimeOfLastAllocationCharge {
@@ -408,6 +408,7 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
                 try_from_option_field(entry.subnet_stream, "SystemMetadata::streams::V")?,
             );
         }
+        let certification_version = item.certification_version;
         Ok(Self {
             own_subnet_id: subnet_id_try_from_protobuf(try_from_option_field(
                 item.own_subnet_id,
@@ -434,7 +435,9 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
                 "SystemMetadata::network_topology",
             )?,
             state_sync_version: item.state_sync_version,
-            certification_version: item.certification_version,
+            certification_version: item.certification_version.try_into().map_err(|_| {
+                ProxyDecodeError::UnknownCertificationVersion(certification_version)
+            })?,
             subnet_call_context_manager: match item.subnet_call_context_manager {
                 Some(manager) => SubnetCallContextManager::try_from(manager)?,
                 None => Default::default(),
@@ -468,7 +471,7 @@ impl SystemMetadata {
             // committing each state.
             prev_state_hash: Default::default(),
             state_sync_version: 0,
-            certification_version: 0,
+            certification_version: CertificationVersion::V0,
             heap_delta_estimate: NumBytes::from(0),
             time_of_last_allocation_charge: UNIX_EPOCH,
         }

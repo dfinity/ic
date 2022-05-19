@@ -5,6 +5,7 @@ edition = "2018"
 
 [dependencies]
 ic-base-types = { path = "../types/base_types" }
+ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }

@@ -1691,8 +1691,7 @@ impl StateManagerImpl {
 
     fn populate_extra_metadata(&self, state: &mut ReplicatedState, height: Height) {
         state.metadata.state_sync_version = manifest::CURRENT_STATE_SYNC_VERSION;
-        state.metadata.certification_version =
-            ic_canonical_state::CURRENT_CERTIFICATION_VERSION as u32;
+        state.metadata.certification_version = ic_canonical_state::CURRENT_CERTIFICATION_VERSION;
 
         if height == Self::INITIAL_STATE_HEIGHT {
             return;

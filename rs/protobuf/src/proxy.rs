@@ -115,6 +115,9 @@ pub enum ProxyDecodeError {
     /// Duplicate map entry.
     DuplicateEntry { key: String, v1: String, v2: String },
 
+    /// Certification version not implemented.
+    UnknownCertificationVersion(u32),
+
     /// Generic error.
     Other(String),
 }
@@ -173,6 +176,11 @@ impl std::fmt::Display for ProxyDecodeError {
                 f,
                 "Entry {:?} repeats multiple times. Previous: {}, current: {}",
                 key, v1, v2
+            ),
+            Self::UnknownCertificationVersion(version) => write!(
+                f,
+                "Replica does not implement certification version {}",
+                version
             ),
             Self::Other(msg) => f.write_str(msg),
         }

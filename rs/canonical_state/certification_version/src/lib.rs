@@ -1,6 +1,6 @@
-use strum_macros::EnumIter;
+use strum_macros::{EnumCount, EnumIter};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, EnumIter)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter)]
 pub enum CertificationVersion {
     /// Initial version.
     V0 = 0,
