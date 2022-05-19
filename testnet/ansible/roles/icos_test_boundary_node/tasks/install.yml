@@ -112,6 +112,16 @@
   tags:
     - boundary_node
 
+- name: copy denylist file
+  copy:
+    src: "denylist.map"
+    dest: "/etc/nginx/denylist.map"
+    mode: "0644"
+    owner: "root"
+    group: "root"
+  tags:
+    - boundary_node
+
 - name: copy boundary-node-control-plane for icos_test
   vars:
     ic: "{{ inventory_file | dirname | basename }}"
@@ -202,6 +212,16 @@
     owner: "root"
     group: "root"
   when: not nginx_table.stat.exists
+  tags:
+    - boundary_node
+
+- name: copy denylist file
+  copy:
+    src: "denylist.map"
+    dest: "/etc/nginx/denylist.map"
+    mode: "0644"
+    owner: "root"
+    group: "root"
   tags:
     - boundary_node
 
