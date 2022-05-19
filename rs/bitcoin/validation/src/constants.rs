@@ -10,6 +10,12 @@ pub const DIFFICULTY_ADJUSTMENT_INTERVAL: BlockHeight = 6 * 24 * 14;
 /// Needed to help test check for the 20 minute testnet/regtest rule
 pub const TEN_MINUTES: u32 = 60 * 10;
 
+/// Represents approximately the number of blocks that will be created within one year.
+///
+/// This number is determine by the following formula. A year approximately has 356.25 days. Assuming the
+/// Bitcoin network produces a new block every 10 minutes on average, `6 * 24 * 365.25 = 52,596`.
+pub const BLOCKS_IN_ONE_YEAR: BlockHeight = 52_596;
+
 /// Bitcoin mainnet checkpoints
 #[rustfmt::skip]
 const BITCOIN: &[(BlockHeight, &str)] = &[
