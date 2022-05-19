@@ -2,8 +2,7 @@ use crate::{
     canister_manager::{uninstall_canister, InstallCodeContext},
     execution_environment::ExecutionEnvironment,
     metrics::MeasurementScope,
-    util::process_response,
-    util::process_responses,
+    util::{self, process_response, process_responses},
 };
 use ic_btc_canister::BitcoinCanister;
 use ic_config::flag_status::FlagStatus;
@@ -11,9 +10,7 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto::prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{
-    CanisterStatusType, EmptyBlob, InstallCodeArgs, Method as Ic00Method, Payload as _, IC_00,
-};
+use ic_ic00_types::{CanisterStatusType, InstallCodeArgs, Method as Ic00Method, Payload as _};
 use ic_interfaces::execution_environment::{AvailableMemory, ExecResult};
 use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, Scheduler, SubnetAvailableMemory},
@@ -23,13 +20,13 @@ use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::{
-    bitcoin_state::BitcoinState, canister_state::QUEUE_INDEX_NONE, CanisterState, CanisterStatus,
-    InputQueueType, NetworkTopology, ReplicatedState,
+    bitcoin_state::BitcoinState, canister_state::QUEUE_INDEX_NONE, CanisterState, InputQueueType,
+    NetworkTopology, ReplicatedState,
 };
 use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
-    ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{Ingress, MessageId, Payload, Response, StopCanisterContext},
+    ingress::{IngressState, IngressStatus},
+    messages::{Ingress, MessageId},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation,
     NumBytes, NumInstructions, Randomness, SubnetId, Time,
 };
@@ -40,7 +37,6 @@ use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
-    mem,
     str::FromStr,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -622,67 +618,12 @@ impl SchedulerImpl {
         )
     }
 
-    /// Checks for stopping canisters and, if any of them are ready to stop,
-    /// transitions them to be fully stopped. Responses to the pending stop
-    /// message(s) are written to ingress history.
-    fn process_stopping_canisters(&self, mut state: ReplicatedState) -> ReplicatedState {
-        let mut canister_states = state.take_canister_states();
-        let time = state.time();
-
-        for canister in canister_states.values_mut() {
-            if !(canister.status() == CanisterStatusType::Stopping
-                && canister.system_state.ready_to_stop())
-            {
-                // Canister is either not stopping or isn't ready to be stopped yet. Nothing to
-                // do.
-                continue;
-            }
-
-            // Transition the canister to "stopped".
-            let stopping_status =
-                mem::replace(&mut canister.system_state.status, CanisterStatus::Stopped);
-
-            if let CanisterStatus::Stopping { stop_contexts, .. } = stopping_status {
-                // Respond to the stop messages.
-                for stop_context in stop_contexts {
-                    match stop_context {
-                        StopCanisterContext::Ingress { sender, message_id } => {
-                            // Responding to stop_canister request from a user.
-                            self.ingress_history_writer.set_status(
-                                &mut state,
-                                message_id,
-                                IngressStatus::Known {
-                                    receiver: IC_00.get(),
-                                    user_id: sender,
-                                    time,
-                                    state: IngressState::Completed(WasmResult::Reply(
-                                        EmptyBlob::encode(),
-                                    )),
-                                },
-                            )
-                        }
-                        StopCanisterContext::Canister {
-                            sender,
-                            reply_callback,
-                            cycles,
-                        } => {
-                            // Responding to stop_canister request from a canister.
-                            let subnet_id_as_canister_id = CanisterId::from(self.own_subnet_id);
-                            let response = Response {
-                                originator: sender,
-                                respondent: subnet_id_as_canister_id,
-                                originator_reply_callback: reply_callback,
-                                refund: cycles,
-                                response_payload: Payload::Data(EmptyBlob::encode()),
-                            };
-                            state.push_subnet_output_response(response);
-                        }
-                    }
-                }
-            }
-        }
-        state.put_canister_states(canister_states);
-        state
+    fn process_stopping_canisters(&self, state: ReplicatedState) -> ReplicatedState {
+        util::process_stopping_canisters(
+            state,
+            self.ingress_history_writer.as_ref(),
+            self.own_subnet_id,
+        )
     }
 
     fn purge_expired_ingress_messages(&self, state: &mut ReplicatedState) {

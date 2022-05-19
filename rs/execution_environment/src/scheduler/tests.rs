@@ -12,12 +12,12 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::SubnetTopology;
 use ic_replicated_state::{
     canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CallOrigin, ExportedFunctions,
 };
+use ic_replicated_state::{CanisterStatus, SubnetTopology};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     history::MockIngressHistory,
@@ -36,7 +36,7 @@ use ic_test_utilities::{
     },
     with_test_replica_logger,
 };
-use ic_types::messages::CallContextId;
+use ic_types::messages::{CallContextId, Payload, Response, StopCanisterContext};
 use ic_types::methods::{Callback, SystemMethod, WasmClosure};
 use ic_types::{
     ingress::WasmResult, methods::WasmMethod, time::UNIX_EPOCH, ComputeAllocation, Cycles, NumBytes,

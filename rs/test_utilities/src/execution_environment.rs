@@ -7,6 +7,7 @@ use ic_config::subnet_config::SubnetConfigs;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{
+    util::{process_response, process_stopping_canisters},
     CanisterHeartbeatError, ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor,
     IngressHistoryWriterImpl,
 };
@@ -14,6 +15,7 @@ use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs,
 };
+use ic_interfaces::execution_environment::IngressHistoryWriter;
 use ic_interfaces::{
     execution_environment::{
         AvailableMemory, ExecResult, ExecutionMode, ExecutionParameters, HypervisorError,
@@ -26,13 +28,17 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CanisterState, ExecutionState, ReplicatedState};
-use ic_types::messages::MessageId;
+use ic_replicated_state::{
+    canister_state::QUEUE_INDEX_NONE, CanisterState, ExecutionState, InputQueueType,
+    ReplicatedState,
+};
+use ic_types::messages::{MessageId, RequestOrResponse};
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     CanisterId, Cycles, NumInstructions, UserId,
 };
 use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
+use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use maplit::btreemap;
 
 use crate::{
@@ -206,6 +212,10 @@ pub struct ExecutionTest {
     subnet_available_memory: SubnetAvailableMemory,
     // The number of instructions executed so far.
     executed_instructions: NumInstructions,
+    // The total cost of execution so far.
+    execution_cost: Cycles,
+    // Messages to canisters on other subnets.
+    xnet_messages: Vec<RequestOrResponse>,
 
     // Read-only fields.
     instruction_limit: NumInstructions,
@@ -218,6 +228,7 @@ pub struct ExecutionTest {
     exec_env: ExecutionEnvironmentImpl,
     cycles_account_manager: Arc<CyclesAccountManager>,
     metrics_registry: MetricsRegistry,
+    ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
 }
 
 impl ExecutionTest {
@@ -236,8 +247,16 @@ impl ExecutionTest {
             .unwrap()
     }
 
+    pub fn xnet_messages(&self) -> &Vec<RequestOrResponse> {
+        &self.xnet_messages
+    }
+
     pub fn executed_instructions(&self) -> NumInstructions {
         self.executed_instructions
+    }
+
+    pub fn execution_cost(&self) -> Cycles {
+        self.execution_cost
     }
 
     pub fn subnet_available_memory(&self) -> AvailableMemory {
@@ -248,10 +267,13 @@ impl ExecutionTest {
         &self.metrics_registry
     }
 
+    pub fn cycles_account_manager(&self) -> &CyclesAccountManager {
+        &self.cycles_account_manager
+    }
+
     /// Sends a `create_canister` message to the IC management canister.
     /// Consider using higher-level helpers like `canister_from_wat()`.
-    pub fn create_canister(&mut self, initial_cycles: Cycles) -> CanisterId {
-        let cycles = initial_cycles + self.cycles_account_manager.canister_creation_fee();
+    pub fn create_canister(&mut self, cycles: Cycles) -> CanisterId {
         let args = ProvisionalCreateCanisterWithCyclesArgs::new(Some(cycles.get()));
         let result =
             self.subnet_message(Method::ProvisionalCreateCanisterWithCycles, args.encode());
@@ -271,6 +293,19 @@ impl ExecutionTest {
     pub fn start_canister(&mut self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
         let payload = CanisterIdRecord::from(canister_id).encode();
         self.subnet_message(Method::StartCanister, payload)
+    }
+
+    pub fn stop_canister(&mut self, canister_id: CanisterId) -> IngressStatus {
+        let payload = CanisterIdRecord::from(canister_id).encode();
+        self.subnet_message_raw(Method::StopCanister, payload)
+    }
+
+    pub fn process_stopping_canisters(&mut self) {
+        let state = self.state.take().unwrap();
+        let own_subnet_id = state.metadata.own_subnet_id;
+        let state =
+            process_stopping_canisters(state, self.ingress_history_writer.as_ref(), own_subnet_id);
+        self.state = Some(state);
     }
 
     /// Installs the given Wasm binary in the given canister.
@@ -350,6 +385,11 @@ impl ExecutionTest {
         self.canister_from_cycles_and_wat(self.initial_canister_cycles, wat)
     }
 
+    // Creates and installs a universal canister.
+    pub fn universal_canister(&mut self) -> Result<CanisterId, UserError> {
+        self.canister_from_binary(UNIVERSAL_CANISTER_WASM.to_vec())
+    }
+
     /// Sends an ingress message to the given canister to call an update or a
     /// query method. In the latter case the query runs in update context.
     pub fn ingress<S: ToString>(
@@ -358,36 +398,7 @@ impl ExecutionTest {
         method_name: S,
         method_payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        let mut state = self.state.take().unwrap();
-        let message_id = self.next_message_id();
-        let canister = state.take_canister_state(&canister_id).unwrap();
-        let network_topology = Arc::new(state.metadata.network_topology.clone());
-        let exec_result = self.exec_env.execute_canister_message(
-            canister,
-            self.instruction_limit,
-            CanisterInputMessage::Ingress(
-                IngressBuilder::new()
-                    .message_id(message_id)
-                    .source(self.user_id)
-                    .receiver(canister_id)
-                    .method_name(method_name)
-                    .method_payload(method_payload)
-                    .build(),
-            ),
-            mock_time(),
-            network_topology,
-            self.subnet_available_memory.clone(),
-        );
-        state.put_canister_state(exec_result.canister);
-        state.metadata.heap_delta_estimate += exec_result.heap_delta;
-        self.state = Some(state);
-        self.executed_instructions += self.instruction_limit - exec_result.num_instructions_left;
-        let ingress_status = match exec_result.result {
-            ExecResult::ResponseResult(_) | ExecResult::Empty => {
-                unreachable!("Unexpected execution result {:?}", exec_result.result)
-            }
-            ExecResult::IngressResult((_, ingress_status)) => ingress_status,
-        };
+        let ingress_status = self.ingress_raw(canister_id, method_name, method_payload);
         match ingress_status {
             IngressStatus::Unknown
             | IngressStatus::Known {
@@ -413,6 +424,56 @@ impl ExecutionTest {
         }
     }
 
+    /// Sends an ingress message to the given canister to call an update or a
+    /// query method. In the latter case the query runs in update context.
+    /// Returns a raw `IngressStatus` without checking if it is completed.
+    pub fn ingress_raw<S: ToString>(
+        &mut self,
+        canister_id: CanisterId,
+        method_name: S,
+        method_payload: Vec<u8>,
+    ) -> IngressStatus {
+        let mut state = self.state.take().unwrap();
+        let ingress_id = self.next_message_id();
+        let ingress = IngressBuilder::new()
+            .message_id(ingress_id.clone())
+            .source(self.user_id)
+            .receiver(canister_id)
+            .method_name(method_name)
+            .method_payload(method_payload)
+            .build();
+        state
+            .canister_state_mut(&canister_id)
+            .unwrap()
+            .push_ingress(ingress);
+        self.state = Some(state);
+        self.execute_ingress(ingress_id)
+    }
+
+    /// Calls the given `canister_id` via the given universal canister.
+    pub fn call_via<S: ToString>(
+        &mut self,
+        universal_canister: CanisterId,
+        canister_id: CanisterId,
+        method_name: S,
+        method_payload: Vec<u8>,
+    ) -> Result<WasmResult, UserError> {
+        self.ingress(
+            universal_canister,
+            "update",
+            wasm()
+                .call_simple(
+                    canister_id.get().to_vec(),
+                    method_name,
+                    call_args()
+                        .other_side(method_payload)
+                        .on_reject(wasm().reject_message().reject())
+                        .on_reply(wasm().message_payload().append_and_reply()),
+                )
+                .build(),
+        )
+    }
+
     /// Executes the heartbeat method of the given canister.
     pub fn heartbeat(&mut self, canister_id: CanisterId) -> Result<(), CanisterHeartbeatError> {
         let mut state = self.state.take().unwrap();
@@ -430,7 +491,7 @@ impl ExecutionTest {
             state.metadata.heap_delta_estimate += heap_delta;
         }
         self.state = Some(state);
-        self.executed_instructions += self.instruction_limit - num_instructions_left;
+        self.update_execution_stats(self.instruction_limit, num_instructions_left);
         result?;
         Ok(())
     }
@@ -476,34 +537,7 @@ impl ExecutionTest {
         method_name: S,
         method_payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        let state = self.state.take().unwrap();
-
-        let message_id = self.next_message_id();
-
-        let mut provisional_whitelist = BTreeSet::new();
-        provisional_whitelist.insert(self.user_id.get());
-
-        let (new_state, instructions_left) = self.exec_env.execute_subnet_message(
-            CanisterInputMessage::Ingress(
-                IngressBuilder::new()
-                    .message_id(message_id.clone())
-                    .source(self.user_id)
-                    .receiver(CanisterId::ic_00())
-                    .method_name(method_name)
-                    .method_payload(method_payload)
-                    .build(),
-            ),
-            state,
-            self.install_code_instruction_limit,
-            &mut mock_random_number_generator(),
-            &None,
-            &ProvisionalWhitelist::Set(provisional_whitelist),
-            self.subnet_available_memory.clone(),
-            self.max_number_of_canisters,
-        );
-        let ingress_status = new_state.get_ingress_status(&message_id);
-        self.state = Some(new_state);
-        self.executed_instructions += self.install_code_instruction_limit - instructions_left;
+        let ingress_status = self.subnet_message_raw(method_name, method_payload);
         match ingress_status {
             IngressStatus::Unknown
             | IngressStatus::Known {
@@ -527,6 +561,155 @@ impl ExecutionTest {
                 ..
             } => Err(error),
         }
+    }
+
+    // A low-level helper to send subnet messages to the IC management canister.
+    fn subnet_message_raw<S: ToString>(
+        &mut self,
+        method_name: S,
+        method_payload: Vec<u8>,
+    ) -> IngressStatus {
+        let state = self.state.take().unwrap();
+
+        let message_id = self.next_message_id();
+
+        let mut provisional_whitelist = BTreeSet::new();
+        provisional_whitelist.insert(self.user_id.get());
+
+        let is_install_code = method_name.to_string() == "install_code";
+
+        let (new_state, instructions_left) = self.exec_env.execute_subnet_message(
+            CanisterInputMessage::Ingress(
+                IngressBuilder::new()
+                    .message_id(message_id.clone())
+                    .source(self.user_id)
+                    .receiver(CanisterId::ic_00())
+                    .method_name(method_name)
+                    .method_payload(method_payload)
+                    .build(),
+            ),
+            state,
+            self.install_code_instruction_limit,
+            &mut mock_random_number_generator(),
+            &None,
+            &ProvisionalWhitelist::Set(provisional_whitelist),
+            self.subnet_available_memory.clone(),
+            self.max_number_of_canisters,
+        );
+        let ingress_status = new_state.get_ingress_status(&message_id);
+        self.state = Some(new_state);
+        if is_install_code {
+            self.update_execution_stats(self.install_code_instruction_limit, instructions_left);
+        }
+        ingress_status
+    }
+
+    // A low-level helper to induct and execute all pending messages and return
+    // the status of the given message.
+    fn execute_ingress(&mut self, ingress_id: MessageId) -> IngressStatus {
+        let mut ingress_status = IngressStatus::Unknown;
+        loop {
+            self.induct_messages();
+            let (executed_any, ingress_results) = self.execute_messages();
+            for (id, result) in ingress_results {
+                if id == ingress_id {
+                    ingress_status = result;
+                }
+            }
+            if !executed_any {
+                break;
+            }
+        }
+        ingress_status
+    }
+
+    // A low-level helper to execute all pending messages.
+    // Returns:
+    // 1) A progress flag indicating whether any message was executed or not.
+    // 2) A vector of ingress results.
+    fn execute_messages(&mut self) -> (bool, Vec<(MessageId, IngressStatus)>) {
+        let mut ingress_results = vec![];
+        let mut executed_any = false;
+        let mut state = self.state.take().unwrap();
+        let mut canisters = state.take_canister_states();
+        let canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
+        for canister_id in canister_ids {
+            let network_topology = Arc::new(state.metadata.network_topology.clone());
+            let mut canister = canisters.remove(&canister_id).unwrap();
+            while canister.has_input() {
+                let message = canister.pop_input().unwrap();
+                let result = self.exec_env.execute_canister_message(
+                    canister,
+                    self.instruction_limit,
+                    message,
+                    mock_time(),
+                    Arc::clone(&network_topology),
+                    self.subnet_available_memory.clone(),
+                );
+                let result = process_response(result);
+                state.metadata.heap_delta_estimate += result.heap_delta;
+                self.update_execution_stats(self.instruction_limit, result.num_instructions_left);
+                canister = result.canister;
+                if let ExecResult::IngressResult(ingress_result) = result.result {
+                    ingress_results.push(ingress_result);
+                };
+                executed_any = true;
+            }
+            canisters.insert(canister_id, canister);
+        }
+        state.put_canister_states(canisters);
+        self.state = Some(state);
+        (executed_any, ingress_results)
+    }
+
+    // Increments the executed instructions and the execution cost counters.
+    fn update_execution_stats(&mut self, limit: NumInstructions, left: NumInstructions) {
+        let mgr = &self.cycles_account_manager;
+        self.executed_instructions += limit - left;
+        // Ideally we would simply add `execution_cost(limit - left)`
+        // but that leads to small precision errors because 1 Cycle = 0.4 Instructions.
+        let fixed_cost = mgr.execution_cost(NumInstructions::from(0));
+        let instruction_cost = mgr.execution_cost(limit) - mgr.execution_cost(left);
+        self.execution_cost += instruction_cost + fixed_cost;
+    }
+
+    // Inducts messages between canisters and pushes all cross-net messages to
+    // `self.xnet_messages`.
+    fn induct_messages(&mut self) {
+        let mut state = self.state.take().unwrap();
+        let mut subnet_available_memory = self.subnet_available_memory.get().get_total_memory();
+        let max_canister_memory_size = self.exec_env.max_canister_memory_size();
+        let mut canisters = state.take_canister_states();
+        let canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
+        for source_canister_id in canister_ids {
+            let mut source_canister = canisters.remove(&source_canister_id).unwrap();
+            source_canister.induct_messages_to_self(
+                max_canister_memory_size,
+                &mut subnet_available_memory,
+                state.metadata.own_subnet_type,
+            );
+            source_canister
+                .system_state
+                .output_queues_for_each(|canister_id, msg| match canisters.get_mut(canister_id) {
+                    Some(dest_canister) => dest_canister
+                        .push_input(
+                            QUEUE_INDEX_NONE,
+                            (*msg).clone(),
+                            max_canister_memory_size,
+                            &mut subnet_available_memory,
+                            state.metadata.own_subnet_type,
+                            InputQueueType::LocalSubnet,
+                        )
+                        .map_err(|(_, _)| {}),
+                    None => {
+                        self.xnet_messages.push((*msg).clone());
+                        Ok(())
+                    }
+                });
+            canisters.insert(source_canister_id, source_canister);
+        }
+        state.put_canister_states(canisters);
+        self.state = Some(state);
     }
 
     /// A low-level helper to generate the next message id.
@@ -712,11 +895,12 @@ impl ExecutionTestBuilder {
         let hypervisor = Arc::new(hypervisor);
         let ingress_history_writer =
             IngressHistoryWriterImpl::new(Config::default(), self.log.clone(), &metrics_registry);
-        let ingress_history_writer = Arc::new(ingress_history_writer);
+        let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
+            Arc::new(ingress_history_writer);
         let exec_env = ExecutionEnvironmentImpl::new(
             self.log,
             hypervisor,
-            ingress_history_writer,
+            Arc::clone(&ingress_history_writer),
             &metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
@@ -728,6 +912,8 @@ impl ExecutionTestBuilder {
             state: Some(state),
             message_id: 0,
             executed_instructions: NumInstructions::from(0),
+            execution_cost: Cycles::new(0),
+            xnet_messages: vec![],
             subnet_available_memory: SubnetAvailableMemory::from(AvailableMemory::new(
                 self.subnet_available_memory,
                 self.subnet_available_memory,
@@ -740,6 +926,7 @@ impl ExecutionTestBuilder {
             exec_env,
             cycles_account_manager,
             metrics_registry,
+            ingress_history_writer,
         }
     }
 }
