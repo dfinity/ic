@@ -1,0 +1,40 @@
+# This condition is equivalent to .rules-protected-branch, but
+# having it written here helps understanding the condition below
+.rules-monpoly_pipeline-deploy:
+  rules:
+    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH =~ /^rc--/'
+
+# This condition is the negation of .rules-monpoly_pipeline-deploy
+.rules-monpoly_pipeline-test-only:
+  rules:
+    - if: '$CI_COMMIT_REF_PROTECTED != "true"'
+    - if: '$SCHEDULE_NAME != "run-all-master" && $CI_COMMIT_BRANCH !~ /^rc--/'
+
+.build-and-test-monpoly_pipeline-docker-image: &build-and-test-monpoly_pipeline-docker-image |
+  docker build -t monpoly_pipeline ./policy-monitoring
+  MONPOLY_PIPELINE_INSTANCE=$(docker run -d -it --rm monpoly_pipeline)
+  docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.monpoly_io
+  docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.mfotl_sanity
+
+test-monpoly_pipeline-docker-image:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-monpoly_pipeline-test-only
+  stage: prod-tests
+  script:
+    - set -euo pipefail
+    - *build-and-test-monpoly_pipeline-docker-image
+
+deploy-monpoly_pipeline-docker-image:
+  extends:
+    - .ubuntu-nix-docker
+    - .rules-monpoly_pipeline-deploy
+  stage: prod-tests
+  script:
+    - set -euo pipefail
+    - TAG=$(date '+%Y-%m-%d-%H%M')
+    - *build-and-test-monpoly_pipeline-docker-image
+    - docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
+    - docker tag monpoly_pipeline dfinity/monpoly_pipeline:"$TAG"
+    - docker push dfinity/monpoly_pipeline:"$TAG"

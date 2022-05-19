@@ -1,6 +1,9 @@
 import os
 import re
+from importlib.util import module_from_spec
+from importlib.util import spec_from_file_location
 from os.path import isdir
+from os.path import isfile
 from os.path import join
 from typing import List
 
@@ -43,15 +46,10 @@ def assert_match(test: str, stream: str, actual: List[str], expected: List[str])
 def run_tests(tests_dir: str, tests: List[str], local_sig_file=True) -> None:
     print("Preparing to run %d tests from %s" % (len(tests), str(tests_dir)), flush=True)
     for test in tests:
-
-        # if test != 'long_running':
-        #     print(f"Skipping test {test}")
-        #     continue
-
         print("=== Running Test %s ===" % test, flush=True)
 
         test_prefix = join(tests_dir, test)
-        test_instances = [t for t in os.listdir(test_prefix) if isdir(join(test_prefix, t))]
+        test_instances = [t for t in os.listdir(test_prefix) if isdir(join(test_prefix, t)) and t != "__pycache__"]
 
         if not test_instances:
             run_test(tests_dir, test, ".", local_sig_file)
@@ -64,16 +62,33 @@ def run_tests(tests_dir: str, tests: List[str], local_sig_file=True) -> None:
 
 def run_test(prefix: str, test: str, instance: str, local_sig_file=True):
 
-    with open(str(join(prefix, test, instance, "input.log")), "r") as log_file:
-        logs = list(map(lambda x: x.strip("\n"), log_file.readlines()))
+    test_dir = join(prefix, test, instance)
+    log_file = str(join(test_dir, "input.log"))
 
-    with open(str(join(prefix, test, instance, "expected_stdout.txt")), "r") as expected_stdout_file:
+    if not isfile(log_file):
+        log_gen_file = str(join(test_dir, "input.py"))
+        assert isfile(log_gen_file), f"cannot find input.log nor input.py in {str(test_dir)}"
+
+        print(" Generating input.log using input.py ...", end="", flush=True)
+
+        module_name = log_gen_file.replace(".py", "").replace("/", ".")
+        spec = spec_from_file_location(module_name, log_gen_file)
+        module = module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.gen(log_file)
+
+        print(" done.")
+
+    with open(log_file, "r") as log_file_text:
+        logs = list(map(lambda x: x.strip("\n"), log_file_text.readlines()))
+
+    with open(str(join(test_dir, "expected_stdout.txt")), "r") as expected_stdout_file:
         expected_stdout = list(map(lambda x: x.strip("\n"), expected_stdout_file.readlines()))
 
-    with open(str(join(prefix, test, instance, "expected_stderr.txt")), "r") as expected_stderr_file:
+    with open(str(join(test_dir, "expected_stderr.txt")), "r") as expected_stderr_file:
         expected_stderr = list(map(lambda x: x.strip("\n"), expected_stderr_file.readlines()))
 
-    expected_exit_code_file_path = str(join(prefix, test, instance, "expected_exit_code.txt"))
+    expected_exit_code_file_path = str(join(test_dir, "expected_exit_code.txt"))
     with open(expected_exit_code_file_path, "r") as expected_exit_code_file:
         expected_exit_code = list(map(lambda x: x.strip("\n"), expected_exit_code_file.readlines()))
 
@@ -113,7 +128,7 @@ def run_test(prefix: str, test: str, instance: str, local_sig_file=True):
         error_handler=error_handler,
         exit_handler=exit_handler,
         docker=(not docker.is_inside_docker()),
-        hard_timeout=8.0,
+        hard_timeout=6.0,
     ) as monpoly:
 
         try:
@@ -140,7 +155,7 @@ def run_test(prefix: str, test: str, instance: str, local_sig_file=True):
             local_sig_file=sig_file,
             local_formula=str(join(test, "formula.mfotl")),
             docker=(not docker.is_inside_docker()),
-            hard_timeout=6.0,
+            hard_timeout=5.0,
         )
         assert var_seq is not None, "could not obtain sequence of variables"
         print(f"obtained sequence of variables: {', '.join(var_seq)}")
