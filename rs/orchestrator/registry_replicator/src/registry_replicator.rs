@@ -34,13 +34,12 @@ use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
 use ic_interfaces::registry::{RegistryClient, RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_registry_client::client::{create_data_provider, RegistryClientImpl};
+use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_common::registry::RegistryCanister;
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore, LocalStoreImpl};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{NodeId, RegistryVersion};
 use std::io::{Error, ErrorKind};
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -59,43 +58,8 @@ pub struct RegistryReplicator {
 }
 
 impl RegistryReplicator {
-    pub fn new(
-        logger: ReplicaLogger,
-        rt_handle: tokio::runtime::Handle,
-        node_id: Option<NodeId>,
-        local_store_path: PathBuf,
-        poll_delay: Duration,
-    ) -> Self {
-        // Initialize registry client and start polling/caching *local* store for
-        // updates
-        let registry_client = Self::initialize_registry_client(create_data_provider(
-            rt_handle,
-            &DataProviderConfig::LocalStore(local_store_path.clone()),
-            // We set the NNS public key to `None` and thus disable registry data signature
-            // verification while reading from the local store. The verfication happens in
-            // the internal state, as the data is polled from the registry canister and
-            // before it is written to the local store.
-            None,
-        ));
-
-        let local_store = Arc::new(LocalStoreImpl::new(local_store_path.clone()));
-        std::fs::create_dir_all(local_store_path)
-            .expect("Could not create directory for registry local store.");
-
-        Self {
-            logger,
-            node_id,
-            registry_client,
-            local_store,
-            started: Arc::new(AtomicBool::new(false)),
-            cancelled: Arc::new(AtomicBool::new(false)),
-            poll_delay,
-        }
-    }
-
     pub fn new_from_config(
         logger: ReplicaLogger,
-        rt_handle: tokio::runtime::Handle,
         node_id: Option<NodeId>,
         config: &Config,
     ) -> Self {
@@ -111,10 +75,26 @@ impl RegistryReplicator {
             panic!("Only LocalStore is supported in the orchestrator.");
         };
 
+        let local_store = Arc::new(LocalStoreImpl::new(local_store_path.clone()));
+        std::fs::create_dir_all(local_store_path)
+            .expect("Could not create directory for registry local store.");
+
         let poll_delay =
             std::time::Duration::from_millis(config.nns_registry_replicator.poll_delay_duration_ms);
 
-        Self::new(logger, rt_handle, node_id, local_store_path, poll_delay)
+        // Initialize registry client and start polling/caching *local* store for
+        // updates
+        let registry_client = Self::initialize_registry_client(local_store.clone());
+
+        Self {
+            logger,
+            node_id,
+            registry_client,
+            local_store,
+            started: Arc::new(AtomicBool::new(false)),
+            cancelled: Arc::new(AtomicBool::new(false)),
+            poll_delay,
+        }
     }
 
     /// initialize a new registry client and start polling the given data
