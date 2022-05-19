@@ -1,7 +1,7 @@
 use ic_interfaces::execution_environment::{
     ExecutionComplexity,
     HypervisorError::{self},
-    HypervisorResult, SystemApi,
+    HypervisorResult, PerformanceCounterType, SystemApi,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::PageIndex;
@@ -197,6 +197,12 @@ impl SystemApi for SystemApiEmpty {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_time(&self) -> HypervisorResult<Time> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn ic0_performance_counter(
+        &self,
+        _performance_counter_type: PerformanceCounterType,
+    ) -> HypervisorResult<u64> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn out_of_instructions(

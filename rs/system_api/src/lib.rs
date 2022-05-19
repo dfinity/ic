@@ -10,7 +10,8 @@ use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionParameters,
     HypervisorError::{self, *},
-    HypervisorResult, OutOfInstructionsHandler, SubnetAvailableMemory, SystemApi,
+    HypervisorResult, OutOfInstructionsHandler, PerformanceCounterType, SubnetAvailableMemory,
+    SystemApi,
     TrapCode::CyclesAmountTooBigFor64Bit,
 };
 use ic_logger::{error, info, ReplicaLogger};
@@ -2329,6 +2330,19 @@ impl SystemApi for SystemApiImpl {
             | ApiType::InspectMessage { time, .. } => Ok(*time),
         };
         trace_syscall!(self, ic0_time, result);
+        result
+    }
+
+    fn ic0_performance_counter(
+        &self,
+        performance_counter_type: PerformanceCounterType,
+    ) -> HypervisorResult<u64> {
+        let result = match performance_counter_type {
+            PerformanceCounterType::Instructions(instructions_executed) => {
+                Ok(instructions_executed.get())
+            }
+        };
+        trace_syscall!(self, ic0_performance_counter, result);
         result
     }
 

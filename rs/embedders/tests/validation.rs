@@ -696,3 +696,17 @@ fn can_validate_module_cycles_u128_related_imports() {
         Ok(WasmValidationDetails::default())
     );
 }
+
+#[test]
+fn can_validate_performance_counter_import() {
+    let wasm = wat2wasm(
+        r#"(module
+        (import "ic0" "performance_counter" (func $ic0_performance_counter (param i32) (result i64)))
+    )"#,
+    )
+    .unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Ok(WasmValidationDetails::default())
+    );
+}

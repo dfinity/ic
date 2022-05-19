@@ -47,6 +47,13 @@ pub enum SubnetAvailableMemoryError {
     },
 }
 
+/// Performance counter type.
+#[derive(Debug)]
+pub enum PerformanceCounterType {
+    // The number of WebAssembly instructions the canister has executed
+    Instructions(NumInstructions),
+}
+
 /// Tracks the execution complexity.
 ///
 /// Each execution has an associated complexity, i.e. how much CPU, memory,
@@ -700,6 +707,24 @@ pub trait SystemApi {
     ) -> HypervisorResult<()>;
 
     fn ic0_time(&self) -> HypervisorResult<Time>;
+
+    /// The canister can query the "performance counter", which is
+    /// a deterministic monotonically increasing integer approximating
+    /// the amount of work the canister has done since the beginning of
+    /// the current execution.
+    ///
+    /// The argument type decides which performance counter to return:
+    ///     0 : instruction counter. The number of WebAssembly
+    ///         instructions the system has determined that the canister
+    ///         has executed.
+    ///
+    /// Note: as the instruction counters are not available on the SystemApi level,
+    /// the `ic0_performance_counter_helper()` in `wasmtime_embedder` module does
+    /// most of the work. Yet the function is still implemented here for the consistency.
+    fn ic0_performance_counter(
+        &self,
+        performance_counter_type: PerformanceCounterType,
+    ) -> HypervisorResult<u64>;
 
     /// This system call is not part of the public spec and used by the
     /// hypervisor, when execution runs out of instructions.
