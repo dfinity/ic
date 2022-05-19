@@ -1,5 +1,8 @@
 use crate::metrics::encode_metrics;
-use crate::updates::get_btc_address::{GetBtcAddressArgs, GetBtcAddressResult};
+use crate::updates::{
+    get_btc_address::{GetBtcAddressArgs, GetBtcAddressResult},
+    get_withdrawal_account::GetWithdrawalAccountResult,
+};
 use candid::candid_method;
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, update};
 use ic_ckbtc_minter::runtime::CanisterRuntime;
@@ -29,6 +32,12 @@ fn post_upgrade(args: UpgradeArgs) {
 #[update]
 fn get_btc_address(args: GetBtcAddressArgs) -> GetBtcAddressResult {
     updates::get_btc_address(args, &CanisterRuntime {})
+}
+
+#[candid_method(update)]
+#[update]
+fn get_withdrawal_account() -> GetWithdrawalAccountResult {
+    updates::get_withdrawal_account(&CanisterRuntime {})
 }
 
 #[export_name = "canister_query http_request"]

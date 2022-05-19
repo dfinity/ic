@@ -4210,6 +4210,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk 0.5.0",
  "ic-cdk-macros",
+ "ic-crypto-sha",
  "ic-ledger-types",
  "ic-metrics-encoder",
  "lazy_static",
