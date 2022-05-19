@@ -398,9 +398,9 @@ def main(runner_args: List[str], folders_to_remove: List[str], keep_tmp_artifact
             if is_slack_timeout_notify:
                 slack_message = "\n".join(
                     [
-                        f"Scheduled job \`{CI_JOB_NAME}\` *timed out*. <{CI_JOB_URL}|log>.",  # noqa
+                        f"Scheduled job `{CI_JOB_NAME}` *timed out*. <{CI_JOB_URL}|log>.",  # noqa
                         f"Commit: <{CI_PROJECT_URL}/-/commit/{CI_COMMIT_SHA}|{CI_COMMIT_SHORT_SHA}>.",
-                        f"IC_VERSION_ID: \`{IC_VERSION_ID}\`.",  # noqa
+                        f"IC_VERSION_ID: `{IC_VERSION_ID}`.",  # noqa
                     ]
                 )
                 returncode = notify_slack(slack_message, CI_PROJECT_DIR)
@@ -429,12 +429,12 @@ def main(runner_args: List[str], folders_to_remove: List[str], keep_tmp_artifact
     if is_slack_test_failure_notify:
         msg = "\n".join(
             [
-                f"Pot \`{{}}\` *failed*. <{CI_JOB_URL}|log>.",  # noqa
+                f"Pot `{{}}` *failed*. <{CI_JOB_URL}|log>.",  # noqa
                 f"Commit: <{CI_PROJECT_URL}/-/commit/{CI_COMMIT_SHA}|{CI_COMMIT_SHORT_SHA}>.",
-                f"IC_VERSION_ID: \`{IC_VERSION_ID}\`.",  # noqa
+                f"IC_VERSION_ID: `{IC_VERSION_ID}`.",  # noqa
             ]
         )
-        SUMMARY_ARGS.append(f'--slack_message="{msg}"')
+        SUMMARY_ARGS.append(f"--slack_message={msg}")
 
     logging.debug(f"SUMMARY_ARGS={SUMMARY_ARGS}")
 
