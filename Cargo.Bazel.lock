@@ -1,5 +1,5 @@
 {
-  "checksum": "da974918f1a38751a424b2df1a6d586a392780d561e89fc03d6ca3bcd867c04f",
+  "checksum": "95b67c1ffe3394217201b63b7da1bed2f92defe0e2d52435e55435b0ab945ba0",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -2090,6 +2090,7 @@
           "**"
         ],
         "crate_features": [
+          "alloc",
           "clock",
           "default",
           "libc",
@@ -3788,6 +3789,10 @@
             {
               "id": "sha2 0.9.9",
               "target": "sha2"
+            },
+            {
+              "id": "simple_asn1 0.5.4",
+              "target": "simple_asn1"
             },
             {
               "id": "slog 2.7.0",
@@ -12617,6 +12622,60 @@
         "version": "1.4.0"
       },
       "license": "Apache-2.0/MIT"
+    },
+    "simple_asn1 0.5.4": {
+      "name": "simple_asn1",
+      "version": "0.5.4",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/simple_asn1/0.5.4/download",
+          "sha256": "8eb4ea60fb301dc81dfc113df680571045d375ab7345d171c5dc7d7e13107a80"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "simple_asn1",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "simple_asn1",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "chrono 0.4.19",
+              "target": "chrono"
+            },
+            {
+              "id": "num-bigint 0.4.3",
+              "target": "num_bigint"
+            },
+            {
+              "id": "num-traits 0.2.15",
+              "target": "num_traits"
+            },
+            {
+              "id": "thiserror 1.0.31",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.5.4"
+      },
+      "license": "ISC"
     },
     "siphasher 0.3.10": {
       "name": "siphasher",
