@@ -881,11 +881,13 @@ impl CanisterManager {
             compute_allocation.as_percent(),
             Some(memory_allocation.bytes().get()),
             freeze_threshold.get(),
-            self.cycles_account_manager.idle_cycles_burned_rate(
-                memory_allocation,
-                canister_memory_usage,
-                compute_allocation,
-            ),
+            self.cycles_account_manager
+                .idle_cycles_burned_rate(
+                    memory_allocation,
+                    canister_memory_usage,
+                    compute_allocation,
+                )
+                .get(),
         ))
     }
 

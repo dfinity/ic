@@ -1478,9 +1478,21 @@ fn test_request_nonexistent_canister(method: Method) {
 
 #[test]
 fn get_running_canister_status_from_another_canister() {
+    let memory_allocation = NumBytes::new(1 << 30);
+    let expected_idle_cycles_burned_per_second = Cycles::new(127000);
+    test_canister_status(memory_allocation, expected_idle_cycles_burned_per_second);
+}
+
+#[test]
+fn get_canister_status_from_another_canister_when_memory_low() {
+    let memory_allocation = NumBytes::new(150);
+    let expected_idle_cycles_burned_per_second = Cycles::new(1);
+    test_canister_status(memory_allocation, expected_idle_cycles_burned_per_second);
+}
+
+fn test_canister_status(memory_allocation: NumBytes, expected_idle_cycles_burned: Cycles) {
     let controller = canister_test_id(1);
     let freezing_threshold = 123;
-    let memory_allocation = NumBytes::new(100);
     let canister = CanisterStateBuilder::new()
         .with_status(CanisterStatusType::Running)
         .with_controller(controller)
@@ -1496,17 +1508,7 @@ fn get_running_canister_status_from_another_canister() {
         ComputeAllocation::zero(),
     );
 
-    assert_eq!(
-        (idle_cycles_burned_per_second * freezing_threshold as f64) as u128,
-        cycles_account_manager
-            .freeze_threshold_cycles(
-                NumSeconds::new(freezing_threshold),
-                MemoryAllocation::BestEffort,
-                memory_allocation,
-                ComputeAllocation::zero()
-            )
-            .get()
-    );
+    assert_eq!(idle_cycles_burned_per_second, expected_idle_cycles_burned);
     test_canister_status_helper(
         canister,
         CanisterStatusResultV2::new(
@@ -1517,9 +1519,9 @@ fn get_running_canister_status_from_another_canister() {
             NumBytes::from(0),
             INITIAL_CYCLES.get(),
             ComputeAllocation::default().as_percent(),
-            Some(100),
+            Some(memory_allocation.get()),
             freezing_threshold,
-            idle_cycles_burned_per_second,
+            idle_cycles_burned_per_second.get(),
         ),
     )
 }
@@ -1544,7 +1546,7 @@ fn get_stopped_canister_status_from_another_canister() {
             ComputeAllocation::default().as_percent(),
             None,
             123,
-            0f64,
+            0,
         ),
     );
 }
@@ -1569,7 +1571,7 @@ fn get_stopping_canister_status_from_another_canister() {
             ComputeAllocation::default().as_percent(),
             None,
             123,
-            0f64,
+            0,
         ),
     );
 }
