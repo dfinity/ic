@@ -819,6 +819,8 @@ impl fmt::Display for RewardEvent {
 }
 
 /// A general trait for the environment in which governance is running.
+///
+/// See NativeEnvironment for an implementation that is often suitable for tests.
 #[async_trait]
 pub trait Environment: Send + Sync {
     /// Returns the current time, in seconds since the epoch.
@@ -899,11 +901,89 @@ impl Drop for LedgerUpdateLock {
     }
 }
 
+impl From<u64> for ProposalId {
+    fn from(id: u64) -> Self {
+        ProposalId { id }
+    }
+}
+
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::pb::v1::neuron::Followees;
     use maplit::btreemap;
+    use rand::{Rng, RngCore};
+
+    /// An implementation of the Environment trait that behaves in a
+    /// "reasonable" but not necessarily entirely realistic way (compared to the
+    /// real IC) where possible. E.g. the now method returns the current real
+    /// time. When there is no "reasonable" behavior, the unimplemented macro is
+    /// called.
+    ///
+    /// The only method that is completely unimplemented is call_canister, since
+    /// that is not a native concept on any system other than the IC
+    /// itself. canister_id is partially implemented.
+    pub struct NativeEnvironment {
+        /// When Some, contains the value that the canister_id method returns.
+        pub local_canister_id: Option<CanisterId>,
+    }
+
+    /// NativeEnvironment is "empty" by default. I.e. the canister_id method
+    /// calls unimplemented.
+    impl Default for NativeEnvironment {
+        fn default() -> Self {
+            Self {
+                local_canister_id: None,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Environment for NativeEnvironment {
+        fn now(&self) -> u64 {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        }
+
+        fn random_u64(&mut self) -> u64 {
+            rand::thread_rng().gen()
+        }
+
+        fn random_byte_array(&mut self) -> [u8; 32] {
+            let mut result = [0_u8; 32];
+            rand::thread_rng().fill_bytes(&mut result[..]);
+            result
+        }
+
+        async fn call_canister(
+            &self,
+            _canister_id: CanisterId,
+            _method_name: &str,
+            _arg: Vec<u8>,
+        ) -> Result<Vec<u8>, (Option<i32>, String)> {
+            unimplemented!()
+        }
+
+        /// At least in the case of Governance (the only known user of
+        /// Environment), this is only used to determine whether to "short
+        /// circuit", i.e. return ResourceExhausted instead of doing the "real
+        /// work". Most tests do not attempt exercise the special "running out of
+        /// memory" condition; therefore, it makes sense for this to always
+        /// always return NoIssue.
+        fn heap_growth_potential(&self) -> crate::types::HeapGrowthPotential {
+            HeapGrowthPotential::NoIssue
+        }
+
+        fn canister_id(&self) -> CanisterId {
+            if let Some(id) = self.local_canister_id {
+                return id;
+            }
+
+            unimplemented!();
+        }
+    }
 
     #[test]
     fn test_nervous_system_parameters_validate() {

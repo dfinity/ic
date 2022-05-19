@@ -191,7 +191,7 @@ impl Div<Duration> for Duration {
 // assert_approx_eq! macro are unused. This is very strange, so
 // just tell clippy to keep quiet.
 #[allow(unused_imports, unused_macros)]
-mod test {
+mod tests {
     use super::*;
 
     /// Asserts that the two arguments are equal, with a relative tolerance of
