@@ -67,6 +67,8 @@ mock! {
 
         fn remove_states_below(&self, height: Height);
 
+        fn remove_inmemory_states_below(&self, height: Height);
+
         fn commit_and_certify(
             &self,
             state: ReplicatedState,
@@ -267,6 +269,10 @@ impl StateManager for FakeStateManager {
             .write()
             .unwrap()
             .retain(|snap| snap.height == Height::new(0) || snap.height >= height)
+    }
+
+    fn remove_inmemory_states_below(&self, _height: Height) {
+        // All heights are checkpoints
     }
 
     fn commit_and_certify(
@@ -564,6 +570,13 @@ impl StateManager for RefMockStateManager {
 
     fn remove_states_below(&self, height: Height) {
         self.mock.read().unwrap().remove_states_below(height)
+    }
+
+    fn remove_inmemory_states_below(&self, height: Height) {
+        self.mock
+            .read()
+            .unwrap()
+            .remove_inmemory_states_below(height)
     }
 
     fn commit_and_certify(

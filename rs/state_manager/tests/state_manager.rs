@@ -768,6 +768,151 @@ fn can_remove_checkpoints() {
 }
 
 #[test]
+fn cannot_remove_height_zero() {
+    state_manager_test(|_metrics, state_manager| {
+        assert_eq!(state_manager.list_state_heights(CERT_ANY), vec![height(0),],);
+
+        state_manager.remove_states_below(height(0));
+        state_manager.remove_inmemory_states_below(height(0));
+
+        assert_eq!(state_manager.list_state_heights(CERT_ANY), vec![height(0),],);
+
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![height(0), height(1)],
+        );
+
+        state_manager.remove_states_below(height(0));
+        state_manager.remove_inmemory_states_below(height(0));
+
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![height(0), height(1)],
+        );
+    });
+}
+
+#[test]
+fn cannot_remove_latest_height_or_checkpoint() {
+    state_manager_test(|_metrics, state_manager| {
+        for i in 1..11 {
+            let (_height, state) = state_manager.take_tip();
+
+            let scope = if i % 2 == 0 {
+                CertificationScope::Full
+            } else {
+                CertificationScope::Metadata
+            };
+
+            state_manager.commit_and_certify(state, height(i), scope.clone());
+        }
+
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY).last(),
+            Some(&height(10))
+        );
+
+        state_manager.remove_states_below(height(20));
+        state_manager.remove_inmemory_states_below(height(20));
+
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY).last(),
+            Some(&height(10))
+        );
+
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(11), CertificationScope::Metadata);
+
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY).last(),
+            Some(&height(11))
+        );
+
+        // 10 is the latest checkpoint, hence cannot have been deleted
+        assert!(state_manager
+            .list_state_heights(CERT_ANY)
+            .contains(&height(10)));
+
+        state_manager.remove_states_below(height(20));
+        state_manager.remove_inmemory_states_below(height(20));
+
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY).last(),
+            Some(&height(11))
+        );
+
+        assert!(state_manager
+            .list_state_heights(CERT_ANY)
+            .contains(&height(10)));
+    });
+}
+
+#[test]
+fn can_remove_checkpoints_and_noncheckpoints_separately() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let mut heights = vec![height(0)];
+        for i in 1..10 {
+            let (_height, state) = state_manager.take_tip();
+            heights.push(height(i));
+
+            let scope = if i % 2 == 0 {
+                CertificationScope::Full
+            } else {
+                CertificationScope::Metadata
+            };
+
+            state_manager.commit_and_certify(state, height(i), scope.clone());
+
+            if scope == CertificationScope::Full {
+                // We need to wait for hashing to complete, otherwise the
+                // checkpoint can be retained until the hashing is complete.
+                wait_for_checkpoint(&state_manager, height(i));
+            }
+        }
+        assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
+        state_manager.remove_inmemory_states_below(height(6));
+
+        // Only odd heights should have been removed
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![
+                height(0),
+                height(2),
+                height(4),
+                height(6),
+                height(7),
+                height(8),
+                height(9)
+            ],
+        );
+
+        state_manager.remove_states_below(height(4));
+
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![
+                height(0),
+                height(4),
+                height(6),
+                height(7),
+                height(8),
+                height(9)
+            ],
+        );
+
+        let state_manager = restart_fn(state_manager, Some(height(6)));
+
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![height(0), height(6)],
+        );
+    });
+}
+
+#[test]
 fn can_keep_last_checkpoint_and_higher_states_after_removal() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let mut heights = vec![height(0)];

@@ -573,16 +573,18 @@ impl StateSyncRefs {
 
 /// SharedState is mutable state that can be accessed from multiple threads.
 struct SharedState {
+    /// Certifications metadata kept for all states
     certifications_metadata: CertificationsMetadata,
+    /// Metadata for each checkpoint
     states_metadata: StatesMetadata,
-    // A list of states present in the memory.  This list is guranteed to not be
-    // empty as it should always contain the state at height=0.
+    /// A list of states present in the memory.  This list is guranteed to not be
+    /// empty as it should always contain the state at height=0.
     snapshots: VecDeque<Snapshot>,
-    // The last checkpoint that was advertised.
+    /// The last checkpoint that was advertised.
     last_advertised: Height,
-    // The state we are are trying to fetch.
+    /// The state we are are trying to fetch.
     fetch_state: Option<(Height, CryptoHashOfState, Height)>,
-    // State representing the on disk mutable state
+    /// State representing the on disk mutable state
     tip: Option<(Height, ReplicatedState)>,
 }
 
@@ -1884,6 +1886,173 @@ impl StateManagerImpl {
         // state machine discover a newer state the next time it calls
         // `take_tip()` and update the tip accordingly.
     }
+
+    /// Remove any inmemory state at height h with h < last_height_to_keep, and
+    /// any checkpoint at height h < last_checkpoint_to_keep
+    ///
+    /// Shared inner function of the public functions remove_states_below
+    /// and remove_inmemory_states_below
+    fn remove_states_below_impl(
+        &self,
+        last_height_to_keep: Height,
+        last_checkpoint_to_keep: Height,
+    ) {
+        debug_assert!(
+            last_height_to_keep >= last_checkpoint_to_keep,
+            "last_height_to_keep: {}, last_checkpoint_to_keep: {}",
+            last_height_to_keep,
+            last_checkpoint_to_keep
+        );
+
+        // In debug builds we store the latest_state_height here so
+        // that we can verify later that this height is retained.
+        #[cfg(debug_assertions)]
+        let latest_state_height = self.latest_state_height();
+
+        let heights_to_remove = std::ops::Range {
+            start: Height::new(1),
+            end: last_height_to_keep,
+        };
+
+        let mut states = self.states.write();
+
+        let checkpoints_to_keep: BTreeSet<Height> = states
+            .states_metadata
+            .keys()
+            .copied()
+            .filter(|height| {
+                *height == Self::INITIAL_STATE_HEIGHT || *height >= last_checkpoint_to_keep
+            })
+            .collect();
+
+        // Send object to deallocation thread if it has capacity.
+        let deallocate = |x| {
+            if self.deallocation_sender.len() < DEALLOCATION_BACKLOG_THRESHOLD {
+                self.deallocation_sender
+                    .send(x)
+                    .expect("failed to send object to deallocation thread");
+            } else {
+                std::mem::drop(x);
+            }
+        };
+
+        let (removed, retained) = states.snapshots.drain(0..).partition(|snapshot| {
+            heights_to_remove.contains(&snapshot.height)
+                && !checkpoints_to_keep.contains(&snapshot.height)
+        });
+        states.snapshots = retained;
+
+        self.metrics
+            .resident_state_count
+            .set(states.snapshots.len() as i64);
+
+        let latest_height = states
+            .snapshots
+            .back()
+            .map(|s| s.height)
+            .unwrap_or(Self::INITIAL_STATE_HEIGHT);
+
+        self.latest_state_height
+            .store(latest_height.get(), Ordering::Relaxed);
+
+        let min_resident_height = checkpoints_to_keep
+            .iter()
+            .min()
+            .unwrap_or(&last_height_to_keep)
+            .min(&last_height_to_keep);
+
+        self.metrics
+            .min_resident_height
+            .set(min_resident_height.get() as i64);
+        self.metrics
+            .max_resident_height
+            .set(latest_height.get() as i64);
+
+        // Send removed snapshot to deallocator thread
+        deallocate(Box::new(removed));
+
+        for (height, metadata) in states.states_metadata.range(heights_to_remove) {
+            if checkpoints_to_keep.contains(height) {
+                continue;
+            }
+            if let Some(ref checkpoint_ref) = metadata.checkpoint_ref {
+                checkpoint_ref.mark_deleted();
+            }
+        }
+
+        let mut certifications_metadata = states
+            .certifications_metadata
+            .split_off(&last_height_to_keep);
+
+        for h in checkpoints_to_keep.iter() {
+            if let Some(cert_metadata) = states.certifications_metadata.remove(h) {
+                certifications_metadata.insert(*h, cert_metadata);
+            }
+        }
+
+        std::mem::swap(
+            &mut certifications_metadata,
+            &mut states.certifications_metadata,
+        );
+
+        // Send removed certification metadata to deallocator thread
+        deallocate(Box::new(certifications_metadata));
+
+        let latest_certified_height = states
+            .certifications_metadata
+            .iter()
+            .rev()
+            .find_map(|(h, m)| m.certification.as_ref().map(|_| *h))
+            .unwrap_or(Self::INITIAL_STATE_HEIGHT);
+
+        self.latest_certified_height
+            .store(latest_certified_height.get(), Ordering::Relaxed);
+
+        self.metrics
+            .latest_certified_height
+            .set(latest_certified_height.get() as i64);
+
+        let mut metadata_to_keep = states.states_metadata.split_off(&last_height_to_keep);
+
+        for h in checkpoints_to_keep.iter() {
+            if let Some(metadata) = states.states_metadata.remove(h) {
+                metadata_to_keep.insert(*h, metadata);
+            }
+        }
+        std::mem::swap(&mut states.states_metadata, &mut metadata_to_keep);
+        if *ic_sys::IS_WSL {
+            // We send obsolete metadata to deallocation thread so that they are freed
+            // AFTER the in-memory states. We do this because in-memory states might
+            // have PageMap objects that are still referencing the checkpoints, and
+            // attempting to delete a file that is still open causes errors when
+            // running on WSL (even though it's a perfectly valid usage on UNIX systems).
+            //
+            // NOTE: we rely on deallocations happening sequentially, adding more
+            // deallocation threads might break the desired behavior.
+            deallocate(Box::new(metadata_to_keep));
+        }
+
+        self.persist_metadata_or_die(&states.states_metadata);
+
+        drop(states);
+        #[cfg(debug_assertions)]
+        {
+            use ic_interfaces_state_manager::CERT_ANY;
+            let checkpoint_heights = self
+                .state_layout
+                .checkpoint_heights()
+                .unwrap_or_else(|err| {
+                    fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
+                });
+            let state_heights = self.list_state_heights(CERT_ANY);
+
+            debug_assert!(checkpoints_to_keep
+                .iter()
+                .all(|h| checkpoint_heights.contains(h)));
+
+            debug_assert!(state_heights.contains(&latest_state_height));
+        }
+    }
 }
 
 fn initial_state(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> Labeled<ReplicatedState> {
@@ -2278,8 +2447,9 @@ impl StateManager for StateManagerImpl {
     ///   see Note [Oldest Required State Recovery]. Therefore, we keep the
     ///   oldest checkpoint to keep and more recent checkpoints.
     ///
-    /// * We keep three most recent checkpoints to increase average checkpoint lifetime.
-    ///   The larger the lifetime, the more time other nodes have to sync states.
+    /// * We keep the (EXTRA_CHECKPOINTS_TO_KEEP + 1) most recent checkpoints to increase
+    ///   average checkpoint lifetime. The larger the lifetime, the more time other nodes
+    ///   have to sync states.
     fn remove_states_below(&self, requested_height: Height) {
         let _timer = self
             .metrics
@@ -2287,185 +2457,62 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["remove_states_below"])
             .start_timer();
 
-        let checkpoint_heights = self
+        let checkpoint_heights: BTreeSet<Height> = self
             .state_layout
             .checkpoint_heights()
             .unwrap_or_else(|err| {
                 fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
-            });
+            })
+            .drain(..)
+            .collect();
 
         // The latest state must be kept.
         let latest_state_height = self.latest_state_height();
-        let mut last_height_to_keep = latest_state_height.min(requested_height);
-
-        if last_height_to_keep == Self::INITIAL_STATE_HEIGHT {
-            last_height_to_keep = Height::new(1);
-        }
-
-        let heights_to_remove = std::ops::Range {
-            start: Height::new(1),
-            end: last_height_to_keep,
-        };
+        let last_height_to_keep = latest_state_height.min(requested_height);
 
         // The latest checkpoint below or at the requested height will also be kept
         // because the state manager needs to load from it when restarting.
-        // Therefore, it is excluded from the `heights_to_remove` above.
-        // Note: the `oldest_checkpoint_to_keep`, if set, is <= `last_checkpoint`.
         let oldest_checkpoint_to_keep = checkpoint_heights
             .iter()
             .filter(|x| **x <= requested_height)
             .max()
-            .cloned();
-
-        // The `oldest_checkpoint_to_keep` along with newer checkpoints will be kept.
-        let mut checkpoints_to_keep: BTreeSet<Height> = checkpoint_heights
-            .iter()
-            .filter(|x| **x >= requested_height)
-            .cloned()
-            .collect();
-
-        if let Some(h) = oldest_checkpoint_to_keep {
-            checkpoints_to_keep.insert(h);
-        }
+            .copied()
+            .unwrap_or(requested_height);
 
         // Keep extra checkpoints for state sync.
-        checkpoint_heights
+        let oldest_checkpoint_to_keep = checkpoint_heights
             .iter()
             .rev()
             .take(EXTRA_CHECKPOINTS_TO_KEEP + 1)
-            .for_each(|h| {
-                checkpoints_to_keep.insert(*h);
-            });
-
-        let mut states = self.states.write();
-
-        // Send object to deallocation thread if it has capacity.
-        let deallocate = |x| {
-            if self.deallocation_sender.len() < DEALLOCATION_BACKLOG_THRESHOLD {
-                self.deallocation_sender
-                    .send(x)
-                    .expect("failed to send object to deallocation thread");
-            } else {
-                std::mem::drop(x);
-            }
-        };
-
-        let (removed, retained) = states.snapshots.drain(0..).partition(|snapshot| {
-            heights_to_remove.contains(&snapshot.height)
-                && !checkpoints_to_keep.contains(&snapshot.height)
-        });
-        states.snapshots = retained;
-
-        self.metrics
-            .resident_state_count
-            .set(states.snapshots.len() as i64);
-
-        let latest_height = states
-            .snapshots
-            .back()
-            .map(|s| s.height)
-            .unwrap_or(Self::INITIAL_STATE_HEIGHT);
-
-        self.latest_state_height
-            .store(latest_height.get(), Ordering::Relaxed);
-
-        let min_resident_height = checkpoints_to_keep
-            .iter()
+            .copied()
             .min()
-            .unwrap_or(&last_height_to_keep)
-            .min(&last_height_to_keep);
+            .unwrap_or(last_height_to_keep)
+            .min(last_height_to_keep)
+            .min(oldest_checkpoint_to_keep);
 
-        self.metrics
-            .min_resident_height
-            .set(min_resident_height.get() as i64);
-        self.metrics
-            .max_resident_height
-            .set(latest_height.get() as i64);
+        self.remove_states_below_impl(last_height_to_keep, oldest_checkpoint_to_keep);
+    }
 
-        // Send removed snapshot to deallocator thread
-        deallocate(Box::new(removed));
+    /// Variant of `remove_states_below()` that only removes states committed with
+    /// partial certification scope.
+    ///
+    /// The following states are NOT removed:
+    /// * Any state with height >= requested_height
+    /// * Checkpoint heights
+    /// * The latest state
+    /// * State 0
+    fn remove_inmemory_states_below(&self, requested_height: Height) {
+        let _timer = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["remove_inmemory_states_below"])
+            .start_timer();
 
-        for (height, metadata) in states.states_metadata.range(heights_to_remove) {
-            if checkpoints_to_keep.contains(height) {
-                continue;
-            }
-            if let Some(ref checkpoint_ref) = metadata.checkpoint_ref {
-                checkpoint_ref.mark_deleted();
-            }
-        }
+        // The latest state must be kept.
+        let latest_state_height = self.latest_state_height();
+        let last_height_to_keep = latest_state_height.min(requested_height);
 
-        let mut certifications_metadata = states
-            .certifications_metadata
-            .split_off(&last_height_to_keep);
-
-        for h in checkpoints_to_keep.iter() {
-            if let Some(cert_metadata) = states.certifications_metadata.remove(h) {
-                certifications_metadata.insert(*h, cert_metadata);
-            }
-        }
-
-        std::mem::swap(
-            &mut certifications_metadata,
-            &mut states.certifications_metadata,
-        );
-
-        // Send removed certification metadata to deallocator thread
-        deallocate(Box::new(certifications_metadata));
-
-        let latest_certified_height = states
-            .certifications_metadata
-            .iter()
-            .rev()
-            .find_map(|(h, m)| m.certification.as_ref().map(|_| *h))
-            .unwrap_or(Self::INITIAL_STATE_HEIGHT);
-
-        self.latest_certified_height
-            .store(latest_certified_height.get(), Ordering::Relaxed);
-
-        self.metrics
-            .latest_certified_height
-            .set(latest_certified_height.get() as i64);
-
-        let mut metadata_to_keep = states.states_metadata.split_off(&last_height_to_keep);
-
-        for h in checkpoints_to_keep.iter() {
-            if let Some(metadata) = states.states_metadata.remove(h) {
-                metadata_to_keep.insert(*h, metadata);
-            }
-        }
-        std::mem::swap(&mut states.states_metadata, &mut metadata_to_keep);
-        if *ic_sys::IS_WSL {
-            // We send obsolete metadata to deallocation thread so that they are freed
-            // AFTER the in-memory states. We do this because in-memory states might
-            // have PageMap objects that are still referencing the checkpoints, and
-            // attempting to delete a file that is still open causes errors when
-            // running on WSL (even though it's a perfectly valid usage on UNIX systems).
-            //
-            // NOTE: we rely on deallocations happening sequentially, adding more
-            // deallocation threads might break the desired behavior.
-            deallocate(Box::new(metadata_to_keep));
-        }
-
-        self.persist_metadata_or_die(&states.states_metadata);
-
-        drop(states);
-        #[cfg(debug_assertions)]
-        {
-            use ic_interfaces_state_manager::CERT_ANY;
-            let checkpoint_heights = self
-                .state_layout
-                .checkpoint_heights()
-                .unwrap_or_else(|err| {
-                    fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
-                });
-            let state_heights = self.list_state_heights(CERT_ANY);
-
-            debug_assert!(checkpoints_to_keep
-                .iter()
-                .all(|h| checkpoint_heights.contains(h)));
-
-            debug_assert!(state_heights.contains(&latest_state_height));
-        }
+        self.remove_states_below_impl(last_height_to_keep, Self::INITIAL_STATE_HEIGHT);
     }
 
     fn commit_and_certify(
