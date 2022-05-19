@@ -9,6 +9,7 @@ pub struct OrchestratorMetrics {
     /// Registry version last used to succesfully fetch datacenter information
     pub datacenter_registry_version: IntGauge,
     pub ssh_access_registry_version: IntGauge,
+    pub firewall_registry_version: IntGauge,
 }
 
 impl OrchestratorMetrics {
@@ -29,6 +30,10 @@ impl OrchestratorMetrics {
             ssh_access_registry_version: metrics_registry.int_gauge(
                 "shh_access_registry_version",
                 "Registry version last used to update the SSH public keys",
+            ),
+            firewall_registry_version: metrics_registry.int_gauge(
+                "firewall_registry_version",
+                "Latest registry version used for firewall configuration",
             ),
         }
     }
