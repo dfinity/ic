@@ -65,7 +65,7 @@ function process_bootstrap() {
         fi
     done
 
-    for DIR in accounts_ssh_authorized_keys certs; do
+    for DIR in accounts_ssh_authorized_keys certs prober; do
         if [ -e "${TMPDIR}/${DIR}" ]; then
             echo "Setting up ${DIR}"
             cp -r "${TMPDIR}/${DIR}" "${CONFIG_ROOT}/${DIR}"
