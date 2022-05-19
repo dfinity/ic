@@ -19,6 +19,7 @@ rust_library(
         "@crate_index//:strum_macros",
     ],
     deps = [
+        "//rs/bitcoin/types/public",
         "//rs/protobuf",
         "//rs/types/base_types",
         "//rs/types/error_types",
