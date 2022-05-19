@@ -138,7 +138,7 @@ impl CyclesAccountManager {
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,
-    ) -> f64 {
+    ) -> Cycles {
         let one_gib = 1 << 30;
 
         let memory_fee = {
@@ -146,12 +146,21 @@ impl CyclesAccountManager {
                 MemoryAllocation::Reserved(bytes) => bytes,
                 MemoryAllocation::BestEffort => memory_usage,
             };
-            (memory.get() as f64 * self.config.gib_storage_per_second_fee.get() as f64)
-                / one_gib as f64
+            let total_memory_fee =
+                memory.get() as u128 * self.config.gib_storage_per_second_fee.get();
+
+            // Round up the memory fee.
+            if total_memory_fee > 0 && total_memory_fee < one_gib as u128 {
+                Cycles::from(1)
+            } else {
+                Cycles::from((total_memory_fee + one_gib as u128 - 1) / one_gib as u128)
+            }
         };
 
-        let compute_fee = compute_allocation.as_percent() as f64
-            * self.config.compute_percent_allocated_per_second_fee.get() as f64;
+        let compute_fee = Cycles::from(
+            compute_allocation.as_percent() as u128
+                * self.config.compute_percent_allocated_per_second_fee.get(),
+        );
 
         memory_fee + compute_fee
     }
