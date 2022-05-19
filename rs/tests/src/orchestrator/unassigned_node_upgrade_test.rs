@@ -46,7 +46,7 @@ use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::NeuronId;
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use ic_registry_common::registry::RegistryCanister;
+use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::ReplicaVersion;
 use slog::info;

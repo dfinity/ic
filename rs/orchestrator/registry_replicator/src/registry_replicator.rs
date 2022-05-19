@@ -35,8 +35,8 @@ use ic_interfaces::registry::{RegistryClient, RegistryDataProvider, ZERO_REGISTR
 use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_common::registry::RegistryCanister;
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore, LocalStoreImpl};
+use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{NodeId, RegistryVersion};
 use std::io::{Error, ErrorKind};

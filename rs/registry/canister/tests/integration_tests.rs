@@ -16,7 +16,7 @@ use ic_nns_test_utils::{
     registry::invariant_compliant_mutation_as_atomic_req,
 };
 use ic_nns_test_utils_macros::parameterized_upgrades;
-use ic_registry_common::certification::decode_hash_tree;
+use ic_registry_nns_data_provider::certification::decode_hash_tree;
 use ic_registry_transport::{
     insert,
     pb::v1::{

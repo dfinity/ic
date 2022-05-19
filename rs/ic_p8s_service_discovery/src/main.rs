@@ -23,7 +23,7 @@ use elastic_common_schema::{self as ecs, process_fields::WithCurrentProcess};
 use ic_async_utils::shutdown_signal;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_common::create_nns_data_provider;
+use ic_registry_nns_data_provider::create_nns_data_provider;
 
 use config::Config;
 

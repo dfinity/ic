@@ -61,7 +61,7 @@ use ic_registry_client_helpers::{
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
-use ic_registry_common::create_nns_data_provider;
+use ic_registry_nns_data_provider::create_nns_data_provider;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(3);

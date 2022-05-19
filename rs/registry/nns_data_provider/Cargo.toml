@@ -1,5 +1,5 @@
 [package]
-name = "ic-registry-common"
+name = "ic-registry-nns-data-provider"
 version = "0.8.0"
 edition = "2018"
 

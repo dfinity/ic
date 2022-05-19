@@ -28,7 +28,7 @@ use ic_fondue::ic_manager::IcHandle;
 use ic_fondue::ic_manager::IcSubnet;
 use slog::info;
 
-use ic_registry_common::registry::RegistryCanister;
+use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 

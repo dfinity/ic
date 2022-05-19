@@ -10,7 +10,7 @@ ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client = { path = "../client" }
 ic-registry-client-helpers = { path = "../helpers" }
-ic-registry-common = { path = "../common" }
+ic-registry-nns-data-provider = { path = "../nns_data_provider" }
 ic-registry-local-store = { path = "../local_store" }
 ic-registry-keys = { path = "../keys" }
 ic-registry-subnet-type = { path = "../subnet_type" }

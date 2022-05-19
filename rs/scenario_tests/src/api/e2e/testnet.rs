@@ -7,7 +7,7 @@ use ic_registry_client_helpers::{
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
-use ic_registry_common::create_nns_data_provider;
+use ic_registry_nns_data_provider::create_nns_data_provider;
 use ic_registry_routing_table::RoutingTable;
 use ic_types::{registry::connection_endpoint::ConnectionEndpoint, NodeId, PrincipalId, SubnetId};
 use std::{
