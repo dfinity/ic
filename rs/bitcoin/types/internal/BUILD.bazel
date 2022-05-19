@@ -11,8 +11,9 @@ filegroup(
 )
 
 rust_library(
-    name = "ic_protobuf",
+    name = "internal",
     srcs = glob(["src/**"]),
+    crate_name = "ic_btc_types_internal",
     edition = "2018",
     deps = [
         "//rs/protobuf",
