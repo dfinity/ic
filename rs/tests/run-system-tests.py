@@ -64,7 +64,7 @@ def notify_slack(slack_message: str, ci_project_dir: str) -> int:
         "python3",
         f"{ci_project_dir}/gitlab-ci/src/notify_slack/notify_slack.py",
         slack_message,
-        f'--channel="{SLACK_CHANNEL_NOTIFY}"',
+        f"--channel={SLACK_CHANNEL_NOTIFY}",
     ]
     returncode = run_command(command=notify_slack_command)
     return returncode
