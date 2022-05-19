@@ -31,6 +31,12 @@ require { type unlabeled_t, boot_t; }
 read_files_pattern(lvm_t, boot_t, unlabeled_t)
 read_files_pattern(lvm_t, unlabeled_t, unlabeled_t)
 
+# cryptsetup is poking around with tmpfs and pstore, probably looking for
+# encrypted volumes. As we don't have any here, forbid it.
+require { type cgroup_t, pstore_t; }
+dontaudit lvm_t cgroup_t : key { search };
+dontaudit lvm_t pstore_t : key { search };
+
 ###############################################################################
 # mount
 
