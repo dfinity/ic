@@ -3,7 +3,6 @@ mod http;
 mod provisional;
 
 use candid::{CandidType, Decode, Deserialize, Encode};
-use float_cmp::ApproxEq;
 use ic_base_types::{CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SubnetId};
 use ic_btc_types::UtxosFilter;
 use ic_error_types::{ErrorCode, UserError};
@@ -198,9 +197,9 @@ impl Payload<'_> for CanisterStatusResult {}
 ///     controller: principal;
 ///     memory_size: nat;
 ///     cycles: nat;
-///     idle_cycles_burned_per_second: float64;
+///     idle_cycles_burned_per_second: nat;
 /// })`
-#[derive(CandidType, Debug, Deserialize)]
+#[derive(CandidType, Debug, Deserialize, Eq, PartialEq)]
 pub struct CanisterStatusResultV2 {
     status: CanisterStatusType,
     module_hash: Option<Vec<u8>>,
@@ -211,7 +210,7 @@ pub struct CanisterStatusResultV2 {
     // this is for compat with Spec 0.12/0.13
     balance: Vec<(Vec<u8>, candid::Nat)>,
     freezing_threshold: candid::Nat,
-    idle_cycles_burned_per_second: f64,
+    idle_cycles_burned_per_second: candid::Nat,
 }
 
 impl CanisterStatusResultV2 {
@@ -226,7 +225,7 @@ impl CanisterStatusResultV2 {
         compute_allocation: u64,
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
-        idle_cycles_burned_per_second: f64,
+        idle_cycles_burned_per_second: u128,
     ) -> Self {
         Self {
             status,
@@ -245,7 +244,7 @@ impl CanisterStatusResultV2 {
                 freezing_threshold,
             ),
             freezing_threshold: candid::Nat::from(freezing_threshold),
-            idle_cycles_burned_per_second,
+            idle_cycles_burned_per_second: candid::Nat::from(idle_cycles_burned_per_second),
         }
     }
 
@@ -277,37 +276,8 @@ impl CanisterStatusResultV2 {
         self.freezing_threshold.0.to_u64().unwrap()
     }
 
-    pub fn idle_cycles_burned_per_second(&self) -> f64 {
-        self.idle_cycles_burned_per_second
-    }
-}
-
-// We use custom impl of PartialEq because state root is not part of identity.
-impl PartialEq for CanisterStatusResultV2 {
-    fn eq(&self, rhs: &Self) -> bool {
-        (
-            &self.status,
-            &self.module_hash,
-            &self.controller,
-            &self.settings.controllers,
-            &self.memory_size,
-            &self.cycles,
-            &self.settings.compute_allocation,
-            &self.settings.memory_allocation,
-            &self.freezing_threshold,
-        ) == (
-            &rhs.status,
-            &rhs.module_hash,
-            &rhs.controller,
-            &rhs.settings.controllers,
-            &rhs.memory_size,
-            &rhs.cycles,
-            &rhs.settings.compute_allocation,
-            &rhs.settings.memory_allocation,
-            &rhs.freezing_threshold,
-        ) && self
-            .idle_cycles_burned_per_second
-            .approx_eq(rhs.idle_cycles_burned_per_second, (f64::EPSILON, 0))
+    pub fn idle_cycles_burned_per_second(&self) -> u128 {
+        self.idle_cycles_burned_per_second.0.to_u128().unwrap()
     }
 }
 
