@@ -1,0 +1,65 @@
+{
+  "name": "IC dev environment",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "runArgs": ["--cap-add=SYS_PTRACE", "--security-opt", "seccomp=unconfined"],
+
+  "containerEnv": {
+    "EDITOR": "code --wait"
+  },
+
+  // Set *default* container specific settings.json values on container create.
+  "settings": {
+    "lldb.executable": "/usr/bin/lldb",
+    "files.watcherExclude": {
+      "**/target/**": true,
+      "**/.stack-work/**": true
+    },
+    "rust-analyzer.cargo.allFeatures": true,
+    "rust-analyzer.checkOnSave.command": "clippy",
+    "rust-analyzer.checkOnSave.extraArgs": [
+      "--",
+      "-A",
+      "clippy::redundant_closure",
+      "-A",
+      "clippy::too_many_arguments"
+    ],
+
+    // needs to match the black args in .pre-commit-config.yaml
+    "python.formatting.blackArgs": ["--line-length=120"],
+
+    // for reorder-python-imports, lol
+    "python.pythonPath": "/usr/local/bin/nonexistent-path"
+  },
+
+  // Add the IDs of extensions you want installed when the container is created.
+  "extensions": [
+    "eamodio.gitlens",
+    "vadimcn.vscode-lldb",
+    "mutantdino.resourcemonitor",
+    "esbenp.prettier-vscode",
+
+    "matklad.rust-analyzer",
+    "tamasfe.even-better-toml",
+    "serayuzgur.crates",
+
+    "haskell.haskell",
+    "justusadam.language-haskell",
+    "sjurmillidahl.ormolu-vscode",
+
+    "StackBuild.bazel-stack-vscode",
+
+    "ms-python.python",
+    "thebutlah.reorder-python-imports"
+  ],
+
+  // Use 'forwardPorts' to make a list of ports inside the container available locally.
+  // "forwardPorts": [],
+
+  // Use 'postCreateCommand' to run commands after the container is created.
+  "postCreateCommand": "pip3 install -r gitlab-ci/src/requirements.txt",
+
+  // Comment out to run as root instead.
+  "remoteUser": "ubuntu"
+}

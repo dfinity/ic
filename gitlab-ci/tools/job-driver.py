@@ -48,7 +48,8 @@ def execute_job(job):
     try:
         job_mod = re.sub("-", "_", job)
         importlib.import_module(f"job_scripts.{job_mod}").run(*sys.argv[2:])
-    except ImportError:
+    except ImportError as e:
+        print(e)
         print(f"{job}: no script for job")
         exit(1)
 

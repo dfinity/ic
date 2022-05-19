@@ -53,6 +53,8 @@ tarpaulin-report.html
 
 dist-newstyle
 
+**/.stack-work
+
 ### Rust tags created by rusty-tags
 **/rusty-tags.vi
 **/rusty-tags.emacs

@@ -7,7 +7,7 @@ filegroup(
     srcs = glob(
         ["**"],
         exclude = [
-            "target",
+            "target/**/*",
             "*.swp",
             "nervous_system/common/bazel-out/**",
         ],
