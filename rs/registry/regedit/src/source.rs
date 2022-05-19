@@ -1,9 +1,10 @@
 use crate::args::SourceSpec;
 use anyhow::Result;
 use ic_registry_client::client::{
-    create_data_provider, DataProviderConfig, RegistryDataProvider, RegistryTransportRecord,
-    RegistryVersion, ZERO_REGISTRY_VERSION,
+    RegistryDataProvider, RegistryTransportRecord, RegistryVersion, ZERO_REGISTRY_VERSION,
 };
+use ic_registry_common::create_nns_data_provider;
+use ic_registry_local_store::LocalStoreImpl;
 use std::sync::Arc;
 
 pub type Changelog = (Vec<RegistryTransportRecord>, RegistryVersion);
@@ -24,10 +25,8 @@ fn source_to_dataprovider(
     rt_handle: tokio::runtime::Handle,
     source_spec: SourceSpec,
 ) -> Arc<dyn RegistryDataProvider> {
-    let cfg = match source_spec {
-        SourceSpec::LocalStore(path) => DataProviderConfig::LocalStore(path),
-        SourceSpec::Canister(url) => DataProviderConfig::RegistryCanisterUrl(vec![url]),
-    };
-
-    create_data_provider(rt_handle, &cfg, None)
+    match source_spec {
+        SourceSpec::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)) as Arc<_>,
+        SourceSpec::Canister(url) => create_nns_data_provider(rt_handle, vec![url], None),
+    }
 }

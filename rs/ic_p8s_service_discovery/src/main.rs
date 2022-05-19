@@ -22,7 +22,8 @@ use ecs::SetTo;
 use elastic_common_schema::{self as ecs, process_fields::WithCurrentProcess};
 use ic_async_utils::shutdown_signal;
 use ic_metrics::MetricsRegistry;
-use ic_registry_client::client::{create_data_provider, DataProviderConfig, RegistryClientImpl};
+use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_common::create_nns_data_provider;
 
 use config::Config;
 
@@ -72,9 +73,9 @@ async fn main() -> Result<()> {
         None
     };
 
-    let data_provider = create_data_provider(
+    let data_provider = create_nns_data_provider(
         tokio::runtime::Handle::current(),
-        &DataProviderConfig::RegistryCanisterUrl(config.nns.urls.clone()),
+        config.nns.urls.clone(),
         nns_public_key,
     );
 

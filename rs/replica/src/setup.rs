@@ -1,14 +1,18 @@
 use crate::args::ReplicaArgs;
 use clap::Parser;
-use ic_config::{crypto::CryptoConfig, Config, ConfigSource, SAMPLE_CONFIG};
+use ic_config::{
+    crypto::CryptoConfig, registry_client::DataProviderConfig, Config, ConfigSource, SAMPLE_CONFIG,
+};
 use ic_crypto::CryptoComponent;
 use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::{fatal, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
-use ic_registry_client::client::{create_data_provider, RegistryClientImpl};
+use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
+use ic_registry_common::create_nns_data_provider;
+use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::consensus::catchup::{CUPWithOriginalProtobuf, CatchUpPackage};
@@ -224,11 +228,14 @@ pub fn setup_crypto_registry(
         let optional_nns_public_key = optional_nns_public_key_file
             .map(|path| parse_threshold_sig_key(path).expect("failed to parse NNS PK file"));
 
-        let data_provider = create_data_provider(
-            tokio::runtime::Handle::current(),
-            config.registry_client.data_provider.as_ref().unwrap(),
-            optional_nns_public_key,
-        );
+        let data_provider = match config.registry_client.data_provider.unwrap() {
+            DataProviderConfig::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)),
+            DataProviderConfig::RegistryCanisterUrl(urls) => create_nns_data_provider(
+                tokio::runtime::Handle::current(),
+                urls,
+                optional_nns_public_key,
+            ),
+        };
 
         let registry = Arc::new(RegistryClientImpl::new(data_provider, metrics_registry));
         // TODO(RPL-49): pass in registry_client

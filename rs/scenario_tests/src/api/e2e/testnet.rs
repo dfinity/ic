@@ -1,13 +1,13 @@
-use ic_config::registry_client::DataProviderConfig;
 use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetType;
-use ic_registry_client::client::{create_data_provider, RegistryClient, RegistryClientImpl};
+use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_client_helpers::{
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
+use ic_registry_common::create_nns_data_provider;
 use ic_registry_routing_table::RoutingTable;
 use ic_types::{registry::connection_endpoint::ConnectionEndpoint, NodeId, PrincipalId, SubnetId};
 use std::{
@@ -57,9 +57,9 @@ pub fn registry_client(
     let nns_public_key = nns_public_key_path.map(|path| {
         parse_threshold_sig_key(&PathBuf::from(&path)).expect("Unable to parse public key file")
     });
-    let data_provider = create_data_provider(
+    let data_provider = create_nns_data_provider(
         tokio::runtime::Handle::current(),
-        &DataProviderConfig::RegistryCanisterUrl(vec![nns_url]),
+        vec![nns_url],
         nns_public_key,
     );
     let metrics_registry = MetricsRegistry::new();
