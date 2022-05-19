@@ -1,5 +1,5 @@
 {
-  "checksum": "9569044dd18f7bcb0ef32c1147a16755b14354ecb50f962cc7f052479221f3fc",
+  "checksum": "da974918f1a38751a424b2df1a6d586a392780d561e89fc03d6ca3bcd867c04f",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -3702,6 +3702,10 @@
               "target": "lazy_static"
             },
             {
+              "id": "leb128 0.2.5",
+              "target": "leb128"
+            },
+            {
               "id": "libc 0.2.126",
               "target": "libc"
             },
@@ -3730,7 +3734,7 @@
               "target": "procfs"
             },
             {
-              "id": "prometheus 0.13.0",
+              "id": "prometheus 0.13.1",
               "target": "prometheus"
             },
             {
@@ -8325,59 +8329,6 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "parking_lot 0.11.2": {
-      "name": "parking_lot",
-      "version": "0.11.2",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/parking_lot/0.11.2/download",
-          "sha256": "7d17b78036a60663b797adeaee46f5c9dfebb86948d1255007a1d6be0271ff99"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "parking_lot",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "parking_lot",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "default"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "instant 0.1.12",
-              "target": "instant"
-            },
-            {
-              "id": "lock_api 0.4.7",
-              "target": "lock_api"
-            },
-            {
-              "id": "parking_lot_core 0.8.5",
-              "target": "parking_lot_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.11.2"
-      },
-      "license": "Apache-2.0/MIT"
-    },
     "parking_lot 0.12.0": {
       "name": "parking_lot",
       "version": "0.12.0",
@@ -8424,96 +8375,6 @@
         },
         "edition": "2018",
         "version": "0.12.0"
-      },
-      "license": "Apache-2.0/MIT"
-    },
-    "parking_lot_core 0.8.5": {
-      "name": "parking_lot_core",
-      "version": "0.8.5",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/parking_lot_core/0.8.5/download",
-          "sha256": "d76e8e1493bcac0d2766c42737f34458f1c8c50c0d23bcb24ea953affb273216"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "parking_lot_core",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "parking_lot_core",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "instant 0.1.12",
-              "target": "instant"
-            },
-            {
-              "id": "parking_lot_core 0.8.5",
-              "target": "build_script_build"
-            },
-            {
-              "id": "smallvec 1.8.0",
-              "target": "smallvec"
-            }
-          ],
-          "selects": {
-            "cfg(target_os = \"redox\")": [
-              {
-                "id": "redox_syscall 0.2.13",
-                "target": "syscall"
-              }
-            ],
-            "cfg(unix)": [
-              {
-                "id": "libc 0.2.126",
-                "target": "libc"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2018",
-        "version": "0.8.5"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ]
       },
       "license": "Apache-2.0/MIT"
     },
@@ -9661,13 +9522,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "procfs 0.10.1": {
+    "procfs 0.12.0": {
       "name": "procfs",
-      "version": "0.10.1",
+      "version": "0.12.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/procfs/0.10.1/download",
-          "sha256": "95e344cafeaeefe487300c361654bcfc85db3ac53619eeccced29f5ea18c4c70"
+          "url": "https://crates.io/api/v1/crates/procfs/0.12.0/download",
+          "sha256": "0941606b9934e2d98a3677759a971756eb821f75764d0e0d26946d08e74d9104"
         }
       },
       "targets": [
@@ -9700,10 +9561,6 @@
               "target": "byteorder"
             },
             {
-              "id": "flate2 1.0.23",
-              "target": "flate2"
-            },
-            {
               "id": "hex 0.4.3",
               "target": "hex"
             },
@@ -9719,7 +9576,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.10.1"
+        "version": "0.12.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -9785,13 +9642,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "prometheus 0.13.0": {
+    "prometheus 0.13.1": {
       "name": "prometheus",
-      "version": "0.13.0",
+      "version": "0.13.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/prometheus/0.13.0/download",
-          "sha256": "b7f64969ffd5dd8f39bd57a68ac53c163a095ed9d0fb707146da1b27025a3504"
+          "url": "https://crates.io/api/v1/crates/prometheus/0.13.1/download",
+          "sha256": "cface98dfa6d645ea4c789839f176e4b072265d085bfcc48eaa8d137f58d3c39"
         }
       },
       "targets": [
@@ -9855,11 +9712,11 @@
               "target": "memchr"
             },
             {
-              "id": "parking_lot 0.11.2",
+              "id": "parking_lot 0.12.0",
               "target": "parking_lot"
             },
             {
-              "id": "prometheus 0.13.0",
+              "id": "prometheus 0.13.1",
               "target": "build_script_build"
             },
             {
@@ -9874,14 +9731,14 @@
           "selects": {
             "cfg(target_os = \"linux\")": [
               {
-                "id": "procfs 0.10.1",
+                "id": "procfs 0.12.0",
                 "target": "procfs"
               }
             ]
           }
         },
         "edition": "2018",
-        "version": "0.13.0"
+        "version": "0.13.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -16366,7 +16223,6 @@
           "namedpipeapi",
           "ntdef",
           "ntsecapi",
-          "ntstatus",
           "objbase",
           "processenv",
           "profileapi",

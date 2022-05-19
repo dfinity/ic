@@ -105,6 +105,7 @@ crates_repository(
             version = "0.2",
         ),
         "lazy_static": crate.spec(version = "1.4.0"),
+        "leb128": crate.spec(version = "0.2.4"),
         "libc": crate.spec(version = "0.2.91"),
         "maplit": crate.spec(version = "1.0.2"),
         "miracl_core_bls12381": crate.spec(version = "4.1.2"),
