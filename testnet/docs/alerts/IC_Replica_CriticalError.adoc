@@ -27,7 +27,7 @@ prefix:
  * `mr` and `state_manager`: Message Routing team, reachable at
 https://dfinity.slack.com/archives/CKXPC1928[`#eng-messaging`] or via
 `+@team-messaging+`on Slack.
- * `cycles_account_manager`: Execution team, reachable at 
+ * `cycles_account_manager` and `scheduler`: Execution team, reachable at
  https://dfinity.slack.com/archives/CGZJ7G1J6[`#eng-execution`] or via
  `+@team-execution+`on Slack.
 
@@ -78,3 +78,20 @@ response (those cycles were reserved in the corresponding request sent
 earlier), since the response was bigger than the max reserved amount.
 
 An occurrence would indicate unexpectedly big response payload size.
+
+=== `scheduler_canister_invariant_broken`
+
+At least one canister has an invalid state after the execution round.
+It could indicate a bug in the code that breaks the canister state invariants.
+Based on the replica logs, further investigations are needed to determine which canister has an invalid state and what invariant does not hold anymore.
+Check if a recent replica upgrade has happened that could have introduced a code bug.
+
+Escalate to the execution team.
+
+=== `scheduler_subnet_memory_usage_invariant_broken`
+
+At least one subnet where the total amount of storage used by all canisters exceeds the maximum amount of logical storage available.
+It could indicate a bug in the code, resulting in canisters exceeding the subnet storage limit allocated.
+Further checks are needed to verify if the invariant is broken on different subnets. This could be caused by a recent upgrade that could have introduced a bug.
+
+Escalate to the execution team.
