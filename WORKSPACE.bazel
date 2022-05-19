@@ -135,6 +135,7 @@ crates_repository(
         "serde_json": crate.spec(version = "1.0.40"),
         "serde": crate.spec(version = "1.0.136"),
         "sha2": crate.spec(version = "0.9.1"),
+        "simple_asn1": crate.spec(version = "0.5.4"),
         "slog": crate.spec(
             features = [
                 "nested-values",

@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "der_utils",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_internal_threshold_sig_bls12381_der",
+    edition = "2018",
+    visibility = ["//rs/crypto:__subpackages__"],
+    deps = [
+        "@crate_index//:simple_asn1",
+    ],
+)
+
+rust_test(
+    name = "der_utils_test",
+    crate = ":der_utils",
+)
