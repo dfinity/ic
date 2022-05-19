@@ -61,10 +61,14 @@ mod tests {
     use super::*;
     use hex::FromHex;
     use ic_base_types::{NumBytes, NumSeconds};
+    use ic_canonical_state::CertificationVersion;
     use ic_crypto_tree_hash::Digest;
+    use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        canister_state::execution_state::{WasmBinary, WasmMetadata},
+        canister_state::execution_state::{
+            CustomSection, CustomSectionType, WasmBinary, WasmMetadata,
+        },
         metadata_state::Stream,
         page_map::{PageIndex, PAGE_SIZE},
         testing::ReplicatedStateTesting,
@@ -82,7 +86,9 @@ mod tests {
         Cycles, ExecutionRound,
     };
     use ic_wasm_types::CanisterModule;
-    use std::collections::BTreeSet;
+    use maplit::btreemap;
+    use std::{collections::BTreeSet, sync::Arc};
+    use strum::{EnumCount, IntoEnumIterator};
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
@@ -156,9 +162,10 @@ mod tests {
 
     #[test]
     fn test_backward_compatibility() {
-        fn state_fixture(certification_version: u32) -> ReplicatedState {
+        fn state_fixture(certification_version: CertificationVersion) -> ReplicatedState {
+            let subnet_id = subnet_test_id(1);
             let mut state = ReplicatedState::new_rooted_at(
-                subnet_test_id(1),
+                subnet_id,
                 SubnetType::Application,
                 "NOT_USED".into(),
             );
@@ -176,6 +183,12 @@ mod tests {
                 .page_map
                 .update(&[(PageIndex::from(1), &[0u8; PAGE_SIZE])]);
             let wasm_binary = WasmBinary::new(CanisterModule::new(vec![]));
+            let metadata = WasmMetadata::new(btreemap! {
+                String::from("dummy1") => CustomSection {
+                    visibility: CustomSectionType::Private,
+                    content: vec![0, 2],
+                }
+            });
             let execution_state = ExecutionState {
                 canister_root: "NOT_USED".into(),
                 session_nonce: None,
@@ -184,7 +197,7 @@ mod tests {
                 stable_memory: Memory::default(),
                 exported_globals: vec![Global::I32(1)],
                 exports: ExportedFunctions::new(BTreeSet::new()),
-                metadata: WasmMetadata::default(),
+                metadata,
                 last_executed_round: ExecutionRound::from(0),
             };
             canister_state.execution_state = Some(execution_state);
@@ -195,11 +208,13 @@ mod tests {
                 StreamIndexedQueue::with_begin(StreamIndex::from(4)),
                 StreamIndex::new(10),
             );
-
             for _ in 1..6 {
                 stream.push(RequestOrResponse::Response(ResponseBuilder::new().build()));
             }
-
+            if certification_version >= CertificationVersion::V8 {
+                stream.push_reject_signal(10.into());
+                stream.increment_signals_end();
+            }
             state.modify_streams(|streams| {
                 streams.insert(subnet_test_id(5), stream);
             });
@@ -212,18 +227,36 @@ mod tests {
                 );
             }
 
+            let mut routing_table = RoutingTable::new();
+            routing_table
+                .insert(
+                    CanisterIdRange {
+                        start: canister_id,
+                        end: canister_id,
+                    },
+                    subnet_id,
+                )
+                .unwrap();
+            state.metadata.network_topology.subnets = btreemap! {
+                subnet_id => Default::default(),
+            };
+            state.metadata.network_topology.routing_table = Arc::new(routing_table);
+
             state.metadata.certification_version = certification_version;
 
             state
         }
 
-        fn assert_partial_state_hash_matches(certification_version: u32, expected_hash: &str) {
+        fn assert_partial_state_hash_matches(
+            certification_version: CertificationVersion,
+            expected_hash: &str,
+        ) {
             let state = state_fixture(certification_version);
 
             assert_eq!(
                 hash_state(&state).digest(),
                 &Digest::from(<[u8; 32]>::from_hex(expected_hash,).unwrap()),
-                "Mismatched partial state hash computed according to certification version {}. \
+                "Mismatched partial state hash computed according to certification version {:?}. \
                 Perhaps you made a change that requires writing backward compatibility code?",
                 certification_version
             );
@@ -234,24 +267,24 @@ mod tests {
         // PLEASE INCREMENT THE CERTIFICATION VERSION AND PROVIDE APPROPRIATE
         // BACKWARD COMPATIBILITY CODE FOR OLD CERTIFICATION VERSIONS THAT
         // NEED TO BE SUPPORTED.
-        assert_partial_state_hash_matches(
-            // certification_version
-            0,
-            // expected_hash
-            "17F99A07189E1CCB2D33DC43354C823E77549D99EE848736D7017D2FF344482E",
-        );
-        assert_partial_state_hash_matches(
-            // certification_version
-            1,
-            // expected_hash
-            "00315DC9D438336FDA0E4C3FB496736E89351B08B5B2103E0827720E1020A3DF",
-        );
-
-        assert_partial_state_hash_matches(
-            // certification_version
-            2,
-            // expected_hash
-            "B4F0381DFA7C7B3800E6F066FC9614D8D60637C5BF6B212CEA1CAB9B94CEF540",
-        );
+        let expected_hashes: [&str; CertificationVersion::COUNT] = [
+            "4F249F1CD3AADE670227CA651BE3F8CE53C46C1E65CE4C782EA136BBE9758134",
+            "C70548C09DCC0B23940158D22FFD9BD66681622EC9AABDE9555518EAA9DCADAA",
+            "763D3561E11D44D083AF53C30DAFDE3C7CB0B937D6D5110378737AB698D76747",
+            "5A185A986A6F5A6D2D96044B717B4E96D33BE100FF270FDA650ABBA61EE36A9E",
+            "5A185A986A6F5A6D2D96044B717B4E96D33BE100FF270FDA650ABBA61EE36A9E",
+            "5A185A986A6F5A6D2D96044B717B4E96D33BE100FF270FDA650ABBA61EE36A9E",
+            "48BCE58420569AB8C30A8E0653FC597AF1B8C072118BF6E0A75D3BEC2059FFFB",
+            "48BCE58420569AB8C30A8E0653FC597AF1B8C072118BF6E0A75D3BEC2059FFFB",
+            "901C2CDB77697DBD3F024F2521FED2D92F1309A6073C8C50C52A348F76418D3F",
+            "901C2CDB77697DBD3F024F2521FED2D92F1309A6073C8C50C52A348F76418D3F",
+        ];
+        for certification_version in CertificationVersion::iter() {
+            assert_partial_state_hash_matches(
+                certification_version,
+                // expected_hash
+                expected_hashes[certification_version as usize],
+            );
+        }
     }
 }

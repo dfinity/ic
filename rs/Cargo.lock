@@ -5586,6 +5586,7 @@ name = "ic-messaging"
 version = "0.8.0"
 dependencies = [
  "ic-base-types",
+ "ic-certification-version",
  "ic-config",
  "ic-constants",
  "ic-crypto-tree-hash",
@@ -7256,6 +7257,7 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
+ "ic-registry-routing-table",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-replicated-state",
@@ -7277,6 +7279,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "slog",
+ "strum 0.23.0",
  "tempfile",
  "tree-deserializer",
 ]

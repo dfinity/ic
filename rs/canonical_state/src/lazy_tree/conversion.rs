@@ -213,14 +213,7 @@ fn invert_routing_table(
 
 /// Converts replicated state into a lazy tree.
 fn state_as_tree(state: &ReplicatedState) -> LazyTree<'_> {
-    let certification_version =
-        CertificationVersion::try_from(state.metadata.certification_version).unwrap_or_else(|e| {
-            panic!(
-                "bug: this replica does not understand the current certification version: {}",
-                e
-            )
-        });
-
+    let certification_version = state.metadata.certification_version;
     assert!(
         certification_version <= MAX_SUPPORTED_CERTIFICATION_VERSION,
         "Unable to certify state with version {:?}. Maximum supported certification version is {:?}",
