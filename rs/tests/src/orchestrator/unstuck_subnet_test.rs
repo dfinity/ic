@@ -119,15 +119,14 @@ pub fn test(test_env: TestEnv) {
     info!(logger, "Download and save the proper image file...");
     let command = format!(
         r#"sudo chmod 777 /var/lib/ic/data/images
-        sudo chmod 777 /var/lib/ic/data/images/{}-test
-        cd /var/lib/ic/data/images/{}-test/
-        sudo mv base-os.tar.gz old-base-os.tar.gz
-        sudo curl https://download.dfinity.systems/ic/{}/guest-os/update-img/update-img-test.tar.gz -o base-os.tar.gz
-        sudo chmod --reference=old-base-os.tar.gz base-os.tar.gz
-        sudo chown --reference=old-base-os.tar.gz base-os.tar.gz
-        sudo rm old-base-os.tar.gz
+        cd /var/lib/ic/data/images/
+        sudo mv guest-os.tar.gz old-guest-os.tar.gz
+        sudo curl https://download.dfinity.systems/ic/{}/guest-os/update-img/update-img-test.tar.gz -o guest-os.tar.gz
+        sudo chmod --reference=old-guest-os.tar.gz guest-os.tar.gz
+        sudo chown --reference=old-guest-os.tar.gz guest-os.tar.gz
+        sudo rm old-guest-os.tar.gz
         "#,
-        target_version, target_version, target_version
+        target_version,
     );
     for n in &nodes {
         let s = n.get_ssh_session(ADMIN).unwrap();
