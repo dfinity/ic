@@ -33,6 +33,10 @@
     root /var/www/html;
     index index.html;
 
+    if ($denylisted) {
+      return 451;
+    }
+
     location /_/ {
       return 404;
     }
