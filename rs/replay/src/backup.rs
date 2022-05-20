@@ -1,6 +1,6 @@
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::BACKUP_GROUP_SIZE;
-use ic_consensus::consensus::{pool_reader::PoolReader, utils::lookup_replica_version};
+use ic_consensus::consensus::pool_reader::PoolReader;
 use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
@@ -10,16 +10,14 @@ use ic_interfaces::{
     time_source::SysTimeSource,
     validation::ValidationResult,
 };
-use ic_interfaces_state_manager::StateManager;
-use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     consensus::{
-        certification::Certification, BlockProposal, CatchUpPackage, Finalization, HasHeight,
-        Notarization, RandomBeacon, RandomTape,
+        certification::Certification, BlockProposal, CatchUpPackage, Finalization, Notarization,
+        RandomBeacon, RandomTape,
     },
-    Height, RegistryVersion, ReplicaVersion, SubnetId,
+    Height, RegistryVersion, SubnetId,
 };
 use prost::Message;
 use std::{
@@ -165,7 +163,6 @@ pub(crate) fn deserialize_consensus_artifacts(
     pool: &mut ConsensusPoolImpl,
     height_to_batches: &mut BTreeMap<Height, HeightArtifacts>,
     subnet_id: SubnetId,
-    current_replica_version: &ReplicaVersion,
     latest_state_height: Height,
 ) -> ExitPoint {
     let time_source = SysTimeSource::new();
@@ -351,44 +348,10 @@ pub(crate) fn deserialize_consensus_artifacts(
                     "Found a CUP at height {:?}, finalized at height {:?}",
                     cup_height, height
                 );
-                match lookup_replica_version(
-                    &*registry_client,
-                    subnet_id,
-                    &no_op_logger(),
-                    registry_version,
-                ) {
-                    Some(replica_version) if &replica_version != current_replica_version => {
-                        println!(
-                            "⚠️  Please use the replay tool of version {} to continue backup recovery from height {:?}",
-                            replica_version, cup_height
-                        );
-                    }
-                    _ => {}
-                }
                 return ExitPoint::CUPHeightWasFinalized(cup_height);
             }
         }
     }
-}
-
-/// Checks that the restored catch-up package contains the same state hash as
-/// the one computed by the state manager from the restored artifacts and drops
-/// all states below the last CUP.
-pub(crate) fn assert_consistency_and_clean_up<T>(
-    state_manager: &dyn StateManager<State = T>,
-    pool: &mut ConsensusPoolImpl,
-    registry: Arc<dyn RegistryClient>,
-    subnet_id: SubnetId,
-) {
-    let cache = pool.get_cache();
-    crate::player::verify_cup_and_state(registry, subnet_id, state_manager, &*cache);
-    let purge_height = cache.catch_up_package().height();
-    println!("Removing all states below height {:?}", purge_height);
-    state_manager.remove_states_below(purge_height);
-    pool.apply_changes(
-        &SysTimeSource::new(),
-        ChangeAction::PurgeValidatedBelow(purge_height).into(),
-    );
 }
 
 fn deserialization_error(height: Height) -> String {

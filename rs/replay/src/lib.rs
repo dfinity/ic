@@ -16,12 +16,12 @@
 
 use crate::cmd::{ReplayToolArgs, SubCommand};
 use crate::ingress::*;
-use crate::player::Player;
+use crate::player::{Player, ReplayResult};
 
 use ic_canister_client::{Agent, Sender};
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_types::{Height, ReplicaVersion};
+use ic_types::ReplicaVersion;
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::rc::Rc;
@@ -61,9 +61,9 @@ pub mod player;
 /// // replay function could be called as follows:
 /// // replay(args);
 /// ```
-pub fn replay(args: ReplayToolArgs) -> Option<(Height, String)> {
+pub fn replay(args: ReplayToolArgs) -> ReplayResult {
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    let result = Rc::new(RefCell::new(None));
+    let result: Rc<RefCell<ReplayResult>> = Rc::new(RefCell::new(Ok(Default::default())));
     let res_clone = Rc::clone(&result);
     Config::run_with_temp_config(|default_config| {
         let source = ConfigSource::File(args.config);
@@ -99,7 +99,7 @@ pub fn replay(args: ReplayToolArgs) -> Option<(Height, String)> {
                 )
                 .await
                 .with_replay_target_height(target_height);
-                player.restore(cmd.start_height + 1);
+                *res_clone.borrow_mut() = player.restore(cmd.start_height + 1);
             });
             return;
         }
@@ -146,11 +146,14 @@ pub fn replay(args: ReplayToolArgs) -> Option<(Height, String)> {
                     Player::new(cfg, subnet_id).await.with_replay_target_height(target_height)
                 },
             };
-            player.replay(extra);
+            if let Err(e) = player.replay(extra){
+                *res_clone.borrow_mut() = Err(e);
+                return;
+            };
             if let Some(SubCommand::UpdateRegistryLocalStore) = subcmd {
                 player.update_registry_local_store()
             }
-            *res_clone.borrow_mut() = Some(player.get_latest_state_height_and_hash());
+            *res_clone.borrow_mut() = Ok(player.get_latest_state_height_and_hash());
         })
     });
     let ret = result.borrow().clone();
