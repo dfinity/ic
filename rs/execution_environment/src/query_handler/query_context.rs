@@ -412,8 +412,8 @@ impl<'a> QueryContext<'a> {
         let (canister, instructions_left, result) = self.hypervisor.execute_query(
             QueryExecutionType::NonReplicated {
                 call_context_id,
-                network_topology: Arc::clone(&self.network_topology),
                 query_kind,
+                network_topology: Arc::clone(&self.network_topology),
             },
             method_name,
             method_payload,
@@ -422,6 +422,7 @@ impl<'a> QueryContext<'a> {
             Some(self.data_certificate.clone()),
             self.state.time(),
             execution_parameters,
+            &self.network_topology,
         );
         let instructions_executed = instruction_limit - instructions_left;
         measurement_scope.add(instructions_executed, NumMessages::from(1));

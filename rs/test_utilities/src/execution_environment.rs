@@ -524,6 +524,7 @@ impl ExecutionTest {
                 canister,
                 None,
                 execution_parameters,
+                &Default::default(),
             );
         state.put_canister_state(canister);
         self.state = Some(state);

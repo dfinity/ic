@@ -171,7 +171,7 @@ pub fn execute_heartbeat(
         call_context_id,
         own_subnet_id,
         own_subnet_type,
-        network_topology,
+        Arc::clone(&network_topology),
     );
     let (output, output_execution_state, output_system_state) = hypervisor.execute(
         api_type,
@@ -180,6 +180,7 @@ pub fn execute_heartbeat(
         execution_parameters,
         FuncRef::Method(method),
         execution_state,
+        &network_topology,
     );
 
     // Post execution processing.

@@ -1,12 +1,15 @@
 use std::collections::BTreeMap;
 
-use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId};
+use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
+use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use ic_logger::{info, ReplicaLogger};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::DEFAULT_QUEUE_CAPACITY, CanisterStatus, StateError, SystemState,
+    canister_state::DEFAULT_QUEUE_CAPACITY, CanisterStatus, NetworkTopology, StateError,
+    SystemState,
 };
 use ic_types::{
     messages::{CallContextId, CallbackId, Request},
@@ -16,7 +19,7 @@ use ic_types::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{cycles_balance_change::CyclesBalanceChange, CERTIFIED_DATA_MAX_LENGTH};
+use crate::{cycles_balance_change::CyclesBalanceChange, routing, CERTIFIED_DATA_MAX_LENGTH};
 
 /// The information that canisters can see about their own status.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -96,7 +99,13 @@ impl SystemStateChanges {
     ///
     /// This will panic if the changes are invalid. That could indicate that a
     /// canister has broken out of wasmtime.
-    pub fn apply_changes(self, system_state: &mut SystemState) {
+    pub fn apply_changes(
+        self,
+        system_state: &mut SystemState,
+        network_topology: &NetworkTopology,
+        own_subnet_id: SubnetId,
+        logger: &ReplicaLogger,
+    ) {
         // Verify total cycle change is not positive and update cycles balance.
         assert!(self.cycle_change_is_valid(system_state.canister_id == CYCLES_MINTING_CANISTER_ID));
         self.cycles_balance_change
@@ -123,22 +132,41 @@ impl SystemStateChanges {
         }
 
         // Push outgoing messages.
-        for msg in self.requests {
+        let mut callback_changes = BTreeMap::new();
+        for mut msg in self.requests {
+            if msg.receiver == IC_00 {
+                // This is a request to ic:00. Update the receiver to be the appropriate
+                // subnet and also update the corresponding callback.
+                let destination_subnet = routing::resolve_destination(
+                        network_topology,
+                        msg.method_name.as_str(),
+                        msg.method_payload.as_slice(),
+                        own_subnet_id,
+                    )
+                    .map(|id| CanisterId::new(id.get()).unwrap())
+                    .unwrap_or({
+                        info!(
+                            logger,
+                            "Under construction request: Couldn't find the right subnet. Send it to the management canister which will cause the request to be rejected during routing: sender id {}, receiver id {}, method_name {}.",
+                            msg.sender, msg.receiver, msg.method_name
+                        );
+                        IC_00
+                    });
+                msg.receiver = destination_subnet;
+                callback_changes.insert(msg.sender_reply_callback, destination_subnet);
+            }
             system_state
                 .push_output_request(msg)
                 .expect("Unable to send new request");
         }
 
-        // Verify new certified data isn't too long and set it.
-        if let Some(certified_data) = self.new_certified_data.as_ref() {
-            assert!(certified_data.len() <= CERTIFIED_DATA_MAX_LENGTH as usize);
-            system_state.certified_data = certified_data.clone();
-        }
-
         // Verify callback ids and register new callbacks.
         for update in self.callback_updates {
             match update {
-                CallbackUpdate::Register(expected_id, callback) => {
+                CallbackUpdate::Register(expected_id, mut callback) => {
+                    if let Some(receiver) = callback_changes.get(&expected_id) {
+                        callback.respondent = Some(*receiver);
+                    }
                     let id = system_state
                         .call_context_manager_mut()
                         .unwrap()
@@ -153,6 +181,12 @@ impl SystemStateChanges {
                         .expect("Tried to unregister callback with an id that isn't in use");
                 }
             }
+        }
+
+        // Verify new certified data isn't too long and set it.
+        if let Some(certified_data) = self.new_certified_data.as_ref() {
+            assert!(certified_data.len() <= CERTIFIED_DATA_MAX_LENGTH as usize);
+            system_state.certified_data = certified_data.clone();
         }
     }
 }

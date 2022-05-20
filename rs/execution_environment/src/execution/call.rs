@@ -87,7 +87,15 @@ pub fn execute_request_call(
         // query is fine as we do not persist state modifications.
         execution_parameters.subnet_available_memory = subnet_memory_capacity(config);
 
-        execute_query_method_for_request(canister, req, time, execution_parameters, hypervisor, log)
+        execute_query_method_for_request(
+            canister,
+            req,
+            time,
+            execution_parameters,
+            hypervisor,
+            &network_topology,
+            log,
+        )
     } else {
         execute_update_method(
             canister,
@@ -135,6 +143,7 @@ fn execute_query_method_for_request(
     time: Time,
     execution_parameters: ExecutionParameters,
     hypervisor: &Hypervisor,
+    network_topology: &NetworkTopology,
     log: &ReplicaLogger,
 ) -> ExecuteMessageResult<CanisterState> {
     let (canister, cycles, result) = hypervisor.execute_query(
@@ -146,6 +155,7 @@ fn execute_query_method_for_request(
         None,
         time,
         execution_parameters,
+        network_topology,
     );
 
     let result =
@@ -238,6 +248,7 @@ pub(crate) fn execute_ingress_call(
             time,
             execution_parameters,
             hypervisor,
+            &network_topology,
             log,
         )
     } else {
@@ -260,6 +271,7 @@ fn execute_query_method_for_ingress(
     time: Time,
     execution_parameters: ExecutionParameters,
     hypervisor: &Hypervisor,
+    network_topology: &NetworkTopology,
     log: &ReplicaLogger,
 ) -> ExecuteMessageResult<CanisterState> {
     let (canister, cycles, result) = hypervisor.execute_query(
@@ -271,6 +283,7 @@ fn execute_query_method_for_ingress(
         None,
         time,
         execution_parameters,
+        network_topology,
     );
 
     let result =

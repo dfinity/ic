@@ -442,6 +442,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )]),
             ),
             pot(
+                "rejoin",
+                message_routing::rejoin_test::config(),
+                par(vec![t("rejoin", message_routing::rejoin_test::test)]),
+            ),
+            pot(
                 "tecdsa_add_nodes_pot",
                 tecdsa::tecdsa_add_nodes_test::config(),
                 par(vec![t(
@@ -456,11 +461,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "test_tecdsa_remove_nodes",
                     tecdsa::tecdsa_remove_nodes_test::test,
                 )]),
-            ),
-            pot(
-                "rejoin",
-                message_routing::rejoin_test::config(),
-                par(vec![t("rejoin", message_routing::rejoin_test::test)]),
             ),
             pot_with_setup(
                 "tecdsa_signature_same_subnet_pot",
@@ -478,7 +478,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     tecdsa::tecdsa_signature_test::test_threshold_ecdsa_life_cycle,
                 )])
             ),
-            /* This test is WIP (#CON-779)
             pot_with_setup(
                 "tecdsa_signature_from_other_subnet_pot",
                 tecdsa::tecdsa_signature_test::config,
@@ -486,7 +485,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "test_threshold_ecdsa_signature_from_other_subnet",
                     tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_other_subnet,
                 )])
-            ),*/
+            ),
             pot_with_setup(
                 "tecdsa_signature_fails_without_cycles_pot",
                 tecdsa::tecdsa_signature_test::config,
@@ -495,7 +494,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_fails_without_cycles,
                 )])
             ),
-            /* This test is WIP (#CON-779)
             pot_with_setup(
                 "tecdsa_signature_from_nns_without_cycles_pot",
                 tecdsa::tecdsa_signature_test::config,
@@ -503,7 +501,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "test_threshold_ecdsa_signature_from_nns_without_cycles",
                     tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_nns_without_cycles,
                 )])
-            ),*/
+            ),
             pot(
                 "update_registry_idkg_key_pot",
                 orchestrator::update_registry_idkg_key::config(),

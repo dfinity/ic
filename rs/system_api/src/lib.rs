@@ -6,7 +6,6 @@ mod stable_memory;
 pub mod system_api_empty;
 
 use ic_error_types::RejectCode;
-use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionParameters,
     HypervisorError::{self, *},
@@ -14,7 +13,7 @@ use ic_interfaces::execution_environment::{
     SystemApi,
     TrapCode::CyclesAmountTooBigFor64Bit,
 };
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::ENFORCE_MESSAGE_MEMORY_USAGE, memory_required_to_push_request,
@@ -1659,38 +1658,23 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_simple")),
             ApiType::Update {
-                call_context_id,
-                own_subnet_id,
-                network_topology,
-                ..
+                call_context_id, ..
             }
             | ApiType::NonReplicatedQuery {
-                own_subnet_id,
                 query_kind:
                     NonReplicatedQueryKind::Stateful {
-                        call_context_id,
-                        network_topology,
-                        ..
+                        call_context_id, ..
                     },
                 ..
             }
             | ApiType::Heartbeat {
-                call_context_id,
-                own_subnet_id,
-                network_topology,
-                ..
+                call_context_id, ..
             }
             | ApiType::ReplyCallback {
-                call_context_id,
-                own_subnet_id,
-                network_topology,
-                ..
+                call_context_id, ..
             }
             | ApiType::RejectCallback {
-                call_context_id,
-                own_subnet_id,
-                network_topology,
-                ..
+                call_context_id, ..
             } => {
                 if data_len as u64 > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get() {
                     return Ok(RejectCode::SysFatal as i32);
@@ -1715,28 +1699,7 @@ impl SystemApi for SystemApiImpl {
                 let callee =
                     PrincipalId::try_from(id_bytes).map_err(HypervisorError::InvalidPrincipalId)?;
 
-                let callee = if callee == IC_00.get() {
-                    // This is a request to ic:00. Update `callee` to be the appropriate subnet.
-                    let callee = routing::resolve_destination(
-                        network_topology,
-                        method_name.as_str(),
-                        payload.as_slice(),
-                        *own_subnet_id,
-                    )
-                    .unwrap_or({
-                        info!(
-                            self.log,
-                            "Request destination: Couldn't find the right subnet. Send it to the current subnet {},
-                            which will handle rejecting the request gracefully: sender id {}, receiver id {}, method_name {}.",
-                            own_subnet_id,
-                            self.sandbox_safe_system_state.canister_id, callee, method_name
-                        );
-                        *own_subnet_id
-                    });
-                    CanisterId::new(callee.get()).unwrap()
-                } else {
-                    CanisterId::new(callee).map_err(HypervisorError::InvalidCanisterId)?
-                };
+                let callee = CanisterId::new(callee).map_err(HypervisorError::InvalidCanisterId)?;
 
                 let on_reply = WasmClosure::new(reply_fun, reply_env);
                 let on_reject = WasmClosure::new(reject_fun, reject_env);

@@ -298,6 +298,7 @@ fn execute(
     system_state: SystemState,
     wast: &str,
     func_ref: FuncRef,
+    network_topology: &NetworkTopology,
 ) -> Result<Option<WasmResult>, HypervisorError> {
     let mut result = Ok(None);
     let result_ref = &mut result;
@@ -323,6 +324,7 @@ fn execute(
                 execution_parameters,
                 func_ref,
                 execution_state,
+                network_topology,
             )
             .0
             .wasm_result;
@@ -349,6 +351,7 @@ fn test_function_not_found_error() {
         SystemStateBuilder::default().build(),
         wast,
         FuncRef::UpdateClosure(WasmClosure::new(func_idx, 1)),
+        &setup().2,
     );
     assert_eq!(
         wasm_result,
@@ -372,6 +375,7 @@ fn test_table_function_unexpected_signature() {
                   (data (i32.const 0) "table!")
                 )"#,
         FuncRef::UpdateClosure(WasmClosure::new(0, 1)),
+        &setup().2,
     );
     assert_eq!(
         wasm_result,
@@ -397,6 +401,7 @@ fn test_func_ref_call_by_index() {
                   (data (i32.const 0) "table!")
             )"#,
         FuncRef::UpdateClosure(WasmClosure::new(0, 0)),
+        &setup().2,
     );
     assert_eq!(
         wasm_result,
@@ -1212,6 +1217,7 @@ fn sys_api_call_arg_data_size_fail() {
                   (func (;1;) (call 0) drop)
                   (export "canister_update test" (func 1)))"#,
         test_func_ref(),
+        &setup().2,
     );
     let err = wasm_result.unwrap_err();
     assert_eq!(
@@ -1360,6 +1366,7 @@ fn test_execute_query_msg_caller() {
             None,
             mock_time(),
             execution_parameters.clone(),
+            &setup().2,
         );
         assert_eq!(result, Ok(Some(WasmResult::Reply(id.get().into_vec()))));
 
@@ -1373,6 +1380,7 @@ fn test_execute_query_msg_caller() {
             None,
             mock_time(),
             execution_parameters,
+            &setup().2,
         );
         assert_eq!(result, Ok(Some(WasmResult::Reply(id.get().into_vec()))));
     });
@@ -1397,6 +1405,7 @@ fn sys_api_call_arg_data_copy_fail() {
                   (memory 1)
                   (export "canister_update test" (func $test)))"#,
         test_func_ref(),
+        &setup().2,
     );
     assert_eq!(
         wasm_result,
@@ -1474,6 +1483,7 @@ fn test_msg_caller_size_in_reject() {
                   (export "memory" (memory 0))
                   (export "canister_update test" (func $test)))"#,
         test_func_ref(),
+        &setup().2,
     );
     assert_eq!(
         wasm_result,
@@ -1503,6 +1513,7 @@ fn test_msg_caller_copy_in_reject() {
                   (export "memory" (memory 0))
                   (export "canister_update test" (func $test)))"#,
         test_func_ref(),
+        &setup().2,
     );
     assert_eq!(
         wasm_result,
@@ -1560,6 +1571,7 @@ fn sys_api_call_reject_code() {
                     end)
                   (export "canister_update test" (func 1)))"#,
         test_func_ref(),
+        &setup().2,
     );
     wasm_result.unwrap();
 }
@@ -1589,6 +1601,7 @@ fn sys_api_call_reject_code_outside_reject_callback() {
                     end)
                   (export "canister_update test" (func 1)))"#,
         test_func_ref(),
+        &setup().2,
     );
     wasm_result.unwrap();
 }
@@ -1620,6 +1633,7 @@ fn sys_api_call_reject_msg_size() {
               (export "memory" (memory $memory))
               (export "canister_update test" (func 1)))"#,
         test_func_ref(),
+        &setup().2,
     );
     wasm_result.unwrap();
 }
@@ -1694,6 +1708,7 @@ fn sys_api_call_reject_msg_copy() {
         SystemStateBuilder::default().build(),
         REJECT_MSG_COPY_WAT,
         test_func_ref(),
+        &setup().2,
     );
     match wasm_result {
         Ok(Some(WasmResult::Reply(v))) => assert_eq!(&b"xxxxrejected"[..], &v[..]),
@@ -1734,6 +1749,7 @@ fn sys_api_call_reject_msg_copy_called_with_length_that_exceeds_message_length()
         SystemStateBuilder::default().build(),
         REJECT_MSG_COPY_WAT,
         test_func_ref(),
+        &setup().2,
     );
     let err = wasm_result.unwrap_err();
     assert_eq!(
@@ -2677,6 +2693,7 @@ fn changes_to_stable_memory_in_canister_init_are_rolled_back_on_failure() {
                 EMPTY_PAYLOAD.as_slice(),
                 mock_time(),
                 execution_parameters,
+                &setup().2,
             )
         },
     );
@@ -2692,6 +2709,7 @@ fn changes_to_stable_memory_in_canister_pre_upgrade_are_rolled_back_on_failure()
                 test_caller(),
                 mock_time(),
                 execution_parameters,
+                &setup().2,
             )
         },
     )
@@ -2708,6 +2726,7 @@ fn changes_to_stable_memory_in_canister_post_upgrade_are_rolled_back_on_failure(
                 EMPTY_PAYLOAD.as_slice(),
                 mock_time(),
                 execution_parameters,
+                &setup().2,
             )
         },
     )

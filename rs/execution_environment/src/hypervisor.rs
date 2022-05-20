@@ -185,7 +185,7 @@ impl Hypervisor {
             call_context_id,
             self.own_subnet_id,
             self.own_subnet_type,
-            network_topology,
+            Arc::clone(&network_topology),
         );
         let (output, output_execution_state, output_system_state) = self.execute(
             api_type,
@@ -194,6 +194,7 @@ impl Hypervisor {
             execution_parameters,
             FuncRef::Method(method),
             execution_state,
+            &network_topology,
         );
 
         let (mut system_state, heap_delta) = if output.wasm_result.is_ok() {
@@ -234,6 +235,7 @@ impl Hypervisor {
         data_certificate: Option<Vec<u8>>,
         time: Time,
         execution_parameters: ExecutionParameters,
+        network_topology: &NetworkTopology,
     ) -> (
         CanisterState,
         NumInstructions,
@@ -289,6 +291,7 @@ impl Hypervisor {
                     execution_parameters,
                     FuncRef::Method(method),
                     execution_state.clone(),
+                    network_topology,
                 );
 
                 let canister =
@@ -300,20 +303,21 @@ impl Hypervisor {
                 network_topology,
                 query_kind,
             } => {
+                let non_replicated_query_kind = match query_kind {
+                    QueryKind::Pure => NonReplicatedQueryKind::Pure,
+                    QueryKind::Stateful => NonReplicatedQueryKind::Stateful {
+                        call_context_id,
+                        network_topology: Arc::clone(&network_topology),
+                        outgoing_request: None,
+                    },
+                };
                 let api_type = ApiType::non_replicated_query(
                     time,
                     caller,
                     self.own_subnet_id,
                     payload.to_vec(),
                     data_certificate,
-                    match query_kind {
-                        QueryKind::Pure => NonReplicatedQueryKind::Pure,
-                        QueryKind::Stateful => NonReplicatedQueryKind::Stateful {
-                            call_context_id,
-                            network_topology,
-                            outgoing_request: None,
-                        },
-                    },
+                    non_replicated_query_kind,
                 );
                 // As we are executing the query in non-replicated mode, we can
                 // modify the canister as the caller is not going to be able to
@@ -325,6 +329,7 @@ impl Hypervisor {
                     execution_parameters,
                     FuncRef::Method(method),
                     execution_state.clone(),
+                    &network_topology,
                 );
 
                 let new_execution_state = match query_kind {
@@ -354,6 +359,7 @@ impl Hypervisor {
         canister: CanisterState,
         data_certificate: Option<Vec<u8>>,
         execution_parameters: ExecutionParameters,
+        network_topology: &NetworkTopology,
     ) -> (
         CanisterState,
         NumInstructions,
@@ -411,6 +417,7 @@ impl Hypervisor {
             execution_parameters,
             FuncRef::Method(method),
             execution_state.clone(),
+            network_topology,
         );
 
         // We return the unmodified version of the canister.
@@ -501,7 +508,7 @@ impl Hypervisor {
                 call_responded,
                 self.own_subnet_id,
                 self.own_subnet_type,
-                network_topology,
+                Arc::clone(&network_topology),
             ),
             Payload::Reject(context) => ApiType::reject_callback(
                 time,
@@ -511,7 +518,7 @@ impl Hypervisor {
                 call_responded,
                 self.own_subnet_id,
                 self.own_subnet_type,
-                network_topology,
+                Arc::clone(&network_topology),
             ),
         };
 
@@ -531,6 +538,7 @@ impl Hypervisor {
             execution_parameters.clone(),
             func_ref,
             canister.execution_state.take().unwrap(),
+            &network_topology,
         );
 
         let canister_current_memory_usage = canister.memory_usage(self.own_subnet_type);
@@ -578,6 +586,7 @@ impl Hypervisor {
                                 },
                                 func_ref,
                                 canister.execution_state.take().unwrap(),
+                                &network_topology,
                             );
 
                         canister.execution_state = Some(output_execution_state);
@@ -637,6 +646,7 @@ impl Hypervisor {
         &self,
         canister: CanisterState,
         execution_parameters: ExecutionParameters,
+        network_topology: &NetworkTopology,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
         let method = WasmMethod::System(SystemMethod::CanisterStart);
         let memory_usage = canister.memory_usage(self.own_subnet_type);
@@ -672,6 +682,7 @@ impl Hypervisor {
             execution_parameters,
             FuncRef::Method(method),
             execution_state,
+            network_topology,
         );
 
         self.system_execution_result_with_old_system_state(
@@ -700,6 +711,7 @@ impl Hypervisor {
         caller: PrincipalId,
         time: Time,
         execution_parameters: ExecutionParameters,
+        network_topology: &NetworkTopology,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
         let method = WasmMethod::System(SystemMethod::CanisterPreUpgrade);
         let memory_usage = canister.memory_usage(self.own_subnet_type);
@@ -734,6 +746,7 @@ impl Hypervisor {
             execution_parameters,
             FuncRef::Method(method),
             execution_state,
+            network_topology,
         );
         self.system_execution_result(
             output,
@@ -763,6 +776,7 @@ impl Hypervisor {
         payload: &[u8],
         time: Time,
         execution_parameters: ExecutionParameters,
+        network_topology: &NetworkTopology,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
         let method = WasmMethod::System(SystemMethod::CanisterInit);
         let memory_usage = canister.memory_usage(self.own_subnet_type);
@@ -797,6 +811,7 @@ impl Hypervisor {
             execution_parameters,
             FuncRef::Method(method),
             execution_state,
+            network_topology,
         );
         self.system_execution_result(
             output,
@@ -826,6 +841,7 @@ impl Hypervisor {
         payload: &[u8],
         time: Time,
         execution_parameters: ExecutionParameters,
+        network_topology: &NetworkTopology,
     ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
         let method = WasmMethod::System(SystemMethod::CanisterPostUpgrade);
         let memory_usage = canister.memory_usage(self.own_subnet_type);
@@ -860,6 +876,7 @@ impl Hypervisor {
             execution_parameters,
             FuncRef::Method(method),
             execution_state,
+            network_topology,
         );
         self.system_execution_result(
             output,
@@ -882,6 +899,7 @@ impl Hypervisor {
         method_payload: Vec<u8>,
         time: Time,
         execution_parameters: ExecutionParameters,
+        network_topology: &NetworkTopology,
     ) -> (NumInstructions, Result<(), UserError>) {
         let method = WasmMethod::System(SystemMethod::CanisterInspectMessage);
         let memory_usage = canister.memory_usage(self.own_subnet_type);
@@ -917,6 +935,7 @@ impl Hypervisor {
             execution_parameters,
             FuncRef::Method(method),
             execution_state,
+            network_topology,
         );
         match output.wasm_result {
             Ok(maybe_wasm_result) => match maybe_wasm_result {
@@ -1065,6 +1084,7 @@ impl Hypervisor {
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
         execution_state: ExecutionState,
+        network_topology: &NetworkTopology,
     ) -> (WasmExecutionOutput, ExecutionState, SystemState) {
         let api_type_str = api_type.as_str();
         let static_system_state =
@@ -1091,7 +1111,12 @@ impl Hypervisor {
                 })
             };
         self.metrics.observe(api_type_str, &output);
-        system_state_changes.apply_changes(&mut system_state);
+        system_state_changes.apply_changes(
+            &mut system_state,
+            network_topology,
+            self.own_subnet_id,
+            &self.log,
+        );
         (output, execution_state, system_state)
     }
 }
