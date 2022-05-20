@@ -1,50 +1,82 @@
 #![allow(clippy::unwrap_used)]
+
 use super::*;
-use rand_chacha::rand_core::{RngCore, SeedableRng};
-// The following test was disabled because the current params are too large for
-// this to run
-#[test]
-#[ignore]
-fn should_allow_for_2_pow_lambda_t_updates() {
-    let sys = &mk_sys_params();
-    // Check that we're not running with a too big lambda_t.
-    assert_eq!(32, 2_i32.checked_pow(sys.lambda_t as u32).unwrap());
+use proptest::prelude::*;
 
-    let rng = &mut RAND_ChaCha20::new([83; 32]);
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[0u8, 1u8, 0u8, 1u8];
+proptest! {
+    //These tests are slow so we limit the number of iterations
+    #![proptest_config(ProptestConfig {
+        cases: 1,
+        .. ProptestConfig::default()
+    })]
 
-    let (_pk, mut sk) = kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng);
-    let mut count = 0;
-    while sk.current().is_some() {
-        sk.update(sys, rng);
-        count += 1;
-    }
-    assert_eq!(32, count);
-}
+    #[test]
+    fn should_update_initial_epochs(seed: [u8;32], associated_data: [u8;4]) {
+        let sys = &mk_sys_params();
 
-#[test]
-fn should_allow_for_32_updates() {
-    let sys = &mk_sys_params();
+        let rng = &mut RAND_ChaCha20::new(seed);
 
-    let rng = &mut RAND_ChaCha20::new([69; 32]);
-    const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 0u8, 0u8, 7u8];
-
-    let (_pk, mut sk) = kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng);
-    assert!(sk.current().is_some());
-
-    for _i in 0..32 {
-        sk.update(sys, rng);
+        let (_pk, mut sk) = kgen(&associated_data, sys, rng);
         assert!(sk.current().is_some());
+
+        for i in 0..100 {
+            let next_epoch = tau_from_epoch(sys, Epoch::from(i));
+            sk.update_to(&next_epoch, sys, rng);
+            assert!(sk.current().is_some());
+        }
     }
+    #[test]
+    fn should_update_to_random_epochs(epochs: Vec<u32>, seed: [u8;32], associated_data: [u8;4]) {
+        prop_assume!(epochs.len()<15);
+        prop_assume!(epochs.len()>5);
+
+        let sys = &mk_sys_params();
+
+        let rng = &mut RAND_ChaCha20::new(seed);
+
+        let (_pk, mut sk) = kgen(&associated_data, sys, rng);
+        assert!(sk.current().is_some());
+
+        let mut sorted_epochs : Vec<u32>= epochs;
+        sorted_epochs.sort_unstable();
+        for epoch in sorted_epochs{
+            let tau= tau_from_epoch(sys,Epoch::from(epoch));
+            sk.update_to(&tau, sys, rng);
+            assert!(sk.current().is_some());
+        }
+    }
+    #[test]
+    fn should_update_to_the_highest_epoch(seed: [u8;32], associated_data: [u8;4]) {
+        let sys = &mk_sys_params();
+
+        let rng = &mut RAND_ChaCha20::new(seed);
+
+        let (_pk, mut sk) = kgen(&associated_data, sys, rng);
+
+        let max_epoch = if sys.lambda_t < 32 {
+            (2u64.pow(sys.lambda_t as u32) - 1) as u32
+        } else {
+            u32::MAX
+        };
+        assert!(sk.current().is_some());
+        for i in (0..100).rev() {
+            let next_epoch = tau_from_epoch(sys, Epoch::from(max_epoch - i));
+            sk.update_to(&next_epoch, sys, rng);
+            assert!(sk.current().is_some());
+        }
+        // The key should be at the last epoch, the next update should erase the secret key.
+        sk.update(sys, rng);
+        assert!(sk.current().is_none());
+    }
+
 }
 
-#[test]
-fn should_convert_tau_to_epoch() {
-    let sys = &mk_sys_params();
+proptest! {
+    #[test]
+    fn should_convert_tau_to_epoch(epoch: u32) {
+        let sys = &mk_sys_params();
 
-    let mut rng = rand_chacha::ChaChaRng::from_seed([42; 32]);
-    for _i in 0..200 {
-        let epoch = Epoch::from(rng.next_u32());
+        let epoch = Epoch::from(epoch);
         let tau = tau_from_epoch(sys, epoch);
 
         assert_eq!(epoch, epoch_from_tau_vec(&tau));

@@ -193,8 +193,8 @@ mod tests {
     }
 
     proptest! {
-        #[test]
-        #[ignore]
+        #[allow(dead_code)]
+        // #[test]
         // TODO(CRP-323): The current json5 implementation is buggy:
         // Unicode code points U+2028 and U+2029 are not escaped/parsed properly.
         // This test is disabled until issue is fixed.
