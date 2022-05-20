@@ -1,0 +1,28 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "transport",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_interfaces_transport",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        "//rs/phantom_newtype",
+        "//rs/protobuf",
+        "//rs/types/base_types",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+    ],
+)

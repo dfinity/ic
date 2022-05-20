@@ -1,5 +1,5 @@
 {
-  "checksum": "95b67c1ffe3394217201b63b7da1bed2f92defe0e2d52435e55435b0ab945ba0",
+  "checksum": "9df9f8651df43974d17ba1e817223e22d4aec13df9be68b64e341ba6711bfed1",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -3844,6 +3844,10 @@
         "edition": "2018",
         "proc_macro_deps": {
           "common": [
+            {
+              "id": "async-trait 0.1.53",
+              "target": "async_trait"
+            },
             {
               "id": "candid_derive 0.4.5",
               "target": "candid_derive"
@@ -7868,13 +7872,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "once_cell 1.10.0": {
+    "once_cell 1.11.0": {
       "name": "once_cell",
-      "version": "1.10.0",
+      "version": "1.11.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/once_cell/1.10.0/download",
-          "sha256": "87f3e037eac156d1775da914196f0f37741a274155e34a0b7e427c35d2a2ecb9"
+          "url": "https://crates.io/api/v1/crates/once_cell/1.11.0/download",
+          "sha256": "7b10983b38c53aebdf33f542c6275b0f58a238129d00c4ae0e6fb59738d783ca"
         }
       },
       "targets": [
@@ -7903,7 +7907,7 @@
           "std"
         ],
         "edition": "2018",
-        "version": "1.10.0"
+        "version": "1.11.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -8032,7 +8036,7 @@
               "target": "libc"
             },
             {
-              "id": "once_cell 1.10.0",
+              "id": "once_cell 1.11.0",
               "target": "once_cell"
             },
             {
@@ -13056,7 +13060,7 @@
               "target": "debug_unreachable"
             },
             {
-              "id": "once_cell 1.10.0",
+              "id": "once_cell 1.11.0",
               "target": "once_cell"
             },
             {
@@ -14150,7 +14154,7 @@
               "target": "num_cpus"
             },
             {
-              "id": "once_cell 1.10.0",
+              "id": "once_cell 1.11.0",
               "target": "once_cell"
             },
             {
