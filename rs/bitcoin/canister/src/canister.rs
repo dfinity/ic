@@ -46,9 +46,13 @@ pub fn get_utxos(
             store::get_utxos(state, &request.address, min_confirmations)
         }
         Some(UtxosFilter::Page { .. }) => {
-            // It's safe to use `todo!` here as this code isn't yet hooked up the rest of the
-            // replica.
-            todo!("EXC-1009")
+            // TODO(EXC-1009): Implement pagination.
+            Ok(GetUtxosResponse {
+                utxos: vec![],
+                tip_block_hash: vec![],
+                tip_height: 0,
+                next_page: None,
+            })
         }
     }
 }
