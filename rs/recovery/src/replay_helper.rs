@@ -1,8 +1,10 @@
 //! Helper functions calling the `ic-replay` library.
 use crate::RecoveryResult;
 use ic_base_types::SubnetId;
-use ic_replay::cmd::ClapSubnetId;
-use ic_replay::cmd::ReplayToolArgs;
+use ic_replay::{
+    cmd::{ClapSubnetId, ReplayToolArgs},
+    player::{ReplayError, StateParams},
+};
 use ic_types::Height;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -19,7 +21,7 @@ pub async fn replay(
     subnet_id: SubnetId,
     config: PathBuf,
     output: PathBuf,
-) -> RecoveryResult<(Height, String)> {
+) -> RecoveryResult<StateParams> {
     let args = ReplayToolArgs {
         subnet_id: ClapSubnetId::from_str(&subnet_id.to_string()).unwrap(),
         config,
@@ -31,11 +33,12 @@ pub async fn replay(
     // is restarted, we avoid declaring a return value and moving out of the
     // closure, and instead directly write to file.
     let output_file = output.clone();
-    tokio::task::spawn_blocking(move || {
-        if let Some((height, hash)) = ic_replay::replay(args) {
+    tokio::task::spawn_blocking(move || match ic_replay::replay(args) {
+        Ok((height, hash)) | Err(ReplayError::UpgradeDetected((height, hash))) => {
             write_file(&output_file, format!("{} {}", height, hash))
-                .expect("failed to write ic-replay output");
+                .expect("failed to write ic-replay output")
         }
+        err => panic!("Unexpected response: {:?}", err),
     })
     .await
     .map_err(|e| {
@@ -47,7 +50,7 @@ pub async fn replay(
 
 /// Read the replay output written to the given file.
 /// File content is expected to be a single line of <`replay_height` `state_hash`>
-pub fn read_output(output_file: PathBuf) -> RecoveryResult<(Height, String)> {
+pub fn read_output(output_file: PathBuf) -> RecoveryResult<StateParams> {
     let content = read_file(&output_file)?;
     let vec = content.split(' ').collect::<Vec<&str>>();
     Ok((
