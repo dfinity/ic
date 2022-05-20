@@ -6530,6 +6530,7 @@ name = "ic-registry-routing-table"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
+ "candid",
  "ic-base-types",
  "ic-protobuf",
  "ic-test-utilities",

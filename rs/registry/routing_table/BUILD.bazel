@@ -18,6 +18,7 @@ rust_library(
     deps = [
         "//rs/protobuf",
         "//rs/types/base_types",
+        "@crate_index//:candid",
         "@crate_index//:serde",
     ],
 )

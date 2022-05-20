@@ -8,7 +8,9 @@ use crate::message_routing::{LABEL_REMOTE, METRIC_TIME_IN_BACKLOG, METRIC_TIME_I
 use ic_base_types::NumSeconds;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_metrics::MetricsRegistry;
-use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
+use ic_registry_routing_table::{
+    CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
@@ -3180,13 +3182,16 @@ fn complete_canister_migration(
     destination: SubnetId,
 ) -> ReplicatedState {
     let mut routing_table = (*state.metadata.network_topology.routing_table).clone();
-    routing_table.assign_range(
-        CanisterIdRange {
-            start: migrated_canister,
-            end: migrated_canister,
-        },
-        destination,
-    );
+    routing_table
+        .assign_ranges(
+            CanisterIdRanges::try_from(vec![CanisterIdRange {
+                start: migrated_canister,
+                end: migrated_canister,
+            }])
+            .unwrap(),
+            destination,
+        )
+        .expect("ranges are not well formed");
     state.metadata.network_topology.routing_table = Arc::new(routing_table);
     state
 }

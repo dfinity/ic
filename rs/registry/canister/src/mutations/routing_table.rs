@@ -6,7 +6,8 @@ use ic_base_types::SubnetId;
 use ic_protobuf::registry::routing_table::v1 as pb;
 use ic_registry_keys::{make_canister_migrations_record_key, make_routing_table_record_key};
 use ic_registry_routing_table::{
-    routing_table_insert_subnet, CanisterIdRange, CanisterMigrations, RoutingTable,
+    routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, CanisterMigrations,
+    RoutingTable,
 };
 use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue};
 use prost::Message;
@@ -85,7 +86,7 @@ impl Registry {
         })
     }
 
-    /// Makes a registry mutation that remaps the specified canister id range to
+    /// Makes a registry mutation that remaps the specified canister ID range to
     /// another subnet.
     pub fn reroute_canister_range_mutation(
         &self,
@@ -94,7 +95,11 @@ impl Registry {
         destination: SubnetId,
     ) -> RegistryMutation {
         self.modify_routing_table(version, |routing_table| {
-            routing_table.assign_range(canister_id_range, destination);
+            // Note: The conversion from `CanisterIdRange` to `CanisterIdRanges` below is temporary.
+            // In the following work, the mutation will also take `CanisterIdRanges` as input.
+            let ranges = CanisterIdRanges::try_from(vec![canister_id_range])
+                .expect("canister ID ranges are not well formed.");
+            routing_table.assign_ranges(ranges, destination).unwrap();
             routing_table.optimize();
         })
     }

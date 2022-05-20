@@ -1,6 +1,7 @@
 mod proto;
 
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use candid::CandidType;
+use ic_base_types::{CanisterId, CanisterIdError, PrincipalId, SubnetId};
 use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom};
@@ -27,10 +28,52 @@ fn canister_id_into_u128(canister_id: CanisterId) -> u128 {
     canister_id_into_u64(canister_id) as u128
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(
+    CandidType, Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize,
+)]
+/// A range of canister IDs between `start` and `end`, both inclusive.
 pub struct CanisterIdRange {
     pub start: CanisterId,
     pub end: CanisterId,
+}
+
+/// Errors encountered while parsing `CanisterIdRange` from string representations.
+#[derive(Debug, Eq, PartialEq)]
+pub enum CanisterIdRangeError {
+    CanisterIdRangeEmpty(String),
+    CanisterIdParseError(CanisterIdError),
+    CanisterIdsNotPair(String),
+}
+
+impl From<CanisterIdError> for CanisterIdRangeError {
+    fn from(v: CanisterIdError) -> CanisterIdRangeError {
+        CanisterIdRangeError::CanisterIdParseError(v)
+    }
+}
+
+/// `CanisterIdRange` can be converted from a string containing two canister IDs separated by ':',
+/// e.g. `rrkah-fqaaa-aaaaa-aaaaq-cai:qaa6y-5yaaa-aaaaa-aaafa-cai` represents `CanisterIdRange{1:10}`.
+impl std::str::FromStr for CanisterIdRange {
+    type Err = CanisterIdRangeError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let id_pair: Vec<&str> = input.split(':').collect();
+        if id_pair.len() != 2 {
+            return Err(CanisterIdRangeError::CanisterIdsNotPair(format!(
+                "The input string should contain 2 canister IDs separated by ':', got {}",
+                id_pair.len(),
+            )));
+        }
+        let start: CanisterId = CanisterId::from_str(id_pair[0])?;
+        let end: CanisterId = CanisterId::from_str(id_pair[1])?;
+        if start > end {
+            return Err(CanisterIdRangeError::CanisterIdRangeEmpty(format!(
+                "start {} is greater than end {}",
+                start, end,
+            )));
+        }
+        Ok(CanisterIdRange { start, end })
+    }
 }
 
 // EXE-96: Currently the `String`s just offer informative messages about the
@@ -41,6 +84,7 @@ pub enum WellFormedError {
     CanisterIdRangeNotSortedOrNotDisjoint(String),
     RoutingTableEmptyRange(String),
     RoutingTableNotDisjoint(String),
+    RoutingTableNotOptimized,
     CanisterMigrationsEmptyRange(String),
     CanisterMigrationsNotDisjoint(String),
     CanisterMigrationsInvalidTrace(String),
@@ -97,7 +141,7 @@ impl CanisterIdRanges {
         Ok(())
     }
 
-    /// Returns an iterator over canister id ranges.
+    /// Returns an iterator over canister ID ranges.
     /// The canister ranges are guaranteed to be sorted.
     pub fn iter(&self) -> impl Iterator<Item = &CanisterIdRange> {
         self.0.iter()
@@ -105,7 +149,7 @@ impl CanisterIdRanges {
 
     /// Total sum of the lengths of all ranges, i.e., the total number of
     /// canister IDs that are included in the ranges.  Note that the entire
-    /// valid space of canister ids is exactly (1<<64) which cannot be
+    /// valid space of canister IDs is exactly (1<<64) which cannot be
     /// represented in a u64, therefore this function returns a u128.
     pub fn total_count(&self) -> u128 {
         let mut sum = 0;
@@ -166,8 +210,9 @@ impl TryFrom<BTreeMap<CanisterIdRange, SubnetId>> for RoutingTable {
     type Error = WellFormedError;
 
     fn try_from(map: BTreeMap<CanisterIdRange, SubnetId>) -> Result<Self, WellFormedError> {
-        let t = Self(map);
-        t.well_formed()?;
+        let mut t: RoutingTable = Self(map);
+        t.validate()?;
+        t.optimize();
         Ok(t)
     }
 }
@@ -190,29 +235,38 @@ impl RoutingTable {
         canister_id_range: CanisterIdRange,
         subnet_id: SubnetId,
     ) -> Result<(), WellFormedError> {
-        let old_value = self.0.insert(canister_id_range, subnet_id);
-        let result = self.well_formed();
-
-        if result.is_err() {
-            // Undo the table change
-            match old_value {
-                Some(v) => self.0.insert(canister_id_range, v),
-                None => self.0.remove(&canister_id_range),
-            };
+        if canister_id_range.start > canister_id_range.end {
+            return Err(WellFormedError::RoutingTableEmptyRange(format!(
+                "start {} is greater than end {}",
+                canister_id_range.start, canister_id_range.end
+            )));
         }
 
-        result
+        if !are_disjoint(std::iter::once(&canister_id_range), self.0.keys()) {
+            return Err(WellFormedError::RoutingTableNotDisjoint(format!(
+                "Routing table cannot insert an overlapping range: {:?}",
+                canister_id_range
+            )));
+        }
+
+        self.0.insert(canister_id_range, subnet_id);
+
+        self.optimize();
+        debug_assert_eq!(self.well_formed(), Ok(()));
+
+        Ok(())
     }
 
-    /// Assigns an id range to the destination subnet.
+    /// Assigns a canister ID range to the destination subnet.
     ///
     /// Notes:
-    ///   * If the canister id range is not assigned yet, a new mapping is created.
-    ///   * If the canister id range is assigned to other canisters, this function
-    ///     removes the previous mappings, splitting them if necessary.
+    ///   * If the canister ID range is not assigned yet, a new mapping is
+    ///     created.
+    ///   * If canisters in the ID range are assigned to other subnets, this
+    ///     function removes the previous mappings, splitting them if necessary.
     ///
     /// Complexity: O(log N)
-    pub fn assign_range(&mut self, range: CanisterIdRange, destination: SubnetId) {
+    fn assign_range(&mut self, range: CanisterIdRange, destination: SubnetId) {
         fn make_range(start: u64, end: u64) -> CanisterIdRange {
             CanisterIdRange {
                 start: CanisterId::from(start),
@@ -295,8 +349,21 @@ impl RoutingTable {
             self.0.insert(k, v);
         }
         self.0.insert(range, destination);
+    }
 
+    /// Assigns canister ID ranges to the destination subnet.
+    pub fn assign_ranges(
+        &mut self,
+        ranges: CanisterIdRanges,
+        destination: SubnetId,
+    ) -> Result<(), WellFormedError> {
+        ranges.well_formed()?;
+        for range in ranges.iter() {
+            self.assign_range(*range, destination);
+        }
+        self.optimize();
         debug_assert_eq!(self.well_formed(), Ok(()));
+        Ok(())
     }
 
     /// Optimizes the internal structure of the routing table by merging
@@ -321,7 +388,17 @@ impl RoutingTable {
         debug_assert_eq!(self.well_formed(), Ok(()));
     }
 
-    /// Removes all canister id ranges mapped to the specified subnet.
+    fn is_optimized(&self) -> bool {
+        self.iter()
+            .zip(self.iter().skip(1))
+            .all(|((range_1, subnet_1), (range_2, subnet_2))| {
+                let range_1_end = canister_id_into_u64(range_1.end);
+                let range_2_start = canister_id_into_u64(range_2.start);
+                subnet_1 != subnet_2 || range_1_end + 1 != range_2_start
+            })
+    }
+
+    /// Removes all canister ID ranges mapped to the specified subnet.
     pub fn remove_subnet(&mut self, subnet_id_to_remove: SubnetId) {
         self.0
             .retain(|_range, subnet_id| *subnet_id != subnet_id_to_remove);
@@ -336,9 +413,9 @@ impl RoutingTable {
         self.0.is_empty()
     }
 
-    /// Returns Ok if the routing table is well-formed (ranges are non-empty and
-    /// disjoint).
-    fn well_formed(&self) -> Result<(), WellFormedError> {
+    /// Returns Ok if the routing table is valid (ranges are non-empty, disjoint
+    /// but not necessarily optimized).
+    fn validate(&self) -> Result<(), WellFormedError> {
         use WellFormedError::*;
 
         // Used to track the end of the previous end used to check that the
@@ -368,10 +445,27 @@ impl RoutingTable {
         Ok(())
     }
 
+    /// Returns Ok if the routing table is well-formed (ranges are non-empty, disjoint
+    /// and optimized).
+    fn well_formed(&self) -> Result<(), WellFormedError> {
+        use WellFormedError::*;
+
+        self.validate()?;
+
+        // This check should always be performed in the final step
+        // because the definition of being optimized is only meaningful
+        // when ranges are not empty and are disjoint.
+        if !self.is_optimized() {
+            return Err(RoutingTableNotOptimized);
+        }
+
+        Ok(())
+    }
+
     /// Returns the `SubnetId` that the given `principal_id` is assigned to or
     /// `None` if an assignment cannot be found.
     pub fn route(&self, principal_id: PrincipalId) -> Option<SubnetId> {
-        // TODO(EXC-274): Optimize the below search by keeping a set of subnet ids.
+        // TODO(EXC-274): Optimize the below search by keeping a set of subnet IDs.
         // Check if the given `principal_id` is a subnet.
         // Note that the following assumes that all known subnets are in the routing
         // table, even if they're empty (i.e. no canister exists on them). In the
@@ -431,9 +525,19 @@ impl CanisterMigrations {
         Self::default()
     }
 
-    /// Returns Ok if the canister migrations are well-formed (ranges are non-empty
-    /// and disjoint; migration traces consist of at least 2 subnets, with no two
-    /// successive subnets being the same).
+    /// Returns an iterator over the ordered entries.
+    pub fn iter(&self) -> impl std::iter::Iterator<Item = (&CanisterIdRange, &Vec<SubnetId>)> {
+        self.0.iter()
+    }
+
+    /// Returns an iterator over all canister ID ranges in order.
+    pub fn ranges(&self) -> impl std::iter::Iterator<Item = &CanisterIdRange> {
+        self.0.keys()
+    }
+
+    /// Returns Ok if the canister migrations are well-formed (ranges are
+    /// non-empty and disjoint; migration traces consist of at least 2
+    /// subnets, with no two successive subnets being the same).
     pub fn well_formed(&self) -> Result<(), WellFormedError> {
         use WellFormedError::*;
 
@@ -484,6 +588,55 @@ impl CanisterMigrations {
     pub fn lookup(&self, canister_id: CanisterId) -> Option<Vec<SubnetId>> {
         lookup_in_ranges(&self.0, canister_id)
     }
+
+    /// For each range in the canister ID ranges, inserts a mapping from the
+    /// range to the migration trace into the `canister_migrations`.
+    ///
+    /// This method returns an error if any of the provided canister ranges
+    /// overlap existing canister migrations.
+    pub fn insert_ranges(
+        &mut self,
+        canister_id_ranges: CanisterIdRanges,
+        source: SubnetId,
+        destination: SubnetId,
+    ) -> Result<(), WellFormedError> {
+        canister_id_ranges.well_formed()?;
+        // Currently, this method only supports inserting canister ID ranges which do
+        // not overlap with the existing ones in canister migrations.
+        if !are_disjoint(self.0.keys(), canister_id_ranges.iter()) {
+            return Err(WellFormedError::CanisterMigrationsNotDisjoint(
+                "Canister migrations cannot insert overlapping entries".to_string(),
+            ));
+        }
+        for canister_id_range in canister_id_ranges.iter() {
+            self.0.insert(*canister_id_range, vec![source, destination]);
+        }
+        debug_assert_eq!(self.well_formed(), Ok(()));
+        Ok(())
+    }
+
+    /// Removes the ranges if all of them exactly match existing entries with the exact same trace.
+    /// Otherwise, does nothing and returns an error.
+    pub fn remove_ranges(
+        &mut self,
+        ranges_to_remove: CanisterIdRanges,
+        trace: Vec<SubnetId>,
+    ) -> Result<(), String> {
+        let all_matching = ranges_to_remove
+            .iter()
+            .all(|range| self.0.get(range) == Some(&trace));
+
+        if !all_matching {
+            return Err(format!(
+                "Some ranges do not match the provided trace: {:?} in canister migrations.",
+                trace
+            ));
+        }
+        for range in ranges_to_remove.iter() {
+            self.0.remove(range);
+        }
+        Ok(())
+    }
 }
 
 fn lookup_in_ranges<V: Clone>(
@@ -530,6 +683,63 @@ fn lookup_in_ranges<V: Clone>(
         // (or a == b and b > u64::MAX which is impossible).
         None
     }
+}
+
+/// Returns true if two lists of `CanisterIdRange` are disjoint.
+///
+/// Note: this method only works when both lists of `CanisterIdRange` are
+/// well-formed `CanisterIdRanges`, i.e. non-empty, sorted and disjoint ranges.
+pub fn are_disjoint<'a, T1, T2>(mut left_ranges: T1, mut right_ranges: T2) -> bool
+where
+    T1: Iterator<Item = &'a CanisterIdRange>,
+    T2: Iterator<Item = &'a CanisterIdRange>,
+{
+    // Use two pointers to record the current two ranges to be compared to each
+    // other.
+    let mut left_next = left_ranges.next();
+    let mut right_next = right_ranges.next();
+    // If the two ranges are disjoint, move the smaller one to the next range.
+    while let (Some(left_range), Some(right_range)) = (left_next, right_next) {
+        if left_range.end < right_range.start {
+            left_next = left_ranges.next();
+        } else if right_range.end < left_range.start {
+            right_next = right_ranges.next();
+        } else {
+            return false;
+        }
+    }
+    true
+}
+
+/// Returns true if a list of canister ID ranges is a subset of the other one.
+///
+/// Note: To be considered a subset, every range in `subset_ranges` must be
+/// contained by exactly one range in `superset_ranges`.
+///
+/// This method only works when both lists of `CanisterIdRange` are
+/// well-formed `CanisterIdRanges`, i.e. non-empty, sorted and disjoint ranges.
+pub fn is_subset_of<'a, T1, T2>(subset_ranges: T1, mut superset_ranges: T2) -> bool
+where
+    T1: Iterator<Item = &'a CanisterIdRange>,
+    T2: Iterator<Item = &'a CanisterIdRange>,
+{
+    let mut right_next = superset_ranges.next();
+    for left_range in subset_ranges {
+        let mut is_contained = false;
+        while let Some(right_range) = right_next {
+            // Check if `right_range` can cover `left_range`.
+            if left_range.start >= right_range.start && left_range.end <= right_range.end {
+                is_contained = true;
+                break;
+            }
+            // If not, try the next one.
+            right_next = superset_ranges.next();
+        }
+        if !is_contained {
+            return false;
+        }
+    }
+    true
 }
 
 #[cfg(test)]

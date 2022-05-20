@@ -27,7 +27,9 @@ use ic_registry_keys::{
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_routing_table::{routing_table_insert_subnet, CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::{
+    routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, RoutingTable,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
@@ -570,7 +572,7 @@ impl StateMachine {
             .expect("failed to create canister");
         match wasm_result {
             WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
-                .expect("failed to decode canister id record")
+                .expect("failed to decode canister ID record")
                 .get_canister_id(),
             WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
         }
@@ -764,13 +766,16 @@ impl StateMachine {
             .expect("malformed routing table")
             .expect("missing routing table");
 
-        routing_table.assign_range(
-            CanisterIdRange {
-                start: *canister_range.start(),
-                end: *canister_range.end(),
-            },
-            destination,
-        );
+        routing_table
+            .assign_ranges(
+                CanisterIdRanges::try_from(vec![CanisterIdRange {
+                    start: *canister_range.start(),
+                    end: *canister_range.end(),
+                }])
+                .unwrap(),
+                destination,
+            )
+            .expect("ranges are not well formed");
 
         self.registry_data_provider
             .add(
