@@ -1,4 +1,4 @@
-use crate::tls_stub::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
+use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use std::sync::Arc;
 use tokio_rustls::rustls::sign::CertifiedKey;

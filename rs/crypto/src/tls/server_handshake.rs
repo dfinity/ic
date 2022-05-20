@@ -1,8 +1,8 @@
-use crate::tls_stub::{
+use crate::tls::{
     node_id_from_cert_subject_common_name, tls_cert_from_registry, TlsCertFromRegistryError,
 };
 use ic_crypto_internal_csp::api::CspTlsServerHandshake;
-use ic_crypto_internal_csp::tls_stub::cert_chain::CspCertificateChain;
+use ic_crypto_internal_csp::tls::cert_chain::CspCertificateChain;
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, MalformedPeerCertificateError, Peer, PeerNotAllowedError,
     SomeOrAllNodes, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,

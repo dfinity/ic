@@ -1,5 +1,5 @@
-use crate::api::tls_stub::tls_errors::{CspTlsClientHandshakeError, CspTlsServerHandshakeError};
-use crate::tls_stub::cert_chain::CspCertificateChain;
+use crate::api::tls::tls_errors::{CspTlsClientHandshakeError, CspTlsServerHandshakeError};
+use crate::tls::cert_chain::CspCertificateChain;
 use crate::TlsHandshakeCspVault;
 use async_trait::async_trait;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;

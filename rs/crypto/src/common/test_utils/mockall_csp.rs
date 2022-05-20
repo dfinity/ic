@@ -15,7 +15,7 @@ use ic_crypto_internal_csp::api::{
     DistributedKeyGenerationCspClient, NiDkgCspClient, NodePublicKeyData,
     ThresholdSignatureCspClient,
 };
-use ic_crypto_internal_csp::tls_stub::cert_chain::CspCertificateChain;
+use ic_crypto_internal_csp::tls::cert_chain::CspCertificateChain;
 use ic_crypto_internal_csp::types::{
     CspDealing, CspDkgTranscript, CspPop, CspPublicCoefficients, CspPublicKey, CspResponse,
     CspSignature,

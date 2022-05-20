@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
-use crate::tls_stub::rustls::cert_resolver::KeyIncompatibleWithSigSchemeError;
-use crate::tls_stub::rustls::cert_resolver::StaticCertResolver;
+use crate::tls::rustls::cert_resolver::KeyIncompatibleWithSigSchemeError;
+use crate::tls::rustls::cert_resolver::StaticCertResolver;
 use std::sync::Arc;
 use tokio_rustls::rustls::internal::msgs::enums::SignatureAlgorithm;
 use tokio_rustls::rustls::sign::{CertifiedKey, Signer, SigningKey};

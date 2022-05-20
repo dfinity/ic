@@ -1,8 +1,8 @@
-use crate::tls_stub::rustls::cert_resolver::StaticCertResolver;
-use crate::tls_stub::rustls::certified_key;
-use crate::tls_stub::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
-use crate::tls_stub::rustls::node_cert_verifier::NodeClientCertVerifier;
-use crate::tls_stub::{
+use crate::tls::rustls::cert_resolver::StaticCertResolver;
+use crate::tls::rustls::certified_key;
+use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
+use crate::tls::rustls::node_cert_verifier::NodeClientCertVerifier;
+use crate::tls::{
     node_id_from_cert_subject_common_name, tls_cert_from_registry, TlsCertFromRegistryError,
 };
 use ic_crypto_internal_csp::api::CspTlsHandshakeSignerProvider;
