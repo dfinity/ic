@@ -20,7 +20,8 @@ use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CallOrigin, CanisterState, CanisterStatus, Memory, ReplicatedState, SchedulerState, SystemState,
+    CallOrigin, CanisterState, CanisterStatus, Memory, NetworkTopology, ReplicatedState,
+    SchedulerState, SystemState,
 };
 use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
 use ic_types::{
@@ -560,6 +561,7 @@ impl CanisterManager {
         let canister_layout_path = state.path().to_path_buf();
         let compute_allocation_used = state.total_compute_allocation();
         let memory_taken = state.total_memory_taken();
+        let network_topology = &state.metadata.network_topology.clone();
 
         // Perform a battery of validation checks.
         let old_canister = match state.canister_state_mut(&context.canister_id) {
@@ -643,6 +645,7 @@ impl CanisterManager {
                 time,
                 canister_layout_path,
                 execution_parameters,
+                network_topology,
             ),
             CanisterInstallMode::Upgrade => self.upgrade(
                 context,
@@ -650,6 +653,7 @@ impl CanisterManager {
                 time,
                 canister_layout_path,
                 execution_parameters,
+                network_topology,
             ),
         };
 
@@ -1003,6 +1007,7 @@ impl CanisterManager {
         time: Time,
         canister_layout_path: PathBuf,
         mut execution_parameters: ExecutionParameters,
+        network_topology: &NetworkTopology,
     ) -> (
         NumInstructions,
         Result<(NumBytes, CanisterState), CanisterManagerError>,
@@ -1061,9 +1066,11 @@ impl CanisterManager {
         let mut total_heap_delta = NumBytes::from(0);
 
         // Run (start)
-        let (new_canister, instructions_left, result) = self
-            .hypervisor
-            .execute_canister_start(new_canister, execution_parameters.clone());
+        let (new_canister, instructions_left, result) = self.hypervisor.execute_canister_start(
+            new_canister,
+            execution_parameters.clone(),
+            network_topology,
+        );
         info!(
             self.log,
             "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
@@ -1088,6 +1095,7 @@ impl CanisterManager {
             context.arg.as_slice(),
             time,
             execution_parameters.clone(),
+            network_topology,
         );
         info!(
             self.log,
@@ -1112,6 +1120,7 @@ impl CanisterManager {
         time: Time,
         canister_layout_path: PathBuf,
         mut execution_parameters: ExecutionParameters,
+        network_topology: &NetworkTopology,
     ) -> (
         NumInstructions,
         Result<(NumBytes, CanisterState), CanisterManagerError>,
@@ -1126,6 +1135,7 @@ impl CanisterManager {
                 context.sender,
                 time,
                 execution_parameters.clone(),
+                network_topology,
             );
         info!(
             self.log,
@@ -1193,9 +1203,11 @@ impl CanisterManager {
         new_canister.system_state.memory_allocation = desired_memory_allocation;
 
         // Run (start)
-        let (new_canister, instructions_left, result) = self
-            .hypervisor
-            .execute_canister_start(new_canister, execution_parameters.clone());
+        let (new_canister, instructions_left, result) = self.hypervisor.execute_canister_start(
+            new_canister,
+            execution_parameters.clone(),
+            network_topology,
+        );
         info!(
             self.log,
             "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
@@ -1220,6 +1232,7 @@ impl CanisterManager {
                 context.arg.as_slice(),
                 time,
                 execution_parameters.clone(),
+                network_topology,
             );
         info!(
             self.log,

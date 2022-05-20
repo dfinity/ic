@@ -1,7 +1,6 @@
-use crate::{routing, sandbox_safe_system_state::SandboxSafeSystemState, valid_subslice};
-use ic_ic00_types::IC_00;
+use crate::{sandbox_safe_system_state::SandboxSafeSystemState, valid_subslice};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::ReplicaLogger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NetworkTopology;
 use ic_types::{
@@ -147,7 +146,7 @@ impl RequestInPrep {
 /// Turns a `RequestInPrep` into a `Request`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn into_request(
-    network_topology: &NetworkTopology,
+    _network_topology: &NetworkTopology,
     RequestInPrep {
         sender,
         callee,
@@ -161,33 +160,13 @@ pub(crate) fn into_request(
         multiplier_max_size_local_subnet,
     }: RequestInPrep,
     call_context_id: CallContextId,
-    own_subnet_id: SubnetId,
+    _own_subnet_id: SubnetId,
     _own_subnet_type: SubnetType,
     sandbox_safe_system_state: &mut SandboxSafeSystemState,
-    logger: &ReplicaLogger,
+    _logger: &ReplicaLogger,
 ) -> HypervisorResult<Request> {
-    let destination_canister = if callee == IC_00.get() {
-        // This is a request to ic:00. Update `callee` to be the appropriate
-        // subnet.
-        let destination_subnet = routing::resolve_destination(
-            network_topology,
-            method_name.as_str(),
-            method_payload.as_slice(),
-            own_subnet_id,
-        )
-        .unwrap_or({
-            info!(
-                logger,
-                "Under construction request: Couldn't find the right subnet. Send it to the current subnet {},
-            which will handle rejecting the request gracefully: sender id {}, receiver id {}, method_name {}.", own_subnet_id,
-                sender, callee, method_name
-            );
-            own_subnet_id
-        });
-        CanisterId::new(destination_subnet.get()).unwrap()
-    } else {
-        CanisterId::new(callee).map_err(HypervisorError::InvalidCanisterId)?
-    };
+    let destination_canister =
+        CanisterId::new(callee).map_err(HypervisorError::InvalidCanisterId)?;
 
     let payload_size = (method_name.len() + method_payload.len()) as u64;
     {

@@ -1451,6 +1451,7 @@ impl ExecutionEnvironmentImpl {
                             payload.to_vec(),
                             state.time(),
                             execution_parameters,
+                            &state.metadata.network_topology,
                         )
                         .1
                 }
@@ -1487,6 +1488,7 @@ impl ExecutionEnvironmentImpl {
                 canister,
                 None,
                 execution_parameters,
+                &state.metadata.network_topology,
             )
             .2;
 

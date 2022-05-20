@@ -351,7 +351,11 @@ pub(crate) fn verify_signature(message_hash: &[u8], public_key: &PublicKey, sign
     assert!(secp.verify(&message, signature, public_key).is_ok());
 }
 
-async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, key_id: EcdsaKeyId) {
+pub(crate) async fn enable_ecdsa_signing(
+    governance: &Canister<'_>,
+    subnet_id: SubnetId,
+    key_id: EcdsaKeyId,
+) {
     // The ECDSA key sharing process requires that a key first be added to a
     // subnet, and then enabling signing with that key must happen in a separate
     // proposal.
@@ -527,12 +531,28 @@ pub fn test_threshold_ecdsa_signature_fails_without_cycles(
         nns_endpoint.assert_ready(ctx).await;
         app_endpoint.assert_ready(ctx).await;
 
+        let nns = runtime_from_url(nns_endpoint.url.clone());
+        let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
+        enable_ecdsa_signing(
+            &governance,
+            app_endpoint.subnet.as_ref().unwrap().id,
+            make_key(KEY_ID1),
+        )
+        .await;
+
         // Cycles are only required for application subnets.
         let endpoint = endpoints.app_endpoint_2;
         endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
         let message_hash = [0xabu8; 32];
+
+        info!(ctx.logger, "Getting the public key to make sure the subnet has the latest registry changes and routing of ECDSA messages is working");
+        let _public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
+            .await
+            .unwrap();
+
+        info!(ctx.logger, "Checking that signature request fails");
         let error = get_signature(
             &message_hash,
             ECDSA_SIGNATURE_FEE - Cycles::from(1u64),
@@ -621,7 +641,7 @@ pub fn test_threshold_ecdsa_life_cycle(handle: IcHandle, ctx: &ic_fondue::pot::C
                 .unwrap_err(),
             AgentError::ReplicaError {
                 reject_code: 4,
-                reject_message: "This API is not enabled on this subnet".to_string()
+                reject_message: "No route to canister aaaaa-aa".to_string()
             }
         );
         assert_eq!(
@@ -636,7 +656,7 @@ pub fn test_threshold_ecdsa_life_cycle(handle: IcHandle, ctx: &ic_fondue::pot::C
             .unwrap_err(),
             AgentError::ReplicaError {
                 reject_code: 4,
-                reject_message: "This API is not enabled on this subnet".to_string()
+                reject_message: "No route to canister aaaaa-aa".to_string()
             }
         );
 
@@ -744,7 +764,7 @@ pub fn test_threshold_ecdsa_life_cycle(handle: IcHandle, ctx: &ic_fondue::pot::C
             .unwrap_err(),
             AgentError::ReplicaError {
                 reject_code: 4,
-                reject_message: "This API is not enabled on this subnet".to_string()
+                reject_message: "No route to canister aaaaa-aa".to_string()
             }
         );
 

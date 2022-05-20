@@ -1302,6 +1302,7 @@ fn reinstall_calls_canister_start_and_canister_init() {
                     None,
                     mock_time(),
                     EXECUTION_PARAMETERS.clone(),
+                    &state.metadata.network_topology
                 )
                 .2
                 .unwrap(),
@@ -1384,6 +1385,7 @@ fn install_calls_canister_start_and_canister_init() {
                     None,
                     mock_time(),
                     EXECUTION_PARAMETERS.clone(),
+                    &state.metadata.network_topology,
                 )
                 .2
                 .unwrap(),
@@ -3585,6 +3587,7 @@ fn hypervisor_sends_new_controller_to_canister() {
             None,
             mock_time(),
             EXECUTION_PARAMETERS.clone(),
+            &state.metadata.network_topology,
         );
         assert_eq!(
             result.unwrap(),
@@ -3617,6 +3620,7 @@ fn hypervisor_sends_new_controller_to_canister() {
                     None,
                     mock_time(),
                     EXECUTION_PARAMETERS.clone(),
+                    &state.metadata.network_topology,
                 )
                 .2
                 .unwrap(),
@@ -3756,6 +3760,7 @@ fn test_upgrade_preserves_stable_memory() {
             None,
             mock_time(),
             EXECUTION_PARAMETERS.clone(),
+            &state.metadata.network_topology,
         );
         state.put_canister_state(canister);
         assert_eq!(result.unwrap(), Some(WasmResult::Reply(data)));

@@ -49,6 +49,7 @@ pub fn bench_execute_inspect_message(c: &mut Criterion) {
              canister_state,
              time,
              execution_parameters,
+             network_topology,
              ..
          }| {
             let (instructions_left, result) = hypervisor.execute_inspect_message(
@@ -58,6 +59,7 @@ pub fn bench_execute_inspect_message(c: &mut Criterion) {
                 Vec::new(),
                 time,
                 execution_parameters,
+                &network_topology,
             );
             assert_eq!(result, Ok(()), "Error executing inspect message method");
             assert_eq!(

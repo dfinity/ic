@@ -37,6 +37,28 @@ pub fn execution_parameters() -> ExecutionParameters {
     }
 }
 
+fn make_network_topology(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> NetworkTopology {
+    let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
+            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => own_subnet_id,
+        }).unwrap());
+    NetworkTopology {
+        routing_table,
+        subnets: btreemap! {
+            own_subnet_id => SubnetTopology {
+                subnet_type: own_subnet_type,
+                ..SubnetTopology::default()
+            }
+        },
+        ..NetworkTopology::default()
+    }
+}
+
+// Not used in all test crates
+#[allow(dead_code)]
+pub fn default_network_topology() -> NetworkTopology {
+    make_network_topology(subnet_test_id(1), SubnetType::Application)
+}
+
 pub struct ApiTypeBuilder {
     pub own_subnet_id: SubnetId,
     pub own_subnet_type: SubnetType,
@@ -50,19 +72,7 @@ impl ApiTypeBuilder {
     pub fn new() -> Self {
         let own_subnet_id = subnet_test_id(1);
         let own_subnet_type = SubnetType::Application;
-        let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
-            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => own_subnet_id,
-        }).unwrap());
-        let network_topology = Arc::new(NetworkTopology {
-            routing_table,
-            subnets: btreemap! {
-                own_subnet_id => SubnetTopology {
-                    subnet_type: own_subnet_type,
-                    ..SubnetTopology::default()
-                }
-            },
-            ..NetworkTopology::default()
-        });
+        let network_topology = Arc::new(make_network_topology(own_subnet_id, own_subnet_type));
         Self {
             own_subnet_id,
             own_subnet_type,

@@ -176,7 +176,7 @@ fn system_api_security_pot() -> pot::Pot {
 fn tecdsa_complaint_test_pot() -> pot::Pot {
     composable!(
         "tecdsa_complaint_test",
-        tecdsa::tecdsa_complaint_test::enable_ecdsa_signatures_feature(),
+        tecdsa::tecdsa_complaint_test::config(),
         steps! {
             tecdsa::tecdsa_complaint_test::test_threshold_ecdsa_complaint => "tECDSA complaints test"
         }

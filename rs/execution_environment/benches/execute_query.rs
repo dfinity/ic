@@ -44,6 +44,7 @@ pub fn bench_execute_query(c: &mut Criterion) {
              canister_state,
              time,
              execution_parameters,
+             network_topology,
              ..
          }| {
             let (_state, instructions_left, result) = hypervisor.execute_query(
@@ -55,6 +56,7 @@ pub fn bench_execute_query(c: &mut Criterion) {
                 Some(vec![0; 256]),
                 time,
                 execution_parameters,
+                &network_topology,
             );
             assert_eq!(result, Ok(None), "Error executing a query method");
             assert_eq!(

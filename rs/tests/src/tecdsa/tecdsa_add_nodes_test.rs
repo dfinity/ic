@@ -17,13 +17,13 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::tecdsa::tecdsa_signature_test::make_key;
+use crate::tecdsa::tecdsa_signature_test::{enable_ecdsa_signing, make_key};
 use crate::{
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed, NnsExt},
     tecdsa::tecdsa_signature_test::{get_public_key, get_signature, verify_signature, KEY_ID1},
     util::*,
 };
-use canister_test::Cycles;
+use canister_test::{Canister, Cycles};
 use ic_fondue::ic_manager::IcHandle;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
@@ -72,9 +72,22 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     let mut rng = ctx.rng.clone();
     let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
     let message_hash = [0xabu8; 32];
+
+    // Enable ECDSA signatures.
+    block_on(async {
+        nns_endpoint.assert_ready(ctx).await;
+        let nns = runtime_from_url(nns_endpoint.url.clone());
+        let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
+        enable_ecdsa_signing(
+            &governance,
+            nns_endpoint.subnet.as_ref().unwrap().id,
+            make_key(KEY_ID1),
+        )
+        .await;
+    });
+
     // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
     let (canister_id, public_key) = block_on(async {
-        nns_endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(nns_endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
         let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx)

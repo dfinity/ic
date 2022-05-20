@@ -9,7 +9,7 @@ use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     state::SystemStateBuilder,
     types::{
-        ids::{canister_test_id, user_test_id},
+        ids::{canister_test_id, subnet_test_id, user_test_id},
         messages::{RequestBuilder, ResponseBuilder},
     },
 };
@@ -205,7 +205,12 @@ fn correct_charging_source_canister_for_a_request() {
     // execute_canister_response()
     sandbox_safe_system_state
         .system_state_changes
-        .apply_changes(&mut system_state);
+        .apply_changes(
+            &mut system_state,
+            &default_network_topology(),
+            subnet_test_id(1),
+            &no_op_logger(),
+        );
     let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
     cycles_account_manager.response_cycles_refund(
         &no_op_logger(),
@@ -303,7 +308,12 @@ fn call_increases_cycles_consumed_metric() {
         .unwrap();
 
     let system_state_changes = api.into_system_state_changes();
-    system_state_changes.apply_changes(&mut system_state);
+    system_state_changes.apply_changes(
+        &mut system_state,
+        &default_network_topology(),
+        subnet_test_id(1),
+        &no_op_logger(),
+    );
     assert!(
         system_state
             .canister_metrics
