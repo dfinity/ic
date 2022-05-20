@@ -400,9 +400,13 @@ def _generate_tests_may_raise_exception(
     # GitHub/GitLab setup, GitLab cannot know into which branch a commit the PR will merge the change into.
     # Therefore, we use "[hotfix]" in the commit message to identify the change. After the GitLab migration,
     # we should remove the "[hotfix]" check, and just check the "CI_MERGE_REQUEST_TARGET_BRANCH_NAME".
-    if re.search(r"(\b)lessci(\b)", git_repo.commit().message) or (
-        re.search(r"\[hotfix\]", git_repo.commit().message)
-        and not re.search(r"^rc--", os.environ.get("CI_COMMIT_REF_NAME"))
+    if (
+        re.search(r"(\b)lessci(\b)", git_repo.commit().message)
+        or "hotfix" in os.environ.get("CI_MERGE_REQUEST_TITLE", "").lower()
+        or (
+            re.search(r"\[hotfix\]", git_repo.commit().message)
+            and not re.search(r"^rc--", os.environ.get("CI_COMMIT_REF_NAME"))
+        )
     ):
         # The commit message contained the word "lessci", which
         # instructed us to generate a noop pipeline.
