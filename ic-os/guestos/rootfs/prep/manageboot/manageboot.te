@@ -26,6 +26,8 @@ sudo_role_template(ic_manageboot, system_r, ic_manageboot_t)
 domtrans_pattern(ic_manageboot_sudo_t, ic_manageboot_exec_t, ic_manageboot_t)
 # Under certain circumstances, sudo signals its children.
 allow ic_manageboot_sudo_t ic_manageboot_t : process { signal };
+# allow self-signal
+allow ic_manageboot_t ic_manageboot_t : process { signal };
 # Use inherited file descriptor (/dev/null for stdin). Maybe actually
 # replica should explicitly set this to /dev/null.
 allow ic_manageboot_sudo_t init_t : fd { use };

@@ -43,6 +43,8 @@ dontaudit lvm_t pstore_t : key { search };
 # We are dealing with vfat filesystem for the configuration injection.
 require { type mount_t, dosfs_t; }
 allow mount_t dosfs_t : filesystem { getattr };
+# Allow basic permissions around umounting
+allow mount_t initrc_tmp_t : file { read };
 
 ###############################################################################
 # partprobe

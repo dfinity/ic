@@ -19,7 +19,7 @@ require_read_efivarfs_files(syslogd_t)
 require_read_run_systemd(syslogd_t)
 
 # XXX: not clear
-allow syslogd_t syslogd_t : netlink_generic_socket { create };
+allow syslogd_t syslogd_t : netlink_generic_socket { create ioctl };
 
 # journald wants to scan the /run/user hierarchy (presumably relating to login sessions)
 require { type user_runtime_root_t, user_runtime_t; }
