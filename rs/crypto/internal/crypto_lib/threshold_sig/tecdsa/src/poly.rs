@@ -539,6 +539,32 @@ impl PolynomialCommitment {
             .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
     }
 
+    /// This returns a stable serialization of the commitment
+    ///
+    /// This encoding is incompatible with the CBOR serialization used
+    /// by serialize. It is used to compute key IDs for the SKS so no
+    /// equivalent deserialization function is provided. For this
+    /// reason the encoding *must never change* in the future as this
+    /// would prevent looking up existing openings in the SKS
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let curve_type = self.curve_type();
+        let mut r = Vec::with_capacity(2 + self.len() * curve_type.point_bytes());
+
+        let commitment_tag = match self.ctype() {
+            PolynomialCommitmentType::Simple => b'S',
+            PolynomialCommitmentType::Pedersen => b'P',
+        };
+
+        r.push(commitment_tag);
+        r.push(curve_type.tag());
+
+        for point in self.points() {
+            r.extend_from_slice(&point.serialize());
+        }
+
+        r
+    }
+
     pub(crate) fn ctype(&self) -> PolynomialCommitmentType {
         match self {
             Self::Simple(_) => PolynomialCommitmentType::Simple,
