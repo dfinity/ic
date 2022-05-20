@@ -14,7 +14,7 @@ mod common;
 mod keygen;
 pub mod prng;
 mod sign;
-mod tls_stub;
+mod tls;
 
 pub use common::utils;
 pub use ic_crypto_hash::crypto_hash;

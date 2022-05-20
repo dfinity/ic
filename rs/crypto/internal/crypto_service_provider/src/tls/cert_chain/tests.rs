@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used)]
-use crate::tls_stub::cert_chain::{CspCertificateChain, CspCertificateChainCreationError};
+use crate::tls::cert_chain::{CspCertificateChain, CspCertificateChainCreationError};
 use ic_crypto_test_utils::tls::x509_certificates::CertWithPrivateKey;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use openssl::stack::Stack;

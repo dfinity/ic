@@ -1,4 +1,4 @@
-use crate::tls_stub::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
+use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
 use ic_crypto_internal_csp::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use ic_crypto_internal_csp::types::CspSignature;
 use ic_crypto_internal_csp::LocalCspVault;

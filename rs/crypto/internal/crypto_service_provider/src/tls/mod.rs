@@ -4,7 +4,7 @@ use crate::api::tls_errors::{
     CspMalformedPeerCertificateError, CspTlsClientHandshakeError, CspTlsServerHandshakeError,
 };
 use crate::keygen::tls_cert_hash_as_key_id;
-use crate::tls_stub::cert_chain::CspCertificateChainCreationError;
+use crate::tls::cert_chain::CspCertificateChainCreationError;
 use crate::types::CspSecretKey;
 use crate::vault::api::CspVault;
 use cert_chain::CspCertificateChain;

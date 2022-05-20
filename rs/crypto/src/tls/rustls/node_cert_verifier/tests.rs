@@ -1,5 +1,5 @@
-use crate::tls_stub::rustls::node_cert_verifier::NodeClientCertVerifier;
-use crate::tls_stub::rustls::node_cert_verifier::NodeServerCertVerifier;
+use crate::tls::rustls::node_cert_verifier::NodeClientCertVerifier;
+use crate::tls::rustls::node_cert_verifier::NodeServerCertVerifier;
 use ic_base_types::NodeId;
 use ic_crypto_test_utils::tls::registry::{TlsRegistry, REG_V1};
 use ic_crypto_test_utils::tls::x509_certificates::{x509_public_key_cert, CertWithPrivateKey};

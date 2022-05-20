@@ -12,7 +12,7 @@ pub mod public_key_store;
 mod remaining_conversions;
 pub mod secret_key_store;
 pub mod threshold;
-pub mod tls_stub;
+pub mod tls;
 pub mod types;
 pub mod vault;
 

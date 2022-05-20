@@ -2,7 +2,7 @@
 use crate::api::tls_errors::CspTlsServerHandshakeError;
 use crate::api::CspTlsServerHandshake;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
-use crate::tls_stub::test_utils::{
+use crate::tls::test_utils::{
     dummy_csprng, secret_key_store_with_csp_key, secret_key_store_with_key,
     tls_secret_key_with_bytes,
 };

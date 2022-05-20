@@ -1,7 +1,7 @@
 use crate::api::tls_errors::CspTlsClientHandshakeError;
 use crate::api::CspTlsClientHandshake;
 use crate::secret_key_store::SecretKeyStore;
-use crate::tls_stub::{key_from_secret_key_store, peer_cert_from_stream, CspTlsSecretKeyError};
+use crate::tls::{key_from_secret_key_store, peer_cert_from_stream, CspTlsSecretKeyError};
 use crate::Csp;
 use async_trait::async_trait;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
