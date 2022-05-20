@@ -115,3 +115,21 @@ require {
 dontaudit journalbeat_t tmpfs_t : filesystem { getattr };
 dontaudit journalbeat_t fs_t : filesystem { getattr };
 dontaudit journalbeat_t usr_t:file { getattr open read };
+
+# Journalbeat might be looking in `/bin` for its own executable.
+require {
+    type bin_t;
+}
+search_dirs_pattern(journalbeat_t, bin_t, bin_t)
+
+# Allow to read `/sys/fs/cgroup/unified/system.slice/journalbeat.service/cgroup.controllers`
+fs_read_cgroup_files(journalbeat_t)
+
+# Allow to read and write from/to own fifo pipe
+allow journalbeat_t self:fifo_file { read write };
+
+# allow self-signal
+allow journalbeat_t journalbeat_t : process { signal };
+
+# Journalbeat checks `hpage_pmd_size`
+dev_read_sysfs(journalbeat_t)
