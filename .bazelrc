@@ -1,11 +1,19 @@
 build --strategy_regexp=ic-os/guestos/.*=local
 
-build:remote --remote_cache=buildfarm.dfinity.systems
+build --remote_cache=buildfarm.dfinity.systems
 
-build:log --execution_log_json_file=bazel-build-log.json
+build --execution_log_json_file=bazel-build-log.json
 
-build:bes --bes_results_url=https://dash.buildfarm.dfinity.systems/invocation/
-build:bes --bes_backend=bes.buildfarm.dfinity.systems
+build --bes_results_url=https://dash.buildfarm.dfinity.systems/invocation/
+build --bes_backend=bes.buildfarm.dfinity.systems
 
-build:ci --config=remote --config=log --config=bes
-build:dev --config=ci
+build --remote_local_fallback
+
+build:ci --noremote_local_fallback
+
+# no-op config for now as everything is set as default.
+build:dev
+
+# Run `bazel build ... --config=local` if you don't have access to the buildfarm infrastructure.
+build:local --remote_cache=
+build:local --bes_backend=
