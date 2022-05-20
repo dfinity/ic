@@ -261,7 +261,7 @@ fn induct_loopback_stream_reroute_response() {
         let context = RejectContext::new(
             RejectCode::SysTransient,
             format!(
-                "Canister {} has been migrated to {}",
+                "Canister {} is being migrated to/from {}",
                 *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
             ),
         );
@@ -1625,9 +1625,10 @@ fn induct_stream_slices_sender_subnet_mismatch() {
     });
 }
 
-/// Tests that a message adressed to a canister that is not currently and has
-/// not recently (according to `canister_migrations`) been hosted by the this
-/// subnet is dropped, incrementing the respective critical error count.
+/// Tests that a message adressed to a canister that is not currently hosted by
+/// this subnet; and is not being migrated on a path containing both this subnet
+/// and its known host; is dropped, incrementing the respective critical error
+/// count.
 #[test]
 fn induct_stream_slices_receiver_subnet_mismatch() {
     with_test_replica_logger(|log| {
@@ -1641,6 +1642,14 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
             reject_signals: None,
         });
         initial_state.with_streams(btreemap![REMOTE_SUBNET => outgoing_stream]);
+
+        // Throw in a canister migration with a path that does not include this subnet.
+        initial_state = prepare_canister_migration(
+            initial_state,
+            *OTHER_REMOTE_CANISTER,
+            REMOTE_SUBNET,
+            CANISTER_MIGRATION_SUBNET,
+        );
 
         // Incoming slice with requests for canisters not hosted by this subnet.
         let mut stream_slice = generate_stream_slice(StreamSliceConfig {
@@ -1696,8 +1705,129 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
     });
 }
 
-/// Tests that inducting stream slices to a migrated canister results in
-/// reject signals for responses and reject `Responses` for requests on output streams.
+/// Tests that inducting stream slices containing messages to a canister that is
+/// known to be in the process of migration but has not yet been migrated to
+/// this subnet results in reject signals for responses and reject `Responses`
+/// for requests on output streams.
+#[test]
+fn induct_stream_slices_with_messages_to_migrating_canister() {
+    with_test_replica_logger(|log| {
+        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
+        stream_handler.testing_flag_generate_reject_signals = true;
+
+        // `REMOTE_CANISTER` is hosted by `CANISTER_MIGRATION_SUBNET` but in the process
+        // of being migrated to `LOCAL_SUBNET`.
+        initial_state =
+            complete_canister_migration(initial_state, *REMOTE_CANISTER, CANISTER_MIGRATION_SUBNET);
+        initial_state = prepare_canister_migration(
+            initial_state,
+            *REMOTE_CANISTER,
+            CANISTER_MIGRATION_SUBNET,
+            LOCAL_SUBNET,
+        );
+        let mut expected_state = initial_state.clone();
+
+        let outgoing_stream = generate_stream(
+            MessageConfig {
+                sender: *LOCAL_CANISTER,
+                receiver: *OTHER_REMOTE_CANISTER,
+                begin: 21,
+                count: 1,
+            },
+            SignalConfig {
+                end: 43,
+                reject_signals: None,
+            },
+        );
+        initial_state.with_streams(btreemap![REMOTE_SUBNET => outgoing_stream]);
+
+        // Incoming slice...
+        let mut stream_slice = generate_stream_slice(StreamSliceConfig {
+            header_begin: 43,
+            header_end: None,
+            messages_begin: 43,
+            message_count: 0,
+            signals_end: 21,
+            reject_signals: None,
+        });
+        // ...with one incoming request...
+        stream_slice.push_message(test_request(*OTHER_REMOTE_CANISTER, *REMOTE_CANISTER).into());
+        // ...and one incoming response.
+        stream_slice.push_message(test_response(*OTHER_REMOTE_CANISTER, *REMOTE_CANISTER).into());
+
+        // Expecting an outgoing stream with a reject signal @44 for the
+        // incoming response...
+        let mut expected_outgoing_stream = generate_stream(
+            MessageConfig {
+                sender: *LOCAL_CANISTER,
+                receiver: *OTHER_REMOTE_CANISTER,
+                begin: 21,
+                count: 1,
+            },
+            SignalConfig {
+                end: 45,
+                reject_signals: Some(vec![44]),
+            },
+        );
+        // ...and a reject response for the incoming request.
+        let rejected_request = stream_slice
+            .messages()
+            .unwrap()
+            .get(43.into())
+            .unwrap()
+            .clone();
+        let context = RejectContext::new(
+            RejectCode::SysTransient,
+            format!(
+                "Canister {} is being migrated to/from {}",
+                *REMOTE_CANISTER, CANISTER_MIGRATION_SUBNET
+            ),
+        );
+        expected_outgoing_stream.push(generate_reject_response(rejected_request, context));
+
+        expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_outgoing_stream]);
+
+        // Act
+        let inducted_state = stream_handler
+            .induct_stream_slices(initial_state, btreemap![REMOTE_SUBNET => stream_slice]);
+
+        // Assert
+        assert_eq!(
+            expected_state.system_metadata(),
+            inducted_state.system_metadata(),
+        );
+
+        assert_eq!(expected_state, inducted_state);
+
+        assert_inducted_xnet_messages_eq(
+            metric_vec(&[
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                        (LABEL_STATUS, LABEL_VALUE_CANISTER_MIGRATED),
+                    ],
+                    1,
+                ),
+                (
+                    &[
+                        (LABEL_TYPE, LABEL_VALUE_TYPE_RESPONSE),
+                        (LABEL_STATUS, LABEL_VALUE_CANISTER_MIGRATED),
+                    ],
+                    1,
+                ),
+            ]),
+            &metrics_registry,
+        );
+        assert_eq!(
+            0,
+            fetch_inducted_payload_sizes_stats(&metrics_registry).count
+        );
+    });
+}
+
+/// Tests that inducting stream slices containing messages to a migrated
+/// canister results in reject signals for responses and reject `Responses` for
+/// requests on output streams.
 #[test]
 fn induct_stream_slices_with_messages_to_migrated_canister() {
     with_test_replica_logger(|log| {
@@ -1764,7 +1894,7 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
         let context = RejectContext::new(
             RejectCode::SysTransient,
             format!(
-                "Canister {} has been migrated to {}",
+                "Canister {} is being migrated to/from {}",
                 *LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
             ),
         );
@@ -2618,7 +2748,7 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
         let context = RejectContext::new(
             RejectCode::SysTransient,
             format!(
-                "Canister {} has been migrated to {}",
+                "Canister {} is being migrated to/from {}",
                 *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
             ),
         );
@@ -2642,7 +2772,7 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
         let context = RejectContext::new(
             RejectCode::SysTransient,
             format!(
-                "Canister {} has been migrated to {}",
+                "Canister {} is being migrated to/from {}",
                 *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
             ),
         );
