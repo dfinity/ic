@@ -1,5 +1,5 @@
 {
-  "checksum": "d4d68bb30bdde6aba841de9066e95b8cbc2d003c28b097b97b270988ad4eec7b",
+  "checksum": "bd9cbc17b0fa4077913303b62a524f7b7a963613f3de1c4df01a314543c578bc",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -15745,6 +15745,18 @@
         },
         {
           "Binary": {
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -15759,18 +15771,6 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
