@@ -1,0 +1,27 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "proto",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    crate_name = "ic_registry_common_proto",
+    edition = "2018",
+    deps = [
+        "@crate_index//:prost",
+        "@crate_index//:prost-types",
+    ],
+)
+
+# TODO(IC-1207): add rust_test after unblocking its dependencies.
