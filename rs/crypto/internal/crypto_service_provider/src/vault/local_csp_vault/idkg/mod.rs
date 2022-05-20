@@ -363,6 +363,8 @@ pub(crate) fn commitment_key_id(commitment: &PolynomialCommitment) -> KeyId {
     let mut hash = Sha256::new_with_context(&DomainSeparationContext::new(
         COMMITMENT_KEY_ID_DOMAIN.to_string(),
     ));
-    hash.write(&serde_cbor::to_vec(commitment).expect("Failed to serialize commitment"));
+    let commitment_encoding = commitment.to_bytes();
+    hash.write(&(commitment_encoding.len() as u64).to_be_bytes());
+    hash.write(&commitment_encoding);
     KeyId::from(hash.finish())
 }

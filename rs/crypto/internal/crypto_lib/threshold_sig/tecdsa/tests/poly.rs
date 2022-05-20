@@ -493,3 +493,72 @@ fn commitment_opening_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
 
     Ok(())
 }
+
+#[test]
+fn simple_commitment_to_bytes_is_stable() {
+    fn simple_commitment_bytes(curve: EccCurveType, sz: usize) -> Vec<u8> {
+        let mut rng = Seed::from_bytes(&vec![42; sz]).into_rng();
+
+        let polynomial =
+            Polynomial::random(curve, sz, &mut rng).expect("Polynomial::random failed");
+
+        let opening =
+            SimpleCommitment::create(&polynomial, sz).expect("SimpleCommitment::create failed");
+
+        let opening = PolynomialCommitment::Simple(opening);
+        opening.to_bytes()
+    }
+
+    assert_eq!(
+        hex::encode(simple_commitment_bytes(EccCurveType::K256, 1)),
+        "5301039fe83fd99e3c6b76df143254cb8a836d6b47aa68cf3fd7581196afdeb904f9d2"
+    );
+    assert_eq!(
+        hex::encode(simple_commitment_bytes(EccCurveType::K256, 2)),
+        "530103c1f401c44781086b6d0e6b0ef5c4b44615704d089d454570a15f5d57ec5c55820347ab40cedd0e1d19945028dd62a945d7f48083cef4174753c27925b26912af3f"
+    );
+
+    assert_eq!(
+        hex::encode(simple_commitment_bytes(EccCurveType::P256, 1)),
+        "5302032aaa236410513db103d17be5d6f52f1444bdd4e440a20e65c481b56d86a431bc"
+    );
+    assert_eq!(
+        hex::encode(simple_commitment_bytes(EccCurveType::P256, 2)),
+        "530203ebb013814bb1b37b43cf69423883313209fa39a52dae48babe7295010002991c03bfd2404c3905d7fa0a9ab22549ab5c5a34e275d4fbf6953ca2afdd92289b4ae7"
+    );
+}
+
+#[test]
+fn pedersen_commitment_to_bytes_is_stable() {
+    fn pedersen_commitment_bytes(curve: EccCurveType, sz: usize) -> Vec<u8> {
+        let mut rng = Seed::from_bytes(&vec![42; sz]).into_rng();
+
+        let polynomial =
+            Polynomial::random(curve, sz, &mut rng).expect("Polynomial::random failed");
+        let mask = Polynomial::random(curve, sz, &mut rng).expect("Polynomial::random failed");
+
+        let opening = PedersenCommitment::create(&polynomial, &mask, sz)
+            .expect("PedersenCommitment::create failed");
+
+        let opening = PolynomialCommitment::Pedersen(opening);
+        opening.to_bytes()
+    }
+
+    assert_eq!(
+        hex::encode(pedersen_commitment_bytes(EccCurveType::K256, 1)),
+        "5001025b20c6c5dec68e994ec79c9dbdc4657eedda2bce11d3cfd4e9d328b56e25b288"
+    );
+    assert_eq!(
+        hex::encode(pedersen_commitment_bytes(EccCurveType::K256, 2)),
+        "5001032d67617d5848b9401d292fd026b062bdf1c48e8471608b1983ee54b773e61cdb03b4ee72750211155139f613cb32897854152d4f6cb41c843963075c7146dc6001"
+    );
+
+    assert_eq!(
+        hex::encode(pedersen_commitment_bytes(EccCurveType::P256, 1)),
+        "5002026662cd78cf51a8afee0a158b49c9d222930168a96488fe7d574e42585126b085"
+    );
+    assert_eq!(
+        hex::encode(pedersen_commitment_bytes(EccCurveType::P256, 2)),
+        "5002027facbc97df263004792094aa69d0e00e14a9f490f052c20b49abd6e981da2017023720c8f9a0d53edf8e285a47737b47bae702309546a51adf1b8fc2c13db3417f"
+    );
+}
