@@ -19,7 +19,6 @@ use rand::seq::IteratorRandom;
 use rand::Rng;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
-use std::convert::TryFrom;
 use std::ops::{AddAssign, SubAssign};
 
 pub mod util {
@@ -294,36 +293,6 @@ fn omnipotent_dealer() {
         crypto::verify(&message[..], combined_signature, public_key),
         Ok(())
     );
-}
-
-#[test]
-#[ignore]
-/// Verifies that `verify_keygen_args` returns an error if the vector of
-/// eligible nodes is too long.
-///
-/// The maximum length that should be accepted is `NodeIndex::max_value()`.
-/// More should fail.
-///
-/// Note: This is a slow test and can consume a lot of RAM, depending on the
-/// definition of NodeIndex.  To test quickly, change NodeIndex to u16.  If the
-/// code is clean and compiles, this test will run quickly.
-fn verify_keygen_args_rejects_too_many_share_indices() {
-    let max_node_index = usize::try_from(NodeIndex::max_value());
-    if max_node_index.is_err() {
-        return; // usize is smaller than NodeIndex
-    }
-    let max_node_index = max_node_index.unwrap();
-
-    if usize::max_value() > max_node_index {
-        assert!(
-            crypto::verify_keygen_args(NumberOfNodes::from(0), &vec![true; max_node_index]).is_ok()
-        );
-        assert!(crypto::verify_keygen_args(
-            NumberOfNodes::from(0),
-            &vec![true; max_node_index + 1]
-        )
-        .is_err());
-    }
 }
 
 proptest! {
