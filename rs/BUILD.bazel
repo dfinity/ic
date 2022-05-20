@@ -45,6 +45,8 @@ filegroup(
         "//rs/registry/routing_table:sources",
         "//rs/registry/subnet_features:sources",
         "//rs/registry/subnet_type:sources",
+        "//rs/registry/transport/protobuf_generator:sources",
+        "//rs/registry/transport:sources",
         "//rs/rust_canisters/dfn_json:sources",
         "//rs/rust_canisters/on_wire:sources",
         "//rs/stable-structures:sources",
