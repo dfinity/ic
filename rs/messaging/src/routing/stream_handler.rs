@@ -646,17 +646,17 @@ impl StreamHandlerImpl {
                     }
                 },
 
-                // Receiver canister has been migrated away from this subnet.
+                // Receiver canister is migrating to/from this subnet.
                 Some(host_subnet) if self.should_reroute_message_to(&msg, host_subnet, state) => {
                     self.observe_inducted_message_status(msg_type, LABEL_VALUE_CANISTER_MIGRATED);
 
                     match &msg {
                         RequestOrResponse::Request(_) => {
-                            debug!(self.log, "Canister {} has been migrated, generating reject response for {:?}", msg.receiver(), msg);
+                            debug!(self.log, "Canister {} is being migrated, generating reject response for {:?}", msg.receiver(), msg);
                             let context = RejectContext::new(
                                 RejectCode::SysTransient,
                                 format!(
-                                    "Canister {} has been migrated to {}",
+                                    "Canister {} is being migrated to/from {}",
                                     msg.receiver(),
                                     host_subnet
                                 ),
@@ -668,10 +668,10 @@ impl StreamHandlerImpl {
                             if state.metadata.certification_version >= CertificationVersion::V9
                                 || self.testing_flag_generate_reject_signals
                             {
-                                debug!(self.log, "Canister {} has been migrated, generating reject signal for {:?}", msg.receiver(), msg);
+                                debug!(self.log, "Canister {} is being migrated, generating reject signal for {:?}", msg.receiver(), msg);
                                 stream.push_reject_signal(stream_index);
                             } else {
-                                fatal!(self.log, "Canister {} has been migrated, but cannot produce reject signal for response {:?}", msg.receiver(), msg);
+                                fatal!(self.log, "Canister {} is being migrated, but cannot produce reject signal for response {:?}", msg.receiver(), msg);
                             }
                         }
                     }
@@ -725,9 +725,9 @@ impl StreamHandlerImpl {
     }
 
     /// Checks whether `actual_subnet_id` is a valid host subnet for `msg.sender()`
-    /// (i.e. whether it is its current host according to the routing table; or is
-    /// one of the previous subnets on the path of a canister migration including
-    /// `msg.sender()`).
+    /// (i.e. whether it is its current host according to the routing table; or it
+    /// and the known host subnet are both on the path of a canister migration
+    /// including `msg.sender()`).
     fn should_accept_message_from(
         &self,
         msg: &RequestOrResponse,
@@ -769,10 +769,10 @@ impl StreamHandlerImpl {
     /// Checks whether a message addressed to a canister known not to be hosted by
     /// `self.subnet_id` should be rejected (as opposed to silently dropped).
     ///
-    /// Reject signals are only produced for `Responses` addressed to a canister
-    /// known to be hosted by a different subnet according to the routing table;
-    /// but previously hosted by `self.subnet_id` according to the
-    /// `canister_migrations` map.
+    /// Reject signals for `Responses` and reject responses for requests addressed
+    /// to receivers not hosted by `self.subnet_id` are only produced if both the
+    /// known host and `self.subnet_id` are on the path of a canister migration
+    /// including `msg.receiver()`.
     fn should_reroute_message_to(
         &self,
         msg: &RequestOrResponse,
@@ -794,12 +794,7 @@ impl StreamHandlerImpl {
             .network_topology
             .canister_migrations
             .lookup(msg.receiver())
-            .and_then(|trace| {
-                let self_index = trace.iter().position(|s| *s == self.subnet_id)?;
-                let actual_subnet_index =
-                    trace.iter().rposition(|s| *s == actual_receiver_subnet)?;
-                Some(self_index < actual_subnet_index)
-            })
+            .map(|trace| trace.contains(&actual_receiver_subnet) && trace.contains(&self.subnet_id))
             .unwrap_or(false)
     }
 
