@@ -4,7 +4,7 @@ use crate::{
         CanisterManager, CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
     },
     canister_settings::CanisterSettings,
-    execution::call::{execute_ingress_call, execute_request_call},
+    execution::call::execute_call,
     execution::common::action_to_result,
     execution_environment_metrics::ExecutionEnvironmentMetrics,
     hypervisor::Hypervisor,
@@ -801,123 +801,55 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
     fn execute_canister_message(
         &self,
-        mut canister: CanisterState,
+        canister: CanisterState,
         instructions_limit: NumInstructions,
         msg: CanisterInputMessage,
         time: Time,
         network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
     ) -> ExecuteMessageResult<CanisterState> {
-        let (should_refund_remaining_cycles, mut res) = match msg {
-            CanisterInputMessage::Request(request) => {
-                let memory_usage = canister.memory_usage(self.own_subnet_type);
-                let compute_allocation = canister.scheduler_state.compute_allocation;
-                if let Err(err) = self.cycles_account_manager.withdraw_execution_cycles(
-                    &mut canister.system_state,
-                    memory_usage,
-                    compute_allocation,
-                    instructions_limit,
-                ) {
-                    let user_error = Err(UserError::new(ErrorCode::CanisterOutOfCycles, err));
-                    // Canister is out of cycles. Reject the request.
-                    let response = Response {
-                        originator: request.sender,
-                        respondent: canister.canister_id(),
-                        originator_reply_callback: request.sender_reply_callback,
-                        refund: request.payment,
-                        response_payload: Payload::from(user_error),
-                    };
-                    return ExecuteMessageResult {
-                        canister,
-                        num_instructions_left: instructions_limit,
-                        result: ExecResult::ResponseResult(response),
-                        heap_delta: NumBytes::from(0),
-                    };
-                }
-                (
-                    true,
-                    execute_request_call(
-                        canister,
-                        request,
-                        instructions_limit,
-                        time,
-                        network_topology,
-                        subnet_available_memory,
-                        &self.config,
-                        self.own_subnet_type,
-                        &self.hypervisor,
-                        &self.log,
-                    ),
-                )
-            }
-
-            CanisterInputMessage::Ingress(ingress) => {
-                let memory_usage = canister.memory_usage(self.own_subnet_type);
-                let compute_allocation = canister.scheduler_state.compute_allocation;
-                if let Err(err) = self.cycles_account_manager.withdraw_execution_cycles(
-                    &mut canister.system_state,
-                    memory_usage,
-                    compute_allocation,
-                    instructions_limit,
-                ) {
-                    // Canister is out of cycles. Reject the request.
-                    let canister_id = canister.canister_id();
-                    let status = IngressStatus::Known {
-                        receiver: canister_id.get(),
-                        user_id: ingress.source,
-                        time,
-                        state: IngressState::Failed(UserError::new(
-                            ErrorCode::CanisterOutOfCycles,
-                            err.to_string(),
-                        )),
-                    };
-                    return ExecuteMessageResult {
-                        canister,
-                        num_instructions_left: instructions_limit,
-                        result: ExecResult::IngressResult((ingress.message_id, status)),
-                        heap_delta: NumBytes::from(0),
-                    };
-                }
-                (
-                    true,
-                    execute_ingress_call(
-                        canister,
-                        ingress,
-                        instructions_limit,
-                        time,
-                        network_topology,
-                        subnet_available_memory,
-                        &self.config,
-                        self.own_subnet_type,
-                        &self.hypervisor,
-                        &self.log,
-                    ),
-                )
-            }
-
-            CanisterInputMessage::Response(response) => self.execute_canister_response(
+        if let CanisterInputMessage::Response(response) = msg {
+            let (should_refund_remaining_cycles, mut res) = self.execute_canister_response(
                 canister,
                 response,
                 instructions_limit,
                 time,
                 network_topology,
                 subnet_available_memory,
-            ),
+            );
+
+            if should_refund_remaining_cycles {
+                // Refund the canister with any cycles left after message execution.
+                self.cycles_account_manager.refund_execution_cycles(
+                    &mut res.canister.system_state,
+                    res.num_instructions_left,
+                    instructions_limit,
+                );
+            }
+            return res;
         };
 
-        if should_refund_remaining_cycles {
-            // Clone the `cycles_account_manager` to avoid having to require 'static
-            // lifetime bound on `self`.
-            let cycles_account_manager = Arc::clone(&self.cycles_account_manager);
+        let req = match msg {
+            CanisterInputMessage::Request(request) => RequestOrIngress::Request(request),
+            CanisterInputMessage::Ingress(ingress) => RequestOrIngress::Ingress(ingress),
+            CanisterInputMessage::Response(_) => {
+                unreachable!();
+            }
+        };
 
-            // Refund the canister with any cycles left after message execution.
-            cycles_account_manager.refund_execution_cycles(
-                &mut res.canister.system_state,
-                res.num_instructions_left,
-                instructions_limit,
-            );
-        }
-        res
+        execute_call(
+            canister,
+            req,
+            instructions_limit,
+            time,
+            network_topology,
+            subnet_available_memory,
+            &self.config,
+            self.own_subnet_type,
+            &self.hypervisor,
+            &*self.cycles_account_manager,
+            &self.log,
+        )
     }
 
     fn execute_canister_heartbeat(
