@@ -1,3 +1,4 @@
+use crate::execution::common::validate_method;
 use crate::{NonReplicatedQueryKind as QueryKind, QueryExecutionType};
 use ic_canister_sandbox_replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
 use ic_config::flag_status::FlagStatus;
@@ -98,6 +99,13 @@ pub struct Hypervisor {
 }
 
 impl Hypervisor {
+    pub(crate) fn subnet_id(&self) -> SubnetId {
+        self.own_subnet_id
+    }
+
+    pub(crate) fn subnet_type(&self) -> SubnetType {
+        self.own_subnet_type
+    }
     /// Execute an update call.
     ///
     /// Returns:
@@ -249,31 +257,20 @@ impl Hypervisor {
                 Err(HypervisorError::CanisterStopped),
             );
         }
-
         let method = WasmMethod::Query(method.to_string());
         let memory_usage = canister.memory_usage(self.own_subnet_type);
-        let (execution_state, system_state, scheduler_state) = canister.into_parts();
 
-        // Validate that the Wasm module is present.
-        let execution_state = match execution_state {
-            None => {
-                return (
-                    CanisterState::from_parts(None, system_state, scheduler_state),
-                    execution_parameters.total_instruction_limit,
-                    Err(HypervisorError::WasmModuleNotFound),
-                );
-            }
-            Some(state) => state,
-        };
-
-        // Validate that the Wasm module exports the method.
-        if !execution_state.exports_method(&method) {
+        // Validate that the Wasm module is present and exports the method
+        if let Err(err) = validate_method(&method, &canister) {
             return (
-                CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
+                canister,
                 execution_parameters.total_instruction_limit,
-                Err(HypervisorError::MethodNotFound(method)),
+                Err(err),
             );
         }
+
+        let (execution_state, system_state, scheduler_state) = canister.into_parts();
+        let execution_state = execution_state.unwrap();
 
         match query_execution_type {
             QueryExecutionType::Replicated => {
