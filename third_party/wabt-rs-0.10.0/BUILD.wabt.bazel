@@ -1,0 +1,30 @@
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
+
+filegroup(
+    name = "source",
+    srcs = glob(
+        ["**"],
+        exclude = ["BUILD.bazel"],
+    ),
+)
+
+filegroup(
+    name = "shim_sources",
+    srcs = [
+        "src/emscripten-helpers.cc",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cmake(
+    name = "libwabt",
+    cache_entries = {
+        "BUILD_TESTS": "OFF",
+        "BUILD_TOOLS": "OFF",
+        "BUILD_LIBWASM": "ON",
+    },
+    lib_source = ":source",
+    out_include_dir = "include",
+    out_static_libs = ["libwabt.a"],
+    visibility = ["//visibility:public"],
+)

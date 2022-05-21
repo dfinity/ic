@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+rust_library(
+    name = "wabt",
+    srcs = glob(["src/**"]),
+    edition = "2018",
+    proc_macro_deps = ["@crate_index//:serde_derive"],
+    version = "0.10.0",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//wabt-sys",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "wabt_test",
+    crate = ":wabt",
+)
