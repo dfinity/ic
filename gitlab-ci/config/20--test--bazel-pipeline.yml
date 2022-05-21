@@ -1,8 +1,19 @@
-bazel-pipeline:
-  extends: .bazel-rules-child-pipeline
-  # Child pipeline must be generated in a stage prior to the one where it runs
+bazel-test-all:
+  extends:
+    - .bazel-rules-pipeline
+    - .ubuntu-nix-docker
+  tags:
+    - dfinity
+    - docker
+    - ubuntu
+    # Run in ZH since BuildFarm is in ZH
+    - zh
   stage: test
   needs: []
-  trigger:
-    include: /gitlab-ci/config/bazel/00--bazel-pipeline-root.yml
-    strategy: depend
+  artifacts:
+    paths:
+      - bazel-build-log*.json
+  script:
+    - set -euo pipefail
+    - bazel version
+    - bazel test --config ci ...
