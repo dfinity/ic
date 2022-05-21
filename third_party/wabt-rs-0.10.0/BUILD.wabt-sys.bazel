@@ -1,0 +1,25 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+rust_library(
+    name = "wabt-sys",
+    srcs = glob(["src/**"]),
+    edition = "2018",
+    version = "0.8.0",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":wabt_shim",
+        "//wabt-sys/wabt:libwabt",
+    ],
+)
+
+cc_library(
+    name = "wabt_shim",
+    srcs = [
+        "wabt_shim.cc",
+        "//wabt-sys/wabt:shim_sources",
+    ],
+    strip_include_prefix = "wabt-sys/wabt",
+    deps = [
+        "//wabt-sys/wabt:libwabt",
+    ],
+)

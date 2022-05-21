@@ -1,0 +1,21 @@
+--- wabt-sys/wabt/CMakeLists.txt	2022-02-07 11:42:30.000000000 +0100
++++ wabt-sys/wabt/CMakeLists.txt	2022-05-20 22:51:17.000000000 +0200
+@@ -118,6 +118,10 @@
+ 
+ include_directories(${WABT_SOURCE_DIR} ${WABT_BINARY_DIR})
+ 
++install(FILES ${WABT_BINARY_DIR}/config.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
++file(GLOB WABT_HEADERS ${WABT_SOURCE_DIR}/src/*.h ${WABT_SOURCE_DIR}/src/*.def)
++install(FILES ${WABT_HEADERS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/src)
++
+ if (COMPILER_IS_MSVC)
+   # disable warning C4018: signed/unsigned mismatch
+   # disable warning C4056, C4756: overflow in floating-point constant arithmetic
+@@ -349,6 +353,7 @@
+ )
+ 
+ add_library(wabt STATIC ${WABT_LIBRARY_SRC})
++install(TARGETS wabt DESTINATION ${CMAKE_INSTALL_LIBDIR})
+ 
+ IF (NOT WIN32)
+   add_library(wasm-rt-impl STATIC wasm2c/wasm-rt-impl.c wasm2c/wasm-rt-impl.h)
