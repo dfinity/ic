@@ -1,6 +1,6 @@
 use ic_btc_types_internal::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper};
 use std::time::Duration;
-use strum::IntoStaticStr;
+use strum_macros::IntoStaticStr;
 
 /// Describe RPC error -- can be either related to transport (i.e.
 /// failure to transport) or to server (i.e. server responded, but

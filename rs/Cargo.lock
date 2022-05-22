@@ -5510,8 +5510,7 @@ name = "ic-interfaces-bitcoin-adapter-client"
 version = "0.8.0"
 dependencies = [
  "ic-btc-types-internal",
- "strum 0.24.0",
- "tonic",
+ "strum_macros 0.24.0",
 ]
 
 [[package]]
