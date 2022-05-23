@@ -707,8 +707,7 @@ impl BatchProcessor for BatchProcessorImpl {
 
         self.remove_canisters_not_in_routing_table(&mut state);
 
-        let batch_requires_full_state_hash = batch.requires_full_state_hash;
-        let mut state_after_round = self.state_machine.execute_round(
+        let state_after_round = self.state_machine.execute_round(
             state,
             network_topology,
             batch,
@@ -717,12 +716,6 @@ impl BatchProcessor for BatchProcessorImpl {
             max_number_of_canisters,
         );
         self.observe_canisters_memory_usage(&state_after_round);
-
-        // See documentation around the definition of `heap_delta_estimate` for
-        // an explanation.
-        if batch_requires_full_state_hash {
-            state_after_round.metadata.heap_delta_estimate = NumBytes::from(0);
-        }
 
         let phase_timer = Timer::start();
 

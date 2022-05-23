@@ -11,7 +11,7 @@ use ic_crypto::prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{CanisterStatusType, InstallCodeArgs, Method as Ic00Method, Payload as _};
-use ic_interfaces::execution_environment::{AvailableMemory, ExecResult};
+use ic_interfaces::execution_environment::{AvailableMemory, ExecResult, ExecutionRoundType};
 use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, Scheduler, SubnetAvailableMemory},
     messages::CanisterInputMessage,
@@ -867,6 +867,7 @@ impl Scheduler for SchedulerImpl {
         randomness: Randomness,
         ecdsa_subnet_public_key: Option<MasterEcdsaPublicKey>,
         current_round: ExecutionRound,
+        current_round_type: ExecutionRoundType,
         provisional_whitelist: ProvisionalWhitelist,
         max_number_of_canisters: u64,
     ) -> ReplicatedState {
@@ -905,6 +906,12 @@ impl Scheduler for SchedulerImpl {
                     state.metadata.heap_delta_estimate,
                     self.config.subnet_heap_delta_capacity
                 );
+                match current_round_type {
+                    ExecutionRoundType::CheckpointRound => {
+                        state.metadata.heap_delta_estimate = NumBytes::from(0);
+                    }
+                    ExecutionRoundType::OrdinaryRound => {}
+                }
                 self.metrics
                     .round_skipped_due_to_current_heap_delta_above_limit
                     .inc();
@@ -1140,6 +1147,13 @@ impl Scheduler for SchedulerImpl {
                 self.charge_canisters_for_resource_allocation_and_usage(&mut final_state);
             }
         }
+        match current_round_type {
+            ExecutionRoundType::CheckpointRound => {
+                final_state.metadata.heap_delta_estimate = NumBytes::from(0);
+            }
+            ExecutionRoundType::OrdinaryRound => {}
+        }
+
         final_state
     }
 }

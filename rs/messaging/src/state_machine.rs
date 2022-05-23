@@ -1,6 +1,6 @@
 use crate::message_routing::MessageRoutingMetrics;
 use crate::routing::{demux::Demux, stream_builder::StreamBuilder};
-use ic_interfaces::execution_environment::Scheduler;
+use ic_interfaces::execution_environment::{ExecutionRoundType, Scheduler};
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::Timer;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -92,6 +92,12 @@ impl StateMachine for StateMachineImpl {
         state_with_messages.consensus_queue = batch.consensus_responses;
         self.observe_phase_duration(PHASE_INDUCTION, &phase_timer);
 
+        let execution_round_type = if batch.requires_full_state_hash {
+            ExecutionRoundType::CheckpointRound
+        } else {
+            ExecutionRoundType::OrdinaryRound
+        };
+
         let phase_timer = Timer::start();
         // Process messages from the induction pool through the Scheduler.
         let state_after_execution = self.scheduler.execute_round(
@@ -99,6 +105,7 @@ impl StateMachine for StateMachineImpl {
             batch.randomness,
             batch.ecdsa_subnet_public_key,
             ExecutionRound::from(batch.batch_number.get()),
+            execution_round_type,
             provisional_whitelist,
             max_number_of_canisters,
         );
