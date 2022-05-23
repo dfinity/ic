@@ -1,5 +1,5 @@
 {
-  "checksum": "bd9cbc17b0fa4077913303b62a524f7b7a963613f3de1c4df01a314543c578bc",
+  "checksum": "963a4b0b3a842145bdea54f3177f6ac306135d22afc7756dd72dbfea1d356926",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -653,7 +653,7 @@
               "target": "http"
             },
             {
-              "id": "http-body 0.4.4",
+              "id": "http-body 0.4.5",
               "target": "http_body"
             },
             {
@@ -772,7 +772,7 @@
               "target": "http"
             },
             {
-              "id": "http-body 0.4.4",
+              "id": "http-body 0.4.5",
               "target": "http_body"
             },
             {
@@ -1593,7 +1593,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "regex 1.5.5",
+              "id": "regex 1.5.6",
               "target": "regex"
             }
           ],
@@ -2870,7 +2870,7 @@
               "target": "rayon"
             },
             {
-              "id": "regex 1.5.5",
+              "id": "regex 1.5.6",
               "target": "regex"
             },
             {
@@ -3767,7 +3767,7 @@
               "target": "rand_core"
             },
             {
-              "id": "regex 1.5.5",
+              "id": "regex 1.5.6",
               "target": "regex"
             },
             {
@@ -5672,13 +5672,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "http-body 0.4.4": {
+    "http-body 0.4.5": {
       "name": "http-body",
-      "version": "0.4.4",
+      "version": "0.4.5",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/http-body/0.4.4/download",
-          "sha256": "1ff4f84919677303da5f147645dbea6b1881f368d03ac84e1dc09031ebd7b2c6"
+          "url": "https://crates.io/api/v1/crates/http-body/0.4.5/download",
+          "sha256": "d5f38f16d184e36f2408a55281cd658ecbd3ca05cce6d6510a176eca393e26d1"
         }
       },
       "targets": [
@@ -5718,7 +5718,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.4.4"
+        "version": "0.4.5"
       },
       "license": "MIT"
     },
@@ -5919,7 +5919,7 @@
               "target": "http"
             },
             {
-              "id": "http-body 0.4.4",
+              "id": "http-body 0.4.5",
               "target": "http_body"
             },
             {
@@ -6451,11 +6451,11 @@
               "target": "pico_args"
             },
             {
-              "id": "regex 1.5.5",
+              "id": "regex 1.5.6",
               "target": "regex"
             },
             {
-              "id": "regex-syntax 0.6.25",
+              "id": "regex-syntax 0.6.26",
               "target": "regex_syntax"
             },
             {
@@ -6519,7 +6519,7 @@
         "deps": {
           "common": [
             {
-              "id": "regex 1.5.5",
+              "id": "regex 1.5.6",
               "target": "regex"
             }
           ],
@@ -6902,7 +6902,7 @@
               "target": "quote"
             },
             {
-              "id": "regex-syntax 0.6.25",
+              "id": "regex-syntax 0.6.26",
               "target": "regex_syntax"
             },
             {
@@ -9840,7 +9840,7 @@
               "target": "rand_xorshift"
             },
             {
-              "id": "regex-syntax 0.6.25",
+              "id": "regex-syntax 0.6.26",
               "target": "regex_syntax"
             },
             {
@@ -10106,7 +10106,7 @@
               "target": "prost_types"
             },
             {
-              "id": "regex 1.5.5",
+              "id": "regex 1.5.6",
               "target": "regex"
             },
             {
@@ -10142,15 +10142,9 @@
         },
         "build_script_env": {
           "common": {
-            "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+            "PROTOC": "NO_PROTOC_PATH_AT_COMPILE_TIME",
             "PROTOC_NO_VENDOR": "1"
           },
-          "selects": {}
-        },
-        "tools": {
-          "common": [
-            "@com_google_protobuf//:protoc"
-          ],
           "selects": {}
         }
       },
@@ -11688,13 +11682,13 @@
       },
       "license": "MIT"
     },
-    "regex 1.5.5": {
+    "regex 1.5.6": {
       "name": "regex",
-      "version": "1.5.5",
+      "version": "1.5.6",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/regex/1.5.5/download",
-          "sha256": "1a11647b6b25ff05a515cb92c365cec08801e83423a235b51e231e1808747286"
+          "url": "https://crates.io/api/v1/crates/regex/1.5.6/download",
+          "sha256": "d83f127d94bdbcda4c8cc2e50f6f84f4b611f69c902699ca385a39c3a75f9ff1"
         }
       },
       "targets": [
@@ -11746,14 +11740,14 @@
               "target": "memchr"
             },
             {
-              "id": "regex-syntax 0.6.25",
+              "id": "regex-syntax 0.6.26",
               "target": "regex_syntax"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.5.5"
+        "version": "1.5.6"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -11790,13 +11784,13 @@
       },
       "license": "Unlicense/MIT"
     },
-    "regex-syntax 0.6.25": {
+    "regex-syntax 0.6.26": {
       "name": "regex-syntax",
-      "version": "0.6.25",
+      "version": "0.6.26",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/regex-syntax/0.6.25/download",
-          "sha256": "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
+          "url": "https://crates.io/api/v1/crates/regex-syntax/0.6.26/download",
+          "sha256": "49b3de9ec5dc0a3417da371aab17d729997c15010e7fd24ff707773a33bddb64"
         }
       },
       "targets": [
@@ -11830,9 +11824,9 @@
           "unicode-segment"
         ],
         "edition": "2018",
-        "version": "0.6.25"
+        "version": "0.6.26"
       },
-      "license": "MIT/Apache-2.0"
+      "license": "MIT OR Apache-2.0"
     },
     "remove_dir_all 0.5.3": {
       "name": "remove_dir_all",
@@ -14712,7 +14706,7 @@
               "target": "http"
             },
             {
-              "id": "http-body 0.4.4",
+              "id": "http-body 0.4.5",
               "target": "http_body"
             },
             {
@@ -14956,7 +14950,7 @@
               "target": "http"
             },
             {
-              "id": "http-body 0.4.4",
+              "id": "http-body 0.4.5",
               "target": "http_body"
             },
             {
@@ -15745,8 +15739,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -15769,8 +15763,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

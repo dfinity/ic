@@ -45,9 +45,8 @@ crates_repository(
         "prost-build": [crate.annotation(
             build_script_env = {
                 "PROTOC_NO_VENDOR": "1",
-                "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+                "PROTOC": "NO_PROTOC_PATH_AT_COMPILE_TIME",
             },
-            build_script_tools = ["@com_google_protobuf//:protoc"],
         )],
     },
     isolated = True,

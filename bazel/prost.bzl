@@ -22,19 +22,29 @@ def generated_files_check(name, srcs, deps, data, manifest_dir):
         deps = deps,
     )
 
-def protobuf_generator(name, srcs, deps = [], data = []):
+def protobuf_generator(name, srcs, manifest_dir, deps = [], data = []):
+    binary_name = "_%s_bin" % name
     rust_binary(
-        name = name,
+        name = binary_name,
         srcs = srcs,
-        data = data + [
-            "@com_google_protobuf//:protoc",
-            "@com_google_protobuf//:well_known_protos",
-            "@rules_rust//rust/toolchain:current_exec_rustfmt_files",
-        ],
+        data = data,
         edition = "2018",
-        rustc_env = {
-            "PROTOC": "$(rootpath @com_google_protobuf//:protoc)",
-            "PROTOC_INCLUDE": "external/com_github_protocolbuffers_protobuf/src",
-        },
         deps = deps,
+    )
+
+    native.sh_binary(
+        name = name,
+        data = data + [
+            ":" + binary_name,
+            "@com_google_protobuf//:well_known_protos",
+            "@com_google_protobuf//:protoc",
+        ],
+        srcs = ["//bazel:prost_generator.sh"],
+        env = {
+            "PROTOC": "$(location @com_google_protobuf//:protoc)",
+            "PROTOC_INCLUDE": "external/com_github_protocolbuffers_protobuf/src",
+            "CARGO_MANIFEST_DIR": manifest_dir,
+            "GENERATOR": "$(location :%s)" % binary_name,
+        },
+        tags = ["local", "manual"],
     )

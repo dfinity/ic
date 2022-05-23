@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -8,6 +9,11 @@ filegroup(
         ["**"],
         exclude = ["target/**"],
     ),
+)
+
+filegroup(
+    name = "protos",
+    srcs = glob(["proto/**"]),
 )
 
 rust_library(
@@ -32,21 +38,19 @@ rust_library(
 
 rust_test(
     name = "lib_tests",
-    srcs = ["src/lib.rs"],
     crate = ":transport",
-    deps = [
-        "//rs/registry/transport/protobuf_generator",
-        "//rs/test_utilities/compare_dirs",
-        "@crate_index//:tempfile",
-    ],
 )
 
-rust_test(
+generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
-    crate = ":transport",
+    data = [
+        ":protos",
+        "//rs/protobuf:protos",
+    ] + glob(["gen/**"]),
+    manifest_dir = "rs/registry/transport",
     deps = [
-        "//rs/registry/transport/protobuf_generator",
+        "//rs/registry/transport/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
     ],
