@@ -18,7 +18,9 @@ use ic_btc_types_internal::{
     Txid as InternalTxid,
 };
 use ic_config::adapters::AdaptersConfig;
-use ic_interfaces_bitcoin_adapter_client::{BitcoinAdapterClient, Options, RpcError, RpcResult};
+use ic_interfaces_bitcoin_adapter_client::{
+    BitcoinAdapterClient, BitcoinAdapterClientError, Options, RpcResult,
+};
 use ic_logger::{error, ReplicaLogger};
 use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
 use std::{convert::TryFrom, path::PathBuf};
@@ -26,11 +28,15 @@ use tokio::net::UnixStream;
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
 
-fn convert_tonic_error(status: tonic::Status) -> RpcError {
-    RpcError::ServerError {
-        status_code: status.code() as u16,
-        message: status.message().to_string(),
-        source: Box::new(status),
+fn convert_tonic_error(status: tonic::Status) -> BitcoinAdapterClientError {
+    match status.code() {
+        tonic::Code::Unavailable => {
+            BitcoinAdapterClientError::Unavailable(status.message().to_string())
+        }
+        tonic::Code::Cancelled => {
+            BitcoinAdapterClientError::Cancelled(status.message().to_string())
+        }
+        _ => BitcoinAdapterClientError::Unknown(status.message().to_string()),
     }
 }
 
@@ -226,8 +232,11 @@ impl BitcoinAdapterClient for BrokenConnectionBitcoinClient {
                 request_timer.set_label(LABEL_REQUEST_TYPE, LABEL_SEND_TRANSACTION)
             }
         }
-        request_timer.set_label(LABEL_STATUS, RpcError::ConnectionBroken.into());
-        Err(RpcError::ConnectionBroken)
+        request_timer.set_label(
+            LABEL_STATUS,
+            BitcoinAdapterClientError::ConnectionBroken.into(),
+        );
+        Err(BitcoinAdapterClientError::ConnectionBroken)
     }
 }
 

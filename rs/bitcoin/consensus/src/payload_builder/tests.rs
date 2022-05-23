@@ -6,7 +6,7 @@ use ic_btc_types_internal::{
 use ic_interfaces::{
     registry::RegistryValue, self_validating_payload::SelfValidatingPayloadBuilder,
 };
-use ic_interfaces_bitcoin_adapter_client::RpcError;
+use ic_interfaces_bitcoin_adapter_client::BitcoinAdapterClientError;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{bitcoin::v1 as pb_bitcoin, registry::subnet::v1::SubnetRecord};
 use ic_registry_subnet_features::SubnetFeatures;
@@ -265,7 +265,7 @@ fn includes_only_successful_responses_in_the_payload() {
         adapter_client
             .expect_send_request()
             .times(1)
-            .returning(|_, _| Err(RpcError::ConnectionBroken));
+            .returning(|_, _| Err(BitcoinAdapterClientError::ConnectionBroken));
         adapter_client
     }
 
