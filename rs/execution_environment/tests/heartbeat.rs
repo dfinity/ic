@@ -1,5 +1,5 @@
 mod hypervisor;
-use hypervisor::{execution_parameters, setup, with_hypervisor};
+use hypervisor::{execution_parameters, test_network_topology, with_hypervisor};
 use ic_base_types::NumSeconds;
 use ic_execution_environment::execution::heartbeat;
 use ic_execution_environment::CanisterHeartbeatError;
@@ -12,7 +12,7 @@ use ic_test_utilities::{
     mock_time,
     state::SystemStateBuilder,
     state::{get_stopped_canister_on_system_subnet, get_stopping_canister_on_nns},
-    types::ids::{canister_test_id, subnet_test_id},
+    types::ids::canister_test_id,
 };
 use ic_types::{methods::SystemMethod, Cycles, NumBytes, NumInstructions};
 
@@ -32,7 +32,6 @@ fn canister_heartbeat() {
         )
         .unwrap();
 
-        let subnet_id = subnet_test_id(1);
         let subnet_type = SubnetType::Application;
         let canister_id = canister_test_id(42);
         let execution_state = hypervisor
@@ -48,14 +47,13 @@ fn canister_heartbeat() {
             execution_state: Some(execution_state),
             scheduler_state: Default::default(),
         };
-        let (_, _, network_topology) = setup();
+        let network_topology = test_network_topology();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         let heartbeat_result = heartbeat::execute_heartbeat(
             canister,
             network_topology,
             execution_parameters,
-            subnet_id,
             subnet_type,
             mock_time(),
             &hypervisor,
@@ -84,7 +82,6 @@ fn execute_canister_heartbeat_produces_heap_delta() {
         )
         .unwrap();
 
-        let subnet_id = subnet_test_id(1);
         let subnet_type = SubnetType::Application;
         let canister_id = canister_test_id(42);
         let execution_state = hypervisor
@@ -100,14 +97,13 @@ fn execute_canister_heartbeat_produces_heap_delta() {
             execution_state: Some(execution_state),
             scheduler_state: Default::default(),
         };
-        let (_, _, network_topology) = setup();
+        let network_topology = test_network_topology();
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
         let heartbeat_result = heartbeat::execute_heartbeat(
             canister,
             network_topology,
             execution_parameters,
-            subnet_id,
             subnet_type,
             mock_time(),
             &hypervisor,
@@ -125,7 +121,6 @@ fn test_non_existing_canister_heartbeat() {
     with_hypervisor(|hypervisor, tmp_path| {
         let wat = "(module)";
         let binary = wabt::wat2wasm(wat).unwrap();
-        let subnet_id = subnet_test_id(1);
         let subnet_type = SubnetType::Application;
         let canister_id = canister_test_id(42);
         let system_method = SystemMethod::CanisterStart;
@@ -144,14 +139,13 @@ fn test_non_existing_canister_heartbeat() {
             scheduler_state: Default::default(),
         };
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
-        let (_, _, network_topology) = setup();
+        let network_topology = test_network_topology();
         // Run the non-existing system method.
 
         let heartbeat_result = heartbeat::execute_heartbeat(
             canister,
             network_topology,
             execution_parameters,
-            subnet_id,
             subnet_type,
             mock_time(),
             &hypervisor,
@@ -174,7 +168,7 @@ fn test_non_existing_canister_heartbeat() {
 #[test]
 fn canister_heartbeat_doesnt_run_when_canister_is_stopped() {
     with_hypervisor(|hypervisor, _| {
-        let (_, _, network_topology) = setup();
+        let network_topology = test_network_topology();
         let canister = get_stopped_canister_on_system_subnet(canister_test_id(0));
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
@@ -182,7 +176,6 @@ fn canister_heartbeat_doesnt_run_when_canister_is_stopped() {
             canister,
             network_topology,
             execution_parameters,
-            subnet_test_id(1),
             SubnetType::System,
             mock_time(),
             &hypervisor,
@@ -201,7 +194,7 @@ fn canister_heartbeat_doesnt_run_when_canister_is_stopped() {
 #[test]
 fn canister_heartbeat_doesnt_run_when_canister_is_stopping() {
     with_hypervisor(|hypervisor, _| {
-        let (_, _, network_topology) = setup();
+        let network_topology = test_network_topology();
         let canister = get_stopping_canister_on_nns(canister_test_id(0));
         let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
 
@@ -209,7 +202,6 @@ fn canister_heartbeat_doesnt_run_when_canister_is_stopping() {
             canister,
             network_topology,
             execution_parameters,
-            subnet_test_id(1),
             SubnetType::System,
             mock_time(),
             &hypervisor,

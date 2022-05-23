@@ -874,7 +874,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             canister,
             network_topology,
             execution_parameters,
-            self.own_subnet_id,
             self.own_subnet_type,
             time,
             &self.hypervisor,

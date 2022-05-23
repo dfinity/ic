@@ -59,73 +59,43 @@ pub fn default_network_topology() -> NetworkTopology {
     make_network_topology(subnet_test_id(1), SubnetType::Application)
 }
 
-pub struct ApiTypeBuilder {
-    pub own_subnet_id: SubnetId,
-    pub own_subnet_type: SubnetType,
-    pub network_topology: Arc<NetworkTopology>,
-}
+pub struct ApiTypeBuilder;
 
 // Note some methods of the builder might be unused in different test crates
 #[allow(dead_code)]
 #[allow(clippy::new_without_default)]
 impl ApiTypeBuilder {
-    pub fn new() -> Self {
-        let own_subnet_id = subnet_test_id(1);
-        let own_subnet_type = SubnetType::Application;
-        let network_topology = Arc::new(make_network_topology(own_subnet_id, own_subnet_type));
-        Self {
-            own_subnet_id,
-            own_subnet_type,
-            network_topology,
-        }
-    }
-
-    pub fn build_update_api(self) -> ApiType {
+    pub fn build_update_api() -> ApiType {
         ApiType::update(
             mock_time(),
             vec![],
             Cycles::from(0),
             user_test_id(1).get(),
             CallContextId::from(1),
-            self.own_subnet_id,
-            self.own_subnet_type,
-            self.network_topology,
         )
     }
 
-    pub fn build_heartbeat_api(self) -> ApiType {
-        ApiType::heartbeat(
-            mock_time(),
-            CallContextId::from(1),
-            self.own_subnet_id,
-            self.own_subnet_type,
-            self.network_topology,
-        )
+    pub fn build_heartbeat_api() -> ApiType {
+        ApiType::heartbeat(mock_time(), CallContextId::from(1))
     }
 
-    pub fn build_reply_api(self, incoming_cycles: Cycles) -> ApiType {
+    pub fn build_reply_api(incoming_cycles: Cycles) -> ApiType {
         ApiType::reply_callback(
             mock_time(),
             vec![],
             incoming_cycles,
             CallContextId::new(1),
             false,
-            self.own_subnet_id,
-            self.own_subnet_type,
-            self.network_topology,
         )
     }
 
-    pub fn build_reject_api(self, reject_context: RejectContext) -> ApiType {
+    pub fn build_reject_api(reject_context: RejectContext) -> ApiType {
         ApiType::reject_callback(
             mock_time(),
             reject_context,
             Cycles::from(0),
             call_context_test_id(1),
             false,
-            self.own_subnet_id,
-            self.own_subnet_type,
-            self.network_topology,
         )
     }
 }

@@ -10,7 +10,7 @@ use ic_replicated_state::{
 };
 use ic_system_api::ApiType;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
-use ic_types::{Cycles, NumBytes, NumInstructions, SubnetId, Time};
+use ic_types::{Cycles, NumBytes, NumInstructions, Time};
 use std::sync::Arc;
 
 /// Holds the result of heartbeat execution.
@@ -127,7 +127,6 @@ pub fn execute_heartbeat(
     canister: CanisterState,
     network_topology: Arc<NetworkTopology>,
     execution_parameters: ExecutionParameters,
-    own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
     time: Time,
     hypervisor: &Hypervisor,
@@ -166,13 +165,7 @@ pub fn execute_heartbeat(
         .call_context_manager_mut()
         .unwrap()
         .new_call_context(CallOrigin::Heartbeat, Cycles::new(0), time);
-    let api_type = ApiType::heartbeat(
-        time,
-        call_context_id,
-        own_subnet_id,
-        own_subnet_type,
-        Arc::clone(&network_topology),
-    );
+    let api_type = ApiType::heartbeat(time, call_context_id);
     let (output, output_execution_state, output_system_state) = hypervisor.execute(
         api_type,
         system_state.clone(),

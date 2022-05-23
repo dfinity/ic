@@ -236,7 +236,7 @@ fn mint_all_cycles() {
         .with_subnet_type(SubnetType::System)
         .build();
 
-    let api_type = ApiTypeBuilder::new().build_update_api();
+    let api_type = ApiTypeBuilder::build_update_api();
     let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
     let balance_before = api.ic0_canister_cycle_balance().unwrap();
 
@@ -262,7 +262,7 @@ fn mint_cycles_large_value() {
         Cycles::from(1_000_000_000_000_000_u128),
     );
 
-    let api_type = ApiTypeBuilder::new().build_update_api();
+    let api_type = ApiTypeBuilder::build_update_api();
     let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
     let balance_before = api.ic0_canister_cycle_balance().unwrap();
 
@@ -280,7 +280,7 @@ fn mint_cycles_fails_caller_not_on_nns() {
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
-        ApiTypeBuilder::new().build_update_api(),
+        ApiTypeBuilder::build_update_api(),
         &system_state,
         cycles_account_manager,
     );
@@ -299,7 +299,7 @@ fn call_increases_cycles_consumed_metric() {
     let mut system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
-        ApiTypeBuilder::new().build_update_api(),
+        ApiTypeBuilder::build_update_api(),
         &system_state,
         cycles_account_manager,
     );

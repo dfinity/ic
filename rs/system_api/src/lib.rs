@@ -17,7 +17,7 @@ use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::ENFORCE_MESSAGE_MEMORY_USAGE, memory_required_to_push_request,
-    page_map::PAGE_SIZE, Memory, NetworkTopology, NumWasmPages, PageIndex, StateError,
+    page_map::PAGE_SIZE, Memory, NumWasmPages, PageIndex, StateError,
 };
 use ic_sys::PageBytes;
 use ic_types::{
@@ -105,9 +105,6 @@ pub enum ResponseStatus {
 pub enum NonReplicatedQueryKind {
     Stateful {
         call_context_id: CallContextId,
-        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-        network_topology: Arc<NetworkTopology>,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
@@ -155,11 +152,6 @@ pub enum ApiType {
         #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
         response_status: ResponseStatus,
-        own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
-        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-        network_topology: Arc<NetworkTopology>,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
@@ -205,11 +197,6 @@ pub enum ApiType {
         #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
         response_status: ResponseStatus,
-        own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
-        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-        network_topology: Arc<NetworkTopology>,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
@@ -226,11 +213,6 @@ pub enum ApiType {
         #[serde(with = "serde_bytes")]
         response_data: Vec<u8>,
         response_status: ResponseStatus,
-        own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
-        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-        network_topology: Arc<NetworkTopology>,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
@@ -258,11 +240,6 @@ pub enum ApiType {
     Heartbeat {
         time: Time,
         call_context_id: CallContextId,
-        own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
-        #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-        #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-        network_topology: Arc<NetworkTopology>,
         /// Optional outgoing request under construction. If `None` no outgoing
         /// request is currently under construction.
         outgoing_request: Option<RequestInPrep>,
@@ -292,19 +269,10 @@ impl ApiType {
         }
     }
 
-    pub fn heartbeat(
-        time: Time,
-        call_context_id: CallContextId,
-        own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
-        network_topology: Arc<NetworkTopology>,
-    ) -> Self {
+    pub fn heartbeat(time: Time, call_context_id: CallContextId) -> Self {
         Self::Heartbeat {
             time,
             call_context_id,
-            own_subnet_id,
-            own_subnet_type,
-            network_topology,
             outgoing_request: None,
         }
     }
@@ -316,9 +284,6 @@ impl ApiType {
         incoming_cycles: Cycles,
         caller: PrincipalId,
         call_context_id: CallContextId,
-        own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
-        network_topology: Arc<NetworkTopology>,
     ) -> Self {
         Self::Update {
             time,
@@ -328,9 +293,6 @@ impl ApiType {
             call_context_id,
             response_data: vec![],
             response_status: ResponseStatus::NotRepliedYet,
-            own_subnet_id,
-            own_subnet_type,
-            network_topology,
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
         }
@@ -382,9 +344,6 @@ impl ApiType {
         incoming_cycles: Cycles,
         call_context_id: CallContextId,
         replied: bool,
-        own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
-        network_topology: Arc<NetworkTopology>,
     ) -> Self {
         Self::ReplyCallback {
             time,
@@ -397,9 +356,6 @@ impl ApiType {
             } else {
                 ResponseStatus::NotRepliedYet
             },
-            own_subnet_id,
-            own_subnet_type,
-            network_topology,
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
         }
@@ -412,9 +368,6 @@ impl ApiType {
         incoming_cycles: Cycles,
         call_context_id: CallContextId,
         replied: bool,
-        own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
-        network_topology: Arc<NetworkTopology>,
     ) -> Self {
         Self::RejectCallback {
             time,
@@ -427,9 +380,6 @@ impl ApiType {
             } else {
                 ResponseStatus::NotRepliedYet
             },
-            own_subnet_id,
-            own_subnet_type,
-            network_topology,
             outgoing_request: None,
             max_reply_size: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
         }
@@ -1949,34 +1899,22 @@ impl SystemApi for SystemApiImpl {
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_perform")),
             ApiType::Update {
                 call_context_id,
-                own_subnet_id,
-                own_subnet_type,
                 outgoing_request,
-                network_topology,
                 ..
             }
             | ApiType::Heartbeat {
                 call_context_id,
-                own_subnet_id,
-                own_subnet_type,
                 outgoing_request,
-                network_topology,
                 ..
             }
             | ApiType::ReplyCallback {
                 call_context_id,
-                own_subnet_id,
-                own_subnet_type,
                 outgoing_request,
-                network_topology,
                 ..
             }
             | ApiType::RejectCallback {
                 call_context_id,
-                own_subnet_id,
-                own_subnet_type,
                 outgoing_request,
-                network_topology,
                 ..
             } => {
                 let req_in_prep = outgoing_request.take().ok_or_else(|| {
@@ -1986,11 +1924,8 @@ impl SystemApi for SystemApiImpl {
                 })?;
 
                 let req = into_request(
-                    network_topology,
                     req_in_prep,
                     *call_context_id,
-                    *own_subnet_id,
-                    *own_subnet_type,
                     &mut self.sandbox_safe_system_state,
                     &self.log,
                 )?;
@@ -1998,11 +1933,9 @@ impl SystemApi for SystemApiImpl {
                 self.push_output_request(req)
             }
             ApiType::NonReplicatedQuery {
-                own_subnet_id,
                 query_kind:
                     NonReplicatedQueryKind::Stateful {
                         call_context_id,
-                        network_topology,
                         outgoing_request,
                     },
                 ..
@@ -2014,15 +1947,8 @@ impl SystemApi for SystemApiImpl {
                 })?;
 
                 let req = into_request(
-                    network_topology,
                     req_in_prep,
                     *call_context_id,
-                    *own_subnet_id,
-                    // The subnet type is only used to prevent sending cycles
-                    // from Application to VerifiedApplication subnets. But we
-                    // can't send cycles in this context anyway, so there's
-                    // nothing wrong with fixing the type as `Application`.
-                    SubnetType::Application,
                     &mut self.sandbox_safe_system_state,
                     &self.log,
                 )?;
