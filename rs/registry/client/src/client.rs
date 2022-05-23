@@ -62,12 +62,14 @@ impl RegistryClientImpl {
         self.poll_once()?;
         let cancelled = Arc::clone(&self.cancelled);
         let self_ = self.clone();
-        tokio::spawn(async move {
-            while !cancelled.load(Ordering::Relaxed) {
-                tokio::time::sleep(POLLING_PERIOD).await;
-                if let Ok(()) = self_.poll_once() {}
-            }
-        });
+        let _ = std::thread::Builder::new()
+            .name("RegistryClient_Thread".to_string())
+            .spawn(move || {
+                while !cancelled.load(Ordering::Relaxed) {
+                    std::thread::sleep(POLLING_PERIOD);
+                    if let Ok(()) = self_.poll_once() {}
+                }
+            });
 
         Ok(())
     }
@@ -494,8 +496,8 @@ mod tests {
         assert!(get("B2", 7).is_err());
     }
 
-    #[tokio::test]
-    async fn start_polling_actually_polls_data_provider() {
+    #[test]
+    fn start_polling_actually_polls_data_provider() {
         let data_provider = Arc::new(FakeDataProvider {
             poll_counter: Arc::new(AtomicUsize::new(0)),
         });
@@ -504,7 +506,7 @@ mod tests {
         if let Err(e) = registry.fetch_and_start_polling() {
             panic!("fetch_and_start_polling failed: {}", e);
         }
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        std::thread::sleep(Duration::from_secs(1));
         std::mem::drop(registry);
 
         assert!(data_provider.poll_counter.load(Ordering::Relaxed) > 0);
