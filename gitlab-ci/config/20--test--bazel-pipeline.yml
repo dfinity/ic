@@ -8,6 +8,9 @@ bazel-test-all:
     - ubuntu
     # Run in ZH since BuildFarm is in ZH
     - zh
+  image:
+    # use the docker image without nix-shell as docker-run uses it too.
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2022-05-18-de22ae277-f8f79c70919036eca7679e3160aa5af3b2ed63da"
   stage: test
   needs: []
   artifacts:
