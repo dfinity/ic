@@ -1,16 +1,14 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
 use crate::{
-    common::{cbor_response, make_plaintext_response, make_response_on_validation_error},
+    common::{cbor_response, make_plaintext_response},
     types::{to_legacy_request_type, ApiReqType},
+    validator_executor::ValidatorExecutor,
     HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
 };
 use futures_util::FutureExt;
 use hyper::{Body, Response, StatusCode};
-use ic_interfaces::{
-    crypto::IngressSigVerifier, execution_environment::QueryExecutionService,
-    registry::RegistryClient,
-};
+use ic_interfaces::{execution_environment::QueryExecutionService, registry::RegistryClient};
 use ic_logger::{trace, ReplicaLogger};
 use ic_types::{
     malicious_flags::MaliciousFlags,
@@ -18,9 +16,7 @@ use ic_types::{
         CertificateDelegation, HttpQueryContent, HttpRequest, HttpRequestEnvelope,
         SignedRequestBytes, UserQuery,
     },
-    time::current_time,
 };
-use ic_validator::get_authorized_canisters;
 use std::convert::TryFrom;
 use std::future::Future;
 use std::pin::Pin;
@@ -34,7 +30,7 @@ pub(crate) struct QueryService {
     metrics: HttpHandlerMetrics,
     health_status: Arc<RwLock<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-    validator: Arc<dyn IngressSigVerifier + Send + Sync>,
+    validator_executor: ValidatorExecutor,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: QueryExecutionService,
     malicious_flags: MaliciousFlags,
@@ -47,7 +43,7 @@ impl QueryService {
         metrics: HttpHandlerMetrics,
         health_status: Arc<RwLock<ReplicaHealthStatus>>,
         delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-        validator: Arc<dyn IngressSigVerifier + Send + Sync>,
+        validator_executor: ValidatorExecutor,
         registry_client: Arc<dyn RegistryClient>,
         query_execution_service: QueryExecutionService,
         malicious_flags: MaliciousFlags,
@@ -57,7 +53,7 @@ impl QueryService {
             metrics,
             health_status,
             delegation_from_nns,
-            validator,
+            validator_executor,
             registry_client,
             query_execution_service,
             malicious_flags,
@@ -119,34 +115,58 @@ impl Service<Vec<u8>> for QueryService {
                 return Box::pin(async move { Ok(res) });
             }
         };
-        let query = request.content();
 
-        match get_authorized_canisters(
-            &request,
-            self.validator.as_ref(),
-            current_time(),
-            self.registry_client.get_latest_version(),
-            &self.malicious_flags,
-        ) {
-            Ok(targets) => {
-                if !targets.contains(&query.receiver) {
-                    let res = make_plaintext_response(StatusCode::FORBIDDEN, "".to_string());
-                    return Box::pin(async move { Ok(res) });
+        // In case the inner service has state that's driven to readiness and
+        // not tracked by clones (such as `Buffer`), pass the version we have
+        // already called `poll_ready` on into the future, and leave its clone
+        // behind.
+        //
+        // The types implementing the Service trait are not necessary thread-safe.
+        // So the unless the caller is sure that the service implementation is
+        // thread-safe we must make sure 'poll_ready' is always called before 'call'
+        // on the same object. Hence if 'poll_ready' is called and not tracked by
+        // the 'Clone' implementation the following sequence of events may panic.
+        //
+        //  s1.call_ready()
+        //  s2 = s1.clone()
+        //  s2.call()
+        //
+        // NOTE: Buffer::Clone does not track readiness across clones.
+
+        let new_query_execution_service = self.query_execution_service.clone();
+        // Pass old query execution service to future that has already been driven to readiness (called ready() on).
+        // Replace query service stored in struct with cloned verison of query_service.
+        let mut old_query_execution_service = std::mem::replace(
+            &mut self.query_execution_service,
+            new_query_execution_service,
+        );
+
+        let registry_client = self.registry_client.get_latest_version();
+        let malicious_flags = self.malicious_flags.clone();
+        let validator_executor = self.validator_executor.clone();
+        Box::pin(async move {
+            match validator_executor
+                .get_authorized_canisters(&request, registry_client, &malicious_flags)
+                .await
+            {
+                Ok(targets) => {
+                    if !targets.contains(&request.content().receiver) {
+                        let res = make_plaintext_response(StatusCode::FORBIDDEN, "".to_string());
+                        return Ok(res);
+                    }
                 }
-            }
-            Err(err) => {
-                let res = make_response_on_validation_error(request.id(), err, &self.log);
-                return Box::pin(async move { Ok(res) });
-            }
-        };
-
-        Box::pin(
-            self.query_execution_service
-                .call((query.clone(), delegation_from_nns))
+                Err(http_err) => {
+                    let res = make_plaintext_response(http_err.status, http_err.message);
+                    return Ok(res);
+                }
+            };
+            old_query_execution_service
+                .call((request.take_content(), delegation_from_nns))
                 .map(|result| {
                     let v = result?;
                     Ok(cbor_response(&v))
-                }),
-        )
+                })
+                .await
+        })
     }
 }

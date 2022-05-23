@@ -17,6 +17,7 @@ mod read_state;
 mod state_reader_executor;
 mod status;
 mod types;
+mod validator_executor;
 
 use crate::{
     body::BodyReceiverLayer,
@@ -32,6 +33,7 @@ use crate::{
     state_reader_executor::StateReaderExecutor,
     status::StatusService,
     types::*,
+    validator_executor::ValidatorExecutor,
 };
 use hyper::{server::conn::Http, Body, Client, Request, Response, StatusCode};
 use ic_async_utils::ObservableCountingSemaphore;
@@ -156,7 +158,7 @@ struct HttpHandler {
     subnet_type: SubnetType,
     state_reader_executor: StateReaderExecutor,
     registry_client: Arc<dyn RegistryClient>,
-    validator: Arc<dyn IngressSigVerifier + Send + Sync>,
+    validator_executor: ValidatorExecutor,
 
     // External services  wrapped by tower::Buffer. It is safe to be
     // cloned and passed to a single-threaded context.
@@ -294,7 +296,7 @@ pub async fn start_server(
         subnet_type,
         state_reader_executor: StateReaderExecutor::new(state_reader.clone()),
         registry_client,
-        validator: ingress_verifier,
+        validator_executor: ValidatorExecutor::new(ingress_verifier, log.clone()),
         query_execution_service,
         ingress_sender,
         ingress_filter,
@@ -561,7 +563,7 @@ async fn make_router(
                 metrics.clone(),
                 Arc::clone(&http_handler.health_status),
                 Arc::clone(&http_handler.delegation_from_nns),
-                Arc::clone(&http_handler.validator),
+                http_handler.validator_executor.clone(),
                 Arc::clone(&http_handler.registry_client),
                 http_handler.query_execution_service.clone(),
                 http_handler.malicious_flags.clone(),
@@ -596,7 +598,7 @@ async fn make_router(
                 Arc::clone(&http_handler.health_status),
                 Arc::clone(&http_handler.delegation_from_nns),
                 http_handler.state_reader_executor.clone(),
-                Arc::clone(&http_handler.validator),
+                http_handler.validator_executor.clone(),
                 Arc::clone(&http_handler.registry_client),
                 http_handler.malicious_flags.clone(),
             )),
@@ -609,7 +611,7 @@ async fn make_router(
                 metrics.clone(),
                 http_handler.subnet_id,
                 Arc::clone(&http_handler.registry_client),
-                Arc::clone(&http_handler.validator),
+                http_handler.validator_executor.clone(),
                 http_handler.ingress_sender,
                 http_handler.ingress_filter,
                 http_handler.malicious_flags.clone(),

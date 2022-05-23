@@ -1,3 +1,4 @@
+use crate::HttpError;
 use hyper::{Body, HeaderMap, Response, StatusCode};
 use ic_crypto_tree_hash::Path;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label};
@@ -145,23 +146,28 @@ pub(crate) fn empty_response() -> Response<Body> {
     response
 }
 
-pub(crate) fn make_response_on_validation_error(
+pub(crate) fn validation_error_to_http_error(
     message_id: MessageId,
     err: RequestValidationError,
     log: &ReplicaLogger,
-) -> Response<Body> {
+) -> HttpError {
     match err {
-        RequestValidationError::InvalidIngressExpiry(msg)
-        | RequestValidationError::InvalidDelegationExpiry(msg) => {
-            make_plaintext_response(StatusCode::BAD_REQUEST, msg)
-        }
+        RequestValidationError::InvalidIngressExpiry(message)
+        | RequestValidationError::InvalidDelegationExpiry(message) => HttpError {
+            status: StatusCode::BAD_REQUEST,
+            message,
+        },
         _ => {
             let message = format!(
                 "Failed to authenticate request {} due to: {}",
                 message_id, err
             );
-            info!(log, "{}", message);
-            make_plaintext_response(StatusCode::FORBIDDEN, message)
+            info!(log, "Unexpected http request validation error: {}", message);
+
+            HttpError {
+                status: StatusCode::FORBIDDEN,
+                message,
+            }
         }
     }
 }

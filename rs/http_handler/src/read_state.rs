@@ -1,16 +1,15 @@
 //! Module that deals with requests to /api/v2/canister/.../read_state
 
 use crate::{
-    common::{
-        cbor_response, into_cbor, make_plaintext_response, make_response_on_validation_error,
-    },
+    common::{cbor_response, into_cbor, make_plaintext_response},
     state_reader_executor::StateReaderExecutor,
     types::{to_legacy_request_type, ApiReqType},
+    validator_executor::ValidatorExecutor,
     HttpError, HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
 };
 use hyper::{Body, Response, StatusCode};
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path};
-use ic_interfaces::{crypto::IngressSigVerifier, registry::RegistryClient};
+use ic_interfaces::registry::RegistryClient;
 use ic_logger::{trace, ReplicaLogger};
 use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
 use ic_types::{
@@ -20,10 +19,9 @@ use ic_types::{
         HttpRequest, HttpRequestEnvelope, MessageId, ReadState, SignedRequestBytes,
         EXPECTED_MESSAGE_ID_LENGTH,
     },
-    time::current_time,
     CanisterId, UserId,
 };
-use ic_validator::{get_authorized_canisters, CanisterIdSet};
+use ic_validator::CanisterIdSet;
 use std::convert::TryFrom;
 use std::future::Future;
 use std::pin::Pin;
@@ -40,7 +38,7 @@ pub(crate) struct ReadStateService {
     health_status: Arc<RwLock<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     state_reader_executor: StateReaderExecutor,
-    validator: Arc<dyn IngressSigVerifier + Send + Sync>,
+    validator_executor: ValidatorExecutor,
     registry_client: Arc<dyn RegistryClient>,
     malicious_flags: MaliciousFlags,
 }
@@ -53,7 +51,7 @@ impl ReadStateService {
         health_status: Arc<RwLock<ReplicaHealthStatus>>,
         delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
         state_reader_executor: StateReaderExecutor,
-        validator: Arc<dyn IngressSigVerifier + Send + Sync>,
+        validator_executor: ValidatorExecutor,
         registry_client: Arc<dyn RegistryClient>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
@@ -63,7 +61,7 @@ impl ReadStateService {
             health_status,
             delegation_from_nns,
             state_reader_executor,
-            validator,
+            validator_executor,
             registry_client,
             malicious_flags,
         }
@@ -124,20 +122,6 @@ impl Service<Vec<u8>> for ReadStateService {
                 return Box::pin(async move { Ok(res) });
             }
         };
-        let targets = match get_authorized_canisters(
-            &request,
-            self.validator.as_ref(),
-            current_time(),
-            self.registry_client.get_latest_version(),
-            &self.malicious_flags,
-        ) {
-            Ok(targets) => targets,
-            Err(err) => {
-                let res = make_response_on_validation_error(request.id(), err, &self.log);
-                return Box::pin(async move { Ok(res) });
-            }
-        };
-
         // Collect requested path.
         let read_state = request.content().clone();
         let mut paths: Vec<Path> = read_state.paths.clone();
@@ -146,9 +130,21 @@ impl Service<Vec<u8>> for ReadStateService {
         paths.push(Path::from(Label::from("time")));
 
         let labeled_tree = sparse_labeled_tree_from_paths(&mut paths);
-
+        let registry_client = self.registry_client.get_latest_version();
+        let malicious_flags = self.malicious_flags.clone();
         let state_reader_executor = self.state_reader_executor.clone();
+        let validator_executor = self.validator_executor.clone();
         Box::pin(async move {
+            let targets = match validator_executor
+                .get_authorized_canisters(&request, registry_client, &malicious_flags)
+                .await
+            {
+                Ok(targets) => targets,
+                Err(http_err) => {
+                    let res = make_plaintext_response(http_err.status, http_err.message);
+                    return Ok(res);
+                }
+            };
             // Verify authorization for requested paths.
             if let Err(HttpError { status, message }) = verify_paths(
                 &state_reader_executor,
