@@ -5,9 +5,8 @@ use ic_interfaces::execution_environment::{
     AvailableMemory, ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, SubnetTopology};
+use ic_replicated_state::{Memory, NumWasmPages};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::DefaultOutOfInstructionsHandler;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
@@ -15,19 +14,17 @@ use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     mock_time,
     state::SystemStateBuilder,
-    types::ids::{call_context_test_id, subnet_test_id, user_test_id},
+    types::ids::{call_context_test_id, user_test_id},
     with_test_replica_logger,
 };
 use ic_types::{
     methods::{FuncRef, WasmMethod},
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
+    ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 use lazy_static::lazy_static;
-use maplit::btreemap;
 use proptest::prelude::*;
 use std::collections::BTreeSet;
-use std::convert::TryFrom;
 use std::sync::Arc;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
@@ -44,23 +41,6 @@ fn test_api_for_update(
     subnet_type: SubnetType,
 ) -> SystemApiImpl {
     let caller = caller.unwrap_or_else(|| user_test_id(24).get());
-    let subnet_id = subnet_test_id(1);
-    let routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
-        })
-        .unwrap(),
-    );
-    let network_topology = Arc::new(NetworkTopology {
-        routing_table,
-        subnets: btreemap! {
-            subnet_id => SubnetTopology {
-                subnet_type,
-                ..SubnetTopology::default()
-            }
-        },
-        ..NetworkTopology::default()
-    });
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = Arc::new(
         CyclesAccountManagerBuilder::new()
@@ -78,9 +58,6 @@ fn test_api_for_update(
             Cycles::from(0),
             caller,
             call_context_test_id(13),
-            subnet_id,
-            subnet_type,
-            network_topology,
         ),
         static_system_state,
         canister_current_memory_usage,

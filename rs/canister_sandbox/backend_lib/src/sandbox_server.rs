@@ -123,7 +123,7 @@ mod tests {
         AvailableMemory, ExecutionMode, ExecutionParameters, HypervisorError,
     };
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{Global, NetworkTopology, NumWasmPages, PageIndex, PageMap};
+    use ic_replicated_state::{Global, NumWasmPages, PageIndex, PageMap};
     use ic_system_api::{
         sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
         ApiType,
@@ -134,7 +134,7 @@ mod tests {
         messages::CallContextId,
         methods::{FuncRef, WasmMethod},
         time::Time,
-        ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId,
+        ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     };
     use mockall::*;
     use std::collections::BTreeMap;
@@ -203,9 +203,6 @@ mod tests {
                 Cycles::from(0),
                 PrincipalId::try_from([0].as_ref()).unwrap(),
                 CallContextId::from(0),
-                SubnetId::from(PrincipalId::new_subnet_test_id(0)),
-                SubnetType::Application,
-                Arc::new(NetworkTopology::default()),
             ),
             globals,
             canister_current_memory_usage: NumBytes::from(0),

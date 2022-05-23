@@ -1,12 +1,10 @@
 use crate::{sandbox_safe_system_state::SandboxSafeSystemState, valid_subslice};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::ReplicaLogger;
-use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::NetworkTopology;
 use ic_types::{
     messages::{CallContextId, Request},
     methods::{Callback, WasmClosure},
-    CanisterId, Cycles, NumBytes, PrincipalId, SubnetId,
+    CanisterId, Cycles, NumBytes, PrincipalId,
 };
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -146,7 +144,6 @@ impl RequestInPrep {
 /// Turns a `RequestInPrep` into a `Request`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn into_request(
-    _network_topology: &NetworkTopology,
     RequestInPrep {
         sender,
         callee,
@@ -160,8 +157,6 @@ pub(crate) fn into_request(
         multiplier_max_size_local_subnet,
     }: RequestInPrep,
     call_context_id: CallContextId,
-    _own_subnet_id: SubnetId,
-    _own_subnet_type: SubnetType,
     sandbox_safe_system_state: &mut SandboxSafeSystemState,
     _logger: &ReplicaLogger,
 ) -> HypervisorResult<Request> {

@@ -213,9 +213,6 @@ fn execute_update_method(
         incoming_cycles,
         *req.sender(),
         call_context_id,
-        hypervisor.subnet_id(),
-        hypervisor.subnet_type(),
-        network_topology.clone(),
     );
 
     let (output, output_execution_state, output_system_state) = hypervisor.execute(

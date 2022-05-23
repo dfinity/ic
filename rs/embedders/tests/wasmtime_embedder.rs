@@ -2,19 +2,14 @@ use ic_embedders::wasmtime_embedder::system_api_complexity;
 use ic_interfaces::execution_environment::SystemApi;
 use ic_replicated_state::Global;
 use ic_test_utilities::{
-    mock_time,
-    types::ids::{subnet_test_id, user_test_id},
-    wasmtime_instance::WasmtimeInstanceBuilder,
+    mock_time, types::ids::user_test_id, wasmtime_instance::WasmtimeInstanceBuilder,
 };
 use ic_types::methods::{FuncRef, WasmMethod};
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-
     use ic_interfaces::execution_environment::HypervisorError;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::NetworkTopology;
     use ic_test_utilities::wasmtime_instance::DEFAULT_NUM_INSTRUCTIONS;
     use ic_types::PrincipalId;
 
@@ -288,9 +283,6 @@ mod test {
                 0.into(),
                 PrincipalId::new_user_test_id(0),
                 0.into(),
-                subnet_test_id(0),
-                SubnetType::Application,
-                Arc::new(NetworkTopology::default()),
             ))
             .build();
 
@@ -336,9 +328,6 @@ mod test {
                 0.into(),
                 PrincipalId::new_user_test_id(0),
                 0.into(),
-                subnet_test_id(0),
-                subnet_type,
-                Arc::new(NetworkTopology::default()),
             ))
             .with_num_instructions((expected_cpu_complexity - 1).into())
             .with_subnet_type(subnet_type)
@@ -369,9 +358,6 @@ mod test {
                 0.into(),
                 PrincipalId::new_user_test_id(0),
                 0.into(),
-                subnet_test_id(0),
-                subnet_type,
-                Arc::new(NetworkTopology::default()),
             ))
             .with_num_instructions((expected_cpu_complexity - 1).into())
             .with_subnet_type(subnet_type)

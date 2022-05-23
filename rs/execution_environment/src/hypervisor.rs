@@ -99,13 +99,10 @@ pub struct Hypervisor {
 }
 
 impl Hypervisor {
-    pub(crate) fn subnet_id(&self) -> SubnetId {
-        self.own_subnet_id
-    }
-
     pub(crate) fn subnet_type(&self) -> SubnetType {
         self.own_subnet_type
     }
+
     /// Execute an update call.
     ///
     /// Returns:
@@ -191,9 +188,6 @@ impl Hypervisor {
             incoming_cycles,
             *request.sender(),
             call_context_id,
-            self.own_subnet_id,
-            self.own_subnet_type,
-            Arc::clone(&network_topology),
         );
         let (output, output_execution_state, output_system_state) = self.execute(
             api_type,
@@ -304,7 +298,6 @@ impl Hypervisor {
                     QueryKind::Pure => NonReplicatedQueryKind::Pure,
                     QueryKind::Stateful => NonReplicatedQueryKind::Stateful {
                         call_context_id,
-                        network_topology: Arc::clone(&network_topology),
                         outgoing_request: None,
                     },
                 };
@@ -503,9 +496,6 @@ impl Hypervisor {
                 incoming_cycles,
                 callback.call_context_id,
                 call_responded,
-                self.own_subnet_id,
-                self.own_subnet_type,
-                Arc::clone(&network_topology),
             ),
             Payload::Reject(context) => ApiType::reject_callback(
                 time,
@@ -513,9 +503,6 @@ impl Hypervisor {
                 incoming_cycles,
                 callback.call_context_id,
                 call_responded,
-                self.own_subnet_id,
-                self.own_subnet_type,
-                Arc::clone(&network_topology),
             ),
         };
 

@@ -41,7 +41,7 @@ use ic_types::{
     messages::{RejectContext, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{FuncRef, WasmClosure, WasmMethod},
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, SubnetId, Time, UserId,
+    PrincipalId, Time, UserId,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -88,7 +88,7 @@ pub fn execution_parameters(
     )
 }
 
-pub fn setup() -> (SubnetId, SubnetType, Arc<NetworkTopology>) {
+pub fn test_network_topology() -> Arc<NetworkTopology> {
     let subnet_id = subnet_test_id(1);
     let subnet_id_2 = subnet_test_id(2);
     let subnet_type = SubnetType::Application;
@@ -99,7 +99,7 @@ pub fn setup() -> (SubnetId, SubnetType, Arc<NetworkTopology>) {
         })
             .unwrap(),
     );
-    let network_topology = Arc::new(NetworkTopology {
+    Arc::new(NetworkTopology {
         routing_table,
         subnets: btreemap! {
             subnet_id => SubnetTopology {
@@ -112,8 +112,7 @@ pub fn setup() -> (SubnetId, SubnetType, Arc<NetworkTopology>) {
             }
         },
         ..NetworkTopology::default()
-    });
-    (subnet_id, subnet_type, network_topology)
+    })
 }
 
 pub fn with_hypervisor<F, R>(f: F) -> R
@@ -146,30 +145,22 @@ fn test_caller() -> PrincipalId {
 
 fn test_api_type_for_update(caller: Option<PrincipalId>, payload: Vec<u8>) -> ApiType {
     let caller = caller.unwrap_or_else(|| user_test_id(24).get());
-    let (subnet_id, subnet_type, network_topology) = setup();
     ApiType::update(
         mock_time(),
         payload,
         Cycles::zero(),
         caller,
         call_context_test_id(13),
-        subnet_id,
-        subnet_type,
-        network_topology,
     )
 }
 
 fn test_api_type_for_reject(reject_context: RejectContext) -> ApiType {
-    let (subnet_id, subnet_type, network_topology) = setup();
     ApiType::reject_callback(
         mock_time(),
         reject_context,
         Cycles::zero(),
         call_context_test_id(13),
         false,
-        subnet_id,
-        subnet_type,
-        network_topology,
     )
 }
 
@@ -237,7 +228,7 @@ fn execute_update_with_cycles_memory_time(
         .receiver(receiver)
         .build();
 
-    let (_, _, network_topology) = setup();
+    let network_topology = test_network_topology();
     let execution_parameters = execution_parameters(&canister, instructions_limit);
     let (canister, num_instructions_left, action, heap_delta) = hypervisor.execute_update(
         canister,
@@ -280,7 +271,7 @@ fn execute_update_for_request(
         .payment(payment)
         .build();
 
-    let (_, _, network_topology) = setup();
+    let network_topology = test_network_topology();
     let execution_parameters = execution_parameters(&canister, instructions_limit);
     let (canister, num_instructions_left, action, _) = hypervisor.execute_update(
         canister,
@@ -351,7 +342,7 @@ fn test_function_not_found_error() {
         SystemStateBuilder::default().build(),
         wast,
         FuncRef::UpdateClosure(WasmClosure::new(func_idx, 1)),
-        &setup().2,
+        &test_network_topology(),
     );
     assert_eq!(
         wasm_result,
@@ -375,7 +366,7 @@ fn test_table_function_unexpected_signature() {
                   (data (i32.const 0) "table!")
                 )"#,
         FuncRef::UpdateClosure(WasmClosure::new(0, 1)),
-        &setup().2,
+        &test_network_topology(),
     );
     assert_eq!(
         wasm_result,
@@ -401,7 +392,7 @@ fn test_func_ref_call_by_index() {
                   (data (i32.const 0) "table!")
             )"#,
         FuncRef::UpdateClosure(WasmClosure::new(0, 0)),
-        &setup().2,
+        &test_network_topology(),
     );
     assert_eq!(
         wasm_result,
@@ -1217,7 +1208,7 @@ fn sys_api_call_arg_data_size_fail() {
                   (func (;1;) (call 0) drop)
                   (export "canister_update test" (func 1)))"#,
         test_func_ref(),
-        &setup().2,
+        &test_network_topology(),
     );
     let err = wasm_result.unwrap_err();
     assert_eq!(
@@ -1366,7 +1357,7 @@ fn test_execute_query_msg_caller() {
             None,
             mock_time(),
             execution_parameters.clone(),
-            &setup().2,
+            &test_network_topology(),
         );
         assert_eq!(result, Ok(Some(WasmResult::Reply(id.get().into_vec()))));
 
@@ -1380,7 +1371,7 @@ fn test_execute_query_msg_caller() {
             None,
             mock_time(),
             execution_parameters,
-            &setup().2,
+            &test_network_topology(),
         );
         assert_eq!(result, Ok(Some(WasmResult::Reply(id.get().into_vec()))));
     });
@@ -1405,7 +1396,7 @@ fn sys_api_call_arg_data_copy_fail() {
                   (memory 1)
                   (export "canister_update test" (func $test)))"#,
         test_func_ref(),
-        &setup().2,
+        &test_network_topology(),
     );
     assert_eq!(
         wasm_result,
@@ -1483,7 +1474,7 @@ fn test_msg_caller_size_in_reject() {
                   (export "memory" (memory 0))
                   (export "canister_update test" (func $test)))"#,
         test_func_ref(),
-        &setup().2,
+        &test_network_topology(),
     );
     assert_eq!(
         wasm_result,
@@ -1513,7 +1504,7 @@ fn test_msg_caller_copy_in_reject() {
                   (export "memory" (memory 0))
                   (export "canister_update test" (func $test)))"#,
         test_func_ref(),
-        &setup().2,
+        &test_network_topology(),
     );
     assert_eq!(
         wasm_result,
@@ -1571,7 +1562,7 @@ fn sys_api_call_reject_code() {
                     end)
                   (export "canister_update test" (func 1)))"#,
         test_func_ref(),
-        &setup().2,
+        &test_network_topology(),
     );
     wasm_result.unwrap();
 }
@@ -1601,7 +1592,7 @@ fn sys_api_call_reject_code_outside_reject_callback() {
                     end)
                   (export "canister_update test" (func 1)))"#,
         test_func_ref(),
-        &setup().2,
+        &test_network_topology(),
     );
     wasm_result.unwrap();
 }
@@ -1633,7 +1624,7 @@ fn sys_api_call_reject_msg_size() {
               (export "memory" (memory $memory))
               (export "canister_update test" (func 1)))"#,
         test_func_ref(),
-        &setup().2,
+        &test_network_topology(),
     );
     wasm_result.unwrap();
 }
@@ -1708,7 +1699,7 @@ fn sys_api_call_reject_msg_copy() {
         SystemStateBuilder::default().build(),
         REJECT_MSG_COPY_WAT,
         test_func_ref(),
-        &setup().2,
+        &test_network_topology(),
     );
     match wasm_result {
         Ok(Some(WasmResult::Reply(v))) => assert_eq!(&b"xxxxrejected"[..], &v[..]),
@@ -1749,7 +1740,7 @@ fn sys_api_call_reject_msg_copy_called_with_length_that_exceeds_message_length()
         SystemStateBuilder::default().build(),
         REJECT_MSG_COPY_WAT,
         test_func_ref(),
-        &setup().2,
+        &test_network_topology(),
     );
     let err = wasm_result.unwrap_err();
     assert_eq!(
@@ -2693,7 +2684,7 @@ fn changes_to_stable_memory_in_canister_init_are_rolled_back_on_failure() {
                 EMPTY_PAYLOAD.as_slice(),
                 mock_time(),
                 execution_parameters,
-                &setup().2,
+                &test_network_topology(),
             )
         },
     );
@@ -2709,7 +2700,7 @@ fn changes_to_stable_memory_in_canister_pre_upgrade_are_rolled_back_on_failure()
                 test_caller(),
                 mock_time(),
                 execution_parameters,
-                &setup().2,
+                &test_network_topology(),
             )
         },
     )
@@ -2726,7 +2717,7 @@ fn changes_to_stable_memory_in_canister_post_upgrade_are_rolled_back_on_failure(
                 EMPTY_PAYLOAD.as_slice(),
                 mock_time(),
                 execution_parameters,
-                &setup().2,
+                &test_network_topology(),
             )
         },
     )
