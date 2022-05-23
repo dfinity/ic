@@ -270,6 +270,19 @@ impl IDkgTranscriptInternal {
     }
 }
 
+/// Reconstruct a secret share from a set of openings
+///
+/// # Arguments:
+/// * `dealing` for which we want to reconstruct the secret share.
+/// * `openings` provided to compute the secret shares.
+/// * `share_index` index of the receiver for which we are trying to recompute the secret share.
+///
+/// # Errors:
+/// * `InsufficientOpenings` if the provided openings are insufficient
+///   to reconstruct the share for the given share_index.
+/// * `InconsistentCommitment` if the openings resulted in a share that
+///   is not consistent with the dealing commitment.
+/// * Any other error if the share could not be recomputed.
 fn reconstruct_share_from_openings(
     dealing: &IDkgDealingInternal,
     openings: &BTreeMap<NodeIndex, CommitmentOpening>,
@@ -278,13 +291,16 @@ fn reconstruct_share_from_openings(
     let reconstruction_threshold = dealing.commitment.len();
 
     if openings.len() < reconstruction_threshold {
-        return Err(ThresholdEcdsaError::InsufficientOpenings);
+        return Err(ThresholdEcdsaError::InsufficientOpenings(
+            openings.len(),
+            reconstruction_threshold,
+        ));
     }
 
     let curve = dealing.commitment.curve_type();
     let index = EccScalar::from_node_index(curve, share_index);
 
-    match &dealing.commitment {
+    let opening = match &dealing.commitment {
         PolynomialCommitment::Simple(_) => {
             let mut x_values = Vec::with_capacity(openings.len());
             let mut values = Vec::with_capacity(openings.len());
@@ -300,11 +316,7 @@ fn reconstruct_share_from_openings(
 
             let coefficients = LagrangeCoefficients::at_value(&index, &x_values)?;
             let combined_value = coefficients.interpolate_scalar(&values)?;
-            let combined_opening = CommitmentOpening::Simple(combined_value);
-
-            dealing
-                .commitment
-                .return_opening_if_consistent(share_index, &combined_opening)
+            CommitmentOpening::Simple(combined_value)
         }
         PolynomialCommitment::Pedersen(_) => {
             let mut x_values = Vec::with_capacity(openings.len());
@@ -324,13 +336,13 @@ fn reconstruct_share_from_openings(
             let coefficients = LagrangeCoefficients::at_value(&index, &x_values)?;
             let combined_value = coefficients.interpolate_scalar(&values)?;
             let combined_mask = coefficients.interpolate_scalar(&masks)?;
-            let combined_opening = CommitmentOpening::Pedersen(combined_value, combined_mask);
-
-            dealing
-                .commitment
-                .return_opening_if_consistent(share_index, &combined_opening)
+            CommitmentOpening::Pedersen(combined_value, combined_mask)
         }
-    }
+    };
+
+    dealing
+        .commitment
+        .return_opening_if_consistent(share_index, &opening)
 }
 
 impl CommitmentOpening {
@@ -344,11 +356,19 @@ impl CommitmentOpening {
     /// * The openings must have already been verified
     ///
     /// # Errors
+    /// * `ComplaintShouldBeIssued` if a ciphertext failed to decrypt, and
+    ///   we do not currently have any openings for that dealing.
     /// * `InsufficientOpenings` if we require openings for a corrupted dealing but
     ///   do not have sufficiently many openings for that dealing.
     /// * `InvalidCommitment` if the commitments are inconsistent. This
     ///   indicates that there is a corrupted dealing for which we have no openings
     ///   at all.
+    /// * `InvalidCiphertext` if the ciphertext could not be decrypted, for example
+    ///   because the proof of possesion was invalid.
+    /// * `UnableToReconstruct` if we had sufficient openings but were unable to
+    ///   combine them into a share which was consistent with the commitment.
+    /// * `UnableToReconstruct`: internal error denoting that the received openings
+    ///   cannot be used to recompute a share.
     pub(crate) fn from_dealings_and_openings(
         verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
         provided_openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
@@ -357,7 +377,7 @@ impl CommitmentOpening {
         receiver_index: NodeIndex,
         secret_key: &MEGaPrivateKey,
         public_key: &MEGaPublicKey,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> Result<Self, IDkgComputeSecretSharesInternalError> {
         let curve = secret_key.curve_type();
         let mut openings = Vec::with_capacity(verified_dealings.len());
 
@@ -365,22 +385,55 @@ impl CommitmentOpening {
             // If provided_openings contains an entry for dealer_index,
             // reconstruct the share, otherwise attempt to decrypt the dealing
             let opening = if let Some(shares) = provided_openings.get(dealer_index) {
-                reconstruct_share_from_openings(dealing, shares, receiver_index)?
+                reconstruct_share_from_openings(dealing, shares, receiver_index).map_err(|e| {
+                    match e {
+                        ThresholdEcdsaError::InsufficientOpenings(have, req) => {
+                            IDkgComputeSecretSharesInternalError::InsufficientOpenings(have, req)
+                        }
+                        e => IDkgComputeSecretSharesInternalError::UnableToReconstruct(format!(
+                            "{:?}",
+                            e
+                        )),
+                    }
+                })?
             } else {
-                dealing.ciphertext.decrypt_and_check(
-                    &dealing.commitment,
-                    context_data,
-                    *dealer_index,
-                    receiver_index,
-                    secret_key,
-                    public_key,
-                )?
+                dealing
+                    .ciphertext
+                    .decrypt_and_check(
+                        &dealing.commitment,
+                        context_data,
+                        *dealer_index,
+                        receiver_index,
+                        secret_key,
+                        public_key,
+                    )
+                    .map_err(|e| match e {
+                        ThresholdEcdsaError::InvalidCommitment => {
+                            IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued
+                        }
+                        e => IDkgComputeSecretSharesInternalError::InvalidCiphertext(format!(
+                            "Ciphertext {}/{} failed to decrypt {:?}",
+                            dealer_index,
+                            verified_dealings.len(),
+                            e
+                        )),
+                    })?
             };
 
             openings.push((*dealer_index, opening));
         }
 
-        Self::combine_openings(&openings, transcript_commitment, receiver_index, curve)
+        Self::combine_openings(&openings, transcript_commitment, receiver_index, curve).map_err(
+            |e| match e {
+                ThresholdEcdsaError::InsufficientOpenings(have, req) => {
+                    IDkgComputeSecretSharesInternalError::InsufficientOpenings(have, req)
+                }
+                e => IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(format!(
+                    "{:?}",
+                    e
+                )),
+            },
+        )
     }
 
     /// Creates a commitment opening using dealings and openings
@@ -392,8 +445,9 @@ impl CommitmentOpening {
     /// * The dealings must have already been verified
     ///
     /// # Errors
-    /// * `InvalidCommitment` if the commitments are inconsistent. This
-    ///   indicates we should issue a complaint and collect openings.
+    /// * `ComplaintShouldBeIssued` if upon decrypting a ciphertext,
+    ///   the embedded secret was invalid with the dealing commitment.
+    ///   In this case a complaint must be issued.
     pub(crate) fn from_dealings(
         verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
         transcript_commitment: &CombinedCommitment,
@@ -401,25 +455,48 @@ impl CommitmentOpening {
         receiver_index: NodeIndex,
         secret_key: &MEGaPrivateKey,
         public_key: &MEGaPublicKey,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> Result<Self, IDkgComputeSecretSharesInternalError> {
         let curve = secret_key.curve_type();
         let mut openings = Vec::with_capacity(verified_dealings.len());
 
         for (dealer_index, dealing) in verified_dealings {
             // Decrypt each dealing and check consistency with the commitment in the dealing
-            let opening = dealing.ciphertext.decrypt_and_check(
-                &dealing.commitment,
-                context_data,
-                *dealer_index,
-                receiver_index,
-                secret_key,
-                public_key,
-            )?;
+            let opening = dealing
+                .ciphertext
+                .decrypt_and_check(
+                    &dealing.commitment,
+                    context_data,
+                    *dealer_index,
+                    receiver_index,
+                    secret_key,
+                    public_key,
+                )
+                .map_err(|e| match e {
+                    ThresholdEcdsaError::InvalidCommitment => {
+                        IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued
+                    }
+                    e => IDkgComputeSecretSharesInternalError::InvalidCiphertext(format!(
+                        "Ciphertext {}/{} failed to decrypt {:?}",
+                        dealer_index,
+                        verified_dealings.len(),
+                        e
+                    )),
+                })?;
 
             openings.push((*dealer_index, opening));
         }
 
-        Self::combine_openings(&openings, transcript_commitment, receiver_index, curve)
+        Self::combine_openings(&openings, transcript_commitment, receiver_index, curve).map_err(
+            |e| match e {
+                ThresholdEcdsaError::InsufficientOpenings(have, req) => {
+                    IDkgComputeSecretSharesInternalError::InsufficientOpenings(have, req)
+                }
+                e => IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(format!(
+                    "{:?}",
+                    e
+                )),
+            },
+        )
     }
 
     fn combine_openings(

@@ -222,7 +222,7 @@ pub enum ThresholdEcdsaError {
     CurveMismatch,
     InconsistentCiphertext,
     InsufficientDealings,
-    InsufficientOpenings,
+    InsufficientOpenings(usize, usize),
     InterpolationError,
     InvalidArguments(String),
     InvalidCommitment,
@@ -429,26 +429,28 @@ pub fn verify_transcript(
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum IDkgComputeSecretSharesInternalError {
-    InconsistentCommitments,
-    InternalError(String),
-}
-
-impl From<ThresholdEcdsaError> for IDkgComputeSecretSharesInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
-        match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
-            x => Self::InternalError(format!("{:?}", x)),
-        }
-    }
+    ComplaintShouldBeIssued,
+    InsufficientOpenings(usize, usize),
+    InvalidCiphertext(String),
+    UnableToReconstruct(String),
+    UnableToCombineOpenings(String),
 }
 
 /// Computes secret shares (in the form of commitment openings) from
 /// the given dealings.
 ///
-/// # Errors
-/// * `InconsistentCommitments` if the commitments are inconsistent. This
-///   indicates that complaints can be created with [`generate_complaints`].
+/// # Arguments:
+/// * `verified_dealings`: dealings to be decrypted,
+/// * `transcript`: the combined commitment to the coefficients of the shared polynomial,
+/// * `context_data`: associated data used in encryption and the zero-knowledge proofs,
+/// * `receiver_index`: index of the receiver in this specific IDKG instance,
+/// * `secret_key`: MEGa secret decryption key of the receiver,
+/// * `public_key`: MEGa public encryption key associated to `secret_key`,
+///
+/// # Errors:
+/// * `ComplaintShouldBeIssued`: if a ciphertext decrypts to a share that does not match with the commitment.
+/// * `InvalidCiphertext`: if a ciphertext cannot be decrypted.
+/// * `UnableToCombineOpenings`: internal error denoting that the decrypted share cannot be combined.
 pub fn compute_secret_shares(
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     transcript: &IDkgTranscriptInternal,
@@ -465,7 +467,6 @@ pub fn compute_secret_shares(
         secret_key,
         public_key,
     )
-    .map_err(IDkgComputeSecretSharesInternalError::from)
 }
 
 /// Computes secret shares (in the form of commitment openings) from
@@ -476,12 +477,21 @@ pub fn compute_secret_shares(
 /// * There are sufficient valid openings (at least `reconstruction_threshold`
 ///   many) for each corrupted dealing.
 ///
-/// # Errors
-/// * `InsufficientOpenings` if we require openings for a corrupted dealing but
-///   do not have sufficiently many openings for that dealing.
-/// * `InconsistentCommitments` if the commitments are inconsistent. This
-///   indicates that there is a corrupted dealing for which we have no openings
-///   at all.
+/// # Arguments:
+/// * `verified_dealings`: dealings to be decrypted,
+/// * `openings`: openings answering complaints against dealing that could not be decrypted correctly,
+/// * `transcript`: the combined commitment to the coefficients of the shared polynomial,
+/// * `context_data`: associated data used in encryption and the zero-knowledge proofs,
+/// * `receiver_index`: index of the receiver in this specific IDKG instance,
+/// * `secret_key`: MEGa secret decryption key of the receiver,
+/// * `public_key`: MEGa public encryption key associated to `secret_key`,
+///
+/// # Errors:
+/// * `ComplaintShouldBeIssued`: if a ciphertext decrypts to a share that does not match with the commitment.
+/// * `InsufficientOpenings`: if the number of openings answering a complaint is insufficient.
+/// * `InvalidCiphertext`: if a ciphertext cannot be decrypted.
+/// * `UnableToCombineOpenings`: internal error denoting that the decrypted share cannot be combined.
+/// * `UnableToReconstruct`: internal error denoting that the received openings cannot be used to recompute a share.
 pub fn compute_secret_shares_with_openings(
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
@@ -500,7 +510,6 @@ pub fn compute_secret_shares_with_openings(
         secret_key,
         public_key,
     )
-    .map_err(|e| e.into())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -880,7 +889,7 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaDerivePublicKeyError {
             ThresholdEcdsaError::CurveMismatch
             | ThresholdEcdsaError::InconsistentCiphertext
             | ThresholdEcdsaError::InsufficientDealings
-            | ThresholdEcdsaError::InsufficientOpenings
+            | ThresholdEcdsaError::InsufficientOpenings(_, _)
             | ThresholdEcdsaError::InterpolationError
             | ThresholdEcdsaError::InvalidCommitment
             | ThresholdEcdsaError::InvalidComplaint
