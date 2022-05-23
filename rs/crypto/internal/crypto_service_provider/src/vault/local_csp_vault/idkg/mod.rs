@@ -126,7 +126,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                 );
                 Ok(BTreeMap::new())
             }
-            Err(IDkgComputeSecretSharesInternalError::InconsistentCommitments) => {
+            Err(IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued) => {
                 let randomness = Randomness::from(self.csprng.write().gen::<[u8; 32]>());
                 let complaints = generate_complaints(
                     dealings,
@@ -138,9 +138,16 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                 )?;
                 Ok(complaints)
             }
-            Err(IDkgComputeSecretSharesInternalError::InternalError(e)) => {
-                Err(IDkgLoadTranscriptError::InternalError {
-                    internal_error: format!("{:?}", e),
+            Err(IDkgComputeSecretSharesInternalError::InsufficientOpenings(_, _)) => {
+                Err(IDkgLoadTranscriptError::InsufficientOpenings {
+                    internal_error: format!("{:?}", compute_secret_shares_result),
+                })
+            }
+            Err(IDkgComputeSecretSharesInternalError::InvalidCiphertext(_))
+            | Err(IDkgComputeSecretSharesInternalError::UnableToReconstruct(_))
+            | Err(IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(_)) => {
+                Err(IDkgLoadTranscriptError::InvalidArguments {
+                    internal_error: format!("{:?}", compute_secret_shares_result),
                 })
             }
         }
@@ -187,14 +194,22 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                 );
                 Ok(())
             }
-            Err(IDkgComputeSecretSharesInternalError::InconsistentCommitments) => {
+            Err(IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued) => {
                 Err(IDkgLoadTranscriptError::InvalidArguments {
-                    internal_error: "failed to compute secret shares with the provided openings"
-                        .to_string(),
+                    internal_error: "An invalid dealing with no openings was provided".to_string(),
                 })
             }
-            Err(IDkgComputeSecretSharesInternalError::InternalError(e)) => {
-                Err(IDkgLoadTranscriptError::InvalidArguments { internal_error: e })
+            Err(IDkgComputeSecretSharesInternalError::InsufficientOpenings(_, _)) => {
+                Err(IDkgLoadTranscriptError::InsufficientOpenings {
+                    internal_error: format!("{:?}", compute_secret_shares_with_openings_result),
+                })
+            }
+            Err(IDkgComputeSecretSharesInternalError::InvalidCiphertext(_))
+            | Err(IDkgComputeSecretSharesInternalError::UnableToReconstruct(_))
+            | Err(IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(_)) => {
+                Err(IDkgLoadTranscriptError::InvalidArguments {
+                    internal_error: format!("{:?}", compute_secret_shares_with_openings_result),
+                })
             }
         }
     }

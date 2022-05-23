@@ -208,7 +208,19 @@ impl MEGaCiphertext {
         Ok(())
     }
 
-    // Decrypt a MEGa ciphertext and return the encrypted commitment opening
+    /// Decrypt a MEGa ciphertext and return the encrypted commitment opening
+    ///
+    /// # Arguments:
+    /// * `commitment`: a commitment to the coefficients of the polynomial being shared.
+    /// * `associated_data` context data that identifies the protocol instance.
+    /// * `dealer_index`: index of the dealer that encrypted the dealing.
+    /// * `receiver_index`: index of the receiver decrypting the cipher text.
+    /// * `secret_key`: decryption key of the receiver.
+    /// * `public_key`: encryption key of the receiver corresponding to the `secret_key`.
+    /// # Errors:
+    /// * `InvalidCommitment` if the decrypted share does not match with the commitment.
+    /// * `InvalidProof` if the proof of possession is incorrect.
+    /// * Any other error if the ciphertext could not be decrypted for some reason.
     pub(crate) fn decrypt_and_check(
         &self,
         commitment: &PolynomialCommitment,
