@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import re
 import subprocess
 import time
 from statistics import mean
@@ -13,6 +12,7 @@ from common import base_experiment
 from common import prometheus
 from common import report
 from common import ssh
+from common import workload
 from termcolor import colored
 
 NUM_WORKLOAD_GEN = 2  # Number of machines to run the workload generator on
@@ -288,67 +288,58 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         rps_per_machine = int(requests_per_second / self.num_workload_gen)
 
         print("Got targets: ", targets)
-        target_list = ",".join(f"http://[{target}]:8080" for target in targets)
         print("Running against target_list")
 
         curr_outdir = self.out_dir if outdir is None else outdir
-        cmd = (
-            f'./ic-workload-generator "{target_list}" --summary-file wg_summary'
-            f" -n {duration} -r {rps_per_machine} -p 9090 --no-status-check"
-        )
-        cmd += " " + " ".join(arguments)
-
-        # Dump worklod generator command in output directory.
-        if payload is not None:
-            cmd += " --payload '{}'".format(payload.decode("utf-8"))
-        if method is not None:
-            cmd += " -m {}".format(method)
-        if call_method is not None:
-            cmd += ' --call-method "{}"'.format(call_method)
-
-        commands = [
-            "{} --canister-id {}".format(cmd, canister_ids[i % len(canister_ids)]) for i in range(len(machines))
-        ]
-
-        n = 0
-        while n >= 0:
-            n += 1
-            try:
-                filename = os.path.join(self.iter_outdir, f"workload-generator-cmd-{n}")
-                with open(filename, "x") as cmd_file:
-                    for cmd in commands:
-                        cmd_file.write(cmd + "\n")
-                n = -1
-            except FileExistsError:
-                print("Failed to open - file already exists")
-
-        print(f"🚚  Running workload generator with {commands}")
-
         f_stdout = os.path.join(curr_outdir, "workload-generator-{}.stdout.txt")
         f_stderr = os.path.join(curr_outdir, "workload-generator-{}.stderr.txt")
 
         # Set timeout to 2 + len(targets) of the duration.
-        # E.g. timeout will linearly increase as target machines number incrase
+        # E.g. timeout will linearly increase as target machines number increase
         # Wait at least 300s, as there is a potentially high startup overhead for super-small
         # workloads.
         timeout = max((len(targets) / 10 + 2) * duration, 300)
         print(f"Setting workload generator timeout to: {timeout}")
-        ssh.run_all_ssh_in_parallel(machines, commands, f_stdout, f_stderr, timeout)
+
+        print(f"Running on {targets}")
+        load = workload.Workload(
+            machines,
+            targets,
+            rps_per_machine,
+            canister_ids,
+            duration,
+            f_stdout,
+            f_stderr,
+            timeout,
+            payload,
+            method,
+            call_method,
+            arguments,
+        )
+        commands, load_generators = load.get_commands()
+        assert load_generators == machines
+
+        n = 0
+        while True:
+            n += 1
+            try:
+                filename = os.path.join(self.iter_outdir, f"workload-generator-cmd-{n}")
+                # Try to open file in exclusive mode
+                with open(filename, "x") as cmd_file:
+                    for cmd in commands:
+                        cmd_file.write(cmd + "\n")
+                break
+            except FileExistsError:
+                print("Failed to open - file already exists")
+
+        print(f"🚚  Running workload generator with {commands}")
+        load.start()
+        load.join()
 
         print("Fetching workload generator results")
 
-        sources = ["admin@[{}]:wg_summary".format(m) for m in machines]
         destinations = ["{}/summary_machine_{}".format(curr_outdir, m.replace(":", "_")) for m in machines]
-
-        rc = ssh.scp_in_parallel(sources, destinations)
-        if not rc == [0 for _ in range(len(sources))]:
-            print(colored("⚠️  Some workload generators failed:", "red"))
-            for fname in os.listdir(curr_outdir):
-                if re.match("workload-generator.*stderr.*", fname):
-                    with open(os.path.join(curr_outdir, fname)) as ferr:
-                        lines = ferr.read().split("\n")
-                        print("\n".join(lines[-10:]))
-
+        load.fetch_results(destinations, self.out_dir)
         print("Evaluating results from {} machines".format(len(destinations)))
         return report.evaluate_summaries(destinations)
 
