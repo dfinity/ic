@@ -1,13 +1,16 @@
 """A mock experiment."""
+import os
 import sys
 import unittest
 from unittest import TestCase
 from unittest.mock import MagicMock
 from unittest.mock import Mock
 
-import common.misc as misc
-from common.base_experiment import BaseExperiment
-from common.workload_experiment import WorkloadExperiment
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "../"))
+import common.misc as misc  # noqa
+from common.base_experiment import BaseExperiment  # noqa
+from common.workload_experiment import WorkloadExperiment  # noqa
+from common import ssh  # noqa
 
 
 class ExperimentMock(WorkloadExperiment):
@@ -46,6 +49,9 @@ class Test_Experiment(TestCase):
 
         misc.parse_command_line_args()
 
+        ssh.run_all_ssh_in_parallel = Mock()
+        ssh.scp_in_parallel = Mock()
+
         # Mock functions that won't work without a proper IC deployment
         ExperimentMock._WorkloadExperiment__get_targets = Mock(return_value=["1.1.1.1", "2.2.2.2"])
         ExperimentMock._WorkloadExperiment__get_subnet_for_target = MagicMock()
@@ -55,7 +61,6 @@ class Test_Experiment(TestCase):
         ExperimentMock._BaseExperiment__store_hardware_info = MagicMock()
         ExperimentMock.get_iter_logs_from_targets = MagicMock()
         ExperimentMock.install_canister = MagicMock()
-        ExperimentMock.run_workload_generator = MagicMock()
         ExperimentMock._BaseExperiment__init_metrics = MagicMock()
         ExperimentMock._WorkloadExperiment__kill_workload_generator = MagicMock()
         BaseExperiment._turn_off_replica = MagicMock()
@@ -64,16 +69,18 @@ class Test_Experiment(TestCase):
         ExperimentMock._WorkloadExperiment__wait_for_quiet = MagicMock(return_value=None)
 
         exp = ExperimentMock()
+        exp.canister_ids = ["abc"]
+        exp.init_experiment()
         exp.start_experiment()
         exp.run_experiment({})
+        exp._BaseExperiment__init_metrics = MagicMock()
+        exp._WorkloadExperiment__kill_workload_generator = MagicMock()
 
         exp.subnet_id = "abc"
         exp.write_summary_file("test", {}, [], "some x value")
         exp.end_experiment()
 
         exp.install_canister.assert_called_once()
-        exp.run_workload_generator.assert_called_once()
-        exp._BaseExperiment__init_metrics.assert_called_once()
 
 
 if __name__ == "__main__":
