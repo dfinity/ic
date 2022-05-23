@@ -11,6 +11,11 @@ filegroup(
     ),
 )
 
+filegroup(
+    name = "protos",
+    srcs = glob(["proto/**"]),
+)
+
 COMMON_DEPS = [
     "//rs/crypto/sha",
     "//rs/phantom_newtype",
@@ -72,9 +77,7 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob([
         "gen/**",
-        "def/**",
-        "proto/**",
-    ]),
+    ]) + [":protos"],
     manifest_dir = "rs/types/base_types",
     deps = [
         "//rs/test_utilities/compare_dirs",

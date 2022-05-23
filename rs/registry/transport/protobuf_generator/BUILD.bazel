@@ -1,4 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:prost.bzl", "protobuf_generator")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -11,8 +12,8 @@ filegroup(
 )
 
 rust_library(
-    name = "protobuf_generator",
-    srcs = glob(["src/**"]),
+    name = "lib",
+    srcs = ["src/lib.rs"],
     crate_name = "ic_registry_transport_protobuf_generator",
     edition = "2018",
     deps = [
@@ -20,12 +21,9 @@ rust_library(
     ],
 )
 
-rust_binary(
-    name = "protobuf_generator_bin",
-    srcs = glob(["src/**"]),
-    edition = "2018",
-    deps = [
-        "//rs/registry/transport/protobuf_generator",
-        "@crate_index//:prost-build",
-    ],
+protobuf_generator(
+    name = "protobuf_generator",
+    srcs = ["src/main.rs"],
+    manifest_dir = "rs/registry/transport/protobuf_generator",
+    deps = [":lib"],
 )

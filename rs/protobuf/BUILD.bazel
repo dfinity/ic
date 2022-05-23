@@ -11,6 +11,11 @@ filegroup(
     ),
 )
 
+filegroup(
+    name = "protos",
+    srcs = glob(["def/**"]),
+)
+
 rust_library(
     name = "protobuf",
     srcs = glob([
@@ -41,8 +46,7 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob([
         "gen/**",
-        "def/**",
-    ]),
+    ]) + [":protos"],
     manifest_dir = "rs/protobuf",
     deps = [
         "//rs/protobuf/generator:lib",
