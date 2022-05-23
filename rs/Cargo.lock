@@ -2130,15 +2130,10 @@ dependencies = [
 name = "dfn_core"
 version = "0.8.0"
 dependencies = [
- "byteorder",
  "canister-test",
- "cfg-if 0.1.10",
  "dfn_json",
- "futures",
- "hex",
  "ic-base-types",
  "on_wire",
- "rustversion",
 ]
 
 [[package]]
