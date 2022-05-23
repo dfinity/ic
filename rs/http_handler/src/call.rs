@@ -1,15 +1,13 @@
 //! Module that deals with requests to /api/v2/canister/.../call
 
 use crate::{
-    common::{
-        get_cors_headers, make_plaintext_response, make_response,
-        make_response_on_validation_error, map_box_error_to_response,
-    },
+    common::{get_cors_headers, make_plaintext_response, make_response, map_box_error_to_response},
     types::{to_legacy_request_type, ApiReqType},
+    validator_executor::ValidatorExecutor,
     HttpError, HttpHandlerMetrics, IngressFilterService, UNKNOWN_LABEL,
 };
 use hyper::{Body, Response, StatusCode};
-use ic_interfaces::{crypto::IngressSigVerifier, registry::RegistryClient};
+use ic_interfaces::registry::RegistryClient;
 use ic_interfaces_p2p::{IngressError, IngressIngestionService};
 use ic_logger::{error, info_sample, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
@@ -20,10 +18,8 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{SignedIngress, SignedRequestBytes},
-    time::current_time,
     CountBytes, RegistryVersion, SubnetId,
 };
-use ic_validator::validate_request;
 use std::convert::TryInto;
 use std::future::Future;
 use std::pin::Pin;
@@ -37,7 +33,7 @@ pub(crate) struct CallService {
     metrics: HttpHandlerMetrics,
     subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
-    validator: Arc<dyn IngressSigVerifier + Send + Sync>,
+    validator_executor: ValidatorExecutor,
     ingress_sender: IngressIngestionService,
     ingress_filter: LoadShed<IngressFilterService>,
     malicious_flags: MaliciousFlags,
@@ -50,7 +46,7 @@ impl CallService {
         metrics: HttpHandlerMetrics,
         subnet_id: SubnetId,
         registry_client: Arc<dyn RegistryClient>,
-        validator: Arc<dyn IngressSigVerifier + Send + Sync>,
+        validator_executor: ValidatorExecutor,
         ingress_sender: IngressIngestionService,
         ingress_filter: IngressFilterService,
         malicious_flags: MaliciousFlags,
@@ -60,7 +56,7 @@ impl CallService {
             metrics,
             subnet_id,
             registry_client,
-            validator,
+            validator_executor,
             ingress_sender,
             ingress_filter: ServiceBuilder::new().load_shed().service(ingress_filter),
             malicious_flags,
@@ -173,17 +169,6 @@ impl Service<Vec<u8>> for CallService {
             return Box::pin(async move { Ok(res) });
         }
 
-        if let Err(err) = validate_request(
-            msg.as_ref(),
-            self.validator.as_ref(),
-            current_time(),
-            registry_version,
-            &self.malicious_flags,
-        ) {
-            let res = make_response_on_validation_error(message_id, err, &self.log);
-            return Box::pin(async move { Ok(res) });
-        }
-
         let ingress_sender = self.ingress_sender.clone();
 
         // In case the inner service has state that's driven to readiness and
@@ -207,8 +192,18 @@ impl Service<Vec<u8>> for CallService {
 
         let mut ingress_filter = self.ingress_filter.clone();
         let log = self.log.clone();
+        let validator_executor = self.validator_executor.clone();
+        let malicious_flags = self.malicious_flags.clone();
 
         Box::pin(async move {
+            if let Err(http_err) = validator_executor
+                .validate_signed_ingress(&msg, registry_version, &malicious_flags)
+                .await
+            {
+                let res = make_plaintext_response(http_err.status, http_err.message);
+                return Ok(res);
+            }
+
             match ingress_filter
                 .ready()
                 .await
