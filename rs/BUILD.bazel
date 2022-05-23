@@ -61,6 +61,7 @@ filegroup(
         "//rs/types/base_types:sources",
         "//rs/types/error_types:sources",
         "//rs/types/ic00_types:sources",
+        "//rs/types/types:sources",
         "//rs/types/wasm_types:sources",
         "//rs/utils:sources",
     ],
