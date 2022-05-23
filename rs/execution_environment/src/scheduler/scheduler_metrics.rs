@@ -74,6 +74,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) old_open_call_contexts: IntGaugeVec,
     pub(super) canister_invariants: IntCounter,
     pub(super) subnet_memory_usage_invariant: IntCounter,
+    pub(super) total_canister_balance: Gauge,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -488,6 +489,10 @@ impl SchedulerMetrics {
             ),
             canister_invariants: metrics_registry.error_counter(CANISTER_INVARIANT_BROKEN),
             subnet_memory_usage_invariant: metrics_registry.error_counter(SUBNET_MEMORY_USAGE_INVARIANT_BROKEN),
+            total_canister_balance: metrics_registry.gauge(
+                "scheduler_canister_balance_cycles_total",
+                "Total canister balance in Cycles.",
+            ),
         }
     }
 
