@@ -35,7 +35,7 @@ GIT_REV=$(git rev-parse HEAD)
 docker image build --no-cache -t ic-build-bd:$TAG -f- . <<EOF
 FROM dfinity/ic-build:$DOCKER_IMG_VERSION
 COPY --chown=ubuntu:ubuntu . /ic
-RUN sudo mkdir /ic/artifacts && sudo chown -R ubuntu:ubuntu /ic/artifacts
+RUN sudo mkdir -p /ic/artifacts && sudo chown -R ubuntu:ubuntu /ic/artifacts
 EOF
 
 export IMAGE=ic-build-bd:$TAG
