@@ -1790,7 +1790,7 @@ mod test {
             ]
         );
 
-        // Tests a prefix that's starts from a leaf node, then iterates through the root and right
+        // Tests a prefix that starts from a leaf node, then iterates through the root and right
         // sibling.
         assert_eq!(
             btree.range(vec![2]).collect::<Vec<_>>(),
