@@ -1,3 +1,5 @@
+common --experimental_allow_tags_propagation
+
 build --strategy_regexp=ic-os/guestos/.*=local
 
 build --remote_cache=buildfarm.dfinity.systems
