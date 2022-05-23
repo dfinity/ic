@@ -13,10 +13,12 @@ filegroup(
         ],
     ) + [
         "//rs/async_utils:sources",
+        "//rs/bitcoin/service:sources",
         "//rs/bitcoin/test-utils:sources",
         "//rs/bitcoin/types/internal:sources",
         "//rs/bitcoin/types/public:sources",
         "//rs/bitcoin/validation:sources",
+        "//rs/canister_http/service:sources",
         "//rs/canonical_state/certification_version:sources",
         "//rs/constants:sources",
         "//rs/criterion_time:sources",
