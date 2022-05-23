@@ -34,6 +34,7 @@ mock! {
             randomness: ic_types::Randomness,
             ecdsa_subnet_public_key: Option<MasterEcdsaPublicKey>,
             current_round: ExecutionRound,
+            current_round_type: ExecutionRoundType,
             provisional_whitelist: ProvisionalWhitelist,
             max_number_of_canisters: u64,
         ) -> ReplicatedState;
@@ -61,6 +62,11 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
     let metrics = Arc::new(MessageRoutingMetrics::new(&metrics_registry));
 
     let round = ExecutionRound::from(initial_height.get() + 1);
+    let round_type = if provided_batch.requires_full_state_hash {
+        ExecutionRoundType::CheckpointRound
+    } else {
+        ExecutionRoundType::OrdinaryRound
+    };
     let provisional_whitelist = ProvisionalWhitelist::Set(BTreeSet::new());
     let max_number_of_canisters = 0;
 
@@ -84,10 +90,11 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             eq(provided_batch.randomness),
             eq(provided_batch.ecdsa_subnet_public_key.clone()),
             eq(round),
+            eq(round_type),
             eq(provisional_whitelist),
             eq(max_number_of_canisters),
         )
-        .returning(|state, _, _, _, _, _| state);
+        .returning(|state, _, _, _, _, _, _| state);
 
     let mut stream_builder = Box::new(MockStreamBuilder::new());
     stream_builder

@@ -884,6 +884,14 @@ pub trait SystemApi {
     fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64>;
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+
+/// Indicate whether a checkpoint will be taken after the current round or not.
+pub enum ExecutionRoundType {
+    CheckpointRound,
+    OrdinaryRound,
+}
+
 pub trait Scheduler: Send {
     /// Type modelling the replicated state.
     ///
@@ -927,12 +935,14 @@ pub trait Scheduler: Send {
     ///   many instructions is left which is used to update the limit for the
     ///   next `pulse` and if the above constraint is satisfied, we can start
     ///   the `pulse`. And so on.
+    #[allow(clippy::too_many_arguments)]
     fn execute_round(
         &self,
         state: Self::State,
         randomness: Randomness,
         ecdsa_subnet_public_key: Option<MasterEcdsaPublicKey>,
         current_round: ExecutionRound,
+        current_round_type: ExecutionRoundType,
         provisional_whitelist: ProvisionalWhitelist,
         max_number_of_canisters: u64,
     ) -> Self::State;

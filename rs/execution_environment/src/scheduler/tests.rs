@@ -118,6 +118,7 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
                 Randomness::from([0; 32]),
                 None,
                 round,
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -184,6 +185,7 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
                 Randomness::from([0; 32]),
                 None,
                 round,
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -205,12 +207,109 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
                 Randomness::from([0; 32]),
                 None,
                 round,
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
 
             for canister_state in state.canisters_iter_mut() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 1);
+            }
+
+            assert_eq!(
+                scheduler
+                    .metrics
+                    .round_skipped_due_to_current_heap_delta_above_limit
+                    .get(),
+                1
+            );
+        },
+        ingress_history_writer,
+        exec_env,
+    );
+}
+
+#[test]
+fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached() {
+    let scheduler_test_fixture = SchedulerTestFixture {
+        scheduler_config: SchedulerConfig {
+            scheduler_cores: 1,
+            subnet_heap_delta_capacity: NumBytes::from(10),
+            instruction_overhead_per_message: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        },
+        metrics_registry: MetricsRegistry::new(),
+        canister_num: 1,
+        message_num_per_canister: 2,
+    };
+    let exec_env = Arc::new(default_exec_env_mock(
+        &scheduler_test_fixture,
+        3,
+        NumInstructions::from(10),
+        NumBytes::new(4096),
+    ));
+    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(3));
+
+    scheduler_test(
+        &scheduler_test_fixture,
+        |scheduler| {
+            let mut state = get_initial_state(
+                scheduler_test_fixture.canister_num,
+                scheduler_test_fixture.message_num_per_canister,
+            );
+
+            let round = ExecutionRound::from(1);
+            state = scheduler.execute_round(
+                state,
+                Randomness::from([0; 32]),
+                None,
+                round,
+                ExecutionRoundType::OrdinaryRound,
+                ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
+            );
+            for canister_state in state.canisters_iter_mut() {
+                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
+            }
+
+            for canister_state in state.canisters_iter_mut() {
+                canister_state.push_ingress(
+                    SignedIngressBuilder::new()
+                        .canister_id(canister_state.canister_id())
+                        .build()
+                        .into(),
+                );
+            }
+            let round = ExecutionRound::from(2);
+            state = scheduler.execute_round(
+                state,
+                Randomness::from([0; 32]),
+                None,
+                round,
+                ExecutionRoundType::CheckpointRound,
+                ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
+            );
+
+            assert_eq!(NumBytes::from(0), state.metadata.heap_delta_estimate);
+
+            for canister_state in state.canisters_iter_mut() {
+                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 1);
+            }
+
+            let round = ExecutionRound::from(3);
+            state = scheduler.execute_round(
+                state,
+                Randomness::from([0; 32]),
+                None,
+                round,
+                ExecutionRoundType::OrdinaryRound,
+                ProvisionalWhitelist::Set(BTreeSet::new()),
+                MAX_NUMBER_OF_CANISTERS,
+            );
+
+            for canister_state in state.canisters_iter_mut() {
+                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
             }
 
             assert_eq!(
@@ -265,6 +364,7 @@ fn canister_gets_heap_delta_rate_limited() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(1),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -286,6 +386,7 @@ fn canister_gets_heap_delta_rate_limited() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(2),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -350,6 +451,7 @@ fn inner_loop_stops_when_no_instructions_consumed() {
                 Randomness::from([0; 32]),
                 None,
                 round,
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -420,6 +522,7 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
                 Randomness::from([0; 32]),
                 None,
                 round,
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -901,6 +1004,7 @@ fn test_message_limit_from_message_overhead() {
                 Randomness::from([0; 32]),
                 None,
                 round,
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -1026,6 +1130,7 @@ fn test_multiple_iterations_of_inner_loop() {
                 Randomness::from([0; 32]),
                 None,
                 round,
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -1135,6 +1240,7 @@ fn canister_can_run_for_multiple_iterations() {
                 Randomness::from([0; 32]),
                 None,
                 round,
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -1191,6 +1297,7 @@ fn validate_consumed_instructions_metric() {
                 Randomness::from([0; 32]),
                 None,
                 round,
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -1286,6 +1393,7 @@ fn only_charge_for_allocation_after_specified_duration() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(1),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -1300,6 +1408,7 @@ fn only_charge_for_allocation_after_specified_duration() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(1),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -1354,6 +1463,7 @@ fn dont_execute_any_canisters_if_not_enough_cycles() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(1),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -1443,6 +1553,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(1),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -1513,6 +1624,7 @@ fn can_execute_messages_with_just_enough_cycles() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(1),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -1588,6 +1700,7 @@ fn execute_only_canisters_with_messages() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(1),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -1673,6 +1786,7 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
                 Randomness::from([0; 32]),
                 None,
                 round,
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -1746,6 +1860,7 @@ fn can_fully_execute_canisters_deterministically_until_out_of_cycles() {
                 Randomness::from([0; 32]),
                 None,
                 round,
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -1817,6 +1932,7 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
                 Randomness::from([0; 32]),
                 None,
                 round,
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -1922,6 +2038,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
                 Randomness::from([0; 32]),
                 None,
                 round,
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -1990,6 +2107,7 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(1),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -2058,6 +2176,7 @@ fn execute_heartbeat_before_messages() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(1),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -2130,6 +2249,7 @@ fn execute_multiple_heartbeats() {
                     Randomness::from([0; 32]),
                     None,
                     ExecutionRound::from(1),
+                    ExecutionRoundType::OrdinaryRound,
                     ProvisionalWhitelist::Set(BTreeSet::new()),
                     MAX_NUMBER_OF_CANISTERS,
                 );
@@ -2381,6 +2501,7 @@ fn can_record_metrics_for_a_round() {
                 Randomness::from([0; 32]),
                 None,
                 round,
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -2536,6 +2657,7 @@ fn heap_delta_rate_limiting_metrics_recorded() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(2),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -2631,6 +2753,7 @@ fn heap_delta_rate_limiting_disabled() {
             Randomness::from([0; 32]),
             None,
             ExecutionRound::from(2),
+            ExecutionRoundType::OrdinaryRound,
             ProvisionalWhitelist::Set(BTreeSet::new()),
             MAX_NUMBER_OF_CANISTERS,
         );
@@ -2739,6 +2862,7 @@ fn requested_method_does_not_exist() {
                 Randomness::from([0; 32]),
                 None,
                 round,
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -2815,6 +2939,7 @@ fn stopping_canisters_are_stopped_when_they_are_ready() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(1),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -2909,6 +3034,7 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(1),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -3035,6 +3161,7 @@ fn execution_round_metrics_are_recorded() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(1),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -3297,6 +3424,7 @@ fn heartbeat_metrics_are_recorded() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(1),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -3388,6 +3516,7 @@ fn execution_round_does_not_too_early() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(1),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -3718,6 +3847,7 @@ fn long_open_call_context_is_recorded() {
                 Randomness::from([0; 32]),
                 None,
                 ExecutionRound::from(4),
+                ExecutionRoundType::OrdinaryRound,
                 ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_NUMBER_OF_CANISTERS,
             );
@@ -3917,6 +4047,7 @@ proptest! {
                     Randomness::from([0; 32]),
                     None,
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
+                ExecutionRoundType::OrdinaryRound,
                     ProvisionalWhitelist::Set(BTreeSet::new()),
                     MAX_NUMBER_OF_CANISTERS,
                 );
@@ -3967,6 +4098,7 @@ proptest! {
                     Randomness::from([0; 32]),
                     None,
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
+                ExecutionRoundType::OrdinaryRound,
                     ProvisionalWhitelist::Set(BTreeSet::new()),
                     MAX_NUMBER_OF_CANISTERS,
                 );
@@ -3975,6 +4107,7 @@ proptest! {
                     Randomness::from([0; 32]),
                     None,
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
+                ExecutionRoundType::OrdinaryRound,
                     ProvisionalWhitelist::Set(BTreeSet::new()),
                     MAX_NUMBER_OF_CANISTERS,
                 );
@@ -4035,6 +4168,7 @@ proptest! {
                             Randomness::from([0; 32]),
                             None,
                             ExecutionRound::from(round),
+                ExecutionRoundType::OrdinaryRound,
                             ProvisionalWhitelist::Set(BTreeSet::new()),
                             MAX_NUMBER_OF_CANISTERS,
                         );
@@ -4091,6 +4225,7 @@ proptest! {
                     Randomness::from([0; 32]),
                     None,
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
+                    ExecutionRoundType::OrdinaryRound,
                     ProvisionalWhitelist::Set(BTreeSet::new()),
                     MAX_NUMBER_OF_CANISTERS,
                 );
