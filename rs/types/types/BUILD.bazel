@@ -1,0 +1,56 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "types",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_types",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:derive_more",
+        "@crate_index//:strum_macros",
+    ],
+    deps = [
+        "//rs/bitcoin/types/internal",
+        "//rs/constants:ic_constants",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/sha",
+        "//rs/crypto/tree_hash",
+        "//rs/phantom_newtype",
+        "//rs/protobuf",
+        "//rs/registry/transport",
+        "//rs/types/base_types",
+        "//rs/types/error_types",
+        "//rs/types/ic00_types",
+        "//rs/utils",
+        "@crate_index//:base32",
+        "@crate_index//:base64",
+        "@crate_index//:bincode",
+        "@crate_index//:byte-unit",
+        "@crate_index//:candid",
+        "@crate_index//:chrono",
+        "@crate_index//:hex",
+        "@crate_index//:http",
+        "@crate_index//:maplit",
+        "@crate_index//:num-traits",
+        "@crate_index//:once_cell",
+        "@crate_index//:prost",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:serde_json",
+        "@crate_index//:serde_with",
+        "@crate_index//:strum",
+        "@crate_index//:thiserror",
+        "@crate_index//:url",
+    ],
+)
