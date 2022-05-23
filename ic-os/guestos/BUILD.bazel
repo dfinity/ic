@@ -107,6 +107,9 @@ ext4_image(
     },
     file_contexts = ":file_contexts",
     partition_size = "3G",
+    # This image currently depends on //:binaries that changes almost always as it depends on //rs:all_sources,
+    # therefore cache hits are very rare. Do not upload it to the remote cache for now as it takes long.
+    tags = ["no-remote-cache"],
 )
 
 disk_image(
@@ -119,4 +122,7 @@ disk_image(
         ":partition-boot.tar",
         ":partition-root.tar",
     ],
+    # This image is not currently used by anything else - do not upload it to the cache for now as it takes long.
+    # TODO: s/no-cache/no-remote-cache/ when https://github.com/bazelbuild/bazel/pull/15453 will be merged and bazel 5.2.0 will be used.
+    tags = ["no-cache"],
 )
