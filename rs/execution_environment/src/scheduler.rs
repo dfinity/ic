@@ -1064,6 +1064,7 @@ impl Scheduler for SchedulerImpl {
         let mut final_state;
         {
             let mut cycles_out_sum = Cycles::zero();
+            let mut total_canister_balance = Cycles::zero();
             let mut total_canister_memory_usage = NumBytes::new(0);
             let _timer = self.metrics.round_finalization_duration.start_timer();
             let own_subnet_type = state.metadata.own_subnet_type;
@@ -1092,9 +1093,14 @@ impl Scheduler for SchedulerImpl {
                         FlagStatus::Disabled => NumInstructions::from(0),
                     };
                 total_canister_memory_usage += canister.memory_usage(own_subnet_type);
-                cycles_out_sum += canister.system_state.balance();
+                total_canister_balance += canister.system_state.balance();
                 cycles_out_sum += canister.system_state.queues().output_queue_cycles();
             }
+            cycles_out_sum += total_canister_balance;
+
+            self.metrics
+                .total_canister_balance
+                .set(total_canister_balance.get() as f64);
 
             // Check that amount of cycles at the beginning of the round (balances and cycles from input messages) is bigger or equal
             // than the amount of cycles at the end of the round (balances and cycles from output messages).
