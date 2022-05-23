@@ -36,9 +36,7 @@ use ic_registry_keys::{make_blessed_replica_version_key, make_subnet_record_key}
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
-use ic_registry_nns_data_provider::{
-    create_nns_data_provider, registry::registry_deltas_to_registry_transport_records,
-};
+use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_transport_records;
 use ic_registry_transport::{
     deserialize_get_changes_since_response, deserialize_get_latest_version_response,
     deserialize_get_value_response, serialize_get_changes_since_request,
@@ -119,18 +117,11 @@ impl Player {
         start_height: u64,
     ) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
-        let data_provided_config = cfg
+        let DataProviderConfig::LocalStore(local_store_from_config) = cfg
             .registry_client
             .data_provider
             .as_ref()
             .expect("No registry provider found");
-
-        let local_store_from_config =
-            if let DataProviderConfig::LocalStore(path) = data_provided_config {
-                path
-            } else {
-                panic!("The replica config must point to a registry local store");
-            };
 
         // In the special case where we start from the Genesis height, we want to clean
         // up the execution state before.
@@ -202,11 +193,7 @@ impl Player {
     pub async fn new(cfg: Config, subnet_id: SubnetId) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
         let metrics_registry = MetricsRegistry::new();
-        let registry = setup_registry(
-            tokio::runtime::Handle::current(),
-            cfg.clone(),
-            Some(&metrics_registry),
-        );
+        let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
 
         let mut replica_version = Default::default();
         let consensus_pool = if cfg.artifact_pool.consensus_pool_path.exists() {
@@ -949,7 +936,6 @@ fn write_records_to_local_store(
 }
 
 fn setup_registry(
-    rt_handle: tokio::runtime::Handle,
     config: Config,
     metrics_registry: Option<&MetricsRegistry>,
 ) -> std::sync::Arc<RegistryClientImpl> {
@@ -959,9 +945,6 @@ fn setup_registry(
         .expect("Data provider required")
     {
         DataProviderConfig::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)),
-        DataProviderConfig::RegistryCanisterUrl(urls) => {
-            create_nns_data_provider(rt_handle, urls, None)
-        }
     };
 
     let registry = Arc::new(RegistryClientImpl::new(data_provider, metrics_registry));

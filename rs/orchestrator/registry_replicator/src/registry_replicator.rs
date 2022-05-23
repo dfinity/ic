@@ -64,16 +64,11 @@ impl RegistryReplicator {
         config: &Config,
     ) -> Self {
         // We only support the local store data provider
-        let local_store_path = if let DataProviderConfig::LocalStore(path) = config
+        let DataProviderConfig::LocalStore(local_store_path) = config
             .registry_client
             .data_provider
             .clone()
-            .expect("registry data provider is not configured")
-        {
-            path
-        } else {
-            panic!("Only LocalStore is supported in the orchestrator.");
-        };
+            .expect("registry data provider is not configured");
 
         let local_store = Arc::new(LocalStoreImpl::new(local_store_path.clone()));
         std::fs::create_dir_all(local_store_path)

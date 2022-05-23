@@ -19,10 +19,6 @@
     // Configuration of registry client
     // ============================================
     registry_client: {
-        // Alternatives:
-        //   * EXAMPLE: registry_canister_url: "https://registry.dfinity.org/",
-        //     fetch updates from node at given url
-        //
         // The default is not to specify it.
         local_store: "/var/lib/ic/data/ic_registry_local_store/"
     },
