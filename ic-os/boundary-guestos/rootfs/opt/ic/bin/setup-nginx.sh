@@ -22,12 +22,20 @@ function copy_certs() {
     fi
 }
 
+function copy_deny_list() {
+    DENY_LIST=/boot/config/denylist.map
+    if [[ -f ${DENY_LIST} ]]; then
+        cp $DENY_LIST /etc/nginx/denylist.map
+    fi
+}
+
 function restore_context() {
     restorecon -v /etc/nginx/ic_public_key.pem
     restorecon -v /etc/nginx/certs/fullchain.pem
     restorecon -v /etc/nginx/keys/privkey.pem
     restorecon -v /etc/nginx/certs/chain.pem
     restorecon -v /etc/nginx/conf.d/*.conf
+    restorecon -v /etc/nginx/denylist.map
 }
 
 function setup_domain_name() {
@@ -57,6 +65,7 @@ function enable_dev_mode() {
 
 copy_nns_url
 copy_certs
+copy_deny_list
 setup_domain_name
 enable_dev_mode
 restore_context

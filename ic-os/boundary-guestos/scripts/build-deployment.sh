@@ -29,6 +29,7 @@ Arguments:
   -c=, --certdir=                       specify directory holding TLS certificates for hosted domain (Default: None i.e. snakeoil/self certified certificate will be used)
   -n=, --nns_urls=                      specify a file that lists on each line a nns url of the form http://[ip]:port this file will override nns urls derived from input json file
   -d=, --nginx-domainname=              domain name hosted by nginx ic0.dev or ic0.app
+  -b=, --denylist=                      a deny list of canisters
        --git-revision=                  git revision for which to prepare the media
        --deployment-type={prod|dev}        production or development deployment type
   -x,  --debug                enable verbose console output
@@ -62,6 +63,9 @@ Arguments:
         -d=* | --nginx-domainname=*)
             NGINX_DOMAIN_NAME="${argument#*=}"
             ;;
+        -b=* | --denylist=*)
+            DENY_LIST="${argument#*=}"
+            ;;
         --deployment-type=*)
             DEPLOYMENT_TYPE="${argument#*=}"
             shift
@@ -83,6 +87,7 @@ INPUT="${INPUT:=${BASE_DIR}/subnet.json}"
 OUTPUT="${OUTPUT:=${BASE_DIR}/build-out}"
 SSH="${SSH:=${BASE_DIR}/../../testnet/config/ssh_authorized_keys}"
 CERT_DIR="${CERT_DIR:=""}"
+DENY_LIST="${DENY_LIST:=""}"
 GIT_REVISION="${GIT_REVISION:=}"
 DEPLOYMENT_TYPE="${DEPLOYMENT_TYPE:="prod"}"
 NGINX_DOMAIN_NAME="${NGINX_DOMAIN_NAME:="ic0.app"}"
@@ -315,6 +320,25 @@ function copy_ssh_keys() {
     done
 }
 
+function copy_deny_list() {
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" == "boundary" ]]; then
+            local subnet_idx=${NODE["subnet_idx"]}
+            local node_idx=${NODE["node_idx"]}
+
+            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+            if [[ -f ${DENY_LIST} ]]; then
+                echo "Using deny list ${DENY_LIST}"
+                cp ${DENY_LIST} ${CONFIG_DIR}/$NODE_PREFIX/denylist.map
+            else
+                echo "Using empty denylist"
+                touch ${CONFIG_DIR}/$NODE_PREFIX/denylist.map
+            fi
+        fi
+    done
+}
+
 function copy_certs() {
     if [[ -f ${CERT_DIR}/fullchain.pem ]] && [[ -f ${CERT_DIR}/privkey.pem ]] && [[ -f ${CERT_DIR}/chain.pem ]]; then
         echo "Using certificates ${CERT_DIR}/fullchain.pem ${CERT_DIR}/privkey.pem ${CERT_DIR}/chain.pem"
@@ -386,6 +410,7 @@ function main() {
     generate_network_config
     copy_ssh_keys
     copy_certs
+    copy_deny_list
     build_tarball
     build_removable_media
     # remove_temporary_directories
