@@ -1,5 +1,5 @@
 {
-  "checksum": "f20bb8c606158096fd528c66003845728084fbb3552513651c24ee5cfe6b3f2a",
+  "checksum": "2efd43b708030abca3b6a2982ea4e5a616455c3857e8a9a087667fe6e76ca290",
   "crates": {
     "cfg-if 1.0.0": {
       "name": "cfg-if",
@@ -110,12 +110,6 @@
             }
           ],
           "selects": {
-            "cfg(target_os = \"wasi\")": [
-              {
-                "id": "wasi 0.10.2+wasi-snapshot-preview1",
-                "target": "wasi"
-              }
-            ],
             "cfg(unix)": [
               {
                 "id": "libc 0.2.126",
@@ -187,43 +181,6 @@
         ]
       },
       "license": "MIT OR Apache-2.0"
-    },
-    "wasi 0.10.2+wasi-snapshot-preview1": {
-      "name": "wasi",
-      "version": "0.10.2+wasi-snapshot-preview1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/wasi/0.10.2+wasi-snapshot-preview1/download",
-          "sha256": "fd6fbd9a79829dd1ad0cc20627bf1ed606756a7f77edff7b66b7064f9cb327c6"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasi",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasi",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "default",
-          "std"
-        ],
-        "edition": "2018",
-        "version": "0.10.2+wasi-snapshot-preview1"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
     }
   },
   "binary_crates": [],
@@ -231,9 +188,6 @@
     "direct-cargo-bazel-deps 0.0.1": ""
   },
   "conditions": {
-    "cfg(target_os = \"wasi\")": [
-      "wasm32-wasi"
-    ],
     "cfg(unix)": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",

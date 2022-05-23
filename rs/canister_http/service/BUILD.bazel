@@ -1,0 +1,43 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "ic_canister_http_service",
+    srcs = glob(["src/**"]),
+    edition = "2018",
+    deps = [
+        ":build_script",
+        "@crate_index//:prost",
+        "@crate_index//:tonic",
+    ],
+)
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    build_script_env = {
+        "CARGO_MANIFEST_DIR": "rs/canister_http/service",
+        "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+        "RUSTFMT": "$(execpath @rules_rust//rust/toolchain:current_exec_rustfmt_files)",
+    },
+    data = [
+        "proto/canister_http_service/v1/proto.proto",
+        "@com_google_protobuf//:protoc",
+        "@rules_rust//rust/toolchain:current_exec_rustfmt_files",
+    ],
+    edition = "2018",
+    deps = [
+        "@crate_index//:prost-build",
+        "@crate_index//:tonic-build",
+    ],
+)
