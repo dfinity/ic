@@ -85,13 +85,6 @@ pub const SAMPLE_CONFIG: &str = r#"
     // Configuration of registry client
     // ============================================
     registry_client: {
-        // Alternatives:
-        //   * EXAMPLE: registry_canister_url: "https://registry.ic.org/",
-        //     fetch updates from node at given url
-        //     DEPRECATED (use local_store)
-        //   * EXAMPLE: local_store: "/tmp/local_store"
-        //     read registry from the registry's local store.
-        //
         // The default is not to specify it.
     },
     // ============================================

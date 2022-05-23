@@ -6665,7 +6665,6 @@ dependencies = [
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-local-store",
- "ic-registry-nns-data-provider",
  "ic-registry-proto-data-provider",
  "ic-registry-subnet-type",
  "ic-replica-setup-ic-network",

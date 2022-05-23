@@ -4,7 +4,6 @@ use ic_config::{
     crypto::CryptoConfig, registry_client::DataProviderConfig, Config, ConfigSource, SAMPLE_CONFIG,
 };
 use ic_crypto::CryptoComponent;
-use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::{fatal, info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -12,7 +11,6 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
-use ic_registry_nns_data_provider::create_nns_data_provider;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::consensus::catchup::{CUPWithOriginalProtobuf, CatchUpPackage};
@@ -200,7 +198,7 @@ pub fn create_consensus_pool_dir(config: &Config) {
 pub fn setup_crypto_registry(
     config: Config,
     metrics_registry: Option<&MetricsRegistry>,
-    optional_nns_public_key_file: Option<&Path>,
+    _optional_nns_public_key_file: Option<&Path>,
     logger: ReplicaLogger,
     prepare_registry_data_provider: impl FnOnce(&CryptoComponent, ProtoRegistryDataProvider),
 ) -> (std::sync::Arc<RegistryClientImpl>, CryptoComponent) {
@@ -225,16 +223,8 @@ pub fn setup_crypto_registry(
             panic!("No data provider was provided in the registry client configuration.")
         }
 
-        let optional_nns_public_key = optional_nns_public_key_file
-            .map(|path| parse_threshold_sig_key(path).expect("failed to parse NNS PK file"));
-
         let data_provider = match config.registry_client.data_provider.unwrap() {
             DataProviderConfig::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)),
-            DataProviderConfig::RegistryCanisterUrl(urls) => create_nns_data_provider(
-                tokio::runtime::Handle::current(),
-                urls,
-                optional_nns_public_key,
-            ),
         };
 
         let registry = Arc::new(RegistryClientImpl::new(data_provider, metrics_registry));

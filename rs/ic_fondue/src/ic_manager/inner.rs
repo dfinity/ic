@@ -378,12 +378,7 @@ impl IcManager {
         replica_config: ReplicaConfig,
         port_allocator: &mut dyn TcpAddrAllocator,
     ) -> Vec<NodeCommand> {
-        let local_store_path =
-            if let DataProviderConfig::LocalStore(p) = registry_data_provider_config {
-                p
-            } else {
-                panic!("Need to configure local store path.");
-            };
+        let DataProviderConfig::LocalStore(local_store_path) = registry_data_provider_config;
         init_subnet
             .initialized_nodes
             .iter()
