@@ -4,6 +4,9 @@ docker_tar(
     name = "bootloader-tree.tar",
     src = ":bootloader",
     dep = glob(["bootloader/**"]),
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 docker_tar(
@@ -16,6 +19,9 @@ docker_tar(
         "--build-arg",
         "BASE_IMAGE=dfinity/guestos-base-dev@sha256:c8de9496654ddad9d4b337f07f19dfe780d6449323fb9223b254d21039a07c57",
     ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 vfat_image(
@@ -23,6 +29,9 @@ vfat_image(
     src = ":bootloader-tree.tar",
     partition_size = "100M",
     subdir = "boot/efi",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 vfat_image(
@@ -30,17 +39,26 @@ vfat_image(
     src = ":bootloader-tree.tar",
     partition_size = "100M",
     subdir = "boot/grub",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 ext4_image(
     name = "partition-config.tar",
     partition_size = "100M",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 tar_extract(
     name = "file_contexts",
     src = ":rootfs-tree.tar",
     path = "etc/selinux/default/contexts/files/file_contexts",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 # Declare the dependencies that we will have for the built filesystem images.
@@ -93,6 +111,9 @@ ext4_image(
     file_contexts = ":file_contexts",
     partition_size = "1G",
     subdir = "boot/",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 ext4_image(
@@ -110,6 +131,9 @@ ext4_image(
     # This image currently depends on //:binaries that changes almost always as it depends on //rs:all_sources,
     # therefore cache hits are very rare. Do not upload it to the remote cache for now as it takes long.
     tags = ["no-remote-cache"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 disk_image(
@@ -125,4 +149,7 @@ disk_image(
     # This image is not currently used by anything else - do not upload it to the cache for now as it takes long.
     # TODO: s/no-cache/no-remote-cache/ when https://github.com/bazelbuild/bazel/pull/15453 will be merged and bazel 5.2.0 will be used.
     tags = ["no-cache"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
