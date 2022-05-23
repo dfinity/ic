@@ -769,8 +769,8 @@ pub enum TokenUnit {
 impl From<TokenUnit> for Vec<u8> {
     fn from(val: TokenUnit) -> Self {
         match val {
-            TokenUnit::Cycles => hex::decode("00").unwrap(),
-            TokenUnit::Icp => hex::decode("01").unwrap(),
+            TokenUnit::Cycles => vec![0x00],
+            TokenUnit::Icp => vec![0x01],
         }
     }
 }

@@ -1,0 +1,30 @@
+load("//bazel:canisters.bzl", "rust_canister")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "dfn_core",
+    srcs = glob(["src/**"]),
+    edition = "2018",
+    deps = [
+        "//rs/rust_canisters/on_wire",
+        "//rs/types/base_types",
+    ],
+)
+
+rust_canister(
+    name = "test_canister",
+    srcs = ["test/wasm.rs"],
+    deps = [":dfn_core"],
+)
+
+# TODO(IC-1207): add dfn_core_test once the test dependencies are bazelized

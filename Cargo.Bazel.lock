@@ -1,5 +1,5 @@
 {
-  "checksum": "963a4b0b3a842145bdea54f3177f6ac306135d22afc7756dd72dbfea1d356926",
+  "checksum": "8fd63e643e25c6da74cf52c5eca4b4c5c4dac06f525797677d7ebb081291686c",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -2249,7 +2249,7 @@
               "target": "clap_lex"
             },
             {
-              "id": "indexmap 1.8.1",
+              "id": "indexmap 1.7.0",
               "target": "indexmap"
             },
             {
@@ -3631,12 +3631,20 @@
               "target": "byte_unit"
             },
             {
+              "id": "byteorder 1.4.3",
+              "target": "byteorder"
+            },
+            {
               "id": "bytes 1.1.0",
               "target": "bytes"
             },
             {
               "id": "candid 0.7.14",
               "target": "candid"
+            },
+            {
+              "id": "cfg-if 0.1.10",
+              "target": "cfg_if"
             },
             {
               "id": "chrono 0.4.19",
@@ -5365,7 +5373,7 @@
               "target": "http"
             },
             {
-              "id": "indexmap 1.8.1",
+              "id": "indexmap 1.7.0",
               "target": "indexmap"
             },
             {
@@ -6091,13 +6099,13 @@
       },
       "license": "Apache-2.0"
     },
-    "indexmap 1.8.1": {
+    "indexmap 1.7.0": {
       "name": "indexmap",
-      "version": "1.8.1",
+      "version": "1.7.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/indexmap/1.8.1/download",
-          "sha256": "0f647032dfaa1f8b6dc29bd3edb7bbef4861b8b8007ebb118d6db284fd59f6ee"
+          "url": "https://crates.io/api/v1/crates/indexmap/1.7.0/download",
+          "sha256": "bc633605454125dec4b66843673f01c7df2b89479b32e0ed634e43a91cff62a5"
         }
       },
       "targets": [
@@ -6141,14 +6149,14 @@
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 1.8.1",
+              "id": "indexmap 1.7.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.8.1"
+        "version": "1.7.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -6443,7 +6451,7 @@
               "target": "lalrpop_util"
             },
             {
-              "id": "petgraph 0.6.0",
+              "id": "petgraph 0.6.1",
               "target": "petgraph"
             },
             {
@@ -8543,13 +8551,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "petgraph 0.6.0": {
+    "petgraph 0.6.1": {
       "name": "petgraph",
-      "version": "0.6.0",
+      "version": "0.6.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/petgraph/0.6.0/download",
-          "sha256": "4a13a2fa9d0b63e5f22328828741e523766fff0ee9e779316902290dff3f824f"
+          "url": "https://crates.io/api/v1/crates/petgraph/0.6.1/download",
+          "sha256": "51b305cc4569dd4e8765bab46261f67ef5d4d11a4b6e745100ee5dad8948b46c"
         }
       },
       "targets": [
@@ -8578,14 +8586,14 @@
               "target": "fixedbitset"
             },
             {
-              "id": "indexmap 1.8.1",
+              "id": "indexmap 1.7.0",
               "target": "indexmap"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.6.0"
+        "version": "0.6.1"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -10090,7 +10098,7 @@
               "target": "multimap"
             },
             {
-              "id": "petgraph 0.6.0",
+              "id": "petgraph 0.6.1",
               "target": "petgraph"
             },
             {
@@ -14846,7 +14854,7 @@
               "target": "futures_util"
             },
             {
-              "id": "indexmap 1.8.1",
+              "id": "indexmap 1.7.0",
               "target": "indexmap"
             },
             {
@@ -15739,8 +15747,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -15751,8 +15759,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

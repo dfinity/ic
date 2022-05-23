@@ -2,7 +2,6 @@ use crate::api::{arg_data, reject, reply, spawn};
 use crate::{printer, setup};
 use core::fmt::Debug;
 use core::future::Future;
-use futures::future::FutureExt;
 use on_wire::{FromWire, IntoWire, NewType};
 
 pub use on_wire::{bytes, from};
@@ -205,8 +204,7 @@ where
     setup::START.call_once(|| {
         printer::hook();
     });
-    let bs = arg_data();
-    f(bs);
+    f(arg_data());
 }
 
 pub fn over_async_bytes<F, Fut>(f: F)
@@ -217,11 +215,11 @@ where
     setup::START.call_once(|| {
         printer::hook();
     });
-    let bs = arg_data();
-    let res = f(bs).map(move |bytes| {
+    let fut = f(arg_data());
+    spawn(async move {
+        let bytes = fut.await;
         reply(&bytes);
-    });
-    spawn(res)
+    })
 }
 
 pub fn over_async_bytes_may_reject<F, Fut>(f: F)
@@ -232,12 +230,14 @@ where
     setup::START.call_once(|| {
         printer::hook();
     });
-    let bs = arg_data();
-    let res = f(bs).map(move |result| match result {
-        Ok(output) => reply(&output),
-        Err(msg) => reject(msg.as_str()),
-    });
-    spawn(res)
+
+    let fut = f(arg_data());
+    spawn(async move {
+        match fut.await {
+            Ok(output) => reply(&output),
+            Err(msg) => reject(msg.as_str()),
+        }
+    })
 }
 
 pub fn over_bytes_result<F, Err>(f: F)
