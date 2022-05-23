@@ -29,14 +29,14 @@ impl TryFrom<BtcServiceGetSuccessorsRequest> for GetSuccessorsRequest {
 
     fn try_from(request: BtcServiceGetSuccessorsRequest) -> Result<Self, Self::Error> {
         let anchor = BlockHash::from_slice(request.anchor.as_slice())
-            .map_err(|_| Status::internal("Failed to parse anchor hash!"))?;
+            .map_err(|_| Status::unknown("Failed to parse anchor hash!"))?;
 
         let processed_block_hashes = request
             .processed_block_hashes
             .iter()
             .map(|hash| {
                 BlockHash::from_slice(hash.as_slice())
-                    .map_err(|_| Status::internal("Failed to read processed_block_hashes!"))
+                    .map_err(|_| Status::unknown("Failed to read processed_block_hashes!"))
             })
             .collect::<Result<Vec<_>, Status>>()?;
 
@@ -55,7 +55,7 @@ impl TryFrom<GetSuccessorsResponse> for BtcServiceGetSuccessorsResponse {
             let mut encoded_block = vec![];
             block
                 .consensus_encode(&mut encoded_block)
-                .map_err(|_| Status::internal("Failed to encode block!"))?;
+                .map_err(|_| Status::unknown("Failed to encode block!"))?;
             blocks.push(encoded_block);
         }
 
@@ -64,7 +64,7 @@ impl TryFrom<GetSuccessorsResponse> for BtcServiceGetSuccessorsResponse {
             let mut encoded_block_header = vec![];
             block_header
                 .consensus_encode(&mut encoded_block_header)
-                .map_err(|_| Status::internal("Failed to encode block header!"))?;
+                .map_err(|_| Status::unknown("Failed to encode block header!"))?;
             next.push(encoded_block_header);
         }
         Ok(BtcServiceGetSuccessorsResponse { blocks, next })

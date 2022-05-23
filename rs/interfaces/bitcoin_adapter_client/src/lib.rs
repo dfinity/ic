@@ -6,20 +6,20 @@ use strum_macros::IntoStaticStr;
 /// failure to transport) or to server (i.e. server responded, but
 /// gave us a message indicating an error).
 #[derive(Debug, IntoStaticStr)]
-pub enum RpcError {
+pub enum BitcoinAdapterClientError {
     /// Failure at transport.
     ConnectionBroken,
-    /// Failure at server endpoint.
-    ServerError {
-        /// gRPC status code.
-        /// See https://grpc.github.io/grpc/core/md_doc_statuscodes.html for more information.
-        status_code: u16,
-        message: String,
-        source: Box<dyn std::error::Error + Send + Sync + 'static>,
-    },
+    /// Bitcoin adapter client is unavailable at the moment and is not able to serve requests.
+    // Likely a transient error. For example still syncing the header chain up to the lastest checkpoint.
+    // You can retry the operation.
+    Unavailable(String),
+    /// Bitcoin adapter request was cancelled by the adapter client. Likely a timeout.
+    Cancelled(String),
+    /// Catch-all for unexpected errors in the bitcoin client. Likely a fatal error.
+    Unknown(String),
 }
 
-pub type RpcResult<T> = Result<T, RpcError>;
+pub type RpcResult<T> = Result<T, BitcoinAdapterClientError>;
 
 pub struct Options {
     pub timeout: Option<Duration>,
