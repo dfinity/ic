@@ -127,6 +127,9 @@ function build_ic_bootstrap_tar() {
             --accounts_ssh_authorized_keys)
                 ACCOUNTS_SSH_AUTHORIZED_KEYS="$2"
                 ;;
+            --denylist)
+                DENY_LIST="$2"
+                ;;
             --deployment-type)
                 DEPLOYMENT_TYPE="$2"
                 if [ ${DEPLOYMENT_TYPE} != "prod" ] && [ ${DEPLOYMENT_TYPE} != "dev" ]; then
@@ -154,6 +157,7 @@ function build_ic_bootstrap_tar() {
     }
 
     NGINX_DOMAIN_NAME="${NGINX_DOMAIN_NAME:="ic0.app"}"
+    DENY_LIST="${DENY_LIST:=""}"
 
     if ! echo $NGINX_DOMAIN_NAME | grep -q ".*\..*"; then
         echo "malformed domain name $NGINX_DOMAIN_NAME"
@@ -182,22 +186,40 @@ EOF
     if [ "${JOURNALBEAT_HOSTS}" != "" ]; then
         echo "journalbeat_hosts=$JOURNALBEAT_HOSTS" >"${BOOTSTRAP_TMPDIR}/journalbeat.conf"
     fi
+
     if [ "${JOURNALBEAT_TAGS}" != "" ]; then
         echo "journalbeat_tags=$JOURNALBEAT_TAGS" >>"${BOOTSTRAP_TMPDIR}/journalbeat.conf"
     fi
+
     if [ "${NNS_PUBLIC_KEY}" != "" ]; then
         cp "${NNS_PUBLIC_KEY}" "${BOOTSTRAP_TMPDIR}/nns_public_key.pem"
     fi
+
+    # list of NNS ipv6 addresses
     if [ "${NNS_URL}" != "" ]; then
         echo "nns_url=${NNS_URL}" >"${BOOTSTRAP_TMPDIR}/nns.conf"
     fi
+
+    # ssh access
     if [ "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" != "" ]; then
         cp -r "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" "${BOOTSTRAP_TMPDIR}/accounts_ssh_authorized_keys"
     fi
+
+    # set the deployment type
     echo ${DEPLOYMENT_TYPE:="prod"} >"${BOOTSTRAP_TMPDIR}/deployment_type"
 
+    # Set the domain name
     echo DOMAIN=${NGINX_DOMAIN} >"${BOOTSTRAP_TMPDIR}/nginxdomain.conf"
     echo TLD=${NGINX_TLD} >>"${BOOTSTRAP_TMPDIR}/nginxdomain.conf"
+
+    # setup the deny list
+    if [[ -f ${DENY_LIST} ]]; then
+        echo "Using deny list ${DENY_LIST}"
+        cp ${DENY_LIST} ${BOOTSTRAP_TMPDIR}/denylist.map
+    else
+        echo "Using empty denylist"
+        touch ${BOOTSTRAP_TMPDIR}/denylist.map
+    fi
 
     tar cf "${OUT_FILE}" -C "${BOOTSTRAP_TMPDIR}" .
     rm -rf "${BOOTSTRAP_TMPDIR}"
