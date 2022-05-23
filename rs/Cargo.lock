@@ -6352,7 +6352,6 @@ dependencies = [
  "slog",
  "tempfile",
  "thiserror",
- "tokio",
  "url",
 ]
 
