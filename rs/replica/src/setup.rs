@@ -150,7 +150,12 @@ pub async fn get_subnet_type(
                 break match subnet_record {
                     Some(record) => match SubnetType::try_from(record.subnet_type) {
                         Ok(subnet_type) => {
-                            info!(logger, "Registry subnet record {:?}", record);
+                            info!(
+                                logger,
+                                "{{subnet_record: Registry subnet record {:?}, subnet_id: {}}}",
+                                record,
+                                subnet_id
+                            );
                             subnet_type
                         }
                         Err(e) => fatal!(logger, "Could not parse SubnetType: {}", e),

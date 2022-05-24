@@ -7,7 +7,7 @@ from typing import Iterable
 from typing import List
 from typing import Optional
 
-import gitlab
+import gitlab.base
 import pytz
 from util.print import eprint
 

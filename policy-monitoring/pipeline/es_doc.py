@@ -9,6 +9,13 @@ from typing import Optional
 from typing import Tuple
 
 
+# Changes to a subnet
+class SubnetParams:
+    def __init__(self, subnet_id: str, subnet_type: str):
+        self.subnet_id = subnet_id
+        self.subnet_type = subnet_type
+
+
 # Changes to the set of nodes in a subnet
 class NodeParams:
     def __init__(self, node_id: str):
@@ -123,7 +130,7 @@ class EsDoc:
 
 class RegistryDoc(EsDoc):
 
-    MARKER = r"^\[Canister [\w-]+?\] \[Registry Canister\] (.*)"
+    MARKER = r"^\[Canister [\w-]+?\] \[Registry\] (.*)"
 
     def __init__(self, repr):
         super().__init__(repr)
@@ -138,7 +145,38 @@ class RegistryDoc(EsDoc):
         text = m.group(1)
         return text
 
-    #   {'_index': 'journalbeat-guestos-journal-7.5.1-2022.04.06', '_type': '_doc', '_id': 'IieN_n8BwsYIEpayu7hb', '_score': None, '_source': {'@timestamp': '2022-04-06T11:06:12.877Z', 'ecs': {'version': '1.1.0'}, 'event': {'created': '2022-04-06T11:06:13.510Z'}, 'systemd': {'unit': 'ic-replica.service', 'invocation_id': '4fbe6c1c49c445a78a4b1381b1959952', 'cgroup': '/system.slice/ic-replica.service', 'transport': 'stdout', 'slice': 'system.slice'}, 'syslog': {'facility': 3, 'identifier': 'orchestrator', 'priority': 6}, 'host': {'hostname': 'ip62001-4d78-40d-0-5000-cff-fe43-51cd', 'boot_id': '3a2713e18abf4212acce647f349ebace', 'id': '9b0d3813efd443ca9adaaeae0c4351cd', 'name': 'ip62001-4d78-40d-0-5000-cff-fe43-51cd'}, 'tags': ['system_test', 'hourly__node_reassignment_pot-2298485185'], 'agent': {'ephemeral_id': 'c32b94ad-c1c1-4742-82a7-d0a390b158bc', 'hostname': 'ip62001-4d78-40d-0-5000-cff-fe43-51cd', 'id': '716933ec-f7b2-4c18-b8e7-c33954759f9e', 'version': '7.5.1', 'type': 'journalbeat'}, 'process': {'capabilites': '0', 'cmd': '/opt/ic/bin/canister_sandbox --embedder-config {"max_wasm_stack_size":5242880,"query_execution_threads":2,"max_globals":200,"max_functions":6000,"max_custom_sections":16,"max_custom_sections_size":1048576,"feature_flags":{"api_cycles_u128_flag":"Enabled","rate_limiting_of_debug_prints":"Enabled"}} rwlgt-iiaaa-aaaaa-aaaaa-cai', 'name': 'canister_sandbo', 'executable': '/opt/ic/bin/canister_sandbox', 'pid': 1009, 'uid': 108}, 'message': '[Canister rwlgt-iiaaa-aaaaa-aaaaa-cai] [Registry Canister] do_remove_nodes_from_subnet finished: RemoveNodesFromSubnetPayload { node_ids: [uoels-4c3q4-lhton-kfjlf-e2j5w-gsg3m-7pan7-6ubmq-mgqva-4i3op-pae, vpkdm-jsdoi-kv7bn-ra4yn-t2gu5-hvttd-4ubw5-g6oyh-ltplh-mw65j-bae] }', 'journald': {'custom': {'selinux_context': 'system_u:system_r:init_t:s0', 'stream_id': '9ff38823be774026954e933e151179e9'}}}, 'sort': [1649243172877]},
+    #   {'_index': 'journalbeat-guestos-journal-7.5.1-2022.05.21', '_type': '_doc', '_id': 'zNRS54ABwsYIEpayoTe7', '_score': None, '_source': {'@timestamp': '2022-05-21T15:53:11.827Z', 'syslog': {'facility': 3, 'priority': 6, 'identifier': 'orchestrator'}, 'ecs': {'version': '1.1.0'}, 'agent': {'id': '1fcdbbe9-6065-4960-a1c6-712323b42e54', 'version': '7.5.1', 'type': 'journalbeat', 'ephemeral_id': '80e3ea00-a94a-4964-8844-ae01c6c42173', 'hostname': 'blank'}, 'message': '[Canister rwlgt-iiaaa-aaaaa-aaaaa-cai] [Registry] do_create_subnet: {payload: CreateSubnetPayload { node_ids: [5clia-sq75b-4svqq-b6nod-dbqla-5ukfb-74azh-fb3yx-jyww2-iuzpf-iqe, 75oko-7ya4i-bdbpu-xapf5-miuaf-trflg-opt36-kj6ko-xm6mq-wud6h-tqe, dt563-psj4o-mke5u-xyfmx-c6gj7-ig63f-ykd2f-ec2u4-m2dsb-jt6b6-zae, vxacy-g2zq6-ygrgg-pfqb4-wxe4k-ibxiy-zlp5k-ckcro-2ffa2-dh6s4-3ae], subnet_id_override: None, ingress_bytes_per_block_soft_cap: 2097152, max_ingress_bytes_per_message: 2097152, max_ingress_messages_per_block: 1000, max_block_payload_size: 4194304, unit_delay_millis: 1000, initial_notary_delay_millis: 600, replica_version_id: "0b2a151dc582640a6ca8c967fc73606f95411bc5", dkg_interval_length: 499, dkg_dealings_per_block: 1, gossip_max_artifact_streams_per_peer: 20, gossip_max_chunk_wait_ms: 15000, gossip_max_duplicity: 1, gossip_max_chunk_size: 4096, gossip_receive_check_cache_size: 5000, gossip_pfn_evaluation_period_ms: 1000, gossip_registry_poll_period_ms: 3000, gossip_retransmission_request_ms: 60000, advert_best_effort_percentage: Some(20), start_as_nns: false, subnet_type: Application, is_halted: false, max_instructions_per_message: 5000000000, max_instructions_per_round: 7000000000, max_instructions_per_install_code: 200000000000, features: SubnetFeatures { ecdsa_signatures: false, canister_sandboxing: false, http_requests: false, bitcoin: None }, max_number_of_canisters: 4, ssh_readonly_access: [], ssh_backup_access: [], ecdsa_config: None }, subnet_id: cbcun-icjyv-6gyoy-5elnl-fmww6-ggtam-62qvn-stqwc-4bgs7-y5wwa-hae}', 'event': {'created': '2022-05-21T15:53:12.900Z'}, 'systemd': {'invocation_id': '45b97258c4534a1ea14f1c6141c827d2', 'transport': 'stdout', 'cgroup': '/system.slice/ic-replica.service', 'slice': 'system.slice', 'unit': 'ic-replica.service'}, 'journald': {'custom': {'stream_id': 'b077a69578af4354ab234404ac0d74a2', 'selinux_context': 'system_u:system_r:init_t:s0'}}, 'tags': ['system_test', 'hourly__create_subnet-martin-zh1-spm22_zh1_dfinity_network-1653148250'], 'process': {'pid': 1002, 'cmd': '/opt/ic/bin/canister_sandbox --embedder-config {"max_wasm_stack_size":5242880,"query_execution_threads":2,"max_globals":300,"max_functions":7000,"max_custom_sections":16,"max_custom_sections_size":1048576,"feature_flags":{"api_cycles_u128_flag":"Enabled","rate_limiting_of_debug_prints":"Enabled"}} rwlgt-iiaaa-aaaaa-aaaaa-cai', 'executable': '/opt/ic/bin/canister_sandbox', 'uid': 108, 'name': 'canister_sandbo', 'capabilites': '0'}, 'host': {'hostname': 'ip62001-4d78-40d-0-5000-4aff-fec4-b00c', 'boot_id': '4462ba9918f04696a563328bc94ad4a6', 'id': 'fdf362f8dc2142f2bf6c64164ac4b00c', 'name': 'blank'}}, 'sort': [1653148391827]},
+    def get_created_subnet(self) -> Optional[SubnetParams]:
+        text = self._text()
+        m = re.match(r"do_create_subnet: {payload: CreateSubnetPayload {.*}, subnet_id: ([a-z0-9-]*)}", text)
+        if not m or len(m.groups()) != 1:
+            return None
+        subnet_id = m.group(1)
+        m1 = re.match(r".*subnet_type: ([A-Za-z]*),.*", text)
+        assert m1 is not None and len(m1.groups()) == 1, "invalid CreateSubnetPayload"
+        subnet_type = m1.group(1)
+        assert (
+            subnet_type == "Application" or subnet_type == "System" or subnet_type == "VerifiedApplication"
+        ), "invalid subnet_type"
+        return SubnetParams(subnet_id, subnet_type)
+
+    #   {'_index': 'journalbeat-guestos-journal-7.5.1-2022.05.21', '_type': '_doc', '_id': 'YLZb54ABKhMW8WgQHcp6', '_score': None, '_source': {'@timestamp': '2022-05-21T16:02:28.020Z', 'journald': {'custom': {'selinux_context': 'system_u:system_r:init_t:s0', 'stream_id': '67b1da3602d14784b7e8805b8c9e12a7'}}, 'event': {'created': '2022-05-21T16:02:28.872Z'}, 'systemd': {'transport': 'stdout', 'cgroup': '/system.slice/ic-replica.service', 'unit': 'ic-replica.service', 'slice': 'system.slice', 'invocation_id': '971b70f079ac4560b1ff1e0a6b98051f'}, 'message': '[Canister rwlgt-iiaaa-aaaaa-aaaaa-cai] [Registry] do_update_subnet: UpdateSubnetPayload { subnet_id: basbk-ayycd-cngac-7mqut-ffjiq-z7lxq-wyq2s-4uof3-nrj7i-nhitq-xqe, max_ingress_bytes_per_message: None, max_ingress_messages_per_block: None, max_block_payload_size: None, unit_delay_millis: None, initial_notary_delay_millis: None, dkg_interval_length: None, dkg_dealings_per_block: None, max_artifact_streams_per_peer: None, max_chunk_wait_ms: None, max_duplicity: None, max_chunk_size: None, receive_check_cache_size: None, pfn_evaluation_period_ms: None, registry_poll_period_ms: None, retransmission_request_ms: None, advert_best_effort_percentage: None, set_gossip_config_to_default: false, start_as_nns: None, subnet_type: None, is_halted: None, max_instructions_per_message: None, max_instructions_per_round: None, max_instructions_per_install_code: None, features: None, ecdsa_config: Some(EcdsaConfig { quadruples_to_create_in_advance: 10, key_ids: [EcdsaKeyId { curve: Secp256k1, name: "secp256k1" }] }), ecdsa_key_signing_enable: None, ecdsa_key_signing_disable: None, max_number_of_canisters: None, ssh_readonly_access: None, ssh_backup_access: None }', 'process': {'uid': 116, 'pid': 1038, 'cmd': '/opt/ic/bin/canister_sandbox --embedder-config {"max_wasm_stack_size":5242880,"query_execution_threads":2,"max_globals":300,"max_functions":7000,"max_custom_sections":16,"max_custom_sections_size":1048576,"feature_flags":{"api_cycles_u128_flag":"Enabled","rate_limiting_of_debug_prints":"Enabled"}} rwlgt-iiaaa-aaaaa-aaaaa-cai', 'capabilites': '0', 'name': 'canister_sandbo', 'executable': '/opt/ic/bin/canister_sandbox'}, 'syslog': {'identifier': 'orchestrator', 'priority': 6, 'facility': 3}, 'tags': ['system_test', 'hourly__tecdsa_signature_same_subnet_pot-martin-zh1-spm22_zh1_dfinity_network-1653148721'], 'agent': {'ephemeral_id': '242319be-c20b-4897-8498-973f1e4a804f', 'hostname': 'blank', 'id': '36f1ce14-c1d3-4886-a62f-5486ef2f3d57', 'version': '7.5.1', 'type': 'journalbeat'}, 'ecs': {'version': '1.1.0'}, 'host': {'id': 'e5eb5c52b1ec49df8f107283b9820c6f', 'name': 'blank', 'boot_id': 'fef8d2207a374ce0906a5984298c968d', 'hostname': 'ip62001-4d78-40d-0-5000-b9ff-fe82-c6f'}}, 'sort': [1653148948020]},
+    def get_updated_subnet(self) -> Optional[SubnetParams]:
+        text = self._text()
+        m = re.match(r".*subnet_id: ([a-z0-9-]*),.*", text)
+        if not m or len(m.groups()) != 1:
+            return None
+        subnet_id = m.group(1)
+        m1 = re.match(r".*subnet_type: Some\(([A-Za-z]*)\),.*", text)
+        if not m1 or len(m1.groups()) != 1:
+            return None
+        subnet_type = m1.group(1)
+        assert (
+            subnet_type == "Application" or subnet_type == "System" or subnet_type == "VerifiedApplication"
+        ), "invalid subnet_type"
+        return SubnetParams(subnet_id, subnet_type)
+
+    #  {'_index': 'journalbeat-guestos-journal-7.5.1-2022.05.21', '_type': '_doc', '_id': 'ydZa54ABwsYIEpayCUo7', '_score': None, '_source': {'@timestamp': '2022-05-21T16:01:15.873Z', 'message': '[Canister rwlgt-iiaaa-aaaaa-aaaaa-cai] [Registry] do_remove_nodes_from_subnet started: RemoveNodesFromSubnetPayload { node_ids: [35acm-i34bc-jsxcs-drpqs-4ux4k-7le55-sz4x5-bivjl-7nhbt-gplof-mqe, fimce-f3l6q-hizba-i5si4-ivanz-2ulhs-r5hou-vvq4y-z7v6t-2fajy-vae] }', 'ecs': {'version': '1.1.0'}, 'event': {'created': '2022-05-21T16:01:18.151Z'}, 'host': {'id': '83b51a5670ff4fba971fd4305aa7cf13', 'name': 'blank', 'boot_id': '347e3b33b60a4ea2979fa52a098d1bcb', 'hostname': 'ip62001-4d78-40d-0-5000-5aff-fea7-cf13'}, 'systemd': {'slice': 'system.slice', 'transport': 'stdout', 'invocation_id': '231656c813ff4e9eb6e5857a6d3ec884', 'cgroup': '/system.slice/ic-replica.service', 'unit': 'ic-replica.service'}, 'process': {'cmd': '/opt/ic/bin/canister_sandbox --embedder-config {"max_wasm_stack_size":5242880,"query_execution_threads":2,"max_globals":300,"max_functions":7000,"max_custom_sections":16,"max_custom_sections_size":1048576,"feature_flags":{"api_cycles_u128_flag":"Enabled","rate_limiting_of_debug_prints":"Enabled"}} rwlgt-iiaaa-aaaaa-aaaaa-cai', 'name': 'canister_sandbo', 'pid': 1049, 'uid': 108, 'capabilites': '0', 'executable': '/opt/ic/bin/canister_sandbox'}, 'syslog': {'priority': 6, 'facility': 3, 'identifier': 'orchestrator'}, 'journald': {'custom': {'selinux_context': 'system_u:system_r:init_t:s0', 'stream_id': 'ed4ba4bf015949ccaf8c165a8f954a6d'}}, 'tags': ['system_test', 'hourly__tecdsa_remove_nodes_pot-martin-zh1-spm22_zh1_dfinity_network-1653148721'], 'agent': {'version': '7.5.1', 'type': 'journalbeat', 'ephemeral_id': 'aef92fa2-435b-4005-b5b7-60f8f257f116', 'hostname': 'blank', 'id': '542aea65-327b-40b5-894b-647ea3352338'}}, 'sort': [1653148875873]},
     def get_removed_nodes(self) -> Optional[List[NodeParams]]:
         text = self._text()
         m = re.match(
@@ -157,7 +195,7 @@ class RegistryDoc(EsDoc):
         assert len(removed_nodes) > 0, "expected node ids but didn't find any"
         return list(map(lambda node_str: NodeParams(node_str), removed_nodes))
 
-    #   {'@timestamp': '2022-04-06T11:06:21.570Z', 'message': '[Canister rwlgt-iiaaa-aaaaa-aaaaa-cai] [Registry Canister] do_add_nodes_to_subnet finished: AddNodesToSubnetPayload { subnet_id: fepls-j4bot-z6dp7-yrzwz-a5gtu-wkr5l-qle56-hwvxa-miyvw-65lc6-uae, node_ids: [uoels-4c3q4-lhton-kfjlf-e2j5w-gsg3m-7pan7-6ubmq-mgqva-4i3op-pae, vpkdm-jsdoi-kv7bn-ra4yn-t2gu5-hvttd-4ubw5-g6oyh-ltplh-mw65j-bae] }', 'syslog': {'identifier': 'orchestrator', 'priority': 6, 'facility': 3}, 'process': {'cmd': '/opt/ic/bin/canister_sandbox --embedder-config {"max_wasm_stack_size":5242880,"query_execution_threads":2,"max_globals":200,"max_functions":6000,"max_custom_sections":16,"max_custom_sections_size":1048576,"feature_flags":{"api_cycles_u128_flag":"Enabled","rate_limiting_of_debug_prints":"Enabled"}} rwlgt-iiaaa-aaaaa-aaaaa-cai', 'uid': 108, 'executable': '/opt/ic/bin/canister_sandbox', 'capabilites': '0', 'name': 'canister_sandbo', 'pid': 1009}, 'agent': {'version': '7.5.1', 'type': 'journalbeat', 'ephemeral_id': 'c32b94ad-c1c1-4742-82a7-d0a390b158bc', 'hostname': 'ip62001-4d78-40d-0-5000-cff-fe43-51cd', 'id': '716933ec-f7b2-4c18-b8e7-c33954759f9e'}, 'ecs': {'version': '1.1.0'}, 'host': {'id': '9b0d3813efd443ca9adaaeae0c4351cd', 'hostname': 'ip62001-4d78-40d-0-5000-cff-fe43-51cd', 'name': 'ip62001-4d78-40d-0-5000-cff-fe43-51cd', 'boot_id': '3a2713e18abf4212acce647f349ebace'}, 'journald': {'custom': {'selinux_context': 'system_u:system_r:init_t:s0', 'stream_id': '9ff38823be774026954e933e151179e9'}}, 'event': {'created': '2022-04-06T11:06:22.397Z'}, 'systemd': {'slice': 'system.slice', 'invocation_id': '4fbe6c1c49c445a78a4b1381b1959952', 'transport': 'stdout', 'cgroup': '/system.slice/ic-replica.service', 'unit': 'ic-replica.service'}, 'tags': ['system_test', 'hourly__node_reassignment_pot-2298485185']}, 'sort': [1649243181570]},
+    #   {'_index': 'journalbeat-guestos-journal-7.5.1-2022.05.21', '_type': '_doc', '_id': 'w9Za54ABwsYIEpayEkwt', '_score': None, '_source': {'@timestamp': '2022-05-21T16:01:20.058Z', 'systemd': {'slice': 'system.slice', 'transport': 'stdout', 'cgroup': '/system.slice/ic-replica.service', 'unit': 'ic-replica.service', 'invocation_id': 'a1a9012e675b4f518a1f4a05e1416ddc'}, 'host': {'boot_id': '55f99aae5bdb4f7cb7778048b2dd8cd9', 'id': '0d28be519f6c47359a90fd3f849976b9', 'hostname': 'ip62001-4d78-40d-0-5000-84ff-fe99-76b9', 'name': 'blank'}, 'tags': ['system_test', 'hourly__tecdsa_add_nodes_pot-martin-zh1-spm22_zh1_dfinity_network-1653148721'], 'agent': {'id': 'd3cc0252-2624-48d1-8433-660ff1467c40', 'version': '7.5.1', 'type': 'journalbeat', 'ephemeral_id': '33d8b5a1-08d2-4baf-ae2e-17016b422162', 'hostname': 'blank'}, 'message': '[Canister rwlgt-iiaaa-aaaaa-aaaaa-cai] [Registry] do_add_nodes_to_subnet started: AddNodesToSubnetPayload { subnet_id: zqbvp-jbpwl-jblgr-2pash-5nbs4-jzyt4-uxc4q-acsct-ynxhm-vlorr-vqe, node_ids: [3qzji-sp6j5-6clae-2tjtq-qvauh-qcnku-cq5xc-lhffl-qlwgg-63plk-cqe, ntjoz-a5fia-5s6q5-uz2ir-4lnhu-66er6-qtm54-ayc7f-4ejj6-ih5rz-tae, p3sku-hq32u-bez5v-a7w46-umfwh-ig5dv-cbdjh-xmhgj-43eab-ihuui-yqe] }', 'ecs': {'version': '1.1.0'}, 'journald': {'custom': {'selinux_context': 'system_u:system_r:init_t:s0', 'stream_id': '467b55e3a80549eab27d52955f6adbd0'}}, 'event': {'created': '2022-05-21T16:01:20.442Z'}, 'process': {'capabilites': '0', 'pid': 1017, 'name': 'canister_sandbo', 'executable': '/opt/ic/bin/canister_sandbox', 'uid': 116, 'cmd': '/opt/ic/bin/canister_sandbox --embedder-config {"max_wasm_stack_size":5242880,"query_execution_threads":2,"max_globals":300,"max_functions":7000,"max_custom_sections":16,"max_custom_sections_size":1048576,"feature_flags":{"api_cycles_u128_flag":"Enabled","rate_limiting_of_debug_prints":"Enabled"}} rwlgt-iiaaa-aaaaa-aaaaa-cai'}, 'syslog': {'priority': 6, 'facility': 3, 'identifier': 'orchestrator'}}, 'sort': [1653148880058]},
     def get_added_nodes(self) -> Optional[List[NodesubnetParams]]:
         text = self._text()
         m = re.match("do_add_nodes_to_subnet finished: AddNodesToSubnetPayload { (.*?) }", text)
@@ -190,6 +228,10 @@ class ReplicaDoc(EsDoc):
     def _log_entry(self):
         return self.parse_message()["log_entry"]
 
+    def get_log_entry_message(self):
+        le = self._log_entry()
+        return le["message"]
+
     def get_crate_module(self) -> Tuple[str, str]:
         le = self._log_entry()
         return le["crate_"], le["module"]
@@ -197,6 +239,21 @@ class ReplicaDoc(EsDoc):
     def get_subnet_id(self) -> str:
         le = self._log_entry()
         return le["subnet_id"]
+
+    def get_subnet_type(self) -> Optional[Tuple[str, str]]:
+        m = re.search(
+            r"{subnet_record: Registry subnet record SubnetRecord {.*subnet_type: ([A-Za-z]*),.*}, subnet_id: ([a-z0-9-]*)}",
+            self.get_log_entry_message(),
+        )
+        if m:
+            assert len(m.groups()) == 2
+            subnet_type = m.group(1)
+            assert (
+                subnet_type == "Application" or subnet_type == "System" or subnet_type == "VerifiedApplication"
+            ), "invalid subnet_type"
+            subnet_id = m.group(2)
+            return (subnet_id, subnet_type)
+        return None
 
     def get_node_id(self) -> str:
         le = self._log_entry()

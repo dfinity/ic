@@ -404,6 +404,7 @@ class Pipeline:
         infra = GlobalInfra(replica_docs=orch_docs)
         self.stat[group.gid]["global_infra"] = {
             "subnets": infra.get_subnet_info(),
+            "original_subnet_types": infra.get_original_subnet_types(),
             "original_subnet_membership": infra.get_original_subnet_membership(),
             "data_centers": infra.get_dc_info(),
             "host_addr_to_node_id_mapping": infra.get_host_addr_to_node_id_mapping(),

@@ -81,6 +81,10 @@ impl Registry {
         let generated_subnet_id = response.fresh_subnet_id;
         let subnet_id_principal = payload.subnet_id_override.unwrap_or(generated_subnet_id);
         let subnet_id = SubnetId::new(subnet_id_principal);
+        println!(
+            "{}do_create_subnet: {{payload: {:?}, subnet_id: {}}}",
+            LOG_PREFIX, payload, subnet_id_principal
+        );
 
         // 2b. Invoke compute_initial_ecdsa_dealings on ic_00
         let ecdsa_initializations = self

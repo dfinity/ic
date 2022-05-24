@@ -1,12 +1,15 @@
 log(node_id:string, subnet_id:string, level:string, message:string)
 log1(node:string, val:float)
 
+local__original_subnet_type(subnet_id:string, subnet_type:string)
 local__originally_in_subnet(node_addr:string, node_addr:string, subnet_id:string)
 local__originally_unassigned(node_addr:string, node_addr:string, subnet_id:string)
 
 p2p__node_added(node_id:string, subnet_id:string)
 p2p__node_removed(node_id:string, subnet_id:string)
 
+registry__subnet_created(subnet_id:string, subnet_type:string)
+registry__subnet_updated(subnet_id:string, subnet_type:string)
 registry__node_added_to_subnet(node_id:string, node_addr:string, subnet_id:string)
 registry__node_removed_from_subnet(node_id:string, node_addr:string)
 
