@@ -47,7 +47,10 @@ gflags.DEFINE_integer("num_canisters", 1, "number of canisters to install")
 
 class StatesyncExperiment(base_experiment.BaseExperiment):
     def __init__(self):
+        """Initialize the state sync experiment."""
         super().__init__()
+        super().init()
+        super().init_experiment()
         self.canister = CANISTER
         hostname = self.get_node_ip_address(self.get_subnet_members(FLAGS.subnet_index)[0])
         for i in range(FLAGS.num_canisters):
