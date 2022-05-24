@@ -382,7 +382,7 @@ proptest! {
     /// If this test fails, you need to check where the error lies (payload vs.
     /// witness) and adjust the estimate accordingly. Or bump the error margin.
     #[test]
-    fn slice_accurate_count_bytes((stream, from, msg_count) in arb_stream_slice(2, 100, 0, 0)) {
+    fn slice_accurate_count_bytes((stream, from, msg_count) in arb_stream_slice(2, 100, 0, 100)) {
         /// Asserts that the `actual` value is within `+/-(error_percent% +
         /// absolute_error)` of the `expected` value.
         fn assert_almost_equal(
@@ -395,10 +395,11 @@ proptest! {
             let expected_max = expected * (100 + error_percent) / 100 + absolute_error;
             assert!(
                 expected_min <= actual && actual <= expected_max,
-                "Expecting estimated size to be within {}% of {}, was {}",
+                "Expecting estimated size to be within {}% + {} of {}, was {}",
                 error_percent,
+                absolute_error,
                 expected,
-                actual
+                actual,
             );
         }
 

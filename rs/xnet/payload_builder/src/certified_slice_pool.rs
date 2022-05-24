@@ -142,6 +142,10 @@ mod header {
         pub(super) fn signals_end(&self) -> StreamIndex {
             self.decoded.signals_end
         }
+
+        pub(super) fn reject_signals_len(&self) -> usize {
+            self.decoded.reject_signals.len()
+        }
     }
 
     impl TryFrom<Vec<u8>> for Header {
@@ -372,9 +376,10 @@ impl Payload {
     ) -> CertifiedSliceResult<(Option<Self>, Option<Self>)> {
         let message_limit = message_limit.unwrap_or(std::usize::MAX);
         let byte_limit = byte_limit.unwrap_or(std::usize::MAX);
+        let reject_signals_bytes = self.reject_signals_count_bytes();
 
         debug_assert!(EMPTY_PAYLOAD_BYTES <= NON_EMPTY_PAYLOAD_FIXED_BYTES);
-        if byte_limit < EMPTY_PAYLOAD_BYTES + NO_MESSAGES_WITNESS_BYTES {
+        if byte_limit < EMPTY_PAYLOAD_BYTES + reject_signals_bytes + NO_MESSAGES_WITNESS_BYTES {
             // `byte_limit` smaller than minimum payload size, bail out.
             return Ok((None, Some(self)));
         }
@@ -399,7 +404,7 @@ impl Payload {
             .expect("Non-zero byte size for empty `messages`.");
 
         // Find the rightmost cutoff point that respects the provided limits.
-        let mut byte_size = NON_EMPTY_PAYLOAD_FIXED_BYTES;
+        let mut byte_size = NON_EMPTY_PAYLOAD_FIXED_BYTES + reject_signals_bytes;
         let mut cutoff = None;
         let slice_begin = messages.begin();
         for (i, (label, message)) in messages.iter().enumerate() {
@@ -440,7 +445,10 @@ impl Payload {
         // Return (possibly empty) prefix, retain non-empty postfix.
         let prefix = self.new_partial(prefix)?;
         if prefix.len() == 0 {
-            debug_assert_eq!(prefix.count_bytes(), EMPTY_PAYLOAD_BYTES);
+            debug_assert_eq!(
+                prefix.count_bytes(),
+                EMPTY_PAYLOAD_BYTES + reject_signals_bytes
+            );
         } else {
             debug_assert_eq!(prefix.count_bytes(), byte_size);
         }
@@ -668,13 +676,29 @@ impl Payload {
             LabeledTree::Leaf(value) => Ok(value),
         }
     }
+
+    fn reject_signals_count_bytes(&self) -> usize {
+        match self.header.reject_signals_len() {
+            0 => 0,
+
+            // 3 bytes (field number, type array, length) plus 1 byte per signal.
+            //
+            // Note that this assumes small deltas between signals. With larger deltas,
+            // signals get encoded as 2 or even 3 bytes, but then we must have much fewer
+            // signals, so they won't have a significant influence on payload size.
+            n => 3 + n,
+        }
+    }
 }
 
 impl CountBytes for Payload {
     fn count_bytes(&self) -> usize {
+        let reject_signals_bytes = self.reject_signals_count_bytes();
         match self.messages.as_ref() {
-            Some(messages) => NON_EMPTY_PAYLOAD_FIXED_BYTES + messages.count_bytes(),
-            None => EMPTY_PAYLOAD_BYTES,
+            Some(messages) => {
+                NON_EMPTY_PAYLOAD_FIXED_BYTES + reject_signals_bytes + messages.count_bytes()
+            }
+            None => EMPTY_PAYLOAD_BYTES + reject_signals_bytes,
         }
     }
 }
