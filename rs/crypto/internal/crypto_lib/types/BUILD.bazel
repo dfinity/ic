@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -30,4 +30,9 @@ rust_library(
         "@crate_index//:thiserror",
         "@crate_index//:zeroize",
     ],
+)
+
+rust_test(
+    name = "types_test",
+    crate = ":types",
 )
