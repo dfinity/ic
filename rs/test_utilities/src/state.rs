@@ -812,14 +812,16 @@ prop_compose! {
     /// Produces a strategy that generates an arbitrary `signals_end` and between
     /// `[sig_min_size, sig_max_size]` reject signals .
     pub fn arb_reject_signals(sig_min_size: usize, sig_max_size: usize)(
-        sigs in prop::collection::btree_set(arbitrary::stream_index(10000 + sig_max_size as u64), sig_min_size..=sig_max_size),
+        sig_start in 0..10000u64,
+        sigs in prop::collection::btree_set(arbitrary::stream_index(100 + sig_max_size as u64), sig_min_size..=sig_max_size),
         sig_end_delta in 0..10u64,
     ) -> (StreamIndex, VecDeque<StreamIndex>) {
         let mut reject_signals = VecDeque::with_capacity(sigs.len());
+        let sig_start = sig_start.into();
         for s in sigs {
-            reject_signals.push_back(s);
+            reject_signals.push_back(s + sig_start);
         }
-        let sig_end = reject_signals.back().unwrap_or(&0.into()).increment() + sig_end_delta.into();
+        let sig_end = sig_start + reject_signals.back().unwrap_or(&0.into()).increment() + sig_end_delta.into();
         (sig_end, reject_signals)
     }
 }
