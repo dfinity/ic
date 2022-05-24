@@ -31,11 +31,6 @@ pub struct ReplicaArgs {
     #[clap(long, parse(try_from_str = ReplicaVersion::try_from))]
     pub replica_version: ReplicaVersion,
 
-    /// A path to the PEM file with the public key of the NNS subnet.
-    /// It's used to certify responses of the registry canister.
-    #[clap(long, parse(from_os_str))]
-    pub nns_public_key_file: Option<PathBuf>,
-
     /// Force to use the given subnet ID. This is needed to upgrade NNS
     /// replicas. In that case, we already know which subnet ID we should be
     /// booting with, and trying to determine it from the registry will fail

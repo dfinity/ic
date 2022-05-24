@@ -11,7 +11,7 @@ use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_replica::{args::ReplicaArgs, setup};
+use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
 use ic_types::{replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion, SubnetId};
 use nix::unistd::{setpgid, Pid};
@@ -123,7 +123,6 @@ async fn run() -> io::Result<()> {
     let _sigpipe_handler =
         signal(SignalKind::pipe()).expect("failed to install SIGPIPE signal handler");
 
-    // Parse command-line args
     let replica_args = setup::parse_args();
     if let Err(e) = &replica_args {
         e.print().expect("Failed to print CLI argument error.");
@@ -134,26 +133,13 @@ async fn run() -> io::Result<()> {
 
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
 
-    let optional_nns_key_path = match &replica_args {
-        Ok(ReplicaArgs {
-            nns_public_key_file: Some(path_buf),
-            ..
-        }) => Some(path_buf.as_path()),
-        _ => None,
-    };
-
     let metrics_registry = MetricsRegistry::global();
 
     #[cfg(target_os = "linux")]
     metrics_registry.register(jemalloc_metrics::JemallocMetrics::new());
 
-    let (registry, crypto) = setup::setup_crypto_registry(
-        config.clone(),
-        Some(&metrics_registry),
-        optional_nns_key_path,
-        logger.clone(),
-        |_crypto, _data_provider| (),
-    );
+    let (registry, crypto) =
+        setup::setup_crypto_registry(config.clone(), Some(&metrics_registry), logger.clone());
 
     let node_id = crypto.get_node_id();
     let cup_with_proto = setup::get_catch_up_package(&replica_args, &logger);
@@ -238,10 +224,6 @@ async fn run() -> io::Result<()> {
     if let Ok((path, hash)) = get_replica_binary_hash() {
         info!(logger, "Running replica binary: {:?} {}", path, hash);
         let _ = REPLICA_BINARY_HASH.set(hash);
-    }
-
-    if replica_args.is_err() {
-        info!(logger, "Warning: unlabeled command-line args are deprecated! Please use the flags/labels defined by ReplicaArgs");
     }
 
     // We abort the whole program with a core dump if a single thread panics.
