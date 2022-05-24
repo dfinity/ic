@@ -1,0 +1,22 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "logmon",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_internal_logmon",
+    edition = "2018",
+    visibility = ["//rs/crypto:__subpackages__"],
+    deps = [
+        "//rs/monitoring/metrics",
+        "@crate_index//:prometheus",
+    ],
+)
