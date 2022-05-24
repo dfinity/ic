@@ -63,7 +63,7 @@ async fn main() {
         let inner: BtcServiceGetSuccessorsResponse = match response {
             Ok(response) => response.into_inner(),
             Err(status) => match status.code() {
-                tonic::Code::Cancelled => continue,
+                tonic::Code::Cancelled | tonic::Code::Unavailable => continue,
                 _ => break,
             },
         };

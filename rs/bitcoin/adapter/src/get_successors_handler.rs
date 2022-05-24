@@ -4,8 +4,10 @@ use std::{
 };
 
 use bitcoin::{Block, BlockHash, BlockHeader, Network};
+use ic_btc_validation::is_beyond_last_checkpoint;
 use ic_logger::{error, ReplicaLogger};
 use tokio::sync::{mpsc::Sender, Mutex};
+use tonic::{Code, Status};
 
 use crate::{common::BlockHeight, config::Config, BlockchainManagerRequest, BlockchainState};
 
@@ -70,12 +72,25 @@ impl GetSuccessorsHandler {
     /// Handles a request for get successors. The response will contain the blocks that the adapter
     /// currently contains in its cache as well as the headers for the next blocks.
     /// If the channels are full, PruneOldBlocks and EnqueueNewBlocksToDownload will not be executed.
-    pub async fn get_successors(&self, request: GetSuccessorsRequest) -> GetSuccessorsResponse {
+    pub async fn get_successors(
+        &self,
+        request: GetSuccessorsRequest,
+    ) -> Result<GetSuccessorsResponse, Status> {
         let response = {
             let state = self.state.lock().await;
             let anchor_height = state
                 .get_cached_header(&request.anchor)
                 .map_or(0, |cached| cached.height);
+
+            // Wait with downloading blocks until we synced the header chain above the last checkpoint
+            // to make sure we are following the correct chain.
+            if !is_beyond_last_checkpoint(&self.network, state.get_active_chain_tip().height) {
+                return Err(Status::new(
+                    Code::Unavailable,
+                    "Header chain not yet synced past last checkpoint",
+                ));
+            }
+
             let allow_multiple_blocks = are_multiple_blocks_allowed(self.network, anchor_height);
             let blocks = get_successor_blocks(
                 &state,
@@ -115,7 +130,7 @@ impl GetSuccessorsHandler {
                 .ok();
         }
 
-        response
+        Ok(response)
     }
 }
 
@@ -304,7 +319,7 @@ mod test {
                 .expect("invalid block");
         }
 
-        let response = handler.get_successors(request).await;
+        let response = handler.get_successors(request).await.unwrap();
 
         // Check that blocks contain block 1.
         assert_eq!(response.blocks.len(), 1);
@@ -345,6 +360,95 @@ mod test {
                 .collect::<Vec<BlockHash>>(),
             next_hashes
         );
+    }
+
+    #[tokio::test]
+    async fn test_get_successors_wait_header_sync_testnet() {
+        let config = ConfigBuilder::new().with_network(Network::Testnet).build();
+        let blockchain_state = BlockchainState::new(&config);
+        let genesis = blockchain_state.genesis().clone();
+        let genesis_hash = genesis.header.block_hash();
+        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let handler = GetSuccessorsHandler::new(
+            &config,
+            Arc::new(Mutex::new(blockchain_state)),
+            blockchain_manager_tx,
+            no_op_logger(),
+        );
+        // Set up the following chain:
+        // 0 -> 1 ---> 2 ---> 3 -> 4
+        let mut previous_hashes = vec![];
+        let main_chain = generate_headers(genesis_hash, genesis.header.time, 4, &[]);
+        previous_hashes.extend(
+            main_chain
+                .iter()
+                .map(|h| h.block_hash())
+                .collect::<Vec<_>>(),
+        );
+
+        // Create a request with the anchor block as the block 0 and processed block hashes contain
+        // block 1 and 2.x
+        let request = GetSuccessorsRequest {
+            anchor: genesis_hash,
+            processed_block_hashes: vec![],
+        };
+
+        {
+            let mut blockchain = handler.state.lock().await;
+            blockchain.add_headers(&main_chain);
+        }
+
+        let response = handler.get_successors(request).await;
+
+        // Since adapter is not yet passed highest checkpoint it should still be unavailbale.
+        // Highest checkpoint for testnet is 546.
+        assert_eq!(response.err().unwrap().code(), Code::Unavailable);
+    }
+
+    #[tokio::test]
+    async fn test_get_successors_wait_header_sync_regtest() {
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let blockchain_state = BlockchainState::new(&config);
+        let genesis = blockchain_state.genesis().clone();
+        let genesis_hash = genesis.header.block_hash();
+        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let handler = GetSuccessorsHandler::new(
+            &config,
+            Arc::new(Mutex::new(blockchain_state)),
+            blockchain_manager_tx,
+            no_op_logger(),
+        );
+
+        // Set up the following chain:
+        // 0 -> 1 -> 2 -> 3 -> 4 -> 5
+        let main_chain = generate_headers(genesis_hash, genesis.header.time, 5, &[]);
+        let main_block_1 = Block {
+            header: main_chain[0],
+            txdata: vec![],
+        };
+        let main_block_2 = Block {
+            header: main_chain[1],
+            txdata: vec![],
+        };
+        {
+            let mut blockchain = handler.state.lock().await;
+            blockchain.add_headers(&main_chain);
+            blockchain
+                .add_block(main_block_1.clone())
+                .expect("invalid block");
+            blockchain
+                .add_block(main_block_2.clone())
+                .expect("invalid block");
+        }
+        let request = GetSuccessorsRequest {
+            anchor: genesis_hash,
+            processed_block_hashes: vec![],
+        };
+        let response = handler.get_successors(request).await.unwrap();
+
+        // Response should be contain the blocks and next headers since the regtest network does not have checkpoints.
+        assert_eq!(response.blocks.len(), 2);
+        assert_eq!(response.next.len(), 3);
     }
 
     /// This tests ensures that `BlockchainManager::handle_client_request(...)` returns multiple
@@ -406,7 +510,7 @@ mod test {
             anchor: genesis_hash,
             processed_block_hashes: vec![],
         };
-        let response = handler.get_successors(request).await;
+        let response = handler.get_successors(request).await.unwrap();
         assert_eq!(response.blocks.len(), 3);
         assert!(
             matches!(response.blocks.get(0), Some(block) if block.block_hash() == main_block_1.block_hash())
@@ -484,7 +588,7 @@ mod test {
             anchor: genesis_hash,
             processed_block_hashes: vec![],
         };
-        let response = handler.get_successors(request).await;
+        let response = handler.get_successors(request).await.unwrap();
         assert_eq!(
             response.blocks.len(),
             1,
@@ -561,7 +665,7 @@ mod test {
             anchor: genesis_hash,
             processed_block_hashes: vec![],
         };
-        let response = handler.get_successors(request).await;
+        let response = handler.get_successors(request).await.unwrap();
         // There are 2 blocks in the chain: {large, small}.
         // Only the large block should be returned in this response.
         assert_eq!(response.blocks.len(), 1);
@@ -617,7 +721,7 @@ mod test {
             anchor: genesis_hash,
             processed_block_hashes: vec![],
         };
-        let response = handler.get_successors(request).await;
+        let response = handler.get_successors(request).await.unwrap();
 
         // Six blocks in the chain. First 5 are small blocks and the last block is large.
         // Should return the first 5 blocks as the total size is below the cap.
