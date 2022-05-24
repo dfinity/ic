@@ -133,3 +133,6 @@ allow journalbeat_t journalbeat_t : process { signal };
 
 # Journalbeat checks `hpage_pmd_size`
 dev_read_sysfs(journalbeat_t)
+
+# For some reason, it wants to read this
+kernel_read_vm_overcommit_sysctl(journalbeat_t)
