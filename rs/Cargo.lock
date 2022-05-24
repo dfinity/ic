@@ -3764,6 +3764,7 @@ name = "ic-btc-adapter-client"
 version = "0.1.0"
 dependencies = [
  "bitcoin 0.27.1",
+ "ic-async-utils",
  "ic-btc-service",
  "ic-btc-types-internal",
  "ic-config",
@@ -3945,6 +3946,7 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "futures",
+ "ic-async-utils",
  "ic-canister-http-service",
  "ic-error-types",
  "ic-ic00-types",

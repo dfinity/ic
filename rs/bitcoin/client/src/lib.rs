@@ -5,6 +5,7 @@ use crate::metrics::{
     OK_LABEL, REQUESTS_LABEL_NAMES, UNKNOWN_LABEL,
 };
 use bitcoin::consensus::Decodable;
+use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_btc_service::{
     btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
     BtcServiceSendTransactionRequest,
@@ -254,6 +255,7 @@ fn setup_bitcoin_adapter_client(
             // as the request to the `MakeConnection`.
             match Endpoint::try_from("http://[::]:50051") {
                 Ok(endpoint) => {
+                    let endpoint = endpoint.executor(ExecuteOnTokioRuntime(rt_handle.clone()));
                     let channel =
                         endpoint.connect_with_connector_lazy(service_fn(move |_: Uri| {
                             // Connect to a Uds socket

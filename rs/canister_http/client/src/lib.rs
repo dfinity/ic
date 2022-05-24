@@ -1,6 +1,7 @@
 mod client;
 
 use crate::client::{BrokenCanisterHttpClient, CanisterHttpAdapterClientImpl};
+use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces_canister_http_adapter_client::CanisterHttpAdapterClient;
 use ic_logger::{error, info, ReplicaLogger};
@@ -35,6 +36,7 @@ pub fn setup_canister_http_client(
             // We will ignore this uri because uds does not use it.
             match Endpoint::try_from("http://[::]:50151") {
                 Ok(endpoint) => {
+                    let endpoint = endpoint.executor(ExecuteOnTokioRuntime(rt_handle.clone()));
                     let channel =
                         endpoint.connect_with_connector_lazy(service_fn(move |_: Uri| {
                             // Connect to a Uds socket
