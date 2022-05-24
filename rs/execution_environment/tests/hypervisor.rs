@@ -23,9 +23,10 @@ use ic_replicated_state::{
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ApiType;
 use ic_test_utilities::execution_environment::{
-    assert_empty_reply, get_reply, ExecutionTest, ExecutionTestBuilder,
+    assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities::types::messages::{IngressBuilder, RequestBuilder};
+use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_test_utilities::{
     assert_utils::assert_balance_equals,
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -1881,7 +1882,9 @@ fn ic0_call_perform_has_no_effect_on_trap() {
 
 #[test]
 fn ic0_call_cycles_add_deducts_cycles() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(MAX_NUM_INSTRUCTIONS.get())
+        .build();
     let wat = r#"
         (module
             (import "ic0" "call_new"
@@ -1915,7 +1918,7 @@ fn ic0_call_cycles_add_deducts_cycles() {
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
-    let ingress_status = test.ingress_raw(canister_id, "test", vec![]);
+    let ingress_status = test.ingress_raw(canister_id, "test", vec![]).1;
     let ingress_state = match ingress_status {
         IngressStatus::Known { state, .. } => state,
         IngressStatus::Unknown => unreachable!("Expected known ingress status"),
@@ -3406,4 +3409,845 @@ fn install_gzip_compressed_module() {
     assert_empty_reply(result);
     let result = test.ingress(canister_id, "read", vec![]);
     assert_eq!(result, Ok(WasmResult::Reply(vec![1, 0, 0, 0])));
+}
+
+#[test]
+fn cycles_cannot_be_accepted_after_response() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create three canisters A, B, C.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let c_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+
+    // Canister C simply replies with the message that was sent to it.
+    let c = wasm().message_payload().append_and_reply().build();
+
+    // Canister B:
+    // 1. Replies to canister A with the message that was sent to it.
+    // 2. Calls canister C.
+    // 3. In the reply callback accepts `transferred_cycles`.
+    let b = wasm()
+        .message_payload()
+        .append_and_reply()
+        .inter_update(
+            c_id.get(),
+            call_args()
+                .other_side(c.clone())
+                .on_reply(wasm().accept_cycles(transferred_cycles)),
+        )
+        .build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers cycles.
+    // 2. Forwards the reply in the reply callback, which is the default
+    //    behaviour of the universal canister.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args().other_side(b.clone()),
+            (0, transferred_cycles),
+        )
+        .build();
+    let result = test.ingress(a_id, "update", a).unwrap();
+    assert_matches!(result, WasmResult::Reply(_));
+
+    // Canister A gets a refund for all transferred cycles.
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("update", &b)
+            - test.reply_fee(&b)
+    );
+
+    // Canister B doesn't get the transferred cycles.
+    assert_eq!(
+        test.canister_state(b_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(b_id)
+            - test.call_fee("update", &c)
+            - test.reply_fee(&c)
+    );
+
+    // Canister C pays only for execution.
+    assert_eq!(
+        test.canister_state(c_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(c_id)
+    );
+}
+
+#[test]
+fn cycles_are_refunded_if_not_accepted() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create three canisters A, B, C.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let c_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let a_to_b_transferred = (initial_cycles.get() / 2) as u64;
+    let a_to_b_accepted = a_to_b_transferred / 2;
+    let b_to_c_transferred = a_to_b_accepted;
+    let b_to_c_accepted = b_to_c_transferred / 2;
+
+    // Canister C accepts some cycles and replies to canister B.
+    let c = wasm()
+        .accept_cycles(b_to_c_accepted)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    // Canister B:
+    // 1. Accepts some cycles.
+    // 2. Replies to canister A.
+    // 3. Calls canister C.
+    // 4. Forwards the reply in the reply callback, which is the default
+    //    behaviour of the universal canister.
+    let b = wasm()
+        .accept_cycles(a_to_b_accepted)
+        .message_payload()
+        .append_and_reply()
+        .call_with_cycles(
+            c_id.get(),
+            "update",
+            call_args().other_side(c.clone()),
+            (0, b_to_c_transferred),
+        )
+        .build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers some cycles to it.
+    // 2. Forwards the reply in the reply callback, which is the default
+    //    behaviour of the universal canister.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args().other_side(b.clone()),
+            (0, a_to_b_transferred),
+        )
+        .build();
+    let result = test.ingress(a_id, "update", a).unwrap();
+    assert_matches!(result, WasmResult::Reply(_));
+
+    // Canister A gets a refund for all cycles not accepted by B.
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("update", &b)
+            - test.reply_fee(&b)
+            - Cycles::new(a_to_b_accepted as u128),
+    );
+
+    // Canister B gets all cycles it accepted and a refund for all cycles not
+    // accepted by C.
+    assert_eq!(
+        test.canister_state(b_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(b_id)
+            - test.call_fee("update", &c)
+            - test.reply_fee(&c)
+            + Cycles::new(a_to_b_accepted as u128)
+            - Cycles::new(b_to_c_accepted as u128)
+    );
+
+    // Canister C get all cycles it accepted.
+    assert_eq!(
+        test.canister_state(c_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(c_id) + Cycles::new(b_to_c_accepted as u128)
+    );
+}
+
+#[test]
+fn cycles_are_refunded_if_callee_traps() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create two canisters: A and B.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let a_to_b_transferred = (initial_cycles.get() / 2) as u64;
+    let a_to_b_accepted = a_to_b_transferred / 2;
+
+    // Canister B:
+    // 1. Accepts some cycles.
+    // 2. Replies to canister A.
+    // 3. Calls trap.
+    let b = wasm()
+        .accept_cycles(a_to_b_accepted)
+        .message_payload()
+        .append_and_reply()
+        .trap()
+        .build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers some cycles to it.
+    // 2. Forwards the reject code and message in the reject callback.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b.clone())
+                .on_reject(wasm().reject_code().reject_message().reject()),
+            (0, a_to_b_transferred),
+        )
+        .build();
+
+    let result = test.ingress(a_id, "update", a).unwrap();
+    let reject_message = match result {
+        WasmResult::Reply(_) => unreachable!("Expected reject, got {}", result),
+        WasmResult::Reject(reject_message) => reject_message,
+    };
+
+    // Canister A gets a refund for all transferred cycles because canister B
+    // trapped after accepting.
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("update", &b)
+            - test.reject_fee(reject_message)
+    );
+
+    // Canister B doesn't get any transferred cycles.
+    assert_eq!(
+        test.canister_state(b_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(b_id)
+    );
+}
+
+#[test]
+fn cycles_are_refunded_even_if_response_callback_traps() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create two canisters: A and B.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let a_to_b_transferred = (initial_cycles.get() / 2) as u64;
+    let a_to_b_accepted = a_to_b_transferred / 2;
+
+    // Canister B accepts cycles and replies.
+    let b = wasm()
+        .accept_cycles(a_to_b_accepted)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers some cycles to it.
+    // 2. Calls trap in the reply callback.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args().other_side(b.clone()).on_reply(wasm().trap()),
+            (0, a_to_b_transferred),
+        )
+        .build();
+    let err = test.ingress(a_id, "update", a).unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+
+    // Calling trap in the reply callback shouldn't affect the amount of
+    // refunded cycles. Canister A gets all cycles that are not accepted by B.
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("update", &b)
+            - test.reply_fee(&b)
+            - Cycles::new(a_to_b_accepted as u128),
+    );
+
+    // Canister B gets cycles it accepted.
+    assert_eq!(
+        test.canister_state(b_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(b_id) + Cycles::new(a_to_b_accepted as u128)
+    );
+}
+
+// TODO(RUN-175): Enable the test after the bug is fixed.
+#[test]
+#[ignore]
+fn cycles_are_refunded_if_callee_is_a_query() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create two canisters: A and B.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let a_to_b_transferred = (initial_cycles.get() / 2) as u64;
+
+    // Canister B simply replies to canister A without accepting any cycles.
+    // Note that it cannot accept cycles because it runs as a query.
+    let b = wasm().message_payload().append_and_reply().build();
+
+    // Canister A:
+    // 1. Calls a query method of canister B and transfers some cycles to it.
+    // 2. Forwards the reply in the reply callback, which is the default
+    //    behaviour of the universal canister.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "query",
+            call_args().other_side(b.clone()),
+            (0, a_to_b_transferred),
+        )
+        .build();
+    let result = test.ingress(a_id, "update", a).unwrap();
+    assert_matches!(result, WasmResult::Reply(_));
+
+    // Canister should get a refund for all transferred cycles.
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("query", &b)
+            - test.reply_fee(&b)
+    );
+
+    // Canister B doesn't get any transferred cycles.
+    assert_eq!(
+        test.canister_state(b_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(b_id)
+    );
+}
+
+#[test]
+fn cycles_are_refunded_if_callee_is_uninstalled_before_execution() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create two canisters: A and B.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let a_to_b_transferred = (initial_cycles.get() / 2) as u64;
+
+    // Canister B simply replies to canister A.
+    let b = wasm().message_payload().append_and_reply().build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers some cycles to it.
+    // 2. Forwards the reject code and message in the reject callback.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b.clone())
+                .on_reject(wasm().reject_code().reject_message().reject()),
+            (0, a_to_b_transferred),
+        )
+        .build();
+
+    // Uninstall canister B before calling it.
+    test.uninstall_code(b_id).unwrap();
+
+    // Send a message to canister A which will call canister B.
+    let result = test.ingress(a_id, "update", a).unwrap();
+    let reject_message = match result {
+        WasmResult::Reply(_) => unreachable!("Expected reject, got {}", result),
+        WasmResult::Reject(reject_message) => reject_message,
+    };
+
+    // Canister A gets a refund for all transferred cycles.
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("update", &b)
+            - test.reject_fee(reject_message)
+    );
+
+    // Canister B doesn't get any cycles.
+    assert_eq!(
+        test.canister_state(b_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(b_id)
+    );
+}
+
+#[test]
+fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
+    // This test uses manual execution to get finer control over the execution
+    // and message induction order.
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create three canisters: A, B, C.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let c_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let a_to_b_transferred = (initial_cycles.get() / 2) as u64;
+    let a_to_b_accepted = a_to_b_transferred / 2;
+    let b_to_c_transferred = a_to_b_accepted;
+    let b_to_c_accepted = b_to_c_transferred / 2;
+
+    // Canister C accepts some cycles and replies.
+    let c = wasm()
+        .accept_cycles(b_to_c_accepted)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    // Canister B:
+    // 1. Accepts some cycles.
+    // 2. Calls canister C and transfers some cycles to it.
+    // 3. Forwards the reply of C to A.
+    let b = wasm()
+        .accept_cycles(a_to_b_accepted)
+        .call_with_cycles(
+            c_id.get(),
+            "update",
+            call_args().other_side(c.clone()),
+            (0, b_to_c_transferred),
+        )
+        .build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers some cycles to it.
+    // 2. Forwards the reply of B to the ingress status.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b.clone())
+                .on_reject(wasm().reject_code().reject_message().reject()),
+            (0, a_to_b_transferred),
+        )
+        .build();
+
+    // Execute canisters A and B.
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Uninstall canister B, which generates a reject message for canister A.
+    test.uninstall_code(b_id).unwrap();
+
+    // Execute canister C and all the replies.
+    let ingress_status = test.execute_all(ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap();
+
+    let reject_message = match result {
+        WasmResult::Reply(_) => unreachable!("Expected reject, got: {:?}", result),
+        WasmResult::Reject(reject_message) => reject_message,
+    };
+    assert!(
+        reject_message.contains("Canister has been uninstalled"),
+        "Unexpected error message: {}",
+        reject_message
+    );
+
+    // Canister A gets all cycles that are not accepted by B.
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("update", &b)
+            - test.reject_fee(reject_message)
+            - Cycles::new(a_to_b_accepted as u128),
+    );
+
+    // Canister B gets all cycles it accepted and all cycles that canister C did
+    // not accept.
+    assert_eq!(
+        test.canister_state(b_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(b_id)
+            - test.call_fee("update", &c)
+            - test.reply_fee(&c)
+            + Cycles::new(a_to_b_accepted as u128)
+            - Cycles::new(b_to_c_accepted as u128)
+    );
+
+    // Canister C gets all cycles it accepted.
+    assert_eq!(
+        test.canister_state(c_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(c_id) + Cycles::new(b_to_c_accepted as u128)
+    );
+}
+
+#[test]
+fn cycles_are_refunded_if_callee_is_reinstalled() {
+    // This test uses manual execution to get finer control over the execution
+    // and message induction order.
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create three canisters: A, B, C.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let c_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let a_to_b_transferred = (initial_cycles.get() / 2) as u64;
+    let a_to_b_accepted = a_to_b_transferred / 2;
+    let b_to_c_transferred = a_to_b_accepted;
+    let b_to_c_accepted = b_to_c_transferred / 2;
+
+    // Canister C accepts some cycles and replies.
+    let c = wasm()
+        .accept_cycles(b_to_c_accepted)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    // Canister B:
+    // 1. Accepts some cycles.
+    // 2. Calls canister C and transfers some cycles to it.
+    // 3. Forwards the reply of C to A.
+    let b = wasm()
+        .accept_cycles(a_to_b_accepted)
+        .call_with_cycles(
+            c_id.get(),
+            "update",
+            call_args().other_side(c.clone()),
+            (0, b_to_c_transferred),
+        )
+        .build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers some cycles to it.
+    // 2. Forwards the reply of B to the ingress status.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b.clone())
+                .on_reject(wasm().reject_code().reject_message().reject()),
+            (0, a_to_b_transferred),
+        )
+        .build();
+
+    // Execute canisters A and B.
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Reinstall canister B with the same code. Since the memory is cleared, the
+    // reply callback will trap.
+    test.reinstall_canister(b_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Execute canister C and all the replies.
+    let ingress_status = test.execute_all(ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap();
+    let reject_message = match result {
+        WasmResult::Reply(_) => unreachable!("Expected reject, got: {:?}", result),
+        WasmResult::Reject(reject_message) => reject_message,
+    };
+    assert!(
+        reject_message.contains("trapped explicitly: panicked at 'get_callback: 1 out of bounds'"),
+        "Unexpected error message: {}",
+        reject_message
+    );
+
+    // Canister A gets all cycles that are not accepted by B.
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("update", &b)
+            - test.reject_fee(reject_message)
+            - Cycles::new(a_to_b_accepted as u128),
+    );
+
+    // Canister B gets all cycles it accepted and all cycles that canister C did
+    // not accept.
+    assert_eq!(
+        test.canister_state(b_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(b_id)
+            - test.call_fee("update", &c)
+            - test.reply_fee(&c)
+            + Cycles::new(a_to_b_accepted as u128)
+            - Cycles::new(b_to_c_accepted as u128)
+    );
+
+    // Canister C gets all cycles it accepted.
+    assert_eq!(
+        test.canister_state(c_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(c_id) + Cycles::new(b_to_c_accepted as u128)
+    );
+}
+
+#[test]
+fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
+    // This test uses manual execution to get finer control over the execution
+    // and message induction order.
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create two canisters: A and B.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    let a_to_b_transferred = (initial_cycles.get() / 2) as u64;
+    let a_to_b_accepted = a_to_b_transferred / 2;
+    let b_transferred_1 = (initial_cycles.get() / 2) as u64;
+    let b_accepted_1 = b_transferred_1 / 2;
+    let b_transferred_2 = b_accepted_1;
+    let b_accepted_2 = b_transferred_2 / 2;
+
+    // The update method #2 canister B accepts some cycles and then replies.
+    let b_2 = wasm()
+        .accept_cycles(b_accepted_2)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    // The update method #1 of canister B:
+    // 1. Accepts some cycles.
+    // 2. Call the update method #2 and transfers some cycles.
+    // 3. Forwards the reply to the caller.
+    let b_1 = wasm()
+        .accept_cycles(b_accepted_1)
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args().other_side(b_2.clone()),
+            (0, b_transferred_2),
+        )
+        .build();
+
+    // The update method #0 of canister B:
+    // 1. Call the update method #2 and transfers some cycles.
+    // 2. Forwards the reject code and message to canister A.
+    let b_0 = wasm()
+        .accept_cycles(a_to_b_accepted)
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b_1.clone())
+                .on_reject(wasm().reject_code().reject_message().reject()),
+            (0, b_transferred_1),
+        )
+        .build();
+
+    // Canister A:
+    // 1. Call the update method #0 of B and transfers some cycles.
+    // 2. Forwards the reject code and message to the ingress status.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b_0.clone())
+                .on_reject(wasm().reject_code().reject_message().reject()),
+            (0, a_to_b_transferred),
+        )
+        .build();
+
+    // Execute canister A and methods #0 and #1 of canister B.
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+
+    // Uninstall canister B, which generates reject messages for all call contexts.
+    test.uninstall_code(b_id).unwrap();
+
+    // Execute method #2 of canister B and all the replies.
+    let ingress_status = test.execute_all(ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap();
+    let reject_message = match result {
+        WasmResult::Reply(_) => unreachable!("Expected reject, got: {:?}", result),
+        WasmResult::Reject(reject_message) => reject_message,
+    };
+    assert!(
+        reject_message.contains("Canister has been uninstalled"),
+        "Unexpected error message: {}",
+        reject_message
+    );
+
+    // Canister A gets a refund for all cycles that B did not accept.
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("update", &b_0)
+            - test.reject_fee(reject_message.clone())
+            - Cycles::new(a_to_b_accepted as u128)
+    );
+
+    // The reject message from method #2 of B to method #1.
+    let reject_message_b_2_to_1 = format!(
+        "IC0304: Attempt to execute a message on canister {} which contains no Wasm module",
+        b_id
+    );
+
+    // Canister B gets the cycles it accepted from A.
+    assert_eq!(
+        test.canister_state(b_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(b_id)
+            - test.call_fee("update", &b_1)
+            - test.call_fee("update", &b_2)
+            - test.reject_fee(reject_message)
+            - test.reject_fee(reject_message_b_2_to_1)
+            + Cycles::new(a_to_b_accepted as u128)
+    );
+}
+
+#[test]
+fn cannot_send_request_to_stopping_canister() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create two canisters: A and B.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    // Canister B simply replies to canister A.
+    let b = wasm().message_payload().append_and_reply().build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers some cycles to it.
+    // 2. Forwards the reply in the reply callback, which is the default
+    //    behaviour of the universal canister.
+    let a = wasm()
+        .call_simple(b_id.get(), "update", call_args().other_side(b))
+        .build();
+
+    // Move canister B to a stopping state before calling it.
+    test.stop_canister(b_id);
+    assert_matches!(
+        test.canister_state(b_id).system_state.status,
+        CanisterStatus::Stopping {
+            call_context_manager: _,
+            stop_contexts: _
+        }
+    );
+
+    // Send a message to canister A which will call canister B.
+    let ingress_status = test.ingress_raw(a_id, "update", a).1;
+
+    // The call gets stuck in the output queue of canister A because we don't
+    // induct message to a stopping canister.
+    let ingress_state = match ingress_status {
+        IngressStatus::Known { state, .. } => state,
+        IngressStatus::Unknown => unreachable!("Expected known ingress status"),
+    };
+    assert_eq!(IngressState::Processing, ingress_state);
+}
+
+#[test]
+fn cannot_send_request_to_stopped_canister() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create two canisters: A and B.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    // Canister B simply replies to canister A.
+    let b = wasm().message_payload().append_and_reply().build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers some cycles to it.
+    // 2. Forwards the reply in the reply callback, which is the default
+    //    behaviour of the universal canister.
+    let a = wasm()
+        .call_simple(b_id.get(), "update", call_args().other_side(b))
+        .build();
+
+    // Stop canister B before calling it.
+    test.stop_canister(b_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        CanisterStatus::Stopped,
+        test.canister_state(b_id).system_state.status
+    );
+
+    // Send a message to canister A which will call canister B.
+    let ingress_status = test.ingress_raw(a_id, "update", a).1;
+
+    // The call gets stuck in the output queue of canister A because we don't
+    // induct message to a stopped canister.
+    let ingress_state = match ingress_status {
+        IngressStatus::Known { state, .. } => state,
+        IngressStatus::Unknown => unreachable!("Expected known ingress status"),
+    };
+    assert_eq!(IngressState::Processing, ingress_state);
+}
+
+#[test]
+fn cannot_stop_canister_with_open_call_context() {
+    // This test uses manual execution to get finer control over the execution
+    // and message induction order.
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    // Create two canisters: A and B.
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    // Canister B simply replies to canister A.
+    let b = wasm().message_payload().append_and_reply().build();
+
+    // Canister A calls canister B.
+    let a = wasm()
+        .call_simple(b_id.get(), "update", call_args().other_side(b.clone()))
+        .build();
+
+    // Enqueue ingress message to canister A but do not execute it (guaranteed
+    // by "manual execution" option of the test).
+    let ingress_status = test.ingress_raw(a_id, "update", a).1;
+    assert_eq!(ingress_status, IngressStatus::Unknown);
+
+    // Execute the ingress message and induct all messages to get the call
+    // message to the input queue of canister B.
+    test.execute_message(a_id);
+    test.induct_messages();
+
+    // Try to stop canister A.
+    test.stop_canister(a_id);
+    test.process_stopping_canisters();
+
+    // Canister A cannot transition to the stopped state because it has an open
+    // call context.
+    assert_matches!(
+        test.canister_state(a_id).system_state.status,
+        CanisterStatus::Stopping {
+            call_context_manager: _,
+            stop_contexts: _
+        }
+    );
+
+    // Execute the call in canister B.
+    let ingress_status = test.execute_message(b_id);
+    assert_eq!(ingress_status, None);
+
+    // Get the reply back to canister A and execute it.
+    test.induct_messages();
+    let ingress_status = test.execute_message(a_id).unwrap().1;
+    let result = check_ingress_status(ingress_status).unwrap();
+    assert_eq!(result, WasmResult::Reply(b));
+
+    // Now it should be possible to stop canister A.
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(a_id).system_state.status,
+        CanisterStatus::Stopped
+    );
 }
