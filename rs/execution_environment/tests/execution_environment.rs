@@ -68,8 +68,6 @@ use ic_types::{
     PrincipalId, QueueIndex, RegistryVersion, SubnetId, Time,
 };
 
-pub mod hypervisor;
-
 const CANISTER_CREATION_FEE: Cycles = Cycles::new(1_000_000_000_000);
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
