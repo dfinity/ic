@@ -22,6 +22,7 @@ def validate_docker_image(filepath: str, shalist):
     results = []
     try:
         myfile = open(filepath, "r")
+        yaml.add_multi_constructor("!reference", lambda loader, suffix, node: "", Loader=yaml.FullLoader)
         yaml_dict = yaml.load(myfile, Loader=yaml.FullLoader)
         # example:  looking for yaml_dict['.ubuntu-nix-docker']['image']['name']
         myfile.close()
@@ -97,7 +98,7 @@ def main(args):
             inspected_files += results
         except Exception as err:
             print(f"Error validating image name failed in {yml_file}, {err}")
-            sys.exit(1)
+            sys.exit(2)
 
     mismatches = 0
     for item in inspected_files:

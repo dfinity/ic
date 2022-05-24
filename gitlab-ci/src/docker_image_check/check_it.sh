@@ -70,6 +70,11 @@ DOCKERFILES_STATUS=$?
 
 set -eEuo pipefail # setting here to avoid use in above execution where we need to not exit with failures
 
+if [ $DOCKERFILES_STATUS -eq 2 ]; then
+    echo "Fatal error checking Dockerfile status. This is likely a bug. Bailing out."
+    exit 1
+fi
+
 if [ $GIT_MESSAGE_VALUE -ne 0 ] && [ $DOCKERFILES_STATUS -ne 0 ]; then # mismatch, and 2nd time - in a forever loop
     echo "Mismatch in Dockerfile sha and Dockerfile image name, and unable to automatically correct, exiting."
     exit 1
