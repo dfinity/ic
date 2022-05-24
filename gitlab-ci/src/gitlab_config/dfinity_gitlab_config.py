@@ -122,6 +122,9 @@ class DfinityGitLabConfig:
         # get all includes recursively
         includes = self._ci_cfg_extract_included_files(ci_cfg)
         max_depth = 0
+
+        # GitLab interprets !reference tags: https://docs.gitlab.cn/14.0/ee/ci/yaml/#reference-tags
+        yaml.add_multi_constructor("!reference", lambda loader, suffix, node: "", Loader=yaml.FullLoader)
         while includes and max_depth < 100000:
             max_depth += 1
             for i in includes:
