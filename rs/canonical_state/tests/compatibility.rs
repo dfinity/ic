@@ -46,20 +46,19 @@ impl<T> VersionedEncoding<T> {
 
 /// Produces a `StreamHeader` valid at all certification versions in the range.
 pub(crate) fn arb_valid_versioned_stream_header(
-    sig_end: u64,
     sig_max_size: usize,
 ) -> impl Strategy<Value = (StreamHeader, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
         // Stream headers up to and including certification version 8 had no reject
         // signals.
         (
-            arb_stream_header(sig_end, /* sig_min_size */ 0, /* sig_max_size */ 0),
+            arb_stream_header(/* sig_min_size */ 0, /* sig_max_size */ 0),
             Just(CertificationVersion::V0..=CertificationVersion::V8)
         ),
         // Stream headers may have reject signals starting with certification version
         // 8.
         (
-            arb_stream_header(sig_end, /* sig_min_size */ 0, sig_max_size),
+            arb_stream_header(/* sig_min_size */ 0, sig_max_size),
             Just(CertificationVersion::V8..=CertificationVersion::V9)
         ),
     ]
@@ -67,14 +66,13 @@ pub(crate) fn arb_valid_versioned_stream_header(
 
 /// Produces a `StreamHeader` invalid at all certification versions in the range.
 pub(crate) fn arb_invalid_versioned_stream_header(
-    sig_end: u64,
     sig_max_size: usize,
 ) -> impl Strategy<Value = (StreamHeader, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
         // Encoding a stream header with non-empty reject signals before certification
         // version 8 should panic.
         (
-            arb_stream_header(sig_end, /* sig_min_size */ 1, sig_max_size),
+            arb_stream_header(/* sig_min_size */ 1, sig_max_size),
             Just(CertificationVersion::V7..=CertificationVersion::V7)
         ),
     ]
@@ -113,7 +111,7 @@ proptest! {
     /// supported canonical type (e.g. `StreamHeaderV6` or `StreamHeader`) and
     /// certification version combinations produce the exact same encoding.
     #[test]
-    fn stream_header_unique_encoding((header, version_range) in arb_valid_versioned_stream_header(10000, 100)) {
+    fn stream_header_unique_encoding((header, version_range) in arb_valid_versioned_stream_header(100)) {
         let mut results = vec![];
         for version in iter(version_range) {
             let results_before = results.len();
@@ -139,7 +137,7 @@ proptest! {
     /// version range (e.g. no `reject_signals` before certification version 8),
     /// all supported encodings will decode back into the same `StreamHeader`.
     #[test]
-    fn stream_header_roundtrip_encoding((header, version_range) in arb_valid_versioned_stream_header(10000, 100)) {
+    fn stream_header_roundtrip_encoding((header, version_range) in arb_valid_versioned_stream_header(100)) {
         for version in iter(version_range) {
             for encoding in &*STREAM_HEADER_ENCODINGS {
                 if encoding.version_range.contains(&version) {
@@ -158,7 +156,7 @@ proptest! {
     /// version range (e.g. no `reject_signals` before certification version 8),
     /// all supported encodings will decode back into the same `StreamHeader`.
     #[test]
-    fn stream_header_encoding_panic_on_invalid((header, version_range) in arb_invalid_versioned_stream_header(10000, 100)) {
+    fn stream_header_encoding_panic_on_invalid((header, version_range) in arb_invalid_versioned_stream_header(100)) {
         for version in iter(version_range) {
             for encoding in &*STREAM_HEADER_ENCODINGS {
                 if encoding.version_range.contains(&version) {

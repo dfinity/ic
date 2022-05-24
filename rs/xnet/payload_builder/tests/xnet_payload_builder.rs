@@ -22,7 +22,7 @@ use ic_test_utilities::{
         fetch_histogram_stats, fetch_histogram_vec_count, metric_vec, HistogramStats, MetricVec,
     },
     mock_time,
-    state::arb_stream,
+    state::{arb_stream, arb_stream_slice},
     types::ids::{
         NODE_1, NODE_2, NODE_3, NODE_4, NODE_42, NODE_5, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4,
         SUBNET_5,
@@ -252,7 +252,7 @@ proptest! {
     /// after the pooled slice.
     #[test]
     fn get_xnet_payload_slice_alignment(
-        (stream, from, msg_count) in arb_stream_slice(5, 10),
+        (stream, from, msg_count) in arb_stream_slice(5, 10, 0, 10),
     ) {
         // Bump `from` (and adjust `msg_count` accordingly) so we can decrement it later
         // on.
@@ -337,8 +337,8 @@ proptest! {
     /// size.
     #[test]
     fn get_xnet_payload_byte_limit_exceeded(
-        (stream1, from1, msg_count1) in arb_stream_slice(10, 15),
-        (stream2, from2, msg_count2) in arb_stream_slice(10, 15),
+        (stream1, from1, msg_count1) in arb_stream_slice(10, 15, 0, 10),
+        (stream2, from2, msg_count2) in arb_stream_slice(10, 15, 0, 10),
     ) {
         with_test_replica_logger(|log| {
             let mut state_manager =
@@ -391,7 +391,7 @@ proptest! {
     /// slice.
     #[test]
     fn get_xnet_payload_byte_limit_too_small(
-        (stream, from, msg_count) in arb_stream_slice(10, 15),
+        (stream, from, msg_count) in arb_stream_slice(10, 15, 0, 10),
     ) {
         with_test_replica_logger(|log| {
             let mut state_manager =
@@ -432,7 +432,7 @@ proptest! {
     /// Tests payload building from a pool containing an empty slice only.
     #[test]
     fn get_xnet_payload_empty_slice(
-        out_stream in arb_stream(1, 1),
+        out_stream in arb_stream(1, 1, 0, 10),
     ) {
         // Empty incoming stream.
         let from = out_stream.signals_end();
@@ -507,8 +507,8 @@ proptest! {
     /// stream throttling limit.
     #[test]
     fn system_subnet_stream_throttling(
-        out_stream in arb_stream(SYSTEM_SUBNET_STREAM_MSG_LIMIT / 2 + 1, SYSTEM_SUBNET_STREAM_MSG_LIMIT + 10),
-        (stream, from, msg_count) in arb_stream_slice(SYSTEM_SUBNET_STREAM_MSG_LIMIT / 2 + 1, SYSTEM_SUBNET_STREAM_MSG_LIMIT),
+        out_stream in arb_stream(SYSTEM_SUBNET_STREAM_MSG_LIMIT / 2 + 1, SYSTEM_SUBNET_STREAM_MSG_LIMIT + 10, 0, 10),
+        (stream, from, msg_count) in arb_stream_slice(SYSTEM_SUBNET_STREAM_MSG_LIMIT / 2 + 1, SYSTEM_SUBNET_STREAM_MSG_LIMIT, 0, 10),
     ) {
         // Set the outgoing stream's signals_end to the slice begin.
         let out_stream = Stream::new(out_stream.messages().clone(), from);
@@ -628,7 +628,7 @@ proptest! {
     /// Tests refilling an empty pool.
     #[test]
     fn refill_pool_empty(
-        (stream, from, msg_count) in arb_stream_slice(10, 15),
+        (stream, from, msg_count) in arb_stream_slice(10, 15, 0, 10),
     ) {
         with_test_replica_logger(|log| {
             let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -704,7 +704,7 @@ proptest! {
     /// append.
     #[test]
     fn refill_pool_append(
-        (stream, from, msg_count) in arb_stream_slice(10, 15),
+        (stream, from, msg_count) in arb_stream_slice(10, 15, 0, 10),
     ) {
         // Bump `from` so we always get a non-empty prefix.
         let from = from.increment();

@@ -1,7 +1,7 @@
 use ic_canonical_state::{
     size_limit_visitor::{Matcher::*, SizeLimitVisitor},
     subtree_visitor::{Pattern, SubtreeVisitor},
-    traverse, Control, LabelLike, Visitor,
+    traverse, Control, LabelLike, Visitor, MAX_SUPPORTED_CERTIFICATION_VERSION,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState};
@@ -26,7 +26,7 @@ struct Fixture {
 prop_compose! {
     /// An arbitrary fixture with default `slice_begin` and `size_limit` values.
     fn arb_barebone_fixture(max_size: usize)
-                   (stream in arb_stream(0, max_size)) -> Fixture {
+                   (stream in arb_stream(0, max_size, 0, max_size)) -> Fixture {
         let begin = stream.messages_begin().get();
         let end = stream.messages_end().get();
 
@@ -35,6 +35,7 @@ prop_compose! {
         state.modify_streams(|streams| {
             streams.insert(subnet, stream);
         });
+        state.metadata.certification_version = MAX_SUPPORTED_CERTIFICATION_VERSION;
 
         let size = compute_message_sizes(&state, begin, end);
 
@@ -55,7 +56,7 @@ prop_compose! {
                   (fixture in arb_barebone_fixture(max_size))
                   (
                       slice_begin in fixture.begin..fixture.end + 1,
-                      size_limit in 0..fixture.size + 1,
+                      size_limit in 0..=fixture.size,
                       fixture in Just(fixture),
                   ) -> Fixture {
         Fixture {

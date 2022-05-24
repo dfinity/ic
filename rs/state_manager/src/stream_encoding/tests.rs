@@ -1,5 +1,6 @@
 use super::*;
 use ic_base_types::NumSeconds;
+use ic_canonical_state::MAX_SUPPORTED_CERTIFICATION_VERSION;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState};
 use ic_test_utilities::{
@@ -13,7 +14,7 @@ const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
 proptest! {
     #[test]
-    fn stream_encode_decode_roundtrip(stream in arb_stream(0, 10)) {
+    fn stream_encode_decode_roundtrip(stream in arb_stream(0, 10, 0, 10)) {
         let mut state = ReplicatedState::new_rooted_at(subnet_test_id(1), SubnetType::Application, "NOT_USED".into());
 
         let subnet = subnet_test_id(42);
@@ -21,6 +22,7 @@ proptest! {
         state.modify_streams(|streams| {
             streams.insert(subnet, stream);
         });
+        state.metadata.certification_version = MAX_SUPPORTED_CERTIFICATION_VERSION;
 
         // Add some noise, for good measure.
         state.put_canister_state(new_canister_state(
@@ -37,7 +39,7 @@ proptest! {
     }
 
     #[test]
-    fn stream_encode_with_size_limit(stream in arb_stream(0, 10), size_limit in 0..1000usize) {
+    fn stream_encode_with_size_limit(stream in arb_stream(0, 10, 0, 10), size_limit in 0..1000usize) {
         let mut state = ReplicatedState::new_rooted_at(subnet_test_id(1), SubnetType::Application, "NOT_USED".into());
 
         let subnet = subnet_test_id(42);
@@ -45,6 +47,7 @@ proptest! {
         state.modify_streams(|streams| {
             streams.insert(subnet, stream);
         });
+        state.metadata.certification_version = MAX_SUPPORTED_CERTIFICATION_VERSION;
 
         let tree_encoding = encode_stream_slice(&state, subnet, stream_slice.header().begin, stream_slice.header().end, Some(size_limit)).0;
         let bytes = encode_tree(tree_encoding.clone());

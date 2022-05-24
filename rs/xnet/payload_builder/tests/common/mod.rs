@@ -14,7 +14,6 @@ use ic_test_utilities::{
     metrics::{
         fetch_gauge, fetch_histogram_stats, fetch_int_counter_vec, HistogramStats, MetricVec,
     },
-    state::arb_stream,
     types::ids::{SUBNET_1, SUBNET_42},
 };
 use ic_types::{
@@ -28,7 +27,6 @@ use ic_xnet_payload_builder::certified_slice_pool::{
     UnpackedStreamSlice, METRIC_POOL_SIZE_BYTES, METRIC_TAKE_COUNT, METRIC_TAKE_GCED_MESSAGES,
     METRIC_TAKE_MESSAGES, METRIC_TAKE_SIZE_BYTES,
 };
-use proptest::prelude::*;
 use std::{convert::TryFrom, sync::Arc};
 use tempfile::{Builder, TempDir};
 
@@ -152,25 +150,6 @@ impl StateManagerFixture {
     /// Returns the `METRIC_TAKE_SIZE_BYTES` histogram's stats.
     pub fn fetch_pool_take_size_bytes(&self) -> HistogramStats {
         fetch_histogram_stats(&self.metrics, METRIC_TAKE_SIZE_BYTES).unwrap()
-    }
-}
-
-prop_compose! {
-    /// Generates a strategy consisting of an arbitrary stream and valid slice begin and message
-    /// count values for extracting a slice from the stream.
-    pub fn arb_stream_slice(min_size: usize, max_size: usize)(
-        stream in arb_stream(min_size, max_size),
-        from_percent in -20..120i64,
-        percent_above_min_size in 0..120i64,
-    ) ->  (Stream, StreamIndex, usize) {
-        let from_percent = from_percent.max(0).min(100) as usize;
-        let percent_above_min_size = percent_above_min_size.max(0).min(100) as usize;
-        let msg_count = min_size +
-            (stream.messages().len() - min_size) * percent_above_min_size / 100;
-        let from = stream.messages_begin() +
-            (((stream.messages().len() - msg_count) * from_percent / 100) as u64).into();
-
-        (stream, from, msg_count)
     }
 }
 
