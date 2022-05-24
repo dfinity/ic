@@ -3,6 +3,7 @@ common --experimental_allow_tags_propagation
 build --strategy_regexp=ic-os/guestos/.*=local
 
 build --remote_cache=buildfarm.dfinity.systems
+build --experimental_remote_cache_async
 
 build --execution_log_json_file=bazel-build-log.json
 
