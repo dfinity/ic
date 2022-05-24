@@ -11,8 +11,6 @@ ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-common-proto = { path = "../proto" }
 ic-registry-client-helpers = { path = "../helpers" }
-ic-registry-local-store = { path = "../local_store" }
-ic-registry-proto-data-provider = { path = "../proto_data_provider" }
 ic-registry-provisional-whitelist = { path = "../provisional_whitelist" }
 ic-registry-routing-table = { path = "../routing_table" }
 ic-registry-subnet-features = { path = "../subnet_features" }
@@ -33,5 +31,6 @@ url = { version = "2.1.1", features = ["serde"] }
 
 [dev-dependencies]
 assert_matches = "1.3.0"
+ic-registry-proto-data-provider = { path = "../proto_data_provider" }
 ic-test-utilities = { path = "../../test_utilities" }
 tempfile = "3.0"

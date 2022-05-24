@@ -11,13 +11,12 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
-use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::consensus::catchup::{CUPWithOriginalProtobuf, CatchUpPackage};
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Parse command-line args into `ReplicaArgs`
@@ -203,45 +202,23 @@ pub fn create_consensus_pool_dir(config: &Config) {
 pub fn setup_crypto_registry(
     config: Config,
     metrics_registry: Option<&MetricsRegistry>,
-    _optional_nns_public_key_file: Option<&Path>,
     logger: ReplicaLogger,
-    prepare_registry_data_provider: impl FnOnce(&CryptoComponent, ProtoRegistryDataProvider),
 ) -> (std::sync::Arc<RegistryClientImpl>, CryptoComponent) {
-    // TODO(OR4-61)
-    let (crypto, registry) = if config.registry_client.data_provider.is_none() {
-        let data_provider = ProtoRegistryDataProvider::new();
-        let registry = Arc::new(RegistryClientImpl::new(
-            Arc::new(data_provider.clone()),
-            metrics_registry,
-        ));
-        let crypto = setup_crypto_provider(
-            &config.crypto,
-            Arc::clone(&registry) as Arc<dyn RegistryClient>,
-            logger,
-            metrics_registry,
-        );
-        // callback to manipulate the mutable data provider
-        prepare_registry_data_provider(&crypto, data_provider);
-        (crypto, registry)
-    } else {
-        if config.registry_client.data_provider.is_none() {
-            panic!("No data provider was provided in the registry client configuration.")
-        }
-
-        let data_provider = match config.registry_client.data_provider.unwrap() {
-            DataProviderConfig::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)),
-        };
-
-        let registry = Arc::new(RegistryClientImpl::new(data_provider, metrics_registry));
-        // TODO(RPL-49): pass in registry_client
-        let crypto = setup_crypto_provider(
-            &config.crypto,
-            Arc::clone(&registry) as Arc<dyn RegistryClient>,
-            logger,
-            metrics_registry,
-        );
-        (crypto, registry)
+    let data_provider = match config
+        .registry_client
+        .data_provider
+        .expect("No data provider was provided in the registry client configuration.")
+    {
+        DataProviderConfig::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)),
     };
+    let registry = Arc::new(RegistryClientImpl::new(data_provider, metrics_registry));
+    // TODO(RPL-49): pass in registry_client
+    let crypto = setup_crypto_provider(
+        &config.crypto,
+        Arc::clone(&registry) as Arc<dyn RegistryClient>,
+        logger,
+        metrics_registry,
+    );
 
     if let Err(e) = registry.fetch_and_start_polling() {
         panic!("fetch_and_start_polling failed: {}", e);
