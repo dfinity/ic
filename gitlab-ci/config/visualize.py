@@ -14,6 +14,7 @@ import yaml
 
 def process_config(filename):
     with open(filename) as f:
+        yaml.add_multi_constructor("!reference", lambda loader, suffix, node: "", Loader=yaml.SafeLoader)
         config = yaml.load(f, Loader=yaml.SafeLoader)
     nodes = []
     edges = []

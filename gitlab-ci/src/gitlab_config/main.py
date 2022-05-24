@@ -171,6 +171,7 @@ if __name__ == "__main__":
     if args.job_list_validate:
         file_name = os.path.join(repo.repo_root(), "rs/gitlab-ci-config.yml")
         with open(file_name) as fin:
+            yaml.add_multi_constructor("!reference", lambda loader, suffix, node: "", Loader=yaml.FullLoader)
             parsed_yml = yaml.load(fin, Loader=yaml.FullLoader)
             job_list_required = set(parsed_yml["ci_jobs_required"])
             job_list_present = set(gitlab.ci_cfg_jobs())

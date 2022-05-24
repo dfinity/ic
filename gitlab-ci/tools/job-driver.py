@@ -30,6 +30,7 @@ all_jobs = {}  # type: dict[str, dict[str, Any]]
 for yml in os.listdir(os.path.join(ci_top, "config")):
     if not yml.endswith(".yml"):
         continue
+    yaml.add_multi_constructor("!reference", lambda loader, suffix, node: "", Loader=yaml.FullLoader)
     job_file = yaml.load(open(os.path.join(ci_top, "config", yml)), Loader=yaml.FullLoader)  # type: dict[str, Any]
     # python <= 3.8 dict merge
     all_jobs = {**all_jobs, **job_file}

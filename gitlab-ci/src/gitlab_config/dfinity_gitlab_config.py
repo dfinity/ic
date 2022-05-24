@@ -116,6 +116,7 @@ class DfinityGitLabConfig:
         if not isinstance(content, str):
             raise ValueError("content argument must be of str type")
 
+        yaml.add_multi_constructor("!reference", lambda loader, suffix, node: "", Loader=yaml.FullLoader)
         ci_cfg = yaml.load(content, Loader=yaml.FullLoader)
 
         # Included files may also have included files, so we may need several passes to
