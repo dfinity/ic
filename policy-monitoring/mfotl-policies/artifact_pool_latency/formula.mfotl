@@ -54,6 +54,19 @@ LET time_per_block(block, subnet_id, time) =
     AND time = t_validated - t_add
 IN
 
-time_per_block(block, subnet_id, time)
-AND (avg_time <- AVG time; subnet_id ONCE time_per_block(block, subnet_id, time))
-AND (max_time <- MAX time; subnet_id ONCE time_per_block(block, subnet_id, time))
+LET subnet_type_assoc(subnet_id, subnet_type) =
+  (local__original_subnet_type(subnet_id, subnet_type) OR registry__subnet_created(subnet_id, subnet_type) OR registry__subnet_updated(subnet_id, subnet_type))
+IN
+
+LET subnet_type_map(subnet_id, subnet_type) =
+  ((NOT subnet_type_assoc(subnet_id, _)) SINCE subnet_type_assoc(subnet_id, subnet_type))
+IN
+
+LET stats(block, subnet_id, time, avg_time, max_time) =
+  time_per_block(block, subnet_id, time)
+  AND (avg_time <- AVG time; subnet_id ONCE time_per_block(block, subnet_id, time))
+  AND (max_time <- MAX time; subnet_id ONCE time_per_block(block, subnet_id, time))
+IN
+
+(stats(block, subnet_id, time, avg_time, max_time) AND subnet_type_map(subnet_id, "System") AND avg_time > 3000.0)
+OR (stats(block, subnet_id, time, avg_time, max_time) AND (subnet_type_map(subnet_id, "Application") OR subnet_type_map(subnet_id, "VerifiedApplication")) AND avg_time > 1000.0)

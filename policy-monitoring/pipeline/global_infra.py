@@ -18,6 +18,7 @@ class GlobalInfra:
     known_hosts: Set[str]
     host_addr_to_node_id_map: Dict[str, str]
     node_id_to_host_map: Dict[str, str]
+    original_subnet_types: Dict[str, str]
     in_subnet_relations: Dict[str, List[Tuple[int, str]]]
     original_subnet_membership: Dict[str, str]
 
@@ -27,6 +28,8 @@ class GlobalInfra:
         self.known_hosts = set()
         # maps host_ipv6 to node_id
         self.host_addr_to_node_id_map = dict()
+        # maps subnet_id to its initial subnet_type
+        self.original_subnet_types = dict()
         # maps node_id to (sorted) list of (unix_ts, node_ids)
         self.in_subnet_relations = dict()
         # maps node_id to the very first subnet it reports being assigned to
@@ -34,7 +37,17 @@ class GlobalInfra:
 
         for doc in replica_docs:
             # Process all replica docs' node_id / subnet data
-            unix_ts, node_id, subnet_id = doc.unix_ts(), doc.get_node_id(), doc.get_subnet_id()
+            unix_ts, node_id, subnet_id, subnet_id_type = (
+                doc.unix_ts(),
+                doc.get_node_id(),
+                doc.get_subnet_id(),
+                doc.get_subnet_type(),
+            )
+
+            if subnet_id_type is not None:
+                (sub_id, sub_type) = subnet_id_type
+                if sub_id not in self.original_subnet_types:
+                    self.original_subnet_types[sub_id] = sub_type
 
             if not subnet_id:
                 # assert not node_id
@@ -103,6 +116,9 @@ class GlobalInfra:
         for members in res.values():
             members.sort(key=lambda m: m[0])
         return res
+
+    def get_original_subnet_types(self) -> Dict[str, str]:
+        return self.original_subnet_types
 
     def get_original_subnet_membership(self) -> Dict[str, str]:
         return self.original_subnet_membership

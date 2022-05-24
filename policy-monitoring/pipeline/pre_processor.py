@@ -23,9 +23,12 @@ from .event import FinalizedEvent
 from .event import MoveBlockProposalEvent
 from .event import NodeMembershipEvent
 from .event import OriginallyInSubnetPreambleEvent
+from .event import OriginalSubnetTypeEvent
 from .event import RebootEvent
 from .event import RegistryNodeAddedEvent
 from .event import RegistryNodeRemovedEvent
+from .event import RegistrySubnetCreatedEvent
+from .event import RegistrySubnetUpdatedEvent
 from .event import ReplicaDivergedEvent
 from .event import UnusualLogEvent
 from .event import ValidatedBlockProposalEvent
@@ -192,6 +195,10 @@ class DeclarativePreProcessor(PreProcessor):
             return ControlePlaneAcceptAbortedEvent(doc)
         if pred == "ControlPlane_tls_server_handshake_failed":
             return ControlePlaneTlsServerHandshakeFailedEvent(doc)
+        if pred == "registry__subnet_created":
+            return RegistrySubnetCreatedEvent(doc)
+        if pred == "registry__subnet_updated":
+            return RegistrySubnetUpdatedEvent(doc)
         if pred == "registry__node_added_to_subnet":
             assert self._infra is not None, f"{pred} event requires global infra"
             return RegistryNodeAddedEvent(doc, self._infra)
@@ -208,6 +215,9 @@ class DeclarativePreProcessor(PreProcessor):
         raise DeclarativePreProcessor.UnknownPredicateError(pred)
 
     def preamble_builder(self, pred: str) -> Event:
+        if pred == "local__original_subnet_type":
+            assert self._infra is not None, f"{pred} preamble event requires global infra"
+            return OriginalSubnetTypeEvent(self._infra)
         if pred == "local__originally_in_subnet":
             assert self._infra is not None, f"{pred} preamble event requires global infra"
             return OriginallyInSubnetPreambleEvent(self._infra)
@@ -221,6 +231,7 @@ class DeclarativePreProcessor(PreProcessor):
     GLOBAL_INFRA_BASED_EVENTS = frozenset(
         [
             "reboot",
+            "local__original_subnet_type",
             "local__originally_unassigned",
             "local__originally_in_subnet",
             "registry__node_added_to_subnet",
@@ -292,7 +303,11 @@ class UniversalPreProcessor(DeclarativePreProcessor):
 
     _PREAMBLES: Dict[str, FrozenSet[str]]
     _PREAMBLES = {
-        "artifact_pool_latency": frozenset(),
+        "artifact_pool_latency": frozenset(
+            [
+                "local__original_subnet_type",
+            ]
+        ),
         "unauthorized_connections": frozenset(
             [
                 "local__originally_in_subnet",
@@ -309,6 +324,8 @@ class UniversalPreProcessor(DeclarativePreProcessor):
             [
                 "p2p__node_added",
                 "p2p__node_removed",
+                "registry__subnet_created",
+                "registry__subnet_updated",
                 "validated_BlockProposal_Added",
                 "validated_BlockProposal_Moved",
             ]

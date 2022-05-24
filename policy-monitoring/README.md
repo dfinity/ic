@@ -39,8 +39,11 @@ To use this script, run the following commands:
 4. `(venv) $ pip install -r ./requirements.txt`
 5. `(venv) $ python main.py --install_monpoly_docker_image`
 6. `(venv) $ python main.py -g [Farm group id] -p [policy name(s)]`
+    - Note: use option `-l` to specify the maximal number of log entries that will be pre-processed. The default value `1000` safeguards from accidental command invocations but is almost certainly insufficient for monitoring policies in system tests. To download _all the logs_ associated with the given `Farm group id`, set `-l 0`; this may result in transmitting gigabytes of logs.
 7. To list all available policies, run `(venv) $ python main.py --list_policies`
 8. To list all available options, run `(venv) $ python main.py --help` 
+
+Remark. On Linux, prefix `python main.py` with `sudo -E env PATH=$PATH` unless you pass the flag `--without_docker`.
 
 Testing
 -------
@@ -52,5 +55,5 @@ Run Monpoly IO tests with the following command:
 
 Run MFOTL policy tests with the following command:
 ```sh
-python -m tests.mfotl_sanity_tests
+(venv) python -m tests.mfotl_sanity
 ```

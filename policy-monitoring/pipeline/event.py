@@ -66,6 +66,20 @@ class InfraEvent(Event):
         self.infra = infra
 
 
+class OriginalSubnetTypeEvent(InfraEvent):
+    """Synthetic event"""
+
+    def __init__(self, infra: GlobalInfra):
+        super().__init__(name="local__original_subnet_type", doc=None, infra=infra)
+
+    def unix_ts(self) -> int:
+        return 0
+
+    def compile_params(self) -> Iterable[Tuple[str, ...]]:
+        subnet_types = self.infra.get_original_subnet_types()
+        return list(subnet_types.items())
+
+
 class OriginallyInSubnetPreambleEvent(InfraEvent):
     """Synthetic event"""
 
@@ -105,7 +119,46 @@ class RebootEvent(InfraEvent):
             return [(str(host_addr), str(data_center_prefix))]
 
 
-class RegistryEvent(InfraEvent):
+class RegistrySubnetEvent(Event):
+
+    doc: RegistryDoc
+
+    def __init__(self, doc: EsDoc, verb: str):
+        super().__init__(name=f"registry__subnet_{verb}", doc=doc)
+
+    def filter(self) -> bool:
+        if super().filter() and self.doc.is_registry_canister():
+            self.doc = RegistryDoc(self.doc.repr)
+            return True
+        else:
+            return False
+
+
+class RegistrySubnetCreatedEvent(RegistrySubnetEvent):
+    def __init__(self, doc: EsDoc):
+        super().__init__(doc=doc, verb="created")
+
+    def compile_params(self) -> Iterable[Tuple[str, ...]]:
+        params = self.doc.get_created_subnet()
+        if params is None:
+            return []
+        else:
+            return [(params.subnet_id, params.subnet_type)]
+
+
+class RegistrySubnetUpdatedEvent(RegistrySubnetEvent):
+    def __init__(self, doc: EsDoc):
+        super().__init__(doc=doc, verb="updated")
+
+    def compile_params(self) -> Iterable[Tuple[str, ...]]:
+        params = self.doc.get_updated_subnet()
+        if params is None or params.subnet_type is None:
+            return []
+        else:
+            return [(params.subnet_id, params.subnet_type)]
+
+
+class RegistryNodeEvent(InfraEvent):
 
     doc: RegistryDoc
 
@@ -120,7 +173,7 @@ class RegistryEvent(InfraEvent):
             return False
 
 
-class RegistryNodeRemovedEvent(RegistryEvent):
+class RegistryNodeRemovedEvent(RegistryNodeEvent):
     def __init__(self, doc: EsDoc, infra: GlobalInfra):
         super().__init__(doc=doc, verb="removed_from", infra=infra)
 
@@ -132,7 +185,7 @@ class RegistryNodeRemovedEvent(RegistryEvent):
             return list(map(lambda params: (params.node_id, self.infra.get_host_ip_addr(params.node_id)), params_iter))
 
 
-class RegistryNodeAddedEvent(RegistryEvent):
+class RegistryNodeAddedEvent(RegistryNodeEvent):
     def __init__(self, doc: EsDoc, infra: GlobalInfra):
         super().__init__(doc=doc, verb="added_to", infra=infra)
 
