@@ -22,7 +22,7 @@ bazel-test-all:
   script:
     - set -euo pipefail
     - bazel version
-    - bazel test --config ci ... 2>&1 | sed 's/\(.*Streaming build results to:.*\)/\o33[92m\1\o33[0m/'
+    - bazel test --config ci ... 2>&1 | sed --unbuffered 's/\(.*Streaming build results to:.*\)/\o33[92m\1\o33[0m/'
   after_script:
     - cp -R "$(readlink -f bazel-testlogs)" bazel-testlogs-gitlab
     - !reference [after_script]
