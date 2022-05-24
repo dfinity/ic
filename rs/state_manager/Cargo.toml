@@ -27,7 +27,7 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 parking_lot = "0.11.1"
 prometheus = { version = "0.12.0", features = [ "process" ] }
-prost = "0.9.0"
+prost = "0.10"
 rand = "0.7.3"
 rand_chacha = "0.2.2"
 scoped_threadpool = "0.1.*"

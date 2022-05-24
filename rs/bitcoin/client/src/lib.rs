@@ -254,18 +254,12 @@ fn setup_bitcoin_adapter_client(
             // as the request to the `MakeConnection`.
             match Endpoint::try_from("http://[::]:50051") {
                 Ok(endpoint) => {
-                    match endpoint.connect_with_connector_lazy(service_fn(move |_: Uri| {
-                        // Connect to a Uds socket
-                        UnixStream::connect(uds_path.clone())
-                    })) {
-                        Ok(channel) => {
-                            Box::new(BitcoinAdapterClientImpl::new(metrics, rt_handle, channel))
-                        }
-                        Err(_) => {
-                            error!(log, "Could not connect endpoint.");
-                            Box::new(BrokenConnectionBitcoinClient::new(metrics))
-                        }
-                    }
+                    let channel =
+                        endpoint.connect_with_connector_lazy(service_fn(move |_: Uri| {
+                            // Connect to a Uds socket
+                            UnixStream::connect(uds_path.clone())
+                        }));
+                    Box::new(BitcoinAdapterClientImpl::new(metrics, rt_handle, channel))
                 }
                 Err(_) => {
                     error!(log, "Could not create an endpoint.");

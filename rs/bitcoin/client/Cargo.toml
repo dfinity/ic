@@ -16,6 +16,6 @@ serde = { version = "1.0.99", features = [ "derive" ] }
 serde_bytes = "0.11.5"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 tokio = { version = "1.15.0", features = ["full"] }
-tonic = "0.6.2"
+tonic = "0.7.2"
 tower = { version = "0.4.11", features = ["util"] }
 

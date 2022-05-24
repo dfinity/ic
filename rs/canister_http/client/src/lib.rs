@@ -35,21 +35,17 @@ pub fn setup_canister_http_client(
             // We will ignore this uri because uds does not use it.
             match Endpoint::try_from("http://[::]:50151") {
                 Ok(endpoint) => {
-                    match endpoint.connect_with_connector_lazy(service_fn(move |_: Uri| {
-                        // Connect to a Uds socket
-                        UnixStream::connect(uds_path.clone())
-                    })) {
-                        Ok(channel) => Box::new(CanisterHttpAdapterClientImpl::new(
-                            rt_handle,
-                            channel,
-                            anononymous_query_handler,
-                            CANISTER_HTTP_CLIENT_CHANNEL_CAPACITY,
-                        )),
-                        Err(e) => {
-                            error!(log, "Unable to connect to the canister http adapter. {}", e);
-                            Box::new(BrokenCanisterHttpClient {})
-                        }
-                    }
+                    let channel =
+                        endpoint.connect_with_connector_lazy(service_fn(move |_: Uri| {
+                            // Connect to a Uds socket
+                            UnixStream::connect(uds_path.clone())
+                        }));
+                    Box::new(CanisterHttpAdapterClientImpl::new(
+                        rt_handle,
+                        channel,
+                        anononymous_query_handler,
+                        CANISTER_HTTP_CLIENT_CHANNEL_CAPACITY,
+                    ))
                 }
                 Err(e) => {
                     error!(

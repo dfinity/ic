@@ -48,7 +48,7 @@ ic-nns-handler-root = { path = "../../nns/handlers/root" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-registry-routing-table = { path = "../routing_table" }
 on_wire = { path = "../../rust_canisters/on_wire" }
-prost = "0.9.0"
+prost = "0.10"
 registry-canister = { path = "../canister" }
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.11.1"

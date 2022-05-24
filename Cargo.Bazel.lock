@@ -1,5 +1,5 @@
 {
-  "checksum": "0817f0db8eec55be004796ad5232ee1fcb442b83061fda2c739f695167e512c9",
+  "checksum": "9fc0f2cc467924a55ce01b735ee3f93f4f07cfe5532d5671e8142b96712c07f4",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -4035,7 +4035,7 @@
               "target": "prost_build"
             },
             {
-              "id": "prost-types 0.9.0",
+              "id": "prost-types 0.10.1",
               "target": "prost_types"
             },
             {
@@ -10473,61 +10473,6 @@
       },
       "license": "Apache-2.0"
     },
-    "prost 0.9.0": {
-      "name": "prost",
-      "version": "0.9.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/prost/0.9.0/download",
-          "sha256": "444879275cb4fd84958b1a1d5420d15e6fcf7c235fe47f053c9c2a80aceb6001"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "prost",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "prost",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "prost-derive",
-          "std"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bytes 1.1.0",
-              "target": "bytes"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "prost-derive 0.9.0",
-              "target": "prost_derive"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.9.0"
-      },
-      "license": "Apache-2.0"
-    },
     "prost-build 0.10.3": {
       "name": "prost-build",
       "version": "0.10.3",
@@ -10716,64 +10661,6 @@
       },
       "license": "Apache-2.0"
     },
-    "prost-derive 0.9.0": {
-      "name": "prost-derive",
-      "version": "0.9.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/prost-derive/0.9.0/download",
-          "sha256": "f9cc1a3263e07e0bf68e96268f37665207b49560d98739662cdfaae215c720fe"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "prost_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "prost_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "anyhow 1.0.57",
-              "target": "anyhow"
-            },
-            {
-              "id": "itertools 0.10.3",
-              "target": "itertools"
-            },
-            {
-              "id": "proc-macro2 1.0.39",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.18",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.95",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.9.0"
-      },
-      "license": "Apache-2.0"
-    },
     "prost-types 0.10.1": {
       "name": "prost-types",
       "version": "0.10.1",
@@ -10781,52 +10668,6 @@
         "Http": {
           "url": "https://crates.io/api/v1/crates/prost-types/0.10.1/download",
           "sha256": "2d0a014229361011dc8e69c8a1ec6c2e8d0f2af7c91e3ea3f5b2170298461e68"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "prost_types",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "prost_types",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bytes 1.1.0",
-              "target": "bytes"
-            },
-            {
-              "id": "prost 0.10.3",
-              "target": "prost"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.10.1"
-      },
-      "license": "Apache-2.0"
-    },
-    "prost-types 0.9.0": {
-      "name": "prost-types",
-      "version": "0.9.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/prost-types/0.9.0/download",
-          "sha256": "534b7a0e836e3c482d2693070f982e39e7611da9695d4d1f5a4b186b51faef0a"
         }
       },
       "targets": [
@@ -10859,14 +10700,14 @@
               "target": "bytes"
             },
             {
-              "id": "prost 0.9.0",
+              "id": "prost 0.10.3",
               "target": "prost"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.9.0"
+        "version": "0.10.1"
       },
       "license": "Apache-2.0"
     },

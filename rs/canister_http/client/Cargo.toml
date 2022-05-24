@@ -19,7 +19,7 @@ ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../../types/types" }
 slog = "2.7.0"
 tokio = { version = "1.15.0", features = ["full"] }
-tonic = "0.6.2"
+tonic = "0.7.2"
 tower = { version = "0.4.8", features = ["util"] }
 
 [dev-dependencies]

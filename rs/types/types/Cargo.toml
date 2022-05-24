@@ -28,7 +28,7 @@ maplit = "1.0.2"
 num-traits = "0.2.12"
 once_cell = "1.8"
 phantom_newtype = { path = "../../phantom_newtype" }
-prost = "0.9.0"
+prost = "0.10"
 serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"
 serde_cbor = "0.11.1"
