@@ -1,0 +1,25 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "der_utils",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_internal_basic_sig_der_utils",
+    edition = "2018",
+    visibility = ["//rs/crypto:__subpackages__"],
+    deps = [
+        "//rs/types/types",
+        "@crate_index//:hex",
+        "@crate_index//:simple_asn1",
+    ],
+)
+
+# TODO(IC-1207): migrate rust_test when unblocked dependencies.

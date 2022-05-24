@@ -23,6 +23,7 @@ filegroup(
         "//rs/canonical_state/certification_version:sources",
         "//rs/constants:sources",
         "//rs/criterion_time:sources",
+        "//rs/crypto/internal/crypto_lib/basic_sig/der_utils:sources",
         "//rs/crypto/internal/crypto_lib/bls12_381/common:sources",
         "//rs/crypto/internal/crypto_lib/bls12_381/serde/miracl:sources",
         "//rs/crypto/internal/crypto_lib/hmac:sources",
