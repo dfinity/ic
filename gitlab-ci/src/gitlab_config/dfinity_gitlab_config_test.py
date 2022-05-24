@@ -107,6 +107,7 @@ def test_simple_script():
             stage: build
         """
     )
+    yaml.add_multi_constructor("!reference", lambda loader, suffix, node: "", Loader=yaml.FullLoader)
     ci_cfg_expected = yaml.load(
         textwrap.dedent(
             """\
@@ -160,6 +161,7 @@ def test_extends():
               SHELL_WRAPPER: "/usr/bin/time"
         """
     )
+    yaml.add_multi_constructor("!reference", lambda loader, suffix, node: "", Loader=yaml.FullLoader)
     ci_cfg_expected = yaml.load(
         textwrap.dedent(
             """\
@@ -255,6 +257,7 @@ def test_extends_complex():
                 CARGO_TEST_FLAGS_EXTRA: "--release"
         """
     )
+    yaml.add_multi_constructor("!reference", lambda loader, suffix, node: "", Loader=yaml.FullLoader)
     ci_cfg_expected = yaml.load(
         textwrap.dedent(
             """\

@@ -110,6 +110,7 @@ def load_gitlab_ci_config(workspace_root):
     file_name = os.path.join(workspace_root, "gitlab-ci-config.yml")
 
     with open(file_name) as fin:
+        yaml.add_multi_constructor("!reference", lambda loader, suffix, node: "", Loader=yaml.FullLoader)
         parsed_yml = yaml.load(fin, Loader=yaml.FullLoader)
         for field in [
             "crate_test_name_override",
