@@ -9,7 +9,7 @@
     SHELL_WRAPPER: "/usr/bin/time"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
-    TESTNET: "cdmax"
+    TESTNET: "cdslo"
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
   artifacts:
     when: always
@@ -252,6 +252,8 @@ large-subnet-gossip-experiment:
       
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER pipenv run python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
+
+      $SHELL_WRAPPER pipenv run python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --is_max_capacity_run="True" --gitlab_job_id="$CI_JOB_ID"
 
       cd -
 

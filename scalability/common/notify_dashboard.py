@@ -100,7 +100,7 @@ class NotifyDashboard:
         ) = summaries
 
         metric = {
-            "timestamp": datetime.datetime.now().isoformat(),
+            "timestamp": datetime.datetime.utcfromtimestamp(int(FLAGS.timestamp)).isoformat(),
             "rev": revision,
             "branch": FLAGS.branch,
             "package": "replica-perf-trend",
@@ -129,7 +129,7 @@ class NotifyDashboard:
     def notify_max_run(name, request_type, experiment_revision, rps, out_dir):
         """Send a maximum capacity data point to performance-trend index in ElasticSearch."""
         metric = {
-            "timestamp": FLAGS.timestamp,
+            "timestamp": datetime.datetime.utcfromtimestamp(int(FLAGS.timestamp)).isoformat(),
             "rev": experiment_revision,
             "branch": FLAGS.branch,
             "package": "replica-perf-trend",
