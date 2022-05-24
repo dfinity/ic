@@ -16,8 +16,6 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         apt-transport-https ca-certificates curl gnupg lsb-release && \
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
-    curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor -o /etc/apt/trusted.gpg.d/bazel.gpg && \
-    echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" | tee /etc/apt/sources.list.d/bazel.list > /dev/null && \
     apt -yq update && \
     apt -yqq install --no-install-recommends \
         android-sdk-ext4-utils \
@@ -25,11 +23,10 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         lldb libc-bin libclang-10-dev liblz4-dev librocksdb-dev libsnappy-dev libzstd-dev zstd vim emacs nano jq \
         zip unzip rclone rsync bc csmith gcc lld lld-10 libc++-10-dev libcsmith-dev sqlite3 libsqlite3-dev libselinux-dev libunwind-dev \
         qemu-system-x86 ovmf iproute2 dosfstools mtools fakeroot faketime android-sdk-ext4-utils \
-        policycoreutils python3 python3-requests python3-pip python3-gflags python3-cbor pipenv shellcheck bazel-5.1.1 \
+        policycoreutils python3 python3-requests python3-pip python3-gflags python3-cbor pipenv shellcheck \
         sudo docker-ce-cli ripgrep patchelf asciidoctor plantuml graphviz cpio nodejs npm gosu pigz zsh hub less \
         ca-certificates curl git isolinux p7zip-full syslinux xorriso && \
-    gem install asciidoctor-diagram rouge && \
-    ln -s $(which bazel-5.1.1) /usr/bin/bazel
+    gem install asciidoctor-diagram rouge
 
 # Add the `${USER}` user, and the required folders
 ARG USER=ubuntu
@@ -101,8 +98,11 @@ ENV ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib ROCKSDB_STATIC=1 \
     LZ4_INCLUDE_DIR=/usr/include LZ4_LIB_DIR=/usr/lib/x86_64-linux-gnu LZ4_STATIC=1 \
     ZSTD_INCLUDE_DIR=/usr/include ZSTD_LIB_DIR=/usr/lib/x86_64-linux-gnu ZSTD_STATIC=1 \
     Z_INCLUDE_DIR=/usr/include Z_LIB_DIR=/usr/lib/x86_64-linux-gnu Z_STATIC=1 \
-    BZ2_INCLUDE_DIR=/usr/include BZ2_LIB_DIR=/usr/lib/x86_64-linux-gnu BZ2_STATIC=1
+    BZ2_INCLUDE_DIR=/usr/include BZ2_LIB_DIR=/usr/lib/x86_64-linux-gnu BZ2_STATIC=1 \
+    USE_BAZEL_VERSION=5.1.1
 
+# Pre-populate the Bazel installation.
+RUN bazel
 
 # Adds the GitHub and GitLab signatures to known_hosts so that `git pull` calls don't require user approval
 RUN mkdir --mode=0700 /home/${USER}/.ssh && \
