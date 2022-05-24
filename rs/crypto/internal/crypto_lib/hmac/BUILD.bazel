@@ -27,8 +27,10 @@ rust_doc_test(
 
 rust_test(
     name = "hmac_test",
-    crate = ":hmac",
+    srcs = glob(["tests/**"]),
+    edition = "2018",
     deps = [
+        ":hmac",
         "@crate_index//:hex",
         "@crate_index//:wycheproof",
     ],
