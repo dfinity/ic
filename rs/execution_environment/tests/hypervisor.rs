@@ -2,11 +2,10 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_config::execution_environment::Config;
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_execution_environment::{Hypervisor, QueryExecutionType};
+use ic_execution_environment::Hypervisor;
 use ic_ic00_types::CanisterHttpResponsePayload;
 use ic_interfaces::execution_environment::{
     AvailableMemory, ExecutionParameters, HypervisorError, HypervisorError::ContractViolation,
-    HypervisorResult, TrapCode,
 };
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_interfaces::messages::RequestOrIngress;
@@ -18,14 +17,14 @@ use ic_replicated_state::CanisterStatus;
 use ic_replicated_state::{
     canister_state::execution_state::CustomSectionType, page_map::MemoryRegion,
     testing::CanisterQueuesTesting, CallContextAction, CanisterState, ExportedFunctions, Global,
-    NetworkTopology, NumWasmPages, PageIndex, SubnetTopology, SystemState,
+    NetworkTopology, PageIndex, SubnetTopology, SystemState,
 };
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ApiType;
 use ic_test_utilities::execution_environment::{
     assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };
-use ic_test_utilities::types::messages::{IngressBuilder, RequestBuilder};
+use ic_test_utilities::types::messages::IngressBuilder;
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_test_utilities::{
     assert_utils::assert_balance_equals,
@@ -140,10 +139,6 @@ fn test_func_ref() -> FuncRef {
     FuncRef::Method(WasmMethod::Update(String::from("test")))
 }
 
-fn test_caller() -> PrincipalId {
-    user_test_id(1).get()
-}
-
 fn test_api_type_for_update(caller: Option<PrincipalId>, payload: Vec<u8>) -> ApiType {
     let caller = caller.unwrap_or_else(|| user_test_id(24).get());
     ApiType::update(
@@ -240,49 +235,6 @@ fn execute_update_with_cycles_memory_time(
     );
 
     (canister, num_instructions_left, action, heap_delta)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn execute_update_for_request(
-    hypervisor: &Hypervisor,
-    wast: &str,
-    method: &str,
-    payload: Vec<u8>,
-    payment: Cycles,
-    caller: Option<PrincipalId>,
-    instructions_limit: NumInstructions,
-    time: Time,
-    canister_root: std::path::PathBuf,
-) -> (CanisterState, NumInstructions, CallContextAction) {
-    let caller = CanisterId::new(caller.unwrap_or_else(|| canister_test_id(24).get())).unwrap();
-
-    let wasm_binary = wabt::wat2wasm(wast).unwrap();
-    let canister_id = canister_test_id(42);
-    let execution_state = hypervisor
-        .create_execution_state(wasm_binary, canister_root, canister_id)
-        .unwrap();
-
-    let canister = canister_from_exec_state(execution_state, canister_id);
-
-    let req = RequestBuilder::new()
-        .method_name(method.to_string())
-        .method_payload(payload)
-        .sender(caller)
-        .receiver(canister.canister_id())
-        .payment(payment)
-        .build();
-
-    let network_topology = test_network_topology();
-    let execution_parameters = execution_parameters(&canister, instructions_limit);
-    let (canister, num_instructions_left, action, _) = hypervisor.execute_update(
-        canister,
-        RequestOrIngress::Request(req),
-        time,
-        network_topology,
-        execution_parameters,
-    );
-
-    (canister, num_instructions_left, action)
 }
 
 fn execute(
@@ -1194,29 +1146,27 @@ fn sys_api_call_time_with_5_seconds() {
 }
 
 #[test]
-// tests that ic0_msg_arg_data_size cannot be accessed in a reject callback
-fn sys_api_call_arg_data_size_fail() {
-    let api_type = test_api_type_for_reject(RejectContext {
-        code: RejectCode::CanisterError,
-        message: "error".to_string(),
-    });
-    let wasm_result = execute(
-        api_type,
-        SystemStateBuilder::default().build(),
-        r#"
-                (module
-                  (import "ic0" "msg_arg_data_size" (func (;0;) (result i32)))
-                  (func (;1;) (call 0) drop)
-                  (export "canister_update test" (func 1)))"#,
-        test_func_ref(),
-        &test_network_topology(),
-    );
-    let err = wasm_result.unwrap_err();
-    assert_eq!(
-        err,
-        HypervisorError::ContractViolation(
-            "\"ic0_msg_arg_data_size\" cannot be executed in reject callback mode".to_string()
+fn ic0_msg_arg_data_size_is_not_available_in_reject_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().message_payload().reject().build();
+    let caller = wasm()
+        .call_simple(
+            callee_id.get(),
+            "update",
+            call_args()
+                .other_side(callee)
+                .on_reject(wasm().message_payload().append_and_reply()),
         )
+        .build();
+    let err = test.ingress(caller_id, "update", caller).unwrap_err();
+    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
+    assert!(
+        err.description()
+            .contains("\"ic0_msg_arg_data_size\" cannot be executed in reject callback mode"),
+        "Unexpected error message: {}",
+        err.description()
     );
 }
 
@@ -1261,121 +1211,36 @@ fn ic0_msg_reply_data_append_has_no_effect_without_ic0_msg_reply() {
     assert_empty_reply(result);
 }
 
-const MSG_CALLER_WAT: &str = r#"
-        (module
-          (import "ic0" "msg_caller_size"
-            (func $ic0_msg_caller_size (result i32)))
-          (import "ic0" "msg_caller_copy"
-            (func $ic0_msg_caller_copy (param i32 i32 i32)))
-          (import "ic0" "msg_reply" (func $msg_reply))
-          (import "ic0" "msg_reply_data_append"
-            (func $msg_reply_data_append (param i32) (param i32)))
-
-          (func $test
-            (local $half_len i32)
-            ;; divide caller size by 2 and store it
-            (local.set $half_len (i32.div_u (call $ic0_msg_caller_size) (i32.const 2)))
-
-            ;; heap[0..$half_len] = canister_id_bytes[0..$half_len]
-            (call $ic0_msg_caller_copy (i32.const 0) (i32.const 0) (local.get $half_len))
-
-            ;; heap[$half_len..2*$half_len] = canister_id_bytes[$half_len..2*$half_len]
-            (call $ic0_msg_caller_copy
-                (local.get $half_len)
-                (local.get $half_len)
-                (i32.sub (call $ic0_msg_caller_size) (local.get $half_len)))
-
-            ;; return heap[0..2*$half_len]
-            (call $msg_reply_data_append (i32.const 0) (call $ic0_msg_caller_size))
-            (call $msg_reply))
-
-          (memory $memory 1)
-          (export "memory" (memory $memory))
-          (export "canister_query query_test" (func $test))
-          (export "canister_update update_test" (func $test)))"#;
-
 #[test]
-// Tests msg_caller functions in update calls.
-fn test_execute_update_msg_caller() {
-    with_hypervisor(|hypervisor, tmp_path| {
-        let id = user_test_id(12);
-        assert_eq!(
-            execute_update_on(
-                &hypervisor,
-                MSG_CALLER_WAT,
-                "update_test",
-                EMPTY_PAYLOAD,
-                Some(id),
-                None,
-                tmp_path.clone(),
-            )
-            .2,
-            CallContextAction::Reply {
-                payload: id.get().into_vec(),
-                refund: Cycles::zero(),
-            },
-        );
-
-        let id = user_test_id(32);
-        assert_eq!(
-            execute_update_on(
-                &hypervisor,
-                MSG_CALLER_WAT,
-                "update_test",
-                EMPTY_PAYLOAD,
-                Some(id),
-                None,
-                tmp_path,
-            )
-            .2,
-            CallContextAction::Reply {
-                payload: id.get().into_vec(),
-                refund: Cycles::zero(),
-            },
-        );
-    });
+fn ic0_msg_caller_size_and_copy_work_in_update_calls() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().caller().append_and_reply().build();
+    let caller = wasm()
+        .call_simple(callee_id.get(), "update", call_args().other_side(callee))
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(caller_id.get().as_slice().to_vec())
+    );
 }
 
 #[test]
-// Tests msg_caller functions in query calls.
-fn test_execute_query_msg_caller() {
-    with_hypervisor(|hypervisor, tmp_path| {
-        let wasm_binary = wabt::wat2wasm(MSG_CALLER_WAT).unwrap();
-        let canister_id = canister_test_id(42);
-        let execution_state = hypervisor
-            .create_execution_state(wasm_binary, tmp_path, canister_id)
-            .unwrap();
-        let _system_state = SystemStateBuilder::default().build();
-        let canister = canister_from_exec_state(execution_state, canister_id);
-        let id = user_test_id(12);
-        let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS);
-        let (canister, _, result) = hypervisor.execute_query(
-            QueryExecutionType::Replicated,
-            "query_test",
-            &[],
-            id.get(),
-            canister,
-            None,
-            mock_time(),
-            execution_parameters.clone(),
-            &test_network_topology(),
-        );
-        assert_eq!(result, Ok(Some(WasmResult::Reply(id.get().into_vec()))));
-
-        let id = canister_test_id(37);
-        let (_, _, result) = hypervisor.execute_query(
-            QueryExecutionType::Replicated,
-            "query_test",
-            &[],
-            id.get(),
-            canister,
-            None,
-            mock_time(),
-            execution_parameters,
-            &test_network_topology(),
-        );
-        assert_eq!(result, Ok(Some(WasmResult::Reply(id.get().into_vec()))));
-    });
+fn ic0_msg_caller_size_and_copy_work_in_query_calls() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().caller().append_and_reply().build();
+    let caller = wasm()
+        .call_simple(callee_id.get(), "query", call_args().other_side(callee))
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(caller_id.get().as_slice().to_vec())
+    );
 }
 
 #[test]
@@ -1458,30 +1323,27 @@ fn ic0_msg_reject_works() {
 }
 
 #[test]
-fn test_msg_caller_size_in_reject() {
-    let api_type = test_api_type_for_reject(RejectContext::new(
-        RejectCode::CanisterError,
-        "canister_reject".to_string(),
-    ));
-    let wasm_result = execute(
-        api_type,
-        SystemStateBuilder::default().build(),
-        r#"
-                (module
-                  (import "ic0" "msg_caller_size"
-                    (func $msg_caller_size (result i32)))
-                  (func $test (drop (call $msg_caller_size)))
-                  (memory (;0;) 1)
-                  (export "memory" (memory 0))
-                  (export "canister_update test" (func $test)))"#,
-        test_func_ref(),
-        &test_network_topology(),
-    );
-    assert_eq!(
-        wasm_result,
-        Err(ContractViolation(
-            "\"ic0_msg_caller_size\" cannot be executed in reject callback mode".to_string()
-        ))
+fn ic0_msg_caller_size_is_not_available_in_reject_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().message_payload().reject().build();
+    let caller = wasm()
+        .call_simple(
+            callee_id.get(),
+            "update",
+            call_args()
+                .other_side(callee)
+                .on_reject(wasm().caller().append_and_reply()),
+        )
+        .build();
+    let err = test.ingress(caller_id, "update", caller).unwrap_err();
+    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
+    assert!(
+        err.description()
+            .contains("\"ic0_msg_caller_size\" cannot be executed in reject callback mode"),
+        "Unexpected error message: {}",
+        err.description()
     );
 }
 
@@ -1539,133 +1401,78 @@ fn ic0_msg_reject_fails_if_called_twice() {
 }
 
 #[test]
-// tests the correct reject code is returned
-fn sys_api_call_reject_code() {
-    let api_type = test_api_type_for_reject(RejectContext::new(
-        RejectCode::CanisterReject,
-        "rejected".to_string(),
-    ));
-    let wasm_result = execute(
-        api_type,
-        SystemStateBuilder::default().build(),
-        r#"
-                (module
-                  (type (;0;) (func (result i32)))
-                  (type (;1;) (func))
-                  (import "ic0" "msg_reject_code" (func (;0;) (type 0)))
-                  (func (;1;) (type 1)
-                    block
-                        call 0
-                        i32.const 4
-                        i32.eq
-                        br_if 0
-                        unreachable
-                    end)
-                  (export "canister_update test" (func 1)))"#,
-        test_func_ref(),
-        &test_network_topology(),
+fn ic0_msg_reject_code_works() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().message_payload().reject().build();
+    let caller = wasm()
+        .call_simple(
+            callee_id.get(),
+            "update",
+            call_args()
+                .other_side(callee)
+                .on_reject(wasm().reject_code().int_to_blob().append_and_reply()),
+        )
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(vec![RejectCode::CanisterReject as u8, 0, 0, 0])
     );
-    wasm_result.unwrap();
 }
 
 #[test]
-// tests the correct reject code is returned
-fn sys_api_call_reject_code_outside_reject_callback() {
-    let api_type = test_api_type_for_reject(RejectContext::new(
-        RejectCode::CanisterError,
-        "canister_reject".to_string(),
-    ));
-    let wasm_result = execute(
-        api_type,
-        SystemStateBuilder::default().build(),
-        r#"
-                (module
-                  (type (;0;) (func (result i32)))
-                  (type (;1;) (func))
-                  (import "ic0" "msg_reject_code" (func (;0;) (type 0)))
-                  (func (;1;) (type 1)
-                    block
-                        call 0
-                        i32.const 5
-                        i32.eq
-                        br_if 0
-                        unreachable
-                    end)
-                  (export "canister_update test" (func 1)))"#,
-        test_func_ref(),
-        &test_network_topology(),
+fn ic0_msg_reject_code_is_not_available_outside_reject_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .reject_code()
+        .int_to_blob()
+        .append_and_reply()
+        .build();
+    let err = test.ingress(canister_id, "update", payload).unwrap_err();
+    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
+    assert!(
+        err.description()
+            .contains("\"ic0_msg_reject_code\" cannot be executed in update mode"),
+        "Unexpected error message: {}",
+        err.description()
     );
-    wasm_result.unwrap();
 }
 
 #[test]
-// calls ic0_msg_reject_msg_size
-fn sys_api_call_reject_msg_size() {
-    let api_type = test_api_type_for_reject(RejectContext::new(
-        RejectCode::CanisterReject,
-        "rejected".to_string(),
-    ));
-    let wasm_result = execute(
-        api_type,
-        SystemStateBuilder::default().build(),
-        r#"
-            (module
-              (type (;0;) (func (result i32)))
-              (type (;1;) (func))
-              (import "ic0" "msg_reject_msg_size" (func (;0;) (type 0)))
-              (func (;1;) (type 1)
-                block
-                    call 0
-                    i32.const 8
-                    i32.eq
-                    br_if 0
-                    unreachable
-                end)
-              (memory $memory 1)
-              (export "memory" (memory $memory))
-              (export "canister_update test" (func 1)))"#,
-        test_func_ref(),
-        &test_network_topology(),
-    );
-    wasm_result.unwrap();
+fn ic0_msg_reject_msg_size_and_copy_work() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().message_payload().reject().build();
+    let caller = wasm()
+        .call_simple(
+            callee_id.get(),
+            "update",
+            call_args()
+                .other_side(callee.clone())
+                .on_reject(wasm().reject_message().append_and_reply()),
+        )
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+    assert_eq!(result, WasmResult::Reply(callee));
 }
 
 #[test]
-// calls reject_msg_size outside a reject callback
-fn sys_api_call_reject_msg_size_outside_reject_callback() {
-    with_hypervisor(|hypervisor, tmp_path| {
-        assert_eq!(
-            execute_update(
-                &hypervisor,
-                r#"
-            (module
-              (type (;0;) (func (result i32)))
-              (type (;1;) (func))
-              (import "ic0" "msg_reject_msg_size" (func (;0;) (type 0)))
-              (func (;1;) (type 1)
-                block
-                    call 0
-                    i32.const 8
-                    i32.eq
-                    br_if 0
-                    unreachable
-                end)
-              (memory $memory 1)
-              (export "memory" (memory $memory))
-              (export "canister_update test" (func 1)))"#,
-                "test",
-                EMPTY_PAYLOAD,
-                tmp_path,
-            )
-            .2,
-            CallContextAction::Fail {
-                error: HypervisorError::ContractViolation(
-                    "\"ic0_msg_reject_msg_size\" cannot be executed in update mode".to_string()
-                ),
-                refund: Cycles::zero(),
-            }
-        );
-    });
+fn ic0_msg_reject_msg_size_is_not_available_outside_reject_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm().reject_message().append_and_reply().build();
+    let err = test.ingress(canister_id, "update", payload).unwrap_err();
+    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
+    assert!(
+        err.description()
+            .contains("\"ic0_msg_reject_msg_size\" cannot be executed in update mode"),
+        "Unexpected error message: {}",
+        err.description()
+    );
 }
 
 const REJECT_MSG_COPY_WAT: &str = r#"
@@ -1687,26 +1494,6 @@ const REJECT_MSG_COPY_WAT: &str = r#"
                   (export "memory" (memory 0))
                   (data (i32.const 0) "xxxx")
                   (export "canister_update test" (func $test)))"#;
-
-#[test]
-// copies data from reject message to the heap and returns it
-fn sys_api_call_reject_msg_copy() {
-    let api_type = test_api_type_for_reject(RejectContext::new(
-        RejectCode::CanisterReject,
-        "rejected".to_string(),
-    ));
-    let wasm_result = execute(
-        api_type,
-        SystemStateBuilder::default().build(),
-        REJECT_MSG_COPY_WAT,
-        test_func_ref(),
-        &test_network_topology(),
-    );
-    match wasm_result {
-        Ok(Some(WasmResult::Reply(v))) => assert_eq!(&b"xxxxrejected"[..], &v[..]),
-        val => panic!("unexpected response: {:?}", val),
-    }
-}
 
 #[test]
 fn sys_api_call_reject_msg_copy_called_outside_reject_callback() {
@@ -2314,38 +2101,31 @@ fn ic0_msg_cycles_available_returns_zero_for_ingress() {
 }
 
 #[test]
-fn sys_api_call_msg_cycles_available_for_inter_canister_message() {
-    with_hypervisor(|hypervisor, tmp_path| {
-        let payment = Cycles::new(50);
-        assert_eq!(
-            execute_update_for_request(
-                &hypervisor,
-                r#"
-                (module
-                  (import "ic0" "msg_cycles_available" (func (;0;) (result i64)))
-                  (func (;1;)
-                    block
-                        call 0
-                        i64.const 50
-                        i64.eq
-                        br_if 0
-                        unreachable
-                    end)
-                  (memory (;0;) 1 20)
-                  (export "canister_update test" (func 1)))"#,
-                "test",
-                EMPTY_PAYLOAD,
-                payment,
-                None,
-                MAX_NUM_INSTRUCTIONS,
-                // Five nanoseconds
-                mock_time() + Duration::new(0, 5),
-                tmp_path,
+fn ic0_msg_cycles_available_works_for_calls() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_cycles_available" (func $msg_cycles_available (result i64)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update test")
+                block
+                    call $msg_cycles_available
+                    i64.const 50
+                    i64.eq
+                    br_if 0
+                    unreachable
+                end
+                (call $msg_reply)
             )
-            .2,
-            CallContextAction::NoResponse { refund: payment },
-        );
-    });
+            (memory 1)
+        )"#;
+    let callee_id = test.canister_from_wat(wat).unwrap();
+    let caller_id = test.universal_canister().unwrap();
+    let caller = wasm()
+        .call_with_cycles(callee_id.get(), "test", call_args(), (0, 50))
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+    assert_eq!(WasmResult::Reply(vec![]), result);
 }
 
 #[test]
@@ -2614,116 +2394,164 @@ fn grow_memory_beyond_32_bit_limit_fails() {
     assert_eq!(ErrorCode::CanisterTrapped, err.code());
 }
 
-fn test_stable_memory_is_rolled_back_on_failure<F>(execute_method: F)
-where
-    F: FnOnce(
-        &Hypervisor,
-        CanisterState,
-    ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>),
-{
-    with_hypervisor(|hypervisor, tmp_path| {
-        let wat = r#"
-            (module
-                (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
-                (import "ic0" "stable_read"
-                    (func $stable_read (param $dst i32) (param $offset i32) (param $size i32)))
-                (import "ic0" "stable_write"
-                    (func $stable_write (param $offset i32) (param $src i32) (param $size i32)))
-
-                (func $test
-                    ;; Grow stable memory by 1 page.
-                    (drop (call $stable_grow (i32.const 1)))
-
-                    ;; stable_memory[0..4] = heap[0..4] ("abcd")
-                    (call $stable_write (i32.const 0) (i32.const 0) (i32.const 4))
-
-                    ;; Reference an invalid part of the heap. Should trap.
-                    (call $stable_write (i32.const 0) (i32.const -1) (i32.const -4))
-                )
-
-                (memory 1)
-                (data (i32.const 0) "abcd")  ;; Initial contents of the heap.
-                (export "canister_init" (func $test))
-                (export "canister_pre_upgrade" (func $test))
-                (export "canister_post_upgrade" (func $test)))"#;
-
-        let wasm = wabt::wat2wasm(wat).unwrap();
-        let canister_id = canister_test_id(42);
-        let execution_state = hypervisor
-            .create_execution_state(wasm, tmp_path, canister_id)
-            .unwrap();
-        let canister = canister_from_exec_state(execution_state, canister_id);
-
-        let (canister, _, res) = execute_method(&hypervisor, canister);
-
-        // We expect an out of bounds memory error. The order and
-        // applicability we do the checks depends on runtime mode
-        // however. Specifically, in sandboxing the stable memory
-        // check is done in the replica and heap check is done by the
-        // sandboxed process.
-        let should_error = res.unwrap_err();
-        if should_error != HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds)
-            && should_error != HypervisorError::Trapped(TrapCode::HeapOutOfBounds)
-        {
-            panic!("Expected a heap or stable memory out of bounds error.");
-        }
-
-        // Stable memory should remain empty since the call failed.
-        assert_eq!(
-            canister.execution_state.unwrap().stable_memory.size,
-            NumWasmPages::new(0)
-        );
-    });
-}
+const STABLE_MEMORY_WAT: &str = r#"
+    (import "ic0" "msg_reply" (func $msg_reply))
+    (import "ic0" "msg_reply_data_append"
+        (func $msg_reply_data_append (param i32) (param i32))
+    )
+    (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+    (import "ic0" "stable_read"
+        (func $stable_read (param $dst i32) (param $offset i32) (param $size i32))
+    )
+    (import "ic0" "stable_write"
+        (func $stable_write (param $offset i32) (param $src i32) (param $size i32))
+    )
+    (import "ic0" "trap" (func $ic_trap (param i32) (param i32)))
+    (func (export "canister_query read")
+        ;; heap[8..12] = stable_memory[0..4]
+        (call $stable_read (i32.const 8) (i32.const 0) (i32.const 4))
+        ;; Return heap[8..12].
+        (call $msg_reply_data_append
+            (i32.const 8)     ;; heap offset = 8
+            (i32.const 4))    ;; length = 4
+        (call $msg_reply)     ;; call reply
+    )
+    (func (export "canister_update write")
+        (call $stable_write (i32.const 0) (i32.const 0) (i32.const 4))
+    )"#;
 
 #[test]
 fn changes_to_stable_memory_in_canister_init_are_rolled_back_on_failure() {
-    test_stable_memory_is_rolled_back_on_failure(
-        |hypervisor: &Hypervisor, canister: CanisterState| {
-            let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS * 10);
-            hypervisor.execute_canister_init(
-                canister,
-                test_caller(),
-                EMPTY_PAYLOAD.as_slice(),
-                mock_time(),
-                execution_parameters,
-                &test_network_topology(),
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = format!(
+        r#"(module
+            {}
+            (func (export "canister_init")
+                (drop (call $stable_grow (i32.const 1)))
+                (call $stable_write (i32.const 0) (i32.const 0) (i32.const 4))
+                (call $ic_trap (i32.const 0) (i32.const 12))
             )
-        },
+            (memory 1)
+            (data (i32.const 0) "abcd")  ;; Initial contents of the heap.
+        )"#,
+        STABLE_MEMORY_WAT
     );
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    let err = test
+        .install_canister(canister_id, wabt::wat2wasm(wat).unwrap())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+    assert_eq!(None, test.canister_state(canister_id).execution_state);
 }
 
 #[test]
 fn changes_to_stable_memory_in_canister_pre_upgrade_are_rolled_back_on_failure() {
-    test_stable_memory_is_rolled_back_on_failure(
-        |hypervisor: &Hypervisor, canister: CanisterState| {
-            let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS * 10);
-            hypervisor.execute_canister_pre_upgrade(
-                canister,
-                test_caller(),
-                mock_time(),
-                execution_parameters,
-                &test_network_topology(),
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = format!(
+        r#"(module
+            {}
+            (func (export "canister_init")
+                (drop (call $stable_grow (i32.const 1)))
             )
-        },
-    )
+            (func (export "canister_pre_upgrade")
+                ;; stable_memory[0..4] = heap[0..4] ("abcd")
+                (call $stable_write (i32.const 0) (i32.const 0) (i32.const 4))
+                (call $ic_trap (i32.const 0) (i32.const 12))
+            )
+            (memory 1)
+            (data (i32.const 0) "abcd")  ;; Initial contents of the heap.
+        )"#,
+        STABLE_MEMORY_WAT
+    );
+    let canister_id = test.canister_from_wat(wat.clone()).unwrap();
+    let result = test.ingress(canister_id, "read", vec![]);
+    assert_eq!(result, Ok(WasmResult::Reply(vec![0, 0, 0, 0])));
+    let err = test
+        .upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+    let result = test.ingress(canister_id, "read", vec![]);
+    assert_eq!(result, Ok(WasmResult::Reply(vec![0, 0, 0, 0])));
 }
 
 #[test]
 fn changes_to_stable_memory_in_canister_post_upgrade_are_rolled_back_on_failure() {
-    test_stable_memory_is_rolled_back_on_failure(
-        |hypervisor: &Hypervisor, canister: CanisterState| {
-            let execution_parameters = execution_parameters(&canister, MAX_NUM_INSTRUCTIONS * 10);
-            hypervisor.execute_canister_post_upgrade(
-                canister,
-                test_caller(),
-                EMPTY_PAYLOAD.as_slice(),
-                mock_time(),
-                execution_parameters,
-                &test_network_topology(),
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = format!(
+        r#"(module
+            {}
+            (func (export "canister_init")
+                (drop (call $stable_grow (i32.const 1)))
             )
-        },
-    )
+            (func (export "canister_post_upgrade")
+                ;; stable_memory[0..4] = heap[0..4] ("abcd")
+                (call $stable_write (i32.const 0) (i32.const 0) (i32.const 4))
+                (call $ic_trap (i32.const 0) (i32.const 12))
+            )
+            (memory 1)
+            (data (i32.const 0) "abcd")  ;; Initial contents of the heap.
+        )"#,
+        STABLE_MEMORY_WAT
+    );
+    let canister_id = test.canister_from_wat(wat.clone()).unwrap();
+    let result = test.ingress(canister_id, "read", vec![]);
+    assert_eq!(result, Ok(WasmResult::Reply(vec![0, 0, 0, 0])));
+    let err = test
+        .upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+    let result = test.ingress(canister_id, "read", vec![]);
+    assert_eq!(result, Ok(WasmResult::Reply(vec![0, 0, 0, 0])));
+}
+
+#[test]
+fn upgrade_preserves_stable_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = format!(
+        r#"(module
+            {}
+            (func (export "canister_init")
+                (drop (call $stable_grow (i32.const 1)))
+            )
+            (memory 1)
+            (data (i32.const 0) "abcd")  ;; Initial contents of the heap.
+        )"#,
+        STABLE_MEMORY_WAT
+    );
+    let canister_id = test.canister_from_wat(wat.clone()).unwrap();
+    let result = test.ingress(canister_id, "write", vec![]);
+    assert_empty_reply(result);
+    let result = test.ingress(canister_id, "read", vec![]);
+    assert_eq!(result, Ok(WasmResult::Reply("abcd".as_bytes().to_vec())));
+    test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap())
+        .unwrap();
+    let result = test.ingress(canister_id, "read", vec![]);
+    assert_eq!(result, Ok(WasmResult::Reply("abcd".as_bytes().to_vec())));
+}
+
+#[test]
+fn reinstall_clears_stable_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = format!(
+        r#"(module
+            {}
+            (func (export "canister_init")
+                (drop (call $stable_grow (i32.const 1)))
+            )
+            (memory 1)
+            (data (i32.const 0) "abcd")  ;; Initial contents of the heap.
+        )"#,
+        STABLE_MEMORY_WAT
+    );
+    let canister_id = test.canister_from_wat(wat.clone()).unwrap();
+    let result = test.ingress(canister_id, "write", vec![]);
+    assert_empty_reply(result);
+    let result = test.ingress(canister_id, "read", vec![]);
+    assert_eq!(result, Ok(WasmResult::Reply("abcd".as_bytes().to_vec())));
+    test.reinstall_canister(canister_id, wabt::wat2wasm(wat).unwrap())
+        .unwrap();
+    let result = test.ingress(canister_id, "read", vec![]);
+    assert_eq!(result, Ok(WasmResult::Reply(vec![0, 0, 0, 0])));
 }
 
 #[test]
