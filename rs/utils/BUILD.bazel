@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -45,4 +45,9 @@ rust_test(
         "@crate_index//:serde",
         "@crate_index//:tempfile",
     ],
+)
+
+rust_doc_test(
+    name = "utils_doc_test",
+    crate = ":utils",
 )
