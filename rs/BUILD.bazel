@@ -28,6 +28,7 @@ filegroup(
         "//rs/crypto/internal/crypto_lib/sha2:sources",
         "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils:sources",
         "//rs/crypto/internal/crypto_lib/types:sources",
+        "//rs/crypto/internal/logmon:sources",
         "//rs/crypto/internal/test_vectors:sources",
         "//rs/crypto/secrets_containers:sources",
         "//rs/crypto/sha:sources",
