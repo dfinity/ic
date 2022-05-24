@@ -47,9 +47,17 @@ struct StreamBuilderMetrics {
     pub critical_error_response_destination_not_found: IntCounter,
 }
 
-/// Desired byte size of an outgoing stream. Messages are routed to a stream
-/// until its `count_bytes()` is greater than or equal to this amount.
+/// Desired byte size of an outgoing stream.
+///
+/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
+/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
 const TARGET_STREAM_SIZE_BYTES: usize = 10 * 1024 * 1024;
+
+/// Maximum number of messages in a stream.
+///
+/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
+/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
+const MAX_STREAM_MESSAGES: usize = 50_000;
 
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
 const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
@@ -230,6 +238,7 @@ impl StreamBuilderImpl {
     fn build_streams_impl(
         &self,
         mut state: ReplicatedState,
+        max_stream_messages: usize,
         target_stream_size_bytes: usize,
     ) -> ReplicatedState {
         /// Pops the previously peeked message.
@@ -254,10 +263,11 @@ impl StreamBuilderImpl {
             message
         }
 
-        /// Tests whether a stream is over the byte limit or (if directed at a
-        /// remote system subnet) over `2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT`
+        /// Tests whether a stream is over the message count limit, byte limit or (if
+        /// directed at a system subnet) over `2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT`.
         fn is_at_limit(
             stream: Option<&Stream>,
+            max_stream_messages: usize,
             target_stream_size_bytes: usize,
             is_local_message: bool,
             destination_subnet_type: SubnetType,
@@ -266,18 +276,22 @@ impl StreamBuilderImpl {
                 Some(stream) => stream,
                 None => return false,
             };
+            let stream_messages_len = stream.messages().len();
 
-            // True if global limit, enforced across all outgoing streams, is hit.
-            let general_limit_hit = stream.count_bytes() >= target_stream_size_bytes;
+            if stream_messages_len >= max_stream_messages
+                || stream.count_bytes() >= target_stream_size_bytes
+            {
+                // At limit if message count or byte size limits (enforced across all outgoing
+                // streams) are hit.
+                return true;
+            }
 
-            // True if system subnet limit is hit. This is only enforced for non-local
+            // At limit if system subnet limit is hit. This is only enforced for non-local
             // streams to system subnets (i.e., excluding the loopback stream on system
             // subnets).
-            let system_subnet_limit_hit = !is_local_message
+            !is_local_message
                 && destination_subnet_type == SubnetType::System
-                && stream.messages().len() >= 2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT;
-
-            general_limit_hit || system_subnet_limit_hit
+                && stream_messages_len >= 2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT
         }
 
         let mut streams = state.take_streams();
@@ -322,6 +336,7 @@ impl StreamBuilderImpl {
                 Some(dst_net_id) => {
                     if is_at_limit(
                         streams.get(&dst_net_id),
+                        max_stream_messages,
                         target_stream_size_bytes,
                         self.subnet_id == dst_net_id,
                         *subnet_types
@@ -538,7 +553,7 @@ impl StreamBuilderImpl {
 
 impl StreamBuilder for StreamBuilderImpl {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState {
-        self.build_streams_impl(state, TARGET_STREAM_SIZE_BYTES)
+        self.build_streams_impl(state, MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES)
     }
 }
 

@@ -410,9 +410,12 @@ impl XNetPayloadBuilderImpl {
     /// signals_end`;
     ///
     ///  2. signals must only refer to past and current messages, i.e.
-    /// `signals_end <= stream.messages_end()`; and
+    /// `signals_end <= stream.messages_end()`;
     ///
-    ///  3. `concat(reject_signals, [signals_end])` must be strictly increasing.
+    ///  3. `signals_end - reject_signals[0] <= MAX_STREAM_MESSAGES`; and
+    ///
+    ///  4. `concat(reject_signals, [signals_end])` must be strictly increasing.
+    /// and
     fn validate_signals(
         &self,
         subnet_id: SubnetId,
@@ -451,6 +454,31 @@ impl XNetPayloadBuilderImpl {
         }
 
         if !reject_signals.is_empty() {
+            // Given the minimum message size (zero-length sender and receiver, no cycles,
+            // no payload) of 17 bytes; plus 16 bytes for `LabelTree` encoding plus label;
+            // and 16+6 bytes for a `Witness::Known` and a `Witness::Fork` node; we have
+            // a minimum of 55 bytes per encoded message.
+            //
+            // With a `TARGET_STREAM_SIZE_BYTES` of 10 MiB, that means a maximum of just
+            // over 190K messages in a stream. 200K to be conservative.
+            const MAX_STREAM_MESSAGES: u64 = 200_000;
+
+            // An honest subnet will only produce signals for the messages in the incoming
+            // stream (i.e. no signals for future messages; and all signals for past
+            // messages have been GC-ed). Meaning we can never have signals going back
+            // farther than the maximum number of messages in a stream.
+            let signals_begin = reject_signals.front().unwrap();
+            if signals_end.get() - signals_begin.get() > MAX_STREAM_MESSAGES {
+                warn!(
+                    self.log,
+                    "Too old reject signal in stream from {}: signals_begin {}, signals_end {}",
+                    subnet_id,
+                    signals_begin,
+                    signals_end
+                );
+                return SignalsValidationResult::Invalid;
+            }
+
             let mut next = signals_end;
             for index in reject_signals.iter().rev() {
                 if index >= &next {
@@ -476,8 +504,8 @@ impl XNetPayloadBuilderImpl {
     ///    within stream message bounds;
     ///  * looks for gaps/duplicates in its `messages` w.r.t. `expected`
     ///    indices;
-    ///  * and ensures signals advance monotonically and only refer to current
-    ///    messages.
+    ///  * and ensures signals advance monotonically and don't cover more than
+    ///    the maximum number of messages in a stream.
     ///
     /// Returns the validation result, including the `CountBytes`-like estimate
     /// (deterministic, but not exact) of the slice size in bytes if valid.

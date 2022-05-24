@@ -382,8 +382,10 @@ fn build_streams_impl_at_limit_leaves_state_untouched() {
         let expected_state = provided_state.clone();
 
         // Act.
-        let result_state = stream_builder.build_streams_impl(provided_state, 0);
+        let result_state = stream_builder.build_streams_impl(provided_state.clone(), usize::MAX, 0);
+        assert_eq!(result_state, expected_state);
 
+        let result_state = stream_builder.build_streams_impl(provided_state, 0, usize::MAX);
         assert_eq!(result_state, expected_state);
 
         assert_eq!(
@@ -419,8 +421,19 @@ fn build_streams_impl_at_limit_leaves_state_untouched() {
     });
 }
 
-#[test]
-fn build_streams_impl_respects_limit() {
+/// Helper for testing `build_streams_impl()` with various message or byte size
+/// limits.
+///
+/// `max_stream_messages` is passed to `build_streams_impl()` as the parameter
+/// of the same name. `max_stream_messages_by_byte_size` is multiplied by the
+/// generated message size and passed as the `target_stream_size_bytes`
+/// parameter. `expected_messages` is the number of messages expected to have
+/// been routed.
+fn build_streams_impl_respects_limits(
+    max_stream_messages: usize,
+    max_stream_messages_by_byte_size: usize,
+    expected_messages: u64,
+) {
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
         provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
@@ -434,12 +447,11 @@ fn build_streams_impl_respects_limit() {
         // All messages returned by `generate_messages_for_test` are of the same size
         let msg_size = msgs.get(0).unwrap().count_bytes() as u64;
 
-        let routed_messages: u64 = 4;
         assert!(
-            msg_count > routed_messages as usize,
+            msg_count > expected_messages as usize,
             "Invalid test setup: msg_count ({}) must be greater than routed_messages ({})",
             msg_count,
-            routed_messages
+            expected_messages
         );
 
         // Set up the provided_canister_states.
@@ -452,7 +464,7 @@ fn build_streams_impl_respects_limit() {
         // With `routed_messages` consumed from output queues.
         expected_state
             .output_into_iter()
-            .take(routed_messages as usize)
+            .take(expected_messages as usize)
             .count();
 
         // And the same `routed_messages` in the stream to `REMOTE_SUBNET`.
@@ -460,7 +472,7 @@ fn build_streams_impl_respects_limit() {
             requests_into_queue_round_robin(
                 StreamIndex::from(0),
                 msgs,
-                Some(routed_messages * msg_size),
+                Some(expected_messages * msg_size),
                 provided_state.time(),
             ),
             Default::default(),
@@ -470,8 +482,11 @@ fn build_streams_impl_respects_limit() {
         });
 
         // Act.
-        let result_state = stream_builder
-            .build_streams_impl(provided_state, (routed_messages * msg_size) as usize);
+        let result_state = stream_builder.build_streams_impl(
+            provided_state,
+            max_stream_messages,
+            max_stream_messages_by_byte_size * msg_size as usize,
+        );
 
         assert_eq!(result_state.canister_states, expected_state.canister_states);
         assert_eq!(result_state.metadata, expected_state.metadata);
@@ -483,18 +498,18 @@ fn build_streams_impl_respects_limit() {
                     (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
                     (LABEL_STATUS, LABEL_VALUE_STATUS_SUCCESS),
                 ],
-                routed_messages,
+                expected_messages,
             )]),
             &metrics_registry,
         );
         assert_eq!(
-            routed_messages,
+            expected_messages,
             fetch_routed_payload_count(&metrics_registry)
         );
         assert_eq!(
             metric_vec(&[(
                 &[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())],
-                routed_messages
+                expected_messages
             )]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_MESSAGES)
         );
@@ -502,7 +517,7 @@ fn build_streams_impl_respects_limit() {
             metric_vec(&[(
                 &[(LABEL_REMOTE, &REMOTE_SUBNET.to_string())],
                 Stream::new(StreamIndexedQueue::default(), Default::default()).count_bytes() as u64
-                    + routed_messages * msg_size
+                    + expected_messages * msg_size
             )]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES)
         );
@@ -511,6 +526,16 @@ fn build_streams_impl_respects_limit() {
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BEGIN)
         );
     });
+}
+
+#[test]
+fn build_streams_impl_respects_byte_size_limit() {
+    build_streams_impl_respects_limits(1_000_000, 4, 4);
+}
+
+#[test]
+fn build_streams_impl_respects_message_limit() {
+    build_streams_impl_respects_limits(4, 1_000_000, 4);
 }
 
 // Tests that messages addressed to canisters not mapped to a known subnet
