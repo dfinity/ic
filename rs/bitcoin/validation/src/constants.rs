@@ -151,6 +151,17 @@ pub fn latest_checkpoint_height(network: &Network, current_height: BlockHeight) 
         .map_or(0, |(height, _)| *height)
 }
 
+pub fn last_checkpoint(network: &Network) -> Option<BlockHeight> {
+    let points = match network {
+        Network::Bitcoin => BITCOIN,
+        Network::Testnet => TESTNET,
+        Network::Signet => &[],
+        Network::Regtest => &[],
+    };
+
+    points.last().map(|(height, _)| *height)
+}
+
 #[cfg(test)]
 pub mod test {
 
@@ -187,5 +198,11 @@ pub mod test {
 
         let height = latest_checkpoint_height(&Network::Testnet, 1_000_000);
         assert_eq!(height, 546);
+    }
+
+    #[test]
+    fn test_last_checkpoint() {
+        assert_eq!(last_checkpoint(&Network::Bitcoin), Some(704_256));
+        assert_eq!(last_checkpoint(&Network::Regtest), None);
     }
 }

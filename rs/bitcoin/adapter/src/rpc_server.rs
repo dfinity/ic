@@ -81,8 +81,9 @@ impl BtcService for BtcServiceImpl {
         let inner = request.into_inner();
         debug!(self.logger, "Received GetSuccessorsRequest: {:?}", inner);
         let request = inner.try_into()?;
+
         match BtcServiceGetSuccessorsResponse::try_from(
-            self.get_successors_handler.get_successors(request).await,
+            self.get_successors_handler.get_successors(request).await?,
         ) {
             Ok(res) => {
                 debug!(self.logger, "Sending GetSuccessorsResponse: {:?}", res);

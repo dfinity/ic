@@ -2,8 +2,8 @@ use bitcoin::{util::uint::Uint256, BlockHash, BlockHeader, Network};
 
 use crate::{
     constants::{
-        checkpoints, latest_checkpoint_height, max_target, no_pow_retargeting, pow_limit_bits,
-        BLOCKS_IN_ONE_YEAR, DIFFICULTY_ADJUSTMENT_INTERVAL, TEN_MINUTES,
+        checkpoints, last_checkpoint, latest_checkpoint_height, max_target, no_pow_retargeting,
+        pow_limit_bits, BLOCKS_IN_ONE_YEAR, DIFFICULTY_ADJUSTMENT_INTERVAL, TEN_MINUTES,
     },
     BlockHeight,
 };
@@ -88,6 +88,16 @@ pub fn validate_header(
     }
 
     Ok(())
+}
+
+/// Checks if block height is higher than the last checkpoint height.
+/// By beeing beyond the last checkpoint we are sure that we store the correct chain up to the height
+/// of the last checkpoint.  
+pub fn is_beyond_last_checkpoint(network: &Network, height: BlockHeight) -> bool {
+    match last_checkpoint(network) {
+        Some(last) => last <= height,
+        None => true,
+    }
 }
 
 /// This validates the header against the network's checkpoints.
