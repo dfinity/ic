@@ -100,7 +100,7 @@ impl<'a> AddressUtxoSet<'a> {
         let mut set: HashSet<_> = self
             .full_utxo_set
             .address_to_outpoints
-            .range(self.address.to_bytes())
+            .range(self.address.to_bytes(), None)
             .map(|(k, _)| {
                 let (_, _, outpoint) = <(AddressStr, Height, OutPoint)>::from_bytes(k);
                 let (txout, height) = self

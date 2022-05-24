@@ -28,6 +28,10 @@ pub struct Iter<'a, M: Memory> {
     // An optional prefix that the keys of all the entries returned must have.
     // Iteration stops as soon as it runs into a key that doesn't have this prefix.
     prefix: Option<Vec<u8>>,
+
+    // An optional offset to begin iterating from in the keys with the same prefix.
+    // Used only in the case that prefix is also set.
+    offset: Option<Vec<u8>>,
 }
 
 impl<'a, M: Memory> Iter<'a, M> {
@@ -37,6 +41,7 @@ impl<'a, M: Memory> Iter<'a, M> {
             // Initialize the cursors with the address of the root of the map.
             cursors: vec![Cursor::Address(map.root_addr)],
             prefix: None,
+            offset: None,
         }
     }
 
@@ -46,6 +51,7 @@ impl<'a, M: Memory> Iter<'a, M> {
             map,
             cursors: vec![],
             prefix: None,
+            offset: None,
         }
     }
 
@@ -58,6 +64,21 @@ impl<'a, M: Memory> Iter<'a, M> {
             map,
             cursors,
             prefix: Some(prefix),
+            offset: None,
+        }
+    }
+
+    pub(crate) fn new_with_prefix_and_offset(
+        map: &'a StableBTreeMap<M>,
+        prefix: Vec<u8>,
+        offset: Vec<u8>,
+        cursors: Vec<Cursor>,
+    ) -> Self {
+        Self {
+            map,
+            cursors,
+            prefix: Some(prefix),
+            offset: Some(offset),
         }
     }
 }
@@ -137,6 +158,14 @@ impl<M: Memory + Clone> Iterator for Iter<'_, M> {
                         // Clear all cursors to avoid needless work in subsequent calls.
                         self.cursors = vec![];
                         return None;
+                    } else if let Some(offset) = &self.offset {
+                        let mut prefix_with_offset = prefix.clone();
+                        prefix_with_offset.extend_from_slice(offset);
+                        // Clear all cursors to avoid needless work in subsequent calls.
+                        if entry.0 < prefix_with_offset {
+                            self.cursors = vec![];
+                            return None;
+                        }
                     }
                 }
 
