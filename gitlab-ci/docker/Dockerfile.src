@@ -45,6 +45,11 @@ WORKDIR /tmp/rocksdb
 
 RUN apt -y install libjemalloc-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libzstd-dev
 
+ARG bazelisk_sha=231ec5ca8115e94c75a1f4fbada1a062b48822ca04f21f26e4cb1cd8973cd458  
+RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.11.0/bazelisk-linux-amd64 -o /opt/bin/bazel && \
+    echo "$bazelisk_sha /opt/bin/bazel" | sha256sum --check && \
+    chmod 777 /opt/bin/bazel
+
 RUN cmake . -DPORTABLE=1 \
   -DWITH_JEMALLOC=1 \
   -DWITH_JNI=0 \
