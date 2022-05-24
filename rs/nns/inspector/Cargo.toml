@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 clap = { version = "3.1.6", features = ["derive"] }
-prost = "0.9.0"
+prost = "0.10"
 hex = "0.4.3"
 ic-nns-constants={path="../constants"}
 stable_reader = {path="../../rust_canisters/stable_reader"}

@@ -27,7 +27,7 @@ ledger-canister = {path = "../../rosetta-api/ledger_canister"}
 on_wire = {path = "../../rust_canisters/on_wire"}
 
 base64 = "0.13.0"
-prost = "0.9.0"
+prost = "0.10"
 rand = "0.7.3"
 serde = "1.0"
 serde_cbor = "0.11.2"

@@ -29,7 +29,7 @@ ic-nns-gtc-accounts = { path = "../gtc_accounts" }
 lazy_static = "1.4.0"
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 libsecp256k1 = "0.5.0"
-prost = "0.9.0"
+prost = "0.10"
 rand = "0.7.3"
 rand_core = "0.5.1"
 serde = { version = "1.0", features = ["derive"] }

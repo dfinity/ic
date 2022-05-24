@@ -144,7 +144,7 @@ crates_repository(
         "proptest-derive": crate.spec(version = "0.1.0"),
         "prost": crate.spec(version = "0.10.3"),
         "prost-build": crate.spec(version = "0.10.3"),
-        "prost-types": crate.spec(version = "0.9.0"),
+        "prost-types": crate.spec(version = "0.10.0"),
         "rand": crate.spec(version = "0.8.3"),
         "rand_chacha": crate.spec(version = "0.2.2"),
         "rand_core": crate.spec(version = "0.5.1"),
