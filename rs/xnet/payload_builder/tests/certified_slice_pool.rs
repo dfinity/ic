@@ -5,6 +5,7 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::{messaging::xnet::v1, proxy::ProtoProxy};
 use ic_test_utilities::{
     metrics::{metric_vec, HistogramStats},
+    state::arb_stream_slice,
     with_test_replica_logger,
 };
 use ic_types::{
@@ -31,7 +32,7 @@ pub const DST_SUBNET: SubnetId = OWN_SUBNET;
 
 proptest! {
     #[test]
-    fn slice_unpack_roundtrip((stream, from, msg_count) in arb_stream_slice(0, 10)) {
+    fn slice_unpack_roundtrip((stream, from, msg_count) in arb_stream_slice(1, 10, 0, 10)) {
         with_test_replica_logger(|log| {
             let fixture = StateManagerFixture::new(log).with_stream(DST_SUBNET, stream);
 
@@ -47,7 +48,7 @@ proptest! {
     }
 
     #[test]
-    fn slice_garbage_collect((mut stream, from, msg_count) in arb_stream_slice(0, 10)) {
+    fn slice_garbage_collect((mut stream, from, msg_count) in arb_stream_slice(1, 10, 0, 10)) {
         /// Convenience wrapper for `UnpackedStreamSlice::garbage_collect()` that takes
         /// and returns `CertifiedStreamSlices`.
         fn gc(
@@ -117,7 +118,7 @@ proptest! {
     }
 
     #[test]
-    fn slice_take_prefix((stream, from, msg_count) in arb_stream_slice(0, 100)) {
+    fn slice_take_prefix((stream, from, msg_count) in arb_stream_slice(0, 100, 0, 100)) {
         /// Convenience wrapper for `UnpackedStreamSlice::take_prefix()` that takes a
         /// `&CertifiedStreamSlice` argument.
         fn take_prefix(
@@ -234,7 +235,7 @@ proptest! {
     }
 
     #[test]
-    fn invalid_slice((stream, from, msg_count) in arb_stream_slice(0, 10)) {
+    fn invalid_slice((stream, from, msg_count) in arb_stream_slice(1, 10, 0, 10)) {
         // Returns the provided slice, adjusted by the provided function.
         fn adjust<F: FnMut(&mut LabeledTree<Vec<u8>>)>(
             slice: &CertifiedStreamSlice,
@@ -381,7 +382,7 @@ proptest! {
     /// If this test fails, you need to check where the error lies (payload vs.
     /// witness) and adjust the estimate accordingly. Or bump the error margin.
     #[test]
-    fn slice_accurate_count_bytes((stream, from, msg_count) in arb_stream_slice(2, 100)) {
+    fn slice_accurate_count_bytes((stream, from, msg_count) in arb_stream_slice(2, 100, 0, 0)) {
         /// Asserts that the `actual` value is within `+/-(error_percent% +
         /// absolute_error)` of the `expected` value.
         fn assert_almost_equal(
@@ -440,7 +441,7 @@ proptest! {
     /// `UnpackedStreamSlice::try_from(slice).unwrap().count_bytes()` (used in
     /// payload building).
     #[test]
-    fn matching_count_bytes((stream, from, msg_count) in arb_stream_slice(2, 100)) {
+    fn matching_count_bytes((stream, from, msg_count) in arb_stream_slice(2, 100, 0, 100)) {
         /// Verifies that the two ways of computing a byte size estimate produce
         /// the exact same result.
         fn assert_matching_count_bytes(slice: CertifiedStreamSlice) {
@@ -465,7 +466,7 @@ proptest! {
 
     #[test]
     fn pool(
-        (mut stream, from, msg_count) in arb_stream_slice(0, 10),
+        (mut stream, from, msg_count) in arb_stream_slice(1, 10, 0, 10),
     ) {
         /// Asserts that the pool has a cached stream position for the given subnet.
         fn has_stream_position(subnet_id: SubnetId, pool: &CertifiedSlicePool) -> bool {
@@ -678,7 +679,7 @@ proptest! {
 
     #[test]
     fn pool_append_same_slice(
-        (mut stream, from, msg_count) in arb_stream_slice(0, 10),
+        (mut stream, from, msg_count) in arb_stream_slice(1, 10, 0, 10),
     ) {
         let to = from + (msg_count as u64).into();
         with_test_replica_logger(|log| {
@@ -779,7 +780,7 @@ proptest! {
 
     #[test]
     fn pool_append_non_empty_to_empty(
-        (mut stream, from, msg_count) in arb_stream_slice(1, 10),
+        (mut stream, from, msg_count) in arb_stream_slice(1, 10, 0, 10),
     ) {
         with_test_replica_logger(|log| {
             // Increment `signals_end` so we can later safely decrement it without underflow.
@@ -824,7 +825,7 @@ proptest! {
 
     #[test]
     fn pool_append_non_empty_to_non_empty(
-        (mut stream, from, msg_count) in arb_stream_slice(2, 10),
+        (mut stream, from, msg_count) in arb_stream_slice(2, 10, 0, 10),
     ) {
         with_test_replica_logger(|log| {
             // Increment `signals_end` so we can later safely decrement it without underflow.

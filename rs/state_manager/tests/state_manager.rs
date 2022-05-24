@@ -2614,7 +2614,7 @@ fn deletes_diverged_states() {
 
 proptest! {
     #[test]
-    fn stream_store_encode_decode(stream in arb_stream(0, 10), size_limit in 0..20usize) {
+    fn stream_store_encode_decode(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
         encode_decode_stream_test(
             /* stream to be used */
             stream,
@@ -2634,7 +2634,7 @@ proptest! {
 
     #[test]
     #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_with_modified_hash_fails(stream in arb_stream(0, 10), size_limit in 0..20usize) {
+    fn stream_store_decode_with_modified_hash_fails(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
         encode_decode_stream_test(
             /* stream to be used */
             stream,
@@ -2657,7 +2657,7 @@ proptest! {
 
     #[test]
     #[should_panic(expected = "Failed to deserialize witness")]
-    fn stream_store_decode_with_empty_witness_fails(stream in arb_stream(0, 10), size_limit in 0..20usize) {
+    fn stream_store_decode_with_empty_witness_fails(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
         encode_decode_stream_test(
             /* stream to be used */
             stream,
@@ -2678,7 +2678,7 @@ proptest! {
 
     #[test]
     #[should_panic(expected = "InconsistentPartialTree")]
-    fn stream_store_decode_slice_push_additional_message(stream in arb_stream(0, 10)) {
+    fn stream_store_decode_slice_push_additional_message(stream in arb_stream(0, 10, 0, 10)) {
         encode_decode_stream_test(
             /* stream to be used */
             stream,
@@ -2716,7 +2716,7 @@ proptest! {
 
     #[test]
     #[should_panic]
-    fn stream_store_decode_slice_modify_message_begin(stream in arb_stream(0, 10)) {
+    fn stream_store_decode_slice_modify_message_begin(stream in arb_stream(0, 10, 0, 10)) {
         encode_decode_stream_test(
             /* stream to be used */
             stream,
@@ -2750,7 +2750,7 @@ proptest! {
 
     #[test]
     #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_slice_modify_signals_end(stream in arb_stream(0, 10)) {
+    fn stream_store_decode_slice_modify_signals_end(stream in arb_stream(0, 10, 0, 10)) {
         encode_decode_stream_test(
             /* stream to be used */
             stream,
@@ -2776,7 +2776,7 @@ proptest! {
 
     #[test]
     #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_slice_push_signal(stream in arb_stream(0, 10)) {
+    fn stream_store_decode_slice_push_signal(stream in arb_stream(0, 10, 0, 10)) {
         encode_decode_stream_test(
             /* stream to be used */
             stream,
@@ -2804,7 +2804,7 @@ proptest! {
 
     #[test]
     #[should_panic(expected = "InvalidDestination")]
-    fn stream_store_decode_with_invalid_destination(stream in arb_stream(0, 10), size_limit in 0..20usize) {
+    fn stream_store_decode_with_invalid_destination(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
         encode_decode_stream_test(
             /* stream to be used */
             stream,
@@ -2825,7 +2825,7 @@ proptest! {
 
     #[test]
     #[should_panic(expected = "InvalidSignature")]
-    fn stream_store_decode_with_rejecting_verifier(stream in arb_stream(0, 10), size_limit in 0..20usize) {
+    fn stream_store_decode_with_rejecting_verifier(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
         encode_decode_stream_test(
             /* stream to be used */
             stream,
@@ -2845,7 +2845,7 @@ proptest! {
     }
 
     #[test]
-    fn stream_store_encode_partial((stream, begin, count) in arb_stream_slice(1, 10), byte_limit in 0..1000usize) {
+    fn stream_store_encode_partial((stream, begin, count) in arb_stream_slice(1, 10, 0, 10), byte_limit in 0..1000usize) {
         // Partial slice with messages beginning at `begin + 1`.
         encode_partial_slice_test(
             stream,
@@ -2863,7 +2863,7 @@ proptest! {
 
     #[test]
     #[should_panic(expected = "failed to encode certified stream: InvalidSliceIndices")]
-    fn stream_store_encode_partial_bad_indices((stream, begin, count) in arb_stream_slice(1, 10), byte_limit in 0..1000usize) {
+    fn stream_store_encode_partial_bad_indices((stream, begin, count) in arb_stream_slice(1, 10, 0, 10), byte_limit in 0..1000usize) {
         // `witness_begin` (`== begin + 1`) after `msg_begin` (`== begin`).
         encode_partial_slice_test(
             stream,
