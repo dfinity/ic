@@ -266,7 +266,7 @@ mod test {
         // Verify that the entries returned are sorted in descending height.
         assert_eq!(
             utxo.address_to_outpoints
-                .range(address.to_bytes())
+                .range(address.to_bytes(), None)
                 .map(|(k, _)| {
                     let (_, height, _) = <(AddressStr, Height, OutPoint)>::from_bytes(k);
                     height

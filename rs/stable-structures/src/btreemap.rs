@@ -689,7 +689,10 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
     }
 
     /// Returns an iterator over the entries in the map where keys begin with the given `prefix`.
-    pub fn range(&self, prefix: Vec<u8>) -> Iter<M> {
+    /// If the optional `offset` is set, the iterator returned will start from the entry that
+    /// contains this `offset` (while still iterating over all remaining entries that begin
+    /// with the given `prefix`).
+    pub fn range(&self, prefix: Vec<u8>, offset: Option<Vec<u8>>) -> Iter<M> {
         if self.root_addr == NULL {
             // Map is empty.
             return Iter::null(self);
@@ -699,7 +702,11 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
         let mut cursors = vec![];
         loop {
             // Look for the prefix in the node.
-            match node.entries.binary_search_by(|e| e.0.cmp(&prefix)) {
+            let mut pivot = prefix.clone();
+            if let Some(offset) = &offset {
+                pivot.extend_from_slice(offset);
+            }
+            match node.entries.binary_search_by(|e| e.0.cmp(&pivot)) {
                 Ok(idx) | Err(idx) => {
                     // If `prefix` is a key in the node, then `idx` would return its
                     // location. Otherwise, `idx` is the location of the next key in
@@ -727,7 +734,16 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
                     match child {
                         None => {
                             // Leaf node. Return an iterator with the found cursors.
-                            return Iter::new_with_prefix(self, prefix, cursors);
+                            match offset {
+                                Some(offset) => {
+                                    return Iter::new_with_prefix_and_offset(
+                                        self, prefix, offset, cursors,
+                                    );
+                                }
+                                None => {
+                                    return Iter::new_with_prefix(self, prefix, cursors);
+                                }
+                            }
                         }
                         Some(child) => {
                             // Iterate over the child node.
@@ -1598,8 +1614,11 @@ mod test {
         let btree = StableBTreeMap::new(mem, 5, 5);
 
         // Test prefixes that don't exist in the map.
-        assert_eq!(btree.range(vec![0]).collect::<Vec<_>>(), vec![]);
-        assert_eq!(btree.range(vec![1, 2, 3, 4]).collect::<Vec<_>>(), vec![]);
+        assert_eq!(btree.range(vec![0], None).collect::<Vec<_>>(), vec![]);
+        assert_eq!(
+            btree.range(vec![1, 2, 3, 4], None).collect::<Vec<_>>(),
+            vec![]
+        );
     }
 
     // Tests the case where the prefix is larger than all the entries in a leaf node.
@@ -1611,7 +1630,7 @@ mod test {
         btree.insert(vec![0], vec![]).unwrap();
 
         // Test a prefix that's larger than the value in the leaf node. Should be empty.
-        assert_eq!(btree.range(vec![1]).collect::<Vec<_>>(), vec![]);
+        assert_eq!(btree.range(vec![1], None).collect::<Vec<_>>(), vec![]);
     }
 
     // Tests the case where the prefix is larger than all the entries in an internal node.
@@ -1631,7 +1650,7 @@ mod test {
 
         // Test a prefix that's larger than the value in the internal node.
         assert_eq!(
-            btree.range(vec![7]).collect::<Vec<_>>(),
+            btree.range(vec![7], None).collect::<Vec<_>>(),
             vec![(vec![7], vec![])]
         );
     }
@@ -1666,7 +1685,7 @@ mod test {
 
         // Tests a prefix that's smaller than the value in the internal node.
         assert_eq!(
-            btree.range(vec![0]).collect::<Vec<_>>(),
+            btree.range(vec![0], None).collect::<Vec<_>>(),
             vec![
                 (vec![0, 1], vec![]),
                 (vec![0, 2], vec![]),
@@ -1677,7 +1696,7 @@ mod test {
 
         // Tests a prefix that crosses several nodes.
         assert_eq!(
-            btree.range(vec![1]).collect::<Vec<_>>(),
+            btree.range(vec![1], None).collect::<Vec<_>>(),
             vec![
                 (vec![1, 1], vec![]),
                 (vec![1, 2], vec![]),
@@ -1688,7 +1707,7 @@ mod test {
 
         // Tests a prefix that's larger than the value in the internal node.
         assert_eq!(
-            btree.range(vec![2]).collect::<Vec<_>>(),
+            btree.range(vec![2], None).collect::<Vec<_>>(),
             vec![
                 (vec![2, 1], vec![]),
                 (vec![2, 2], vec![]),
@@ -1776,11 +1795,11 @@ mod test {
         );
 
         // Tests a prefix that doesn't exist, but is in the middle of the root node.
-        assert_eq!(btree.range(vec![1, 5]).collect::<Vec<_>>(), vec![]);
+        assert_eq!(btree.range(vec![1, 5], None).collect::<Vec<_>>(), vec![]);
 
         // Tests a prefix that crosses several nodes.
         assert_eq!(
-            btree.range(vec![1]).collect::<Vec<_>>(),
+            btree.range(vec![1], None).collect::<Vec<_>>(),
             vec![
                 (vec![1, 2], vec![]),
                 (vec![1, 4], vec![]),
@@ -1793,7 +1812,7 @@ mod test {
         // Tests a prefix that starts from a leaf node, then iterates through the root and right
         // sibling.
         assert_eq!(
-            btree.range(vec![2]).collect::<Vec<_>>(),
+            btree.range(vec![2], None).collect::<Vec<_>>(),
             vec![
                 (vec![2, 1], vec![]),
                 (vec![2, 2], vec![]),
@@ -1835,7 +1854,7 @@ mod test {
         // Getting the range with a prefix should return all 1000 elements with that prefix.
         for prefix in 0..=1 {
             let mut i: u32 = 0;
-            for (key, _) in btree.range(vec![prefix]) {
+            for (key, _) in btree.range(vec![prefix], None) {
                 assert_eq!(
                     key,
                     vec![vec![prefix], i.to_be_bytes().to_vec()]
@@ -1847,5 +1866,162 @@ mod test {
             }
             assert_eq!(i, 1000);
         }
+    }
+
+    #[test]
+    fn range_various_prefixes_with_offset() {
+        let mem = make_memory();
+        let mut btree = StableBTreeMap::new(mem, 5, 5);
+
+        btree.insert(vec![0, 1], vec![]).unwrap();
+        btree.insert(vec![0, 2], vec![]).unwrap();
+        btree.insert(vec![0, 3], vec![]).unwrap();
+        btree.insert(vec![0, 4], vec![]).unwrap();
+        btree.insert(vec![1, 1], vec![]).unwrap();
+        btree.insert(vec![1, 2], vec![]).unwrap();
+        btree.insert(vec![1, 3], vec![]).unwrap();
+        btree.insert(vec![1, 4], vec![]).unwrap();
+        btree.insert(vec![2, 1], vec![]).unwrap();
+        btree.insert(vec![2, 2], vec![]).unwrap();
+        btree.insert(vec![2, 3], vec![]).unwrap();
+        btree.insert(vec![2, 4], vec![]).unwrap();
+
+        // The result should look like this:
+        //                                         [(1, 2)]
+        //                                         /     \
+        // [(0, 1), (0, 2), (0, 3), (0, 4), (1, 1)]       [(1, 3), (1, 4), (2, 1), (2, 2), (2, 3), (2, 4)]
+
+        let root = btree.load_node(btree.root_addr);
+        assert_eq!(root.node_type, NodeType::Internal);
+        assert_eq!(root.entries, vec![(vec![1, 2], vec![])]);
+        assert_eq!(root.children.len(), 2);
+
+        // Tests a offset that's smaller than the value in the internal node.
+        assert_eq!(
+            btree.range(vec![0], Some(vec![0])).collect::<Vec<_>>(),
+            vec![
+                (vec![0, 1], vec![]),
+                (vec![0, 2], vec![]),
+                (vec![0, 3], vec![]),
+                (vec![0, 4], vec![]),
+            ]
+        );
+
+        // Tests a offset that has a value somewhere in the range of values of an internal node.
+        assert_eq!(
+            btree.range(vec![1], Some(vec![3])).collect::<Vec<_>>(),
+            vec![(vec![1, 3], vec![]), (vec![1, 4], vec![]),]
+        );
+
+        // Tests a offset that's larger than the value in the internal node.
+        assert_eq!(
+            btree.range(vec![2], Some(vec![5])).collect::<Vec<_>>(),
+            vec![],
+        );
+    }
+
+    #[test]
+    fn range_various_prefixes_with_offset_2() {
+        let mem = make_memory();
+        let mut btree = StableBTreeMap::new(mem, 5, 5);
+
+        btree.insert(vec![0, 1], vec![]).unwrap();
+        btree.insert(vec![0, 2], vec![]).unwrap();
+        btree.insert(vec![0, 3], vec![]).unwrap();
+        btree.insert(vec![0, 4], vec![]).unwrap();
+        btree.insert(vec![1, 2], vec![]).unwrap();
+        btree.insert(vec![1, 4], vec![]).unwrap();
+        btree.insert(vec![1, 6], vec![]).unwrap();
+        btree.insert(vec![1, 8], vec![]).unwrap();
+        btree.insert(vec![1, 10], vec![]).unwrap();
+        btree.insert(vec![2, 1], vec![]).unwrap();
+        btree.insert(vec![2, 2], vec![]).unwrap();
+        btree.insert(vec![2, 3], vec![]).unwrap();
+        btree.insert(vec![2, 4], vec![]).unwrap();
+        btree.insert(vec![2, 5], vec![]).unwrap();
+        btree.insert(vec![2, 6], vec![]).unwrap();
+        btree.insert(vec![2, 7], vec![]).unwrap();
+        btree.insert(vec![2, 8], vec![]).unwrap();
+        btree.insert(vec![2, 9], vec![]).unwrap();
+
+        // The result should look like this:
+        //                                         [(1, 4), (2, 3)]
+        //                                         /      |       \
+        // [(0, 1), (0, 2), (0, 3), (0, 4), (1, 2)]       |        [(2, 4), (2, 5), (2, 6), (2, 7), (2, 8), (2, 9)]
+        //                                                |
+        //                             [(1, 6), (1, 8), (1, 10), (2, 1), (2, 2)]
+        let root = btree.load_node(btree.root_addr);
+        assert_eq!(root.node_type, NodeType::Internal);
+        assert_eq!(
+            root.entries,
+            vec![(vec![1, 4], vec![]), (vec![2, 3], vec![])]
+        );
+        assert_eq!(root.children.len(), 3);
+
+        let child_0 = btree.load_node(root.children[0]);
+        assert_eq!(child_0.node_type, NodeType::Leaf);
+        assert_eq!(
+            child_0.entries,
+            vec![
+                (vec![0, 1], vec![]),
+                (vec![0, 2], vec![]),
+                (vec![0, 3], vec![]),
+                (vec![0, 4], vec![]),
+                (vec![1, 2], vec![]),
+            ]
+        );
+
+        let child_1 = btree.load_node(root.children[1]);
+        assert_eq!(child_1.node_type, NodeType::Leaf);
+        assert_eq!(
+            child_1.entries,
+            vec![
+                (vec![1, 6], vec![]),
+                (vec![1, 8], vec![]),
+                (vec![1, 10], vec![]),
+                (vec![2, 1], vec![]),
+                (vec![2, 2], vec![]),
+            ]
+        );
+
+        let child_2 = btree.load_node(root.children[2]);
+        assert_eq!(
+            child_2.entries,
+            vec![
+                (vec![2, 4], vec![]),
+                (vec![2, 5], vec![]),
+                (vec![2, 6], vec![]),
+                (vec![2, 7], vec![]),
+                (vec![2, 8], vec![]),
+                (vec![2, 9], vec![]),
+            ]
+        );
+
+        // Tests a offset that crosses several nodes.
+        assert_eq!(
+            btree.range(vec![1], Some(vec![4])).collect::<Vec<_>>(),
+            vec![
+                (vec![1, 4], vec![]),
+                (vec![1, 6], vec![]),
+                (vec![1, 8], vec![]),
+                (vec![1, 10], vec![]),
+            ]
+        );
+
+        // Tests a offset that starts from a leaf node, then iterates through the root and right
+        // sibling.
+        assert_eq!(
+            btree.range(vec![2], Some(vec![2])).collect::<Vec<_>>(),
+            vec![
+                (vec![2, 2], vec![]),
+                (vec![2, 3], vec![]),
+                (vec![2, 4], vec![]),
+                (vec![2, 5], vec![]),
+                (vec![2, 6], vec![]),
+                (vec![2, 7], vec![]),
+                (vec![2, 8], vec![]),
+                (vec![2, 9], vec![]),
+            ]
+        );
     }
 }
