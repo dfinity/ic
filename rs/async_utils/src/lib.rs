@@ -1,13 +1,15 @@
 use slog::{info, Logger};
 
 mod http;
+mod hyper;
 mod observable_counting_semaphore;
 mod unix;
 
-pub use http::{receive_body, receive_body_without_timeout, BodyReceiveError};
-pub use observable_counting_semaphore::*;
-pub use unix::{
-    ensure_single_systemd_socket, incoming_from_first_systemd_socket, incoming_from_path,
+pub use self::{
+    http::{receive_body, receive_body_without_timeout, BodyReceiveError},
+    hyper::ExecuteOnTokioRuntime,
+    observable_counting_semaphore::*,
+    unix::{ensure_single_systemd_socket, incoming_from_first_systemd_socket, incoming_from_path},
 };
 
 /// Aborts the whole program with a core dump if a single thread panics.
