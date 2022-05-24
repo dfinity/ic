@@ -1,0 +1,33 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "keys",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_registry_keys",
+    edition = "2018",
+    deps = [
+        "//rs/types/base_types",
+        "//rs/types/ic00_types",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+    ],
+)
+
+rust_test(
+    name = "keys_test",
+    crate = ":keys",
+    deps = [
+        "@crate_index//:rand",
+    ],
+)
