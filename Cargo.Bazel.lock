@@ -1,5 +1,5 @@
 {
-  "checksum": "fd6efb8713d1b84ed2ca69c51b523130442761453c63f4df5377237a0447b94d",
+  "checksum": "05475fb05b4bb97fef68349341e89a7b1200127acb8adef28f9ebe304d556b10",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -4027,11 +4027,11 @@
               "target": "proptest"
             },
             {
-              "id": "prost 0.10.3",
+              "id": "prost 0.10.4",
               "target": "prost"
             },
             {
-              "id": "prost-build 0.10.3",
+              "id": "prost-build 0.10.4",
               "target": "prost_build"
             },
             {
@@ -4117,6 +4117,10 @@
             {
               "id": "tonic-build 0.7.2",
               "target": "tonic_build"
+            },
+            {
+              "id": "tower 0.4.12",
+              "target": "tower"
             },
             {
               "id": "url 2.2.2",
@@ -10417,13 +10421,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "prost 0.10.3": {
+    "prost 0.10.4": {
       "name": "prost",
-      "version": "0.10.3",
+      "version": "0.10.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/prost/0.10.3/download",
-          "sha256": "bc03e116981ff7d8da8e5c220e374587b98d294af7ba7dd7fda761158f00086f"
+          "url": "https://crates.io/api/v1/crates/prost/0.10.4/download",
+          "sha256": "71adf41db68aa0daaefc69bb30bcd68ded9b9abaad5d1fbb6304c4fb390e083e"
         }
       },
       "targets": [
@@ -10469,17 +10473,17 @@
           ],
           "selects": {}
         },
-        "version": "0.10.3"
+        "version": "0.10.4"
       },
       "license": "Apache-2.0"
     },
-    "prost-build 0.10.3": {
+    "prost-build 0.10.4": {
       "name": "prost-build",
-      "version": "0.10.3",
+      "version": "0.10.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/prost-build/0.10.3/download",
-          "sha256": "65a1118354442de7feb8a2a76f3d80ef01426bd45542c8c1fdffca41a758f846"
+          "url": "https://crates.io/api/v1/crates/prost-build/0.10.4/download",
+          "sha256": "8ae5a4388762d5815a9fc0dea33c56b021cdc8dde0c55e0c9ca57197254b0cab"
         }
       },
       "targets": [
@@ -10547,11 +10551,11 @@
               "target": "petgraph"
             },
             {
-              "id": "prost 0.10.3",
+              "id": "prost 0.10.4",
               "target": "prost"
             },
             {
-              "id": "prost-build 0.10.3",
+              "id": "prost-build 0.10.4",
               "target": "build_script_build"
             },
             {
@@ -10570,7 +10574,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.10.3"
+        "version": "0.10.4"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -10700,7 +10704,7 @@
               "target": "bytes"
             },
             {
-              "id": "prost 0.10.3",
+              "id": "prost 0.10.4",
               "target": "prost"
             }
           ],
@@ -15269,7 +15273,7 @@
               "target": "pin_project"
             },
             {
-              "id": "prost 0.10.3",
+              "id": "prost 0.10.4",
               "target": "prost",
               "alias": "prost1"
             },
@@ -15371,7 +15375,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "prost-build 0.10.3",
+              "id": "prost-build 0.10.4",
               "target": "prost_build"
             },
             {
@@ -16491,6 +16495,18 @@
         },
         {
           "Binary": {
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
             "srcs": {
@@ -16505,18 +16521,6 @@
           "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

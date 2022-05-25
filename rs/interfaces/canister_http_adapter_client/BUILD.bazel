@@ -1,0 +1,21 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "canister_http_adapter_client",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_interfaces_canister_http_adapter_client",
+    edition = "2018",
+    deps = [
+        "//rs/types/types",
+    ],
+)
