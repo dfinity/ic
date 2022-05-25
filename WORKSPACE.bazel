@@ -67,6 +67,10 @@ crates_repository(
         # Keep sorted.
         "anyhow": crate.spec(version = "1.0.31"),
         "arrayvec": crate.spec(version = "0.5.1"),
+        "askama": crate.spec(
+            features = ["serde-json"],
+            version = "0.11.1",
+        ),
         "assert_matches": crate.spec(version = "1.3.0"),
         "async-stream": crate.spec(version = "0.3.3"),
         "async-trait": crate.spec(version = "0.1.36"),
@@ -112,6 +116,7 @@ crates_repository(
             rev = "9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da",
         ),
         "erased-serde": crate.spec(version = "0.3.11"),
+        "eyre": crate.spec(version = "0.6.8"),
         "features": crate.spec(version = "0.10.0"),
         "float-cmp": crate.spec(version = "0.9.0"),
         "futures-util": crate.spec(version = "0.3.21"),
@@ -133,6 +138,7 @@ crates_repository(
         "num-traits": crate.spec(version = "0.2.12"),
         "once_cell": crate.spec(version = "1.8"),
         "openssl": crate.spec(version = "0.10.29"),
+        "pathdiff": crate.spec(version = "0.2.1"),
         "procfs": crate.spec(
             default_features = False,
             version = "^0.9",
@@ -179,6 +185,7 @@ crates_repository(
         "strum_macros": crate.spec(version = "0.23.0"),
         "tempfile": crate.spec(version = "3.1.0"),
         "thiserror": crate.spec(version = "1.0"),
+        "toml": crate.spec(version = "0.5.9"),
         "tokio": crate.spec(
             features = ["full"],
             version = "1.18.1",

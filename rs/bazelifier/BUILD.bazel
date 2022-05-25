@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_binary(
+    name = "bazelifier",
+    srcs = glob(["src/**"]),
+    compile_data = glob(["templates/**"]),
+    crate_name = "bazelifier",
+    edition = "2021",
+    deps = [
+        "@crate_index//:askama",
+        "@crate_index//:eyre",
+        "@crate_index//:pathdiff",
+        "@crate_index//:serde",
+        "@crate_index//:toml",
+    ],
+)

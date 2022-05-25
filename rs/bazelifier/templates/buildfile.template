@@ -1,0 +1,17 @@
+load("@rules_rust//rust:defs.bzl", "{{ build_type }}")
+
+package(default_visibility = ["//visibility:public"])
+
+{{ build_type }}(
+    name = "{{ target_name }}",
+    srcs = glob(["src/**"]),
+    crate_name = "{{ crate_name }}",
+    edition = "{{ edition }}",
+    deps = {{ deps|json }},
+    {% if macro_deps.len() > 0 %}
+    proc_macro_deps = {{ macro_deps|json }},
+    {% endif %}
+    {% if aliases.len() > 0 %}
+    aliases = {{ aliases|json }},
+    {% endif %}
+)
