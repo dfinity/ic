@@ -1,8 +1,8 @@
-use canister_test::Project;
+use canister_test::{Project, Runtime};
 use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_canister_client::Sender;
-use ic_ic00_types::CanisterStatusResultV2;
+use ic_ic00_types::{CanisterInstallMode, CanisterStatusResultV2};
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, CanisterStatusType};
 use ic_sns_governance::pb::v1::{
@@ -608,6 +608,58 @@ fn test_upgrade_root_success() {
             Ok(())
         }
     })
+}
+
+#[test]
+fn governance_mem_test() {
+    local_test_on_sns_subnet(|mut runtime| async move {
+        println!("Initializing governance mem test canister...");
+
+        if let Runtime::Local(local_runtime) = &mut runtime {
+            local_runtime.ingress_time_limit = Duration::from_secs(20 * 60);
+        }
+
+        let mut governance = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .unwrap();
+
+        let state_initializer_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
+            "sns/integration_tests",
+            "sns-governance-mem-test-canister",
+            &[],
+        );
+
+        // It's on purpose that we don't want retries here! This test is only about
+        // initializing a canister with a very large state. A failure is most
+        // likely repeatable, so the test will fail much faster without retries.
+        let install = state_initializer_wasm
+            .install(&runtime)
+            .with_mode(CanisterInstallMode::Install);
+        install.install(&mut governance, Vec::new()).await.unwrap();
+
+        // Now let's upgrade to the real governance canister
+        let real_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
+            "sns/governance",
+            "sns-governance-canister",
+            &[],
+        );
+        governance.set_wasm(real_wasm.bytes());
+
+        // Exercise canister_post_upgrade of the real canister
+        governance
+            .upgrade_to_self_binary(/* arg passed to post-upgrade: */ Vec::new())
+            .await
+            .unwrap();
+
+        // Exercise canister_pre_upgrade (and post upgrade again) of the real canister
+        governance
+            .upgrade_to_self_binary(/* arg passed to post-upgrade: */ Vec::new())
+            .await
+            .unwrap();
+
+        Ok(())
+    });
 }
 
 fn clear_wasm_from_proposal(proposal: &mut ProposalData) {

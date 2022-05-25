@@ -29,6 +29,7 @@ wasm_canister_list=(
     sns-governance-canister
     sns-governance-canister_test
     sns-test-dapp-canister
+    sns-governance-mem-test-canister
     sns-root-canister
     stable
     statesync-test-canister

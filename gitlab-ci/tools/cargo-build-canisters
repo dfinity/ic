@@ -39,6 +39,7 @@ wasm_canister_build_list=(
     sns-governance-canister
     sns-root-canister
     sns-test-dapp-canister
+    sns-governance-mem-test-canister
     stable
     statesync-test-canister
     test-notified
@@ -83,7 +84,7 @@ function wasm_canisters_cargo_args() {
 
 build_with_features ledger-canister notify-method ledger-canister_notify-method
 build_with_features governance-canister test governance-canister_test
-build_with_features sns-governance-canister test sns-governance-canister_test
+build_with_features sns-governance-canister test sns-governance-canister_test sns-governance-mem-test-canister
 
 # We need to build and optimize ledger archive node before we build the ledger
 # because the ledger embeds the Wasm file of the archive.

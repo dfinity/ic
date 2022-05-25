@@ -22,7 +22,7 @@ trait StableMemory {
 
     /// Size of the stable memory, in bytes
     ///
-    /// (Note: that IC stable memroy API does not keep track of this.
+    /// (Note: that IC stable memory API does not keep track of this.
     /// `dfn_core::stable` uses 4 bytes at the beginning of the stable memory
     /// for length)
     fn length(&self) -> u32;

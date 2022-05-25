@@ -7,17 +7,29 @@ edition = "2018"
 name = "sns-test-dapp-canister"
 path = "test_canisters/test_dapp_canister.rs"
 
+[[bin]]
+name = "sns-governance-mem-test-canister"
+path = "test_canisters/sns_governance_mem_test_canister.rs"
+
 # Dependencies required to compile the test canisters.
 [dependencies]
+byteorder = "1.4.3"
 candid = "0.7.4"
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_json = { path = "../../rust_canisters/dfn_json" }
+hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-ic00-types = { path = "../../types/ic00_types" }
+ic-nervous-system-common= {path = "../../nervous_system/common/"}
+ic-sns-governance = { path = "../governance" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 maplit = "1.0.2"
+pretty-bytes = "0.2.2"
+prost = "0.10.0"
+rand = "0.8.4"
+rand_core = "0.6.2"
 
 # Dependencies required to compile the tests.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
