@@ -1,0 +1,48 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "config",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_config",
+    edition = "2018",
+    deps = [
+        "//rs/protobuf",
+        "//rs/registry/subnet_type",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:base64",
+        "@crate_index//:json5",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+        "@crate_index//:url",
+    ],
+)
+
+rust_test(
+    name = "ic_config_test",
+    crate = ":config",
+    proc_macro_deps = [
+        "@crate_index//:proptest-derive",
+    ],
+    deps = [
+        "@crate_index//:proptest",
+    ],
+)
+
+# Doc test disabled due to bug in rules_rust.
+# https://github.com/bazelbuild/rules_rust/issues/1233
+# rust_doc_test(
+#     name = "ic_config_doc_test",
+#     crate = ":config",
+# )
