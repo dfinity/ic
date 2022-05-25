@@ -4,7 +4,6 @@ use ic_config::subnet_config::SubnetConfig;
 use ic_config::Config;
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
-use ic_sns_governance::pb::v1::ListNervousSystemFunctionsResponse;
 use ic_sns_governance::pb::v1::{
     get_neuron_response, get_proposal_response,
     manage_neuron::{
@@ -14,10 +13,11 @@ use ic_sns_governance::pb::v1::{
         RegisterVote, RemoveNeuronPermissions,
     },
     GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse, Governance, GovernanceError,
-    ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion,
-    NervousSystemParameters, Neuron, NeuronId, NeuronPermissionList, Proposal, ProposalData,
-    ProposalId, Vote,
+    ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
+    ManageNeuronResponse, Motion, NervousSystemParameters, Neuron, NeuronId, NeuronPermissionList,
+    Proposal, ProposalData, ProposalId, Vote,
 };
+use ic_sns_governance::pb::v1::{ListNervousSystemFunctionsResponse, RewardEvent};
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ledger_canister as ledger;
 use ledger_canister::{
@@ -691,6 +691,28 @@ impl SnsCanisters<'_> {
         list_neuron_response.neurons
     }
 
+    pub async fn list_proposals(&self, sender: &Sender) -> Vec<ProposalData> {
+        self.list_proposals_(sender, 100).await
+    }
+
+    pub async fn list_proposals_(&self, sender: &Sender, limit: u32) -> Vec<ProposalData> {
+        let list_proposal_response: ListProposalsResponse = self
+            .governance
+            .query_from_sender(
+                "list_proposals",
+                candid_one,
+                ListProposals {
+                    limit,
+                    ..Default::default()
+                },
+                sender,
+            )
+            .await
+            .expect("Error calling the list_proposals API");
+
+        list_proposal_response.proposals
+    }
+
     pub async fn get_nervous_system_parameters(&self) -> NervousSystemParameters {
         self.governance
             .query_("get_nervous_system_parameters", candid_one, ())
@@ -834,6 +856,43 @@ impl SnsCanisters<'_> {
         };
 
         self.make_proposal(sender, subaccount, proposal).await
+    }
+
+    pub async fn get_latest_reward_event(&self) -> RewardEvent {
+        self.governance
+            .query_("get_latest_reward_event", candid_one, ())
+            .await
+            .expect("Error calling get_latest_reward_event")
+    }
+
+    /// Await a RewardEvent to be created.
+    pub async fn await_reward_event(&self, last_reward_period: u64) -> RewardEvent {
+        for _ in 0..25 {
+            let reward_event = self.get_latest_reward_event().await;
+
+            if reward_event.periods_since_genesis > last_reward_period {
+                return reward_event;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+
+        panic!(
+            "There was no RewardEvent greater than {:?}",
+            last_reward_period
+        )
+    }
+
+    /// Await a Proposal being rewarded via it's reward_event_round field.
+    pub async fn await_proposal_rewarding(&self, proposal_id: ProposalId) -> u64 {
+        for _ in 0..25 {
+            let proposal = self.get_proposal(proposal_id).await;
+
+            if proposal.reward_event_round != 0 {
+                return proposal.reward_event_round;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        panic!("Proposal {:?} was not rewarded", proposal_id);
     }
 
     async fn send_manage_neuron(
