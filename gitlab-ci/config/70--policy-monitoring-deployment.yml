@@ -25,3 +25,5 @@ deploy-monpoly-docker:
     - docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
     - docker tag monpoly_pipeline dfinity/monpoly_pipeline:"$TAG"
     - docker push dfinity/monpoly_pipeline:"$TAG"
+    - docker tag monpoly_pipeline dfinity/monpoly_pipeline:latest
+    - docker push dfinity/monpoly_pipeline:latest
