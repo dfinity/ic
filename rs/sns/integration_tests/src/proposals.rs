@@ -16,7 +16,8 @@ use ic_sns_governance::pb::v1::proposal::Action;
 use ic_sns_governance::pb::v1::{
     Ballot, GetProposal, GetProposalResponse, ListProposals, ListProposalsResponse,
     ManageNeuronResponse, Motion, NervousSystemParameters, NeuronId, NeuronPermissionList,
-    NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId, Vote,
+    NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
+    ProposalRewardStatus, Vote,
 };
 use ic_sns_governance::proposal::{
     PROPOSAL_MOTION_TEXT_BYTES_MAX, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
@@ -26,6 +27,7 @@ use ic_sns_governance::types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECO
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder, UserInfo,
 };
+use ic_sns_test_utils::now_seconds;
 use ledger_canister::{AccountIdentifier, Tokens};
 use on_wire::bytes;
 
@@ -1637,6 +1639,237 @@ fn test_proposal_garbage_collection() {
             proposals_after_gc[0].id.as_ref().unwrap(),
             proposal_ids.last().unwrap()
         );
+
+        Ok(())
+    });
+}
+
+/// Test that when there are no proposals submitted during reward_distribution_period_seconds,
+/// that RewardEvents are still generated, proposals can still be processed afterwards, and
+/// that garbage collection can still take place.
+#[test]
+fn test_intermittent_proposal_submission() {
+    local_test_on_sns_subnet(|runtime| async move {
+        // Initialize the ledger with an account for a user who will make proposals
+        let proposer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        // Initialize the ledger with an account for a user who will vote so we can control when
+        // proposals are executed
+        let voter = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        // Set the reward_distribution_period_seconds to the double the initial_voting_period
+        // (initial_voting_period must be at least one day) so that proposals can be submitted and
+        // settled within a single period.
+        let initial_voting_period = ONE_DAY_SECONDS;
+        let reward_distribution_period_seconds = 2 * initial_voting_period;
+
+        let params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            reward_distribution_period_seconds: Some(reward_distribution_period_seconds),
+            initial_voting_period: Some(initial_voting_period),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(proposer.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(voter.sender.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(params.clone())
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        // Stake and claim a neuron for the proposer
+        sns_canisters
+            .stake_and_claim_neuron_with_tokens(
+                &proposer.sender,
+                Some(ONE_YEAR_SECONDS as u32),
+                100,
+            )
+            .await;
+
+        // Stake and claim a neuron for the voter
+        sns_canisters
+            .stake_and_claim_neuron_with_tokens(&voter.sender, Some(ONE_YEAR_SECONDS as u32), 100)
+            .await;
+
+        // Phase 1: First, test that submitting a proposal works as expected
+        let proposal = Proposal {
+            action: Some(Action::Motion(Motion::default())),
+            ..Default::default()
+        };
+
+        // Submit a motion proposal using the proposer
+        let p1_id = sns_canisters
+            .make_proposal(&proposer.sender, &proposer.subaccount, proposal.clone())
+            .await
+            .unwrap();
+
+        // Vote on that proposal using the voter. This should result in the majority being
+        // reached for that proposal
+        sns_canisters
+            .vote(&voter.sender, &voter.subaccount, p1_id, true)
+            .await;
+
+        // Verify that the proposal state is as expected
+        let proposal_data = sns_canisters.get_proposal(p1_id).await;
+        assert!(proposal_data.decided_timestamp_seconds > 0);
+        assert!(proposal_data.executed_timestamp_seconds > 0);
+        // Even though the proposal is executed, it still accepts votes until the
+        // initial_voting_period is reached and the proposal is considered ReadyToSettle.
+        // Until then, it's reward_event_round should be "unset" (0), and its RewardStatus is
+        // AcceptsVotes
+        assert_eq!(proposal_data.reward_event_round, 0);
+        assert_eq!(
+            proposal_data.reward_status(now_seconds(None)),
+            ProposalRewardStatus::AcceptVotes
+        );
+
+        // Advance time to when the proposal's voting period is over.
+        let mut delta_s = (initial_voting_period) as i64;
+        sns_canisters.set_time_warp(delta_s).await?;
+
+        // The reward_event_round should still not have changed (due to a period not elapsing), but
+        // since the initial_voting_period of the proposal has passed, it should be considered
+        // ReadyToSettle.
+        let proposal_data = sns_canisters.get_proposal(p1_id).await;
+        assert_eq!(proposal_data.reward_event_round, 0);
+        assert_eq!(
+            proposal_data.reward_status(now_seconds(Some(delta_s as u64))),
+            ProposalRewardStatus::ReadyToSettle
+        );
+
+        // Since there hasn't been enough time since genesis for a reward period to complete,
+        // the periods_since_genesis of the latest reward event should be 0.
+        let reward_event = sns_canisters.get_latest_reward_event().await;
+        let mut last_reward_period = reward_event.periods_since_genesis;
+        assert_eq!(last_reward_period, 0);
+
+        // Warping time again should allow for a single reward period to complete.
+        delta_s = reward_distribution_period_seconds as i64;
+        sns_canisters.set_time_warp(delta_s).await?;
+
+        // RewardEvents occur on heartbeat. Allow some buffer for the heartbeat to occur to reduce
+        // flakiness.
+        let next_reward_event = sns_canisters.await_reward_event(last_reward_period).await;
+        assert_eq!(
+            next_reward_event.periods_since_genesis,
+            last_reward_period + 1
+        );
+        last_reward_period = next_reward_event.periods_since_genesis;
+
+        // Along with RewardEvents, the proposal should be updated with what RewardEvent
+        // distributed its voting rewards.
+        let reward_event_round = sns_canisters.await_proposal_rewarding(p1_id).await;
+        assert_eq!(reward_event_round, last_reward_period);
+        assert_eq!(next_reward_event.settled_proposals, vec![p1_id]);
+
+        // Phase 2: Test that reward periods can occur without any proposals, and RewardEvents
+        // can still take place.
+        delta_s += reward_distribution_period_seconds as i64; // Add a reward_period to the running time warp
+        sns_canisters.set_time_warp(delta_s).await?;
+
+        // Even though no proposals were submitted, a RewardEvent should have been created
+        let next_reward_event = sns_canisters.await_reward_event(last_reward_period).await;
+        assert_eq!(
+            next_reward_event.periods_since_genesis,
+            last_reward_period + 1
+        );
+        last_reward_period = next_reward_event.periods_since_genesis;
+        assert_eq!(next_reward_event.settled_proposals, vec![]);
+
+        // Phase 3: Given that no Proposals were submitted in the last reward period, all periodic
+        // tasks should still succeed.
+
+        // Create another motion proposal and make sure its lifecycle works as normal.
+        let p2_id = sns_canisters
+            .make_proposal(&proposer.sender, &proposer.subaccount, proposal.clone())
+            .await
+            .unwrap();
+
+        sns_canisters
+            .vote(&voter.sender, &voter.subaccount, p2_id, true)
+            .await;
+
+        // Now warp time to the middle of the next reward period. The proposal should have been
+        // decided and executed, but since another period hasn't completed, not rewarded.
+        delta_s += initial_voting_period as i64;
+        sns_canisters.set_time_warp(delta_s).await?;
+
+        // Assert that the periodic proposal processing still works
+        let proposal_data = sns_canisters.get_proposal(p2_id).await;
+        assert!(proposal_data.decided_timestamp_seconds > 0);
+        assert!(proposal_data.executed_timestamp_seconds > 0);
+        assert_eq!(proposal_data.reward_event_round, 0);
+        assert_eq!(
+            proposal_data.reward_status(now_seconds(Some(delta_s as u64))),
+            ProposalRewardStatus::ReadyToSettle
+        );
+
+        // Advance time well into the next reward period.
+        delta_s += reward_distribution_period_seconds as i64;
+        sns_canisters.set_time_warp(delta_s).await?;
+
+        // A new RewardEvent should have taken place
+        let next_reward_event = sns_canisters.await_reward_event(last_reward_period).await;
+        assert_eq!(
+            next_reward_event.periods_since_genesis,
+            last_reward_period + 1
+        );
+        last_reward_period = next_reward_event.periods_since_genesis;
+
+        // And the last proposal should have been Rewarded.
+        let reward_event_round = sns_canisters.await_proposal_rewarding(p2_id).await;
+        assert_eq!(reward_event_round, last_reward_period);
+        assert_eq!(next_reward_event.settled_proposals, vec![p2_id]);
+
+        // Now, adjust the garbage collection parameter via proposal to make sure
+        // garbage collection still works
+        let proposal = Proposal {
+            title: "Change max_proposals_to_keep_per_action".into(),
+            action: Some(Action::ManageNervousSystemParameters(
+                NervousSystemParameters {
+                    max_proposals_to_keep_per_action: Some(1),
+                    ..Default::default()
+                },
+            )),
+            ..Default::default()
+        };
+
+        let p3_id = sns_canisters
+            .make_proposal(&proposer.sender, &proposer.subaccount, proposal)
+            .await
+            .unwrap();
+
+        // Assert that there are 3 proposals pre acceptance of the proposal via the voter user
+        let mut proposals = sns_canisters.list_proposals(&proposer.sender).await;
+        let proposal_ids: Vec<ProposalId> = proposals.iter().map(|p| p.id.unwrap()).collect();
+        assert_eq!(proposal_ids, vec![p3_id, p2_id, p1_id]);
+
+        sns_canisters
+            .vote(&voter.sender, &voter.subaccount, p3_id, true)
+            .await;
+
+        // Garbage collection happens once every 24 hours, so advance time to when it could occur
+        delta_s += ONE_DAY_SECONDS as i64;
+        sns_canisters.set_time_warp(delta_s).await?;
+
+        // Wait for a heartbeat to trigger a GC round.
+        for _ in 0..25 {
+            proposals = sns_canisters.list_proposals(&proposer.sender).await;
+            if proposals.len() < 3 {
+                // GC occurred
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+
+        // Assert that there are now 2 proposals. p1_id should have been garbage collected
+        // as it was the "older" proposal of Action::Motion
+        let proposals = sns_canisters.list_proposals(&proposer.sender).await;
+        let proposal_ids: Vec<ProposalId> = proposals.iter().map(|p| p.id.unwrap()).collect();
+        assert_eq!(proposal_ids, vec![p3_id, p2_id]);
 
         Ok(())
     });

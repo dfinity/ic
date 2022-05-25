@@ -526,7 +526,7 @@ pub struct ProposalData {
     /// Rounds start at one: a value of zero indicates that
     /// no reward event taking this proposal into consideration happened yet.
     ///
-    /// This field matches field day_after_genesis in RewardEvent.
+    /// This field matches field periods_since_genesis in RewardEvent.
     #[prost(uint64, tag="13")]
     pub reward_event_round: u64,
     /// The proposal's wait-for-quiet state. This needs to be saved in stable memory.
