@@ -273,6 +273,7 @@ pub(crate) fn create_summary_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     pool_reader: &PoolReader<'_>,
+    context: &ValidationContext,
     parent_block: &Block,
     ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
     log: ReplicaLogger,
@@ -309,8 +310,6 @@ pub(crate) fn create_summary_payload(
                 parent_block.height()
             )
         });
-    let prev_summary = prev_summary_block.payload.as_ref().as_summary();
-    let prev_summary_registry_version = prev_summary.dkg.registry_version;
 
     let created = match &ecdsa_payload.key_transcript.next_in_creation {
         ecdsa::KeyTranscriptCreation::Created(transcript) => *transcript,
@@ -325,11 +324,14 @@ pub(crate) fn create_summary_payload(
         None => true,
     };
 
-    // Check for membership change, start next key creation if needed
+    // Check for membership change, start next key creation if needed.
+    // The registry versions to determine node membership:
+    // For this interval: context.registry_version from last summary block
+    // For next interval: context.registry_version from the new summary block
     let next_in_creation = if is_subnet_membership_changing(
         registry_client,
-        prev_summary_registry_version,
-        parent_block.context.registry_version,
+        prev_summary_block.context.registry_version,
+        context.registry_version,
         subnet_id,
     )? {
         info!(
@@ -440,14 +442,15 @@ fn get_subnet_nodes(
 
 pub(crate) fn is_subnet_membership_changing(
     registry_client: &dyn RegistryClient,
-    dkg_registry_version: RegistryVersion,
-    context_registry_version: RegistryVersion,
+    cur_interval_registry_version: RegistryVersion,
+    next_interval_registry_version: RegistryVersion,
     subnet_id: SubnetId,
 ) -> Result<bool, MembershipError> {
-    let current_nodes = get_subnet_nodes(registry_client, dkg_registry_version, subnet_id)?
-        .into_iter()
-        .collect::<BTreeSet<_>>();
-    let next_nodes = get_subnet_nodes(registry_client, context_registry_version, subnet_id)?
+    let current_nodes =
+        get_subnet_nodes(registry_client, cur_interval_registry_version, subnet_id)?
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+    let next_nodes = get_subnet_nodes(registry_client, next_interval_registry_version, subnet_id)?
         .into_iter()
         .collect::<BTreeSet<_>>();
     Ok(current_nodes != next_nodes)
