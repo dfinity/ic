@@ -27,7 +27,7 @@ use ic_protobuf::p2p::v1 as pb;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
-use strum_macros::EnumIter;
+use strum_macros::{EnumIter, IntoStaticStr};
 
 pub use crate::{
     consensus::{
@@ -83,15 +83,24 @@ pub enum ArtifactId {
 /// Artifact tags is used to select an artifact subtype when we do not have
 /// Artifact/ArtifactId/ArtifactAttribute. For example, when lookup quota
 /// or filters.
-#[derive(EnumIter, TryInto, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(EnumIter, TryInto, Clone, Copy, Debug, PartialEq, Eq, Hash, IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
 pub enum ArtifactTag {
+    #[strum(serialize = "canister_http")]
     CanisterHttpArtifact,
+    #[strum(serialize = "certification")]
     CertificationArtifact,
+    #[strum(serialize = "consensus")]
     ConsensusArtifact,
+    #[strum(serialize = "dkg")]
     DkgArtifact,
+    #[strum(serialize = "ecdsa")]
     EcdsaArtifact,
+    #[strum(serialize = "file_tree_sync")]
     FileTreeSyncArtifact,
+    #[strum(serialize = "ingress")]
     IngressArtifact,
+    #[strum(serialize = "state_sync")]
     StateSyncArtifact,
 }
 
