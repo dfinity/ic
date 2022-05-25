@@ -33,14 +33,14 @@
     "python.pythonPath": "/usr/local/bin/nonexistent-path"
   },
 
-  // Add the IDs of extensions you want installed when the container is created.
   "extensions": [
     "eamodio.gitlens",
     "vadimcn.vscode-lldb",
     "mutantdino.resourcemonitor",
     "esbenp.prettier-vscode",
+    "asciidoctor.asciidoctor-vscode",
 
-    "matklad.rust-analyzer",
+    "rust-lang.rust-analyzer",
     "tamasfe.even-better-toml",
     "serayuzgur.crates",
 
@@ -54,12 +54,7 @@
     "thebutlah.reorder-python-imports"
   ],
 
-  // Use 'forwardPorts' to make a list of ports inside the container available locally.
-  // "forwardPorts": [],
-
-  // Use 'postCreateCommand' to run commands after the container is created.
   "postCreateCommand": "pip3 install -r gitlab-ci/src/requirements.txt",
 
-  // Comment out to run as root instead.
   "remoteUser": "ubuntu"
 }
