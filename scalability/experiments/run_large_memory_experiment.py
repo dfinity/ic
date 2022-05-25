@@ -118,6 +118,8 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
                     "call_method": "update_copy" if self.use_updates else "query_copy",
                 }
             )
+
+            avg_succ_rate = evaluated_summaries.get_avg_success_rate(FLAGS.iter_duration)
             (
                 failure_rate,
                 t_median_list,
@@ -142,8 +144,8 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
                 failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE
                 and t_median < workload_experiment.ALLOWABLE_LATENCY
             ):
-                if num_success / self.last_duration > rps_max:
-                    rps_max = num_success / self.last_duration
+                if avg_succ_rate > rps_max:
+                    rps_max = avg_succ_rate
                     rps_max_in = load_total
 
             # Check termination condition
