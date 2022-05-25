@@ -12,7 +12,6 @@ use ic_ic00_types::{
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_interfaces::{execution_environment::AvailableMemory, messages::CanisterInputMessage};
 use ic_metrics::MetricsRegistry;
-use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus};
@@ -25,6 +24,7 @@ use ic_replicated_state::{
 use ic_replicated_state::{
     canister_state::QUEUE_INDEX_NONE, InputQueueType, NetworkTopology, SubnetTopology,
 };
+use ic_test_utilities::execution_environment::test_registry_settings;
 use ic_test_utilities::{
     crypto::mock_random_number_generator,
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -44,7 +44,7 @@ use ic_types::{
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::str::FromStr;
-use std::{collections::BTreeSet, convert::TryFrom, sync::Arc};
+use std::{convert::TryFrom, sync::Arc};
 use tempfile::TempDir;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
@@ -52,8 +52,6 @@ lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
         AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into();
 }
-const MAX_NUMBER_OF_CANISTERS: u64 = 0;
-
 // TODO(EXC-1120): This is copied from `tests/execution_environment.rs`.
 // Refactor the code so that this method is defined only once.
 fn initial_state(
@@ -162,9 +160,8 @@ fn execute_get_balance(
             MAX_NUM_INSTRUCTIONS,
             &mut mock_random_number_generator(),
             &None,
-            &ProvisionalWhitelist::Set(BTreeSet::new()),
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            MAX_NUMBER_OF_CANISTERS,
+            &test_registry_settings(),
         )
         .0;
     state
@@ -211,9 +208,8 @@ fn execute_get_utxos(
             MAX_NUM_INSTRUCTIONS,
             &mut mock_random_number_generator(),
             &None,
-            &ProvisionalWhitelist::Set(BTreeSet::new()),
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            MAX_NUMBER_OF_CANISTERS,
+            &test_registry_settings(),
         )
         .0;
 

@@ -1,9 +1,10 @@
 use crate::message_routing::MessageRoutingMetrics;
 use crate::routing::{demux::Demux, stream_builder::StreamBuilder};
-use ic_interfaces::execution_environment::{ExecutionRoundType, Scheduler};
+use ic_interfaces::execution_environment::{
+    ExecutionRoundType, RegistryExecutionSettings, Scheduler,
+};
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::Timer;
-use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::{batch::Batch, ExecutionRound};
@@ -22,9 +23,8 @@ pub(crate) trait StateMachine: Send {
         state: ReplicatedState,
         network_topology: NetworkTopology,
         batch: Batch,
-        provisional_whitelist: ProvisionalWhitelist,
         subnet_features: SubnetFeatures,
-        max_number_of_canisters: u64,
+        registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState;
 }
 pub(crate) struct StateMachineImpl {
@@ -68,9 +68,8 @@ impl StateMachine for StateMachineImpl {
         mut state: ReplicatedState,
         network_topology: NetworkTopology,
         batch: Batch,
-        provisional_whitelist: ProvisionalWhitelist,
         subnet_features: SubnetFeatures,
-        max_number_of_canisters: u64,
+        registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
         let phase_timer = Timer::start();
 
@@ -106,8 +105,7 @@ impl StateMachine for StateMachineImpl {
             batch.ecdsa_subnet_public_key,
             ExecutionRound::from(batch.batch_number.get()),
             execution_round_type,
-            provisional_whitelist,
-            max_number_of_canisters,
+            registry_settings,
         );
         self.observe_phase_duration(PHASE_EXECUTION, &phase_timer);
 

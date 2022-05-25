@@ -17,7 +17,7 @@ use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs,
 };
-use ic_interfaces::execution_environment::IngressHistoryWriter;
+use ic_interfaces::execution_environment::{IngressHistoryWriter, RegistryExecutionSettings};
 use ic_interfaces::{
     execution_environment::{
         AvailableMemory, ExecResult, ExecutionMode, ExecutionParameters, HypervisorError,
@@ -49,7 +49,6 @@ use crate::{
 };
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
-const MAX_NUMBER_OF_CANISTERS: u64 = 1000;
 
 pub struct ExecutionEnvironmentBuilder {
     nns_subnet_id: SubnetId,
@@ -223,7 +222,7 @@ pub struct ExecutionTest {
     instruction_limit: NumInstructions,
     install_code_instruction_limit: NumInstructions,
     initial_canister_cycles: Cycles,
-    max_number_of_canisters: u64,
+    registry_settings: RegistryExecutionSettings,
     user_id: UserId,
     manual_execution: bool,
 
@@ -601,8 +600,12 @@ impl ExecutionTest {
 
         let message_id = self.next_message_id();
 
-        let mut provisional_whitelist = BTreeSet::new();
-        provisional_whitelist.insert(self.user_id.get());
+        match &mut self.registry_settings.provisional_whitelist {
+            ProvisionalWhitelist::Set(ids) => {
+                ids.insert(self.user_id.get());
+            }
+            ProvisionalWhitelist::All => {}
+        };
 
         let is_install_code = method_name.to_string() == "install_code";
 
@@ -620,9 +623,8 @@ impl ExecutionTest {
             self.install_code_instruction_limit,
             &mut mock_random_number_generator(),
             &None,
-            &ProvisionalWhitelist::Set(provisional_whitelist),
             self.subnet_available_memory.clone(),
-            self.max_number_of_canisters,
+            &self.registry_settings,
         );
         let ingress_status = new_state.get_ingress_status(&message_id);
         self.state = Some(new_state);
@@ -818,7 +820,7 @@ pub struct ExecutionTestBuilder {
     install_code_instruction_limit: NumInstructions,
     initial_canister_cycles: Cycles,
     subnet_available_memory: i64,
-    max_number_of_canisters: u64,
+    registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
 }
 
@@ -843,7 +845,7 @@ impl Default for ExecutionTestBuilder {
             install_code_instruction_limit: config.max_instructions_per_install_code,
             initial_canister_cycles: INITIAL_CANISTER_CYCLES,
             subnet_available_memory,
-            max_number_of_canisters: MAX_NUMBER_OF_CANISTERS,
+            registry_settings: test_registry_settings(),
             manual_execution: false,
         }
     }
@@ -930,7 +932,10 @@ impl ExecutionTestBuilder {
 
     pub fn with_max_number_of_canisters(self, max_number_of_canisters: u64) -> Self {
         Self {
-            max_number_of_canisters,
+            registry_settings: RegistryExecutionSettings {
+                max_number_of_canisters,
+                ..self.registry_settings
+            },
             ..self
         }
     }
@@ -1023,7 +1028,7 @@ impl ExecutionTestBuilder {
             instruction_limit: self.instruction_limit,
             install_code_instruction_limit: self.install_code_instruction_limit,
             initial_canister_cycles: self.initial_canister_cycles,
-            max_number_of_canisters: self.max_number_of_canisters,
+            registry_settings: self.registry_settings,
             user_id: user_test_id(1),
             exec_env,
             cycles_account_manager,
@@ -1080,5 +1085,12 @@ pub fn check_ingress_status(ingress_status: IngressStatus) -> Result<WasmResult,
             state: IngressState::Failed(error),
             ..
         } => Err(error),
+    }
+}
+
+pub fn test_registry_settings() -> RegistryExecutionSettings {
+    RegistryExecutionSettings {
+        max_number_of_canisters: 1_000,
+        provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
     }
 }

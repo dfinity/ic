@@ -892,6 +892,13 @@ pub enum ExecutionRoundType {
     OrdinaryRound,
 }
 
+/// Configuration of execution that comes from the registry.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RegistryExecutionSettings {
+    pub max_number_of_canisters: u64,
+    pub provisional_whitelist: ProvisionalWhitelist,
+}
+
 pub trait Scheduler: Send {
     /// Type modelling the replicated state.
     ///
@@ -943,8 +950,7 @@ pub trait Scheduler: Send {
         ecdsa_subnet_public_key: Option<MasterEcdsaPublicKey>,
         current_round: ExecutionRound,
         current_round_type: ExecutionRoundType,
-        provisional_whitelist: ProvisionalWhitelist,
-        max_number_of_canisters: u64,
+        registry_settings: &RegistryExecutionSettings,
     ) -> Self::State;
 }
 
