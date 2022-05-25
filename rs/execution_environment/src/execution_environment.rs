@@ -26,7 +26,9 @@ use ic_ic00_types::{
     ProvisionalTopUpCanisterArgs, SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs,
     UpdateSettingsArgs, IC_00,
 };
-use ic_interfaces::execution_environment::{AvailableMemory, CanisterOutOfCyclesError, ExecResult};
+use ic_interfaces::execution_environment::{
+    AvailableMemory, CanisterOutOfCyclesError, ExecResult, RegistryExecutionSettings,
+};
 use ic_interfaces::{
     execution_environment::{
         ExecuteMessageResult, ExecutionMode, ExecutionParameters, HypervisorError,
@@ -86,9 +88,8 @@ pub trait ExecutionEnvironment: Sync + Send {
         instructions_limit: NumInstructions,
         rng: &mut (dyn RngCore + 'static),
         ecdsa_subnet_public_key: &Option<MasterEcdsaPublicKey>,
-        provisional_whitelist: &ProvisionalWhitelist,
         subnet_available_memory: SubnetAvailableMemory,
-        max_number_of_canisters: u64,
+        registry_settings: &RegistryExecutionSettings,
     ) -> (ReplicatedState, NumInstructions);
 
     /// Executes a replicated message sent to a canister.
@@ -215,9 +216,8 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         instructions_limit: NumInstructions,
         rng: &mut (dyn RngCore + 'static),
         ecdsa_subnet_public_key: &Option<MasterEcdsaPublicKey>,
-        provisional_whitelist: &ProvisionalWhitelist,
         subnet_available_memory: SubnetAvailableMemory,
-        max_number_of_canisters: u64,
+        registry_settings: &RegistryExecutionSettings,
     ) -> (ReplicatedState, NumInstructions) {
         let timer = Timer::start(); // Start logging execution time.
 
@@ -271,7 +271,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                 let result = match CanisterSettings::try_from(settings) {
                                     Err(err) => (Some((Err(err.into()), cycles)), instructions_limit),
                                     Ok(settings) =>
-                                        (Some(self.create_canister(*msg.sender(), cycles, settings, max_number_of_canisters, &mut state)), instructions_limit)
+                                        (Some(self.create_canister(*msg.sender(), cycles, settings, registry_settings.max_number_of_canisters, &mut state)), instructions_limit)
                                 };
                                 info!(
                                     self.log,
@@ -725,8 +725,8 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                     cycles_amount,
                                     settings,
                                     &mut state,
-                                    provisional_whitelist,
-                                    max_number_of_canisters,
+                                    &registry_settings.provisional_whitelist,
+                                    registry_settings.max_number_of_canisters,
                                 )
                                 .map(|canister_id| CanisterIdRecord::from(canister_id).encode())
                                 .map_err(|err| err.into()),
@@ -745,7 +745,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         args.get_canister_id(),
                         args.to_u128(),
                         &mut state,
-                        provisional_whitelist,
+                        &registry_settings.provisional_whitelist,
                     ),
                 };
                 (Some((res, Cycles::zero())), instructions_limit)

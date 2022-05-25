@@ -11,14 +11,15 @@ use ic_crypto::prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{CanisterStatusType, InstallCodeArgs, Method as Ic00Method, Payload as _};
-use ic_interfaces::execution_environment::{AvailableMemory, ExecResult, ExecutionRoundType};
+use ic_interfaces::execution_environment::{
+    AvailableMemory, ExecResult, ExecutionRoundType, RegistryExecutionSettings,
+};
 use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, Scheduler, SubnetAvailableMemory},
     messages::CanisterInputMessage,
 };
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::{
     bitcoin_state::BitcoinState, canister_state::QUEUE_INDEX_NONE, CanisterState, InputQueueType,
     NetworkTopology, ReplicatedState,
@@ -868,8 +869,7 @@ impl Scheduler for SchedulerImpl {
         ecdsa_subnet_public_key: Option<MasterEcdsaPublicKey>,
         current_round: ExecutionRound,
         current_round_type: ExecutionRoundType,
-        provisional_whitelist: ProvisionalWhitelist,
-        max_number_of_canisters: u64,
+        registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
         let measurement_scope = MeasurementScope::root(&self.metrics.round);
 
@@ -968,9 +968,8 @@ impl Scheduler for SchedulerImpl {
                     self.config.max_instructions_per_message,
                     &mut csprng,
                     &ecdsa_subnet_public_key,
-                    &provisional_whitelist,
                     subnet_available_memory.clone(),
-                    max_number_of_canisters,
+                    registry_settings,
                 );
 
                 state = new_state;
@@ -1007,9 +1006,8 @@ impl Scheduler for SchedulerImpl {
                     instructions_limit_per_message,
                     &mut csprng,
                     &ecdsa_subnet_public_key,
-                    &provisional_whitelist,
                     subnet_available_memory.clone(),
-                    max_number_of_canisters,
+                    registry_settings,
                 );
 
                 state = new_state;

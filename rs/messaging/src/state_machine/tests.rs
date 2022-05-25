@@ -10,6 +10,7 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{ReplicatedState, SubnetTopology};
 use ic_test_utilities::{
+    execution_environment::test_registry_settings,
     state_manager::FakeStateManager,
     types::batch::{BatchBuilder, IngressPayloadBuilder, PayloadBuilder},
     types::ids::subnet_test_id,
@@ -22,8 +23,6 @@ use ic_types::{Height, PrincipalId, SubnetId};
 use mockall::{mock, predicate::*, Sequence};
 use std::collections::{BTreeMap, BTreeSet};
 
-const MAX_NUMBER_OF_CANISTERS: u64 = 0;
-
 mock! {
     pub Scheduler {}
     trait Scheduler {
@@ -35,8 +34,7 @@ mock! {
             ecdsa_subnet_public_key: Option<MasterEcdsaPublicKey>,
             current_round: ExecutionRound,
             current_round_type: ExecutionRoundType,
-            provisional_whitelist: ProvisionalWhitelist,
-            max_number_of_canisters: u64,
+            registry_settings: &RegistryExecutionSettings,
         ) -> ReplicatedState;
     }
 }
@@ -67,8 +65,6 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
     } else {
         ExecutionRoundType::OrdinaryRound
     };
-    let provisional_whitelist = ProvisionalWhitelist::Set(BTreeSet::new());
-    let max_number_of_canisters = 0;
 
     let mut seq = Sequence::new();
 
@@ -91,10 +87,9 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             eq(provided_batch.ecdsa_subnet_public_key.clone()),
             eq(round),
             eq(round_type),
-            eq(provisional_whitelist),
-            eq(max_number_of_canisters),
+            eq(test_registry_settings()),
         )
-        .returning(|state, _, _, _, _, _, _| state);
+        .returning(|state, _, _, _, _, _| state);
 
     let mut stream_builder = Box::new(MockStreamBuilder::new());
     stream_builder
@@ -164,9 +159,8 @@ fn state_machine_populates_network_topology() {
             fixture.initial_state,
             fixture.network_topology.clone(),
             provided_batch,
-            ProvisionalWhitelist::Set(BTreeSet::new()),
             Default::default(),
-            MAX_NUMBER_OF_CANISTERS,
+            &test_registry_settings(),
         );
 
         assert_eq!(state.metadata.network_topology, fixture.network_topology);
@@ -191,9 +185,8 @@ fn test_delivered_batch(provided_batch: Batch) {
             fixture.initial_state,
             NetworkTopology::default(),
             provided_batch,
-            ProvisionalWhitelist::Set(BTreeSet::new()),
             Default::default(),
-            MAX_NUMBER_OF_CANISTERS,
+            &test_registry_settings(),
         );
     });
 }

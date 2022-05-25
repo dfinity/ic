@@ -9,7 +9,6 @@ use ic_ic00_types::{CanisterIdRecord, Method};
 use ic_interfaces::execution_environment::{ExecuteMessageResult, HypervisorError};
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_logger::replica_logger::no_op_logger;
-use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -18,6 +17,7 @@ use ic_replicated_state::{
     CallOrigin, ExportedFunctions,
 };
 use ic_replicated_state::{CanisterStatus, SubnetTopology};
+use ic_test_utilities::execution_environment::test_registry_settings;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     history::MockIngressHistory,
@@ -59,7 +59,6 @@ const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(1 << 
 const LAST_ROUND_MAX: u64 = 100;
 const MAX_CANISTER_MEMORY_SIZE: NumBytes = MAX_MEMORY_ALLOCATION;
 const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(u64::MAX);
-const MAX_NUMBER_OF_CANISTERS: u64 = 0;
 
 lazy_static! {
     static ref INITIAL_CYCLES: Cycles =
@@ -119,8 +118,7 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             for canister_state in state.canisters_iter() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -186,8 +184,7 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             for canister_state in state.canisters_iter_mut() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -208,8 +205,7 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
 
             for canister_state in state.canisters_iter_mut() {
@@ -265,8 +261,7 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             for canister_state in state.canisters_iter_mut() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -287,8 +282,7 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
                 None,
                 round,
                 ExecutionRoundType::CheckpointRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
 
             assert_eq!(NumBytes::from(0), state.metadata.heap_delta_estimate);
@@ -304,8 +298,7 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
 
             for canister_state in state.canisters_iter_mut() {
@@ -365,8 +358,7 @@ fn canister_gets_heap_delta_rate_limited() {
                 None,
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             assert_eq!(
                 state
@@ -387,8 +379,7 @@ fn canister_gets_heap_delta_rate_limited() {
                 None,
                 ExecutionRound::from(2),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             assert_eq!(
                 state
@@ -452,8 +443,7 @@ fn inner_loop_stops_when_no_instructions_consumed() {
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             for canister_state in state.canisters_iter_mut() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -523,8 +513,7 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             for canister_state in state.canisters_iter_mut() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 1);
@@ -1005,8 +994,7 @@ fn test_message_limit_from_message_overhead() {
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             let number_of_messages = scheduler.metrics.msg_execution_duration.get_sample_count();
             assert_eq!(number_of_messages, expected_number_of_messages);
@@ -1131,8 +1119,7 @@ fn test_multiple_iterations_of_inner_loop() {
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             for canister_state in state.canisters_iter_mut() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -1241,8 +1228,7 @@ fn canister_can_run_for_multiple_iterations() {
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             // Verify that we actually ran 6 iterations.
             assert_eq!(
@@ -1298,8 +1284,7 @@ fn validate_consumed_instructions_metric() {
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             for canister_state in state.canisters_iter_mut() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -1394,8 +1379,7 @@ fn only_charge_for_allocation_after_specified_duration() {
                 None,
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             let canister_state = state.canisters_iter().next().unwrap();
             assert_eq!(canister_state.system_state.balance().get(), initial_cycles);
@@ -1409,8 +1393,7 @@ fn only_charge_for_allocation_after_specified_duration() {
                 None,
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             let canister_state = state.canisters_iter().next().unwrap();
             assert_eq!(
@@ -1464,8 +1447,7 @@ fn dont_execute_any_canisters_if_not_enough_cycles() {
                 None,
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             for canister_state in state.canisters_iter() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 1);
@@ -1554,8 +1536,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
                 None,
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
 
             for (_, canister) in state.canister_states.iter() {
@@ -1625,8 +1606,7 @@ fn can_execute_messages_with_just_enough_cycles() {
                 None,
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             for canister_state in state.canisters_iter() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -1701,8 +1681,7 @@ fn execute_only_canisters_with_messages() {
                 None,
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             for canister_state in state.canisters_iter() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -1787,8 +1766,7 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             for canister_state in state.canisters_iter() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -1861,8 +1839,7 @@ fn can_fully_execute_canisters_deterministically_until_out_of_cycles() {
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             for canister_state in state.canisters_iter() {
                 let id = &canister_state.canister_id();
@@ -1933,8 +1910,7 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             for canister_state in state.canisters_iter() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 7);
@@ -1991,7 +1967,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
     exec_env
         .expect_execute_subnet_message()
         .times(3)
-        .returning(move |_, state, _, _, _, _, _, _| (state, NumInstructions::from(0)));
+        .returning(move |_, state, _, _, _, _, _| (state, NumInstructions::from(0)));
 
     let exec_env = Arc::new(exec_env);
 
@@ -2039,8 +2015,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
         },
         ingress_history_writer,
@@ -2108,8 +2083,7 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
                 None,
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
         },
         ingress_history_writer,
@@ -2177,8 +2151,7 @@ fn execute_heartbeat_before_messages() {
                 None,
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
         },
         ingress_history_writer,
@@ -2250,8 +2223,7 @@ fn execute_multiple_heartbeats() {
                     None,
                     ExecutionRound::from(1),
                     ExecutionRoundType::OrdinaryRound,
-                    ProvisionalWhitelist::Set(BTreeSet::new()),
-                    MAX_NUMBER_OF_CANISTERS,
+                    &test_registry_settings(),
                 );
             }
         },
@@ -2502,8 +2474,7 @@ fn can_record_metrics_for_a_round() {
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
 
             let registry = &scheduler_test_fixture.metrics_registry;
@@ -2658,8 +2629,7 @@ fn heap_delta_rate_limiting_metrics_recorded() {
                 None,
                 ExecutionRound::from(2),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
 
             let registry = &scheduler_test_fixture.metrics_registry;
@@ -2754,8 +2724,7 @@ fn heap_delta_rate_limiting_disabled() {
             None,
             ExecutionRound::from(2),
             ExecutionRoundType::OrdinaryRound,
-            ProvisionalWhitelist::Set(BTreeSet::new()),
-            MAX_NUMBER_OF_CANISTERS,
+            &test_registry_settings(),
         );
 
         let registry = &scheduler_test_fixture.metrics_registry;
@@ -2863,8 +2832,7 @@ fn requested_method_does_not_exist() {
                 None,
                 round,
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             for canister_state in state.canisters_iter() {
                 assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
@@ -2940,8 +2908,7 @@ fn stopping_canisters_are_stopped_when_they_are_ready() {
                 None,
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             assert_eq!(state.canister_states.len(), 1);
             for canister_state in state.canisters_iter() {
@@ -3035,8 +3002,7 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
                 None,
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             assert_eq!(state.canister_states.len(), 1);
             assert_eq!(
@@ -3118,7 +3084,7 @@ fn execution_round_metrics_are_recorded() {
     exec_env
         .expect_execute_subnet_message()
         .times(3)
-        .returning(move |_, state, _, _, _, _, _, _| (state, NumInstructions::from(0)));
+        .returning(move |_, state, _, _, _, _, _| (state, NumInstructions::from(0)));
 
     let exec_env = Arc::new(exec_env);
 
@@ -3162,8 +3128,7 @@ fn execution_round_metrics_are_recorded() {
                 None,
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             assert_eq!(1, scheduler.metrics.round.duration.get_sample_count(),);
             assert_eq!(1, scheduler.metrics.round.instructions.get_sample_count(),);
@@ -3425,8 +3390,7 @@ fn heartbeat_metrics_are_recorded() {
                 None,
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             assert_eq!(
                 2,
@@ -3517,8 +3481,7 @@ fn execution_round_does_not_too_early() {
                 None,
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
             assert_eq!(
                 2,
@@ -3848,8 +3811,7 @@ fn long_open_call_context_is_recorded() {
                 None,
                 ExecutionRound::from(4),
                 ExecutionRoundType::OrdinaryRound,
-                ProvisionalWhitelist::Set(BTreeSet::new()),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
 
             let registry = &scheduler_test_fixture.metrics_registry;
@@ -4047,9 +4009,8 @@ proptest! {
                     Randomness::from([0; 32]),
                     None,
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
-                ExecutionRoundType::OrdinaryRound,
-                    ProvisionalWhitelist::Set(BTreeSet::new()),
-                    MAX_NUMBER_OF_CANISTERS,
+                    ExecutionRoundType::OrdinaryRound,
+                    &test_registry_settings(),
                 );
             },
             ingress_history_writer,
@@ -4098,18 +4059,16 @@ proptest! {
                     Randomness::from([0; 32]),
                     None,
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
-                ExecutionRoundType::OrdinaryRound,
-                    ProvisionalWhitelist::Set(BTreeSet::new()),
-                    MAX_NUMBER_OF_CANISTERS,
+                    ExecutionRoundType::OrdinaryRound,
+                    &test_registry_settings(),
                 );
                 let new_state2 = scheduler.execute_round(
                     state.clone(),
                     Randomness::from([0; 32]),
                     None,
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
-                ExecutionRoundType::OrdinaryRound,
-                    ProvisionalWhitelist::Set(BTreeSet::new()),
-                    MAX_NUMBER_OF_CANISTERS,
+                    ExecutionRoundType::OrdinaryRound,
+                    &test_registry_settings(),
                 );
                 assert_eq!(new_state1, new_state2);
             },
@@ -4168,9 +4127,8 @@ proptest! {
                             Randomness::from([0; 32]),
                             None,
                             ExecutionRound::from(round),
-                ExecutionRoundType::OrdinaryRound,
-                            ProvisionalWhitelist::Set(BTreeSet::new()),
-                            MAX_NUMBER_OF_CANISTERS,
+                            ExecutionRoundType::OrdinaryRound,
+                            &test_registry_settings(),
                         );
                 }
                 for canister_state in state.canisters_iter() {
@@ -4226,8 +4184,7 @@ proptest! {
                     None,
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
                     ExecutionRoundType::OrdinaryRound,
-                    ProvisionalWhitelist::Set(BTreeSet::new()),
-                    MAX_NUMBER_OF_CANISTERS,
+                    &test_registry_settings(),
                 );
                 assert_eq!(state.canisters_iter().count(), original_canister_count);
             },

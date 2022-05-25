@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, convert::TryFrom, sync::Arc};
+use std::{convert::TryFrom, sync::Arc};
 
 use assert_matches::assert_matches;
 use candid::Encode;
@@ -37,7 +37,9 @@ use ic_replicated_state::{
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, InputQueueType, ReplicatedState,
     SchedulerState, SystemState,
 };
-use ic_test_utilities::execution_environment::ExecutionEnvironmentBuilder;
+use ic_test_utilities::execution_environment::{
+    test_registry_settings, ExecutionEnvironmentBuilder,
+};
 use ic_test_utilities::{
     crypto::mock_random_number_generator,
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -75,7 +77,6 @@ lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
         AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into();
 }
-const MAX_NUMBER_OF_CANISTERS: u64 = 0;
 
 fn initial_state(
     subnet_type: SubnetType,
@@ -1014,9 +1015,8 @@ fn stopping_canister_rejects_requests() {
                     MAX_NUM_INSTRUCTIONS,
                     &mut mock_random_number_generator(),
                     &None,
-                    &ProvisionalWhitelist::Set(BTreeSet::new()),
                     MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                    MAX_NUMBER_OF_CANISTERS,
+                    &test_registry_settings(),
                 )
                 .0;
 
@@ -1215,9 +1215,8 @@ fn execute_stop_canister_updates_ingress_history_when_called_on_already_stopped_
                 MAX_NUM_INSTRUCTIONS,
                 &mut mock_random_number_generator(),
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             )
             .0;
 
@@ -1254,9 +1253,8 @@ fn execute_stop_canister_does_not_update_ingress_history_when_called_on_running_
                 MAX_NUM_INSTRUCTIONS,
                 &mut mock_random_number_generator(),
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             )
             .0;
 
@@ -1287,9 +1285,8 @@ fn execute_stop_canister_does_not_update_ingress_history_when_called_on_stopping
                 MAX_NUM_INSTRUCTIONS,
                 &mut mock_random_number_generator(),
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             )
             .0;
 
@@ -1322,9 +1319,8 @@ fn execute_stop_canister_writes_failure_to_ingress_history_when_called_with_inco
                 MAX_NUM_INSTRUCTIONS,
                 &mut mock_random_number_generator(),
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             )
             .0;
 
@@ -1389,9 +1385,8 @@ fn test_canister_status_helper(
                 MAX_NUM_INSTRUCTIONS,
                 &mut mock_random_number_generator(),
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             )
             .0;
 
@@ -1447,9 +1442,8 @@ fn test_request_nonexistent_canister(method: Method) {
                 MAX_NUM_INSTRUCTIONS,
                 &mut mock_random_number_generator(),
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             )
             .0;
 
@@ -1628,9 +1622,8 @@ fn start_canister_from_another_canister() {
                 MAX_NUM_INSTRUCTIONS,
                 &mut mock_random_number_generator(),
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             )
             .0;
 
@@ -1698,9 +1691,8 @@ fn stop_canister_from_another_canister() {
                 MAX_NUM_INSTRUCTIONS,
                 &mut mock_random_number_generator(),
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             )
             .0;
 
@@ -1778,9 +1770,8 @@ fn starting_a_stopping_canister_succeeds() {
                 MAX_NUM_INSTRUCTIONS,
                 &mut mock_random_number_generator(),
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             )
             .0;
 
@@ -1824,9 +1815,8 @@ fn subnet_ingress_message_unknown_method() {
                 MAX_NUM_INSTRUCTIONS,
                 &mut mock_random_number_generator(),
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             )
             .0;
 
@@ -1876,9 +1866,8 @@ fn subnet_canister_request_unknown_method() {
                 MAX_NUM_INSTRUCTIONS,
                 &mut mock_random_number_generator(),
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             )
             .0;
 
@@ -1932,9 +1921,8 @@ fn subnet_ingress_message_on_create_canister_fails() {
                 MAX_NUM_INSTRUCTIONS,
                 &mut mock_random_number_generator(),
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             )
             .0;
 
@@ -1984,9 +1972,8 @@ fn subnet_canister_request_bad_candid_payload() {
                 MAX_NUM_INSTRUCTIONS,
                 &mut mock_random_number_generator(),
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             )
             .0;
 
@@ -2054,9 +2041,8 @@ fn execute_create_canister_request(
             MAX_NUM_INSTRUCTIONS,
             &mut mock_random_number_generator(),
             &None,
-            &ProvisionalWhitelist::Set(BTreeSet::new()),
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            MAX_NUMBER_OF_CANISTERS,
+            &test_registry_settings(),
         )
         .0
 }
@@ -2276,9 +2262,8 @@ fn execute_setup_initial_dkg_request(
             MAX_NUM_INSTRUCTIONS,
             &mut mock_random_number_generator(),
             &None,
-            &ProvisionalWhitelist::Set(BTreeSet::new()),
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            MAX_NUMBER_OF_CANISTERS,
+            &test_registry_settings(),
         )
         .0
 }
@@ -2378,9 +2363,8 @@ fn install_code_fails_on_invalid_compute_allocation() {
                 MAX_NUM_INSTRUCTIONS,
                 &mut mock_random_number_generator(),
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             )
             .0;
 
@@ -2429,9 +2413,8 @@ fn install_code_fails_on_invalid_memory_allocation() {
                 MAX_NUM_INSTRUCTIONS,
                 &mut mock_random_number_generator(),
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             )
             .0;
 
@@ -2514,9 +2497,8 @@ fn metrics_are_observed_for_subnet_messages() {
                 MAX_NUM_INSTRUCTIONS,
                 &mut csprng,
                 &None,
-                &ProvisionalWhitelist::Set(BTreeSet::new()),
                 MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-                MAX_NUMBER_OF_CANISTERS,
+                &test_registry_settings(),
             );
         }
 
@@ -2533,9 +2515,8 @@ fn metrics_are_observed_for_subnet_messages() {
             MAX_NUM_INSTRUCTIONS,
             &mut csprng,
             &None,
-            &ProvisionalWhitelist::Set(BTreeSet::new()),
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            MAX_NUMBER_OF_CANISTERS,
+            &test_registry_settings(),
         );
 
         assert_eq!(
@@ -3170,9 +3151,8 @@ fn execute_canister_http_request() {
             MAX_NUM_INSTRUCTIONS,
             &mut mock_random_number_generator(),
             &None,
-            &ProvisionalWhitelist::Set(BTreeSet::new()),
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            MAX_NUMBER_OF_CANISTERS,
+            &test_registry_settings(),
         );
 
         // Check that the SubnetCallContextManager contains the request.
@@ -3237,9 +3217,8 @@ fn execute_canister_http_request_disabled() {
             MAX_NUM_INSTRUCTIONS,
             &mut mock_random_number_generator(),
             &None,
-            &ProvisionalWhitelist::Set(BTreeSet::new()),
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            MAX_NUMBER_OF_CANISTERS,
+            &test_registry_settings(),
         );
 
         // Check that the SubnetCallContextManager does not contains any request.
@@ -3303,9 +3282,8 @@ fn execute_compute_initial_ecdsa_dealings(
             MAX_NUM_INSTRUCTIONS,
             &mut mock_random_number_generator(),
             &None,
-            &ProvisionalWhitelist::Set(BTreeSet::new()),
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            MAX_NUMBER_OF_CANISTERS,
+            &test_registry_settings(),
         )
         .0
 }
@@ -3499,9 +3477,8 @@ fn execute_ecdsa_signing(
             MAX_NUM_INSTRUCTIONS,
             &mut mock_random_number_generator(),
             &None,
-            &ProvisionalWhitelist::Set(BTreeSet::new()),
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            MAX_NUMBER_OF_CANISTERS,
+            &test_registry_settings(),
         )
         .0
 }

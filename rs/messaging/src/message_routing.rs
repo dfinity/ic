@@ -7,7 +7,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ic00_types::{CanisterStatusType, EcdsaKeyId};
 use ic_interfaces::{
     certified_stream_store::CertifiedStreamStore,
-    execution_environment::{IngressHistoryWriter, Scheduler},
+    execution_environment::{IngressHistoryWriter, RegistryExecutionSettings, Scheduler},
     messaging::{MessageRouting, MessageRoutingError},
     registry::RegistryClient,
 };
@@ -711,9 +711,11 @@ impl BatchProcessor for BatchProcessorImpl {
             state,
             network_topology,
             batch,
-            provisional_whitelist,
             subnet_features,
-            max_number_of_canisters,
+            &RegistryExecutionSettings {
+                max_number_of_canisters,
+                provisional_whitelist,
+            },
         );
         self.observe_canisters_memory_usage(&state_after_round);
 
