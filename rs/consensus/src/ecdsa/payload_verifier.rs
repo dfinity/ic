@@ -119,6 +119,7 @@ pub fn validate_payload(
             subnet_id,
             registry_client,
             pool_reader,
+            context,
             parent_block,
             payload.as_summary().ecdsa.as_ref(),
         )
@@ -143,6 +144,7 @@ pub fn validate_summary_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     pool_reader: &PoolReader<'_>,
+    context: &ValidationContext,
     parent_block: &Block,
     summary_payload: Option<&ecdsa::EcdsaPayload>,
 ) -> ValidationResult<EcdsaValidationError> {
@@ -160,6 +162,7 @@ pub fn validate_summary_payload(
         subnet_id,
         registry_client,
         pool_reader,
+        context,
         parent_block,
         None,
         ic_logger::replica_logger::no_op_logger(),

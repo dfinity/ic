@@ -309,6 +309,7 @@ impl BlockMaker {
                         self.replica_config.subnet_id,
                         &*self.registry_client,
                         pool,
+                        &context,
                         &parent,
                         Some(&self.ecdsa_payload_metrics),
                         self.log.clone(),
