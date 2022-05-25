@@ -1102,18 +1102,20 @@ impl Scheduler for SchedulerImpl {
                 .total_canister_balance
                 .set(total_canister_balance.get() as f64);
 
+            // TODO(EXC-1124): Re-enable the check below once it's fixed.
+            //
             // Check that amount of cycles at the beginning of the round (balances and cycles from input messages) is bigger or equal
             // than the amount of cycles at the end of the round (balances and cycles from output messages).
-            if cycles_in_sum < cycles_out_sum {
-                warn!(
-                    round_log,
-                    "At Round {} @ time {}, the resulted state after execution does not hold the in-out cycles invariant: cycles at beginning of round {} were fewer than cycles at end of round {}",
-                    current_round,
-                    state.time(),
-                    cycles_in_sum,
-                    cycles_out_sum,
-                );
-            }
+            // if cycles_in_sum < cycles_out_sum {
+            //     warn!(
+            //         round_log,
+            //         "At Round {} @ time {}, the resulted state after execution does not hold the in-out cycles invariant: cycles at beginning of round {} were fewer than cycles at end of round {}",
+            //         current_round,
+            //         state.time(),
+            //         cycles_in_sum,
+            //         cycles_out_sum,
+            //     );
+            // }
 
             // Check replicated state invariants still hold after the round execution.
             if total_canister_memory_usage > self.exec_env.subnet_memory_capacity() {
