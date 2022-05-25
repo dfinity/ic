@@ -152,12 +152,6 @@ pub(crate) mod utils {
     }
 }
 
-/// Max number of ingress message we can buffer until the P2P layer is ready to
-/// accept them.
-// The latency SLO for 'call' requests is set for 2s. Given the rate limiter of
-// 100 per second this buffer should not be bigger than 200. We are conservite
-// setting it to 100.
-const MAX_BUFFERED_INGRESS_MESSAGES: usize = 100;
 /// Max number of inflight requests into P2P. Note each each requests requires a
 /// dedicated thread to execute on so this number should be relatively small.
 // Do not increase the number until we get to the root cause of NET-743.
@@ -229,9 +223,6 @@ pub fn start_p2p(
             .rate_limit(MAX_INGRESS_MESSAGES_PER_SECOND, Duration::from_secs(1))
             .service(ingress_event_handler),
     );
-    let ingress_ingestion_service = ServiceBuilder::new()
-        .buffer(MAX_BUFFERED_INGRESS_MESSAGES)
-        .service(ingress_ingestion_service);
     (ingress_ingestion_service, p2p_thread_joiner)
 }
 
