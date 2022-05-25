@@ -97,7 +97,7 @@ use ic_protobuf::{
 };
 use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
 use ic_types::{
-    artifact::{Artifact, ArtifactId},
+    artifact::{Artifact, ArtifactId, ArtifactTag},
     chunkable::{ArtifactErrorCode, ChunkId},
     crypto::CryptoHash,
     p2p::GossipAdvert,
@@ -428,19 +428,11 @@ impl DownloadManager for DownloadManagerImpl {
                 integrity_hash: gossip_chunk.integrity_hash.clone(),
                 chunk_id: gossip_chunk.chunk_id,
             }) {
-                let artifact_type = match &gossip_chunk.artifact_id {
-                    ArtifactId::ConsensusMessage(_) => "consensus",
-                    ArtifactId::CanisterHttpMessage(_) => "canister_http",
-                    ArtifactId::IngressMessage(_) => "ingress",
-                    ArtifactId::CertificationMessage(_) => "certification",
-                    ArtifactId::DkgMessage(_) => "dkg",
-                    ArtifactId::EcdsaMessage(_) => "ecdsa",
-                    ArtifactId::FileTreeSync(_) => "file_tree_sync",
-                    ArtifactId::StateSync(_) => "state_sync",
-                };
+                let artifact_tag: &'static str =
+                    ArtifactTag::from(&gossip_chunk.artifact_id).into();
                 self.metrics
                     .chunk_delivery_time
-                    .with_label_values(&[artifact_type])
+                    .with_label_values(&[artifact_tag])
                     .observe(tracker.requested_instant.elapsed().as_millis() as f64);
             } else {
                 trace!(
