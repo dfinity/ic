@@ -745,18 +745,6 @@ checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
 
 [[package]]
 name = "bitcoin"
-version = "0.27.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a41df6ad9642c5c15ae312dd3d074de38fd3eb7cc87ad4ce10f90292a83fe4d"
-dependencies = [
- "bech32",
- "bitcoin_hashes",
- "secp256k1 0.20.3",
- "serde",
-]
-
-[[package]]
-name = "bitcoin"
 version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05bba324e6baf655b882df672453dbbc527bc938cadd27750ae510aaccc3a66a"
@@ -764,6 +752,7 @@ dependencies = [
  "bech32",
  "bitcoin_hashes",
  "secp256k1 0.22.1",
+ "serde",
 ]
 
 [[package]]
@@ -3734,7 +3723,7 @@ dependencies = [
 name = "ic-btc-adapter"
 version = "0.1.0"
 dependencies = [
- "bitcoin 0.27.1",
+ "bitcoin",
  "clap 3.1.9",
  "futures",
  "hashlink 0.8.0",
@@ -3763,7 +3752,7 @@ dependencies = [
 name = "ic-btc-adapter-client"
 version = "0.1.0"
 dependencies = [
- "bitcoin 0.27.1",
+ "bitcoin",
  "ic-async-utils",
  "ic-btc-service",
  "ic-btc-types-internal",
@@ -3784,7 +3773,7 @@ dependencies = [
 name = "ic-btc-canister"
 version = "0.1.0"
 dependencies = [
- "bitcoin 0.27.1",
+ "bitcoin",
  "byteorder",
  "candid",
  "clap 3.1.9",
@@ -3844,7 +3833,7 @@ dependencies = [
 name = "ic-btc-test-utils"
 version = "0.1.0"
 dependencies = [
- "bitcoin 0.27.1",
+ "bitcoin",
 ]
 
 [[package]]
@@ -3869,7 +3858,7 @@ dependencies = [
 name = "ic-btc-validation"
 version = "0.1.0"
 dependencies = [
- "bitcoin 0.27.1",
+ "bitcoin",
  "csv",
 ]
 
@@ -4200,7 +4189,7 @@ name = "ic-ckbtc-minter"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "bitcoin 0.28.1",
+ "bitcoin",
  "candid",
  "dfn_http_metrics",
  "ic-base-types",
@@ -5212,7 +5201,7 @@ name = "ic-execution-environment"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "bitcoin 0.27.1",
+ "bitcoin",
  "candid",
  "criterion",
  "escargot",
@@ -6780,7 +6769,7 @@ dependencies = [
 name = "ic-replicated-state"
 version = "0.8.0"
 dependencies = [
- "bitcoin 0.27.1",
+ "bitcoin",
  "criterion",
  "criterion-time",
  "cvt",
@@ -7171,7 +7160,7 @@ dependencies = [
 name = "ic-state-layout"
 version = "0.8.0"
 dependencies = [
- "bitcoin 0.27.1",
+ "bitcoin",
  "hex",
  "ic-base-types",
  "ic-ic00-types",
@@ -11254,9 +11243,7 @@ version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97d03ceae636d0fed5bae6a7f4f664354c5f4fcedf6eef053fef17e49f837d0a"
 dependencies = [
- "rand 0.6.5",
  "secp256k1-sys 0.4.1",
- "serde",
 ]
 
 [[package]]
@@ -11265,7 +11252,9 @@ version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26947345339603ae8395f68e2f3d85a6b0a8ddfe6315818e80b8504415099db0"
 dependencies = [
+ "rand 0.6.5",
  "secp256k1-sys 0.5.2",
+ "serde",
 ]
 
 [[package]]

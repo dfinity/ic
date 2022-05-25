@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-bitcoin = "0.27.1"
+bitcoin = "0.28.1"
 cvt = "0.1.1"
 debug_stub_derive = "0.3.0"
 ic-btc-types = { path = "../bitcoin/types/public" }

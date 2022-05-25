@@ -6,7 +6,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bitcoin = "0.27.1"
+bitcoin = "0.28.1"
 candid = "0.7.4"
 byteorder = "1.4.3"
 ic-metrics = { path = "../../monitoring/metrics" }
@@ -37,7 +37,7 @@ path = "src/examples/explore_utxos.rs"
 
 [dev-dependencies]
 ic-btc-test-utils = { path = "../test-utils" }
-bitcoin = {version = "0.27.1", features = ["rand"]} # needed for generating secp256k1 keys.
+bitcoin = {version = "0.28.1", features = ["rand"]} # needed for generating secp256k1 keys.
 clap = {version = "3.1.9", features = ["derive"]}
 maplit = "1.0.2"
 tempfile = "3.2.0"
