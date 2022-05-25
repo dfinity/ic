@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 /// tasks performing a basic-sig operation and measuring the running times, and then
 /// asserts that the total running time is smaller than the sum of the individual ones.
 #[tokio::test(flavor = "multi_thread")]
+#[ignore] // The test is ignored because its time-based test approach makes it flaky on CI.
 async fn should_run_parallel_vault_calls_from_tokio_tasks_in_parallel() {
     const NUM_TASKS: i32 = 3;
     let registry_version = REG_V1;
@@ -35,9 +36,11 @@ async fn should_run_parallel_vault_calls_from_tokio_tasks_in_parallel() {
     for join_handle in join_handles {
         let (result, task_duration) = join_handle.await.expect("task panicked");
         assert!(result.is_ok());
+        println!("task_duration = {:?}", task_duration);
         sum_of_task_durations += task_duration;
     }
     let total_duration = start.elapsed();
+    println!("total_duration = {:?}", total_duration);
     assert!(total_duration < sum_of_task_durations);
 }
 
@@ -45,6 +48,7 @@ async fn should_run_parallel_vault_calls_from_tokio_tasks_in_parallel() {
 /// performing a basic-sig operation and measuring the running times, and then asserts
 /// that the total running time is smaller than the sum of the individual ones.
 #[tokio::test(flavor = "multi_thread")]
+#[ignore] // The test is ignored because its time-based test approach makes it flaky on CI.
 async fn should_run_parallel_vault_calls_from_std_threads_in_parallel() {
     const NUM_TASKS: i32 = 3;
     let registry_version = REG_V1;
@@ -70,14 +74,16 @@ async fn should_run_parallel_vault_calls_from_std_threads_in_parallel() {
         }));
     }
 
-    let mut sum_of_thread_drations = Duration::ZERO;
+    let mut sum_of_thread_durations = Duration::ZERO;
     for thread_handle in thread_handles {
         let (result, thread_duration) = thread_handle.join().expect("failed to join");
         assert!(result.is_ok());
-        sum_of_thread_drations += thread_duration;
+        println!("task_duration = {:?}", thread_duration);
+        sum_of_thread_durations += thread_duration;
     }
     let total_duration = start.elapsed();
-    assert!(total_duration < sum_of_thread_drations);
+    println!("total_duration = {:?}", total_duration);
+    assert!(total_duration < sum_of_thread_durations);
 }
 
 /// Creates a TempCryptoComponent with a remote vault, starts multiple tokio
@@ -85,6 +91,7 @@ async fn should_run_parallel_vault_calls_from_std_threads_in_parallel() {
 /// running time, and then asserts that the total running time is smaller than
 /// the sum of the individual ones.
 #[tokio::test(flavor = "multi_thread")]
+#[ignore] // The test is ignored because its time-based test approach makes it flaky on CI.
 async fn should_run_parallel_vault_calls_from_tokio_tasks_and_std_threads_in_parallel() {
     const NUM_TASKS_PER_CLIENT: i32 = 3;
     let registry_version = REG_V1;
@@ -126,14 +133,17 @@ async fn should_run_parallel_vault_calls_from_tokio_tasks_and_std_threads_in_par
     for task_handle in task_handles {
         let (result, task_duration) = task_handle.await.expect("failed to await");
         assert!(result.is_ok());
+        println!("task_duration = {:?}", task_duration);
         sum_of_task_and_thread_durations += task_duration;
     }
     for thread_handle in thread_handles {
         let (result, thread_duration) = thread_handle.join().expect("failed to join");
         assert!(result.is_ok());
+        println!("task_duration = {:?}", thread_duration);
         sum_of_task_and_thread_durations += thread_duration;
     }
     let total_duration = start.elapsed();
+    println!("total_duration = {:?}", total_duration);
     assert!(total_duration < sum_of_task_and_thread_durations);
 }
 
@@ -143,6 +153,7 @@ async fn should_run_parallel_vault_calls_from_tokio_tasks_and_std_threads_in_par
 /// with standard threads, and then asserts that the total running time is smaller
 /// than the sum of the individual ones.
 #[tokio::test(flavor = "multi_thread")]
+#[ignore] // The test is ignored because its time-based test approach makes it flaky on CI.
 async fn should_run_parallel_vault_calls_from_multiple_clients_in_parallel() {
     const NUM_TASKS_PER_CLIENT: i32 = 3;
     let registry_version = REG_V1;
@@ -189,13 +200,16 @@ async fn should_run_parallel_vault_calls_from_multiple_clients_in_parallel() {
     for task_handle in task_handles {
         let (result, task_duration) = task_handle.await.expect("failed to await");
         assert!(result.is_ok());
+        println!("task_duration = {:?}", task_duration);
         sum_of_task_and_thread_durations += task_duration;
     }
     for thread_handle in thread_handles {
         let (result, thread_duration) = thread_handle.join().expect("failed to join");
         assert!(result.is_ok());
+        println!("task_duration = {:?}", thread_duration);
         sum_of_task_and_thread_durations += thread_duration;
     }
     let total_duration = start.elapsed();
+    println!("total_duration = {:?}", total_duration);
     assert!(total_duration < sum_of_task_and_thread_durations);
 }
