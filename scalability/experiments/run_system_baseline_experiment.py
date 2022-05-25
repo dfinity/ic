@@ -153,8 +153,11 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
 
             else:
                 rps_max_iter.append(rps_max)
-                if failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE and t_median < FLAGS.allowable_latency:
-                    if num_success / duration_in_iteration > rps_max:
+                if (
+                    failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE
+                    and t_median < workload_experiment.ALLOWABLE_LATENCY
+                ):
+                    if avg_succ_rate > rps_max:
                         rps_max = avg_succ_rate
                         rps_max_in = load_total
 

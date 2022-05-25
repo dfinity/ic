@@ -16,14 +16,6 @@ gflags.DEFINE_integer(
     "max_rps", 40000, "Maximum requests per second to be sent. Experiment will wrap up beyond this number."
 )
 
-# Maximum failure rate and median query duration limit to consider
-# for rps to choose as rps_max. If failure rate or latency is higher,
-# continue running the benchmark, but do not consider this RPS
-# for max capacity
-gflags.DEFINE_integer(
-    "allowable_latency", 5000, "Maximum query median latency at which to consider the iteration successful."
-)
-
 if __name__ == "__main__":
     misc.parse_command_line_args()
 

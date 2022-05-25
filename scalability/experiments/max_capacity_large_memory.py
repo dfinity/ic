@@ -17,14 +17,6 @@ gflags.DEFINE_integer(
 gflags.DEFINE_integer("increment_rps", 5, "Increment of requests per second per round.")
 
 
-# Maximum failure rate and median query duration limit to consider
-# for rps to choose as rps_max. If failure rate or latency is higher,
-# continue running the benchmark, but do not consider this RPS
-# for max capacity
-gflags.DEFINE_integer(
-    "allowable_latency", 5000, "Maximum median latency at which to consider the iteration successful."
-)
-
 if __name__ == "__main__":
     misc.parse_command_line_args()
     exp = run_large_memory_experiment.LargeMemoryExperiment()
