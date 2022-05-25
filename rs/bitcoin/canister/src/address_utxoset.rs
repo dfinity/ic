@@ -5,7 +5,7 @@ use crate::{
 };
 use bitcoin::{Address, OutPoint, Transaction, TxOut};
 use ic_btc_types::Utxo;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 type Height = u32;
 
@@ -97,7 +97,7 @@ impl<'a> AddressUtxoSet<'a> {
 
     pub fn into_vec(self) -> Vec<Utxo> {
         // Retrieve all the UTXOs of the address from the underlying UTXO set.
-        let mut set: HashSet<_> = self
+        let mut set: BTreeSet<_> = self
             .full_utxo_set
             .address_to_outpoints
             .range(self.address.to_bytes(), None)
