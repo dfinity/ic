@@ -22,7 +22,7 @@ class Workload(threading.Thread):
         self,
         load_generators: [str],
         target_machines: [str],
-        rps_per_machine: int,
+        rps_per_machine: [int],
         canister_ids: [str],
         duration: int,
         f_stdout: str,
@@ -59,7 +59,7 @@ class Workload(threading.Thread):
         target_list = ",".join(f"http://[{target}]:8080" for target in self.target_machines)
         cmd = (
             f'./ic-workload-generator "{target_list}" --summary-file wg_summary'
-            f" -n {self.duration} -r {self.rps_per_machine} -p 9090 --no-status-check"
+            f" -n {self.duration} -p 9090 --no-status-check"
         )
         cmd += " " + " ".join(self.arguments)
 
@@ -75,7 +75,15 @@ class Workload(threading.Thread):
         # In the case of multiple canisters, select a different canister for each machine.
         num_load_generators = len(self.load_generators)
         canister_ids = [self.canister_ids[i % len(self.canister_ids)] for i in range(num_load_generators)]
-        commands = ["{} --canister-id {}".format(cmd, canister_id) for canister_id in canister_ids]
+        assert num_load_generators == len(self.rps_per_machine)
+        commands = [
+            "{} --canister-id {} -r {rps}".format(
+                cmd,
+                canister_id,
+                rps=rps,
+            )
+            for canister_id, rps in zip(canister_ids, self.rps_per_machine)
+        ]
 
         return (commands, self.load_generators)
 
