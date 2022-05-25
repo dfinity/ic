@@ -7159,6 +7159,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-sns-wasm"
+version = "0.1.0"
+dependencies = [
+ "build-info",
+ "candid",
+ "dfn_candid",
+ "dfn_core",
+]
+
+[[package]]
 name = "ic-starter"
 version = "0.8.0"
 dependencies = [

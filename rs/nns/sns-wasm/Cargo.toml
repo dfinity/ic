@@ -1,0 +1,20 @@
+[package]
+name = "ic-sns-wasm"
+version = "0.1.0"
+edition = "2018"
+
+[[bin]]
+name = "sns-wasm-canister"
+path = "canister/canister.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# This MUST be kept in sync with build-info-build in the [build-dependencies] section!
+build-info = { version = "0.0.26", default-features = false, features = [] }
+
+candid = "0.7.4"
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+dfn_core = { path = "../../rust_canisters/dfn_core" }
+
