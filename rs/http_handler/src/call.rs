@@ -25,7 +25,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tower::{load_shed::LoadShed, BoxError, Service, ServiceBuilder, ServiceExt};
+use tower::{buffer::Buffer, load_shed::LoadShed, BoxError, Service, ServiceBuilder, ServiceExt};
 
 #[derive(Clone)]
 pub(crate) struct CallService {
@@ -34,7 +34,7 @@ pub(crate) struct CallService {
     subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
     validator_executor: ValidatorExecutor,
-    ingress_sender: IngressIngestionService,
+    ingress_sender: Buffer<IngressIngestionService, SignedIngress>,
     ingress_filter: LoadShed<IngressFilterService>,
     malicious_flags: MaliciousFlags,
 }
@@ -47,7 +47,7 @@ impl CallService {
         subnet_id: SubnetId,
         registry_client: Arc<dyn RegistryClient>,
         validator_executor: ValidatorExecutor,
-        ingress_sender: IngressIngestionService,
+        ingress_sender: Buffer<IngressIngestionService, SignedIngress>,
         ingress_filter: IngressFilterService,
         malicious_flags: MaliciousFlags,
     ) -> Self {
