@@ -4,6 +4,7 @@ members = [
   "artifact_manager",
   "artifact_pool",
   "async_utils",
+  "bazelifier",
   "bitcoin/adapter",
   "bitcoin/client",
   "bitcoin/service",
