@@ -78,11 +78,22 @@ pub(crate) fn insert_utxo(
 ) {
     // Insert the outpoint.
     if let Some(address) = Address::from_script(&output.script_pubkey, utxo_set.network) {
-        // Add the address to the index if we can parse it.
-        utxo_set
-            .address_to_outpoints
-            .insert((address.to_string(), height, outpoint).to_bytes(), vec![])
-            .expect("insertion must succeed");
+        let address_str = address.to_string();
+
+        // Due to a bug in the bitcoin crate, it is possible in some extremely rare cases
+        // that `Address:from_script` succeeds even if the address is invalid.
+        //
+        // To get around this bug, we convert the address to a string, and verify that this
+        // string is a valid address.
+        //
+        // See https://github.com/rust-bitcoin/rust-bitcoin/issues/995 for more information.
+        if Address::from_str(&address_str).is_ok() {
+            // Add the address to the index if we can parse it.
+            utxo_set
+                .address_to_outpoints
+                .insert((address_str, height, outpoint).to_bytes(), vec![])
+                .expect("insertion must succeed");
+        }
     }
 
     let outpoint_already_exists = utxo_set.utxos.insert(outpoint, (output, height));
@@ -299,5 +310,30 @@ mod test {
 
         // Should panic, as we are trying to insert a UTXO with the same outpoint.
         insert_utxo(&mut utxo_set, OutPoint::null(), tx_out_2, 2);
+    }
+
+    #[test]
+    fn malformed_addresses_are_not_inserted_in_address_outpoints() {
+        // A script that isn't valid, but can be successfully converted into an address
+        // due to a bug in the bitcoin crate. See:
+        // (https://github.com/rust-bitcoin/rust-bitcoin/issues/995)
+        let script = bitcoin::Script::from(vec![
+            0, 17, 97, 69, 142, 51, 3, 137, 205, 4, 55, 238, 159, 227, 100, 29, 112, 204, 24,
+        ]);
+
+        let address = bitcoin::Address::from_script(&script, Network::Testnet).unwrap();
+
+        let mut utxo_set = UtxoSet::new(Network::Testnet);
+
+        let tx_out_1 = TransactionBuilder::coinbase()
+            .with_output(&address, 1000)
+            .build()
+            .output[0]
+            .clone();
+
+        insert_utxo(&mut utxo_set, OutPoint::null(), tx_out_1, 1);
+
+        // Verify that this invalid address was not inserted into the address outpoints.
+        assert!(utxo_set.address_to_outpoints.is_empty());
     }
 }
