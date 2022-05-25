@@ -37,8 +37,8 @@ pub fn get_balance(payload: &[u8], state: &mut ReplicatedState) -> Result<Vec<u8
             state.put_bitcoin_state(btc_canister_state.into());
             balance_response
                 .map(|balance|
-                    // Using `unwrap()` here is safe because of a simple candid::Nat(u64) type.
-                    Encode!(&candid::Nat::from(balance)).unwrap())
+                    // Using `unwrap()` here is safe because it's a simple u64 conversion.
+                    Encode!(&balance).unwrap())
                 .map_err(|err| {
                     UserError::new(
                         ErrorCode::CanisterRejectedMessage,

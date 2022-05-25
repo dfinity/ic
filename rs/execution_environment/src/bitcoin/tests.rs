@@ -406,8 +406,7 @@ fn get_balance_single_request_succeeds() {
             min_confirmations,
         );
 
-        let satoshi_response: Satoshi = 123;
-        let expected_balance_payload = Encode!(&candid::Nat::from(satoshi_response)).unwrap();
+        let expected_balance_payload = Encode!(&123u64).unwrap();
         assert_eq!(
             state.get_ingress_status(&message_test_id(0)),
             IngressStatus::Known {
@@ -464,8 +463,7 @@ fn get_balance_repeated_request_succeeded() {
             min_confirmations,
         );
 
-        let satoshi_response: Satoshi = 123;
-        let expected_balance_payload = Encode!(&candid::Nat::from(satoshi_response)).unwrap();
+        let expected_balance_payload = Encode!(&123u64).unwrap();
         assert_eq!(
             state.get_ingress_status(&message_test_id(1)),
             IngressStatus::Known {
@@ -510,8 +508,7 @@ fn get_balance_with_min_confirmations_1() {
             min_confirmations,
         );
 
-        let satoshi_response: Satoshi = 123;
-        let expected_balance_payload = Encode!(&candid::Nat::from(satoshi_response)).unwrap();
+        let expected_balance_payload = Encode!(&123u64).unwrap();
         assert_eq!(
             state.get_ingress_status(&message_test_id(0)),
             IngressStatus::Known {
@@ -556,8 +553,7 @@ fn get_balance_with_min_confirmations_2() {
             min_confirmations,
         );
 
-        let satoshi_response: Satoshi = 0;
-        let expected_balance_payload = Encode!(&candid::Nat::from(satoshi_response)).unwrap();
+        let expected_balance_payload = Encode!(&0u64).unwrap();
         assert_eq!(
             state.get_ingress_status(&message_test_id(0)),
             IngressStatus::Known {
