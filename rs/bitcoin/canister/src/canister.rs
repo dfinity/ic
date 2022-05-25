@@ -73,7 +73,7 @@ mod test {
     use bitcoin::secp256k1::rand::rngs::OsRng;
     use bitcoin::secp256k1::Secp256k1;
     use bitcoin::{blockdata::constants::genesis_block, Address, Network, PublicKey};
-    use ic_btc_test_utils::{BlockBuilder, TransactionBuilder};
+    use ic_btc_test_utils::{random_p2tr_address, BlockBuilder, TransactionBuilder};
     use ic_btc_types::{OutPoint, Utxo};
 
     // A default state to use for tests.
@@ -440,5 +440,53 @@ mod test {
             }),
             Err(SendTransactionError::MalformedTransaction)
         );
+    }
+
+    #[test]
+    fn support_taproot_addresses() {
+        for network in [
+            Network::Bitcoin,
+            Network::Regtest,
+            Network::Testnet,
+            Network::Signet,
+        ]
+        .iter()
+        {
+            let address = random_p2tr_address(*network);
+
+            // Create a genesis block where 1000 satoshis are given to a taproot address.
+            let coinbase_tx = TransactionBuilder::coinbase()
+                .with_output(&address, 1000)
+                .build();
+            let block_0 = BlockBuilder::genesis()
+                .with_transaction(coinbase_tx.clone())
+                .build();
+
+            let state = State::new(0, *network, block_0.clone());
+
+            // Assert that the UTXOs of the taproot address can be retrieved.
+            assert_eq!(
+                get_utxos(
+                    &state,
+                    GetUtxosRequest {
+                        address: address.to_string(),
+                        filter: None
+                    }
+                ),
+                Ok(GetUtxosResponse {
+                    utxos: vec![Utxo {
+                        outpoint: OutPoint {
+                            txid: coinbase_tx.txid().to_vec(),
+                            vout: 0,
+                        },
+                        value: 1000,
+                        height: 0,
+                    }],
+                    tip_block_hash: block_0.block_hash().to_vec(),
+                    tip_height: 0,
+                    next_page: None,
+                })
+            );
+        }
     }
 }

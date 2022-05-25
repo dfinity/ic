@@ -6,7 +6,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bitcoin = { version = "0.27.0", features = ["default", "use-serde", "rand"] }
+bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
 clap = { version = "3.1.6", features = ["derive"] }
 futures = "0.3.17"
 hashlink = "0.8.0"

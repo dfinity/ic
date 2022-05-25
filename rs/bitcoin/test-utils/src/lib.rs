@@ -1,7 +1,7 @@
 use bitcoin::{
     secp256k1::rand::rngs::OsRng, secp256k1::Secp256k1, util::uint::Uint256, Address, Block,
-    BlockHash, BlockHeader, Network, OutPoint, PublicKey, Script, Transaction, TxIn, TxMerkleNode,
-    TxOut,
+    BlockHash, BlockHeader, KeyPair, Network, OutPoint, PublicKey, Script, Transaction, TxIn,
+    TxMerkleNode, TxOut, Witness, XOnlyPublicKey,
 };
 
 /// Generates a random P2PKH address.
@@ -10,6 +10,15 @@ pub fn random_p2pkh_address(network: Network) -> Address {
     let mut rng = OsRng::new().unwrap();
 
     Address::p2pkh(&PublicKey::new(secp.generate_keypair(&mut rng).1), network)
+}
+
+pub fn random_p2tr_address(network: Network) -> Address {
+    let secp = Secp256k1::new();
+    let mut rng = OsRng::new().unwrap();
+    let key_pair = KeyPair::new(&secp, &mut rng);
+    let xonly = XOnlyPublicKey::from_keypair(&key_pair);
+
+    Address::p2tr(&secp, xonly, None, network)
 }
 
 pub struct BlockBuilder {
@@ -46,7 +55,8 @@ impl BlockBuilder {
         };
 
         let merkle_root =
-            bitcoin::util::hash::bitcoin_merkle_root(txdata.iter().map(|tx| tx.txid().as_hash()));
+            bitcoin::util::hash::bitcoin_merkle_root(txdata.iter().map(|tx| tx.txid().as_hash()))
+                .unwrap();
         let merkle_root = TxMerkleNode::from_hash(merkle_root);
 
         let header = match self.prev_header {
@@ -114,7 +124,7 @@ impl TransactionBuilder {
             previous_output: self.input,
             script_sig: Script::new(),
             sequence: 0xffffffff,
-            witness: vec![],
+            witness: Witness::new(),
         }];
 
         // Use default of 50 BTC

@@ -1,5 +1,5 @@
 {
-  "checksum": "9fc0f2cc467924a55ce01b735ee3f93f4f07cfe5532d5671e8142b96712c07f4",
+  "checksum": "fd6efb8713d1b84ed2ca69c51b523130442761453c63f4df5377237a0447b94d",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -1217,13 +1217,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "bitcoin 0.27.1": {
+    "bitcoin 0.28.1": {
       "name": "bitcoin",
-      "version": "0.27.1",
+      "version": "0.28.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/bitcoin/0.27.1/download",
-          "sha256": "9a41df6ad9642c5c15ae312dd3d074de38fd3eb7cc87ad4ce10f90292a83fe4d"
+          "url": "https://crates.io/api/v1/crates/bitcoin/0.28.1/download",
+          "sha256": "05bba324e6baf655b882df672453dbbc527bc938cadd27750ae510aaccc3a66a"
         }
       },
       "targets": [
@@ -1262,14 +1262,14 @@
               "target": "bitcoin_hashes"
             },
             {
-              "id": "secp256k1 0.20.3",
+              "id": "secp256k1 0.22.1",
               "target": "secp256k1"
             }
           ],
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.27.1"
+        "version": "0.28.1"
       },
       "license": "CC0-1.0"
     },
@@ -3883,7 +3883,7 @@
               "target": "bincode"
             },
             {
-              "id": "bitcoin 0.27.1",
+              "id": "bitcoin 0.28.1",
               "target": "bitcoin"
             },
             {
@@ -12523,13 +12523,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "secp256k1 0.20.3": {
+    "secp256k1 0.22.1": {
       "name": "secp256k1",
-      "version": "0.20.3",
+      "version": "0.22.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/secp256k1/0.20.3/download",
-          "sha256": "97d03ceae636d0fed5bae6a7f4f664354c5f4fcedf6eef053fef17e49f837d0a"
+          "url": "https://crates.io/api/v1/crates/secp256k1/0.22.1/download",
+          "sha256": "26947345339603ae8395f68e2f3d85a6b0a8ddfe6315818e80b8504415099db0"
         }
       },
       "targets": [
@@ -12564,24 +12564,24 @@
               "target": "rand"
             },
             {
-              "id": "secp256k1-sys 0.4.2",
+              "id": "secp256k1-sys 0.5.2",
               "target": "secp256k1_sys"
             }
           ],
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.20.3"
+        "version": "0.22.1"
       },
       "license": "CC0-1.0"
     },
-    "secp256k1-sys 0.4.2": {
+    "secp256k1-sys 0.5.2": {
       "name": "secp256k1-sys",
-      "version": "0.4.2",
+      "version": "0.5.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/secp256k1-sys/0.4.2/download",
-          "sha256": "957da2573cde917463ece3570eab4a0b3f19de6f1646cde62e6fd3868f566036"
+          "url": "https://crates.io/api/v1/crates/secp256k1-sys/0.5.2/download",
+          "sha256": "152e20a0fd0519390fc43ab404663af8a0b794273d2a91d60ad4a39f13ffe110"
         }
       },
       "targets": [
@@ -12622,14 +12622,14 @@
         "deps": {
           "common": [
             {
-              "id": "secp256k1-sys 0.4.2",
+              "id": "secp256k1-sys 0.5.2",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.4.2"
+        "version": "0.5.2"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -12644,7 +12644,7 @@
           ],
           "selects": {}
         },
-        "links": "rustsecp256k1_v0_4_1"
+        "links": "rustsecp256k1_v0_5_0"
       },
       "license": "CC0-1.0"
     },
@@ -16491,18 +16491,6 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
             "srcs": {
@@ -16517,6 +16505,18 @@
           "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

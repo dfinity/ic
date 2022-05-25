@@ -2,7 +2,7 @@ use crate::{blocktree::BlockDoesNotExtendTree, state::State, store, BitcoinCanis
 use bitcoin::{
     hash_types::{BlockHash, TxMerkleNode},
     hashes::Hash,
-    Network,
+    Network, Witness,
 };
 use ic_btc_types::Network as BitcoinNetwork;
 use ic_btc_types_internal::{
@@ -168,7 +168,7 @@ fn to_btc_transaction(transaction: &Transaction) -> bitcoin::Transaction {
                 },
                 script_sig: bitcoin::Script::from(x.script_sig.to_vec()),
                 sequence: x.sequence,
-                witness: x.witness.iter().map(|w| w.to_vec()).collect(),
+                witness: Witness::from_vec(x.witness.iter().map(|w| w.to_vec()).collect()),
             })
             .collect(),
         output: transaction

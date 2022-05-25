@@ -52,7 +52,7 @@ tower = { version = "0.4.11", features = ["limit", "buffer", "timeout"] }
 
 [dev-dependencies]
 assert_matches = "1.3.0"
-bitcoin = "0.27.1"
+bitcoin = "0.28.1"
 criterion = { version = "0.3", features = ["html_reports"] }
 iai = "0.1"
 ic-btc-test-utils = { path = "../bitcoin/test-utils" }

@@ -166,7 +166,7 @@ pub mod test_common {
             block.txdata.push(tx.clone());
         }
 
-        block.header.merkle_root = block.merkle_root();
+        block.header.merkle_root = block.compute_merkle_root().unwrap_or_default();
         solve_proof_of_work(&mut block.header);
         block
     }

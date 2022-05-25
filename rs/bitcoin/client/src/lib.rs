@@ -70,7 +70,7 @@ fn to_internal_txin(txin: &bitcoin::TxIn) -> InternalTxIn {
         witness: txin
             .witness
             .iter()
-            .map(|v| serde_bytes::ByteBuf::from(v.clone()))
+            .map(|v| serde_bytes::ByteBuf::from(v.to_vec()))
             .collect(),
     }
 }

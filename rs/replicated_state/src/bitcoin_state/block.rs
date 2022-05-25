@@ -1,6 +1,6 @@
 use bitcoin::{
     hashes::Hash, Block, BlockHash, BlockHeader, OutPoint, Script, Transaction, TxIn, TxMerkleNode,
-    TxOut, Txid,
+    TxOut, Txid, Witness,
 };
 use ic_protobuf::bitcoin::v1;
 
@@ -31,7 +31,7 @@ pub fn to_proto(block: &Block) -> v1::Block {
                         }),
                         script_sig: i.script_sig.to_bytes(),
                         sequence: i.sequence,
-                        witness: i.witness.clone(),
+                        witness: i.witness.to_vec(),
                     })
                     .collect(),
                 output: t
@@ -78,7 +78,7 @@ pub fn from_proto(block: &v1::Block) -> Block {
                             ),
                             script_sig: Script::from(i.script_sig.clone()),
                             sequence: i.sequence,
-                            witness: i.witness.clone(),
+                            witness: Witness::from_vec(i.witness.clone()),
                         }
                     })
                     .collect(),

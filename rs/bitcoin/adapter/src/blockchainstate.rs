@@ -232,7 +232,7 @@ impl BlockchainState {
     pub fn add_block(&mut self, block: Block) -> Result<BlockHeight, AddBlockError> {
         let block_hash = block.block_hash();
 
-        if !block.check_merkle_root() {
+        if block.compute_merkle_root().is_some() && !block.check_merkle_root() {
             return Err(AddBlockError::InvalidMerkleRoot(block_hash));
         }
 
@@ -332,9 +332,7 @@ impl BlockchainState {
 
     /// Returns the current size of the block cache.
     pub fn get_block_cache_size(&self) -> usize {
-        self.block_cache
-            .values()
-            .fold(0, |sum, b| b.get_size() + sum)
+        self.block_cache.values().fold(0, |sum, b| b.size() + sum)
     }
 }
 
@@ -613,7 +611,7 @@ mod test {
         state.add_block(test_state.block_1.clone()).unwrap();
         state.add_block(test_state.block_2.clone()).unwrap();
 
-        let expected_cache_size = test_state.block_1.get_size() + test_state.block_2.get_size();
+        let expected_cache_size = test_state.block_1.size() + test_state.block_2.size();
         let block_cache_size = state.get_block_cache_size();
 
         assert_eq!(expected_cache_size, block_cache_size);

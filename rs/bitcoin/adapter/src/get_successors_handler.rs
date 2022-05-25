@@ -156,7 +156,7 @@ fn get_successor_blocks(
             // Retrieve the block from the cache.
             match state.get_block(&node) {
                 Some(block) => {
-                    let block_size = block.get_size();
+                    let block_size = block.size();
                     if response_block_size == 0
                         || (response_block_size + block_size
                             <= MAX_GET_SUCCESSORS_RESPONSE_BLOCKS_SIZE_BYTES
