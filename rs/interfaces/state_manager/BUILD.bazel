@@ -1,0 +1,24 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "state_manager",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_interfaces_state_manager",
+    edition = "2018",
+    deps = [
+        "//rs/crypto/tree_hash",
+        "//rs/phantom_newtype",
+        "//rs/types/types",
+        "@crate_index//:thiserror",
+    ],
+)

@@ -1,0 +1,22 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "p2p",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_interfaces_p2p",
+    edition = "2018",
+    deps = [
+        "//rs/types/types",
+        "@crate_index//:tower",
+    ],
+)
