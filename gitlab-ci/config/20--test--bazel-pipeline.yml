@@ -1,7 +1,9 @@
 bazel-test-all:
   extends:
-    - .bazel-rules-pipeline
     - .ubuntu-nix-docker
+    - .bazel-rules-pipeline
+  variables:
+    BAZEL_ARGS: --config ci
   tags:
     - dfinity
     - docker
@@ -21,8 +23,13 @@ bazel-test-all:
       junit: bazel-testlogs-gitlab/**/test.xml
   script:
     - set -euo pipefail
-    - bazel version
-    - bazel test --config ci ... 2>&1 | sed --unbuffered 's/\(.*Streaming build results to:.*\)/\o33[92m\1\o33[0m/'
+    - |
+      if [ "$CI_MERGE_REQUEST_EVENT_TYPE" == "merge_train" ];then
+        BAZEL_ARGS="${BAZEL_ARGS} --build_tests_only"
+      fi
+      bazel version
+      # shellcheck disable=SC2086 # Expanding BAZEL_ARGS into multiple parameters
+      bazel test ${BAZEL_ARGS} ... 2>&1 | sed --unbuffered 's/\(.*Streaming build results to:.*\)/\o33[92m\1\o33[0m/'
   after_script:
     - cp -R "$(readlink -f bazel-testlogs)" bazel-testlogs-gitlab
     - !reference [after_script]
