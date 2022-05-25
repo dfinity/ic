@@ -143,3 +143,4 @@ systemd_connect_userdb(sshd_t)
 # allow smart card daemon access to /run/udev
 require { type udev_var_run_t, pcscd_t; }
 read_files_pattern(pcscd_t, udev_var_run_t, udev_var_run_t)
+kernel_read_vm_overcommit_sysctl(pcscd_t)
