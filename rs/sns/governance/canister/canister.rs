@@ -83,7 +83,7 @@ impl CanisterEnv {
             // Why we don't use raw_rand from the ic00 api instead: this is an asynchronous
             // call so can't really be used to generate random numbers for most cases.
             // It could be used to seed the PRNG, but that wouldn't add any security regarding
-            // upredictability since the pseudo-random numbers could still be predicted after
+            // unpredictability since the pseudo-random numbers could still be predicted after
             // inception.
             rng: {
                 let now_nanos = now()
@@ -207,7 +207,7 @@ fn canister_init_(init_payload: GovernanceProto) {
 
 /// Executes some logic before executing an upgrade, including serializing and writing the
 /// governance's state to stable memory so that it is preserved during the upgrade and can
-/// be deserialised again in canister_post_upgrade. That is, the stable memory allows
+/// be deserialized again in canister_post_upgrade. That is, the stable memory allows
 /// saving the state and restoring it after the upgrade.
 #[export_name = "canister_pre_upgrade"]
 fn canister_pre_upgrade() {
@@ -221,9 +221,10 @@ fn canister_pre_upgrade() {
         .expect("Error. Couldn't serialize canister pre-upgrade.");
 
     writer.flush(); // or `drop(writer)`
+    println!("{}Completed pre upgrade", log_prefix());
 }
 
-/// Executes some logic after executing an upgrade, including deserialising what has been written
+/// Executes some logic after executing an upgrade, including deserializing what has been written
 /// to stable memory in canister_pre_upgrade and initialising the governance's state with it.
 #[export_name = "canister_post_upgrade"]
 fn canister_post_upgrade() {
@@ -247,6 +248,7 @@ fn canister_post_upgrade() {
         }
     }
     .expect("Couldn't upgrade canister.");
+    println!("{}Completed post upgrade", log_prefix());
 }
 
 #[cfg(feature = "test")]

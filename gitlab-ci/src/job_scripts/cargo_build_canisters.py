@@ -36,6 +36,7 @@ BIN_CANISTERS = [
     "sns-governance-canister",
     "sns-root-canister",
     "sns-test-dapp-canister",
+    "sns-governance-mem-test-canister",
     "stable",
     "statesync-test-canister",
     "test-notified",

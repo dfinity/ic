@@ -33,6 +33,31 @@ const PROPOSAL_EXECUTE_SNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
 /// The number of e8s per governance token;
 pub const E8S_PER_TOKEN: u64 = TOKEN_SUBDIVIDABLE_BY;
 
+/// The Governance spec gives each Action a u64 equivalent identifier. This module gives
+/// those u64 values a human-readable const variable for use in the SNS.
+pub mod native_action_ids {
+    /// Unspecified Action.
+    pub const UNSPECIFIED: u64 = 0;
+
+    /// Motion Action.
+    pub const MOTION: u64 = 1;
+
+    /// ManageNervousSystemParameters Action.
+    pub const MANAGE_NERVOUS_SYSTEM_PARAMETERS: u64 = 2;
+
+    /// UpgradeSnsControlledCanister Action.
+    pub const UPGRADE_SNS_CONTROLLER_CANISTER: u64 = 3;
+
+    /// AddGenericNervousSystemFunction Action.
+    pub const ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION: u64 = 4;
+
+    /// RemoveGenericNervousSystemFunction Action.
+    pub const REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION: u64 = 5;
+
+    /// ExecuteGenericNervousSystemFunction Action.
+    pub const EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION: u64 = 6;
+}
+
 impl From<&manage_neuron::Command> for neuron_in_flight_command::Command {
     #[rustfmt::skip]
     fn from(src: &manage_neuron::Command) -> neuron_in_flight_command::Command {
@@ -704,7 +729,7 @@ impl Action {
     pub fn native_functions() -> Vec<NervousSystemFunction> {
         vec![
             NervousSystemFunction {
-                id: 0,
+                id: native_action_ids::UNSPECIFIED,
                 name: "Unspecified".to_string(),
                 description: Some(
                     "Catch-all w.r.t to following for all types of proposals.".to_string(),
@@ -712,7 +737,7 @@ impl Action {
                 function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
             },
             NervousSystemFunction {
-                id: 1,
+                id: native_action_ids::MOTION,
                 name: "Motion".to_string(),
                 description: Some(
                     "Side-effect-less proposals to set general governance direction.".to_string(),
@@ -720,7 +745,7 @@ impl Action {
                 function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
             },
             NervousSystemFunction {
-                id: 2,
+                id: native_action_ids::MANAGE_NERVOUS_SYSTEM_PARAMETERS,
                 name: "Manage nervous system parameters".to_string(),
                 description: Some(
                     "Proposal to change the core parameters of SNS governance.".to_string(),
@@ -728,7 +753,7 @@ impl Action {
                 function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
             },
             NervousSystemFunction {
-                id: 3,
+                id: native_action_ids::UPGRADE_SNS_CONTROLLER_CANISTER,
                 name: "Upgrade SNS controlled canister".to_string(),
                 description: Some(
                     "Proposal to upgrade the wasm of an SNS controlled canister.".to_string(),
@@ -736,7 +761,7 @@ impl Action {
                 function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
             },
             NervousSystemFunction {
-                id: 4,
+                id: native_action_ids::ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION,
                 name: "Add nervous system function".to_string(),
                 description: Some(
                     "Proposal to add a new, user-defined, nervous system function:\
@@ -746,7 +771,7 @@ impl Action {
                 function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
             },
             NervousSystemFunction {
-                id: 5,
+                id: native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
                 name: "Remove nervous system function".to_string(),
                 description: Some(
                     "Proposal to remove a user-defined nervous system function,\
@@ -776,12 +801,20 @@ impl Action {
 impl From<&Action> for u64 {
     fn from(action: &Action) -> Self {
         match action {
-            Action::Unspecified(_) => 0,
-            Action::Motion(_) => 1,
-            Action::ManageNervousSystemParameters(_) => 2,
-            Action::UpgradeSnsControlledCanister(_) => 3,
-            Action::AddGenericNervousSystemFunction(_) => 4,
-            Action::RemoveGenericNervousSystemFunction(_) => 5,
+            Action::Unspecified(_) => native_action_ids::UNSPECIFIED,
+            Action::Motion(_) => native_action_ids::MOTION,
+            Action::ManageNervousSystemParameters(_) => {
+                native_action_ids::MANAGE_NERVOUS_SYSTEM_PARAMETERS
+            }
+            Action::UpgradeSnsControlledCanister(_) => {
+                native_action_ids::UPGRADE_SNS_CONTROLLER_CANISTER
+            }
+            Action::AddGenericNervousSystemFunction(_) => {
+                native_action_ids::ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION
+            }
+            Action::RemoveGenericNervousSystemFunction(_) => {
+                native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION
+            }
             Action::ExecuteGenericNervousSystemFunction(proposal) => proposal.function_id,
         }
     }
