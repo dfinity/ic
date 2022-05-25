@@ -3,7 +3,8 @@ use bitcoin::{
     network::message::RawNetworkMessage,
     {consensus::encode, network::message::NetworkMessage},
 };
-use ic_logger::{error, ReplicaLogger};
+use futures::future::TryFutureExt;
+use ic_logger::{debug, error, ReplicaLogger};
 use std::{io, net::SocketAddr, time::Duration};
 use thiserror::Error;
 use tokio::{
@@ -120,7 +121,7 @@ pub struct Stream {
 impl Stream {
     /// Creates new SOCKS client. In case of missing proxy address we fall back to the direct TCP
     /// stream.
-    pub async fn connect(config: StreamConfig) -> StreamResult<Stream> {
+    pub async fn connect(config: StreamConfig, logger: &ReplicaLogger) -> StreamResult<Stream> {
         let StreamConfig {
             address,
             socks_proxy,
@@ -133,27 +134,39 @@ impl Stream {
         let timeout_duration = Duration::from_secs(CONNECTION_TIMEOUT_SECS);
         let data = vec![0u8; STREAM_BUFFER_SIZE];
         let unparsed = vec![];
-        let inner = match socks_proxy {
-            Some(socks_proxy_addr) => {
-                let socks_stream = timeout(
-                    timeout_duration,
-                    Socks5Stream::connect(socks_proxy_addr.as_str(), address),
-                )
+
+        // First try to connect through local socket. If no direct connectivity can be established we fall back
+        // to the socks proxy, through which we have a IPv4 connectivity.
+        let stream = timeout(timeout_duration, async {
+            TcpStream::connect(&address)
                 .await
-                .map_err(|_| StreamError::Timeout)?
-                .map_err(StreamError::Socks)?
-                .into_inner();
-                socks_stream.set_nodelay(true).map_err(StreamError::Io)?;
-                socks_stream
-            }
-            None => {
-                let connect_result = timeout(timeout_duration, TcpStream::connect(&address))
-                    .await
-                    .map_err(|_| StreamError::Timeout)?;
-                connect_result.map_err(StreamError::Io)?
-            }
-        };
-        let (read_half, write_half) = inner.into_split();
+                .map_err(|socket_err| StreamError::Io(socket_err))
+        })
+        .into_inner()
+        .or_else(|_| {
+            timeout(timeout_duration, async {
+                match socks_proxy {
+                    Some(socks_proxy_addr) => {
+                        Ok(Socks5Stream::connect(socks_proxy_addr.as_str(), address)
+                            .map_err(|socks_err| StreamError::Socks(socks_err))
+                            .await?.into_inner())
+                    }
+                    None => {
+                        debug!(
+                            logger,
+                            "No direct connectivity to bitcoin peer {} and no socks proxy available.",
+                            address
+                        );
+                        Err(StreamError::Timeout)
+                    }
+                }
+            })
+            .into_inner()
+        })
+        .await
+        .map_err(|_| StreamError::Timeout)?;
+
+        let (read_half, write_half) = stream.into_split();
         Ok(Self {
             address,
             data,
@@ -259,7 +272,7 @@ pub fn handle_stream(config: StreamConfig) -> tokio::task::JoinHandle<()> {
         let logger = config.logger.clone();
         // Clone the sender here to handle errors that the Stream may return.
         let stream_event_sender = config.stream_event_sender.clone();
-        let stream_result = Stream::connect(config).await;
+        let stream_result = Stream::connect(config, &logger).await;
         let mut stream = match stream_result {
             Ok(stream) => {
                 stream_event_sender
@@ -272,6 +285,7 @@ pub fn handle_stream(config: StreamConfig) -> tokio::task::JoinHandle<()> {
                 stream
             }
             Err(err) => {
+                error!(&logger, "Failed to connect to {} ::: {}", address, err);
                 let kind = match err {
                     StreamError::Io(_) => StreamEventKind::FailedToConnect,
                     StreamError::Timeout => StreamEventKind::FailedToConnect,
