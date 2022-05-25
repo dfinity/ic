@@ -9,3 +9,4 @@ six>=1.16.0
 termcolor>=1.1.0
 absl-py>=0.14.1
 git+https://github.com/dfinity-lab/ic-py@9c8c2b9639c139eb7cfaf613ebd8fe08609aa7dd#egg=ic-py
+uuid

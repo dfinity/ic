@@ -1,5 +1,6 @@
 import argparse
 import math
+import operator
 import os
 import subprocess
 import sys
@@ -171,6 +172,33 @@ def get_anonymous_agent(hostname: str):
     ident = Identity(anonymous=True)
     client = Client(url="http://[{}]:8080".format(hostname))
     return Agent(ident, client)
+
+
+def evaluate_stop_conditions(conditions):
+    okay = True
+    op_labels = {
+        operator.ge: ">=",
+    }
+    for (val1, val2, op, label1, label2) in conditions:
+
+        op_label = op_labels[op] if op in op_labels else str(op)
+        if op(val1, val2):
+            okay = False
+            print(colored(f"Stopping because {label1} {val1} {op_label} {label2} {val2}", "red"))
+        else:
+            print(colored(f"Okay since not {label1} {val1} {op_label} {label2} {val2}", "green"))
+
+    return okay
+
+
+def evaluate_stop_latency_failure_iter(latency, latency_threshold, failure, failure_threshold, iteration, max_iter):
+    return evaluate_stop_conditions(
+        [
+            (latency, latency_threshold, operator.ge, "latency", "threshold"),
+            (failure, failure_threshold, operator.ge, "failure rate", "threshold"),
+            (iteration, max_iter, operator.ge, "iteration", "number datapointswork"),
+        ]
+    )
 
 
 def distribute_load_to_n(load: int, n: int):

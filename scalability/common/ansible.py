@@ -49,4 +49,6 @@ def get_ansible_hostnames_for_subnet(testnet, subnet=0, sort=True):
     hosts = [h["ansible_host"] for h in get_ansible_machine_info_for_subnet(testnet, subnet)]
     if sort:
         hosts = sorted(hosts)
+    if len(hosts) < 1:
+        raise Exception(f"No hosts found for testnet {testnet}")
     return hosts

@@ -44,6 +44,7 @@ CANISTER = "memory-test-canister.wasm"
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("payload_size", 5000000, "Payload size to pass to memory test canister")
+gflags.DEFINE_integer("num_canisters", 1, "Number of canisters to install and benchmark against.")
 
 
 class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
@@ -52,9 +53,10 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
     def __init__(self):
         """Construct experiment 2."""
         super().__init__(num_workload_gen=1)
-        self.install_canister(
-            self.target_nodes[0], canister=os.path.join(self.artifacts_path, f"../canisters/{CANISTER}")
-        )
+        for _ in range(FLAGS.num_canisters):
+            self.install_canister(
+                self.target_nodes[0], canister=os.path.join(self.artifacts_path, f"../canisters/{CANISTER}")
+            )
 
     def run_experiment_internal(self, config):
         """Run workload generator with the load specified in config."""
@@ -62,8 +64,14 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
         load = config["load_total"]
         call_method = config["call_method"]
         t_start = int(time.time())
+        if len(self.machines) != 1:
+            raise Exception("Expected number of workload generator machines to be exactly 1")
+        # The workload generator can only target a single canister.
+        # If we want to target num_canister canisters, we hence need num_canister workload generators.
+        # They can all be on the same machine.
+        assert len(self.canister_ids) == FLAGS.num_canisters
         r = self.run_workload_generator(
-            self.machines,
+            [self.machines[0] for _ in range(FLAGS.num_canisters)],
             self.target_nodes,
             load,
             outdir=self.iter_outdir,
@@ -130,22 +138,23 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
 
             print(f"🚀  ... failure rate for {load_total} rps was {failure_rate} median latency is {t_median}")
 
-            if len(datapoints) == 1:
-                rps_max = num_success / self.last_duration
-                rps_max_in = load_total
-                run = False
+            if (
+                failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE
+                and t_median < workload_experiment.ALLOWABLE_LATENCY
+            ):
+                if num_success / self.last_duration > rps_max:
+                    rps_max = num_success / self.last_duration
+                    rps_max_in = load_total
 
-            else:
-                if failure_rate < workload_experiment.ALLOWABLE_FAILURE_RATE and t_median < FLAGS.allowable_latency:
-                    if num_success / self.last_duration > rps_max:
-                        rps_max = num_success / self.last_duration
-                        rps_max_in = load_total
-
-                run = (
-                    failure_rate < workload_experiment.STOP_FAILURE_RATE
-                    and t_median < workload_experiment.STOP_T_MEDIAN
-                    and iteration < len(datapoints)
-                )
+            # Check termination condition
+            run = misc.evaluate_stop_latency_failure_iter(
+                t_median,
+                workload_experiment.STOP_T_MEDIAN,
+                failure_rate,
+                workload_experiment.STOP_FAILURE_RATE,
+                iteration,
+                len(datapoints),
+            )
 
             # Write summary file in each iteration including experiment specific data.
             rtype = "update_copy" if self.use_updates else "query_copy"

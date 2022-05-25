@@ -10,7 +10,7 @@ def scp_file(source, destination):
     return p
 
 
-def run_ssh(machine, command, f_stdout=None, f_stderr=None):
+def run_ssh(machine: str, command: str, f_stdout=None, f_stderr=None):
     """Run the given command on the given machine."""
     print("{}: Running {}".format(colored(machine, "blue"), command))
     args = [
@@ -102,6 +102,7 @@ def run_all_ssh_in_parallel(
         ps.append(
             (
                 machine,
+                command,
                 run_ssh(
                     machine,
                     command,
@@ -111,9 +112,18 @@ def run_all_ssh_in_parallel(
             )
         )
 
-    rc = []
-    for (machine, p) in ps:
-        rc.append(p.wait(timeout=timeout))
-        print("Done running {} on {}".format(command, machine))
+    rcs = []
+    for (machine, command, p) in ps:
+        try:
+            rc = p.wait(timeout=timeout)
+            rcs.append(rc)
+            status = colored("OK", "green") if rc == 0 else colored(f"rc={rc}", "red")
+            print("{}: {} Done running {} on {}".format(colored(machine, "blue"), status, command, machine))
+        except subprocess.TimeoutExpired:
+            print(
+                "{}: {} Timeout running {} on {}".format(
+                    colored(machine, "blue"), colored("fail", "red"), command, machine
+                )
+            )
 
-    return rc
+    return rcs
