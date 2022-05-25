@@ -123,6 +123,7 @@ crates_repository(
             package = "getrandom",
             version = "0.2",
         ),
+        "json5": crate.spec(version = "0.4.1"),
         "lazy_static": crate.spec(version = "1.4.0"),
         "leb128": crate.spec(version = "0.2.4"),
         "libc": crate.spec(version = "0.2.91"),
@@ -155,7 +156,10 @@ crates_repository(
         "serde_derive": crate.spec(version = "1.0.136"),
         "serde_json": crate.spec(version = "1.0.40"),
         "serde_with": crate.spec(version = "1.6.2"),
-        "serde": crate.spec(version = "1.0.136"),
+        "serde": crate.spec(
+            features = ["derive"],
+            version = "1.0.136",
+        ),
         "sha2": crate.spec(version = "0.9.1"),
         "simple_asn1": crate.spec(version = "0.5.4"),
         "slog": crate.spec(

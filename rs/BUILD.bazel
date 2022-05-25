@@ -21,6 +21,7 @@ filegroup(
         "//rs/bitcoin/validation:sources",
         "//rs/canister_http/service:sources",
         "//rs/canonical_state/certification_version:sources",
+        "//rs/config:sources",
         "//rs/constants:sources",
         "//rs/criterion_time:sources",
         "//rs/crypto/internal/crypto_lib/basic_sig/der_utils:sources",
