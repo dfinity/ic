@@ -46,6 +46,10 @@ pub struct LocalRegistry {
     cached_registry_canister: RwLock<(RootSubnetInfo, RegistryCanister)>,
     query_timeout: Duration,
     tokio_runtime_handle: tokio::runtime::Handle,
+    // In case the LocalRegistry was not created with a handle to an external
+    // tokio Runtime, LocalRegistry must take ownership of its own tokio
+    // runtime.
+    tokio_runtime: Option<tokio::runtime::Runtime>,
 }
 
 impl LocalRegistry {
@@ -68,11 +72,15 @@ impl LocalRegistry {
     ) -> Result<Self, LocalRegistryError> {
         let tokio_runtime =
             tokio::runtime::Runtime::new().expect("Could not instantiate tokio runtime");
-        Self::new_with_runtime_handle(
+        let mut s = Self::new_with_runtime_handle(
             local_store_path,
             query_timeout,
             tokio_runtime.handle().clone(),
-        )
+        )?;
+
+        // We need to hold on to a tokio runtime.
+        s.tokio_runtime = Some(tokio_runtime);
+        Ok(s)
     }
 
     /// Same as [new].
@@ -104,6 +112,7 @@ impl LocalRegistry {
             cached_registry_canister,
             query_timeout,
             tokio_runtime_handle,
+            tokio_runtime: None,
         })
     }
 
