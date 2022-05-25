@@ -1,7 +1,6 @@
 use crate::util::candid_error_to_user_error;
 use candid::Encode;
 use ic_btc_canister::state::State as BitcoinCanisterState;
-use ic_btc_types::{GetBalanceRequest, GetUtxosRequest};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, BitcoinNetwork, Method as Ic00Method, Payload,
@@ -29,10 +28,8 @@ pub fn get_balance(payload: &[u8], state: &mut ReplicatedState) -> Result<Vec<u8
             let btc_canister_state = BitcoinCanisterState::from(state.take_bitcoin_state());
             let balance_response = ic_btc_canister::get_balance(
                 &btc_canister_state,
-                GetBalanceRequest {
-                    address: args.address,
-                    min_confirmations: args.min_confirmations,
-                },
+                &args.address,
+                args.min_confirmations,
             );
             state.put_bitcoin_state(btc_canister_state.into());
             balance_response
@@ -67,13 +64,8 @@ pub fn get_utxos(payload: &[u8], state: &mut ReplicatedState) -> Result<Vec<u8>,
             }
 
             let btc_canister_state = BitcoinCanisterState::from(state.take_bitcoin_state());
-            let utxos_response = ic_btc_canister::get_utxos(
-                &btc_canister_state,
-                GetUtxosRequest {
-                    address: args.address,
-                    filter: args.filter,
-                },
-            );
+            let utxos_response =
+                ic_btc_canister::get_utxos(&btc_canister_state, &args.address, args.filter);
             state.put_bitcoin_state(btc_canister_state.into());
 
             utxos_response

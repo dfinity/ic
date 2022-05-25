@@ -1,13 +1,7 @@
-use crate::{
-    state::UtxoSet,
-    types::{Address as AddressStr, Storable},
-    utxos::UtxosTrait,
-};
+use crate::{state::UtxoSet, types::Storable, utxos::UtxosTrait};
 use bitcoin::{Address, OutPoint, Transaction, TxOut};
-use ic_btc_types::Utxo;
+use ic_btc_types::{Address as AddressStr, Height, Utxo};
 use std::collections::{BTreeMap, BTreeSet};
-
-type Height = u32;
 
 /// A struct that tracks the UTXO set of a given address.
 ///

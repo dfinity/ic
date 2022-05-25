@@ -1,8 +1,8 @@
 use crate::{metrics::BitcoinCanisterMetrics, state::State, store};
 use bitcoin::{util::psbt::serialize::Deserialize, Transaction};
 use ic_btc_types::{
-    GetBalanceError, GetBalanceRequest, GetUtxosError, GetUtxosRequest, GetUtxosResponse,
-    SendTransactionError, SendTransactionRequest, UtxosFilter,
+    GetBalanceError, GetUtxosError, GetUtxosResponse, SendTransactionError, SendTransactionRequest,
+    UtxosFilter,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -26,24 +26,29 @@ impl BitcoinCanister {
 }
 
 /// Retrieves the balance of the given Bitcoin address.
-pub fn get_balance(state: &State, request: GetBalanceRequest) -> Result<u64, GetBalanceError> {
-    let min_confirmations = request.min_confirmations.unwrap_or(0);
+pub fn get_balance(
+    state: &State,
+    address: &str,
+    min_confirmations: Option<u32>,
+) -> Result<u64, GetBalanceError> {
+    let min_confirmations = min_confirmations.unwrap_or(0);
 
-    store::get_balance(state, &request.address, min_confirmations)
+    store::get_balance(state, address, min_confirmations)
 }
 
 pub fn get_utxos(
     state: &State,
-    request: GetUtxosRequest,
+    address: &str,
+    filter: Option<UtxosFilter>,
 ) -> Result<GetUtxosResponse, GetUtxosError> {
-    match request.filter {
+    match filter {
         None => {
             // No filter is specified. Return all UTXOs for the address.
-            store::get_utxos(state, &request.address, 0)
+            store::get_utxos(state, address, 0)
         }
         Some(UtxosFilter::MinConfirmations(min_confirmations)) => {
             // Return UTXOs with the requested number of confirmations.
-            store::get_utxos(state, &request.address, min_confirmations)
+            store::get_utxos(state, address, min_confirmations)
         }
         Some(UtxosFilter::Page { .. }) => {
             // TODO(EXC-1009): Implement pagination.
@@ -110,13 +115,7 @@ mod test {
             let state = State::new(0, *network, genesis_block.clone());
 
             assert_eq!(
-                get_utxos(
-                    &state,
-                    GetUtxosRequest {
-                        address: address.to_string(),
-                        filter: None
-                    },
-                ),
+                get_utxos(&state, &address.to_string(), None),
                 Ok(GetUtxosResponse {
                     utxos: vec![Utxo {
                         outpoint: OutPoint {
@@ -137,13 +136,7 @@ mod test {
     #[test]
     fn get_balance_malformed_address() {
         assert_eq!(
-            get_balance(
-                &default_state(),
-                GetBalanceRequest {
-                    address: String::from("not an address"),
-                    min_confirmations: None
-                },
-            ),
+            get_balance(&default_state(), "not an address", None),
             Err(GetBalanceError::MalformedAddress)
         );
     }
@@ -151,13 +144,7 @@ mod test {
     #[test]
     fn get_utxos_malformed_address() {
         assert_eq!(
-            get_utxos(
-                &default_state(),
-                GetUtxosRequest {
-                    address: String::from("not an address"),
-                    filter: None
-                },
-            ),
+            get_utxos(&default_state(), "not an address", None),
             Err(GetUtxosError::MalformedAddress)
         );
     }
@@ -208,48 +195,21 @@ mod test {
             // address 1 to have a balance of 0.
             for min_confirmations in [None, Some(0), Some(1)].iter() {
                 assert_eq!(
-                    get_balance(
-                        &state,
-                        GetBalanceRequest {
-                            address: address_2.to_string(),
-                            min_confirmations: *min_confirmations
-                        },
-                    ),
+                    get_balance(&state, &address_2.to_string(), *min_confirmations),
                     Ok(1000)
                 );
 
                 assert_eq!(
-                    get_balance(
-                        &state,
-                        GetBalanceRequest {
-                            address: address_1.to_string(),
-                            min_confirmations: *min_confirmations
-                        },
-                    ),
+                    get_balance(&state, &address_1.to_string(), *min_confirmations),
                     Ok(0)
                 );
             }
 
             // With two confirmations, expect address 2 to have a balance of 0, and address 1 to
             // have a balance of 1000.
+            assert_eq!(get_balance(&state, &address_2.to_string(), Some(2)), Ok(0));
             assert_eq!(
-                get_balance(
-                    &state,
-                    GetBalanceRequest {
-                        address: address_2.to_string(),
-                        min_confirmations: Some(2)
-                    },
-                ),
-                Ok(0)
-            );
-            assert_eq!(
-                get_balance(
-                    &state,
-                    GetBalanceRequest {
-                        address: address_1.to_string(),
-                        min_confirmations: Some(2)
-                    },
-                ),
+                get_balance(&state, &address_1.to_string(), Some(2)),
                 Ok(1000)
             );
 
@@ -257,23 +217,11 @@ mod test {
             // the chain's height.
             for i in 3..10 {
                 assert_eq!(
-                    get_balance(
-                        &state,
-                        GetBalanceRequest {
-                            address: address_2.to_string(),
-                            min_confirmations: Some(i)
-                        },
-                    ),
+                    get_balance(&state, &address_2.to_string(), Some(i)),
                     Err(GetBalanceError::MinConfirmationsTooLarge { given: i, max: 2 })
                 );
                 assert_eq!(
-                    get_balance(
-                        &state,
-                        GetBalanceRequest {
-                            address: address_1.to_string(),
-                            min_confirmations: Some(i)
-                        },
-                    ),
+                    get_balance(&state, &address_1.to_string(), Some(i)),
                     Err(GetBalanceError::MinConfirmationsTooLarge { given: i, max: 2 })
                 );
             }
@@ -328,10 +276,8 @@ mod test {
                 assert_eq!(
                     get_utxos(
                         &state,
-                        GetUtxosRequest {
-                            address: address_2.to_string(),
-                            filter: min_confirmations.map(UtxosFilter::MinConfirmations),
-                        },
+                        &address_2.to_string(),
+                        min_confirmations.map(UtxosFilter::MinConfirmations),
                     ),
                     Ok(GetUtxosResponse {
                         utxos: vec![Utxo {
@@ -351,10 +297,8 @@ mod test {
                 assert_eq!(
                     get_utxos(
                         &state,
-                        GetUtxosRequest {
-                            address: address_1.to_string(),
-                            filter: min_confirmations.map(UtxosFilter::MinConfirmations),
-                        },
+                        &address_1.to_string(),
+                        min_confirmations.map(UtxosFilter::MinConfirmations),
                     ),
                     Ok(GetUtxosResponse {
                         utxos: vec![],
@@ -370,10 +314,8 @@ mod test {
             assert_eq!(
                 get_utxos(
                     &state,
-                    GetUtxosRequest {
-                        address: address_2.to_string(),
-                        filter: Some(UtxosFilter::MinConfirmations(2))
-                    },
+                    &address_2.to_string(),
+                    Some(UtxosFilter::MinConfirmations(2))
                 ),
                 Ok(GetUtxosResponse {
                     utxos: vec![],
@@ -385,10 +327,8 @@ mod test {
             assert_eq!(
                 get_utxos(
                     &state,
-                    GetUtxosRequest {
-                        address: address_1.to_string(),
-                        filter: Some(UtxosFilter::MinConfirmations(2))
-                    },
+                    &address_1.to_string(),
+                    Some(UtxosFilter::MinConfirmations(2))
                 ),
                 Ok(GetUtxosResponse {
                     utxos: vec![Utxo {
@@ -411,20 +351,16 @@ mod test {
                 assert_eq!(
                     get_utxos(
                         &state,
-                        GetUtxosRequest {
-                            address: address_2.to_string(),
-                            filter: Some(UtxosFilter::MinConfirmations(i))
-                        },
+                        &address_2.to_string(),
+                        Some(UtxosFilter::MinConfirmations(i))
                     ),
                     Err(GetUtxosError::MinConfirmationsTooLarge { given: i, max: 2 })
                 );
                 assert_eq!(
                     get_utxos(
                         &state,
-                        GetUtxosRequest {
-                            address: address_1.to_string(),
-                            filter: Some(UtxosFilter::MinConfirmations(i))
-                        },
+                        &address_1.to_string(),
+                        Some(UtxosFilter::MinConfirmations(i))
                     ),
                     Err(GetUtxosError::MinConfirmationsTooLarge { given: i, max: 2 })
                 );
@@ -466,13 +402,7 @@ mod test {
 
             // Assert that the UTXOs of the taproot address can be retrieved.
             assert_eq!(
-                get_utxos(
-                    &state,
-                    GetUtxosRequest {
-                        address: address.to_string(),
-                        filter: None
-                    }
-                ),
+                get_utxos(&state, &address.to_string(), None),
                 Ok(GetUtxosResponse {
                     utxos: vec![Utxo {
                         outpoint: OutPoint {

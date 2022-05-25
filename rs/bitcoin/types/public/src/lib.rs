@@ -42,7 +42,8 @@ pub enum UtxosFilter {
 /// A request for getting the UTXOs for a given address.
 #[derive(CandidType, Debug, Deserialize, PartialEq)]
 pub struct GetUtxosRequest {
-    pub address: String,
+    pub address: Address,
+    pub network: Network,
     pub filter: Option<UtxosFilter>,
 }
 
@@ -71,7 +72,8 @@ impl std::fmt::Display for GetUtxosError {
 
 #[derive(CandidType, Debug, Deserialize, PartialEq)]
 pub struct GetBalanceRequest {
-    pub address: String,
+    pub address: Address,
+    pub network: Network,
     pub min_confirmations: Option<u32>,
 }
 

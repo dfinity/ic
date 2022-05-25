@@ -1,6 +1,6 @@
-use crate::proto;
-use crate::{types::Height, PageMapMemory};
+use crate::{proto, PageMapMemory};
 use bitcoin::{hashes::Hash, Block, Network, OutPoint, Script, TxOut, Txid};
+use ic_btc_types::Height;
 use ic_protobuf::bitcoin::v1;
 use ic_replicated_state::page_map::PersistenceError;
 use ic_replicated_state::{

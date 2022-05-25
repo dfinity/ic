@@ -4,7 +4,6 @@ mod provisional;
 
 use candid::{CandidType, Decode, Deserialize, Encode};
 use ic_base_types::{CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SubnetId};
-use ic_btc_types::UtxosFilter;
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
@@ -18,7 +17,6 @@ use strum_macros::{Display, EnumIter, EnumString};
 pub const IC_00: CanisterId = CanisterId::ic_00();
 pub const MAX_CONTROLLERS: usize = 10;
 pub use http::{CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader, HttpMethod};
-pub use ic_btc_types::Network as BitcoinNetwork;
 pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
 
 /// Methods exported by ic:00.
@@ -950,35 +948,11 @@ impl ComputeInitialEcdsaDealingsResponse {
     }
 }
 
-/// Struct used for encoding/decoding
-/// (record {
-///   address : bitcoin_address;
-///   network: bitcoin_network;
-///   min_confirmations: opt nat32;
-/// });
-#[derive(CandidType, Deserialize)]
-pub struct BitcoinGetBalanceArgs {
-    pub address: String,
-    pub network: BitcoinNetwork,
-    pub min_confirmations: Option<u32>,
-}
+// Export the bitcoin types.
+pub use ic_btc_types::{
+    GetBalanceRequest as BitcoinGetBalanceArgs, GetUtxosRequest as BitcoinGetUtxosArgs,
+    Network as BitcoinNetwork,
+};
 
 impl Payload<'_> for BitcoinGetBalanceArgs {}
-
-/// Struct used for encoding/decoding
-/// record {
-///  address : bitcoin_address;
-///  network: bitcoin_network;
-///  filter: opt variant {
-///    min_confirmations: nat32;
-///    page: blob;
-///  };
-/// };
-#[derive(CandidType, Deserialize)]
-pub struct BitcoinGetUtxosArgs {
-    pub address: String,
-    pub network: BitcoinNetwork,
-    pub filter: Option<UtxosFilter>,
-}
-
 impl Payload<'_> for BitcoinGetUtxosArgs {}
