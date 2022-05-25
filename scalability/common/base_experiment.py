@@ -419,9 +419,10 @@ class BaseExperiment:
                     self.canister_ids.append(cid)
                     this_canister_id = cid
                     print("Found canister ID: ", cid)
+                    all_canisters = ",".join(self.canister_ids)
                     print(
                         colored(
-                            f"Cannister installed successfully (to reuse across runs, specify --canister_id={cid})",
+                            f"Cannister installed successfully (to reuse across runs, specify --canister_id={all_canisters})",
                             "yellow",
                         )
                     )

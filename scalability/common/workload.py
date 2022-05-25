@@ -1,6 +1,7 @@
 import os
 import re
 import threading
+import uuid
 
 from common import ssh
 from termcolor import colored
@@ -57,10 +58,7 @@ class Workload(threading.Thread):
     def get_commands(self) -> [str]:
         """Build a list of command line arguments to use for workload generation."""
         target_list = ",".join(f"http://[{target}]:8080" for target in self.target_machines)
-        cmd = (
-            f'./ic-workload-generator "{target_list}" --summary-file wg_summary'
-            f" -n {self.duration} -p 9090 --no-status-check"
-        )
+        cmd = f'./ic-workload-generator "{target_list}"' f" -n {self.duration} -p 9090 --no-status-check"
         cmd += " " + " ".join(self.arguments)
 
         # Dump worklod generator command in output directory.
@@ -75,14 +73,16 @@ class Workload(threading.Thread):
         # In the case of multiple canisters, select a different canister for each machine.
         num_load_generators = len(self.load_generators)
         canister_ids = [self.canister_ids[i % len(self.canister_ids)] for i in range(num_load_generators)]
+        self.uuids = [uuid.uuid4()] * num_load_generators
         assert num_load_generators == len(self.rps_per_machine)
         commands = [
-            "{} --canister-id {} -r {rps}".format(
+            "{} --canister-id {} --summary-file wg_summary_{} -r {rps} ".format(
                 cmd,
                 canister_id,
+                self.uuids[i],
                 rps=rps,
             )
-            for canister_id, rps in zip(canister_ids, self.rps_per_machine)
+            for i, (canister_id, rps) in enumerate(zip(canister_ids, self.rps_per_machine))
         ]
 
         return (commands, self.load_generators)
@@ -94,7 +94,7 @@ class Workload(threading.Thread):
 
     def fetch_results(self, destinations, out_dir):
         """Fetch results from workload generators."""
-        sources = ["admin@[{}]:wg_summary".format(m) for m in self.load_generators]
+        sources = ["admin@[{}]:wg_summary_{}".format(m, self.uuids[i]) for i, m in enumerate(self.load_generators)]
         rc = ssh.scp_in_parallel(sources, destinations)
         if not rc == [0 for _ in range(len(destinations))]:
             print(colored("⚠️  Some workload generators failed:", "red"))

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import random
 import subprocess
 import time
 from statistics import mean
@@ -41,9 +42,9 @@ gflags.DEFINE_integer("target_rps", 10, "Requests per second the workload genera
 
 
 # When failure rate reaches this level, there is no point keep running, so stop following experiments.
-STOP_FAILURE_RATE = 0.4
+STOP_FAILURE_RATE = 0.9
 # When median latency reaches this level, there is no point keep running, so stop following experiments.
-STOP_T_MEDIAN = 30000
+STOP_T_MEDIAN = 300000
 
 # When failure rate is below this level, we consider the experiment successful.
 ALLOWABLE_FAILURE_RATE = 0.2
@@ -96,9 +97,9 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         if len(FLAGS.workload_generator_machines) > 0:
             workload_generator_machines = FLAGS.workload_generator_machines.split(",")
         else:
-            wg_testnet_nns_host = ansible.get_ansible_hostnames_for_subnet(
-                FLAGS.wg_testnet, base_experiment.NNS_SUBNET_INDEX, sort=False
-            )[0]
+            wg_testnet_nns_host = random.choice(
+                ansible.get_ansible_hostnames_for_subnet(FLAGS.wg_testnet, base_experiment.NNS_SUBNET_INDEX, sort=False)
+            )
 
             workload_generator_machines = self.get_hostnames(FLAGS.wg_subnet, f"http://[{wg_testnet_nns_host}]:8080")
 
@@ -285,7 +286,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         if canister_ids is None:
             canister_ids = self.canister_ids
 
-        rps_per_machine = misc.distribute_load_to_n(requests_per_second, self.num_workload_gen)
+        rps_per_machine = misc.distribute_load_to_n(requests_per_second, len(machines))
 
         print("Got targets: ", targets)
         print("Running against target_list")
@@ -350,4 +351,5 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
             "load_generator_machines": self.machines,
             "target_machines": self.target_nodes,
             "subnet_id": self.subnet_id,
+            "canister_ids": ",".join(self.canister_ids),
         }
