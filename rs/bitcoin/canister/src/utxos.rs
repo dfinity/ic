@@ -1,7 +1,8 @@
 use crate::state::{Utxos, UTXO_VALUE_MAX_SIZE_MEDIUM, UTXO_VALUE_MAX_SIZE_SMALL};
-use crate::types::{Height, Storable};
+use crate::types::Storable;
 use crate::PageMapMemory;
 use bitcoin::{OutPoint, TxOut};
+use ic_btc_types::Height;
 use stable_structures::{btreemap, Memory};
 
 /// Methods defined for [`Utxos`] struct.

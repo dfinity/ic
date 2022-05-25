@@ -1,10 +1,8 @@
 //! Types that are private to the crate.
 use crate::state::UTXO_KEY_SIZE;
 use bitcoin::{hashes::Hash, OutPoint, Script, TxOut, Txid};
+use ic_btc_types::{Address, Height};
 use std::convert::TryInto;
-
-pub type Address = String;
-pub type Height = u32;
 
 /// A trait with convencience methods for storing an element into a stable structure.
 pub trait Storable {

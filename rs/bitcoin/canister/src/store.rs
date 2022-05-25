@@ -1,8 +1,6 @@
-use crate::{
-    blocktree::BlockDoesNotExtendTree, state::State, types::Height, unstable_blocks, utxoset,
-};
+use crate::{blocktree::BlockDoesNotExtendTree, state::State, unstable_blocks, utxoset};
 use bitcoin::{Address, Block, Txid};
-use ic_btc_types::{GetBalanceError, GetUtxosError, GetUtxosResponse, Satoshi, Utxo};
+use ic_btc_types::{GetBalanceError, GetUtxosError, GetUtxosResponse, Height, Satoshi, Utxo};
 use lazy_static::lazy_static;
 use std::str::FromStr;
 

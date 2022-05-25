@@ -8,7 +8,6 @@ candid = "0.7.14"
 hex = "0.4.2"
 ic-base-types = { path = "../types/base_types" }
 ic-btc-canister = { path = "../bitcoin/canister" }
-ic-btc-types = { path = "../bitcoin/types/public" }
 ic-canister-sandbox-replica-controller = { path = "../canister_sandbox/replica_controller" }
 ic-config = { path = "../config" }
 ic-crypto = { path = "../crypto" }
@@ -56,6 +55,7 @@ bitcoin = "0.28.1"
 criterion = { version = "0.3", features = ["html_reports"] }
 iai = "0.1"
 ic-btc-test-utils = { path = "../bitcoin/test-utils" }
+ic-btc-types = { path = "../bitcoin/types/public" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-wasm-types = { path = "../types/wasm_types" }
 libflate = "1.1.2"
