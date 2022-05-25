@@ -42,8 +42,14 @@ repos:
     # because the intention is clearly to define no service.
     exclude: ^rs/nns/empty[.]did$
     language: system
-    verbose: true
     always_run: true
+
+  - id: bazel_buildifier
+    name: Auto format bazel build files.
+    stages: [commit]
+    entry: bazel run //:buildifier
+    files: \.bazel|\.bzl$
+    language: system
 
 # The following repo is maintained by us at
 # https://gitlab.com/dfinity-lab/open/pre-commit-tools.
