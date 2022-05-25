@@ -1,4 +1,5 @@
 import argparse
+import math
 import os
 import subprocess
 import sys
@@ -170,3 +171,11 @@ def get_anonymous_agent(hostname: str):
     ident = Identity(anonymous=True)
     client = Client(url="http://[{}]:8080".format(hostname))
     return Agent(ident, client)
+
+
+def distribute_load_to_n(load: int, n: int):
+    """Distribute the given load to n entities."""
+    per_entity = [int(math.floor(load / n))] * n
+    remainder = load % n
+    add_per_machine = [1 if x < remainder else 0 for x in range(n)]
+    return [x + y for x, y in zip(per_entity, add_per_machine)]

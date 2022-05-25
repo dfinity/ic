@@ -9,6 +9,7 @@ from typing import List
 import gflags
 from common import ansible
 from common import base_experiment
+from common import misc
 from common import prometheus
 from common import report
 from common import ssh
@@ -284,8 +285,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         if canister_ids is None:
             canister_ids = self.canister_ids
 
-        assert requests_per_second % self.num_workload_gen == 0
-        rps_per_machine = int(requests_per_second / self.num_workload_gen)
+        rps_per_machine = misc.distribute_load_to_n(requests_per_second, self.num_workload_gen)
 
         print("Got targets: ", targets)
         print("Running against target_list")
