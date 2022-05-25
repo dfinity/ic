@@ -1252,63 +1252,6 @@ mod tests {
         crate::test_utils::test_persistent_pool_path_is_cleanedup_after_tests::<RocksDBConfig>()
     }
 
-    // Test purge by compaction actually purges.
-    // TODO CON-383: This test is currently disabled as it seem to fail on linux
-    // sometimes with this error: `IO error: lock :
-    // /build/ic_testsJ2Zq00/test_purge_by_compaction/LOCK: No locks available`.
-    #[ignore]
-    #[test]
-    fn test_purge_by_compaction() {
-        run_persistent_pool_test("test_purge_by_compaction", |mut config, log| {
-            // set a small purge interval
-            config.persistent_pool_validated_purge_interval = Height::from(8);
-            let mut pool = PersistentHeightIndexedPool::new_consensus_pool(config, log);
-            // insert a few things
-            let rb_ops = random_beacon_ops();
-            pool.mutate(rb_ops.clone());
-            // check if read is ok after insertion
-            let iter = pool.random_beacon().get_all();
-            let msgs_from_pool: Vec<RandomBeacon> = iter.collect();
-            assert_eq!(msgs_from_pool.len(), rb_ops.ops.len());
-            let min_height = msgs_from_pool.iter().map(|x| x.height()).min().unwrap();
-            // purge below height 5
-            let mut purge_ops = PoolSectionOps::new();
-            purge_ops.purge_below(Height::from(5));
-            pool.mutate(purge_ops);
-            let mut iter = pool.random_beacon().get_all();
-            assert!(iter.all(|x| x.height() >= Height::from(5)));
-            // range becomes (5, 18) after purge
-            assert_eq!(
-                pool.random_beacon().height_range().map(|r| r.min),
-                Some(Height::from(5))
-            );
-            // But real min height is unchanged because compaction didn't happen
-            assert_eq!(
-                pool.get_first_height(&RANDOM_BEACON_CF_INFO, SeekPos::Start),
-                Some(min_height)
-            );
-            // trigger compaction by purging again at height 10
-            let mut purge_ops = PoolSectionOps::new();
-            purge_ops.purge_below(Height::from(10));
-            pool.mutate(purge_ops);
-            assert_eq!(
-                pool.random_beacon().height_range().map(|r| r.min),
-                Some(Height::from(10))
-            );
-            // min height becomes 10 after compaction
-            // Due to asynchrony, we'll wait at most 5s for this to happen.
-            for _ in 0..50 {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-                if pool.get_first_height(&RANDOM_BEACON_CF_INFO, SeekPos::Start)
-                    == Some(Height::from(10))
-                {
-                    return;
-                }
-            }
-            panic!("compaction did not purge")
-        });
-    }
-
     // Test if purge survives reboot.
     #[test]
     fn test_purge_survives_reboot() {
