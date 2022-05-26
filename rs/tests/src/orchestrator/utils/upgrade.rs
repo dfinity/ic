@@ -102,6 +102,7 @@ pub(crate) fn fetch_unassigned_node_version(endpoint: &IcNodeSnapshot) -> Result
 
 /// Waits until the endpoint is healthy and running the given replica version.
 /// Panics if the timeout is reached while waiting.
+#[allow(dead_code)]
 pub(crate) fn assert_assigned_replica_version(
     endpoint: &IcEndpoint,
     expected_version: &str,
@@ -144,6 +145,7 @@ pub(crate) fn assert_assigned_replica_version_v2(
 }
 
 /// Gets the replica version from the endpoint if it is healthy.
+#[allow(dead_code)]
 pub(crate) fn get_assigned_replica_version(endpoint: &IcEndpoint) -> Result<String, String> {
     let version = match block_on(async { endpoint.status().await }) {
         Ok(status) if Some(ReplicaHealthStatus::Healthy) == status.replica_health_status => status,

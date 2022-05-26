@@ -26,12 +26,11 @@ end::catalog[] */
 
 use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::ADMIN;
-use crate::nns::NnsExt;
+use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::node_reassignment_test::{can_read_msg, store_message};
-use crate::orchestrator::utils::upgrade::{assert_assigned_replica_version, can_install_canister};
+use crate::orchestrator::utils::upgrade::{
+    assert_assigned_replica_version_v2, can_install_canister,
+};
 use crate::util::*;
 use ic_cup_explorer::get_catchup_content;
 use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType};
@@ -71,15 +70,12 @@ pub fn setup_failover_nodes(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    let (handle, ctx) = get_ic_handle_and_ctx(env.clone());
-
-    let mut rng = ctx.rng.clone();
-    ctx.install_nns_canisters(&handle, true);
+    let logger = env.logger();
 
     let broken_replica_version = env::var("BROKEN_BLOCKMAKER_GIT_REVISION")
         .expect("Environment variable $BROKEN_BLOCKMAKER_GIT_REVISION is not set!");
     info!(
-        ctx.logger,
+        logger,
         "BROKEN_BLOCKMAKER_GIT_REVISION: {}", broken_replica_version
     );
 
@@ -87,7 +83,7 @@ pub fn test(env: TestEnv) {
         Ok(ver) => ver,
         Err(_) => panic!("Environment variable $IC_VERSION_ID is not set!"),
     };
-    info!(ctx.logger, "IC_VERSION_ID: {}", master_version);
+    info!(logger, "IC_VERSION_ID: {}", master_version);
 
     let working_version = format!("{}-test", master_version);
 
@@ -95,55 +91,85 @@ pub fn test(env: TestEnv) {
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
 
     info!(
-        ctx.logger,
+        logger,
         "ssh_authorized_priv_keys_dir: {:?}", ssh_authorized_priv_keys_dir
     );
     info!(
-        ctx.logger,
+        logger,
         "ssh_authorized_pub_keys_dir: {:?}", ssh_authorized_pub_keys_dir
     );
 
-    let nns_node = get_random_nns_node_endpoint(&handle, &mut rng);
+    // choose a node from the nns subnet
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .expect("there is no NNS node");
+    nns_node.await_status_is_healthy().unwrap();
+
+    nns_node
+        .install_nns_canisters()
+        .expect("NNS canisters not installed");
+    info!(logger, "NNS canisters are installed.");
+
     info!(
-        ctx.logger,
-        "Selected random NNS node: {} ({})",
+        logger,
+        "Selected NNS node: {} ({:?})",
         nns_node.node_id,
-        nns_node.ip_address().unwrap()
+        nns_node.get_ip_addr()
     );
-    block_on(nns_node.assert_ready(&ctx));
 
-    let app_node = get_random_application_node_endpoint(&handle, &mut rng);
+    let app_subnet = env
+        .topology_snapshot()
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .expect("there is no application subnet");
+    let mut app_nodes = app_subnet.nodes();
+    let app_node = app_nodes.next().expect("there is no application node");
     info!(
-        ctx.logger,
-        "Selected random application subnet node: {} ({})",
+        logger,
+        "Selected random application subnet node: {} ({:?})",
         app_node.node_id,
-        app_node.ip_address().unwrap()
+        app_node.get_ip_addr()
     );
-    info!(ctx.logger, "app node URL: {}", app_node.url);
-    block_on(app_node.assert_ready(&ctx));
+    info!(logger, "app node URL: {}", app_node.get_public_url());
+    app_node.await_status_is_healthy().unwrap();
 
-    info!(ctx.logger, "Ensure app subnet is functional");
+    info!(logger, "Ensure app subnet is functional");
     let msg = "subnet recovery works!";
-    let app_can_id = block_on(store_message(&app_node.url, msg));
+    let app_can_id = block_on(store_message(&app_node.get_public_url(), msg));
     assert!(block_on(can_read_msg(
-        &ctx.logger,
-        &app_node.url,
+        &logger,
+        &app_node.get_public_url(),
         app_can_id,
         msg
     )));
 
-    let subnet_id = app_node.subnet_id().expect("No subnet_id found");
+    let subnet_id = app_subnet.subnet_id;
 
-    let unassigned_nodes = get_unassinged_nodes_endpoints(&handle)
-        .iter()
-        .map(|ie| ie.node_id.to_string())
-        .collect::<Vec<String>>();
+    let mut unassigned_nodes = env.topology_snapshot().unassigned_nodes();
 
-    let upload_node = if !unassigned_nodes.is_empty() {
-        get_random_unassigned_node_endpoint(&handle, &mut rng)
+    let upload_node = if let Some(node) = unassigned_nodes.next() {
+        node
     } else {
-        get_random_application_node_endpoint(&handle, &mut rng)
+        app_nodes.next().unwrap()
     };
+
+    info!(logger, "App nodes:");
+    env.topology_snapshot()
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .unwrap()
+        .nodes()
+        .for_each(|n| {
+            info!(logger, "A: {}", n.node_id);
+        });
+
+    info!(logger, "Unassigned nodes:");
+    env.topology_snapshot().unassigned_nodes().for_each(|n| {
+        info!(logger, "U: {}", n.node_id);
+    });
 
     let pub_key = file_sync_helper::read_file(&ssh_authorized_pub_keys_dir.join(ADMIN))
         .expect("Couldn't read public key");
@@ -152,31 +178,37 @@ pub fn test(env: TestEnv) {
 
     let recovery_args = RecoveryArgs {
         dir: tempdir.path().to_path_buf(),
-        nns_url: nns_node.url.clone(),
+        nns_url: nns_node.get_public_url(),
         replica_version: Some(ReplicaVersion::try_from(master_version).unwrap()),
         key_file: Some(ssh_authorized_priv_keys_dir.join(ADMIN)),
     };
+
+    let unassigned_nodes_ids = env
+        .topology_snapshot()
+        .unassigned_nodes()
+        .map(|n| n.node_id.to_string())
+        .collect::<Vec<String>>();
 
     // Unlike during a production recovery using the CLI, here we already know all of parameters ahead of time.
     let subnet_args = AppSubnetRecoveryArgs {
         subnet_id,
         upgrade_version: Some(ReplicaVersion::try_from(working_version.clone()).unwrap()),
-        replacement_nodes: Some(unassigned_nodes),
+        replacement_nodes: Some(unassigned_nodes_ids),
         pub_key: Some(pub_key),
-        download_node: Some(app_node.ip_address().unwrap()),
-        upload_node: Some(upload_node.ip_address().unwrap()),
+        download_node: Some(app_node.get_ip_addr()),
+        upload_node: Some(upload_node.get_ip_addr()),
     };
 
     let mut subnet_recovery =
-        AppSubnetRecovery::new(ctx.logger.clone(), recovery_args, None, subnet_args);
+        AppSubnetRecovery::new(env.logger(), recovery_args, None, subnet_args);
 
-    info!(ctx.logger, "Confirming admin ssh access to app node");
+    info!(logger, "Confirming admin ssh access to app node");
     assert!(subnet_recovery
         .get_recovery_api()
-        .check_ssh_access("admin", app_node.ip_address().unwrap()));
+        .check_ssh_access("admin", app_node.get_ip_addr()));
 
     info!(
-        ctx.logger,
+        logger,
         "Breaking the app subnet by upgrading to a broken replica version"
     );
     let broken_version = ReplicaVersion::try_from(broken_replica_version.clone())
@@ -185,7 +217,7 @@ pub fn test(env: TestEnv) {
         .get_recovery_api()
         .bless_replica_version(&broken_version)
         .expect("Failed to bless replica version");
-    info!(ctx.logger, "{}", bless_broken_version.descr());
+    info!(logger, "{}", bless_broken_version.descr());
     bless_broken_version
         .exec()
         .expect("Execution of step failed");
@@ -193,38 +225,38 @@ pub fn test(env: TestEnv) {
     let upgrade_to_broken_version = subnet_recovery
         .get_recovery_api()
         .update_subnet_replica_version(subnet_id, &broken_version);
-    info!(ctx.logger, "{}", upgrade_to_broken_version.descr());
+    info!(logger, "{}", upgrade_to_broken_version.descr());
     upgrade_to_broken_version
         .exec()
         .expect("Execution of step failed");
 
-    assert_assigned_replica_version(app_node, &broken_replica_version, &ctx.logger);
+    assert_assigned_replica_version_v2(&app_node, &broken_replica_version, env.logger());
     info!(
-        ctx.logger,
+        logger,
         "Successfully upgraded subnet {} to {}", subnet_id, broken_replica_version
     );
 
-    info!(ctx.logger, "Ensure the subnet works in read mode");
+    info!(logger, "Ensure the subnet works in read mode");
     assert!(block_on(can_read_msg(
-        &ctx.logger,
-        &app_node.url,
+        &logger,
+        &app_node.get_public_url(),
         app_can_id,
         msg
     )));
     info!(
-        ctx.logger,
+        logger,
         "Ensure the subnet doesn't work in write mode anymore"
     );
-    assert!(!can_install_canister(&app_node.url));
+    assert!(!can_install_canister(&app_node.get_public_url()));
 
     info!(
-        ctx.logger,
+        logger,
         "Starting recovery of subnet {}",
         subnet_id.to_string()
     );
 
     while let Some((step_type, step)) = subnet_recovery.next() {
-        info!(ctx.logger, "Next step: {:?}", step_type);
+        info!(logger, "Next step: {:?}", step_type);
         if matches!(step_type, StepType::ValidateReplayOutput) {
             // Replay output has to be validated differently since prometheus doesn't work here
             let (latest_height, state_hash) = subnet_recovery
@@ -233,7 +265,7 @@ pub fn test(env: TestEnv) {
                 .expect("Failed to get replay output");
 
             // Sanity check to confirm that replay didn't actually do anything
-            let cup_content = block_on(get_catchup_content(&app_node.url))
+            let cup_content = block_on(get_catchup_content(&app_node.get_public_url()))
                 .expect("Couldn't fetch catchup package")
                 .expect("No CUP found");
 
@@ -257,45 +289,73 @@ pub fn test(env: TestEnv) {
             continue;
         }
 
-        info!(ctx.logger, "{}", step.descr());
+        info!(logger, "{}", step.descr());
         step.exec().expect("Execution of step failed");
     }
 
     assert!(subnet_recovery.success(), "Recovery unsuccessful");
 
+    info!(logger, "Blocking for newer registry version");
+    env.topology_snapshot()
+        .block_for_newer_registry_version()
+        .expect("Could not block for newer registry version");
+
+    info!(logger, "App nodes:");
+    env.topology_snapshot()
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .unwrap()
+        .nodes()
+        .for_each(|n| {
+            info!(logger, "A: {}", n.node_id);
+        });
+
+    info!(logger, "Unassigned nodes:");
+    env.topology_snapshot().unassigned_nodes().for_each(|n| {
+        info!(logger, "U: {}", n.node_id);
+    });
+
     // Confirm that ALL nodes are now healthy and running on the new version
-    assert_assigned_replica_version(upload_node, &working_version, &ctx.logger);
-    info!(
-        ctx.logger,
-        "Healthy upgrade of node {} to {}", upload_node.node_id, working_version
-    );
-    let mut other_nodes = get_other_subnet_nodes(&handle, upload_node);
-    other_nodes.append(&mut get_unassinged_nodes_endpoints(&handle));
-    for endpoint in other_nodes {
-        assert_assigned_replica_version(upload_node, &working_version, &ctx.logger);
+    let all_app_nodes: Vec<IcNodeSnapshot> = env
+        .topology_snapshot()
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .expect("there is no application subnet")
+        .nodes()
+        .collect();
+    for node in all_app_nodes {
+        assert_assigned_replica_version_v2(&node, &working_version, env.logger());
         info!(
-            ctx.logger,
-            "Healthy upgrade of node {} to {}", endpoint.node_id, working_version
+            logger,
+            "Healthy upgrade of assigned node {} to {}", node.node_id, working_version
         );
     }
 
-    info!(ctx.logger, "Ensure the old message is still readable");
+    env.topology_snapshot().unassigned_nodes().for_each(|n| {
+        assert_assigned_replica_version_v2(&n, &working_version, env.logger());
+        info!(
+            logger,
+            "Healthy upgrade of unassigned node {} to {}", n.node_id, working_version
+        );
+    });
+
+    info!(logger, "Ensure the old message is still readable");
     assert!(block_on(can_read_msg(
-        &ctx.logger,
-        &upload_node.url,
+        &logger,
+        &upload_node.get_public_url(),
         app_can_id,
         msg
     )));
-    block_on(upload_node.assert_ready(&ctx));
+    upload_node.await_status_is_healthy().unwrap();
     let new_msg = "subnet recovery still works!";
     info!(
-        ctx.logger,
+        logger,
         "Ensure the the subnet is accepting updates after the recovery"
     );
-    let new_app_can_id = block_on(store_message(&upload_node.url, new_msg));
+    let new_app_can_id = block_on(store_message(&upload_node.get_public_url(), new_msg));
     assert!(block_on(can_read_msg(
-        &ctx.logger,
-        &upload_node.url,
+        &logger,
+        &upload_node.get_public_url(),
         new_app_can_id,
         new_msg
     )));
