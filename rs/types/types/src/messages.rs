@@ -257,7 +257,6 @@ mod tests {
     use super::*;
     use crate::time::current_time_and_expiry_time;
     use maplit::btreemap;
-    use proptest::prelude::*;
     use serde_cbor::Value;
     use std::{convert::TryFrom, io::Cursor};
 
@@ -333,19 +332,6 @@ mod tests {
 
     fn integer(val: u64) -> Value {
         Value::Integer(val as i128)
-    }
-
-    proptest! {
-        #[ignore]
-        #[test]
-        // The conversion from Submit to HttpRequest is not total so we proptest
-        // the hell out of it to make sure no enum constructors are added which are
-        // not handled by the conversion.
-        fn request_id_conversion_does_not_panic(
-            submit: HttpRequestEnvelope::<HttpCallContent>)
-        {
-            let _ = HttpRequest::try_from(submit).unwrap();
-        }
     }
 
     #[test]
