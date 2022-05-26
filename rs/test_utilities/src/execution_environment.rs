@@ -35,6 +35,7 @@ use ic_replicated_state::{
     ReplicatedState,
 };
 use ic_types::messages::{MessageId, RequestOrResponse};
+use ic_types::Time;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     CanisterId, Cycles, NumInstructions, UserId,
@@ -218,6 +219,9 @@ pub struct ExecutionTest {
     // Messages to canisters on other subnets.
     xnet_messages: Vec<RequestOrResponse>,
 
+    // Mutable parameters of execution.
+    time: Time,
+
     // Read-only fields.
     instruction_limit: NumInstructions,
     install_code_instruction_limit: NumInstructions,
@@ -305,6 +309,10 @@ impl ExecutionTest {
 
     pub fn cycles_account_manager(&self) -> &CyclesAccountManager {
         &self.cycles_account_manager
+    }
+
+    pub fn advance_time(&mut self, duration: std::time::Duration) {
+        self.time += duration;
     }
 
     /// Sends a `create_canister` message to the IC management canister.
@@ -531,7 +539,7 @@ impl ExecutionTest {
             canister,
             self.instruction_limit,
             network_topology,
-            mock_time(),
+            self.time,
             self.subnet_available_memory.clone(),
         );
         state.put_canister_state(canister);
@@ -566,7 +574,7 @@ impl ExecutionTest {
             .exec_env
             .hypervisor_for_testing()
             .execute_anonymous_query(
-                mock_time(),
+                self.time,
                 &method_name.to_string(),
                 method_payload.as_slice(),
                 canister,
@@ -676,7 +684,7 @@ impl ExecutionTest {
                     canister,
                     self.instruction_limit,
                     message,
-                    mock_time(),
+                    self.time,
                     Arc::clone(&network_topology),
                     self.subnet_available_memory.clone(),
                 );
@@ -716,7 +724,7 @@ impl ExecutionTest {
                 canister,
                 self.instruction_limit,
                 message,
-                mock_time(),
+                self.time,
                 Arc::clone(&network_topology),
                 self.subnet_available_memory.clone(),
             );
@@ -1025,6 +1033,7 @@ impl ExecutionTestBuilder {
                 self.subnet_available_memory,
                 self.subnet_available_memory,
             )),
+            time: mock_time(),
             instruction_limit: self.instruction_limit,
             install_code_instruction_limit: self.install_code_instruction_limit,
             initial_canister_cycles: self.initial_canister_cycles,

@@ -1,308 +1,36 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
-use ic_config::execution_environment::Config;
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_execution_environment::Hypervisor;
 use ic_ic00_types::CanisterHttpResponsePayload;
-use ic_interfaces::execution_environment::{AvailableMemory, ExecutionParameters, HypervisorError};
-use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
-use ic_interfaces::messages::RequestOrIngress;
-use ic_metrics::MetricsRegistry;
+use ic_interfaces::execution_environment::HypervisorError;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::CanisterStatus;
 use ic_replicated_state::{
     canister_state::execution_state::CustomSectionType, page_map::MemoryRegion,
-    testing::CanisterQueuesTesting, CallContextAction, CanisterState, ExportedFunctions, Global,
-    NetworkTopology, PageIndex, SubnetTopology, SystemState,
+    testing::CanisterQueuesTesting, ExportedFunctions, Global, PageIndex,
 };
 use ic_sys::PAGE_SIZE;
-use ic_system_api::ApiType;
 use ic_test_utilities::execution_environment::{
     assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };
-use ic_test_utilities::types::messages::IngressBuilder;
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_test_utilities::{
     assert_utils::assert_balance_equals,
-    cycles_account_manager::CyclesAccountManagerBuilder,
     metrics::{fetch_histogram_stats, HistogramStats},
-    mock_time,
-    state::{canister_from_exec_state, SystemStateBuilder},
-    types::ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
-    with_test_replica_logger,
 };
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
-    ingress::WasmResult,
-    messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-    methods::{FuncRef, WasmClosure, WasmMethod},
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, Time, UserId,
+    ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, methods::WasmMethod,
+    CanisterId, Cycles, NumBytes, NumInstructions,
 };
-use lazy_static::lazy_static;
-use maplit::btreemap;
 use proptest::prelude::*;
 use proptest::test_runner::{TestRng, TestRunner};
 use std::collections::BTreeSet;
 use std::time::Duration;
-use std::{convert::TryFrom, sync::Arc};
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
-const EMPTY_PAYLOAD: Vec<u8> = Vec::new();
-const MEMORY_ALLOCATION: NumBytes = NumBytes::new(10_000_000);
 const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
-
-lazy_static! {
-    pub static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into();
-}
-
-pub fn execution_parameters_with_unique_subnet_available_memory(
-    canister: &CanisterState,
-    instruction_limit: NumInstructions,
-    subnet_available_memory: SubnetAvailableMemory,
-) -> ExecutionParameters {
-    ExecutionParameters {
-        total_instruction_limit: instruction_limit,
-        slice_instruction_limit: instruction_limit,
-        canister_memory_limit: canister.memory_limit(NumBytes::new(u64::MAX / 2)),
-        subnet_available_memory,
-        compute_allocation: canister.scheduler_state.compute_allocation,
-        subnet_type: SubnetType::Application,
-        execution_mode: ExecutionMode::Replicated,
-    }
-}
-
-pub fn execution_parameters(
-    canister: &CanisterState,
-    instruction_limit: NumInstructions,
-) -> ExecutionParameters {
-    execution_parameters_with_unique_subnet_available_memory(
-        canister,
-        instruction_limit,
-        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-    )
-}
-
-pub fn test_network_topology() -> Arc<NetworkTopology> {
-    let subnet_id = subnet_test_id(1);
-    let subnet_id_2 = subnet_test_id(2);
-    let subnet_type = SubnetType::Application;
-    let routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfe) } => subnet_id,
-            CanisterIdRange{ start: CanisterId::from(0xff), end: CanisterId::from(0xff) } => subnet_id_2,
-        })
-            .unwrap(),
-    );
-    Arc::new(NetworkTopology {
-        routing_table,
-        subnets: btreemap! {
-            subnet_id => SubnetTopology {
-                subnet_type,
-                ..SubnetTopology::default()
-            },
-            subnet_id_2 => SubnetTopology {
-                subnet_type: SubnetType::VerifiedApplication,
-                ..SubnetTopology::default()
-            }
-        },
-        ..NetworkTopology::default()
-    })
-}
-
-pub fn with_hypervisor<F, R>(f: F) -> R
-where
-    F: FnOnce(Hypervisor, std::path::PathBuf) -> R,
-{
-    with_test_replica_logger(|log| {
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let metrics_registry = MetricsRegistry::new();
-        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let hypervisor = Hypervisor::new(
-            Config::default(),
-            &metrics_registry,
-            subnet_test_id(1),
-            SubnetType::Application,
-            log,
-            cycles_account_manager,
-        );
-        f(hypervisor, tmpdir.path().into())
-    })
-}
-
-fn test_api_type_for_update(caller: Option<PrincipalId>, payload: Vec<u8>) -> ApiType {
-    let caller = caller.unwrap_or_else(|| user_test_id(24).get());
-    ApiType::update(
-        mock_time(),
-        payload,
-        Cycles::zero(),
-        caller,
-        call_context_test_id(13),
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn execute_update_with_cycles_memory_time(
-    hypervisor: &Hypervisor,
-    wast: &str,
-    method: &str,
-    payload: Vec<u8>,
-    source: Option<UserId>,
-    receiver: Option<CanisterId>,
-    instructions_limit: NumInstructions,
-    bytes: NumBytes,
-    time: Time,
-    canister_root: std::path::PathBuf,
-) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
-    let source = source.unwrap_or_else(|| user_test_id(24));
-    let receiver = receiver.unwrap_or_else(|| canister_test_id(42));
-
-    let wasm_binary = wabt::wat2wasm(wast).unwrap();
-    let execution_state = hypervisor
-        .create_execution_state(wasm_binary, canister_root, receiver)
-        .unwrap();
-    let mut canister = canister_from_exec_state(execution_state, receiver);
-    canister.system_state.memory_allocation = MemoryAllocation::try_from(bytes).unwrap();
-    canister.system_state.canister_id = receiver;
-
-    let req = IngressBuilder::new()
-        .method_name(method.to_string())
-        .method_payload(payload)
-        .source(source)
-        .receiver(receiver)
-        .build();
-
-    let network_topology = test_network_topology();
-    let execution_parameters = execution_parameters(&canister, instructions_limit);
-    let (canister, num_instructions_left, action, heap_delta) = hypervisor.execute_update(
-        canister,
-        RequestOrIngress::Ingress(req),
-        time,
-        network_topology,
-        execution_parameters,
-    );
-
-    (canister, num_instructions_left, action, heap_delta)
-}
-
-fn execute(
-    api_type: ApiType,
-    system_state: SystemState,
-    wast: &str,
-    func_ref: FuncRef,
-    network_topology: &NetworkTopology,
-) -> Result<Option<WasmResult>, HypervisorError> {
-    let mut result = Ok(None);
-    let result_ref = &mut result;
-    with_hypervisor(move |hypervisor, tmp_path| {
-        let wasm_binary = wabt::wat2wasm(wast).unwrap();
-        let execution_state = hypervisor
-            .create_execution_state(wasm_binary, tmp_path, system_state.canister_id)
-            .unwrap();
-        let execution_parameters = ExecutionParameters {
-            total_instruction_limit: MAX_NUM_INSTRUCTIONS,
-            slice_instruction_limit: MAX_NUM_INSTRUCTIONS,
-            canister_memory_limit: NumBytes::from(4 << 30),
-            subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            compute_allocation: ComputeAllocation::default(),
-            subnet_type: SubnetType::Application,
-            execution_mode: ExecutionMode::Replicated,
-        };
-        *result_ref = hypervisor
-            .execute(
-                api_type,
-                system_state,
-                NumBytes::from(0),
-                execution_parameters,
-                func_ref,
-                execution_state,
-                network_topology,
-            )
-            .0
-            .wasm_result;
-    });
-    result
-}
-
-#[test]
-// Runs unavailable table function
-fn test_function_not_found_error() {
-    let func_idx = 111;
-    let wast = r#"(module
-                  (import "ic0" "trap" (func $ic_trap (param i32) (param i32)))
-                  (func $test (param i64 i32)
-                    (call $ic_trap (i32.const 0) (i32.const 6)))
-                  (table funcref (elem $test))
-                  (memory (export "memory") 1)
-                  (data (i32.const 0) "table!")
-            )"#;
-
-    let api_type = test_api_type_for_update(None, vec![]);
-    let wasm_result = execute(
-        api_type,
-        SystemStateBuilder::default().build(),
-        wast,
-        FuncRef::UpdateClosure(WasmClosure::new(func_idx, 1)),
-        &test_network_topology(),
-    );
-    assert_eq!(
-        wasm_result,
-        Err(HypervisorError::FunctionNotFound(0, func_idx))
-    );
-}
-
-#[test]
-// Runs table function with a wrong signature
-fn test_table_function_unexpected_signature() {
-    let api_type = test_api_type_for_update(None, vec![]);
-    let wasm_result = execute(
-        api_type,
-        SystemStateBuilder::default().build(),
-        r#"(module
-                  (import "ic0" "trap" (func $ic_trap (param i32 i32)))
-                  (func $test
-                    (call $ic_trap (i32.const 0) (i32.const 6)))
-                  (table funcref (elem $test))
-                  (memory (export "memory") 1)
-                  (data (i32.const 0) "table!")
-                )"#,
-        FuncRef::UpdateClosure(WasmClosure::new(0, 1)),
-        &test_network_topology(),
-    );
-    assert_eq!(
-        wasm_result,
-        Err(HypervisorError::ContractViolation(
-            "function invocation does not match its signature".to_string()
-        ))
-    );
-}
-
-#[test]
-// tests calling a func_ref by table index
-fn test_func_ref_call_by_index() {
-    let api_type = test_api_type_for_update(None, vec![0, 1, 2, 3]);
-    let wasm_result = execute(
-        api_type,
-        SystemStateBuilder::default().build(),
-        r#"(module
-                  (import "ic0" "trap" (func $ic_trap (param i32 i32)))
-                  (func $test (param $env i32)
-                    (call $ic_trap (i32.const 0) (i32.const 6)))
-                  (table funcref (elem $test))
-                  (memory (export "memory") 1)
-                  (data (i32.const 0) "table!")
-            )"#,
-        FuncRef::UpdateClosure(WasmClosure::new(0, 0)),
-        &test_network_topology(),
-    );
-    assert_eq!(
-        wasm_result,
-        Err(HypervisorError::CalledTrap("table!".to_string()))
-    );
-}
 
 #[test]
 fn ic0_canister_status_works() {
@@ -1018,82 +746,43 @@ fn ic0_stable64_read_does_not_trap_if_in_bounds() {
 }
 
 #[test]
-fn sys_api_call_time_with_5_nanoseconds() {
-    with_hypervisor(|hypervisor, tmp_path| {
-        assert_eq!(
-            execute_update_with_cycles_memory_time(
-                &hypervisor,
-                r#"
-                (module
-                    (import "ic0" "time" (func $time (result i64)))
-                    (import "ic0" "msg_reply" (func $msg_reply))
-
-                    (func $test
-                        ;; Make sure that time is callable.
-                        (if (i64.ne (call $time) (i64.const 5))
-                            (then (unreachable))
-                        )
-
-                        (call $msg_reply)
-                    )
-
-                    (export "canister_update test" (func $test)))"#,
-                "test",
-                EMPTY_PAYLOAD,
-                None,
-                None,
-                MAX_NUM_INSTRUCTIONS,
-                MEMORY_ALLOCATION,
-                // Five nanoseconds
-                mock_time() + Duration::new(0, 5),
-                tmp_path,
+fn time_with_5_nanoseconds() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "time" (func $time (result i64)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update test")
+                (if (i64.ne (call $time) (i64.const 5))
+                    (then (unreachable))
+                )
+                (call $msg_reply)
             )
-            .2,
-            CallContextAction::Reply {
-                payload: vec![],
-                refund: Cycles::zero(),
-            }
-        );
-    });
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    test.advance_time(Duration::new(0, 5));
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
 }
 
 #[test]
-fn sys_api_call_time_with_5_seconds() {
-    with_hypervisor(|hypervisor, tmp_path| {
-        assert_eq!(
-            execute_update_with_cycles_memory_time(
-                &hypervisor,
-                r#"
-                (module
-                    (import "ic0" "time" (func $time (result i64)))
-                    (import "ic0" "msg_reply" (func $msg_reply))
-
-                    (func $test
-                        ;; Make sure that time is callable.
-                        (if (i64.ne (call $time) (i64.const 5000000000))
-                            (then (unreachable))
-                        )
-                        (call $msg_reply)
-                    )
-
-                    (export "canister_update test" (func $test)))"#,
-                "test",
-                EMPTY_PAYLOAD,
-                None,
-                None,
-                MAX_NUM_INSTRUCTIONS,
-                MEMORY_ALLOCATION,
-                // Five seconds
-                mock_time() + Duration::new(5, 0),
-                tmp_path,
+fn ic0_time_with_5_seconds() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "time" (func $time (result i64)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update test")
+                (if (i64.ne (call $time) (i64.const 5000000000))
+                    (then (unreachable))
+                )
+                (call $msg_reply)
             )
-            .2,
-            CallContextAction::Reply {
-                payload: vec![],
-                refund: Cycles::zero(),
-            }
-        );
-    });
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    test.advance_time(Duration::new(5, 0));
+    let result = test.ingress(canister_id, "test", vec![]).unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
 }
 
 #[test]
