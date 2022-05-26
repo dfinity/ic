@@ -331,6 +331,36 @@ fn eval(ops: Ops) {
                 api::call_cycles_add128(amount_high, amount_low)
             }
 
+            // get the size of the argument data
+            56 => stack.push_int(api::msg_arg_data_size()),
+
+            // copy the argument data
+            57 => {
+                let size = stack.pop_int();
+                let offset = stack.pop_int();
+                stack.push_blob(api::msg_arg_data_copy(offset, size));
+            }
+
+            // get the size of the caller bytes
+            58 => stack.push_int(api::msg_caller_size()),
+
+            // copy the caller bytes
+            59 => {
+                let size = stack.pop_int();
+                let offset = stack.pop_int();
+                stack.push_blob(api::msg_caller_copy(offset, size));
+            }
+
+            // get the size of the reject message
+            60 => stack.push_int(api::msg_reject_msg_size()),
+
+            // copy the reject message
+            61 => {
+                let size = stack.pop_int();
+                let offset = stack.pop_int();
+                stack.push_blob(api::msg_reject_msg_copy(offset, size));
+            }
+
             _ => api::trap_with(&format!("unknown op {}", op)),
         }
     }

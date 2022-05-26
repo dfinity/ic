@@ -4,9 +4,7 @@ use ic_config::execution_environment::Config;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_execution_environment::Hypervisor;
 use ic_ic00_types::CanisterHttpResponsePayload;
-use ic_interfaces::execution_environment::{
-    AvailableMemory, ExecutionParameters, HypervisorError, HypervisorError::ContractViolation,
-};
+use ic_interfaces::execution_environment::{AvailableMemory, ExecutionParameters, HypervisorError};
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_interfaces::messages::RequestOrIngress;
 use ic_metrics::MetricsRegistry;
@@ -38,7 +36,7 @@ use ic_test_utilities::{
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
     ingress::WasmResult,
-    messages::{RejectContext, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
+    messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     methods::{FuncRef, WasmClosure, WasmMethod},
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     PrincipalId, Time, UserId,
@@ -135,10 +133,6 @@ where
     })
 }
 
-fn test_func_ref() -> FuncRef {
-    FuncRef::Method(WasmMethod::Update(String::from("test")))
-}
-
 fn test_api_type_for_update(caller: Option<PrincipalId>, payload: Vec<u8>) -> ApiType {
     let caller = caller.unwrap_or_else(|| user_test_id(24).get());
     ApiType::update(
@@ -147,49 +141,6 @@ fn test_api_type_for_update(caller: Option<PrincipalId>, payload: Vec<u8>) -> Ap
         Cycles::zero(),
         caller,
         call_context_test_id(13),
-    )
-}
-
-fn test_api_type_for_reject(reject_context: RejectContext) -> ApiType {
-    ApiType::reject_callback(
-        mock_time(),
-        reject_context,
-        Cycles::zero(),
-        call_context_test_id(13),
-        false,
-    )
-}
-
-fn execute_update(
-    hypervisor: &Hypervisor,
-    wast: &str,
-    method: &str,
-    payload: Vec<u8>,
-    canister_root: std::path::PathBuf,
-) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
-    execute_update_on(hypervisor, wast, method, payload, None, None, canister_root)
-}
-
-fn execute_update_on(
-    hypervisor: &Hypervisor,
-    wast: &str,
-    method: &str,
-    payload: Vec<u8>,
-    source: Option<UserId>,
-    receiver: Option<CanisterId>,
-    canister_root: std::path::PathBuf,
-) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
-    execute_update_with_cycles_memory_time(
-        hypervisor,
-        wast,
-        method,
-        payload,
-        source,
-        receiver,
-        MAX_NUM_INSTRUCTIONS,
-        NumBytes::from(0),
-        mock_time(),
-        canister_root,
     )
 }
 
@@ -1157,7 +1108,7 @@ fn ic0_msg_arg_data_size_is_not_available_in_reject_callback() {
             "update",
             call_args()
                 .other_side(callee)
-                .on_reject(wasm().message_payload().append_and_reply()),
+                .on_reject(wasm().msg_arg_data_size().int_to_blob().append_and_reply()),
         )
         .build();
     let err = test.ingress(caller_id, "update", caller).unwrap_err();
@@ -1244,31 +1195,27 @@ fn ic0_msg_caller_size_and_copy_work_in_query_calls() {
 }
 
 #[test]
-// Tests that ic0_msg_arg_data_copy cannot be accessed in a reject callback
-fn sys_api_call_arg_data_copy_fail() {
-    let api_type = test_api_type_for_reject(RejectContext {
-        code: RejectCode::CanisterError,
-        message: "error".to_string(),
-    });
-    let wasm_result = execute(
-        api_type,
-        SystemStateBuilder::default().build(),
-        r#"
-                (module
-                  (import "ic0" "msg_arg_data_copy"
-                    (func $ic0_msg_arg_data_copy (param i32 i32 i32)))
-                  (func $test
-                    (call $ic0_msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 0)))
-                  (memory 1)
-                  (export "canister_update test" (func $test)))"#,
-        test_func_ref(),
-        &test_network_topology(),
-    );
-    assert_eq!(
-        wasm_result,
-        Err(HypervisorError::ContractViolation(
-            "\"ic0_msg_arg_data_copy\" cannot be executed in reject callback mode".to_string()
-        ))
+fn ic0_msg_arg_data_copy_is_not_available_in_reject_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().message_payload().reject().build();
+    let caller = wasm()
+        .call_simple(
+            callee_id.get(),
+            "update",
+            call_args()
+                .other_side(callee)
+                .on_reject(wasm().msg_arg_data_copy(0, 1).append_and_reply()),
+        )
+        .build();
+    let err = test.ingress(caller_id, "update", caller).unwrap_err();
+    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
+    assert!(
+        err.description()
+            .contains("\"ic0_msg_arg_data_copy\" cannot be executed in reject callback mode"),
+        "Unexpected error message: {}",
+        err.description()
     );
 }
 
@@ -1334,7 +1281,7 @@ fn ic0_msg_caller_size_is_not_available_in_reject_callback() {
             "update",
             call_args()
                 .other_side(callee)
-                .on_reject(wasm().caller().append_and_reply()),
+                .on_reject(wasm().msg_caller_size().int_to_blob().append_and_reply()),
         )
         .build();
     let err = test.ingress(caller_id, "update", caller).unwrap_err();
@@ -1348,32 +1295,27 @@ fn ic0_msg_caller_size_is_not_available_in_reject_callback() {
 }
 
 #[test]
-fn test_msg_caller_copy_in_reject() {
-    let api_type = test_api_type_for_reject(RejectContext::new(
-        RejectCode::CanisterError,
-        "canister_reject".to_string(),
-    ));
-    let wasm_result = execute(
-        api_type,
-        SystemStateBuilder::default().build(),
-        r#"
-                (module
-                  (import "ic0" "msg_caller_copy"
-                    (func $msg_caller_copy (param i32 i32 i32)))
-                  (func $test
-                    (call $msg_caller_copy (i32.const 0) (i32.const 0) (i32.const 0)))
-
-                  (memory (;0;) 1)
-                  (export "memory" (memory 0))
-                  (export "canister_update test" (func $test)))"#,
-        test_func_ref(),
-        &test_network_topology(),
-    );
-    assert_eq!(
-        wasm_result,
-        Err(ContractViolation(
-            "\"ic0_msg_caller_copy\" cannot be executed in reject callback mode".to_string()
-        ))
+fn ic0_msg_caller_copy_is_not_available_in_reject_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().message_payload().reject().build();
+    let caller = wasm()
+        .call_simple(
+            callee_id.get(),
+            "update",
+            call_args()
+                .other_side(callee)
+                .on_reject(wasm().msg_caller_copy(0, 1).append_and_reply()),
+        )
+        .build();
+    let err = test.ingress(caller_id, "update", caller).unwrap_err();
+    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
+    assert!(
+        err.description()
+            .contains("\"ic0_msg_caller_copy\" cannot be executed in reject callback mode"),
+        "Unexpected error message: {}",
+        err.description()
     );
 }
 
@@ -1464,7 +1406,11 @@ fn ic0_msg_reject_msg_size_and_copy_work() {
 fn ic0_msg_reject_msg_size_is_not_available_outside_reject_callback() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let payload = wasm().reject_message().append_and_reply().build();
+    let payload = wasm()
+        .msg_reject_msg_size()
+        .int_to_blob()
+        .append_and_reply()
+        .build();
     let err = test.ingress(canister_id, "update", payload).unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert!(
@@ -1475,67 +1421,43 @@ fn ic0_msg_reject_msg_size_is_not_available_outside_reject_callback() {
     );
 }
 
-const REJECT_MSG_COPY_WAT: &str = r#"
-                (module
-                  (import "ic0" "msg_reply" (func $msg_reply))
-                  (import "ic0" "msg_reply_data_append"
-                    (func $msg_reply_data_append (param i32 i32)))
-                  (import "ic0" "msg_reject_msg_copy" (func $msg_reject_msg_copy (param i32 i32 i32)))
-                  (func $test
-                    (call $msg_reject_msg_copy
-                        (i32.const 4)     ;; heap dst = 4
-                        (i32.const 0)     ;; offset = 0
-                        (i32.const 8))    ;; length = 8
-                    (call $msg_reply_data_append
-                        (i32.const 0)      ;; heap offset = 0
-                        (i32.const 12))    ;; length = 12 (len("xxxx") + len("rejected"))
-                    (call $msg_reply))
-                  (memory (;0;) 1)
-                  (export "memory" (memory 0))
-                  (data (i32.const 0) "xxxx")
-                  (export "canister_update test" (func $test)))"#;
-
 #[test]
-fn sys_api_call_reject_msg_copy_called_outside_reject_callback() {
-    with_hypervisor(|hypervisor, tmp_path| {
-        assert_eq!(
-            execute_update(
-                &hypervisor,
-                REJECT_MSG_COPY_WAT,
-                "test",
-                EMPTY_PAYLOAD,
-                tmp_path,
-            )
-            .2,
-            CallContextAction::Fail {
-                error: HypervisorError::ContractViolation(
-                    "\"ic0_msg_reject_msg_copy\" cannot be executed in update mode".to_string()
-                ),
-                refund: Cycles::zero(),
-            }
-        );
-    });
+fn ic0_msg_reject_msg_copy_is_not_available_outside_reject_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm().msg_reject_msg_copy(0, 1).append_and_reply().build();
+    let err = test.ingress(canister_id, "update", payload).unwrap_err();
+    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
+    assert!(
+        err.description()
+            .contains("\"ic0_msg_reject_msg_copy\" cannot be executed in update mode"),
+        "Unexpected error message: {}",
+        err.description()
+    );
 }
 
 #[test]
-fn sys_api_call_reject_msg_copy_called_with_length_that_exceeds_message_length() {
-    let api_type = test_api_type_for_reject(RejectContext::new(
-        RejectCode::CanisterReject,
-        "error".to_string(),
-    ));
-    let wasm_result = execute(
-        api_type,
-        SystemStateBuilder::default().build(),
-        REJECT_MSG_COPY_WAT,
-        test_func_ref(),
-        &test_network_topology(),
-    );
-    let err = wasm_result.unwrap_err();
-    assert_eq!(
-        err,
-        HypervisorError::ContractViolation(
-            "ic0.msg_reject_msg_copy msg: src=0 + length=8 exceeds the slice size=5".to_string()
+fn ic0_msg_reject_msg_copy_called_with_length_that_exceeds_message_length() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().push_bytes("error".as_bytes()).reject().build();
+    let caller = wasm()
+        .call_simple(
+            callee_id.get(),
+            "update",
+            call_args()
+                .other_side(callee)
+                .on_reject(wasm().msg_reject_msg_copy(0, 8).append_and_reply()),
         )
+        .build();
+    let err = test.ingress(caller_id, "update", caller).unwrap_err();
+    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
+    assert!(
+        err.description()
+            .contains("ic0.msg_reject_msg_copy msg: src=0 + length=8 exceeds the slice size=5"),
+        "Unexpected error message: {}",
+        err.description()
     );
 }
 
@@ -4078,4 +4000,35 @@ fn cannot_stop_canister_with_open_call_context() {
         test.canister_state(a_id).system_state.status,
         CanisterStatus::Stopped
     );
+}
+
+#[test]
+fn can_use_more_instructions_during_install_code() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(10_000)
+        .with_install_code_instruction_limit(1_000_000)
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let work = wasm().stable_grow(1).stable_fill(0, 42, 65_536).build();
+
+    // The update call should hit the instruction limit and fail.
+    let err = test
+        .ingress(canister_id, "update", work.clone())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterInstructionLimitExceeded, err.code());
+
+    // Set the pre-upgrade hook to do the same operation.
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().set_pre_upgrade(work).reply().build(),
+        )
+        .unwrap();
+    assert_eq!(WasmResult::Reply(vec![]), result);
+
+    // An upgrade of the canister succeeds because `install_code` has a
+    // higher instruction limit.
+    let result = test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec());
+    assert_eq!(Ok(()), result);
 }
