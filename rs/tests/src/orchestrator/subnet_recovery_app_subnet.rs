@@ -28,9 +28,7 @@ use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_P
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::node_reassignment_test::{can_read_msg, store_message};
-use crate::orchestrator::utils::upgrade::{
-    assert_assigned_replica_version_v2, can_install_canister,
-};
+use crate::orchestrator::utils::upgrade::{assert_assigned_replica_version, can_install_canister};
 use crate::util::*;
 use ic_cup_explorer::get_catchup_content;
 use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType};
@@ -230,7 +228,7 @@ pub fn test(env: TestEnv) {
         .exec()
         .expect("Execution of step failed");
 
-    assert_assigned_replica_version_v2(&app_node, &broken_replica_version, env.logger());
+    assert_assigned_replica_version(&app_node, &broken_replica_version, env.logger());
     info!(
         logger,
         "Successfully upgraded subnet {} to {}", subnet_id, broken_replica_version
@@ -324,7 +322,7 @@ pub fn test(env: TestEnv) {
         .nodes()
         .collect();
     for node in all_app_nodes {
-        assert_assigned_replica_version_v2(&node, &working_version, env.logger());
+        assert_assigned_replica_version(&node, &working_version, env.logger());
         info!(
             logger,
             "Healthy upgrade of assigned node {} to {}", node.node_id, working_version
@@ -332,7 +330,7 @@ pub fn test(env: TestEnv) {
     }
 
     env.topology_snapshot().unassigned_nodes().for_each(|n| {
-        assert_assigned_replica_version_v2(&n, &working_version, env.logger());
+        assert_assigned_replica_version(&n, &working_version, env.logger());
         info!(
             logger,
             "Healthy upgrade of unassigned node {} to {}", n.node_id, working_version

@@ -8,7 +8,6 @@ use crate::{
 };
 use anyhow::{bail, Result};
 use ic_canister_client::Sender;
-use ic_fondue::ic_manager::IcEndpoint;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::NeuronId;
@@ -100,33 +99,10 @@ pub(crate) fn fetch_unassigned_node_version(endpoint: &IcNodeSnapshot) -> Result
     Ok(version)
 }
 
-/// Waits until the endpoint is healthy and running the given replica version.
+/// Waits until the node is healthy and running the given replica version.
 /// Panics if the timeout is reached while waiting.
 #[allow(dead_code)]
 pub(crate) fn assert_assigned_replica_version(
-    endpoint: &IcEndpoint,
-    expected_version: &str,
-    logger: &Logger,
-) {
-    for i in 1..=50 {
-        let res = get_assigned_replica_version(endpoint);
-        if res.is_err() {
-            info!(logger, "{:?}", res);
-        }
-        let fetched_version = res.ok();
-        info!(logger, "Try: {}. replica version: {:?}", i, fetched_version);
-        if Some(expected_version.to_string()) == fetched_version {
-            return;
-        };
-        std::thread::sleep(std::time::Duration::from_secs(10));
-    }
-
-    panic!("Couldn't detect the replica version {}", expected_version)
-}
-
-/// Waits until the endpoint is healthy and running the given replica version.
-/// Panics if the timeout is reached while waiting.
-pub(crate) fn assert_assigned_replica_version_v2(
     node: &IcNodeSnapshot,
     expected_version: &str,
     logger: Logger,
@@ -135,7 +111,7 @@ pub(crate) fn assert_assigned_replica_version_v2(
         logger,
         secs(600),
         secs(10),
-        || match get_assigned_replica_version_v2(node) {
+        || match get_assigned_replica_version(node) {
             Ok(ver) if ver == expected_version => Ok(()),
             Ok(ver) => bail!("Replica version: {:?}", ver),
             Err(err) => bail!("Error reading replica version: {:?}", err),
@@ -144,23 +120,8 @@ pub(crate) fn assert_assigned_replica_version_v2(
     .expect("Can't fetch expected replica version");
 }
 
-/// Gets the replica version from the endpoint if it is healthy.
-#[allow(dead_code)]
-pub(crate) fn get_assigned_replica_version(endpoint: &IcEndpoint) -> Result<String, String> {
-    let version = match block_on(async { endpoint.status().await }) {
-        Ok(status) if Some(ReplicaHealthStatus::Healthy) == status.replica_health_status => status,
-        Ok(_) => return Err("Replica is not healty".to_string()),
-        Err(err) => return Err(err.to_string()),
-    }
-    .impl_version;
-    match version {
-        Some(ver) => Ok(ver),
-        None => Err("No version found in status".to_string()),
-    }
-}
-
-/// Gets the replica version from the endpoint if it is healthy.
-pub(crate) fn get_assigned_replica_version_v2(node: &IcNodeSnapshot) -> Result<String, String> {
+/// Gets the replica version from the node if it is healthy.
+pub(crate) fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<String, String> {
     let version = match node.status() {
         Ok(status) if Some(ReplicaHealthStatus::Healthy) == status.replica_health_status => status,
         Ok(_) => return Err("Replica is not healty".to_string()),

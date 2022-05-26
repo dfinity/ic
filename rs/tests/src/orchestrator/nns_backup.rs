@@ -30,8 +30,8 @@ use crate::{
             wait_until_authentication_is_granted, AuthMean,
         },
         upgrade::{
-            assert_assigned_replica_version_v2, bless_replica_version,
-            get_assigned_replica_version_v2, update_subnet_replica_version, UpdateImageType,
+            assert_assigned_replica_version, bless_replica_version, get_assigned_replica_version,
+            update_subnet_replica_version, UpdateImageType,
         },
     },
     util::block_on,
@@ -76,7 +76,7 @@ pub fn test(env: TestEnv) {
 
     let node_ip: IpAddr = nns_node.get_ip_addr();
     let subnet_id = env.topology_snapshot().root_subnet_id();
-    let replica_version = get_assigned_replica_version_v2(&nns_node).unwrap();
+    let replica_version = get_assigned_replica_version(&nns_node).unwrap();
 
     // Update the registry with two new pairs of keys.
     let (backup_private_key, backup_public_key) = generate_key_strings();
@@ -118,7 +118,7 @@ pub fn test(env: TestEnv) {
         log,
         "nns_backup_test: Wait until the upgrade happens and the backup keys are made available"
     );
-    assert_assigned_replica_version_v2(&nns_node, &test_version, env.logger());
+    assert_assigned_replica_version(&nns_node, &test_version, env.logger());
     wait_until_authentication_is_granted(&node_ip, "backup", &backup_mean);
 
     info!(

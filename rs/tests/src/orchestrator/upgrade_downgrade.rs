@@ -72,7 +72,7 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
         .expect("NNS canisters not installed");
     info!(logger, "NNS canisters are installed.");
 
-    let original_branch_version = get_assigned_replica_version_v2(&nns_node).unwrap();
+    let original_branch_version = get_assigned_replica_version(&nns_node).unwrap();
     // We have to upgrade to `<VERSION>-test` because the original version is stored without the
     // download URL in the registry.
     let branch_version = format!("{}-test", original_branch_version);
@@ -145,7 +145,7 @@ fn downgrade_upgrade_roundtrip(
     upgrade_to(nns_node, subnet_id, &subnet_node, target_version, &logger);
 
     start_node(&logger, &faulty_node);
-    assert_assigned_replica_version_v2(&faulty_node, target_version, env.logger());
+    assert_assigned_replica_version(&faulty_node, target_version, env.logger());
 
     assert!(block_on(can_read_msg(
         &logger,
@@ -172,7 +172,7 @@ fn downgrade_upgrade_roundtrip(
     let can_id_3 = block_on(store_message(&subnet_node.get_public_url(), msg_3));
 
     start_node(&logger, &faulty_node);
-    assert_assigned_replica_version_v2(&faulty_node, branch_version, env.logger());
+    assert_assigned_replica_version(&faulty_node, branch_version, env.logger());
 
     for (c, m) in &[(can_id, msg), (can_id_2, msg_2), (can_id_3, msg_3)] {
         assert!(block_on(can_read_msg(
@@ -203,7 +203,7 @@ fn upgrade_to(
         &ic_types::ReplicaVersion::try_from(target_version).unwrap(),
         subnet_id,
     ));
-    assert_assigned_replica_version_v2(subnet_node, target_version, logger.clone());
+    assert_assigned_replica_version(subnet_node, target_version, logger.clone());
     info!(
         logger,
         "Successfully upgraded subnet {} to {}", subnet_id, target_version
