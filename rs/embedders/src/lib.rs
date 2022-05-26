@@ -19,6 +19,7 @@ pub struct WasmExecutionInput {
     pub execution_state: ExecutionState,
 }
 
+#[derive(Debug)]
 pub struct InstanceRunResult {
     pub dirty_pages: Vec<PageIndex>,
     pub stable_memory_size: NumWasmPages,

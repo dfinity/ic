@@ -11,7 +11,7 @@ mod test {
     use ic_interfaces::execution_environment::HypervisorError;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::wasmtime_instance::DEFAULT_NUM_INSTRUCTIONS;
-    use ic_types::PrincipalId;
+    use ic_types::{methods::WasmClosure, PrincipalId};
 
     use super::*;
 
@@ -580,5 +580,68 @@ mod test {
             )
             .with_globals(vec![Global::I64(0); DEFAULT_GLOBALS_LENGTH + 1])
             .build();
+    }
+
+    #[test]
+    fn calling_function_with_invalid_index_fails() {
+        let func_idx = 111;
+        let wat = r#"
+            (module
+                (import "ic0" "trap" (func $ic_trap (param i32) (param i32)))
+                (func $test (param i64 i32)
+                    (call $ic_trap (i32.const 0) (i32.const 6))
+                )
+                (table funcref (elem $test))
+                (memory (export "memory") 1)
+            )"#;
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance
+            .run(FuncRef::UpdateClosure(WasmClosure::new(func_idx, 1)))
+            .unwrap_err();
+        assert_eq!(err, HypervisorError::FunctionNotFound(0, func_idx));
+    }
+
+    #[test]
+    fn calling_function_with_invalid_signature_fails() {
+        let wat = r#"
+            (module
+                (import "ic0" "trap" (func $ic_trap (param i32 i32)))
+                (func $test
+                    (call $ic_trap (i32.const 0) (i32.const 6))
+                )
+                (table funcref (elem $test))
+                (memory (export "memory") 1)
+            )"#;
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance
+            .run(FuncRef::UpdateClosure(WasmClosure::new(0, 1)))
+            .unwrap_err();
+        assert_eq!(
+            err,
+            HypervisorError::ContractViolation(
+                "function invocation does not match its signature".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn calling_function_by_index() {
+        let wat = r#"
+            (module
+                (import "ic0" "trap" (func $ic_trap (param i32 i32)))
+                (func $test (param i32)
+                    (call $ic_trap (i32.const 0) (i32.const 6))
+                )
+                (table funcref (elem $test))
+                (memory (export "memory") 1)
+            )"#;
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance
+            .run(FuncRef::UpdateClosure(WasmClosure::new(0, 0)))
+            .unwrap_err();
+        assert_eq!(
+            err,
+            HypervisorError::CalledTrap(std::str::from_utf8(&[0; 6]).unwrap().to_string())
+        );
     }
 }
