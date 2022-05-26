@@ -9,10 +9,12 @@ ic-config = { path = "../config" }
 ic-consensus-message = { path = "./message" }
 ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
+ic-crypto-hash = { path = "../crypto/hash" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs", optional = true }
 ic-error-types = { path = "../types/error_types" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
+ic-interfaces-canister-http-adapter-client = { path = "../interfaces/canister_http_adapter_client" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }

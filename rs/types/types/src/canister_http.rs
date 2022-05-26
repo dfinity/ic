@@ -106,22 +106,22 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CanisterHttpRequest {
-    pub id: CanisterHttpRequestId,
     pub timeout: Time,
+    pub id: CallbackId,
     pub content: CanisterHttpRequestContext,
 }
 
 /// The content of a response of a after the filtering step.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CanisterHttpResponse {
-    pub id: CanisterHttpRequestId,
+    pub id: CallbackId,
     pub timeout: Time,
     pub content: CanisterHttpResponseContent,
 }
 
 impl CountBytes for CanisterHttpResponse {
     fn count_bytes(&self) -> usize {
-        size_of::<CanisterHttpRequestId>() + size_of::<Time>() + self.content.count_bytes()
+        size_of::<CallbackId>() + size_of::<Time>() + self.content.count_bytes()
     }
 }
 
@@ -198,7 +198,7 @@ impl CountBytes for CanisterHttpResponseWithConsensus {
     }
 }
 
-/// A collection of signature shares supporting the same [`CanisterHttpRequestId`] with different hashes.
+/// A collection of signature shares supporting the same [`CallbackId`] with different hashes.
 ///
 /// This can be used as a proof, that consensus can not be reached for this call, as sufficiently many nodes
 /// have seen divergent content.
@@ -210,7 +210,7 @@ pub struct CanisterHttpResponseDivergence {
 /// Metadata about some [`CanisterHttpResponseContent`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CanisterHttpResponseMetadata {
-    pub id: CanisterHttpRequestId,
+    pub id: CallbackId,
     pub timeout: Time,
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
     pub registry_version: RegistryVersion,
