@@ -70,7 +70,7 @@ use ic_nns_governance::{
     },
 };
 use ledger_canister::{AccountIdentifier, Memo, Tokens};
-use maplit::hashmap;
+use maplit::{btreemap, hashmap};
 use proptest::prelude::{prop_assert, prop_assert_eq, proptest, TestCaseError};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 
@@ -10226,4 +10226,126 @@ fn test_long_proposal_title_is_invalid() {
 fn test_accept_reasonable_proposal_title() {
     let result = validate_proposal_title(&Some("When In The Course of Human Events".to_string()));
     assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn zero_total_reward_shares() {
+    // Step 1: Prepare the world.
+
+    let genesis_timestamp_seconds = 1;
+
+    // There needs to be > 0 tokens in the world for this test.
+    let account_id = AccountIdentifier::new(
+        ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
+        None,
+    );
+    let helper = fake::FakeDriver::default().with_ledger_accounts(vec![fake::FakeAccount {
+        id: account_id,
+        amount_e8s: 1_000_000_000_000,
+    }]);
+
+    // Make sure that we begin the test a "long" time after the UNIX epoch.
+    let now = helper.state.lock().unwrap().now;
+    assert!(now > 30 * 24 * 60 * 60);
+
+    // Step 1.1: Craft a neuron with a "net" stake (i.e. cached stake - fees) of 0.
+    let neuron_id = 42;
+    // A number whose only significance is that it is not Protocol Buffers default (i.e. 0.0).
+    let maturity_e8s_equivalent = 3;
+    let depleted_neuron = Neuron {
+        id: Some(NeuronId { id: neuron_id }),
+        cached_neuron_stake_e8s: 1_000_000_000,
+        neuron_fees_e8s: 1_000_000_000,
+        maturity_e8s_equivalent,
+        ..Default::default()
+    };
+    let voting_power = depleted_neuron.voting_power(now);
+    assert_eq!(voting_power, 0);
+
+    // Step 1.2: Craft a ProposalData that is ReadyToSettle.
+    let proposal_id = 99;
+    let do_nothing_proposal = Proposal {
+        action: Some(proposal::Action::Motion(Motion {
+            motion_text: "For great justice.".to_string(),
+        })),
+        ..Default::default()
+    };
+    let ready_to_settle_proposal_data = ProposalData {
+        id: Some(ProposalId { id: proposal_id }),
+        proposal: Some(do_nothing_proposal),
+        ballots: hashmap! {
+            depleted_neuron.id.as_ref().unwrap().id => Ballot {
+                vote: Vote::Yes as i32,
+                voting_power,
+            },
+        },
+        ..Default::default()
+    };
+    let wait_for_quiet_threshold_seconds = 99;
+    assert_eq!(
+        ready_to_settle_proposal_data.reward_status(now, wait_for_quiet_threshold_seconds),
+        ProposalRewardStatus::ReadyToSettle,
+    );
+
+    // Step 1.3: Craft a governance.
+    let proto = GovernanceProto {
+        genesis_timestamp_seconds,
+        wait_for_quiet_threshold_seconds,
+        short_voting_period_seconds: wait_for_quiet_threshold_seconds,
+
+        proposals: btreemap! {
+            ready_to_settle_proposal_data.id.unwrap().id => ready_to_settle_proposal_data,
+        },
+        neurons: hashmap! {
+            depleted_neuron.id.as_ref().unwrap().id => depleted_neuron,
+        },
+
+        // Last reward event was a "long time ago".
+        // This should cause rewards to be distributed.
+        latest_reward_event: Some(RewardEvent {
+            day_after_genesis: 1,
+            actual_timestamp_seconds: 1,
+            settled_proposals: vec![],
+            distributed_e8s_equivalent: 0,
+        }),
+
+        ..Default::default()
+    };
+    let mut governance = Governance::new(proto, helper.get_fake_env(), helper.get_fake_ledger());
+    // Prevent gc.
+    governance.latest_gc_timestamp_seconds = now;
+
+    // Step 2: Run code under test.
+    governance.run_periodic_tasks().await;
+
+    // Step 3: Inspect results. The main thing is to make sure that we did not
+    // divide by zero. If that happened, it would show up in a couple places:
+    // neuron maturity, and latest_reward_event.
+
+    // Step 3.1: Inspect the neuron.
+    let neuron = governance.proto.neurons.get(&neuron_id).unwrap();
+    // We expect no change to the neuron's maturity.
+    assert_eq!(
+        neuron.maturity_e8s_equivalent, maturity_e8s_equivalent,
+        "neuron: {:#?}",
+        neuron,
+    );
+
+    // Step 3.2: Inspect the latest_reward_event.
+    let reward_event = governance.proto.latest_reward_event.as_ref().unwrap();
+    assert_eq!(
+        reward_event
+            .settled_proposals
+            .iter()
+            .map(|p| p.id)
+            .collect::<Vec<_>>(),
+        vec![proposal_id],
+        "{:#?}",
+        reward_event,
+    );
+    assert_eq!(
+        reward_event.distributed_e8s_equivalent, 0,
+        "{:#?}",
+        reward_event,
+    );
 }

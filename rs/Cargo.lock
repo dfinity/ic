@@ -5660,6 +5660,7 @@ dependencies = [
 name = "ic-nervous-system-common"
 version = "0.8.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "build-info",
  "build-info-build",
@@ -5673,6 +5674,7 @@ dependencies = [
  "ic-ic00-types",
  "ic-nns-governance",
  "ledger-canister",
+ "num",
  "prost",
  "serde",
 ]
@@ -5771,6 +5773,7 @@ dependencies = [
 name = "ic-nns-governance"
 version = "0.8.0"
 dependencies = [
+ "anyhow",
  "assert_matches",
  "async-trait",
  "build-info",
@@ -5800,6 +5803,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ledger-canister",
  "maplit",
+ "num",
  "on_wire",
  "pretty_assertions 1.0.0",
  "proptest 1.0.0",
@@ -5811,6 +5815,7 @@ dependencies = [
  "strum 0.23.0",
  "strum_macros 0.23.1",
  "tempfile",
+ "tokio",
  "tokio-test",
 ]
 
@@ -9127,6 +9132,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "num"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43db66d1170d347f9a065114077f7dccb00c1b9478c89384490a3425279a4606"
+dependencies = [
+ "num-bigint 0.4.2",
+ "num-complex",
+ "num-integer",
+ "num-iter",
+ "num-rational 0.4.0",
+ "num-traits",
+]
+
+[[package]]
 name = "num-bigint"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9234,9 +9253,9 @@ dependencies = [
 
 [[package]]
 name = "num-integer"
-version = "0.1.43"
+version = "0.1.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d59457e662d541ba17869cf51cf177c0b5f0cbf476c66bdc90bf1edac4f875b"
+checksum = "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"
 dependencies = [
  "autocfg 1.1.0",
  "num-traits",
@@ -9272,6 +9291,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d41702bd167c2df5520b384281bc111a4b5efcf7fbc4c9c222c815b07e0a6a6a"
 dependencies = [
  "autocfg 1.1.0",
+ "num-bigint 0.4.2",
  "num-integer",
  "num-traits",
 ]

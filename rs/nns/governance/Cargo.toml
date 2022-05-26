@@ -26,8 +26,10 @@ harness = false
 # This MUST be kept in sync with build-info-build in the [build-dependencies] section!
 build-info = { version = "0.0.26", default-features = false, features = [] }
 
+anyhow = "1.0.57"
 async-trait = "0.1.42"
 candid = "0.7.4"
+comparable = { version = "0.5", features = ["derive"] }
 cycles-minting-canister = { path = "../cmc" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
@@ -42,6 +44,7 @@ ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-protobuf = { path = "../../protobuf" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+num = "0.4.0"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = "0.10"
 serde = { version = "1.0", features = ["derive"] }
@@ -50,7 +53,6 @@ rand_core = "0.5.1"
 registry-canister = { path = "../../registry/canister" }
 strum_macros = "0.23.0"
 strum = "0.23.0"
-comparable = { version = "0.5", features = ["derive"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 csv = "1.1"
@@ -77,6 +79,7 @@ ledger-canister = { path = "../../rosetta-api/ledger_canister", features = ["tes
 pretty_assertions = "1.0"
 proptest = "1.0"
 tempfile = "3.1.0"
+tokio = { version = "1.9.0", features = [ "full" ] }
 tokio-test = "0.4.2"
 
 [features]
