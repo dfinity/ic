@@ -1,5 +1,6 @@
 use candid::{CandidType, Deserialize};
 use dfn_core::api::{call, CanisterId};
+use num::{rational::Ratio, BigInt};
 use serde::Serialize;
 
 use std::fmt;
@@ -80,4 +81,95 @@ pub async fn get_canister_status(canister_id: PrincipalId) -> CanisterStatusResu
     )
     .await
     .unwrap()
+}
+
+/// (Concisely) converts an integer to a rational.
+///
+/// You might be thinking, "wait, shouldn't the num library supply a conversion
+/// function?". Well, it does, but it converts from I to Ratio<I> where I is
+/// some primitive integer type, but we want to convert from I to Ratio<BigInt>
+/// to avoid (or at least minimize) loss of precision. Eliminating (or at least
+/// minimizing) loss of precision might be a little more expensive, but it is
+/// gentler on the feeble human brain. Maybe, we could get away with using
+/// Ratio<u64>, but why optimize prematurely, when it is a Well-Known Fact that
+/// "premature optimization is the root of all evil"?
+pub fn i2r(i: impl Into<BigInt>) -> Ratio<BigInt> {
+    Ratio::from(i.into())
+}
+
+pub fn percent(i: impl Into<BigInt>) -> Ratio<BigInt> {
+    i2r(i) / i2r(100)
+}
+
+/// Convert a rational number into a u64.
+///
+/// To successfully convert, the argument must
+///
+///   1. not have a fractional part (i.e. must be an actual integer), and
+///   2. it must not overflow u64 (i.e. be <= max and >= min)
+pub fn try_r2u64(r: &Ratio<BigInt>) -> anyhow::Result<u64> {
+    let fract = r.fract();
+    if fract != i2r(0) {
+        anyhow::bail!(
+            "Could not convert rational to u64, because a fractional part remains: {}",
+            r
+        );
+    }
+
+    if r < &i2r(0) {
+        anyhow::bail!(
+            "Could not convert rational to u64, because the argument is negative (underflow?): {}",
+            r
+        );
+    }
+
+    let (n, d) = r.clone().into();
+    debug_assert_eq!(d, BigInt::from(1), "{:#?}", r);
+
+    let mut chunks = n.iter_u64_digits();
+    let first_chunk = chunks.next().unwrap_or(0);
+
+    // Assert that there are no more chunks.
+    let big_chunks = chunks.collect::<Vec<u64>>();
+    if big_chunks != Vec::<u64>::new() {
+        anyhow::bail!(
+            "Could not convert rational to u64, because of overflow: {}",
+            r
+        );
+    }
+
+    Ok(first_chunk)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn try_r2u64_ok() {
+        for i in [0, 1, 2, 3, 42, u64::MAX - 1, u64::MAX] {
+            assert!(try_r2u64(&i2r(i)).is_ok());
+        }
+    }
+
+    #[test]
+    fn try_r2u64_fract() {
+        #![allow(clippy::approx_constant)]
+
+        let five_fourths = i2r(5) / i2r(4);
+        assert!(try_r2u64(&five_fourths).is_err());
+
+        assert!(try_r2u64(&Ratio::from_float(3.14).unwrap()).is_err());
+    }
+
+    #[test]
+    fn try_r2u64_negative() {
+        assert!(try_r2u64(&i2r(-1)).is_err());
+    }
+
+    #[test]
+    fn try_r2u64_too_big() {
+        let slightly_too_large = i2r(u64::MAX) + i2r(1);
+        assert!(try_r2u64(&slightly_too_large).is_err());
+    }
 }
