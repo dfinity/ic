@@ -16,7 +16,7 @@ use hex_literal::hex;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal_canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("6243c3af6d8dd11b9aec8a1744f1e435ec200f6f880637a6c000fe2d251811f4");
+    hex!("c54cce351c28b6334bfe6e88066128fc51cd374306be6bbbbf58849c3c70e2b5");
 
 /// Operands used in encoding UC payloads.
 enum Ops {
@@ -59,6 +59,12 @@ enum Ops {
     Int64ToBlob = 50,
     AcceptCycles128 = 54,
     CallCyclesAdd128 = 55,
+    MsgArgDataSize = 56,
+    MsgArgDataCopy = 57,
+    MsgCallerSize = 58,
+    MsgCallerCopy = 59,
+    MsgRejectMsgSize = 60,
+    MsgRejectMsgCopy = 61,
 }
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
@@ -385,6 +391,51 @@ impl PayloadBuilder {
         let call = call.into();
         let call_args = call.get_call_args();
         self = self.call_with_cycles(call.callee, call.method, call_args, call.cycles);
+        self
+    }
+
+    /// Pushes the size of the argument data onto the stack.
+    pub fn msg_arg_data_size(mut self) -> Self {
+        self.0.push(Ops::MsgArgDataSize as u8);
+        self
+    }
+
+    /// Pushes a blob of the given size filled with the argument data bytes starting
+    /// from the given offset.
+    pub fn msg_arg_data_copy(mut self, offset: u32, size: u32) -> Self {
+        self = self.push_int(offset);
+        self = self.push_int(size);
+        self.0.push(Ops::MsgArgDataCopy as u8);
+        self
+    }
+
+    /// Pushes the size of the caller data onto the stack.
+    pub fn msg_caller_size(mut self) -> Self {
+        self.0.push(Ops::MsgCallerSize as u8);
+        self
+    }
+
+    /// Pushes a blob of the given size filled with the caller data bytes starting
+    /// from the given offset.
+    pub fn msg_caller_copy(mut self, offset: u32, size: u32) -> Self {
+        self = self.push_int(offset);
+        self = self.push_int(size);
+        self.0.push(Ops::MsgCallerCopy as u8);
+        self
+    }
+
+    /// Pushes the size of the reject message onto the stack.
+    pub fn msg_reject_msg_size(mut self) -> Self {
+        self.0.push(Ops::MsgRejectMsgSize as u8);
+        self
+    }
+
+    /// Pushes a blob of the given size filled with the reject message bytes starting
+    /// from the given offset.
+    pub fn msg_reject_msg_copy(mut self, offset: u32, size: u32) -> Self {
+        self = self.push_int(offset);
+        self = self.push_int(size);
+        self.0.push(Ops::MsgRejectMsgCopy as u8);
         self
     }
 

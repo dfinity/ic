@@ -223,10 +223,6 @@ pub fn cycles_restrictions_pot() -> Pot {
                 "controller_and_controllee_on_different_subnets",
                 execution::canister_lifecycle::controller_and_controllee_on_different_subnets,
             ),
-            t(
-                "can_use_more_instructions_during_install_code",
-                execution::instructions_limit::can_use_more_instructions_during_install_code,
-            ),
         ]),
     )
 }

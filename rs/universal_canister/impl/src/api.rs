@@ -120,24 +120,44 @@ pub fn call_perform() -> u32 {
     unsafe { ic0::call_perform() }
 }
 
+/// Returns the size of the argument data in bytes.
+pub fn msg_arg_data_size() -> u32 {
+    unsafe { ic0::msg_arg_data_size() }
+}
+
+/// Returns a buffer of the given size that is filled with the argument data
+/// bytes starting from the given offset.
+pub fn msg_arg_data_copy(offset: u32, size: u32) -> Vec<u8> {
+    let mut bytes = vec![0; size as usize];
+    unsafe {
+        ic0::msg_arg_data_copy(bytes.as_mut_ptr() as u32, offset, size);
+    }
+    bytes
+}
+
 /// Returns the argument extracted from the message payload.
 pub fn arg_data() -> Vec<u8> {
-    let len: u32 = unsafe { ic0::msg_arg_data_size() };
-    let mut bytes = vec![0; len as usize];
+    msg_arg_data_copy(0, msg_arg_data_size())
+}
+
+/// Returns the size of the caller in bytes.
+pub fn msg_caller_size() -> u32 {
+    unsafe { ic0::msg_caller_size() }
+}
+
+/// Returns a buffer of the given size that is filled with the caller bytes
+/// starting from the given offset.
+pub fn msg_caller_copy(offset: u32, size: u32) -> Vec<u8> {
+    let mut bytes = vec![0; size as usize];
     unsafe {
-        ic0::msg_arg_data_copy(bytes.as_mut_ptr() as u32, 0, len);
+        ic0::msg_caller_copy(bytes.as_mut_ptr() as u32, offset, size);
     }
     bytes
 }
 
 /// Returns the caller of the current call.
 pub fn caller() -> Vec<u8> {
-    let len: u32 = unsafe { ic0::msg_caller_size() };
-    let mut bytes = vec![0; len as usize];
-    unsafe {
-        ic0::msg_caller_copy(bytes.as_mut_ptr() as u32, 0, len);
-    }
-    bytes
+    msg_caller_copy(0, msg_caller_size())
 }
 
 /// Returns the canister id as a blob.
@@ -154,14 +174,24 @@ pub fn status() -> u32 {
     unsafe { ic0::canister_status() }
 }
 
-/// Returns the rejection message.
-pub fn reject_message() -> Vec<u8> {
-    let len: u32 = unsafe { ic0::msg_reject_msg_size() };
-    let mut bytes = vec![0; len as usize];
+/// Returns the size of the reject message in bytes.
+pub fn msg_reject_msg_size() -> u32 {
+    unsafe { ic0::msg_reject_msg_size() }
+}
+
+/// Returns a buffer of the given size that is filled with the reject message
+/// bytes starting from the given offset.
+pub fn msg_reject_msg_copy(offset: u32, size: u32) -> Vec<u8> {
+    let mut bytes = vec![0; size as usize];
     unsafe {
-        ic0::msg_reject_msg_copy(bytes.as_mut_ptr() as u32, 0, len);
+        ic0::msg_reject_msg_copy(bytes.as_mut_ptr() as u32, offset, size);
     }
     bytes
+}
+
+/// Returns the rejection message.
+pub fn reject_message() -> Vec<u8> {
+    msg_reject_msg_copy(0, msg_reject_msg_size())
 }
 
 pub fn reply_data_append(payload: &[u8]) {
