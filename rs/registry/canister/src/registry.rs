@@ -239,6 +239,13 @@ impl Registry {
         self.apply_mutations_as_version(mutations, self.version);
     }
 
+    /// This is needed to test certain edge cases where the registry is in an invalid state
+    /// such as when a new invariant is added.
+    #[cfg(test)]
+    pub(crate) fn dangerously_apply_mutations(&mut self, mutations: Vec<RegistryMutation>) {
+        self.apply_mutations(mutations)
+    }
+
     /// Verifies the implicit precondition corresponding to the mutation_type
     /// field.
     fn verify_mutation_type(&self, mutations: &[RegistryMutation]) -> Vec<Error> {
