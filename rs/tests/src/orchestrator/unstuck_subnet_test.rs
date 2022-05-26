@@ -23,7 +23,7 @@ use crate::{
         test_env::TestEnv,
         test_env_api::*,
     },
-    orchestrator::utils::upgrade::get_assigned_replica_version_v2,
+    orchestrator::utils::upgrade::get_assigned_replica_version,
 };
 use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
@@ -68,7 +68,7 @@ pub fn test(test_env: TestEnv) {
         .expect("NNS canisters not installed");
     info!(logger, "NNS canisters are installed.");
 
-    let target_version = get_assigned_replica_version_v2(&nns_node).unwrap();
+    let target_version = get_assigned_replica_version(&nns_node).unwrap();
     info!(logger, "Target version: {}", target_version);
 
     block_on(bless_replica_version(
@@ -146,7 +146,7 @@ pub fn test(test_env: TestEnv) {
             test_env.logger(),
             secs(1800),
             secs(60),
-            || match get_assigned_replica_version_v2(n) {
+            || match get_assigned_replica_version(n) {
                 Ok(current_version) => {
                     info!(
                         logger,
