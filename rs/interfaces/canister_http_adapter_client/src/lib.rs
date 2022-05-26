@@ -1,7 +1,7 @@
 use ic_types::canister_http::{CanisterHttpRequest, CanisterHttpResponse};
 
 /// The error type that can be returned on "send".
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Eq, Debug, PartialEq)]
 pub enum SendError<Request> {
     /// Channel is full. Some responses must be consumes before new
     /// requests are send.
@@ -11,7 +11,7 @@ pub enum SendError<Request> {
 }
 
 /// The error type that can be returned on "try_receive".
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Eq, Debug, PartialEq)]
 pub enum TryReceiveError {
     /// No new response are available.
     Empty,
@@ -26,4 +26,4 @@ pub trait NonBlockingChannel<Request> {
 }
 
 pub type CanisterHttpAdapterClient =
-    Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
+    Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send + Sync>;

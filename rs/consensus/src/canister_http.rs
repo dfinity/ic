@@ -17,6 +17,8 @@ use ic_types::{
 };
 use std::{collections::BTreeSet, sync::Arc};
 
+pub mod pool_manager;
+
 /// The canonical implementation of CanisterHttpGossip
 struct CanisterHttpGossipImpl {
     consensus_cache: Arc<dyn ConsensusPoolCache>,
