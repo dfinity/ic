@@ -6,7 +6,7 @@ edition = "2018"
 [dependencies]
 lazy_static = "1.4.0"
 pprof = { version = "0.9.1", default-features = false, features = ["backtrace-rs", "flamegraph", "prost-codec"] }
-prost = "0.10"
+prost = "0.10.4"
 regex = "1.3.9"
 thiserror = "1.0"
 tokio = { version = "1.15.0", features = [ "full" ] }

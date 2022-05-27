@@ -6,8 +6,7 @@ edition = "2018"
 [dependencies]
 candid = "0.7.4"
 ic-protobuf = { path = "../../protobuf" }
-prost = "0.10"
-prost-types = "0.10"
+prost = "0.10.4"
 bytes = "1.0.1"
 serde = { version = "1.0.99", features = ["derive"] }
 

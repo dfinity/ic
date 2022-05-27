@@ -29,7 +29,7 @@ intmap = "0.7.0"
 lazy_static = "1.4.0"
 on_wire = {path = "../../rust_canisters/on_wire"}
 phantom_newtype = { path = "../../phantom_newtype" }
-prost = "0.10"
+prost = "0.10.4"
 prost-derive = "0.10"
 serde = "1.0"
 serde_bytes = "0.11"

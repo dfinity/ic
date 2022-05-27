@@ -20,7 +20,7 @@ ic-nns-governance = {path="../governance"}
 ic-test-identity = {path="../../test_utilities/identity"}
 ic-sys = { path = "../../sys" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
-prost = "0.10"
+prost = "0.10.4"
 tokio = { version = "1.15.0", features = ["full"] }
 url = "2.2.0"
 

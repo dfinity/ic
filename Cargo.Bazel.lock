@@ -1,5 +1,5 @@
 {
-  "checksum": "88e888325f9e6eda591258d217f51d96f5f57e0c3ac6a37fbedede2fdef226fb",
+  "checksum": "023998afcd1e51164b4e2571e6bc833d9a5c5c53060df1d649b7822b21c98314",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -1192,13 +1192,13 @@
       },
       "license": "MIT"
     },
-    "beef 0.5.1": {
+    "beef 0.5.2": {
       "name": "beef",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/beef/0.5.1/download",
-          "sha256": "bed554bd50246729a1ec158d08aa3235d1b69d94ad120ebe187e28894787e736"
+          "url": "https://crates.io/api/v1/crates/beef/0.5.2/download",
+          "sha256": "3a8241f3ebb85c056b509d4327ad0358fbbba6ffb340bf388f26350aeda225b1"
         }
       },
       "targets": [
@@ -1224,7 +1224,7 @@
           "default"
         ],
         "edition": "2018",
-        "version": "0.5.1"
+        "version": "0.5.2"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -2759,7 +2759,7 @@
         "deps": {
           "common": [
             {
-              "id": "os_str_bytes 6.0.1",
+              "id": "os_str_bytes 6.1.0",
               "target": "os_str_bytes"
             }
           ],
@@ -4473,10 +4473,6 @@
             {
               "id": "prost-build 0.10.4",
               "target": "prost_build"
-            },
-            {
-              "id": "prost-types 0.10.1",
-              "target": "prost_types"
             },
             {
               "id": "rand 0.8.5",
@@ -8034,7 +8030,7 @@
         "deps": {
           "common": [
             {
-              "id": "beef 0.5.1",
+              "id": "beef 0.5.2",
               "target": "beef"
             },
             {
@@ -9603,13 +9599,13 @@
       },
       "license": "MIT"
     },
-    "os_str_bytes 6.0.1": {
+    "os_str_bytes 6.1.0": {
       "name": "os_str_bytes",
-      "version": "6.0.1",
+      "version": "6.1.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/os_str_bytes/6.0.1/download",
-          "sha256": "029d8d0b2f198229de29dca79676f2738ff952edf3fde542eb8bf94d8c21b435"
+          "url": "https://crates.io/api/v1/crates/os_str_bytes/6.1.0/download",
+          "sha256": "21326818e99cfe6ce1e524c2a805c189a99b5ae555a35d19f9a284b427d86afa"
         }
       },
       "targets": [
@@ -9635,7 +9631,7 @@
           "raw_os_str"
         ],
         "edition": "2018",
-        "version": "6.0.1"
+        "version": "6.1.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -10791,13 +10787,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "prettyplease 0.1.10": {
+    "prettyplease 0.1.11": {
       "name": "prettyplease",
-      "version": "0.1.10",
+      "version": "0.1.11",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/prettyplease/0.1.10/download",
-          "sha256": "d9e07e3a46d0771a8a06b5f4441527802830b43e679ba12f44960f48dd4c6803"
+          "url": "https://crates.io/api/v1/crates/prettyplease/0.1.11/download",
+          "sha256": "f28f53e8b192565862cf99343194579a022eb9c7dd3a8d03134734803c7b3125"
         }
       },
       "targets": [
@@ -10833,7 +10829,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.10"
+        "version": "0.1.11"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -11832,10 +11828,6 @@
       "common_attrs": {
         "compile_data_glob": [
           "**"
-        ],
-        "crate_features": [
-          "default",
-          "std"
         ],
         "deps": {
           "common": [
@@ -16561,7 +16553,7 @@
         "deps": {
           "common": [
             {
-              "id": "prettyplease 0.1.10",
+              "id": "prettyplease 0.1.11",
               "target": "prettyplease"
             },
             {
@@ -17794,8 +17786,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -17818,8 +17810,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

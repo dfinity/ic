@@ -36,7 +36,7 @@ slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "rel
 slog-scope = "4.1.2"
 tokio = { version = "1.15.0", features = ["full"] }
 prometheus = { version = "0.12.0", features = [ "process" ] }
-prost = "0.10"
+prost = "0.10.4"
 tower = { version = "0.4.11", features = ["util"] }
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
 

@@ -7,7 +7,7 @@ edition = "2018"
 features = "0.10.0"
 bitflags = "1.2.1"
 hex = "0.4.2"
-prost = "0.10"
+prost = "0.10.4"
 scoped_threadpool = "0.1.*"
 serde = { version = "1.0.99", default-features = false }
 

@@ -20,7 +20,6 @@ rust_library(
     edition = "2018",
     deps = [
         "@crate_index//:prost",
-        "@crate_index//:prost-types",
     ],
 )
 
