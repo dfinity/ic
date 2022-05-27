@@ -4,6 +4,7 @@ build --strategy_regexp=ic-os/guestos/.*=local
 
 build --remote_cache=bes.buildfarm.dfinity.systems
 build --experimental_remote_cache_async
+build --incompatible_remote_build_event_upload_respect_no_cache
 
 build --execution_log_json_file=bazel-build-log.json
 
