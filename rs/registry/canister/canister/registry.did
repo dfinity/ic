@@ -45,6 +45,11 @@ type BlessReplicaVersionPayload = record {
   node_manager_binary_url : text;
   binary_url : text;
 };
+type CanisterIdRange = record { end : principal; start : principal };
+type CompleteCanisterMigrationPayload = record {
+  canister_id_ranges : vec CanisterIdRange;
+  migration_trace : vec principal;
+};
 type CreateSubnetPayload = record {
   unit_delay_millis : nat64;
   max_instructions_per_round : nat64;
@@ -127,6 +132,11 @@ type NodeProvidersMonthlyXdrRewards = record {
 };
 type NodeRewardRate = record { xdr_permyriad_per_node_per_month : nat64 };
 type NodeRewardRates = record { rates : vec record { text; NodeRewardRate } };
+type PrepareCanisterMigrationPayload = record {
+  canister_id_ranges : vec CanisterIdRange;
+  source_subnet : principal;
+  destination_subnet : principal;
+};
 type RecoverSubnetPayload = record {
   height : nat64;
   replacement_nodes : opt vec principal;
@@ -146,18 +156,18 @@ type RemoveNodeOperatorsPayload = record {
   node_operators_to_remove : vec vec nat8;
 };
 type RemoveNodesPayload = record { node_ids : vec principal };
-type RerouteCanisterRangePayload = record {
-  range_end_inclusive : principal;
-  range_start_inclusive : principal;
+type RerouteCanisterRangesPayload = record {
+  source_subnet : principal;
+  reassigned_canister_ranges : vec CanisterIdRange;
   destination_subnet : principal;
 };
 type Result = variant { Ok : principal; Err : text };
-type Result_1 = variant {
+type Result_1 = variant { Ok; Err : text };
+type Result_2 = variant {
   Ok : vec record { DataCenterRecord; NodeOperatorRecord };
   Err : text;
 };
-type Result_2 = variant { Ok : NodeProvidersMonthlyXdrRewards; Err : text };
-type Result_3 = variant { Ok; Err : text };
+type Result_3 = variant { Ok : NodeProvidersMonthlyXdrRewards; Err : text };
 type SetFirewallConfigPayload = record {
   ipv4_prefixes : vec text;
   firewall_config : text;
@@ -238,21 +248,25 @@ service : {
   add_or_remove_data_centers : (AddOrRemoveDataCentersProposalPayload) -> ();
   bless_replica_version : (BlessReplicaVersionPayload) -> ();
   clear_provisional_whitelist : () -> ();
+  complete_canister_migration : (CompleteCanisterMigrationPayload) -> (
+      Result_1,
+    );
   create_subnet : (CreateSubnetPayload) -> ();
   delete_subnet : (DeleteSubnetPayload) -> ();
   get_build_metadata : () -> (text) query;
-  get_node_operators_and_dcs_of_node_provider : (principal) -> (Result_1) query;
-  get_node_providers_monthly_xdr_rewards : () -> (Result_2) query;
+  get_node_operators_and_dcs_of_node_provider : (principal) -> (Result_2) query;
+  get_node_providers_monthly_xdr_rewards : () -> (Result_3) query;
+  prepare_canister_migration : (PrepareCanisterMigrationPayload) -> (Result_1);
   recover_subnet : (RecoverSubnetPayload) -> ();
   remove_firewall_rules : (RemoveFirewallRulesPayload) -> ();
   remove_node_directly : (RemoveNodeDirectlyPayload) -> ();
   remove_node_operators : (RemoveNodeOperatorsPayload) -> ();
   remove_nodes : (RemoveNodesPayload) -> ();
   remove_nodes_from_subnet : (RemoveNodesPayload) -> ();
-  reroute_canister_range : (RerouteCanisterRangePayload) -> (Result_3);
+  reroute_canister_ranges : (RerouteCanisterRangesPayload) -> (Result_1);
   set_firewall_config : (SetFirewallConfigPayload) -> ();
   update_firewall_rules : (AddFirewallRulesPayload) -> ();
-  update_node_directly : (UpdateNodeDirectlyPayload) -> (Result_3);
+  update_node_directly : (UpdateNodeDirectlyPayload) -> (Result_1);
   update_node_operator_config : (UpdateNodeOperatorConfigPayload) -> ();
   update_node_operator_config_directly : (
       UpdateNodeOperatorConfigDirectlyPayload,

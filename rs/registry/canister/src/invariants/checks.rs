@@ -1,11 +1,14 @@
 use crate::{
     common::LOG_PREFIX,
     invariants::{
-        common::RegistrySnapshot, crypto::check_node_crypto_keys_invariants,
-        endpoint::check_endpoint_invariants, firewall::check_firewall_invariants,
+        common::RegistrySnapshot,
+        crypto::check_node_crypto_keys_invariants,
+        endpoint::check_endpoint_invariants,
+        firewall::check_firewall_invariants,
         node_operator::check_node_operator_invariants,
         replica_version::check_replica_version_invariants,
-        routing_table::check_routing_table_invariants, subnet::check_subnet_invariants,
+        routing_table::{check_canister_migrations_invariants, check_routing_table_invariants},
+        subnet::check_subnet_invariants,
         unassigned_nodes_config::check_unassigned_nodes_config_invariants,
     },
     registry::Registry,
@@ -68,6 +71,9 @@ impl Registry {
         // Routing Table invariants
         result = result.and(check_routing_table_invariants(&snapshot));
 
+        // Canister migrations invariants
+        result = result.and(check_canister_migrations_invariants(&snapshot));
+
         // Subnet invariants
         result = result.and(check_subnet_invariants(&snapshot));
 
@@ -128,17 +134,28 @@ mod tests {
     use crate::registry::EncodedVersion;
 
     use super::*;
+    use ic_base_types::CanisterId;
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_common::registry::encode_or_panic;
     use ic_protobuf::registry::{
-        node_operator::v1::NodeOperatorRecord, routing_table::v1::RoutingTable,
+        node_operator::v1::NodeOperatorRecord,
+        routing_table::v1::{
+            CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
+        },
     };
-    use ic_registry_keys::{make_node_operator_record_key, make_routing_table_record_key};
+    use ic_registry_keys::{
+        make_canister_migrations_record_key, make_node_operator_record_key,
+        make_routing_table_record_key,
+    };
+    use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
     use ic_registry_transport::{
         delete, insert,
         pb::v1::{RegistryAtomicMutateRequest, RegistryMutation},
     };
+    use ic_test_utilities::types::ids::subnet_test_id;
+    use maplit::btreemap;
     use std::collections::BTreeMap;
+    use std::convert::TryFrom;
 
     fn empty_mutation() -> Vec<u8> {
         encode_or_panic(&RegistryAtomicMutateRequest {
@@ -225,9 +242,40 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "not hosted by any subnet")]
+    fn invalid_canister_migrations_invariants_check_panic() {
+        let routing_table = RoutingTable::try_from(btreemap! {
+        CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => subnet_test_id(1),
+        CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
+        CanisterIdRange{ start: CanisterId::from(0x200), end: CanisterId::from(0x2ff) } => subnet_test_id(3),
+    }).unwrap();
+
+        let routing_table = PbRoutingTable::from(routing_table);
+        let key1 = make_routing_table_record_key();
+        let value1 = encode_or_panic(&routing_table);
+
+        // The canister ID range {0x200:0x2ff} in `canister_migrations` is not hosted by any subnet in trace according to the routing table.
+        let canister_migrations = CanisterMigrations::try_from(btreemap! {
+        CanisterIdRange{ start: CanisterId::from(0x200), end: CanisterId::from(0x2ff) } => vec![subnet_test_id(1), subnet_test_id(2)],
+    }).unwrap();
+
+        let canister_migrations = PbCanisterMigrations::from(canister_migrations);
+        let key2 = make_canister_migrations_record_key();
+        let value2 = encode_or_panic(&canister_migrations);
+
+        let mutations = vec![
+            insert(key1.as_bytes(), &value1),
+            insert(key2.as_bytes(), &value2),
+        ];
+
+        let registry = Registry::new();
+        registry.check_global_state_invariants(&mutations);
+    }
+
+    #[test]
     fn snapshot_reflects_latest_registry_state() {
         let key1 = make_routing_table_record_key();
-        let value1 = encode_or_panic(&RoutingTable { entries: vec![] });
+        let value1 = encode_or_panic(&PbRoutingTable { entries: vec![] });
 
         let key2 = make_node_operator_record_key(*TEST_USER1_PRINCIPAL);
         let value2 = encode_or_panic(&NodeOperatorRecord {

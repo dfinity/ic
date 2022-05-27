@@ -33,6 +33,7 @@ use registry_canister::{
     common::LOG_PREFIX,
     init::RegistryCanisterInitPayload,
     mutations::{
+        complete_canister_migration::CompleteCanisterMigrationPayload,
         do_add_node_operator::AddNodeOperatorPayload,
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
         do_bless_replica_version::BlessReplicaVersionPayload,
@@ -53,7 +54,8 @@ use registry_canister::{
             do_add_node::AddNodePayload, do_remove_node_directly::RemoveNodeDirectlyPayload,
             do_remove_nodes::RemoveNodesPayload,
         },
-        reroute_canister_range::RerouteCanisterRangePayload,
+        prepare_canister_migration::PrepareCanisterMigrationPayload,
+        reroute_canister_ranges::RerouteCanisterRangesPayload,
     },
     pb::v1::{NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage},
     proto_on_wire::protobuf,
@@ -669,17 +671,53 @@ fn update_unassigned_nodes_config_(payload: UpdateUnassignedNodesConfigPayload) 
     recertify_registry();
 }
 
-#[export_name = "canister_update reroute_canister_range"]
-fn reroute_canister_range() {
-    check_caller_is_governance_and_log("reroute_canister_range");
-    over_may_reject(candid_one, |payload: RerouteCanisterRangePayload| {
-        reroute_canister_range_(payload)
+#[export_name = "canister_update prepare_canister_migration"]
+fn prepare_canister_migration() {
+    check_caller_is_governance_and_log("prepare_canister_migration");
+    over_may_reject(candid_one, |payload: PrepareCanisterMigrationPayload| {
+        prepare_canister_migration_(payload)
     });
 }
 
-#[candid_method(update, rename = "reroute_canister_range")]
-fn reroute_canister_range_(payload: RerouteCanisterRangePayload) -> Result<(), String> {
-    if let Err(msg) = registry_mut().reroute_canister_range(payload) {
+#[candid_method(update, rename = "prepare_canister_migration")]
+fn prepare_canister_migration_(payload: PrepareCanisterMigrationPayload) -> Result<(), String> {
+    if let Err(msg) = registry_mut().prepare_canister_migration(payload) {
+        println!("{} Reject: {}", LOG_PREFIX, msg);
+        return Err(msg);
+    }
+    recertify_registry();
+    Ok(())
+}
+
+#[export_name = "canister_update reroute_canister_ranges"]
+fn reroute_canister_ranges() {
+    check_caller_is_governance_and_log("reroute_canister_ranges");
+    over_may_reject(candid_one, |payload: RerouteCanisterRangesPayload| {
+        reroute_canister_ranges_(payload)
+    });
+}
+
+#[candid_method(update, rename = "reroute_canister_ranges")]
+fn reroute_canister_ranges_(payload: RerouteCanisterRangesPayload) -> Result<(), String> {
+    if let Err(msg) = registry_mut().reroute_canister_ranges(payload) {
+        println!("{} Reject: {}", LOG_PREFIX, msg);
+        return Err(msg);
+    }
+    recertify_registry();
+    Ok(())
+}
+
+#[export_name = "canister_update complete_canister_migration"]
+fn complete_canister_migration() {
+    check_caller_is_governance_and_log("complete_canister_migration");
+    over_may_reject(candid_one, |payload: CompleteCanisterMigrationPayload| {
+        complete_canister_migration_(payload)
+    });
+}
+
+#[candid_method(update, rename = "complete_canister_migration")]
+fn complete_canister_migration_(payload: CompleteCanisterMigrationPayload) -> Result<(), String> {
+    if let Err(msg) = registry_mut().complete_canister_migration(payload) {
         println!("{} Reject: {}", LOG_PREFIX, msg);
         return Err(msg);
     }

@@ -4,6 +4,7 @@ use candid::CandidType;
 use ic_base_types::{CanisterId, CanisterIdError, PrincipalId, SubnetId};
 use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 use std::{collections::BTreeMap, convert::TryFrom};
 
 fn canister_id_into_u64(canister_id: CanisterId) -> u64 {
@@ -44,6 +45,14 @@ pub enum CanisterIdRangeError {
     CanisterIdParseError(CanisterIdError),
     CanisterIdsNotPair(String),
 }
+
+impl Display for CanisterIdRangeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for CanisterIdRangeError {}
 
 impl From<CanisterIdError> for CanisterIdRangeError {
     fn from(v: CanisterIdError) -> CanisterIdRangeError {
@@ -479,10 +488,18 @@ impl RoutingTable {
         // If the `principal_id` was not a subnet, it must be a `CanisterId` (otherwise
         // we can't route to it).
         match CanisterId::try_from(principal_id) {
-            Ok(canister_id) => lookup_in_ranges(&self.0, canister_id),
+            Ok(canister_id) => {
+                lookup_in_ranges(&self.0, canister_id).map(|(_range, subnet_id)| subnet_id)
+            }
             // Cannot route to any subnet as we couldn't convert to a `CanisterId`.
             Err(_) => None,
         }
+    }
+
+    /// Returns the corresponding `CanisterIdRange` and `SubnetId` that the given `canister_id` is assigned to
+    /// or `None` if an assignment cannot be found.
+    pub fn lookup_entry(&self, canister_id: CanisterId) -> Option<(CanisterIdRange, SubnetId)> {
+        lookup_in_ranges(&self.0, canister_id)
     }
 
     /// Find all canister ranges that are assigned to subnet_id.
@@ -528,6 +545,11 @@ impl CanisterMigrations {
     /// Returns an iterator over the ordered entries.
     pub fn iter(&self) -> impl std::iter::Iterator<Item = (&CanisterIdRange, &Vec<SubnetId>)> {
         self.0.iter()
+    }
+
+    /// Returns a reference to the trace corresponding to the range.
+    pub fn get(&self, range: &CanisterIdRange) -> Option<&Vec<SubnetId>> {
+        self.0.get(range)
     }
 
     /// Returns an iterator over all canister ID ranges in order.
@@ -586,7 +608,7 @@ impl CanisterMigrations {
     }
 
     pub fn lookup(&self, canister_id: CanisterId) -> Option<Vec<SubnetId>> {
-        lookup_in_ranges(&self.0, canister_id)
+        lookup_in_ranges(&self.0, canister_id).map(|(_range, trace)| trace)
     }
 
     /// For each range in the canister ID ranges, inserts a mapping from the
@@ -642,7 +664,7 @@ impl CanisterMigrations {
 fn lookup_in_ranges<V: Clone>(
     canister_id_range_to_value: &BTreeMap<CanisterIdRange, V>,
     canister_id: CanisterId,
-) -> Option<V> {
+) -> Option<(CanisterIdRange, V)> {
     // In simple terms, we need to do a binary search of all the interval
     // ranges tracked in self to see if `canister_id` in included in any of
     // them.  BTreeMap offers this functionality in the form of the
@@ -666,7 +688,7 @@ fn lookup_in_ranges<V: Clone>(
         assert!(interval.start <= canister_id);
         // If canister_id is in the interval then we found our answer.
         if canister_id <= interval.end {
-            Some(value.clone())
+            Some((*interval, value.clone()))
         } else {
             // In this case, either [start, end] is the last interval in the
             // map and c comes after end, or there is an interval [a, b] in

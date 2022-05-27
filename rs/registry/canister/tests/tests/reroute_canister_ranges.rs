@@ -13,16 +13,22 @@ use ic_test_utilities::types::ids::subnet_test_id;
 use ic_types::CanisterId;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
-    mutations::reroute_canister_range::RerouteCanisterRangePayload,
+    mutations::{
+        prepare_canister_migration::PrepareCanisterMigrationPayload,
+        reroute_canister_ranges::RerouteCanisterRangesPayload,
+    },
 };
 
-async fn get_routing_table(canister: &canister_test::Canister<'_>) -> RoutingTable {
+pub(crate) async fn get_routing_table(canister: &canister_test::Canister<'_>) -> RoutingTable {
     use std::convert::TryFrom;
     let pb_routing_table: pb::RoutingTable = get_value(canister, b"routing_table").await;
     RoutingTable::try_from(pb_routing_table).expect("failed to decode routing table")
 }
 
-fn check_error_message<T: std::fmt::Debug>(result: Result<T, String>, expected_substring: &str) {
+pub(crate) fn check_error_message<T: std::fmt::Debug>(
+    result: Result<T, String>,
+    expected_substring: &str,
+) {
     match result {
         Ok(value) => panic!(
             "expected the call to fail with message '{}', got Ok({:?})",
@@ -38,14 +44,13 @@ fn check_error_message<T: std::fmt::Debug>(result: Result<T, String>, expected_s
 }
 
 #[test]
-fn test_reroute_canister_range() {
+fn test_reroute_canister_ranges() {
     local_test_on_nns_subnet(|runtime| {
         async move {
             let (subnet_1_mutation, subnet_id_1, _, _) = prepare_registry(
-                /* num_nodes_in_subnet = */ 4, /* num_anassigned_nodes = */ 0,
+                /* num_nodes_in_subnet = */ 4, /* num_unassigned_nodes = */ 0,
             );
-            let nns_subnet = subnet_test_id(1);
-
+            let nns_subnet = subnet_test_id(999);
             let rt_mutation = {
                 fn range(start: u64, end: u64) -> CanisterIdRange {
                     CanisterIdRange {
@@ -81,16 +86,38 @@ fn test_reroute_canister_range() {
                 ic_nns_constants::GOVERNANCE_CANISTER_ID
             );
 
-            let payload = RerouteCanisterRangePayload {
-                range_start_inclusive: CanisterId::from(10).into(),
-                range_end_inclusive: CanisterId::from(11).into(),
-                destination_subnet: subnet_id_1.get(),
+            // Add canister migrations entries.
+            let payload = PrepareCanisterMigrationPayload {
+                canister_id_ranges: vec![CanisterIdRange {
+                    start: CanisterId::from(10),
+                    end: CanisterId::from(11),
+                }],
+                source_subnet: nns_subnet,
+                destination_subnet: subnet_id_1,
             };
 
             try_call_via_universal_canister(
                 &governance_fake,
                 &registry,
-                "reroute_canister_range",
+                "prepare_canister_migration",
+                Encode!(&payload).unwrap(),
+            )
+            .await
+            .unwrap();
+
+            let payload = RerouteCanisterRangesPayload {
+                reassigned_canister_ranges: vec![CanisterIdRange {
+                    start: CanisterId::from(10),
+                    end: CanisterId::from(11),
+                }],
+                source_subnet: nns_subnet,
+                destination_subnet: subnet_id_1,
+            };
+
+            try_call_via_universal_canister(
+                &governance_fake,
+                &registry,
+                "reroute_canister_ranges",
                 Encode!(&payload).unwrap(),
             )
             .await
@@ -118,33 +145,39 @@ fn test_reroute_canister_range() {
             check_error_message(
                 registry
                     .update_(
-                        "reroute_canister_range",
+                        "reroute_canister_ranges",
                         dfn_candid::candid_one,
-                        RerouteCanisterRangePayload {
-                            range_start_inclusive: CanisterId::from(12).into(),
-                            range_end_inclusive: CanisterId::from(15).into(),
-                            destination_subnet: subnet_id_1.get(),
+                        RerouteCanisterRangesPayload {
+                            reassigned_canister_ranges: vec![CanisterIdRange {
+                                start: CanisterId::from(12),
+                                end: CanisterId::from(15),
+                            }],
+                            source_subnet: nns_subnet,
+                            destination_subnet: subnet_id_1,
                         },
                     )
                     .await as Result<(), String>,
                 "not authorized",
             );
 
-            // Invalid request: start > end
+            // Invalid request: canister ID ranges are not well formed
             check_error_message(
                 try_call_via_universal_canister(
                     &governance_fake,
                     &registry,
-                    "reroute_canister_range",
-                    Encode!(&RerouteCanisterRangePayload {
-                        range_start_inclusive: CanisterId::from(15).into(),
-                        range_end_inclusive: CanisterId::from(10).into(),
-                        destination_subnet: subnet_id_1.get(),
+                    "reroute_canister_ranges",
+                    Encode!(&RerouteCanisterRangesPayload {
+                        reassigned_canister_ranges: vec![CanisterIdRange {
+                            start: CanisterId::from(15),
+                            end: CanisterId::from(10),
+                        },],
+                        source_subnet: nns_subnet,
+                        destination_subnet: subnet_id_1,
                     })
                     .unwrap(),
                 )
                 .await,
-                "start > end",
+                "not well formed",
             );
 
             // Invalid request: non-existing subnet
@@ -152,11 +185,14 @@ fn test_reroute_canister_range() {
                 try_call_via_universal_canister(
                     &governance_fake,
                     &registry,
-                    "reroute_canister_range",
-                    Encode!(&RerouteCanisterRangePayload {
-                        range_start_inclusive: CanisterId::from(12).into(),
-                        range_end_inclusive: CanisterId::from(15).into(),
-                        destination_subnet: subnet_test_id(9999).get(),
+                    "reroute_canister_ranges",
+                    Encode!(&RerouteCanisterRangesPayload {
+                        reassigned_canister_ranges: vec![CanisterIdRange {
+                            start: CanisterId::from(12),
+                            end: CanisterId::from(15),
+                        },],
+                        source_subnet: nns_subnet,
+                        destination_subnet: subnet_test_id(9999),
                     })
                     .unwrap(),
                 )

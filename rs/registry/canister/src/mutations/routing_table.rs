@@ -1,4 +1,4 @@
-use crate::{mutations::common::decode_registry_value, registry::Registry};
+use crate::{common::LOG_PREFIX, mutations::common::decode_registry_value, registry::Registry};
 
 use std::convert::TryFrom;
 
@@ -6,10 +6,9 @@ use ic_base_types::SubnetId;
 use ic_protobuf::registry::routing_table::v1 as pb;
 use ic_registry_keys::{make_canister_migrations_record_key, make_routing_table_record_key};
 use ic_registry_routing_table::{
-    routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, CanisterMigrations,
-    RoutingTable,
+    routing_table_insert_subnet, CanisterIdRanges, CanisterMigrations, RoutingTable,
 };
-use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue};
+use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 use prost::Message;
 
 fn routing_table_into_registry_mutation(
@@ -26,8 +25,7 @@ fn routing_table_into_registry_mutation(
     }
 }
 
-#[allow(dead_code)]
-// The function will be used when canister migration mutation is fully supported in the future.
+/// Returns the given `CanisterMigrations` as a registry mutation of the given type.
 fn canister_migrations_into_registry_mutation(
     canister_migrations: CanisterMigrations,
     mutation_type: i32,
@@ -43,25 +41,31 @@ fn canister_migrations_into_registry_mutation(
 }
 
 impl Registry {
-    /// Decodes the routing table at the specified version.
+    /// Get the routing table or panic on error with a message.
+    pub fn get_routing_table_or_panic(&self, version: u64) -> RoutingTable {
+        let RegistryValue {
+            value: routing_table_bytes,
+            version: _,
+            deletion_marker: _,
+        } = self
+            .get(make_routing_table_record_key().as_bytes(), version)
+            .unwrap_or_else(|| panic!("{}routing table not found in the registry.", LOG_PREFIX));
+
+        RoutingTable::try_from(decode_registry_value::<pb::RoutingTable>(
+            routing_table_bytes.clone(),
+        ))
+        .expect("failed to decode the routing table from protobuf")
+    }
+
+    /// Applies the given mutation to the routing table at the specified version.
     fn modify_routing_table(
         &self,
         version: u64,
         f: impl FnOnce(&mut RoutingTable),
     ) -> RegistryMutation {
-        let RegistryValue {
-            value: routing_table_vec,
-            version: _,
-            deletion_marker: _,
-        } = self
-            .get(make_routing_table_record_key().as_bytes(), version)
-            .unwrap();
-        let mut routing_table = RoutingTable::try_from(decode_registry_value::<pb::RoutingTable>(
-            routing_table_vec.clone(),
-        ))
-        .expect("failed to decode the routing table from protobuf");
+        let mut routing_table = self.get_routing_table_or_panic(version);
         f(&mut routing_table);
-        routing_table_into_registry_mutation(routing_table, 1)
+        routing_table_into_registry_mutation(routing_table, registry_mutation::Type::Update as i32)
     }
 
     /// Handle adding a subnet to the routing table.
@@ -88,19 +92,83 @@ impl Registry {
 
     /// Makes a registry mutation that remaps the specified canister ID range to
     /// another subnet.
-    pub fn reroute_canister_range_mutation(
+    pub fn reroute_canister_ranges_mutation(
         &self,
         version: u64,
-        canister_id_range: CanisterIdRange,
+        canister_id_ranges: CanisterIdRanges,
         destination: SubnetId,
     ) -> RegistryMutation {
         self.modify_routing_table(version, |routing_table| {
-            // Note: The conversion from `CanisterIdRange` to `CanisterIdRanges` below is temporary.
-            // In the following work, the mutation will also take `CanisterIdRanges` as input.
-            let ranges = CanisterIdRanges::try_from(vec![canister_id_range])
-                .expect("canister ID ranges are not well formed.");
-            routing_table.assign_ranges(ranges, destination).unwrap();
+            routing_table
+                .assign_ranges(canister_id_ranges, destination)
+                .unwrap();
             routing_table.optimize();
         })
+    }
+
+    /// Retrieves the canister migrations if the key exists.
+    pub fn get_canister_migrations(&self, version: u64) -> Option<CanisterMigrations> {
+        self.get(make_canister_migrations_record_key().as_bytes(), version)
+            .map(|registry_value| {
+                CanisterMigrations::try_from(decode_registry_value::<pb::CanisterMigrations>(
+                    registry_value.value.clone(),
+                ))
+                .expect("failed to decode the canister migrations from protobuf")
+            })
+    }
+
+    /// Creates a mutation that applies the given change to `canister_mutations`
+    /// at the specified version, creating the entry if it doesn't exist.
+    fn modify_canister_migrations(
+        &self,
+        version: u64,
+        f: impl FnOnce(&mut CanisterMigrations),
+        mutation_type: i32,
+    ) -> RegistryMutation {
+        let mut canister_migrations = self.get_canister_migrations(version).unwrap_or_default();
+
+        f(&mut canister_migrations);
+        canister_migrations_into_registry_mutation(canister_migrations, mutation_type)
+    }
+
+    /// Makes a registry mutation that modifies the canister migrations.
+    pub fn migrate_canister_ranges_mutation(
+        &self,
+        version: u64,
+        canister_id_ranges: CanisterIdRanges,
+        source: SubnetId,
+        destination: SubnetId,
+    ) -> RegistryMutation {
+        // The registry mutation type is set to `Upsert` so that the mutation is still valid
+        // when canister migrations are not present in the registry.
+        self.modify_canister_migrations(
+            version,
+            |canister_migrations| {
+                canister_migrations
+                    .insert_ranges(canister_id_ranges, source, destination)
+                    .unwrap();
+            },
+            registry_mutation::Type::Upsert as i32,
+        )
+    }
+
+    /// Makes a registry mutation that removes all provided entries from `canister_migrations`.
+    pub fn remove_canister_migrations_mutation(
+        &self,
+        version: u64,
+        canister_id_ranges: CanisterIdRanges,
+        migration_trace: Vec<SubnetId>,
+    ) -> RegistryMutation {
+        // The registry mutation type is set to `Update` to prevent the removal
+        // when canister migrations are not present in the registry.
+        self.modify_canister_migrations(
+            version,
+            |canister_migrations| {
+                canister_migrations
+                    .remove_ranges(canister_id_ranges, migration_trace)
+                    .unwrap();
+            },
+            registry_mutation::Type::Update as i32,
+        )
     }
 }

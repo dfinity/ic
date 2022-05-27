@@ -40,7 +40,11 @@ repos:
     files: (nns|registry).+[.]did$
     # Not sure why this exists (might be a piece of test data, but it should not be checked,
     # because the intention is clearly to define no service.
-    exclude: ^rs/nns/empty[.]did$
+    exclude: |
+      (?x)^(
+          rs/nns/empty[.]did|
+          rs/registry/canister/canister/registry.did
+      )$
     language: system
     always_run: true
 

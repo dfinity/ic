@@ -156,7 +156,7 @@ fn test_remove_nodes_from_subnet_succeeds() {
         async move {
             let num_nodes_in_subnet1 = 4_usize;
             let num_nodes_in_subnet2 = 4_usize;
-            let (init_mutate, subnet1_id, subnet2_node_ids, _) =
+            let (init_mutate, subnet1_id, _, subnet2_node_ids, _) =
                 prepare_registry_with_two_node_sets(
                     num_nodes_in_subnet1,
                     num_nodes_in_subnet2,

@@ -471,7 +471,7 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "update_unassigned_nodes_config")
             }
             NnsFunction::RemoveNodeOperators => (REGISTRY_CANISTER_ID, "remove_node_operators"),
-            NnsFunction::RerouteCanisterRange => (REGISTRY_CANISTER_ID, "reroute_canister_range"),
+            NnsFunction::RerouteCanisterRanges => (REGISTRY_CANISTER_ID, "reroute_canister_ranges"),
         };
         Ok((canister_id, method))
     }
@@ -1093,7 +1093,7 @@ impl Proposal {
                             NnsFunction::UninstallCode => Topic::Governance,
                             NnsFunction::UpdateNodeRewardsTable => Topic::NetworkEconomics,
                             NnsFunction::AddOrRemoveDataCenters => Topic::ParticipantManagement,
-                            NnsFunction::RerouteCanisterRange => Topic::SubnetManagement,
+                            NnsFunction::RerouteCanisterRanges => Topic::SubnetManagement,
                         }
                     } else {
                         Topic::Unspecified
