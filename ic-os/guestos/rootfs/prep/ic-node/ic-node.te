@@ -317,6 +317,7 @@ dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : file { getattr open read
 allow ic_canister_sandbox_t null_device_t : chr_file { read };
 dontaudit ic_canister_sandbox_t proc_t : dir { search };
 dontaudit ic_canister_sandbox_t proc_t : lnk_file { read };
+dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : lnk_file { read };
 
 # Deny accessing system information (tries to access "/proc/sys/kernel/osrelease" for unspecified reasons).
 dontaudit ic_canister_sandbox_t sysctl_kernel_t : dir { search };
@@ -343,3 +344,16 @@ require { type syslogd_t; }
 allow syslogd_t ic_canister_sandbox_t : dir { getattr open read search };
 allow syslogd_t ic_canister_sandbox_t : file { open read getattr ioctl};
 allow syslogd_t ic_canister_sandbox_t : process { getattr };
+
+# Allow interacting with our own executable.
+require {
+    type bin_t;
+}
+search_dirs_pattern(ic_canister_sandbox_t, bin_t, bin_t)
+read_files_pattern(ic_canister_sandbox_t, ic_canister_sandbox_exec_t, ic_canister_sandbox_exec_t)
+
+# Do not allow self signaling, as this also allows signaling other sandboxes.
+dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : process { signal };
+
+# Forbid the sandbox from checking certs
+dontaudit ic_canister_sandbox_t cert_t : file { read };
