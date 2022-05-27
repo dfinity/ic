@@ -112,7 +112,8 @@ pub struct CanisterIdRanges(Vec<CanisterIdRange>);
 impl TryFrom<Vec<CanisterIdRange>> for CanisterIdRanges {
     type Error = WellFormedError;
 
-    fn try_from(ranges: Vec<CanisterIdRange>) -> Result<Self, WellFormedError> {
+    fn try_from(mut ranges: Vec<CanisterIdRange>) -> Result<Self, WellFormedError> {
+        ranges.sort();
         let r = Self(ranges);
         r.well_formed()?;
         Ok(r)

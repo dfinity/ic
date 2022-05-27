@@ -58,7 +58,7 @@ use ic_protobuf::registry::{
     node_operator::v1::NodeOperatorRecord,
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-    routing_table::v1::RoutingTable,
+    routing_table::v1::{CanisterMigrations, RoutingTable},
     subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
@@ -70,7 +70,8 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
 use ic_registry_keys::{
     get_node_record_node_id, is_node_record_key, make_blessed_replica_version_key,
-    make_crypto_node_key, make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
+    make_canister_migrations_record_key, make_crypto_node_key,
+    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
@@ -103,6 +104,7 @@ use registry_canister::mutations::firewall::{
 };
 use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;
 use registry_canister::mutations::{
+    complete_canister_migration::CompleteCanisterMigrationPayload,
     do_add_node_operator::AddNodeOperatorPayload, do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_bless_replica_version::BlessReplicaVersionPayload, do_create_subnet::CreateSubnetPayload,
     do_recover_subnet::RecoverSubnetPayload,
@@ -110,6 +112,7 @@ use registry_canister::mutations::{
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
     do_update_subnet::UpdateSubnetPayload,
     do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
+    prepare_canister_migration::PrepareCanisterMigrationPayload,
     reroute_canister_ranges::RerouteCanisterRangesPayload,
 };
 use serde::Serialize;
@@ -342,8 +345,14 @@ enum SubCommand {
     ProposeToStopCanister(StopCanisterCmd),
     /// Propose to remove a list of node operators from the Registry
     ProposeToRemoveNodeOperators(ProposeToRemoveNodeOperatorsCmd),
-    /// Propose to change the routing table.
+    /// Propose to modify the routing table. Step 2 of canister migration.
     ProposeToRerouteCanisterRanges(ProposeToRerouteCanisterRangesCmd),
+    /// Propose additions or updates to `canister_migrations`. Step 1 of canister migration.
+    ProposeToPrepareCanisterMigration(ProposeToPrepareCanisterMigrationCmd),
+    /// Propose to remove entries from `canister_migrations`. Step 3 of canister migration.
+    ProposeToCompleteCanisterMigration(ProposeToCompleteCanisterMigrationCmd),
+    /// Get the latest canister migrations.
+    GetCanisterMigrations,
 }
 
 /// Indicates whether a value should be added or removed.
@@ -2568,6 +2577,46 @@ impl SubnetDescriptor {
     }
 }
 
+/// Sub-command to submit a proposal to modify the canister migrations.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToPrepareCanisterMigrationCmd {
+    /// The list of canister ID ranges in migration.
+    #[clap(long, multiple_values(true), required = true)]
+    canister_id_ranges: Vec<CanisterIdRange>,
+    /// The source of the canister ID ranges.
+    #[clap(long, required = true)]
+    source_subnet: PrincipalId,
+    /// The new destination for the canister ID ranges.
+    #[clap(long, required = true)]
+    destination_subnet: PrincipalId,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<PrepareCanisterMigrationPayload>
+    for ProposeToPrepareCanisterMigrationCmd
+{
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Migrate {} canister ranges from subnet {} to subnet {}",
+                self.canister_id_ranges.len(),
+                self.source_subnet,
+                self.destination_subnet
+            ),
+        }
+    }
+
+    async fn payload(&self, _: Url) -> PrepareCanisterMigrationPayload {
+        PrepareCanisterMigrationPayload {
+            canister_id_ranges: self.canister_id_ranges.clone(),
+            source_subnet: SubnetId::from(self.source_subnet),
+            destination_subnet: SubnetId::from(self.destination_subnet),
+        }
+    }
+}
+
 /// Sub-command to propose a change in the routing table.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
@@ -2602,6 +2651,45 @@ impl ProposalTitleAndPayload<RerouteCanisterRangesPayload> for ProposeToRerouteC
             reassigned_canister_ranges: self.canister_id_ranges.clone(),
             source_subnet: SubnetId::from(self.source_subnet),
             destination_subnet: SubnetId::from(self.destination_subnet),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to remove some entries from the canister migrations.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToCompleteCanisterMigrationCmd {
+    /// The list of canister ID ranges to be removed from canister migrations.
+    #[clap(long, multiple_values(true), required = true)]
+    canister_id_ranges: Vec<CanisterIdRange>,
+    /// The migration trace containing a list of subnet IDs.
+    #[clap(long, multiple_values(true), required = true)]
+    migration_trace: Vec<PrincipalId>,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<CompleteCanisterMigrationPayload>
+    for ProposeToCompleteCanisterMigrationCmd
+{
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Remove {} canister ranges from the canister migrations.",
+                self.canister_id_ranges.len()
+            ),
+        }
+    }
+
+    async fn payload(&self, _: Url) -> CompleteCanisterMigrationPayload {
+        CompleteCanisterMigrationPayload {
+            canister_id_ranges: self.canister_id_ranges.clone(),
+            migration_trace: self
+                .migration_trace
+                .iter()
+                .cloned()
+                .map(SubnetId::from)
+                .collect(),
         }
     }
 }
@@ -3280,6 +3368,31 @@ async fn main() {
                 NnsFunction::RerouteCanisterRanges,
                 opts.nns_url,
                 sender,
+            )
+            .await;
+        }
+        SubCommand::ProposeToPrepareCanisterMigration(cmd) => {
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::PrepareCanisterMigration,
+                opts.nns_url,
+                sender,
+            )
+            .await;
+        }
+        SubCommand::ProposeToCompleteCanisterMigration(cmd) => {
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::CompleteCanisterMigration,
+                opts.nns_url,
+                sender,
+            )
+            .await;
+        }
+        SubCommand::GetCanisterMigrations => {
+            print_and_get_last_value::<CanisterMigrations>(
+                make_canister_migrations_record_key().as_bytes().to_vec(),
+                &registry_canister,
             )
             .await;
         }

@@ -1787,6 +1787,10 @@ pub enum NnsFunction {
     RemoveFirewallRules = 26,
     /// Update firewall rules in the registry
     UpdateFirewallRules = 27,
+    /// Insert or update `canister_migrations` entries.
+    PrepareCanisterMigration = 28,
+    /// Remove `canister_migrations` entries.
+    CompleteCanisterMigration = 29,
 }
 /// The proposal status, with respect to decision making and execution.
 /// See also ProposalRewardStatus.

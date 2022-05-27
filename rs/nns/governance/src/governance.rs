@@ -472,6 +472,12 @@ impl NnsFunction {
             }
             NnsFunction::RemoveNodeOperators => (REGISTRY_CANISTER_ID, "remove_node_operators"),
             NnsFunction::RerouteCanisterRanges => (REGISTRY_CANISTER_ID, "reroute_canister_ranges"),
+            NnsFunction::PrepareCanisterMigration => {
+                (REGISTRY_CANISTER_ID, "prepare_canister_migration")
+            }
+            NnsFunction::CompleteCanisterMigration => {
+                (REGISTRY_CANISTER_ID, "complete_canister_migration")
+            }
         };
         Ok((canister_id, method))
     }
@@ -1094,6 +1100,8 @@ impl Proposal {
                             NnsFunction::UpdateNodeRewardsTable => Topic::NetworkEconomics,
                             NnsFunction::AddOrRemoveDataCenters => Topic::ParticipantManagement,
                             NnsFunction::RerouteCanisterRanges => Topic::SubnetManagement,
+                            NnsFunction::PrepareCanisterMigration => Topic::SubnetManagement,
+                            NnsFunction::CompleteCanisterMigration => Topic::SubnetManagement,
                         }
                     } else {
                         Topic::Unspecified
