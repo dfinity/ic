@@ -1,4 +1,4 @@
-use canister_test::{local_test_with_config_e, Canister, Project, Runtime, Wasm};
+use canister_test::{local_test_with_config_e, Canister, CanisterIdRecord, Project, Runtime, Wasm};
 use dfn_candid::{candid_one, CandidOne};
 use ic_config::subnet_config::SubnetConfig;
 use ic_config::Config;
@@ -29,12 +29,14 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::path::Path;
 use std::thread;
+use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
 use crate::{NUM_SNS_CANISTERS, SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES};
 use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
 use ic_crypto_sha::Sha256;
+use ic_nervous_system_root::{CanisterStatusResult, CanisterStatusType};
 use ic_sns_governance::governance::TimeWarp;
 use ic_sns_governance::pb::v1::manage_neuron::disburse::Amount;
 use ic_sns_governance::pb::v1::manage_neuron::{Disburse, Split, StartDissolving};
@@ -873,7 +875,7 @@ impl SnsCanisters<'_> {
             if reward_event.periods_since_genesis > last_reward_period {
                 return reward_event;
             }
-            thread::sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(100));
         }
 
         panic!(
@@ -890,9 +892,39 @@ impl SnsCanisters<'_> {
             if proposal.reward_event_round != 0 {
                 return proposal.reward_event_round;
             }
-            thread::sleep(Duration::from_millis(100));
+            sleep(Duration::from_millis(100));
         }
         panic!("Proposal {:?} was not rewarded", proposal_id);
+    }
+
+    /// Get an SNS canister status from Root
+    pub async fn canister_status(&self, canister_id: CanisterId) -> CanisterStatusResult {
+        self.root
+            .update_(
+                "canister_status",
+                candid_one,
+                CanisterIdRecord::from(canister_id),
+            )
+            .await
+            .unwrap()
+    }
+
+    /// Await an SNS canister completing an upgrade. This method should be called after the
+    /// execution of an upgrade proposal.
+    pub async fn await_canister_upgrade(&self, canister_id: CanisterId) {
+        for _ in 0..25 {
+            let status = self.canister_status(canister_id).await;
+            // Stop waiting once the canister has reached the Running state.
+            if status.status == CanisterStatusType::Running {
+                return;
+            }
+
+            sleep(Duration::from_millis(100));
+        }
+        panic!(
+            "Canister {} didn't reach the running state after upgrading",
+            canister_id
+        )
     }
 
     async fn send_manage_neuron(

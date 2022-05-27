@@ -46,6 +46,8 @@ ic-sns-governance = { path = "../governance" }
 ic-sns-root = { path = "../root" }
 ic-sns-test-utils = { path = "../test_utils" }
 ic-types = { path = "../../types/types" }
+itertools = "0.10.3"
+lazy_static = "1.4.0"
 on_wire = { path = "../../rust_canisters/on_wire" }
 tokio = { version = "1.17.0", features = ["time"] }
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }

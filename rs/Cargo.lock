@@ -1601,7 +1601,7 @@ dependencies = [
  "cranelift-codegen",
  "cranelift-entity",
  "cranelift-frontend",
- "itertools 0.10.0",
+ "itertools 0.10.3",
  "log",
  "smallvec",
  "wasmparser",
@@ -1628,7 +1628,7 @@ dependencies = [
  "clap 2.33.3",
  "criterion-plot",
  "csv",
- "itertools 0.10.0",
+ "itertools 0.10.3",
  "lazy_static",
  "num-traits",
  "oorandom",
@@ -6155,7 +6155,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
- "itertools 0.10.0",
+ "itertools 0.10.3",
  "lazy_static",
  "parse_int",
  "prometheus 0.12.0",
@@ -7091,6 +7091,8 @@ dependencies = [
  "ic-sns-root",
  "ic-sns-test-utils",
  "ic-types 0.8.0",
+ "itertools 0.10.3",
+ "lazy_static",
  "ledger-canister",
  "maplit",
  "on_wire",
@@ -7144,6 +7146,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-sha",
  "ic-nervous-system-common",
+ "ic-nervous-system-root",
  "ic-sns-governance",
  "ic-sns-root",
  "ic-types 0.8.0",
@@ -8059,9 +8062,9 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.10.0"
+version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37d572918e350e82412fe766d24b15e6682fb2ed2bbe018280caa810397cb319"
+checksum = "a9a9d19fa1e79b6215ff29b9d6880b706147f16e9b1dbb1e4e5947b5b02bc5e3"
 dependencies = [
  "either",
 ]
@@ -10008,7 +10011,7 @@ checksum = "a5aab5be6e4732b473071984b3164dbbfb7a3674d30ea5ff44410b6bcd960c3c"
 dependencies = [
  "difflib",
  "float-cmp 0.9.0",
- "itertools 0.10.0",
+ "itertools 0.10.3",
  "normalize-line-endings",
  "predicates-core",
  "regex",
@@ -10272,7 +10275,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "cmake",
  "heck 0.4.0",
- "itertools 0.10.0",
+ "itertools 0.10.3",
  "lazy_static",
  "log",
  "multimap",
@@ -10291,7 +10294,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b670f45da57fb8542ebdbb6105a925fe571b67f9e7ed9f47a06a84e72b4e7cc"
 dependencies = [
  "anyhow",
- "itertools 0.10.0",
+ "itertools 0.10.3",
  "proc-macro2 1.0.36",
  "quote 1.0.17",
  "syn 1.0.93",
@@ -12468,7 +12471,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-utils 0.11.1",
  "ic-utils 0.8.0",
- "itertools 0.10.0",
+ "itertools 0.10.3",
  "json5",
  "lazy_static",
  "leaky-bucket",

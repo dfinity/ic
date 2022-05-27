@@ -1,9 +1,9 @@
-use canister_test::{Project, Runtime};
+use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_canister_client::Sender;
 use ic_ic00_types::{CanisterInstallMode, CanisterStatusResultV2};
-use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
 use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, CanisterStatusType};
 use ic_sns_governance::pb::v1::{
     governance_error::ErrorType, proposal::Action, NervousSystemParameters, NeuronPermissionList,
@@ -11,13 +11,21 @@ use ic_sns_governance::pb::v1::{
 };
 use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
-    local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder,
+    install_governance_canister, install_ledger_canister, install_root_canister,
+    local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder, UserInfo,
 };
+use itertools::Itertools;
+use lazy_static::lazy_static;
 use ledger_canister::Tokens;
 use maplit::btreeset;
 use std::collections::BTreeSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, Duration};
+
+// The minimum WASM payload.
+lazy_static! {
+    pub static ref EMPTY_WASM: Vec<u8> = vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0];
+}
 
 #[test]
 fn test_upgrade_canister_proposal_is_successful() {
@@ -660,6 +668,198 @@ fn governance_mem_test() {
 
         Ok(())
     });
+}
+
+/// This is a regression test: it used to be that, if two upgrades happened in a
+/// row, with the stable memory of the second being smaller than for the first,
+/// the second upgrade would read too many bytes from stable memory, resulting
+/// in a trap in post_upgrade.
+#[test]
+fn test_upgrade_after_state_shrink() {
+    local_test_on_sns_subnet(|runtime| async move {
+        // Initialize a User with a unique principal to claim a neuron
+        let neuron_claimer = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
+        // Initialize an extra user who's unique principal will be used to shrink the state
+        let extra_user = UserInfo::new(Sender::from_keypair(&TEST_USER2_KEYPAIR));
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            neuron_grantable_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_ledger_account(neuron_claimer.sender.get_principal_id().into(), alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        // Stake and claim a neuron using the `neuron_claimer` user
+        sns_canisters
+            .stake_and_claim_neuron(&neuron_claimer.sender, Some(ONE_YEAR_SECONDS as u32))
+            .await;
+
+        // Use the neuron_claimer to add the extra_user's unique principal as a permission to
+        // the neuron. This permission is what will shrink the state after the update.
+        sns_canisters
+            .add_neuron_permissions(
+                &neuron_claimer.sender,
+                &neuron_claimer.subaccount,
+                Some(extra_user.sender.get_principal_id()),
+                vec![NeuronPermissionType::Vote as i32],
+            )
+            .await;
+
+        // Get the WASM of the sns-governance canister to be used in the upgrades
+        let governance_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
+            "sns/governance",
+            "sns-governance-canister",
+            &[], // features
+        )
+        .bytes();
+
+        // Create and submit an upgrade proposal to trigger the first "write and read" of
+        // stable memory for the governance canister.
+        let proposal = Proposal {
+            title: "Upgrade governance.".into(),
+            action: Some(Action::UpgradeSnsControlledCanister(
+                UpgradeSnsControlledCanister {
+                    canister_id: Some(sns_canisters.governance.canister_id().into()),
+                    new_canister_wasm: governance_wasm,
+                },
+            )),
+            ..Default::default()
+        };
+
+        sns_canisters
+            .make_proposal(
+                &neuron_claimer.sender,
+                &neuron_claimer.subaccount,
+                proposal.clone(),
+            )
+            .await
+            .unwrap();
+
+        sns_canisters
+            .await_canister_upgrade(sns_canisters.governance.canister_id())
+            .await;
+
+        // Now that the first upgrade is complete, shrink the state by removing the NeuronPermission
+        // granted to the extra_voter user.
+        sns_canisters
+            .remove_neuron_permissions(
+                &neuron_claimer.sender,
+                &neuron_claimer.subaccount,
+                &extra_user.sender.get_principal_id(),
+                vec![NeuronPermissionType::Vote as i32],
+            )
+            .await;
+
+        // Submit the same upgrade proposal to trigger the second "write and read" of
+        // stable memory for the governance canister.
+        sns_canisters
+            .make_proposal(&neuron_claimer.sender, &neuron_claimer.subaccount, proposal)
+            .await
+            .unwrap();
+
+        // Await the canister upgrade to complete. If the upgrade completes we know that
+        // the canister completed it pre-upgrade and post-upgrade cycle successfully
+        sns_canisters
+            .await_canister_upgrade(sns_canisters.governance.canister_id())
+            .await;
+
+        Ok(())
+    });
+}
+
+/// Test that SNS canisters can be installed in any order.
+#[test]
+fn test_install_canisters_in_any_order() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let mut sns_init_payload = SnsInitPayloadsBuilder::new()
+            .with_nervous_system_parameters(NervousSystemParameters::with_default_values())
+            .build();
+
+        // Initialize the SNS canisters but do not install any canister code
+        let mut root = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Couldn't create Root canister");
+
+        let mut governance = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Couldn't create Governance canister");
+
+        let mut ledger = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Couldn't create Ledger canister");
+
+        let root_canister_id = root.canister_id();
+        let governance_canister_id = governance.canister_id();
+        let ledger_canister_id = ledger.canister_id();
+
+        // Populate the minimal set of fields for install
+        sns_init_payload.governance.ledger_canister_id = Some(ledger_canister_id.into());
+        sns_init_payload.governance.root_canister_id = Some(root_canister_id.into());
+        sns_init_payload.root.governance_canister_id = Some(governance_canister_id.into());
+        sns_init_payload.root.ledger_canister_id = Some(ledger_canister_id.into());
+
+        // Use canister tags to generate all the permutations needed to test random order installs
+        let canister_tags = vec!["governance", "ledger", "root"];
+
+        // Generate the permutations
+        let permutation_size = canister_tags.len();
+        let canister_install_order_permutations =
+            canister_tags.into_iter().permutations(permutation_size);
+
+        for canister_install_order in canister_install_order_permutations {
+            println!("Testing install order: {:?}", canister_install_order);
+            for canister_tag in canister_install_order {
+                println!("Starting install of {}", canister_tag);
+
+                // Match the canister tag and wait for the install to complete to guarantee the
+                // order
+                match canister_tag {
+                    "governance" => {
+                        install_governance_canister(
+                            &mut governance,
+                            sns_init_payload.governance.clone(),
+                        )
+                        .await
+                    }
+                    "ledger" => {
+                        install_ledger_canister(&mut ledger, sns_init_payload.ledger.clone()).await
+                    }
+                    "root" => install_root_canister(&mut root, sns_init_payload.root.clone()).await,
+                    _ => panic!("Unexpected canister tag"),
+                };
+                println!("Successfully installed {}", canister_tag);
+            }
+
+            // After each permutation, reset all the canisters to the empty wasm to
+            // test the next install order
+            reset_canister_to_empty_wasm(&mut governance).await;
+            reset_canister_to_empty_wasm(&mut ledger).await;
+            reset_canister_to_empty_wasm(&mut root).await;
+        }
+
+        Ok(())
+    });
+}
+
+async fn reset_canister_to_empty_wasm(canister: &mut Canister<'_>) {
+    let wasm: Wasm = Wasm::from_bytes(EMPTY_WASM.clone());
+    wasm.install_with_retries_onto_canister(canister, None, None)
+        .await
+        .unwrap_or_else(|e| panic!("Could not install empty wasm due to {}", e));
 }
 
 fn clear_wasm_from_proposal(proposal: &mut ProposalData) {
