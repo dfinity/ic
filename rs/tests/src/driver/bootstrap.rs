@@ -237,6 +237,8 @@ pub fn create_config_disk_image(
         .registry_local_store_path();
 
     cmd.arg(img_path.clone())
+        .arg("--hostname")
+        .arg(node.node_id.to_string())
         .arg("--ic_registry_local_store")
         .arg(local_store_path)
         .arg("--ic_crypto")
