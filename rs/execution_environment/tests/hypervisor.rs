@@ -1626,7 +1626,7 @@ fn instruction_limit_is_respected() {
 #[test]
 fn subnet_available_memory_is_respected_by_memory_grow() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_available_memory(9 * WASM_PAGE_SIZE as i64)
+        .with_subnet_total_memory(9 * WASM_PAGE_SIZE as i64)
         .build();
     let wat = r#"
         (module
@@ -2179,6 +2179,10 @@ fn cannot_execute_update_on_stopping_canister() {
     );
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopping, err.code());
+    assert_eq!(
+        format!("Canister {} is not running", canister_id),
+        err.description()
+    );
 }
 
 #[test]
@@ -2193,6 +2197,10 @@ fn cannot_execute_update_on_stopped_canister() {
     );
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopped, err.code());
+    assert_eq!(
+        format!("Canister {} is not running", canister_id),
+        err.description()
+    );
 }
 
 #[test]
@@ -2209,6 +2217,10 @@ fn cannot_execute_query_on_stopping_canister() {
     );
     let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopping, err.code());
+    assert_eq!(
+        format!("Canister {} is not running", canister_id),
+        err.description()
+    );
 }
 
 #[test]
@@ -2223,6 +2235,10 @@ fn cannot_execute_query_on_stopped_canister() {
     );
     let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopped, err.code());
+    assert_eq!(
+        format!("Canister {} is not running", canister_id),
+        err.description()
+    );
 }
 
 #[test]
@@ -3279,7 +3295,8 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
     test.uninstall_code(b_id).unwrap();
 
     // Execute canister C and all the replies.
-    let ingress_status = test.execute_all(ingress_id);
+    test.execute_all();
+    let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
 
     let reject_message = match result {
@@ -3386,7 +3403,8 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
         .unwrap();
 
     // Execute canister C and all the replies.
-    let ingress_status = test.execute_all(ingress_id);
+    test.execute_all();
+    let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     let reject_message = match result {
         WasmResult::Reply(_) => unreachable!("Expected reject, got: {:?}", result),
@@ -3507,7 +3525,8 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
     test.uninstall_code(b_id).unwrap();
 
     // Execute method #2 of canister B and all the replies.
-    let ingress_status = test.execute_all(ingress_id);
+    test.execute_all();
+    let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     let reject_message = match result {
         WasmResult::Reply(_) => unreachable!("Expected reject, got: {:?}", result),
@@ -3581,8 +3600,10 @@ fn cannot_send_request_to_stopping_canister() {
     // Send a message to canister A which will call canister B.
     let ingress_status = test.ingress_raw(a_id, "update", a).1;
 
-    // The call gets stuck in the output queue of canister A because we don't
-    // induct message to a stopping canister.
+    // Canister B refuses to accept the message in its input queue.
+    // The message is lost in the current test setup. In production
+    // message routing would generate a reject message.
+    assert_eq!(1, test.lost_messages().len());
     let ingress_state = match ingress_status {
         IngressStatus::Known { state, .. } => state,
         IngressStatus::Unknown => unreachable!("Expected known ingress status"),
@@ -3621,8 +3642,10 @@ fn cannot_send_request_to_stopped_canister() {
     // Send a message to canister A which will call canister B.
     let ingress_status = test.ingress_raw(a_id, "update", a).1;
 
-    // The call gets stuck in the output queue of canister A because we don't
-    // induct message to a stopped canister.
+    // Canister B refuses to accept the message in its input queue.
+    // The message is lost in the current test setup. In production
+    // message routing would generate a reject message.
+    assert_eq!(1, test.lost_messages().len());
     let ingress_state = match ingress_status {
         IngressStatus::Known { state, .. } => state,
         IngressStatus::Unknown => unreachable!("Expected known ingress status"),
@@ -3651,7 +3674,7 @@ fn cannot_stop_canister_with_open_call_context() {
 
     // Enqueue ingress message to canister A but do not execute it (guaranteed
     // by "manual execution" option of the test).
-    let ingress_status = test.ingress_raw(a_id, "update", a).1;
+    let (ingress_id, ingress_status) = test.ingress_raw(a_id, "update", a);
     assert_eq!(ingress_status, IngressStatus::Unknown);
 
     // Execute the ingress message and induct all messages to get the call
@@ -3674,12 +3697,12 @@ fn cannot_stop_canister_with_open_call_context() {
     );
 
     // Execute the call in canister B.
-    let ingress_status = test.execute_message(b_id);
-    assert_eq!(ingress_status, None);
+    test.execute_message(b_id);
 
     // Get the reply back to canister A and execute it.
     test.induct_messages();
-    let ingress_status = test.execute_message(a_id).unwrap().1;
+    test.execute_message(a_id);
+    let ingress_status = test.ingress_status(ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     assert_eq!(result, WasmResult::Reply(b));
 
