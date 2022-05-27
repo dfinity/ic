@@ -13,6 +13,7 @@ use ic_config::{
     artifact_pool::ArtifactPoolConfig, consensus::ConsensusConfig, transport::TransportConfig,
 };
 use ic_consensus::{
+    canister_http::CanisterHttpPayloadBuilderImpl,
     certification,
     consensus::{pool_reader::PoolReader, ConsensusCrypto, Membership},
     dkg, ecdsa,
@@ -260,6 +261,19 @@ fn setup_artifact_manager(
     );
     let ingress_manager = Arc::new(ingress_manager);
 
+    let canister_http_payload_builder = CanisterHttpPayloadBuilderImpl::new(
+        artifact_pools.canister_http_pool.clone(),
+        artifact_pools.consensus_pool_cache.clone(),
+        consensus_crypto.clone(),
+        membership.clone(),
+        subnet_id,
+        registry_client.clone(),
+        &metrics_registry,
+        replica_logger.clone(),
+    );
+
+    let canister_http_payload_builder = Arc::new(canister_http_payload_builder);
+
     let dkg_key_manager = Arc::new(Mutex::new(
         ic_consensus::consensus::dkg_key_manager::DkgKeyManager::new(
             metrics_registry.clone(),
@@ -284,6 +298,7 @@ fn setup_artifact_manager(
                     Arc::clone(&ingress_manager) as Arc<_>,
                     Arc::clone(&xnet_payload_builder) as Arc<_>,
                     Arc::clone(&self_validating_payload_builder) as Arc<_>,
+                    Arc::clone(&canister_http_payload_builder) as Arc<_>,
                     Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
                     Arc::clone(&artifact_pools.ecdsa_pool) as Arc<_>,
                     Arc::clone(&artifact_pools.canister_http_pool) as Arc<_>,

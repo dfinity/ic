@@ -332,7 +332,7 @@ pub fn aggregate<
 
 // Return a mapping from the unique content contained in `shares` to the
 // shares that contain this content
-fn group_shares<C: Eq + Ord, S: Ord, Shares: Iterator<Item = Signed<C, S>>>(
+pub(crate) fn group_shares<C: Eq + Ord, S: Ord, Shares: Iterator<Item = Signed<C, S>>>(
     shares: Shares,
 ) -> BTreeMap<C, BTreeSet<S>> {
     shares.fold(BTreeMap::new(), |mut grouped_shares, share| {

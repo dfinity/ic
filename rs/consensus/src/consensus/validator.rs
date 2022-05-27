@@ -959,7 +959,12 @@ impl Validator {
         );
 
         self.payload_builder
-            .validate_payload(&proposal.payload, &payloads, &proposal.context)
+            .validate_payload(
+                proposal.height,
+                &proposal.payload,
+                &payloads,
+                &proposal.context,
+            )
             .map_err(|err| {
                 err.map(
                     PermanentError::PayloadValidationError,
@@ -1924,12 +1929,12 @@ pub mod test {
             Arc::get_mut(&mut payload_builder)
                 .unwrap()
                 .expect_validate_payload()
-                .withf(move |_, payloads, _| {
+                .withf(move |_, _, payloads, _| {
                     // Assert that payloads are from blocks between:
                     // `certified_height` and the current height (`prior_height`)
                     payloads.len() as u64 == (prior_height - certified_height).get()
                 })
-                .returning(|_, _, _| Ok(()));
+                .returning(|_, _, _, _| Ok(()));
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
@@ -2037,7 +2042,7 @@ pub mod test {
             Arc::get_mut(&mut payload_builder)
                 .unwrap()
                 .expect_validate_payload()
-                .returning(|_, _, _| Ok(()));
+                .returning(|_, _, _, _| Ok(()));
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
@@ -2134,7 +2139,7 @@ pub mod test {
             Arc::get_mut(&mut payload_builder)
                 .unwrap()
                 .expect_validate_payload()
-                .returning(|_, _, _| Ok(()));
+                .returning(|_, _, _, _| Ok(()));
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
@@ -2256,7 +2261,7 @@ pub mod test {
             Arc::get_mut(&mut payload_builder)
                 .unwrap()
                 .expect_validate_payload()
-                .returning(|_, _, _| Ok(()));
+                .returning(|_, _, _, _| Ok(()));
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
@@ -2332,7 +2337,7 @@ pub mod test {
             Arc::get_mut(&mut payload_builder)
                 .unwrap()
                 .expect_validate_payload()
-                .returning(|_, _, _| Ok(()));
+                .returning(|_, _, _, _| Ok(()));
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
@@ -2696,7 +2701,7 @@ pub mod test {
             Arc::get_mut(&mut payload_builder)
                 .unwrap()
                 .expect_validate_payload()
-                .returning(|_, _, _| {
+                .returning(|_, _, _, _| {
                     Err(ValidationError::Transient(
                         PayloadTransientError::XNetPayloadValidationError(
                             XNetTransientValidationError::StateNotCommittedYet(Height::from(0)),

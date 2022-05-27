@@ -49,7 +49,7 @@ use crate::consensus::{
 };
 use ic_config::consensus::ConsensusConfig;
 use ic_interfaces::{
-    canister_http::CanisterHttpPool,
+    canister_http::{CanisterHttpPayloadBuilder, CanisterHttpPool},
     consensus::{Consensus, ConsensusGossip},
     consensus_pool::ConsensusPool,
     dkg::DkgPool,
@@ -135,6 +135,7 @@ impl ConsensusImpl {
         ingress_selector: Arc<dyn IngressSelector>,
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
+        canister_http_payload_builder: Arc<dyn CanisterHttpPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
         canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
@@ -154,6 +155,7 @@ impl ConsensusImpl {
             ingress_selector.clone(),
             xnet_payload_builder,
             self_validating_payload_builder,
+            canister_http_payload_builder,
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -621,6 +623,7 @@ pub fn setup(
     ingress_selector: Arc<dyn IngressSelector>,
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
     self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
+    canister_http_payload_builder: Arc<dyn CanisterHttpPayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
     canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
@@ -655,6 +658,7 @@ pub fn setup(
             ingress_selector,
             xnet_payload_builder,
             self_validating_payload_builder,
+            canister_http_payload_builder,
             dkg_pool,
             ecdsa_pool,
             canister_http_pool,
@@ -682,6 +686,7 @@ mod tests {
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::{
+        canister_http::FakeCanisterHttpPayloadBuilder,
         ingress_selector::FakeIngressSelector,
         message_routing::FakeMessageRouting,
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
@@ -747,6 +752,7 @@ mod tests {
             Arc::new(FakeIngressSelector::new()),
             Arc::new(FakeXNetPayloadBuilder::new()),
             Arc::new(FakeSelfValidatingPayloadBuilder::new()),
+            Arc::new(FakeCanisterHttpPayloadBuilder::new()),
             dkg_pool,
             ecdsa_pool,
             canister_http_pool,

@@ -14,9 +14,23 @@ use ic_protobuf::{canister_http::v1 as canister_http_pb, types::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
+pub const MAX_CANISTER_HTTP_PAYLOAD_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
+
 /// Payload that contains CanisterHttpPayload messages.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CanisterHttpPayload(pub Vec<CanisterHttpResponseWithConsensus>);
+
+impl CanisterHttpPayload {
+    /// Returns the number of responses that this payload contains
+    pub fn num_responses(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns true, if this is an empty payload
+    pub fn is_empty(&self) -> bool {
+        self.num_responses() == 0
+    }
+}
 
 impl From<&CanisterHttpPayload> for pb::CanisterHttpPayload {
     fn from(payload: &CanisterHttpPayload) -> Self {

@@ -52,6 +52,7 @@ impl BatchPayloadSectionBuilder {
     pub(crate) fn build_payload(
         &self,
         payload: &mut BatchPayload,
+        height: Height,
         validation_context: &ValidationContext,
         max_size: NumBytes,
         priority: usize,
@@ -90,8 +91,12 @@ impl BatchPayloadSectionBuilder {
             Self::CanisterHttp(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
 
-                let canister_http =
-                    builder.get_canister_http_payload(validation_context, &past_payloads, max_size);
+                let canister_http = builder.get_canister_http_payload(
+                    height,
+                    validation_context,
+                    &past_payloads,
+                    max_size,
+                );
                 let size = NumBytes::new(canister_http.count_bytes() as u64);
 
                 payload.canister_http = canister_http;
@@ -112,6 +117,7 @@ impl BatchPayloadSectionBuilder {
     /// **On error:**: Either a transient or permantent error.
     pub(crate) fn validate_payload(
         &self,
+        height: Height,
         payload: &BatchPayload,
         validation_context: &ValidationContext,
         past_payloads: &[(Height, Time, Payload)],
@@ -145,6 +151,7 @@ impl BatchPayloadSectionBuilder {
             BatchPayloadSectionBuilder::CanisterHttp(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
                 Ok(builder.validate_canister_http_payload(
+                    height,
                     &payload.canister_http,
                     validation_context,
                     &past_payloads,

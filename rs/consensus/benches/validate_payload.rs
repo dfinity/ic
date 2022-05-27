@@ -34,6 +34,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
+    canister_http::FakeCanisterHttpPayloadBuilder,
     consensus::{fake::*, make_genesis, MockConsensusCache},
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -156,6 +157,7 @@ where
             ingress_manager,
             Arc::new(FakeXNetPayloadBuilder::new()),
             Arc::new(FakeSelfValidatingPayloadBuilder::new()),
+            Arc::new(FakeCanisterHttpPayloadBuilder::new()),
             metrics_registry,
             no_op_logger(),
         ));
@@ -302,7 +304,12 @@ fn validate_payload(
         certified_height: Height::from(CERTIFIED_HEIGHT),
     };
 
-    payload_builder.validate_payload(payload, &past_payloads, &validation_context)
+    payload_builder.validate_payload(
+        Height::from(CERTIFIED_HEIGHT + 1),
+        payload,
+        &past_payloads,
+        &validation_context,
+    )
 }
 
 fn validate_payload_benchmark(criterion: &mut Criterion) {

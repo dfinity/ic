@@ -77,6 +77,13 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
         Box::new(self.content.iter())
     }
 
+    fn get_response_content_by_hash(
+        &self,
+        hash: &CryptoHashOf<CanisterHttpResponse>,
+    ) -> Option<CanisterHttpResponse> {
+        self.content.get(hash).cloned()
+    }
+
     fn lookup_validated(
         &self,
         msg_id: &CanisterHttpResponseId,
