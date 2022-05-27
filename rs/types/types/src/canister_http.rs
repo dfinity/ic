@@ -215,7 +215,7 @@ pub struct CanisterHttpResponseDivergence {
 }
 
 /// Metadata about some [`CanisterHttpResponseContent`].
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CanisterHttpResponseMetadata {
     pub id: CallbackId,
     pub timeout: Time,

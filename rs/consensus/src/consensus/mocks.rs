@@ -43,6 +43,7 @@ mock! {
 
         fn validate_payload(
             &self,
+            height: Height,
             payload: &Payload,
             past_payloads: &[(Height, Time, Payload)],
             context: &ValidationContext,

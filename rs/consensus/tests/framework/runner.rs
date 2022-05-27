@@ -144,6 +144,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.ingress_selector.clone(),
             deps.xnet_payload_builder.clone(),
             deps.self_validating_payload_builder.clone(),
+            deps.canister_http_payload_builder.clone(),
             deps.dkg_pool.clone(),
             deps.ecdsa_pool.clone(),
             deps.canister_http_pool.clone(),

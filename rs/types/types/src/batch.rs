@@ -6,7 +6,7 @@ mod ingress;
 mod self_validating;
 mod xnet;
 
-pub use self::canister_http::CanisterHttpPayload;
+pub use self::canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE};
 pub use self::ingress::{IngressPayload, IngressPayloadError, InvalidIngressPayload};
 pub use self::self_validating::SelfValidatingPayload;
 pub use self::xnet::XNetPayload;

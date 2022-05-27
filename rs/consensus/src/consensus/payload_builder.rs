@@ -1,13 +1,10 @@
 //! Payload creation/validation subcomponent
 
-use crate::{
-    canister_http::CanisterHttpPayloadBuilderImpl,
-    consensus::{
-        block_maker::SubnetRecords, metrics::PayloadBuilderMetrics,
-        payload::BatchPayloadSectionBuilder,
-    },
+use crate::consensus::{
+    block_maker::SubnetRecords, metrics::PayloadBuilderMetrics, payload::BatchPayloadSectionBuilder,
 };
 use ic_interfaces::{
+    canister_http::CanisterHttpPayloadBuilder,
     consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
@@ -51,6 +48,7 @@ pub trait PayloadBuilder: Send + Sync {
     /// order.
     fn validate_payload(
         &self,
+        height: Height,
         payload: &Payload,
         past_payloads: &[(Height, Time, Payload)],
         context: &ValidationContext,
@@ -74,16 +72,15 @@ impl PayloadBuilderImpl {
         ingress_selector: Arc<dyn IngressSelector>,
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
+        canister_http_payload_builder: Arc<dyn CanisterHttpPayloadBuilder>,
         metrics: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
         let section_builder = vec![
-            BatchPayloadSectionBuilder::Ingress(ingress_selector.clone()),
-            BatchPayloadSectionBuilder::SelfValidating(self_validating_payload_builder.clone()),
-            BatchPayloadSectionBuilder::XNet(xnet_payload_builder.clone()),
-            BatchPayloadSectionBuilder::CanisterHttp(Arc::new(
-                CanisterHttpPayloadBuilderImpl::new(),
-            )),
+            BatchPayloadSectionBuilder::Ingress(ingress_selector),
+            BatchPayloadSectionBuilder::SelfValidating(self_validating_payload_builder),
+            BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
+            BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
         ];
 
         Self {
@@ -129,6 +126,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
             accumulated_size += self.section_builder[section_id]
                 .build_payload(
                     &mut batch_payload,
+                    height,
                     context,
                     NumBytes::new(max_block_payload_size.saturating_sub(accumulated_size)),
                     section_id,
@@ -142,6 +140,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
 
     fn validate_payload(
         &self,
+        height: Height,
         payload: &Payload,
         past_payloads: &[(Height, Time, Payload)],
         context: &ValidationContext,
@@ -177,7 +176,8 @@ impl PayloadBuilder for PayloadBuilderImpl {
 
         let mut accumulated_size = NumBytes::new(0);
         for builder in &self.section_builder {
-            accumulated_size += builder.validate_payload(batch_payload, context, past_payloads)?;
+            accumulated_size +=
+                builder.validate_payload(height, batch_payload, context, past_payloads)?;
             if accumulated_size > max_block_payload_size {
                 return Err(ValidationError::Permanent(
                     PayloadPermanentError::PayloadTooBig {
@@ -224,6 +224,7 @@ mod test {
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
+        canister_http::FakeCanisterHttpPayloadBuilder,
         consensus::fake::Fake,
         ingress_selector::FakeIngressSelector,
         mock_time,
@@ -234,6 +235,7 @@ mod test {
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_types::{
+        canister_http::CanisterHttpResponseWithConsensus,
         consensus::{
             certification::{Certification, CertificationContent},
             dkg::Dealings,
@@ -253,6 +255,7 @@ mod test {
         mut ingress_messages: Vec<Vec<SignedIngress>>,
         mut certified_streams: Vec<BTreeMap<SubnetId, CertifiedStreamSlice>>,
         responses_from_adapter: Vec<BitcoinAdapterResponse>,
+        canister_http_responses: Vec<CanisterHttpResponseWithConsensus>,
     ) -> PayloadBuilderImpl {
         let ingress_selector = FakeIngressSelector::new();
         ingress_messages
@@ -262,6 +265,8 @@ mod test {
             FakeXNetPayloadBuilder::make(certified_streams.drain(..).collect());
         let self_validating_payload_builder =
             FakeSelfValidatingPayloadBuilder::new().with_responses(responses_from_adapter);
+        let canister_http_payload_builder =
+            FakeCanisterHttpPayloadBuilder::new().with_responses(canister_http_responses);
 
         PayloadBuilderImpl::new(
             subnet_test_id(0),
@@ -269,6 +274,7 @@ mod test {
             Arc::new(ingress_selector),
             Arc::new(xnet_payload_builder),
             Arc::new(self_validating_payload_builder),
+            Arc::new(canister_http_payload_builder),
             MetricsRegistry::new(),
             no_op_logger(),
         )
@@ -314,6 +320,7 @@ mod test {
         provided_ingress_messages: Vec<SignedIngress>,
         provided_certified_streams: BTreeMap<SubnetId, CertifiedStreamSlice>,
         provided_responses_from_adapter: Vec<BitcoinAdapterResponse>,
+        provided_canister_http_responses: Vec<CanisterHttpResponseWithConsensus>,
     ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { registry, .. } = dependencies(pool_config, 1);
@@ -322,6 +329,7 @@ mod test {
                 vec![provided_ingress_messages.clone()],
                 vec![provided_certified_streams.clone()],
                 provided_responses_from_adapter.clone(),
+                provided_canister_http_responses.clone(),
             );
 
             let prev_payloads = Vec::new();
@@ -367,7 +375,7 @@ mod test {
             callback_id: 0,
         }];
 
-        test_get_messages(inputs, certified_streams, responses_from_adapter)
+        test_get_messages(inputs, certified_streams, responses_from_adapter, vec![])
     }
 
     #[test]
@@ -444,14 +452,14 @@ mod test {
                 // No ingress for third block
             ];
             let payload_builder =
-                make_test_payload_impl(registry, ingress, certified_streams, vec![]);
+                make_test_payload_impl(registry, ingress, certified_streams, vec![], vec![]);
 
             // Build first payload and then validate it
             let payload0 =
                 payload_builder.get_payload(Height::from(0), &[], &context, &subnet_records);
             let wrapped_payload0 = wrap_batch_payload(0, payload0);
             payload_builder
-                .validate_payload(&wrapped_payload0, &[], &context)
+                .validate_payload(Height::from(0), &wrapped_payload0, &[], &context)
                 .unwrap();
 
             // Build second payload and validate it
@@ -464,7 +472,7 @@ mod test {
             );
             let wrapped_payload1 = wrap_batch_payload(0, payload1);
             payload_builder
-                .validate_payload(&wrapped_payload1, &past_payload0, &context)
+                .validate_payload(Height::from(1), &wrapped_payload1, &past_payload0, &context)
                 .unwrap();
 
             // Build third payload and validate it
@@ -478,8 +486,12 @@ mod test {
             );
             let wrapped_payload2 = wrap_batch_payload(1, payload2);
 
-            let pb_result =
-                payload_builder.validate_payload(&wrapped_payload2, &past_payload1, &context);
+            let pb_result = payload_builder.validate_payload(
+                Height::from(2),
+                &wrapped_payload2,
+                &past_payload1,
+                &context,
+            );
 
             match pb_result {
                 Err(

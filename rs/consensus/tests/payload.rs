@@ -9,6 +9,7 @@ use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
+use ic_test_utilities::canister_http::FakeCanisterHttpPayloadBuilder;
 use ic_test_utilities::{
     consensus::make_genesis,
     crypto::CryptoReturningOk,
@@ -45,8 +46,13 @@ fn consensus_produces_expected_batches() {
 
         let xnet_payload_builder = FakeXNetPayloadBuilder::new();
         let xnet_payload_builder = Arc::new(xnet_payload_builder);
+
         let self_validating_payload_builder = FakeSelfValidatingPayloadBuilder::new();
         let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
+
+        let canister_http_payload_builder = FakeCanisterHttpPayloadBuilder::new();
+        let canister_http_payload_builder = Arc::new(canister_http_payload_builder);
+
         let mut state_manager = MockStateManager::new();
         state_manager.expect_remove_states_below().return_const(());
         state_manager
@@ -135,6 +141,7 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&ingress_selector) as Arc<_>,
             Arc::clone(&xnet_payload_builder) as Arc<_>,
             Arc::clone(&self_validating_payload_builder) as Arc<_>,
+            Arc::clone(&canister_http_payload_builder) as Arc<_>,
             Arc::clone(&dkg_pool) as Arc<_>,
             Arc::clone(&ecdsa_pool) as Arc<_>,
             Arc::clone(&canister_http_pool) as Arc<_>,
