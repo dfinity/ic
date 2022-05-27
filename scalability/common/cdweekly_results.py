@@ -27,7 +27,7 @@ def convert_date(ts: int):
 
 
 WATTS_PER_NODE = 700
-MAINNET_CURR_TRANSACTION_RATE = 2900  # per second
+MAINNET_CURR_TRANSACTION_RATE = 3300  # per second
 # Total facility enery (incl compute + cooling) / IT equipment energy (only compute)
 # https://en.wikipedia.org/wiki/Power_usage_effectiveness
 PUE = 2.33
@@ -159,12 +159,22 @@ def parse_topo(data):
     data = json.loads(data)
 
     subnets = data["topology"]["subnets"]
-    num_subnets = len(subnets)
+    num_subnets = 0
+    num_nodes = 0
 
-    num_nodes_per_subnet = [len(v["records"][0]["value"]["membership"]) for (_, v) in subnets.items()]
-    num_nodes = sum(num_nodes_per_subnet)
+    num_app_subnets = 0
+    num_app_nodes = 0
 
-    return (num_nodes, num_subnets)
+    for (_, v) in subnets.items():
+        subnet_type = v["records"][0]["value"]["subnet_type"]
+        print("Subnet type:", subnet_type)
+        num_subnets += 1
+        num_nodes += len(v["records"][0]["value"]["membership"])
+        if subnet_type != "system":
+            num_app_subnets += 1
+            num_app_nodes += len(v["records"][0]["value"]["membership"])
+
+    return (num_nodes, num_subnets, num_app_nodes, num_app_subnets)
 
 
 def get_num_boundary_nodes():
@@ -178,7 +188,7 @@ def get_num_boundary_nodes():
 if __name__ == "__main__":
 
     misc.parse_command_line_args()
-    num_nodes, num_subnets = get_num_nodes_mainnet()
+    num_nodes, num_subnets, num_app_nodes, num_app_subnets = get_num_nodes_mainnet()
     timestamp, num_boundary_nodes = get_num_boundary_nodes()
     num_boundary_nodes = int(num_boundary_nodes)
     print("Boundary nodes at ", datetime.fromtimestamp(timestamp), num_boundary_nodes)
@@ -190,8 +200,10 @@ if __name__ == "__main__":
 
         data = {
             "num_subnets": num_subnets,
-            "num_boundary_nodes": num_boundary_nodes,
             "num_nodes": num_nodes,
+            "num_app_subnets": num_app_subnets,
+            "num_app_nodes": num_app_nodes,
+            "num_boundary_nodes": num_boundary_nodes,
             "last_generated": int(time.time()),
         }
 
@@ -239,8 +251,11 @@ if __name__ == "__main__":
         print("query", data["plot_exp1_query"]["plot"][0]["y"], latest_query_performance)
         print("update", latest_update_performance)
 
-        latest_approx_mainnet_update_performance = num_subnets * latest_update_performance
-        latest_approx_mainnet_query_performance = num_nodes * latest_query_performance
+        latest_approx_mainnet_update_performance = num_app_subnets * latest_update_performance
+        latest_approx_mainnet_query_performance = num_app_nodes * latest_query_performance
+
+        data["latest_approx_mainnet_subnet_update_performance"] = "{:.0f}".format(latest_update_performance)
+        data["latest_approx_mainnet_node_query_performance"] = "{:.0f}".format(latest_query_performance)
 
         data["latest_approx_mainnet_update_performance"] = "{:.0f}".format(latest_approx_mainnet_update_performance)
         data["latest_approx_mainnet_query_performance"] = "{:.0f}".format(latest_approx_mainnet_query_performance)
