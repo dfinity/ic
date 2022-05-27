@@ -4,6 +4,12 @@ policy_module(misc-fixes, 1.0.0)
 # policy)
 
 ###############################################################################
+# Mark unconfined_t as permissive for now, until policy development is
+# completed.
+require { type unconfined_t; }
+permissive unconfined_t;
+
+###############################################################################
 # lvm / device mapper
 
 require { type lvm_t; }
