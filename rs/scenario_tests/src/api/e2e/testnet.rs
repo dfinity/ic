@@ -68,9 +68,6 @@ pub fn registry_client(
         Some(&metrics_registry),
     ));
     registry_client.try_polling_latest_version(100).unwrap();
-    if let Err(e) = registry_client.fetch_and_start_polling() {
-        panic!("fetch_and_start_polling failed: {}", e);
-    }
 
     registry_client
 }
