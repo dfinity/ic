@@ -72,6 +72,12 @@ options may be specified:
     change required for enabling a development mode. The default deployment type
     is 'prod'.
 
+  --denylist path
+    Specify a denylist of canisters for the Boundary Nodes
+
+  --prober-identity path
+    specify an identity file for the prober
+
   --nginx-domainname
     domain name hosted by nginx ic0.dev or ic0.app
 EOF
@@ -130,6 +136,9 @@ function build_ic_bootstrap_tar() {
             --denylist)
                 DENY_LIST="$2"
                 ;;
+            --prober-identity)
+                PROBER_IDENTITY="$2"
+                ;;
             --deployment-type)
                 DEPLOYMENT_TYPE="$2"
                 if [ ${DEPLOYMENT_TYPE} != "prod" ] && [ ${DEPLOYMENT_TYPE} != "dev" ]; then
@@ -158,6 +167,7 @@ function build_ic_bootstrap_tar() {
 
     NGINX_DOMAIN_NAME="${NGINX_DOMAIN_NAME:="ic0.app"}"
     DENY_LIST="${DENY_LIST:=""}"
+    PROBER_IDENTITY="${PROBER_IDENTITY:=""}"
 
     if ! echo $NGINX_DOMAIN_NAME | grep -q ".*\..*"; then
         echo "malformed domain name $NGINX_DOMAIN_NAME"
@@ -219,6 +229,13 @@ EOF
     else
         echo "Using empty denylist"
         touch ${BOOTSTRAP_TMPDIR}/denylist.map
+    fi
+
+    # setup the prober identity
+    if [[ -f ${PROBER_IDENTITY} ]]; then
+        echo "Using prober identity ${PROBER_IDENTITY}"
+        mkdir -p ${BOOTSTRAP_TMPDIR}/prober
+        cp ${PROBER_IDENTITY} ${BOOTSTRAP_TMPDIR}/prober/identity.pem
     fi
 
     tar cf "${OUT_FILE}" -C "${BOOTSTRAP_TMPDIR}" .
