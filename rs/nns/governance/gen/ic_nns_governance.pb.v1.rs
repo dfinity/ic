@@ -1780,7 +1780,7 @@ pub enum NnsFunction {
     /// Remove Node Operator from the registry.
     RemoveNodeOperators = 23,
     /// Update the routing table in the registry.
-    RerouteCanisterRange = 24,
+    RerouteCanisterRanges = 24,
     /// Add firewall rules in the registry
     AddFirewallRules = 25,
     /// Remove firewall rules in the registry

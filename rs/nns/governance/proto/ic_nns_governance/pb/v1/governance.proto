@@ -451,7 +451,7 @@ enum NnsFunction {
   // Remove Node Operator from the registry.
   NNS_FUNCTION_REMOVE_NODE_OPERATORS = 23;
   // Update the routing table in the registry.
-  NNS_FUNCTION_REROUTE_CANISTER_RANGE = 24;
+  NNS_FUNCTION_REROUTE_CANISTER_RANGES = 24;
   // Add firewall rules in the registry
   NNS_FUNCTION_ADD_FIREWALL_RULES = 25;
   // Remove firewall rules in the registry

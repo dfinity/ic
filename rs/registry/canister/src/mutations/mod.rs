@@ -1,4 +1,5 @@
 pub mod common;
+pub mod complete_canister_migration;
 mod dkg;
 pub mod do_add_node_operator;
 pub mod do_add_nodes_to_subnet;
@@ -20,6 +21,7 @@ pub mod do_update_subnet_replica;
 pub mod do_update_unassigned_nodes_config;
 pub mod firewall;
 pub mod node_management;
-pub mod reroute_canister_range;
+pub mod prepare_canister_migration;
+pub mod reroute_canister_ranges;
 mod routing_table;
 mod subnet;

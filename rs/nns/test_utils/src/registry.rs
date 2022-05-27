@@ -407,7 +407,14 @@ pub fn prepare_registry(
     Vec<NodeId>,
     Vec<RegistryMutation>,
 ) {
-    prepare_registry_with_two_node_sets(num_nodes_in_subnet, num_unassigned_nodes, false)
+    let (mutate_request, subnet_id, _, nodes_in_subnet2_ids, node_mutations) =
+        prepare_registry_with_two_node_sets(num_nodes_in_subnet, num_unassigned_nodes, false);
+    (
+        mutate_request,
+        subnet_id,
+        nodes_in_subnet2_ids,
+        node_mutations,
+    )
 }
 
 /// Returns a list of Registry mutations that add Nodes and Subnets (when
@@ -421,6 +428,7 @@ pub fn prepare_registry(
 /// Returns:
 ///     * the initial registry mutate request
 ///     * the subnet id of the first to-be-created subnet
+///     * the subnet id of the second to-be-created subnet if `assign_nodes_to_subnet2` is `true`
 ///     * the IDs of the nodes that are either inserted into the 2nd subnet or
 ///       unassigned
 ///     * The mutations that add node records and keys
@@ -431,6 +439,7 @@ pub fn prepare_registry_with_two_node_sets(
 ) -> (
     RegistryAtomicMutateRequest,
     SubnetId,
+    Option<SubnetId>,
     Vec<NodeId>,
     Vec<RegistryMutation>,
 ) {
@@ -509,6 +518,7 @@ pub fn prepare_registry_with_two_node_sets(
     let mut subnet_list = decode_registry_value::<SubnetListRecord>(mutations.remove(0).value);
     subnet_list.subnets.push(subnet_id.get().to_vec());
 
+    let mut subnet2_id_option = None;
     if assign_nodes_to_subnet2 {
         // Subnet record 2
         let subnet2_record = SubnetRecord {
@@ -522,6 +532,7 @@ pub fn prepare_registry_with_two_node_sets(
             ..Default::default()
         };
         let subnet2_id = SubnetId::new(PrincipalId::new_subnet_test_id(18));
+        subnet2_id_option = Some(subnet2_id);
         mutations.push(insert(
             make_subnet_record_key(subnet2_id).as_bytes(),
             encode_or_panic(&subnet2_record),
@@ -556,6 +567,7 @@ pub fn prepare_registry_with_two_node_sets(
     (
         mutate_request,
         subnet_id,
+        subnet2_id_option,
         nodes_in_subnet2_ids.to_vec(),
         node_mutations,
     )

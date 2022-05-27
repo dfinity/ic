@@ -82,6 +82,7 @@ use ic_registry_local_store::{
 };
 use ic_registry_nns_data_provider::data_provider::NnsDataProvider;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
+use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
@@ -109,7 +110,7 @@ use registry_canister::mutations::{
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
     do_update_subnet::UpdateSubnetPayload,
     do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
-    reroute_canister_range::RerouteCanisterRangePayload,
+    reroute_canister_ranges::RerouteCanisterRangesPayload,
 };
 use serde::Serialize;
 use std::collections::{BTreeMap, HashSet};
@@ -342,7 +343,7 @@ enum SubCommand {
     /// Propose to remove a list of node operators from the Registry
     ProposeToRemoveNodeOperators(ProposeToRemoveNodeOperatorsCmd),
     /// Propose to change the routing table.
-    ProposeToRerouteCanisterRange(ProposeToRerouteCanisterRangeCmd),
+    ProposeToRerouteCanisterRanges(ProposeToRerouteCanisterRangesCmd),
 }
 
 /// Indicates whether a value should be added or removed.
@@ -2570,35 +2571,37 @@ impl SubnetDescriptor {
 /// Sub-command to propose a change in the routing table.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToRerouteCanisterRangeCmd {
-    /// The first canister in the range to reroute.
+struct ProposeToRerouteCanisterRangesCmd {
+    /// The list of canister ID ranges to be rerouted.
+    #[clap(long, multiple_values(true), required = true)]
+    canister_id_ranges: Vec<CanisterIdRange>,
+    /// The source of the canister ID ranges.
     #[clap(long, required = true)]
-    range_start_inclusive: PrincipalId,
-    /// The last canister in the range to reroute.
-    #[clap(long, required = true)]
-    range_end_inclusive: PrincipalId,
+    source_subnet: PrincipalId,
     /// The destination subnet for the specified canister range.
     #[clap(long, required = true)]
     destination_subnet: PrincipalId,
 }
 
 #[async_trait]
-impl ProposalTitleAndPayload<RerouteCanisterRangePayload> for ProposeToRerouteCanisterRangeCmd {
+impl ProposalTitleAndPayload<RerouteCanisterRangesPayload> for ProposeToRerouteCanisterRangesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => format!(
-                "Reroute canister range [{}, {}] to subnet {}",
-                self.range_start_inclusive, self.range_end_inclusive, self.destination_subnet
+                "Reroute {} canister ranges from subnet {} to subnet {}",
+                self.canister_id_ranges.len(),
+                self.source_subnet,
+                self.destination_subnet
             ),
         }
     }
 
-    async fn payload(&self, _: Url) -> RerouteCanisterRangePayload {
-        RerouteCanisterRangePayload {
-            range_start_inclusive: self.range_start_inclusive,
-            range_end_inclusive: self.range_end_inclusive,
-            destination_subnet: self.destination_subnet,
+    async fn payload(&self, _: Url) -> RerouteCanisterRangesPayload {
+        RerouteCanisterRangesPayload {
+            reassigned_canister_ranges: self.canister_id_ranges.clone(),
+            source_subnet: SubnetId::from(self.source_subnet),
+            destination_subnet: SubnetId::from(self.destination_subnet),
         }
     }
 }
@@ -3271,10 +3274,10 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToRerouteCanisterRange(cmd) => {
+        SubCommand::ProposeToRerouteCanisterRanges(cmd) => {
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::RerouteCanisterRange,
+                NnsFunction::RerouteCanisterRanges,
                 opts.nns_url,
                 sender,
             )
