@@ -110,6 +110,9 @@ require { type tmpfs_t, unlabeled_t; }
 relabelfrom_dirs_pattern(systemd_tmpfiles_t, { tmpfs_t unlabeled_t }, { tmpfs_t unlabeled_t })
 list_dirs_pattern(systemd_tmpfiles_t, unlabeled_t, unlabeled_t)
 
+# A tempfile is used as part of setting up machine-id
+read_files_pattern(systemd_tmpfiles_t, tmpfs_t, tmpfs_t)
+
 ###############################################################################
 # udev
 
