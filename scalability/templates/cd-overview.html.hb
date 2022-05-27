@@ -24,12 +24,22 @@
 
     <div>
       Based on numbers from: <span class="timestamp">{{last_generated}}</span><br />
-      Assuming mainnet has <span class="w3-tag w3-light-grey exp_value">{{num_subnets}}</span> subnets and
-      <span class="w3-tag w3-light-grey exp_value">{{num_nodes}}</span> nodes.
+      Assuming mainnet has <span class="w3-tag w3-light-grey exp_value">{{num_app_subnets}}</span> application subnets running
+      <span class="w3-tag w3-light-grey exp_value">{{num_app_nodes}}</span> nodes.
     </div>
 
+    Per subnet, that is: 
+    <div class="w3-btn w3-green w3-large">
+      {{latest_approx_mainnet_subnet_update_performance}} updates/s
+    </div>
+
+    and per IC node:
+    <div class="w3-btn w3-green w3-large">
+      {{latest_approx_mainnet_node_query_performance}} querys/s
+    </div>
+    
     <div>
-      Extrapolated from the latest performance runs, mainnet would sustain the following load:
+      Extrapolated from those latest performance runs, mainnet would sustain the following load:
     </div>
 
     <div class="w3-btn w3-green w3-large">
@@ -60,7 +70,7 @@
     
     <div>
       Given a total of <span class="w3-tag w3-light-grey exp_value">{{num_nodes}}</span> nodes
-      and <span class="w3-tag w3-light-grey exp_value">{{num_boundary_nodes}}</span> in mainnet, that results in a
+      and <span class="w3-tag w3-light-grey exp_value">{{num_boundary_nodes}}</span> boundary nodes in mainnet, that results in a
       worst case of <span class="w3-tag w3-light-grey exp_value">{{watts_ic}}W</span> to operate all IC nodes for mainnet.
       That's a worst case analysis for power consumption of nodes because we would normally expect them to throttle
       when not fully utilized and thereby reducing power consumption.
