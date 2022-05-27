@@ -19,6 +19,8 @@ docker_tar(
         "--build-arg",
         "BASE_IMAGE=dfinity/guestos-base-dev@sha256:c8de9496654ddad9d4b337f07f19dfe780d6449323fb9223b254d21039a07c57",
     ],
+    # This image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
+    tags = ["no-remote-cache"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
