@@ -1,6 +1,7 @@
 syntax = "proto3";
-
 package canister_http.v1;
+
+import "types/v1/types.proto";
 
 message HttpHeader {
   string name = 1;
@@ -16,6 +17,7 @@ message CanisterHttpRequest {
 message CanisterHttpResponse {
   uint64 id = 1;
   uint64 timeout = 2;
+  types.v1.CanisterId canister_id = 4;
   CanisterHttpResponseContent content = 3;
 }
 

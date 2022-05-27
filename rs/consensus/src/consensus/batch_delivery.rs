@@ -22,6 +22,7 @@ use ic_protobuf::log::consensus_log_entry::v1::ConsensusLogEntry;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
 use ic_types::{
+    canister_http::*,
     consensus::ecdsa::{CompletedSignature, EcdsaBlockReader},
     crypto::threshold_sig::ni_dkg::{
         NiDkgId, NiDkgTag, NiDkgTargetSubnet::Remote, NiDkgTranscript,
@@ -218,7 +219,8 @@ pub fn deliver_batches(
 /// This function creates responses to the system calls that are redirected to
 /// consensus. There are two types of calls being handled here:
 /// - Initial NiDKG transcript creation, where a response may come from summary payloads.
-/// - Threshold ECDSA signature creation, where a response may from from data payloads.
+/// - Threshold ECDSA signature creation, where a response may come from from data payloads.
+/// - CanisterHttpResponse handling, where a response to a canister http request may come from data payloads.
 pub fn generate_responses_to_subnet_calls(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     block: &Block,
@@ -245,29 +247,102 @@ pub fn generate_responses_to_subnet_calls(
                 summary.dkg.transcripts_for_new_subnets(),
                 log,
             ));
-        } else if let Some(payload) = &block_payload.as_ref().as_data().ecdsa {
-            let sign_with_ecdsa_contexts = &state
-                .get_ref()
-                .metadata
-                .subnet_call_context_manager
-                .sign_with_ecdsa_contexts;
-            consensus_responses.append(&mut generate_responses_to_sign_with_ecdsa_calls(
-                sign_with_ecdsa_contexts,
-                payload,
-            ));
+        } else {
+            let block_payload = block_payload.as_ref().as_data();
+            if let Some(payload) = &block_payload.ecdsa {
+                let sign_with_ecdsa_contexts = &state
+                    .get_ref()
+                    .metadata
+                    .subnet_call_context_manager
+                    .sign_with_ecdsa_contexts;
+                consensus_responses.append(&mut generate_responses_to_sign_with_ecdsa_calls(
+                    sign_with_ecdsa_contexts,
+                    payload,
+                ));
 
-            let ecdsa_dealings_contexts = &state
-                .get_ref()
-                .metadata
-                .subnet_call_context_manager
-                .ecdsa_dealings_contexts;
-            consensus_responses.append(&mut generate_responses_to_initial_dealings_calls(
-                ecdsa_dealings_contexts,
-                payload,
-            ));
+                let ecdsa_dealings_contexts = &state
+                    .get_ref()
+                    .metadata
+                    .subnet_call_context_manager
+                    .ecdsa_dealings_contexts;
+                consensus_responses.append(&mut generate_responses_to_initial_dealings_calls(
+                    ecdsa_dealings_contexts,
+                    payload,
+                ));
+                consensus_responses.append(
+                    &mut generate_execution_responses_for_canister_http_responses(
+                        &block_payload.batch.canister_http,
+                    ),
+                );
+                consensus_responses.append(
+                    &mut generate_execution_responses_for_expired_canister_http_responses(
+                        block.context.time,
+                        &state
+                            .get_ref()
+                            .metadata
+                            .subnet_call_context_manager
+                            .canister_http_request_contexts,
+                    ),
+                );
+            }
         }
     }
     consensus_responses
+}
+
+/// Generate execution responses for http requests that have timed out
+pub fn generate_execution_responses_for_expired_canister_http_responses(
+    consensus_time: Time,
+    request_map: &BTreeMap<CallbackId, CanisterHttpRequestContext>,
+) -> Vec<Response> {
+    let mut responses = Vec::new();
+    for (callback_id, request) in request_map.iter() {
+        // TODO: Make this amount configuragble
+        let timeout_allowed = std::time::Duration::from_secs(5 * 60);
+        if request.time + timeout_allowed < consensus_time {
+            responses.push(Response {
+                originator: request.request.sender,
+                respondent: request.request.sender,
+                refund: Cycles::from(0),
+                originator_reply_callback: *callback_id,
+                response_payload: ic_types::messages::Payload::Reject(
+                    ic_types::messages::RejectContext {
+                        code: ic_error_types::RejectCode::SysTransient,
+                        message: "Canister http request timed out".to_string(),
+                    },
+                ),
+            });
+        }
+    }
+    responses
+}
+
+/// This function converts the canister http responses from the batch payload
+/// into something that is recognizable by upper layers.
+pub fn generate_execution_responses_for_canister_http_responses(
+    canister_http_payload: &CanisterHttpPayload,
+) -> Vec<Response> {
+    canister_http_payload
+        .0
+        .iter()
+        .map(|canister_http_response| {
+            let content = &canister_http_response.content;
+            Response {
+                originator: content.canister_id,
+                respondent: content.canister_id,
+                originator_reply_callback: content.id,
+                refund: Cycles::from(0),
+                response_payload: match &content.content {
+                    CanisterHttpResponseContent::Success(data) => {
+                        ic_types::messages::Payload::Data(data.clone())
+                    }
+                    CanisterHttpResponseContent::Reject(canister_http_reject) => {
+                        ic_types::messages::Payload::Reject((canister_http_reject).into())
+                    }
+                },
+            }
+        })
+        .collect()
 }
 
 /// This function creates responses to the SetupInitialDKG system calls with the

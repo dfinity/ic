@@ -9,11 +9,11 @@ use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces_canister_http_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
 use ic_types::{
     canister_http::{
-        CanisterHttpReject, CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpRequestId,
-        CanisterHttpResponse, CanisterHttpResponseContent,
+        CanisterHttpReject, CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
+        CanisterHttpResponseContent,
     },
     messages::{AnonymousQuery, AnonymousQueryResponse, Request},
-    CanisterId, Time,
+    CanisterId,
 };
 use tokio::{
     runtime::Handle,
@@ -181,9 +181,17 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 });
 
             // Drive created future to completion and make response available on the channel.
-            permit.send(match adapter_canister_http_response.await {
-                Ok(resp) => build_canister_http_success(request_id, request_timeout, resp),
-                Err(err) => build_canister_http_reject(request_id, request_timeout, err.0, err.1),
+            permit.send(CanisterHttpResponse {
+                id: request_id,
+                timeout: request_timeout,
+                canister_id: request_receiver,
+                content: match adapter_canister_http_response.await {
+                    Ok(resp) => CanisterHttpResponseContent::Success(resp),
+                    Err((reject_code, message)) => CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                        reject_code,
+                        message,
+                    }),
+                }
             });
         });
         Ok(())
@@ -264,34 +272,6 @@ fn grpc_status_code_to_reject(code: Code) -> RejectCode {
     }
 }
 
-fn build_canister_http_success(
-    request_id: CanisterHttpRequestId,
-    request_timeout: Time,
-    transform_response: Vec<u8>,
-) -> CanisterHttpResponse {
-    CanisterHttpResponse {
-        id: request_id,
-        timeout: request_timeout,
-        content: CanisterHttpResponseContent::Success(transform_response),
-    }
-}
-
-fn build_canister_http_reject(
-    request_id: CanisterHttpRequestId,
-    request_timeout: Time,
-    reject_code: RejectCode,
-    reject_message: String,
-) -> CanisterHttpResponse {
-    CanisterHttpResponse {
-        id: request_id,
-        timeout: request_timeout,
-        content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
-            reject_code,
-            message: reject_message,
-        }),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,6 +283,7 @@ mod tests {
     use ic_types::{
         canister_http::CanisterHttpMethod,
         messages::{Blob, CallbackId},
+        Time,
     };
     use std::{
         convert::Infallible,
@@ -410,7 +391,10 @@ mod tests {
             id: CallbackId::from(request_id),
             timeout: request_timeout,
             content: CanisterHttpRequestContext {
-                request: RequestBuilder::default().build(),
+                request: RequestBuilder::default()
+                    .receiver(CanisterId::from(1))
+                    .sender(CanisterId::from(1))
+                    .build(),
                 url: "http://notused.com".to_string(),
                 headers: Vec::new(),
                 body: None,
@@ -430,6 +414,7 @@ mod tests {
         CanisterHttpResponse {
             id: CallbackId::from(request_id),
             timeout: request_timeout,
+            canister_id: ic_types::CanisterId::from(1),
             content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
                 reject_code,
                 message: reject_message,
@@ -447,6 +432,7 @@ mod tests {
         CanisterHttpResponse {
             id: CallbackId::from(request_id),
             timeout: request_timeout,
+            canister_id: ic_types::CanisterId::from(1),
             content: CanisterHttpResponseContent::Success(
                 Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
                     status,

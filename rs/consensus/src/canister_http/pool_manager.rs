@@ -302,6 +302,7 @@ pub mod test {
     fn empty_canister_http_response(id: u64) -> CanisterHttpResponse {
         CanisterHttpResponse {
             id: CallbackId::from(id),
+            canister_id: ic_types::CanisterId::from(0),
             timeout: Time::from_nanos_since_unix_epoch(0),
             content: CanisterHttpResponseContent::Success(Vec::new()),
         }

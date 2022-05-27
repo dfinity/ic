@@ -19,9 +19,9 @@
 
 use crate::{
     crypto::{CryptoHashOf, Signed},
-    messages::{CallbackId, Request},
+    messages::{CallbackId, RejectContext, Request},
     signature::*,
-    CountBytes, RegistryVersion, Time,
+    CanisterId, CountBytes, RegistryVersion, Time,
 };
 use ic_error_types::RejectCode;
 use ic_protobuf::{
@@ -116,6 +116,7 @@ pub struct CanisterHttpRequest {
 pub struct CanisterHttpResponse {
     pub id: CallbackId,
     pub timeout: Time,
+    pub canister_id: CanisterId,
     pub content: CanisterHttpResponseContent,
 }
 
@@ -144,6 +145,12 @@ impl CountBytes for CanisterHttpResponseContent {
 pub struct CanisterHttpReject {
     pub reject_code: RejectCode,
     pub message: String,
+}
+
+impl From<&CanisterHttpReject> for RejectContext {
+    fn from(value: &CanisterHttpReject) -> RejectContext {
+        RejectContext::new(value.reject_code, value.message.clone())
+    }
 }
 
 impl CountBytes for CanisterHttpReject {
