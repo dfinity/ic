@@ -24,7 +24,7 @@ bazel-test-all:
   script:
     - set -euo pipefail
     - |
-      if [ "$CI_MERGE_REQUEST_EVENT_TYPE" == "merge_train" ];then
+      if [ "${CI_MERGE_REQUEST_EVENT_TYPE:-}" == "merge_train" ];then
         BAZEL_ARGS="${BAZEL_ARGS} --build_tests_only"
       fi
       bazel version
