@@ -14,8 +14,7 @@ impl Registry {
         payload: CompleteCanisterMigrationPayload,
     ) -> Result<(), String> {
         // Construct the canister ID ranges from payload.
-        let mut canister_id_ranges = payload.canister_id_ranges;
-        canister_id_ranges.sort();
+        let canister_id_ranges = payload.canister_id_ranges;
         // Check if the canister ID ranges are well formed.
         let canister_id_ranges = CanisterIdRanges::try_from(canister_id_ranges)
             .map_err(|e| format!("canister ID ranges are not well formed: {:?}", e))?;

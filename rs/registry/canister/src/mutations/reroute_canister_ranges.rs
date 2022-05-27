@@ -14,8 +14,7 @@ impl Registry {
         payload: RerouteCanisterRangesPayload,
     ) -> Result<(), String> {
         // Construct the canister ID ranges from payload.
-        let mut reassigned_canister_ranges = payload.reassigned_canister_ranges.clone();
-        reassigned_canister_ranges.sort();
+        let reassigned_canister_ranges = payload.reassigned_canister_ranges.clone();
         // Check if the canister ID ranges are well formed.
         let reassigned_canister_ranges = CanisterIdRanges::try_from(reassigned_canister_ranges)
             .map_err(|e| format!("canister ID ranges are not well formed: {:?}", e))?;

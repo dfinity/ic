@@ -458,6 +458,11 @@ enum NnsFunction {
   NNS_FUNCTION_REMOVE_FIREWALL_RULES = 26;
   // Update firewall rules in the registry
   NNS_FUNCTION_UPDATE_FIREWALL_RULES = 27;
+  // Insert or update `canister_migrations` entries.
+  NNS_FUNCTION_PREPARE_CANISTER_MIGRATION = 28;
+  // Remove `canister_migrations` entries.
+  NNS_FUNCTION_COMPLETE_CANISTER_MIGRATION = 29;
+
 }
 
 // Payload of a proposal that calls a function on another NNS
