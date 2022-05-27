@@ -10,8 +10,7 @@ ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 bytes = "1.0.1"
-prost = "0.10"
-prost-types = "0.10"
+prost = "0.10.4"
 
 [dev-dependencies]
 rand = "0.7.3"

@@ -16,7 +16,7 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 libc = "0.2.91"
-prost = "0.10"
+prost = "0.10.4"
 serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"
 serde_cbor = "0.11.1"

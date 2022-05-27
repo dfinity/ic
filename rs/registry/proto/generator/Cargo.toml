@@ -4,4 +4,4 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-prost-build = "0.10"
+prost-build = "0.10.4"

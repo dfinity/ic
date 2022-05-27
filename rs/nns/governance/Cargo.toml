@@ -46,7 +46,7 @@ ic-protobuf = { path = "../../protobuf" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 num = "0.4.0"
 on_wire = { path = "../../rust_canisters/on_wire" }
-prost = "0.10"
+prost = "0.10.4"
 serde = { version = "1.0", features = ["derive"] }
 rand = "0.7.3"
 rand_core = "0.5.1"

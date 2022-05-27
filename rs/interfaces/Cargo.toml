@@ -18,7 +18,7 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
-prost = "0.10"
+prost = "0.10.4"
 rand = "0.7.3"
 serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"

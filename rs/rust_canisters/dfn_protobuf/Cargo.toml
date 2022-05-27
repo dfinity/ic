@@ -7,5 +7,4 @@ edition = "2018"
 on_wire = { path = "../on_wire" }
 dfn_core = { path = "../dfn_core" }
 ic-base-types = {path="../../types/base_types"}
-prost = "0.10"
-prost-types = "0.10"
+prost = "0.10.4"

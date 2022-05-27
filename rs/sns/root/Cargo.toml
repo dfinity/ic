@@ -19,7 +19,7 @@ ic-ic00-types = { path = "../../types/ic00_types" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
-prost = "0.10"
+prost = "0.10.4"
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]

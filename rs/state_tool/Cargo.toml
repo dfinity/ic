@@ -23,5 +23,5 @@ ic-state-manager = { path = "../state_manager" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
-prost = "0.10"
+prost = "0.10.4"
 scoped_threadpool = "0.1.*"

@@ -39,7 +39,7 @@ ic-utils = { path = "../../../utils" }
 lazy_static = "1.4.0"
 openssl = "0.10.38"
 parking_lot = "0.11.1"
-prost = "0.10"
+prost = "0.10.4"
 rand = "0.7.3"
 rand_chacha = "0.2.2"
 rand_core = "0.5.1"

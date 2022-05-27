@@ -21,7 +21,7 @@ ic-utils = { path = "../utils" }
 lazy_static = "1.4.0"
 prometheus = { version = "0.12.0", features = [ "process" ] }
 lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "1cf86b5cc09947e94a787065cadd163a42ef7f18" }
-prost = "0.10"
+prost = "0.10.4"
 rocksdb = { version = "0.15.0", optional = true }
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_json = "1.0.40"
