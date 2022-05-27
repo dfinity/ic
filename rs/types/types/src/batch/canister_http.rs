@@ -16,7 +16,7 @@ use std::convert::TryFrom;
 
 /// Payload that contains CanisterHttpPayload messages.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct CanisterHttpPayload(Vec<CanisterHttpResponseWithConsensus>);
+pub struct CanisterHttpPayload(pub Vec<CanisterHttpResponseWithConsensus>);
 
 impl From<&CanisterHttpPayload> for pb::CanisterHttpPayload {
     fn from(payload: &CanisterHttpPayload) -> Self {
@@ -32,6 +32,7 @@ impl From<&CanisterHttpPayload> for pb::CanisterHttpPayload {
                             content: Some(canister_http_pb::CanisterHttpResponseContent::from(
                                 &payload.content.content,
                             )),
+                            canister_id: Some(pb::CanisterId::from(payload.content.canister_id)),
                         }),
                         hash: payload.proof.content.content_hash.clone().get().0,
                         registry_version: payload.proof.content.registry_version.get(),
@@ -65,11 +66,19 @@ impl TryFrom<pb::CanisterHttpPayload> for CanisterHttpPayload {
                             .ok_or("Error: canister_http_payload does not contain a response")?;
                         let id = CanisterHttpRequestId::new(response.id);
                         let timeout = Time::from_nanos_since_unix_epoch(response.timeout);
+                        let canister_id = response
+                            .canister_id
+                            .ok_or_else(|| "No canister id on canister http response".to_string())
+                            .and_then(|canister_id| {
+                                crate::CanisterId::try_from(canister_id)
+                                    .map_err(|e| format!("Proxy decode error {:?}", e))
+                            })?;
 
                         Ok(CanisterHttpResponseWithConsensus {
                             content: CanisterHttpResponse {
                                 id,
                                 timeout,
+                                canister_id,
                                 content: CanisterHttpResponseContent::try_from(
                                     response.content.ok_or(
                                         "Error: canistrer_http_response does not contain content",
@@ -175,6 +184,7 @@ mod tests {
             content: CanisterHttpResponse {
                 id: CanisterHttpRequestId::new(1),
                 timeout: Time::from_nanos_since_unix_epoch(1234),
+                canister_id: crate::CanisterId::from(1),
                 content: CanisterHttpResponseContent::Success(
                     Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
                         status: 200,

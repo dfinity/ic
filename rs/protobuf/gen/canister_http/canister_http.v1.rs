@@ -23,6 +23,8 @@ pub struct CanisterHttpResponse {
     pub id: u64,
     #[prost(uint64, tag="2")]
     pub timeout: u64,
+    #[prost(message, optional, tag="4")]
+    pub canister_id: ::core::option::Option<super::super::types::v1::CanisterId>,
     #[prost(message, optional, tag="3")]
     pub content: ::core::option::Option<CanisterHttpResponseContent>,
 }
