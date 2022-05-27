@@ -6341,6 +6341,7 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "assert_matches",
+ "crossbeam-channel 0.5.1",
  "ic-config",
  "ic-interfaces",
  "ic-metrics",
@@ -6355,6 +6356,7 @@ dependencies = [
  "ic-registry-transport",
  "ic-test-utilities",
  "ic-types 0.8.0",
+ "ic-utils 0.8.0",
  "prometheus 0.12.0",
  "prost",
  "serde",
