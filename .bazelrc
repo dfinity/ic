@@ -1,5 +1,4 @@
 common --experimental_allow_tags_propagation
-common --incompatible_strict_action_env # use an environment with a static value for PATH and do not inherit LD_LIBRARY_PATH
 
 build --strategy_regexp=ic-os/guestos/.*=local
 
