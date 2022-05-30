@@ -12,7 +12,7 @@ pvs /dev/mapper/vda10-crypt >/dev/null 2>&1 || (
 lvs /dev/store/shared-crypto >/dev/null 2>&1 || (
     echo "Logical volume 'shared-crypto' does not exist yet (first boot?), creating it."
     LV_SIZE=1024M
-    lvcreate -L "$LV_SIZE"M -n shared-crypto store
+    lvcreate --yes -L "$LV_SIZE"M -n shared-crypto store
 )
 
 # Set up state data store if it does not exist yet.
@@ -21,7 +21,7 @@ lvs /dev/store/shared-data >/dev/null 2>&1 || (
     # For now, only use 25% of available capacity.
     TOTAL_SIZE=$(($(blockdev --getsz /dev/mapper/vda10-crypt) * 512))
     LV_SIZE=$(("$TOTAL_SIZE" / 4 / 1024 / 1024))
-    lvcreate -L "$LV_SIZE"M -n shared-data store
+    lvcreate --yes -L "$LV_SIZE"M -n shared-data store
 )
 
 # Set up backup data store if it does not exist yet.
@@ -34,5 +34,5 @@ lvs /dev/store/shared-backup >/dev/null 2>&1 || (
     if [ "${LV_SIZE}" -gt "${LV_SIZE_LIMIT}" ]; then
         LV_SIZE="${LV_SIZE_LIMIT}"
     fi
-    lvcreate -L "$LV_SIZE"M -n shared-backup store
+    lvcreate --yes -L "$LV_SIZE"M -n shared-backup store
 )
