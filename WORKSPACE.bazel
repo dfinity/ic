@@ -175,10 +175,16 @@ crates_repository(
             ],
             version = "2.5.2",
         ),
+        "slog-async": crate.spec(
+            features = ["nested-values"],
+            version = "2.5",
+        ),
         "slog-json": crate.spec(
             features = ["nested-values"],
             version = "2.3",
         ),
+        "slog-scope": crate.spec(version = "4.1.2"),
+        "slog-term": crate.spec(version = "2.6.0"),
         "slog_derive": crate.spec(version = "0.2.0"),
         "strum": crate.spec(version = "0.23.0"),
         "strum_macros": crate.spec(version = "0.23.0"),
