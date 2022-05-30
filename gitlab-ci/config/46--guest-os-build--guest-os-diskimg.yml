@@ -19,10 +19,6 @@ guest-os-diskimg:
           --out="artifacts/release"
 
       "${CI_PROJECT_DIR}/gitlab-ci/tools/job-driver.py" guest-os-diskimg
-  artifacts:
-    paths:
-      - ic-os/guestos/build-out/disk-img${BUILD_EXTRA_SUFFIX}/*
-    expire_in: 2 days
 
 # Build dev image.
 #
@@ -81,11 +77,6 @@ boundary-os-diskimg:
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" rclone -- \
       "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "$BUILD_OUT" "$UPLOAD_TARGET"
       echo "Build ID (real or fake git revision): ${VERSION}"
-
-  artifacts:
-    paths:
-      - ic-os/boundary-guestos/build-out/disk-img${BUILD_EXTRA_SUFFIX}/*
-    expire_in: 2 days
 
 # Build dev image.
 #

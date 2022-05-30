@@ -14,6 +14,8 @@ Usage:
   Build update artifact image for IC guest OS. This is a gzip'ed tar file containing
   the boot and root filesystem images for the operating system as well version metadata.
 
+  -f image compression format: The image compression format to build.
+     Must be either "gz" or "zstd".
   -i ubuntu.dockerimg: Points to the output of "docker save"
      of the ubuntu docker image. If not given, will implicitly call
      docker build.
@@ -26,8 +28,13 @@ Usage:
 EOF
 }
 
-while getopts "i:o:p:v:x:" OPT; do
+FORMAT="gz"
+
+while getopts "f:i:o:p:v:x:" OPT; do
     case "${OPT}" in
+        f)
+            FORMAT="${OPTARG}"
+            ;;
         i)
             IN_FILE="${OPTARG}"
             ;;
@@ -50,8 +57,16 @@ while getopts "i:o:p:v:x:" OPT; do
     esac
 done
 
+# Validate and process arguments
+
+if [ "${FORMAT}" != "gz" -a "${FORMAT}" != "zstd" ]; then
+    echo "Unknown compression format: ${FORMAT}" >&2
+    usage >&2
+    exit 1
+fi
+
 if [ "${OUT_FILE}" == "" ]; then
-    usage
+    usage >&2
     exit 1
 fi
 
@@ -76,6 +91,14 @@ echo "${VERSION}" >"${TMPDIR}/VERSION.TXT"
 # that VERSION.TXT is first entry, making it quick & easy to extract.
 # Override owner, group and mtime to make build independent of the user
 # building it.
-tar czf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 --mtime='UTC 1970-01-01 00:00:00' --sparse -C "${TMPDIR}" .
+
+if [ "${FORMAT}" == "gz" ]; then
+    tar -czf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 --mtime='UTC 1970-01-01 00:00:00' \
+        --sparse -C "${TMPDIR}" .
+else
+    tar -cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 --mtime='UTC 1970-01-01 00:00:00' \
+        --use-compress-program="zstd --threads=0 -10" \
+        --sparse -C "${TMPDIR}" .
+fi
 
 rm -rf "${TMPDIR}"

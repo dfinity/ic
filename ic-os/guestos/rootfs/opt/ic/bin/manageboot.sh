@@ -206,7 +206,7 @@ case "${ACTION}" in
         elif [ "$#" == 1 ]; then
             TMPDIR=$(mktemp -d -t upgrade-image-XXXXXXXXXXXX)
             trap "rm -rf $TMPDIR" exit
-            tar -xf "$1" -C "${TMPDIR}"
+            tar -xaf "$1" -C "${TMPDIR}"
             BOOT_IMG="${TMPDIR}"/boot.img
             ROOT_IMG="${TMPDIR}"/root.img
         else

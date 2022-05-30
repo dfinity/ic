@@ -38,12 +38,21 @@ mkdir -p "${BUILD_OUT}"
 
 # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
 buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-upgrade-img -- \
-    ./scripts/build-update-image.sh -o "${BUILD_OUT}"/update-img.tar.gz -v "${VERSION}" -x ../../artifacts/release ${BUILD_EXTRA_ARGS}
+    ./scripts/build-update-image.sh -o "${BUILD_OUT}"/update-img.tar.gz -f "gz" -v "${VERSION}" -x ../../artifacts/release ${BUILD_EXTRA_ARGS}
 
 # Create a second upgrade image with different version number to ease testing with self upgrades
 # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
 buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-upgrade-img -- \
-    ./scripts/build-update-image.sh -o "${BUILD_OUT}"/update-img-test.tar.gz -v "${VERSION}-test" -x ../../artifacts/release ${BUILD_EXTRA_ARGS}
+    ./scripts/build-update-image.sh -o "${BUILD_OUT}"/update-img-test.tar.gz -f "gz" -v "${VERSION}-test" -x ../../artifacts/release ${BUILD_EXTRA_ARGS}
+
+# shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
+buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-upgrade-img -- \
+    ./scripts/build-update-image.sh -o "${BUILD_OUT}"/update-img.tar.zst -f "zstd" -v "${VERSION}" -x ../../artifacts/release ${BUILD_EXTRA_ARGS}
+
+# Create a second upgrade image with different version number to ease testing with self upgrades
+# shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
+buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-upgrade-img -- \
+    ./scripts/build-update-image.sh -o "${BUILD_OUT}"/update-img-test.tar.zst -f "zstd" -v "${VERSION}-test" -x ../../artifacts/release ${BUILD_EXTRA_ARGS}
 
 ls -lah "${BUILD_OUT}"
 

@@ -31,10 +31,13 @@
 
       CDN_BASE_URL="${image_cdn[$disk_type]}"
       curl --retry 10 --fail "$CDN_BASE_URL/disk-img.tar.gz" --output disk-img.tar.gz
+      curl --retry 10 --fail "$CDN_BASE_URL/disk-img.tar.zst" --output disk-img.tar.zst
       curl --retry 10 --fail "$CDN_BASE_URL/SHA256SUMS" --output SHA256SUMS
 
       chmod 0644 "disk-img.tar.gz"
       chown root:root "disk-img.tar.gz"
+      chmod 0644 "disk-img.tar.zst"
+      chown root:root "disk-img.tar.zst"
       sha256sum -c SHA256SUMS
     }
 
@@ -67,7 +70,7 @@
     for disk_type in "${disk_types[@]}"; do
        IMAGE_DIR=${image_dir[$disk_type]}
        cd "$IMAGE_DIR"
-       tar xvf disk-img.tar.gz --sparse
+       tar xavf disk-img.tar.gz --sparse
     done
   args:
     executable: /bin/bash
