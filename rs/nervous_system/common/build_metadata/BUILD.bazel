@@ -1,0 +1,17 @@
+load("@rules_rust//rust:defs.bzl", "rust_proc_macro")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_proc_macro(
+    name = "build_metadata",
+    srcs = glob(["src/**"]),
+    edition = "2018",
+)
