@@ -24,7 +24,7 @@ docker-build-ic:
       cd ../icos
       echo "IC-OS SHA256SUMS"
       # shellcheck disable=SC2035
-      sha256sum -b *.gz | tee SHA256SUMS
+      sha256sum -b *.tar.* | tee SHA256SUMS
       cd ../../..
 
       VERSION=$(git rev-parse HEAD)
