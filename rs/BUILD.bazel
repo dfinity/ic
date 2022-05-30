@@ -64,6 +64,7 @@ filegroup(
         "//rs/rust_canisters/dfn_candid:sources",
         "//rs/rust_canisters/dfn_core:sources",
         "//rs/rust_canisters/dfn_json:sources",
+        "//rs/rust_canisters/dfn_protobuf:sources",
         "//rs/rust_canisters/on_wire:sources",
         "//rs/stable-structures:sources",
         "//rs/sys:sources",
