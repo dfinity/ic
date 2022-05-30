@@ -54,33 +54,22 @@ impl fmt::Debug for TlsEd25519SecretKeyDerBytes {
 
 /// Generate a key pair and return the certificate and private key in DER
 /// format.
-///
-/// Note that the certificate serial number must be at most 20 octets according
-/// to https://tools.ietf.org/html/rfc5280 Section 4.1.2.2. The 19 bytes serial
-/// number argument is interpreted as an unsigned integer and thus fits in 20
-/// bytes, encoded as a signed ASN1 integer.
 pub fn generate_tls_key_pair_der<R: Rng + CryptoRng>(
     csprng: &mut R,
     common_name: &str,
-    serial: [u8; 19],
     not_after: &Asn1Time,
 ) -> (TlsEd25519CertificateDerBytes, TlsEd25519SecretKeyDerBytes) {
-    let (x509_cert, key_pair) = generate_tls_key_pair(csprng, common_name, serial, not_after);
+    let (x509_cert, key_pair) = generate_tls_key_pair(csprng, common_name, not_after);
     der_encode_cert_and_secret_key(&key_pair, x509_cert)
 }
 
 /// Generate a key pair and return the certificate and private key.
-///
-/// Note that the certificate serial number must be at most 20 octets according
-/// to https://tools.ietf.org/html/rfc5280 Section 4.1.2.2. The 19 bytes serial
-/// number argument is interpreted as an unsigned integer and thus fits in 20
-/// bytes, encoded as a signed ASN1 integer.
 pub fn generate_tls_key_pair<R: Rng + CryptoRng>(
     csprng: &mut R,
     common_name: &str,
-    serial: [u8; 19],
     not_after: &Asn1Time,
 ) -> (X509, PKey<Private>) {
+    let serial: [u8; 19] = csprng.gen();
     let key_pair = ed25519_key_pair(csprng);
     let x509_certificate = x509_v3_certificate(
         common_name,
@@ -100,6 +89,12 @@ fn ed25519_key_pair<R: Rng + CryptoRng>(csprng: &mut R) -> PKey<Private> {
         .expect("failed to create Ed25519 key pair from raw private key")
 }
 
+/// Generates a certificate.
+///
+/// Note that the certificate serial number must be at most 20 octets according
+/// to https://tools.ietf.org/html/rfc5280 Section 4.1.2.2. The 19 bytes serial
+/// number argument is interpreted as an unsigned integer and thus fits in 20
+/// bytes, encoded as a signed ASN1 integer.
 fn x509_v3_certificate(
     common_name: &str,
     serial: [u8; 19],
