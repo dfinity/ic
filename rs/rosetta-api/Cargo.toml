@@ -1,7 +1,7 @@
 
 [package]
 name = "ic-rosetta-api"
-version = "1.5.1"
+version = "1.6.0"
 authors = ["The Internet Computer Project Developers"]
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 edition = "2018"
@@ -21,7 +21,7 @@ dfn_protobuf = {path = "../rust_canisters/dfn_protobuf"}
 hex = "0.4.2"
 ic-canister-client = { path = "../canister_client" }
 ic-constants = { path = "../constants" }
-ic-crypto = { path = "../crypto" }
+ic-certified-vars = { path = "../certified_vars" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "../crypto/internal/crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-sha = {path = "../crypto/sha/"}
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
@@ -48,7 +48,6 @@ strum = "0.23"
 strum_macros = "0.23"
 tempfile = "3.1.0"
 tokio = { version = "1.15.0", features = ["full"] }
-tree-deserializer = { path = "../tree_deserializer" }
 url = "2.2.1"
 
 [dev-dependencies]
