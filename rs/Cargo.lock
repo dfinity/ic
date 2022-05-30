@@ -6834,7 +6834,7 @@ dependencies = [
 
 [[package]]
 name = "ic-rosetta-api"
-version = "1.5.1"
+version = "1.6.0"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -6851,8 +6851,8 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-canister-client",
+ "ic-certified-vars",
  "ic-constants",
- "ic-crypto",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-sha",
  "ic-crypto-tree-hash",
@@ -6882,7 +6882,6 @@ dependencies = [
  "strum_macros 0.23.1",
  "tempfile",
  "tokio",
- "tree-deserializer",
  "url",
 ]
 
