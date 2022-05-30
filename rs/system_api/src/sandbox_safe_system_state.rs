@@ -144,6 +144,10 @@ impl SystemStateChanges {
                         own_subnet_id,
                     )
                     .map(|id| CanisterId::new(id.get()).unwrap())
+                    .map_err(|err| {
+                        println!("resolve error: {:?}", err);
+                        err
+                    })
                     .unwrap_or({
                         info!(
                             logger,
