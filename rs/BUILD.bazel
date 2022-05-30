@@ -48,6 +48,7 @@ filegroup(
         "//rs/monitoring/logger:sources",
         "//rs/monitoring/metrics:sources",
         "//rs/monitoring/metrics_encoder:sources",
+        "//rs/nervous_system/common/build_metadata:sources",
         "//rs/nns/constants:sources",
         "//rs/phantom_newtype:sources",
         "//rs/protobuf:sources",
