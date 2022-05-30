@@ -14,7 +14,7 @@ use ic_execution_environment::{
     IngressHistoryWriterImpl,
 };
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload,
+    CanisterIdRecord, CanisterInstallMode, EcdsaKeyId, EmptyBlob, InstallCodeArgs, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, SetControllerArgs,
 };
 use ic_interfaces::execution_environment::{IngressHistoryWriter, RegistryExecutionSettings};
@@ -46,152 +46,10 @@ use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use maplit::btreemap;
 
-use crate::{
-    crypto::mock_random_number_generator, cycles_account_manager::CyclesAccountManagerBuilder,
-    mock_time, types::messages::IngressBuilder,
-};
+use crate::types::messages::{RequestBuilder, SignedIngressBuilder};
+use crate::{crypto::mock_random_number_generator, mock_time, types::messages::IngressBuilder};
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
-
-pub struct ExecutionEnvironmentBuilder {
-    nns_subnet_id: SubnetId,
-    own_subnet_id: SubnetId,
-    sender_subnet_id: SubnetId,
-    subnet_type: SubnetType,
-    log: ReplicaLogger,
-    sender_canister_id: Option<CanisterId>,
-    ecdsa_signature_fee: Option<Cycles>,
-}
-
-impl Default for ExecutionEnvironmentBuilder {
-    fn default() -> Self {
-        Self {
-            nns_subnet_id: subnet_test_id(2),
-            own_subnet_id: subnet_test_id(1),
-            sender_subnet_id: subnet_test_id(1),
-            subnet_type: SubnetType::Application,
-            log: no_op_logger(),
-            sender_canister_id: None,
-            ecdsa_signature_fee: None,
-        }
-    }
-}
-
-impl ExecutionEnvironmentBuilder {
-    /// By default, this subnet id and the sender subnet id are
-    /// `subnet_test_id(1)`, while the nns is `subnet_test_id(2)`.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn with_nns_subnet_id(self, nns_subnet_id: SubnetId) -> Self {
-        Self {
-            nns_subnet_id,
-            ..self
-        }
-    }
-
-    pub fn with_own_subnet_id(self, own_subnet_id: SubnetId) -> Self {
-        Self {
-            own_subnet_id,
-            ..self
-        }
-    }
-
-    pub fn with_sender_subnet_id(self, sender_subnet_id: SubnetId) -> Self {
-        Self {
-            sender_subnet_id,
-            ..self
-        }
-    }
-
-    pub fn with_subnet_type(self, subnet_type: SubnetType) -> Self {
-        Self {
-            subnet_type,
-            ..self
-        }
-    }
-
-    pub fn with_log(self, log: ReplicaLogger) -> Self {
-        Self { log, ..self }
-    }
-
-    pub fn with_sender_canister(self, sender_canister: CanisterId) -> Self {
-        Self {
-            sender_canister_id: Some(sender_canister),
-            ..self
-        }
-    }
-
-    pub fn with_ecdsa_signature_fee(self, ecdsa_signing_fee: Cycles) -> Self {
-        Self {
-            ecdsa_signature_fee: Some(ecdsa_signing_fee),
-            ..self
-        }
-    }
-
-    pub fn build(self) -> (ReplicatedState, ExecutionEnvironmentImpl) {
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-
-        let own_range = CanisterIdRange {
-            start: CanisterId::from(0x100),
-            end: CanisterId::from(0x1ff),
-        };
-        let routing_table = Arc::new(match self.sender_canister_id {
-            None => RoutingTable::try_from(btreemap! {
-                CanisterIdRange { start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => self.sender_subnet_id,
-                own_range => self.own_subnet_id,
-            }).unwrap(),
-            Some(sender_canister) => RoutingTable::try_from(btreemap! {
-                CanisterIdRange { start: sender_canister, end: sender_canister } => self.sender_subnet_id,
-                own_range => self.own_subnet_id,
-            }).unwrap_or_else(|_| panic!("Unable to create routing table - sender canister {} is in the range {:?}", sender_canister, own_range)),
-        });
-
-        let mut state = ReplicatedState::new_rooted_at(
-            self.own_subnet_id,
-            self.subnet_type,
-            tmpdir.path().to_path_buf(),
-        );
-        state.metadata.network_topology.routing_table = routing_table;
-        state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
-
-        let metrics_registry = MetricsRegistry::new();
-
-        let mut cycles_account_manager_builder =
-            CyclesAccountManagerBuilder::new().with_subnet_type(self.subnet_type);
-        if let Some(ecdsa_signature_fee) = self.ecdsa_signature_fee {
-            cycles_account_manager_builder =
-                cycles_account_manager_builder.with_ecdsa_signature_fee(ecdsa_signature_fee);
-        }
-        let cycles_account_manager = Arc::new(cycles_account_manager_builder.build());
-
-        let hypervisor = Hypervisor::new(
-            Config::default(),
-            &metrics_registry,
-            self.own_subnet_id,
-            self.subnet_type,
-            self.log.clone(),
-            Arc::clone(&cycles_account_manager),
-        );
-        let hypervisor = Arc::new(hypervisor);
-        let ingress_history_writer =
-            IngressHistoryWriterImpl::new(Config::default(), self.log.clone(), &metrics_registry);
-        let ingress_history_writer = Arc::new(ingress_history_writer);
-        let exec_env = ExecutionEnvironmentImpl::new(
-            self.log,
-            hypervisor,
-            ingress_history_writer,
-            &metrics_registry,
-            self.own_subnet_id,
-            self.subnet_type,
-            1,
-            Config::default(),
-            cycles_account_manager,
-        );
-        (state, exec_env)
-    }
-}
 
 /// A helper for execution tests.
 ///
@@ -234,6 +92,7 @@ pub struct ExecutionTest {
     initial_canister_cycles: Cycles,
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
+    caller_canister_id: Option<CanisterId>,
 
     // The actual implementation.
     exec_env: ExecutionEnvironmentImpl,
@@ -339,6 +198,10 @@ impl ExecutionTest {
         let bytes = reject_message.to_string().len() + std::mem::size_of::<RejectCode>();
         self.cycles_account_manager
             .xnet_call_bytes_transmitted_fee(NumBytes::from(bytes as u64))
+    }
+
+    pub fn canister_creation_fee(&self) -> Cycles {
+        self.cycles_account_manager.canister_creation_fee()
     }
 
     pub fn subnet_available_memory(&self) -> AvailableMemory {
@@ -892,6 +755,57 @@ impl ExecutionTest {
         self.state = Some(state);
     }
 
+    /// Injects a call to the IC management canister originating from the
+    /// canister specified by `self.caller_canister_id`.
+    ///
+    /// Note: if you need to call `ic00` from the same subnet, then consider
+    /// performing the real call using the universal canister.
+    pub fn inject_call_to_ic00<S: ToString>(
+        &mut self,
+        method_name: S,
+        method_payload: Vec<u8>,
+        payment: Cycles,
+    ) {
+        let caller_canister_id = self.caller_canister_id.unwrap();
+        self.state_mut()
+            .subnet_queues_mut()
+            .push_input(
+                QUEUE_INDEX_NONE,
+                RequestOrResponse::Request(
+                    RequestBuilder::new()
+                        .sender(caller_canister_id)
+                        .receiver(CanisterId::ic_00())
+                        .method_name(method_name)
+                        .method_payload(method_payload)
+                        .payment(payment)
+                        .build(),
+                ),
+                InputQueueType::RemoteSubnet,
+            )
+            .unwrap();
+    }
+
+    /// Asks the canister if it is willing to accept the ingress message.
+    pub fn should_accept_ingress_message<S: ToString>(
+        &mut self,
+        canister_id: CanisterId,
+        method_name: S,
+        method_payload: Vec<u8>,
+    ) -> Result<(), UserError> {
+        let ingress = SignedIngressBuilder::new()
+            .sender(self.user_id())
+            .canister_id(canister_id)
+            .method_name(method_name)
+            .method_payload(method_payload)
+            .build();
+        self.exec_env.should_accept_ingress_message(
+            Arc::new(self.state().clone()),
+            &ProvisionalWhitelist::new_empty(),
+            ingress.content(),
+            ExecutionMode::NonReplicated,
+        )
+    }
+
     /// A low-level helper to generate the next message id.
     fn next_message_id(&mut self) -> MessageId {
         let message_id = self.message_id;
@@ -904,11 +818,12 @@ impl ExecutionTest {
 pub struct ExecutionTestBuilder {
     nns_subnet_id: SubnetId,
     own_subnet_id: SubnetId,
-    sender_subnet_id: SubnetId,
+    caller_subnet_id: Option<SubnetId>,
     subnet_type: SubnetType,
     log: ReplicaLogger,
-    sender_canister_id: Option<CanisterId>,
+    caller_canister_id: Option<CanisterId>,
     ecdsa_signature_fee: Option<Cycles>,
+    ecdsa_key: Option<EcdsaKeyId>,
     instruction_limit: NumInstructions,
     install_code_instruction_limit: NumInstructions,
     initial_canister_cycles: Cycles,
@@ -930,11 +845,12 @@ impl Default for ExecutionTestBuilder {
         Self {
             nns_subnet_id: subnet_test_id(2),
             own_subnet_id: subnet_test_id(1),
-            sender_subnet_id: subnet_test_id(1),
+            caller_subnet_id: None,
             subnet_type,
             log: no_op_logger(),
-            sender_canister_id: None,
+            caller_canister_id: None,
             ecdsa_signature_fee: None,
+            ecdsa_key: None,
             instruction_limit: config.max_instructions_per_message,
             install_code_instruction_limit: config.max_instructions_per_install_code,
             initial_canister_cycles: INITIAL_CANISTER_CYCLES,
@@ -965,9 +881,12 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_sender_subnet_id(self, sender_subnet_id: SubnetId) -> Self {
+    /// Ensures that the routing table is set up properl to allow inject a fake
+    /// call from the given subnet/canister. See `inject_call_to_ic00()`.
+    pub fn with_caller(self, subnet_id: SubnetId, canister_id: CanisterId) -> Self {
         Self {
-            sender_subnet_id,
+            caller_subnet_id: Some(subnet_id),
+            caller_canister_id: Some(canister_id),
             ..self
         }
     }
@@ -983,16 +902,16 @@ impl ExecutionTestBuilder {
         Self { log, ..self }
     }
 
-    pub fn with_sender_canister(self, sender_canister: CanisterId) -> Self {
+    pub fn with_ecdsa_signature_fee(self, ecdsa_signing_fee: u128) -> Self {
         Self {
-            sender_canister_id: Some(sender_canister),
+            ecdsa_signature_fee: Some(Cycles::new(ecdsa_signing_fee)),
             ..self
         }
     }
 
-    pub fn with_ecdsa_signature_fee(self, ecdsa_signing_fee: Cycles) -> Self {
+    pub fn with_ecdsa_key(self, ecdsa_key: EcdsaKeyId) -> Self {
         Self {
-            ecdsa_signature_fee: Some(ecdsa_signing_fee),
+            ecdsa_key: Some(ecdsa_key),
             ..self
         }
     }
@@ -1056,15 +975,15 @@ impl ExecutionTestBuilder {
             start: CanisterId::from(0x100),
             end: CanisterId::from(0x1ff),
         };
-        let routing_table = Arc::new(match self.sender_canister_id {
+        let routing_table = Arc::new(match self.caller_canister_id {
             None => RoutingTable::try_from(btreemap! {
-                CanisterIdRange { start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => self.sender_subnet_id,
+                CanisterIdRange { start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => self.own_subnet_id,
                 own_range => self.own_subnet_id,
             }).unwrap(),
-            Some(sender_canister) => RoutingTable::try_from(btreemap! {
-                CanisterIdRange { start: sender_canister, end: sender_canister } => self.sender_subnet_id,
+            Some(caller_canister) => RoutingTable::try_from(btreemap! {
+                CanisterIdRange { start: caller_canister, end: caller_canister } => self.caller_subnet_id.unwrap(),
                 own_range => self.own_subnet_id,
-            }).unwrap_or_else(|_| panic!("Unable to create routing table - sender canister {} is in the range {:?}", sender_canister, own_range)),
+            }).unwrap_or_else(|_| panic!("Unable to create routing table - sender canister {} is in the range {:?}", caller_canister, own_range)),
         });
 
         let mut state = ReplicatedState::new_rooted_at(
@@ -1082,6 +1001,15 @@ impl ExecutionTestBuilder {
             .cycles_account_manager_config;
         if let Some(ecdsa_signature_fee) = self.ecdsa_signature_fee {
             config.ecdsa_signature_fee = ecdsa_signature_fee;
+            state.metadata.own_subnet_features.ecdsa_signatures = true;
+        }
+        if let Some(ecdsa_key) = self.ecdsa_key {
+            state.metadata.own_subnet_features.ecdsa_signatures = true;
+            state
+                .metadata
+                .network_topology
+                .ecdsa_keys
+                .insert(ecdsa_key, vec![self.own_subnet_id]);
         }
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             self.instruction_limit,
@@ -1134,6 +1062,7 @@ impl ExecutionTestBuilder {
             initial_canister_cycles: self.initial_canister_cycles,
             registry_settings: self.registry_settings,
             user_id: user_test_id(1),
+            caller_canister_id: self.caller_canister_id,
             exec_env,
             cycles_account_manager,
             metrics_registry,
