@@ -98,11 +98,10 @@ ENV ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib ROCKSDB_STATIC=1 \
     LZ4_INCLUDE_DIR=/usr/include LZ4_LIB_DIR=/usr/lib/x86_64-linux-gnu LZ4_STATIC=1 \
     ZSTD_INCLUDE_DIR=/usr/include ZSTD_LIB_DIR=/usr/lib/x86_64-linux-gnu ZSTD_STATIC=1 \
     Z_INCLUDE_DIR=/usr/include Z_LIB_DIR=/usr/lib/x86_64-linux-gnu Z_STATIC=1 \
-    BZ2_INCLUDE_DIR=/usr/include BZ2_LIB_DIR=/usr/lib/x86_64-linux-gnu BZ2_STATIC=1 \
-    USE_BAZEL_VERSION=5.1.1
+    BZ2_INCLUDE_DIR=/usr/include BZ2_LIB_DIR=/usr/lib/x86_64-linux-gnu BZ2_STATIC=1
 
 # Pre-populate the Bazel installation.
-RUN bazel
+RUN USE_BAZEL_VERSION=5.1.1 bazel version
 
 # Adds the GitHub and GitLab signatures to known_hosts so that `git pull` calls don't require user approval
 RUN mkdir --mode=0700 /home/${USER}/.ssh && \

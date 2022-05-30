@@ -16,7 +16,7 @@
         - '**/BUILD.bazel'
         - '**/*.bzl'
         - 'gitlab-ci/config/*bazel*'
-        - '.bazelrc'
+        - '.bazel*'
         - 'WORKSPACE.bazel'
         - 'toolchains/*'
         - '**/Cargo*.lock'
