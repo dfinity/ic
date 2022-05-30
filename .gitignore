@@ -71,6 +71,7 @@ test_report.xml
 # IC-OS disk images
 *-os.iso
 *-img.tar.gz
+*-img.tar.zst
 
 # Various build artifacts
 /artifacts/

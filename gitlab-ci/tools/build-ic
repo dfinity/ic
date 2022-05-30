@@ -118,5 +118,5 @@ if [ "$BUILD_IMAGES" == "true" ] && [ "$BUILD_BINARIES" == "true" ] && [ "$BUILD
     echo IC-OS Image
     cd "$DISK_DIR"
     # shellcheck disable=SC2035
-    sha256sum -b *.gz
+    sha256sum -b *.tar.*
 fi

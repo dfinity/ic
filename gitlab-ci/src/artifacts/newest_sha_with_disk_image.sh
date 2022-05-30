@@ -18,7 +18,13 @@ function disk_image_exists() {
         || curl --output /dev/null --silent --head --fail \
             "https://download.dfinity.systems/ic/$git_sha/guest-os/disk-img/disk-img.tar.gz" \
         || curl --output /dev/null --silent --head --fail \
-            "https://download.dfinity.systems/ic/$git_sha/guest-os/disk-img.tar.gz"
+            "https://download.dfinity.systems/ic/$git_sha/guest-os/disk-img.tar.gz" \
+        || curl --output /dev/null --silent --head --fail \
+            "https://download.dfinity.systems/blessed/ic/$git_sha/guest-os/disk-img/disk-img.tar.zst" \
+        || curl --output /dev/null --silent --head --fail \
+            "https://download.dfinity.systems/ic/$git_sha/guest-os/disk-img/disk-img.tar.zst" \
+        || curl --output /dev/null --silent --head --fail \
+            "https://download.dfinity.systems/ic/$git_sha/guest-os/disk-img.tar.zst"
 }
 
 for git_sha in $(git log --format=format:%H "$branch_name" --max-count=50); do

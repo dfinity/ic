@@ -70,7 +70,7 @@ RUN \
 # - Construct the actual target image (IC-OS root filesystem)
 #
 # Update below image when new dfinity/boundaryos-base image gets produced (see deploy-guest-os-baseimg CI job on master/rc).
-FROM dfinity/boundaryos-base@sha256:aa6724deaf12f10fb4ec298adf86397d6fdd61bea950460eb7e0dc182505a647
+FROM dfinity/boundaryos-base@sha256:dd7b44dbd166c0d6317860b1de86a88426295c19a6040d7ab72fc98d876e9f88
 
 RUN mkdir -p /boot/config \
              /boot/efi \

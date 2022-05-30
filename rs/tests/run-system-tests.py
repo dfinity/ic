@@ -132,17 +132,24 @@ def create_env_variables(is_local_run: bool, artifact_dir: str, ci_project_dir: 
 
 
 def get_ic_os_image_sha(img_base_url) -> Tuple[str, str]:
-    img_url = f"{img_base_url}disk-img.tar.gz"
+    filename = "disk-img.tar.zst"
+    img_url = f"{img_base_url}{filename}"
     img_sha256_url = f"{img_base_url}SHA256SUMS"
     result = requests.get(f"{img_sha256_url}")
     logging.debug(f"GET {img_sha256_url} responded with status_code={result.status_code}.")
     if result.status_code != 200:
         raise GetImageShaException(f"Unexpected status_code={result.status_code} for the GET {img_sha256_url}")
     try:
-        img_sha256, _ = result.text.split(" ")
+        hashes = {}
+        for line in result.text.splitlines():
+            parts = line.split(" ")
+            hash = parts[0]
+            name = parts[1][1:]
+            hashes[name] = hash
+        img_sha256 = hashes[filename]
+        return img_sha256, img_url
     except Exception:
         raise GetImageShaException(f"Couldn't extract img_sha256 from {result.text}.")
-    return img_sha256, img_url
 
 
 def run_command(command: List[str], **kwargs) -> int:

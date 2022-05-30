@@ -8,6 +8,6 @@ set -eo pipefail
 TMPDIR=$(mktemp -d)
 trap "rm -rf ${TMPDIR}" exit
 
-tar -xf "$1" -C "${TMPDIR}"
+tar -xaf "$1" -C "${TMPDIR}"
 
 /opt/ic/bin/manageboot.sh install "${TMPDIR}"/boot.img "${TMPDIR}"/root.img
