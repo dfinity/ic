@@ -38,6 +38,7 @@ filegroup(
         "//rs/crypto/sha:sources",
         "//rs/crypto/tree_hash:sources",
         "//rs/elastic_common_schema:sources",
+        "//rs/interfaces:sources",
         "//rs/interfaces/bitcoin_adapter_client:sources",
         "//rs/interfaces/canister_http_adapter_client:sources",
         "//rs/interfaces/p2p:sources",

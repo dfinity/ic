@@ -1,0 +1,47 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "interfaces",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_interfaces",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:async-trait",
+        "@crate_index//:derive_more",
+    ],
+    deps = [
+        "//rs/crypto/tree_hash",
+        "//rs/interfaces/state_manager",
+        "//rs/protobuf",
+        "//rs/registry/provisional_whitelist",
+        "//rs/registry/subnet_type",
+        "//rs/registry/transport",
+        "//rs/sys",
+        "//rs/types/base_types",
+        "//rs/types/error_types",
+        "//rs/types/types",
+        "//rs/types/wasm_types",
+        "//rs/utils",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:thiserror",
+        "@crate_index//:tower",
+    ],
+)
+
+rust_test(
+    name = "interfaces_test",
+    crate = ":interfaces",
+)
