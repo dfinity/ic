@@ -9,8 +9,9 @@ import libhoney
 
 
 class Context:
-    def __init__(self, trace_id, suite_name, service_name):
+    def __init__(self, trace_id, job_url, suite_name, service_name):
         self.trace_id = trace_id
+        self.job_url = job_url
         self.suite_name = suite_name
         self.service_name = service_name
 
@@ -36,6 +37,7 @@ def push_span(node, parent_id, ctx, depth):
     )
     ev.add_field("trace.parent_id", parent_id)
     ev.add_field("trace.span_id", span_id)
+    ev.add_field("job_url", ctx.job_url)
     ev.add_field("trace.trace_id", ctx.trace_id)
     ev.add_field("ci_provider", "GitLab-CI")
     execution_result, execution_message = input.format_node_result(node.result)
@@ -54,6 +56,7 @@ def to_millis(secs, nanos):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--test_results", type=str, help="Path to a file containing test results.")
+    parser.add_argument("--job_url", type=str, help="Url of the Gitlab CI job.")
     parser.add_argument("--trace_id", type=str, help="Id of a trace containing the tests.")
     parser.add_argument(
         "--parent_id", type=str, help="Id of a parent span to which all top-level spans will be linked to."
@@ -67,7 +70,7 @@ def main():
 
     libhoney.init(writekey=api_token, dataset="gitlab-ci-dfinity", debug=False)
     root = input.read_test_results(args.test_results)
-    ctx = Context(args.trace_id, root.name, args.type)
+    ctx = Context(args.trace_id, args.job_url, root.name, args.type)
     create_and_export_spans(root, args.parent_id, ctx, 0)
     libhoney.close()
 

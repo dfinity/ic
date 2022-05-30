@@ -416,6 +416,7 @@ def main(runner_args: List[str], folders_to_remove: List[str], keep_tmp_artifact
             "python3",
             f"{CI_PROJECT_DIR}/gitlab-ci/src/test_results/honeycomb.py",
             f"--test_results={RESULT_FILE}",
+            f"--job_url={CI_JOB_URL}",
             f"--trace_id={ROOT_PIPELINE_ID}",
             f"--parent_id={JOB_ID}",
             "--type=system-tests",
