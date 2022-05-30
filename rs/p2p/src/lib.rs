@@ -166,6 +166,7 @@ const MAX_INGRESS_MESSAGES_PER_SECOND: u64 = 100;
 pub fn start_p2p(
     metrics_registry: MetricsRegistry,
     log: ReplicaLogger,
+    rt_handle: tokio::runtime::Handle,
     node_id: NodeId,
     subnet_id: SubnetId,
     transport_config: TransportConfig,
@@ -209,6 +210,9 @@ pub fn start_p2p(
     advert_subscriber.start(gossip.clone());
 
     let p2p_thread_joiner = P2PThreadJoiner::new(log.clone(), gossip);
+
+    // Creating the 'ingress_ingestion_service' requres that we are within a tokio runtime context.
+    let _rt_enter_guard = rt_handle.enter();
 
     let ingress_event_handler = BoxService::new(event_handler::IngressEventHandler::new(
         log,

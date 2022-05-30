@@ -108,7 +108,7 @@ pub struct Player {
 impl Player {
     /// Create and return a `Player` from a replica configuration object for
     /// restoring states from backups.
-    pub async fn new_for_backup(
+    pub fn new_for_backup(
         mut cfg: Config,
         replica_version: ReplicaVersion,
         backup_spool_path: &Path,
@@ -182,15 +182,14 @@ impl Player {
             replica_version,
             log,
             _async_log_guard,
-        )
-        .await;
+        );
         player.tmp_dir = Some(tmp_dir);
         player
     }
 
     /// Create and return a `Player` from a replica configuration object for
     /// subnet recovery.
-    pub async fn new(cfg: Config, subnet_id: SubnetId) -> Self {
+    pub fn new(cfg: Config, subnet_id: SubnetId) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
         let metrics_registry = MetricsRegistry::new();
         let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
@@ -228,11 +227,10 @@ impl Player {
             log,
             _async_log_guard,
         )
-        .await
     }
 
     #[allow(clippy::too_many_arguments)]
-    async fn new_with_params(
+    fn new_with_params(
         cfg: Config,
         verifier: Arc<dyn Verifier>,
         registry: Arc<RegistryClientImpl>,
@@ -248,8 +246,7 @@ impl Player {
             subnet_id,
             registry.get_latest_version(),
             &log,
-        )
-        .await;
+        );
         let local_store_path = if let Some(DataProviderConfig::LocalStore(path)) =
             cfg.registry_client.data_provider.clone()
         {
@@ -280,6 +277,7 @@ impl Player {
         let execution_service = ExecutionServices::setup_execution(
             log.clone(),
             &metrics_registry,
+            tokio::runtime::Handle::current(),
             subnet_id,
             subnet_type,
             subnet_config.scheduler_config,
@@ -301,7 +299,7 @@ impl Player {
         );
         let certification_pool = if consensus_pool.is_some() {
             Some(CertificationPoolImpl::new(
-                ArtifactPoolConfig::from(cfg.artifact_pool.clone()),
+                ArtifactPoolConfig::from(cfg.artifact_pool),
                 log.clone(),
                 metrics_registry,
             ))

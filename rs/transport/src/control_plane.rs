@@ -908,6 +908,8 @@ impl TransportImpl {
             return Err(TransportErrorCode::TransportClientAlreadyRegistered);
         }
 
+        // Creating the listeners requres that we are within a tokio runtime context.
+        let _rt_enter_guard = self.tokio_runtime.enter();
         // Bind to the server ports.
         let mut listeners = Vec::new();
         for flow_config in &self.config.p2p_flows {

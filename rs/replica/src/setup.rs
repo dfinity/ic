@@ -85,7 +85,7 @@ pub fn get_catch_up_package(
 /// Panic if this fails after some retries. The orchestrator should
 /// never have booted a replica if our node ID is not assigned to a subntwork
 /// yet.
-pub async fn get_subnet_id(
+pub fn get_subnet_id(
     node_id: NodeId,
     registry_client: &dyn RegistryClient,
     cup: Option<&CatchUpPackage>,
@@ -130,12 +130,12 @@ pub async fn get_subnet_id(
                 node_id, registry_version
             );
         }
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
 }
 
 /// Return the subnet type of the given subnet.
-pub async fn get_subnet_type(
+pub fn get_subnet_type(
     registry: &dyn RegistryClient,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
@@ -171,7 +171,7 @@ pub async fn get_subnet_type(
                     "Unable to read the subnet record: {}\nTrying again...",
                     err.to_string(),
                 );
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                std::thread::sleep(std::time::Duration::from_millis(10));
             }
         }
     }

@@ -3977,7 +3977,6 @@ name = "ic-canister-http-service"
 version = "0.1.0"
 dependencies = [
  "prost",
- "prost-build",
  "tonic",
  "tonic-build",
 ]

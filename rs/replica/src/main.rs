@@ -62,12 +62,7 @@ fn get_replica_binary_hash() -> std::result::Result<(PathBuf, String), String> {
     Ok((replica_binary_path, hex::encode(hasher.finish())))
 }
 
-#[tokio::main]
-async fn main() {
-    run().await.unwrap();
-}
-
-async fn run() -> io::Result<()> {
+fn main() -> io::Result<()> {
     // We do not support 32 bits architectures and probably never will.
     assert_eq_size!(usize, u64);
 
@@ -90,11 +85,6 @@ async fn run() -> io::Result<()> {
 
     #[cfg(feature = "profiler")]
     let guard = pprof::ProfilerGuard::new(100).unwrap();
-    // Setup temp directory for the configuration.
-    let tmpdir = tempfile::Builder::new()
-        .prefix("ic_config")
-        .tempdir()
-        .unwrap();
 
     // Before setup of execution, we disable SIGPIPEs. In particular,
     // we install the corresponding signal handler. We are setting up
@@ -120,29 +110,30 @@ async fn run() -> io::Result<()> {
     // And SO_NOSIGPIPE is kernel dependent (>2.2) and has spotty
     // support. (And thus both options lead to sporadic problems
     // commonly if we simply depend on them.)
-    let _sigpipe_handler =
-        signal(SignalKind::pipe()).expect("failed to install SIGPIPE signal handler");
-
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let sigpipe_handler = rt.block_on(async {
+        signal(SignalKind::pipe()).expect("failed to install SIGPIPE signal handler")
+    });
+    // Parse command-line args
     let replica_args = setup::parse_args();
     if let Err(e) = &replica_args {
         e.print().expect("Failed to print CLI argument error.");
     }
 
     let config_source = setup::get_config_source(&replica_args);
+    // Setup temp directory for the configuration.
+    let tmpdir = tempfile::Builder::new()
+        .prefix("ic_config")
+        .tempdir()
+        .unwrap();
     let config = Config::load_with_tmpdir(config_source, tmpdir.path().to_path_buf());
 
-    let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
+    let (logger, async_log_guard) = new_replica_logger_from_config(&config.logger);
 
     let metrics_registry = MetricsRegistry::global();
 
     #[cfg(target_os = "linux")]
     metrics_registry.register(jemalloc_metrics::JemallocMetrics::new());
-
-    let (registry, crypto) =
-        setup::setup_crypto_registry(config.clone(), Some(&metrics_registry), logger.clone());
-
-    let node_id = crypto.get_node_id();
-    let cup_with_proto = setup::get_catch_up_package(&replica_args, &logger);
 
     // Set the replica verison and report as metric
     setup::set_replica_version(&replica_args, &logger);
@@ -160,6 +151,13 @@ async fn run() -> io::Result<()> {
         ])
         .set(1);
     }
+
+    let (registry, crypto) =
+        setup::setup_crypto_registry(config.clone(), Some(&metrics_registry), logger.clone());
+
+    let node_id = crypto.get_node_id();
+    let cup_with_proto = setup::get_catch_up_package(&replica_args, &logger);
+
     let subnet_id = match &replica_args {
         Ok(args) => {
             if let Some(subnet) = args.force_subnet.as_ref() {
@@ -176,29 +174,24 @@ async fn run() -> io::Result<()> {
                         .map(|cup_with_proto| &cup_with_proto.cup),
                     &logger,
                 )
-                .await
             }
         }
-        Err(_) => {
-            setup::get_subnet_id(
-                node_id,
-                registry.as_ref(),
-                cup_with_proto
-                    .as_ref()
-                    .map(|cup_with_proto| &cup_with_proto.cup),
-                &logger,
-            )
-            .await
-        }
+        Err(_) => setup::get_subnet_id(
+            node_id,
+            registry.as_ref(),
+            cup_with_proto
+                .as_ref()
+                .map(|cup_with_proto| &cup_with_proto.cup),
+            &logger,
+        ),
     };
 
     let subnet_type = setup::get_subnet_type(
-        &*registry,
+        registry.as_ref(),
         subnet_id,
         registry.get_latest_version(),
         &logger,
-    )
-    .await;
+    );
 
     let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
 
@@ -234,9 +227,8 @@ async fn run() -> io::Result<()> {
     setup::create_consensus_pool_dir(&config);
 
     let crypto = Arc::new(crypto);
-    let rt_handle = tokio::runtime::Handle::current();
     let _metrics = MetricsRuntimeImpl::new(
-        rt_handle.clone(),
+        rt.handle().clone(),
         config.metrics.clone(),
         metrics_registry.clone(),
         registry.clone(),
@@ -267,7 +259,7 @@ async fn run() -> io::Result<()> {
         _xnet_endpoint,
     ) = ic_replica::setup_p2p::construct_ic_stack(
         logger.clone(),
-        rt_handle.clone(),
+        rt.handle().clone(),
         config.clone(),
         subnet_config,
         node_id,
@@ -283,8 +275,9 @@ async fn run() -> io::Result<()> {
 
     let malicious_behaviour = &config.malicious_behaviour;
 
-    rt_handle.spawn(ic_http_handler::start_server(
-        metrics_registry.clone(),
+    ic_http_handler::start_server(
+        rt.handle().clone(),
+        metrics_registry,
         config.http_handler.clone(),
         ingress_message_filter,
         ingress_ingestion_service,
@@ -300,13 +293,12 @@ async fn run() -> io::Result<()> {
         config.artifact_pool.backup.map(|config| config.spool_path),
         subnet_type,
         malicious_behaviour.malicious_flags.clone(),
-        rt_handle.clone(),
-    ));
+    );
 
-    tokio::time::sleep(Duration::from_millis(5000)).await;
+    std::thread::sleep(Duration::from_millis(5000));
 
     if config.malicious_behaviour.maliciously_seg_fault() {
-        tokio::spawn(async move {
+        rt.spawn(async move {
             loop {
                 // Exit roughly every 8 seconds.
                 tokio::time::sleep(Duration::from_millis(500)).await;
@@ -321,14 +313,18 @@ async fn run() -> io::Result<()> {
         });
     }
 
-    shutdown_signal(logger.inner_logger.root.clone()).await;
+    rt.block_on(async move {
+        let _drop_async_log_guard = async_log_guard;
+        let _drop_sigpipe_handler = sigpipe_handler;
+        info!(logger, "IC Replica Terminated");
+        shutdown_signal(logger.inner_logger.root.clone()).await
+    });
 
     #[cfg(feature = "profiler")]
     finalize_report(&guard);
     // Ensure cleanup of the temporary directory is triggered; error
     // otherwise.
     tmpdir.close()?;
-    info!(logger, "IC Replica Terminated");
     Ok(())
 }
 

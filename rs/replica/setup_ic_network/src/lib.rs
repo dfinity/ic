@@ -160,6 +160,7 @@ pub fn create_networking_stack(
     start_p2p(
         metrics_registry,
         log,
+        rt_handle,
         node_id,
         subnet_id,
         transport_config,

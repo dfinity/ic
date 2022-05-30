@@ -201,6 +201,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
         ExecutionServices::setup_execution(
             log.clone().into(),
             &metrics_registry,
+            tokio::runtime::Handle::current(),
             replica_config.subnet_id,
             subnet_type,
             subnet_config.scheduler_config,

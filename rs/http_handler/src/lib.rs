@@ -272,7 +272,8 @@ fn create_port_file(path: PathBuf, port: u16) {
 /// port fails.
 /// The function spawns a tokio task per connection.
 #[allow(clippy::too_many_arguments)]
-pub async fn start_server(
+pub fn start_server(
+    rt_handle: tokio::runtime::Handle,
     metrics_registry: MetricsRegistry,
     config: Config,
     ingress_filter: IngressFilterService,
@@ -289,153 +290,154 @@ pub async fn start_server(
     backup_spool_path: Option<PathBuf>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
-    rt_handle: tokio::runtime::Handle,
-) -> Result<(), Error> {
+) {
     let metrics = HttpHandlerMetrics::new(&metrics_registry);
 
     let listen_addr = config.listen_addr;
     let port_file_path = config.port_file_path.clone();
-
-    let ingress_sender = ServiceBuilder::new()
-        .buffer(MAX_BUFFERED_INGRESS_MESSAGES)
-        .service(ingress_ingestion_service);
-
-    let http_handler = HttpHandler {
-        log: log.clone(),
-        config,
-        subnet_id,
-        nns_subnet_id,
-        subnet_type,
-        state_reader_executor: StateReaderExecutor::new(state_reader.clone()),
-        registry_client,
-        validator_executor: ValidatorExecutor::new(ingress_verifier, log.clone()),
-        query_execution_service,
-        ingress_sender,
-        ingress_filter,
-        consensus_pool_cache,
-        backup_spool_path,
-        malicious_flags,
-        delegation_from_nns: Arc::new(RwLock::new(None)),
-        health_status: Arc::new(RwLock::new(ReplicaHealthStatus::Starting)),
-    };
-
-    info!(log, "Starting HTTP server...");
 
     // TODO(OR4-60): temporarily listen on [::] so that we accept both IPv4 and
     // IPv6 connections. This requires net.ipv6.bindv6only = 0. Revert this once
     // we have rolled out IPv6 in prometheus and ic_p8s_service_discovery.
     let mut addr = "[::]:8080".parse::<SocketAddr>().unwrap();
     addr.set_port(listen_addr.port());
+    info!(log, "Starting HTTP server...");
+    rt_handle.clone().spawn(async move {
+        let ingress_sender = ServiceBuilder::new()
+            .buffer(MAX_BUFFERED_INGRESS_MESSAGES)
+            .service(ingress_ingestion_service);
 
-    info!(log, "Binding HTTP server to address {}", addr);
-    let tcp_listener = TcpListener::bind(addr).await?;
+        let http_handler = HttpHandler {
+            log: log.clone(),
+            config,
+            subnet_id,
+            nns_subnet_id,
+            subnet_type,
+            state_reader_executor: StateReaderExecutor::new(state_reader.clone()),
+            registry_client,
+            validator_executor: ValidatorExecutor::new(ingress_verifier, log.clone()),
+            query_execution_service,
+            ingress_sender,
+            ingress_filter,
+            consensus_pool_cache,
+            backup_spool_path,
+            malicious_flags,
+            delegation_from_nns: Arc::new(RwLock::new(None)),
+            health_status: Arc::new(RwLock::new(ReplicaHealthStatus::Starting)),
+        };
 
-    // If addr == 0, then a random port will be assigned. In this case it
-    // is useful to report the randomly assigned port by writing it to a file.
-    let local_addr = tcp_listener.local_addr()?;
-    if let Some(path) = port_file_path {
-        create_port_file(path, local_addr.port());
-    }
+        info!(log, "Binding HTTP server to address {}", addr);
+        let tcp_listener = TcpListener::bind(addr).await.unwrap();
 
-    start_server_initialization(
-        Arc::clone(&state_reader),
-        http_handler.subnet_id,
-        http_handler.nns_subnet_id,
-        http_handler.log.clone(),
-        Arc::clone(&http_handler.delegation_from_nns),
-        Arc::clone(&http_handler.health_status),
-        rt_handle.clone(),
-    );
+        // If addr == 0, then a random port will be assigned. In this case it
+        // is useful to report the randomly assigned port by writing it to a file.
+        let local_addr = tcp_listener.local_addr().unwrap();
+        if let Some(path) = port_file_path {
+            create_port_file(path, local_addr.port());
+        }
 
-    let outstanding_connections =
-        ObservableCountingSemaphore::new(MAX_OUTSTANDING_CONNECTIONS, metrics.connections.clone());
-    let mut http = Http::new();
-    http.http2_max_concurrent_streams(HTTP_MAX_CONCURRENT_STREAMS);
-    loop {
-        let log = log.clone();
-        let http = http.clone();
-        let http_handler = http_handler.clone();
-        let tls_handshake = Arc::clone(&tls_handshake);
-        let metrics = metrics.clone();
-        let request_permit = outstanding_connections.acquire().await;
-        match tcp_listener.accept().await {
-            Ok((tcp_stream, _)) => {
-                metrics.connections_total.inc();
-                // Start recording connection setup duration.
-                let connection_start_time = Instant::now();
-                rt_handle.spawn(async move {
-                    // Do a move of the permit so it gets dropped at the end of the scope.
-                    let _request_permit_deleter = request_permit;
-                    let mut b = [0_u8; 1];
-                    let serve_https = match timeout(
-                        Duration::from_secs(MAX_TCP_PEEK_TIMEOUT_SECS),
-                        tcp_stream.peek(&mut b),
-                    )
-                    .await
-                    {
-                        // The peek operation didn't timeout, and the peek oparation didn't return
-                        // an error.
-                        Ok(Ok(_)) => b[0] == 22,
-                        Ok(Err(err)) => {
-                            warn!(log, "Connection error (can't peek). {}", err);
-                            metrics.observe_connection_error(
-                                ConnectionError::Peek,
+        start_server_initialization(
+            Arc::clone(&state_reader),
+            http_handler.subnet_id,
+            http_handler.nns_subnet_id,
+            http_handler.log.clone(),
+            Arc::clone(&http_handler.delegation_from_nns),
+            Arc::clone(&http_handler.health_status),
+            rt_handle.clone(),
+        );
+
+        let outstanding_connections = ObservableCountingSemaphore::new(
+            MAX_OUTSTANDING_CONNECTIONS,
+            metrics.connections.clone(),
+        );
+        let mut http = Http::new();
+        http.http2_max_concurrent_streams(HTTP_MAX_CONCURRENT_STREAMS);
+        loop {
+            let log = log.clone();
+            let http = http.clone();
+            let http_handler = http_handler.clone();
+            let tls_handshake = Arc::clone(&tls_handshake);
+            let metrics = metrics.clone();
+            let request_permit = outstanding_connections.acquire().await;
+            match tcp_listener.accept().await {
+                Ok((tcp_stream, _)) => {
+                    metrics.connections_total.inc();
+                    // Start recording connection setup duration.
+                    let connection_start_time = Instant::now();
+                    rt_handle.spawn(async move {
+                        // Do a move of the permit so it gets dropped at the end of the scope.
+                        let _request_permit_deleter = request_permit;
+                        let mut b = [0_u8; 1];
+                        let serve_https = match timeout(
+                            Duration::from_secs(MAX_TCP_PEEK_TIMEOUT_SECS),
+                            tcp_stream.peek(&mut b),
+                        )
+                        .await
+                        {
+                            // The peek operation didn't timeout, and the peek oparation didn't return
+                            // an error.
+                            Ok(Ok(_)) => b[0] == 22,
+                            Ok(Err(err)) => {
+                                warn!(log, "Connection error (can't peek). {}", err);
+                                metrics.observe_connection_error(
+                                    ConnectionError::Peek,
+                                    connection_start_time,
+                                );
+                                false
+                            }
+                            Err(err) => {
+                                warn!(
+                                    log,
+                                    "Connection error (tcp peeking timeout after {}s). {}",
+                                    MAX_TCP_PEEK_TIMEOUT_SECS,
+                                    err
+                                );
+
+                                metrics.observe_connection_error(
+                                    ConnectionError::PeekTimeout,
+                                    connection_start_time,
+                                );
+                                false
+                            }
+                        };
+                        if serve_https {
+                            serve_secure_connection(
+                                tls_handshake,
+                                tcp_stream,
+                                metrics,
+                                http,
+                                http_handler,
                                 connection_start_time,
-                            );
-                            false
-                        }
-                        Err(err) => {
-                            warn!(
                                 log,
-                                "Connection error (tcp peeking timeout after {}s). {}",
-                                MAX_TCP_PEEK_TIMEOUT_SECS,
-                                err
-                            );
-
-                            metrics.observe_connection_error(
-                                ConnectionError::PeekTimeout,
+                            )
+                            .await;
+                        } else {
+                            // If either
+                            //      1. peeking timed out
+                            //      2. peeking failed
+                            //      3. first byte is not 22
+                            // then fallback to HTTP.
+                            serve_unsecure_connection(
+                                metrics,
+                                http,
+                                http_handler,
+                                tcp_stream,
                                 connection_start_time,
-                            );
-                            false
+                                log,
+                            )
+                            .await;
                         }
-                    };
-                    if serve_https {
-                        serve_secure_connection(
-                            tls_handshake,
-                            tcp_stream,
-                            metrics,
-                            http,
-                            http_handler,
-                            connection_start_time,
-                            log,
-                        )
-                        .await;
-                    } else {
-                        // If either
-                        //      1. peeking timed out
-                        //      2. peeking failed
-                        //      3. first byte is not 22
-                        // then fallback to HTTP.
-                        serve_unsecure_connection(
-                            metrics,
-                            http,
-                            http_handler,
-                            tcp_stream,
-                            connection_start_time,
-                            log,
-                        )
-                        .await;
-                    }
-                });
-            }
-            // Don't exit the loop on a connection error. We will want to
-            // continue serving.
-            Err(err) => {
-                metrics.observe_connection_error(ConnectionError::Accept, Instant::now());
-                warn!(log, "Connection error (can't accept) {}", err);
+                    });
+                }
+                // Don't exit the loop on a connection error. We will want to
+                // continue serving.
+                Err(err) => {
+                    metrics.observe_connection_error(ConnectionError::Accept, Instant::now());
+                    warn!(log, "Connection error (can't accept) {}", err);
+                }
             }
         }
-    }
+    });
 }
 
 fn create_main_service(
