@@ -15,6 +15,7 @@ build --bes_backend=bes.buildfarm.dfinity.systems
 build --remote_local_fallback
 
 build:ci --noremote_local_fallback
+build:ci --repository_cache=/cache/bazel
 
 # no-op config for now as everything is set as default.
 build:dev
