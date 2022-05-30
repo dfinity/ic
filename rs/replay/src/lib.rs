@@ -87,20 +87,19 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
         }
 
         if let Some(SubCommand::RestoreFromBackup(cmd)) = subcmd {
-            rt.block_on(async {
-                let mut player = Player::new_for_backup(
-                    cfg,
-                    ReplicaVersion::try_from(cmd.replica_version.as_str())
-                        .expect("Couldn't parse the replica version"),
-                    &cmd.backup_spool_path,
-                    &cmd.registry_local_store_path,
-                    subnet_id,
-                    cmd.start_height,
-                )
-                .await
-                .with_replay_target_height(target_height);
-                *res_clone.borrow_mut() = player.restore(cmd.start_height + 1);
-            });
+            let _enter_guard = rt.enter();
+
+            let mut player = Player::new_for_backup(
+                cfg,
+                ReplicaVersion::try_from(cmd.replica_version.as_str())
+                    .expect("Couldn't parse the replica version"),
+                &cmd.backup_spool_path,
+                &cmd.registry_local_store_path,
+                subnet_id,
+                cmd.start_height,
+            )
+            .with_replay_target_height(target_height);
+            *res_clone.borrow_mut() = player.restore(cmd.start_height + 1);
             return;
         }
         let extra = move |player: &Player, time| {
@@ -137,16 +136,19 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                 _ => Vec::new(),
             }
         };
-        rt.block_on(async move {
+        {
+            let _enter_guard = rt.enter();
             let player = match (subcmd.as_ref(), target_height) {
                 (Some(_), Some(_)) => {
-                    panic!("Target height cannot be used with any sub-command in subnet-recovery mode.");
-                },
+                    panic!(
+                    "Target height cannot be used with any sub-command in subnet-recovery mode."
+                );
+                }
                 (_, target_height) => {
-                    Player::new(cfg, subnet_id).await.with_replay_target_height(target_height)
-                },
+                    Player::new(cfg, subnet_id).with_replay_target_height(target_height)
+                }
             };
-            if let Err(e) = player.replay(extra){
+            if let Err(e) = player.replay(extra) {
                 *res_clone.borrow_mut() = Err(e);
                 return;
             };
@@ -154,7 +156,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                 player.update_registry_local_store()
             }
             *res_clone.borrow_mut() = Ok(player.get_latest_state_height_and_hash());
-        })
+        }
     });
     let ret = result.borrow().clone();
     ret

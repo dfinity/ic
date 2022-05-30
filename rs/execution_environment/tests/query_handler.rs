@@ -44,6 +44,7 @@ async fn query_non_existent() {
         let execution_services = ExecutionServices::setup_execution(
             log,
             &metrics_registry,
+            tokio::runtime::Handle::current(),
             subnet_id,
             subnet_type,
             subnet_config.scheduler_config,

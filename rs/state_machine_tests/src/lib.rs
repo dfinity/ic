@@ -246,6 +246,7 @@ impl StateMachine {
             ExecutionServices::setup_execution(
                 replica_logger.clone(),
                 &metrics_registry,
+                runtime.handle().clone(),
                 subnet_id,
                 subnet_type,
                 subnet_config.scheduler_config,

@@ -153,6 +153,7 @@ pub fn construct_ic_stack(
     let execution_services = ExecutionServices::setup_execution(
         replica_logger.clone(),
         &metrics_registry,
+        rt_handle.clone(),
         subnet_id,
         subnet_type,
         subnet_config.scheduler_config,
