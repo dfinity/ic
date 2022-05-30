@@ -220,6 +220,23 @@ impl Recovery {
             })
     }
 
+    /// Executes the given SSH command.
+    pub fn execute_ssh_command(
+        &self,
+        account: &str,
+        node_ip: IpAddr,
+        commands: &str,
+    ) -> RecoveryResult<Option<String>> {
+        let ssh_helper = SshHelper::new(
+            self.logger.clone(),
+            account.to_string(),
+            node_ip,
+            self.admin_helper.neuron_args.is_some(),
+            self.key_file.clone(),
+        );
+        ssh_helper.ssh(commands.to_string())
+    }
+
     /// Returns true if ssh access to the given account and ip exists.
     pub fn check_ssh_access(&self, account: &str, node_ip: IpAddr) -> bool {
         let ssh_helper = SshHelper::new(

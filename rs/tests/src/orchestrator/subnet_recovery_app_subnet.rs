@@ -33,7 +33,6 @@ use crate::util::*;
 use ic_cup_explorer::get_catchup_content;
 use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType};
 use ic_recovery::file_sync_helper;
-use ic_recovery::steps::Step;
 use ic_recovery::RecoveryArgs;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
@@ -69,13 +68,6 @@ pub fn setup_failover_nodes(env: TestEnv) {
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
-
-    let broken_replica_version = env::var("BROKEN_BLOCKMAKER_GIT_REVISION")
-        .expect("Environment variable $BROKEN_BLOCKMAKER_GIT_REVISION is not set!");
-    info!(
-        logger,
-        "BROKEN_BLOCKMAKER_GIT_REVISION: {}", broken_replica_version
-    );
 
     let master_version = match env::var("IC_VERSION_ID") {
         Ok(ver) => ver,
@@ -205,34 +197,25 @@ pub fn test(env: TestEnv) {
         .get_recovery_api()
         .check_ssh_access("admin", app_node.get_ip_addr()));
 
+    // Let's take f+1 nodes and break them.
+    let f = (SUBNET_SIZE - 1) / 3;
     info!(
         logger,
-        "Breaking the app subnet by upgrading to a broken replica version"
+        "Breaking the app subnet by breaking the replica binary on f+1={} nodes",
+        f + 1
     );
-    let broken_version = ReplicaVersion::try_from(broken_replica_version.clone())
-        .expect("Couldn't parse broken replica version");
-    let bless_broken_version = subnet_recovery
-        .get_recovery_api()
-        .bless_replica_version(&broken_version)
-        .expect("Failed to bless replica version");
-    info!(logger, "{}", bless_broken_version.descr());
-    bless_broken_version
-        .exec()
-        .expect("Execution of step failed");
 
-    let upgrade_to_broken_version = subnet_recovery
-        .get_recovery_api()
-        .update_subnet_replica_version(subnet_id, &broken_version);
-    info!(logger, "{}", upgrade_to_broken_version.descr());
-    upgrade_to_broken_version
-        .exec()
-        .expect("Execution of step failed");
-
-    assert_assigned_replica_version(&app_node, &broken_replica_version, env.logger());
-    info!(
-        logger,
-        "Successfully upgraded subnet {} to {}", subnet_id, broken_replica_version
-    );
+    let faulty_nodes = app_nodes.take(f + 1).collect::<Vec<_>>();
+    for node in faulty_nodes {
+        subnet_recovery
+            .get_recovery_api()
+            .execute_ssh_command(
+                "admin",
+                node.get_ip_addr(),
+                "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica",
+            )
+            .expect("couldn't run ssh command");
+    }
 
     info!(logger, "Ensure the subnet works in read mode");
     assert!(block_on(can_read_msg(
@@ -257,30 +240,24 @@ pub fn test(env: TestEnv) {
         info!(logger, "Next step: {:?}", step_type);
         if matches!(step_type, StepType::ValidateReplayOutput) {
             // Replay output has to be validated differently since prometheus doesn't work here
-            let (latest_height, state_hash) = subnet_recovery
+            let (latest_height, _state_hash) = subnet_recovery
                 .get_recovery_api()
                 .get_replay_output()
                 .expect("Failed to get replay output");
 
-            // Sanity check to confirm that replay didn't actually do anything
+            // Sanity check to confirm that replay actually did something
             let cup_content = block_on(get_catchup_content(&app_node.get_public_url()))
                 .expect("Couldn't fetch catchup package")
                 .expect("No CUP found");
 
-            let (cup_height, cup_hash) = (
+            let (cup_height, _cup_hash) = (
                 Height::from(cup_content.random_beacon.unwrap().height),
                 cup_content.state_hash,
             );
 
-            assert_eq!(
-                cup_height, latest_height,
-                "CUP height and replay height diverged (replay did something)."
-            );
-
-            assert_eq!(
-                state_hash,
-                hex::encode(&cup_hash),
-                "Replay hash and CUP hash diverged (replay did something)."
+            assert!(
+                cup_height <= latest_height,
+                "CUP height is above the replay height."
             );
 
             // Continue, so we don't execute the iterator's ValidateReplayOutput step
