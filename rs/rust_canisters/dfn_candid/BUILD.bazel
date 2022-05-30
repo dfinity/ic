@@ -1,0 +1,44 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "dfn_candid",
+    srcs = glob(["src/**"]),
+    edition = "2018",
+    deps = [
+        "//rs/rust_canisters/dfn_core",
+        "//rs/rust_canisters/on_wire",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+    ],
+)
+
+rust_canister(
+    name = "candid-test-canister",
+    srcs = ["test/wasm.rs"],
+    edition = "2018",
+    deps = [
+        ":dfn_candid",
+        "//rs/rust_canisters/dfn_core",
+    ],
+)
+
+# Blocked on Bazelization of `canister_test` crate.
+#
+# rust_test(
+#     name = "dfn_candid_test",
+#     srcs = ["test/test.rs"],
+#     crate = ":dfn_candid",
+#     deps = ["//rs/rust_canisters/canister_test""],
+# )

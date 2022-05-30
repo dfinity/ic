@@ -58,6 +58,7 @@ filegroup(
         "//rs/registry/subnet_type:sources",
         "//rs/registry/transport:sources",
         "//rs/registry/transport/protobuf_generator:sources",
+        "//rs/rust_canisters/dfn_candid:sources",
         "//rs/rust_canisters/dfn_core:sources",
         "//rs/rust_canisters/dfn_json:sources",
         "//rs/rust_canisters/on_wire:sources",
