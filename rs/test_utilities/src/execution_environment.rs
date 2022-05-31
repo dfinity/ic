@@ -831,6 +831,7 @@ pub struct ExecutionTestBuilder {
     subnet_message_memory: i64,
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
+    rate_limiting_of_instructions: bool,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -858,6 +859,7 @@ impl Default for ExecutionTestBuilder {
             subnet_message_memory: subnet_total_memory,
             registry_settings: test_registry_settings(),
             manual_execution: false,
+            rate_limiting_of_instructions: false,
         }
     }
 }
@@ -968,12 +970,19 @@ impl ExecutionTestBuilder {
         }
     }
 
+    pub fn with_rate_limiting_of_instructions(self) -> Self {
+        Self {
+            rate_limiting_of_instructions: true,
+            ..self
+        }
+    }
+
     pub fn build(self) -> ExecutionTest {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
         let own_range = CanisterIdRange {
             start: CanisterId::from(0x100),
-            end: CanisterId::from(0x1ff),
+            end: CanisterId::from(self.registry_settings.max_number_of_canisters - 1),
         };
         let routing_table = Arc::new(match self.caller_canister_id {
             None => RoutingTable::try_from(btreemap! {
@@ -1017,8 +1026,13 @@ impl ExecutionTestBuilder {
             self.own_subnet_id,
             config,
         ));
+        let rate_limiting_of_instructions = if self.rate_limiting_of_instructions {
+            FlagStatus::Enabled
+        } else {
+            FlagStatus::Disabled
+        };
         let config = Config {
-            rate_limiting_of_instructions: FlagStatus::Disabled,
+            rate_limiting_of_instructions,
             ..Config::default()
         };
         let hypervisor = Hypervisor::new(
@@ -1123,7 +1137,7 @@ pub fn check_ingress_status(ingress_status: IngressStatus) -> Result<WasmResult,
 
 pub fn test_registry_settings() -> RegistryExecutionSettings {
     RegistryExecutionSettings {
-        max_number_of_canisters: 1_000,
+        max_number_of_canisters: 0x2000,
         provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
     }
 }
