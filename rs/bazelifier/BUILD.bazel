@@ -18,6 +18,7 @@ rust_binary(
     edition = "2021",
     deps = [
         "@crate_index//:askama",
+        "@crate_index//:clap",
         "@crate_index//:eyre",
         "@crate_index//:pathdiff",
         "@crate_index//:serde",

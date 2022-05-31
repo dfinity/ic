@@ -4,7 +4,17 @@
 use std::{collections::BTreeMap, fmt::Display, io::Write, path::Path, process::Command};
 
 use askama::Template;
+use clap::Parser;
 use serde::Deserialize;
+
+#[derive(Parser, Debug)]
+struct Options {
+    /// Overwrite any existing BUILD file
+    #[clap(short, long)]
+    force: bool,
+    /// Cargo.toml file to convert
+    cargo_file: String,
+}
 
 enum BuildType {
     Lib,
@@ -98,14 +108,10 @@ static MACRO_CRATES: &[&str] = &[
 ];
 
 fn main() -> eyre::Result<()> {
-    let mut args = std::env::args();
-    let tomlfile = match args.nth(1) {
-        Some(n) => n,
-        None => {
-            eprintln!("usage: bazelifier <Cargo.toml file>");
-            std::process::exit(1);
-        }
-    };
+    let Options {
+        force,
+        cargo_file: tomlfile,
+    } = Options::parse();
 
     // if running with bazel run, move to the requested cwd
     if let Some(wd) = std::env::var_os("BUILD_WORKING_DIRECTORY") {
@@ -115,7 +121,7 @@ fn main() -> eyre::Result<()> {
     let abs = std::fs::canonicalize(&tomlfile)?;
     let manifest_dir = abs.parent().unwrap();
     let buildfile_path = manifest_dir.join("BUILD.bazel");
-    if buildfile_path.exists() {
+    if !force && buildfile_path.exists() {
         eprintln!(
             "{} already exists, refusing to overwrite it",
             buildfile_path.display()
