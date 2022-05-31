@@ -31,6 +31,58 @@ https://dfinity.slack.com/archives/CKXPC1928[`#eng-messaging`] or via
  https://dfinity.slack.com/archives/CGZJ7G1J6[`#eng-execution`] or via
  `+@team-execution+`on Slack.
 
+=== `cycles_account_manager_response_cycles_refund_error`
+
+Cycles Account Manager did not perform a refund of leftover cycles from the
+response (those cycles were reserved in the corresponding request sent
+earlier), since the response was bigger than the max reserved amount.
+
+An occurrence would indicate unexpectedly big response payload size.
+
+Escalate to the Execution team.
+
+=== `mr_induct_response_failed`
+
+Inducting a canister `Response` has failed. There are two possible causes for
+this, both unexpected:
+
+ * Lack of resources: full input queue; or out of memory. We make explicit
+   reservations for both (input queue slots; and response memory), so this
+   would indicate a bug in the reservation logic.
+ * Destination canister not found: a canister should not be deleted with open
+   call contexts; and responses to migrated canisters should be rerouted.
+
+Escalate to the Message Routing team.
+
+=== `mr_receiver_subnet_mismatch`, `mr_sender_subnet_mismatch`
+
+A canister message was not routed to the right subnet (according to the routing
+table) while the destination canister is not being migrated
+(`mr_receiver_subnet_mismatch`). Or a canister message was not received from the
+right subnet while the source canister is not being migrated
+(`mr_receiver_subnet_mismatch`). This likely means one of 3 things:
+
+ * A bug in the routing logic.
+ * A canister migration that was completed too early (while canister messages
+   were still in flight).
+ * A malicious sender subnet.
+
+Escalate to the Message Routing team.
+
+=== `mr_reject_signals_for_request`
+
+A reject signal was received for a canister request. Reject signals are only
+used to reroute responses during canister migrations. Misrouted requests result
+in reject responses instead.
+
+There are two possible causes for this error:
+
+ * A bug leading to the two subnets disagreeing on stream indices (e.g. signal
+   actually refers to a response, but is off-by-one).
+ * A malicious remote subnet.
+
+Escalate to the Message Routing team.
+
 === `mr_stream_builder_infinite_loop`
 
 An infinite loop was detected while iterating over canister output queues as
@@ -39,6 +91,45 @@ would indicate a bug in the `PeekableOutputIterator` implementation.
 
 Unless a stream is found to have stalled (which should not be the case, as at
 least one message is routed every round) no immediate action is needed.
+
+=== `mr_stream_builder_payload_too_large`
+
+A canister response (either from another canister or from the system) with a
+payload larger than `MAX_INTER_CANISTER_PAYLOAD_IN_BYTES` was encountered by
+the routing logic and dropped. We reserve `MAX_INTER_CANISTER_PAYLOAD_IN_BYTES`
+for every expected response and rely on this limit in order to avoid stalling
+streams or bulding oversized blocks.
+
+This indicates a bug in Execution or some system component that produces
+canister responses (i.e. not enforcing `MAX_INTER_CANISTER_PAYLOAD_IN_BYTES`).
+
+Escalate to the responsible team (response is logged). Fall back to Message
+Routing team if unsure.
+
+=== `mr_stream_builder_response_destination_not_found`
+
+Message Routing is unable to route a canister response. Since we validate the
+origin of incoming messages and we never unmap canister ranges in the routing
+table, this would indicate a bug in MR code.
+
+Escalate to the Message Routing team.
+
+=== `scheduler_canister_invariant_broken`
+
+At least one canister has an invalid state after the execution round.
+It could indicate a bug in the code that breaks the canister state invariants.
+Based on the replica logs, further investigations are needed to determine which canister has an invalid state and what invariant does not hold anymore.
+Check if a recent replica upgrade has happened that could have introduced a code bug.
+
+Escalate to the Execution team.
+
+=== `scheduler_subnet_memory_usage_invariant_broken`
+
+At least one subnet where the total amount of storage used by all canisters exceeds the maximum amount of logical storage available.
+It could indicate a bug in the code, resulting in canisters exceeding the subnet storage limit allocated.
+Further checks are needed to verify if the invariant is broken on different subnets. This could be caused by a recent upgrade that could have introduced a bug.
+
+Escalate to the Execution team.
 
 === `state_manager_manifest_reused_chunk_hash_error_count`
 
@@ -51,17 +142,6 @@ between the reused and recomputed chunk hash.
 An occurrence would indicate either a random bit flip or, if this happens on
 multiple replicas, a bug that must be investigated immediately.
 
-=== `state_manager_missing_checkpoints`
-
-State Manager retains one or more checkpoints at all times (for the purpose of
-resuming after a crash/restart; and for slow/newly added replicas to use for
-catching up with the subnet) as directories on disk. It also keeps track of
-the list of checkpoints in a states metadata file. This error indicates that a
-checkpoint listed in the states metadata file is not actually present on disk.
-
-An occurrence would very likely point to a bug in either the State Manager or
-in the API between State Manager and Consensus.
-
 === `state_sync_corrupted_chunks`
 
 This is very similar to `state_manager_manifest_reused_chunk_hash_error_count`
@@ -70,28 +150,3 @@ that the State Sync implementation had assumed was already present locally.
 
 An occurrence would indicate either a random bit flip or, if this happens on
 multiple replicas, a bug that must be investigated immediately.
-
-=== `cycles_account_manager_response_cycles_refund_error`
-
-Cycles Account Manager did not perform a refund of leftover cycles from the 
-response (those cycles were reserved in the corresponding request sent 
-earlier), since the response was bigger than the max reserved amount.
-
-An occurrence would indicate unexpectedly big response payload size.
-
-=== `scheduler_canister_invariant_broken`
-
-At least one canister has an invalid state after the execution round.
-It could indicate a bug in the code that breaks the canister state invariants.
-Based on the replica logs, further investigations are needed to determine which canister has an invalid state and what invariant does not hold anymore.
-Check if a recent replica upgrade has happened that could have introduced a code bug.
-
-Escalate to the execution team.
-
-=== `scheduler_subnet_memory_usage_invariant_broken`
-
-At least one subnet where the total amount of storage used by all canisters exceeds the maximum amount of logical storage available.
-It could indicate a bug in the code, resulting in canisters exceeding the subnet storage limit allocated.
-Further checks are needed to verify if the invariant is broken on different subnets. This could be caused by a recent upgrade that could have introduced a bug.
-
-Escalate to the execution team.

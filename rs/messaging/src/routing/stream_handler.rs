@@ -83,11 +83,10 @@ const LABEL_VALUE_TYPE_REQUEST: &str = "request";
 const LABEL_VALUE_TYPE_RESPONSE: &str = "response";
 const LABEL_REMOTE: &str = "remote";
 
-const CRITICAL_ERROR_REJECT_SIGNALS_FOR_REQUEST: &str =
-    "message_routing_reject_signals_for_request";
-const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "message_routing_induct_response_failed";
-const CRITICAL_ERROR_SENDER_SUBNET_MISMATCH: &str = "message_routing_sender_subnet_mismatch";
-const CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH: &str = "message_routing_receiver_subnet_mismatch";
+const CRITICAL_ERROR_REJECT_SIGNALS_FOR_REQUEST: &str = "mr_reject_signals_for_request";
+const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
+const CRITICAL_ERROR_SENDER_SUBNET_MISMATCH: &str = "mr_sender_subnet_mismatch";
+const CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH: &str = "mr_receiver_subnet_mismatch";
 
 impl StreamHandlerMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
@@ -492,7 +491,7 @@ impl StreamHandlerImpl {
                     // if the destination canister moved away.
                     error!(
                         self.log,
-                        "{} Received unsupported reject signal from {} for request: {:?}",
+                        "{}: Received unsupported reject signal from {} for request: {:?}",
                         CRITICAL_ERROR_REJECT_SIGNALS_FOR_REQUEST,
                         remote_subnet,
                         request
@@ -636,7 +635,7 @@ impl StreamHandlerImpl {
                                 // Critical error, responses should always be inducted successfully.
                                 error!(
                                     self.log,
-                                    "{} Inducting response failed: {:?}",
+                                    "{}: Inducting response failed: {:?}",
                                     CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
                                     response
                                 );
@@ -682,7 +681,7 @@ impl StreamHandlerImpl {
                 host_subnet => {
                     error!(
                         self.log,
-                        "{} Dropping misrouted message (receiver {} is hosted by {:?}): {:?}",
+                        "{}: Dropping misrouted message (receiver {} is hosted by {:?}): {:?}",
                         CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH,
                         msg.receiver(),
                         host_subnet,
@@ -703,7 +702,7 @@ impl StreamHandlerImpl {
             // reject responses.
             error!(
                 self.log,
-                "{} Dropping message from subnet {} claiming to be from sender {}: {:?}",
+                "{}: Dropping message from subnet {} claiming to be from sender {}: {:?}",
                 CRITICAL_ERROR_SENDER_SUBNET_MISMATCH,
                 remote_subnet_id,
                 msg.sender(),

@@ -35,6 +35,9 @@ use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use std::{str::FromStr, time::Duration};
 
+pub const CRITICAL_ERROR_RESPONSE_CYCLES_REFUND: &str =
+    "cycles_account_manager_response_cycles_refund_error";
+
 /// Errors returned by the [`CyclesAccountManager`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CyclesAccountManagerError {
@@ -562,7 +565,8 @@ impl CyclesAccountManager {
                 error_counter.inc();
                 error!(
                     log,
-                    "Unexpected response payload size of {} bytes (max expected {})",
+                    "{}: Unexpected response payload size of {} bytes (max expected {})",
+                    CRITICAL_ERROR_RESPONSE_CYCLES_REFUND,
                     response_payload_size_bytes,
                     max_payload_size_bytes
                 );
