@@ -46,8 +46,8 @@ while getopts "n:o:b:m" OPT; do
     esac
 done
 
-if [ "${BITCOIND_ADDR_CONFIG_FILE}" != "" -a -e "${BITCOIND_ADDR_CONFIG_FILE}" ]; then
-    read_bitcoind_addr_variables "${BITCOIND_ADDR_CONFIG_FILE}"
+if [ "${BITCOIND_ADDR_FILE}" != "" -a -e "${BITCOIND_ADDR_FILE}" ]; then
+    read_bitcoind_addr_variables "${BITCOIND_ADDR_FILE}"
 fi
 
 BITCOIN_NETWORK='"testnet"'
