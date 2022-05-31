@@ -50,6 +50,8 @@ pub enum WasmValidationError {
     TooManyCustomSections { defined: usize, allowed: usize },
     /// Module defines an invalid index for a local function.
     InvalidFunctionIndex { index: usize, import_count: usize },
+    /// A function was too complex.
+    FunctionComplexityTooHigh,
 }
 
 impl std::fmt::Display for WasmValidationError {
@@ -102,6 +104,7 @@ impl std::fmt::Display for WasmValidationError {
                 "Function has index {} but should start from {}.",
                 index, import_count
             ),
+            Self::FunctionComplexityTooHigh => write!(f, "Wasm module contains a function that is too complex"),
         }
     }
 }
