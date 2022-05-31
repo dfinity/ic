@@ -1,0 +1,27 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "proto_data_provider",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_registry_proto_data_provider",
+    edition = "2018",
+    deps = [
+        "//rs/interfaces",
+        "//rs/registry/proto",
+        "//rs/registry/transport",
+        "//rs/types/types",
+        "//rs/utils",
+        "@crate_index//:bytes",
+        "@crate_index//:thiserror",
+    ],
+)
