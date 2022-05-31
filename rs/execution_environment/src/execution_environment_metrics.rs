@@ -1,12 +1,10 @@
+use ic_cycles_account_manager::CRITICAL_ERROR_RESPONSE_CYCLES_REFUND;
 use ic_error_types::UserError;
 use ic_ic00_types as ic00;
 use ic_metrics::buckets::decimal_buckets;
 use ic_metrics::{MetricsRegistry, Timer};
 use prometheus::{HistogramVec, IntCounter};
 use std::str::FromStr;
-
-const CRITICAL_ERROR_RESPONSE_CYCLES_REFUND: &str =
-    "cycles_account_manager_response_cycles_refund_error";
 
 /// Metrics used to monitor the performance of the execution environment.
 pub(crate) struct ExecutionEnvironmentMetrics {

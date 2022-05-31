@@ -1120,7 +1120,8 @@ impl Scheduler for SchedulerImpl {
                 self.metrics.subnet_memory_usage_invariant.inc();
                 warn!(
                     round_log,
-                    "At Round {} @ time {}, the resulted state after execution does not hold the invariants. Exceeding capacity subnet memory allowed: used {} allowed {}",
+                    "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Exceeding capacity subnet memory allowed: used {} allowed {}",
+                    SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
                     current_round,
                     state.time(),
                     total_canister_memory_usage,
