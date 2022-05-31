@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "local_store",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_registry_local_store",
+    edition = "2018",
+    deps = [
+        "//rs/interfaces",
+        "//rs/registry/proto",
+        "//rs/registry/transport",
+        "//rs/types/types",
+        "//rs/utils",
+        "@crate_index//:bytes",
+        "@crate_index//:prost",
+    ],
+)
+
+rust_test(
+    name = "local_store_test",
+    crate = ":local_store",
+    data = glob(["artifacts/**"]),
+    edition = "2018",
+    deps = [
+        "@crate_index//:rand",
+        "@crate_index//:tempfile",
+    ],
+)
