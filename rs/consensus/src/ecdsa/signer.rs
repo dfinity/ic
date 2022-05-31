@@ -7,7 +7,7 @@ use crate::consensus::{
 };
 use crate::ecdsa::complaints::EcdsaTranscriptLoader;
 use crate::ecdsa::utils::{load_transcripts, EcdsaBlockReaderImpl};
-use ic_interfaces::consensus_pool::{ConsensusBlockCache, ConsensusBlockChain};
+use ic_interfaces::consensus_pool::ConsensusBlockCache;
 use ic_interfaces::crypto::{ErrorReplication, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_logger::{debug, warn, ReplicaLogger};
@@ -375,13 +375,11 @@ impl EcdsaSigner for EcdsaSignerImpl {
 pub(crate) trait EcdsaSignatureBuilder {
     /// Returns the signatures that can be successfully built from
     /// the current entries in the ECDSA pool
-    fn get_completed_signatures(
-        &self,
-        chain: Arc<dyn ConsensusBlockChain>,
-    ) -> Vec<(RequestId, ThresholdEcdsaCombinedSignature)>;
+    fn get_completed_signatures(&self) -> Vec<(RequestId, ThresholdEcdsaCombinedSignature)>;
 }
 
 pub(crate) struct EcdsaSignatureBuilderImpl<'a> {
+    block_reader: &'a dyn EcdsaBlockReader,
     crypto: &'a dyn ConsensusCrypto,
     ecdsa_pool: &'a dyn EcdsaPool,
     metrics: &'a EcdsaPayloadMetrics,
@@ -390,6 +388,7 @@ pub(crate) struct EcdsaSignatureBuilderImpl<'a> {
 
 impl<'a> EcdsaSignatureBuilderImpl<'a> {
     pub(crate) fn new(
+        block_reader: &'a dyn EcdsaBlockReader,
         crypto: &'a dyn ConsensusCrypto,
         ecdsa_pool: &'a dyn EcdsaPool,
         metrics: &'a EcdsaPayloadMetrics,
@@ -398,6 +397,7 @@ impl<'a> EcdsaSignatureBuilderImpl<'a> {
         Self {
             crypto,
             ecdsa_pool,
+            block_reader,
             metrics,
             log,
         }
@@ -429,13 +429,9 @@ impl<'a> EcdsaSignatureBuilderImpl<'a> {
 }
 
 impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
-    fn get_completed_signatures(
-        &self,
-        chain: Arc<dyn ConsensusBlockChain>,
-    ) -> Vec<(RequestId, ThresholdEcdsaCombinedSignature)> {
-        let block_reader = EcdsaBlockReaderImpl::new(chain);
+    fn get_completed_signatures(&self) -> Vec<(RequestId, ThresholdEcdsaCombinedSignature)> {
         let requested_signatures = resolve_sig_inputs_refs(
-            &block_reader,
+            self.block_reader,
             "purge_artifacts",
             self.metrics.payload_errors.clone(),
             &self.log,

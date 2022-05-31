@@ -105,6 +105,14 @@ impl BlockPayload {
         }
     }
 
+    /// Returns a reference to EcdsaPayload if it exists.
+    pub fn as_ecdsa(&self) -> Option<&ecdsa::EcdsaPayload> {
+        match self {
+            BlockPayload::Data(data) => data.ecdsa.as_ref(),
+            BlockPayload::Summary(data) => data.ecdsa.as_ref(),
+        }
+    }
+
     /// Return the payload type.
     pub fn payload_type(&self) -> PayloadType {
         match self {
