@@ -4,11 +4,11 @@
 # useful for debug and policy development. The system behaves essentially the
 # same as if SELinux was not activated.
 #
-EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0"
+# EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=0"
 
 # Uncomment this to run system with SELinux in ENFORCING mode: All rules
 # of the policy are enforced, and forbidden actions are not just logged but
 # stopped. This causes the system to behave differently than in either
 # "no SELinux" or "permissive" mode.
 #
-# EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=1"
+EXTRA_BOOT_ARGS="security=selinux selinux=1 enforcing=1"
