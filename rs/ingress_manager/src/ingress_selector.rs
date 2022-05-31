@@ -81,7 +81,7 @@ impl<'a> IngressSelector for IngressManager {
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
         let mut num_messages = 0;
 
-        let messages_in_payload = self.ingress_pool.select_validated(
+        let mut messages_in_payload = self.ingress_pool.select_validated(
             expiry_range,
             Box::new(move |ingress_obj| {
                 let result = self.validate_ingress(
@@ -116,7 +116,30 @@ impl<'a> IngressSelector for IngressManager {
             }),
         );
 
-        let payload = IngressPayload::from(messages_in_payload);
+        // NOTE: Since the `Vec<SignedIngress>` is deserialized and slightly smaller than the
+        // serialized `IngressPayload`, we need to check the size of the latter.
+        // In the improbable case, that the deserialized form fits the size limit but the
+        // serialized form does not, we need to remove some `SignedIngress` and try again.
+        let payload = loop {
+            let payload = IngressPayload::from(messages_in_payload.clone());
+            let payload_size = payload.count_bytes();
+            if payload_size < byte_limit.get() as usize {
+                break payload;
+            }
+
+            warn!(
+                self.log,
+                "Serialized form of ingress (was {} bytes) did not pass \
+                size restriction ({} bytes), reducing ingress and trying again",
+                payload_size,
+                byte_limit.get()
+            );
+            messages_in_payload.pop();
+            if messages_in_payload.is_empty() {
+                break IngressPayload::default();
+            }
+        };
+
         let payload_size = payload.count_bytes();
         debug_assert!(payload_size <= byte_limit.get() as usize);
 
@@ -1761,11 +1784,6 @@ mod tests {
                     .method_payload(vec![0; ALMOST_MAX_SIZE])
                     .expiry_time(mock_time())
                     .build();
-
-                assert_eq!(
-                    IngressPayload::from(vec![msg.clone()]).count_bytes(),
-                    msg.count_bytes()
-                );
 
                 let msg_id = IngressMessageId::from(&msg);
                 let msg_attribute = IngressMessageAttribute::new(&msg);
