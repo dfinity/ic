@@ -1,3 +1,5 @@
+load("//third_party/lmdb-0.9.70:repository.bzl", "lmdb_repository")
+load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
 load("//third_party/wabt-rs-0.10.0:repository.bzl", "wabt_rs_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
@@ -77,6 +79,7 @@ crates_repository(
         "base32": crate.spec(version = "0.4.0"),
         "base64": crate.spec(version = "0.11.0"),
         "bincode": crate.spec(version = "1.2.1"),
+        "bindgen": crate.spec(version = "0.59.2"),
         "bitcoin": crate.spec(
             features = ["rand"],
             version = "0.28.1",
@@ -97,6 +100,7 @@ crates_repository(
         ),
         "candid": crate.spec(version = "0.7.13"),
         "candid_derive": crate.spec(version = "0.4.5"),
+        "cc": crate.spec(version = "1.0.73"),
         "cfg-if": crate.spec(version = "0.1.10"),
         "chrono": crate.spec(version = "0.4.19"),
         "clap": crate.spec(
@@ -140,6 +144,7 @@ crates_repository(
         "once_cell": crate.spec(version = "1.8"),
         "openssl": crate.spec(version = "0.10.29"),
         "pathdiff": crate.spec(version = "0.2.1"),
+        "pkg-config": crate.spec(version = "0.3.25"),
         "procfs": crate.spec(
             default_features = False,
             version = "^0.9",
@@ -247,6 +252,10 @@ wasm_crate_repositories()
 # Third party dependencies that require special treatment
 
 wabt_rs_repository(name = "wabt_rs")
+
+lmdb_repository(name = "lmdb")
+
+lmdb_rkv_repository(name = "lmdb_rkv")
 
 http_archive(
     name = "buildifier_prebuilt",
