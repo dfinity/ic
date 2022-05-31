@@ -4,101 +4,32 @@
 
 set -eo pipefail
 
-# Take a filesystem tree and turn it into a vfat filesystem image.
-#
-# Arguments:
-# - $1: name of file to build filesystem image in; this must be a file truncated
-#   to the desired size of the filesystem to be built
-# - $2: base directory of file system tree
-function fstree_to_vfat() {
-    FS_IMAGE="$1"
-    FS_DIR="$2"
-
-    mkfs.vfat -i 0 "${FS_IMAGE}"
-
-    # Create all directories in sorted order
-    for d in $(cd "${FS_DIR}" && find . -mindepth 1 -type d | sed -e 's/^\.\///' | sort); do
-        faketime "1970-1-1 0" mmd -i "${FS_IMAGE}" "::/$d"
-    done
-
-    # Copy all files in sorted order
-    for f in $(cd "${FS_DIR}" && find . -mindepth 1 -type f | sed -e 's/^\.\///' | sort); do
-        faketime "1970-1-1 0" mcopy -o -i "${FS_IMAGE}" "${FS_DIR}/$f" "::/$f"
-    done
-}
-
-# Build bootloader -- this consists of the EFI System Partition (ESP) +
-# a dedicated partition to hold grub modules and configuration.
-#
-# Arguments:
-# - $1: name of the ESP image file; this must be a file truncated
-#   to the desired size of the filesystem to be built
-# - $2: name of the grub partition image file; this must be a file truncated
-#   to the desired size of the filesystem to be built
-#
-# The function expects the "bootloader docker tarball" output on stdin.
-function build_bootloader_from_tar() {
-    ESP_IMAGE="$1"
-    GRUB_IMAGE="$2"
-
-    local FAKEROOT_STATE_FILE=$(mktemp -t fakerootstate-XXXXXXXXXXXX)
-    local DOCKER_EXTRACT_TMPDIR=$(mktemp -d -t bootloader-XXXXXXXXXXXX)
-    fakeroot -s "${FAKEROOT_STATE_FILE}" "${BASE_DIR}"/scripts/docker_extract.py "${DOCKER_EXTRACT_TMPDIR}"
-
-    local EFI_FSDIR="${DOCKER_EXTRACT_TMPDIR}"/boot/efi
-    local GRUB_FSDIR="${DOCKER_EXTRACT_TMPDIR}"/boot/grub
-    cp bootloader/grub.cfg bootloader/grubenv "${GRUB_FSDIR}"/
-    fstree_to_vfat "${ESP_IMAGE}" "${EFI_FSDIR}"
-    fstree_to_vfat "${GRUB_IMAGE}" "${GRUB_FSDIR}"
-
-    rm -rf "${DOCKER_EXTRACT_TMPDIR}"
-}
-
 function usage() {
     cat <<EOF
 Usage:
-  build-disk-image -o outfile [-t bootloader.tar] [-u ubuntu.tar] [-b boot.img] [-r root.img] [-x execdir]
+  build-disk-image -o outfile [-t dev] [-x execdir]
 
-  Build whole disk of IC guest OS VM image.
+  Build whole disk of Boundary Node guest OS VM image.
 
   -o outfile: Name of output file; mandatory
-  -t bootloader.tar: Docker save tar of the bootloader build
-  -u ubuntu.tar: Docker save tar of the ubuntu system image build
+  -t image type: The type of image to build. Must be either "dev" or "prod".
+      If nothing is specified, defaults to building "prod" image.
   -p password: Set root password for console access. BE CAREFUL.
-  -v version: The version written into the image.
+  -v version: The version written into the image; mandatory
   -x execdir: Set executable source dir. Will take all required IC executables
      from source directory and install it into the correct location before
-     building the image.
-
-  -b and -r should be given together, and they are mutually exclusive
-  with -u. Both designate where to take the ubuntu system from.
-  If neither are given, then this will build the ubuntu system using
-  docker behind the scenes.
-
-  If -t is given, then this should be the "docker save" of the
-  bootloader build. If this is not given, then this will also be
-  built implicitly using docker. Options -x, -p and -v take no effect
-  if this is given.
+     building the image; mandatroy
 EOF
 }
 
-BUILD_TYPE=disk
-while getopts "o:t:u:b:r:v:p:x:" OPT; do
+BUILD_TYPE=prod
+while getopts "o:t:v:p:x:" OPT; do
     case "${OPT}" in
         o)
             OUT_FILE="${OPTARG}"
             ;;
         t)
-            BOOTLOADER_TAR="${OPTARG}"
-            ;;
-        u)
-            UBUNTU_TAR="${OPTARG}"
-            ;;
-        b)
-            IN_BOOT_IMG="${OPTARG}"
-            ;;
-        r)
-            IN_ROOT_IMG="${OPTARG}"
+            BUILD_TYPE="${OPTARG}"
             ;;
         v)
             VERSION="${OPTARG}"
@@ -110,62 +41,80 @@ while getopts "o:t:u:b:r:v:p:x:" OPT; do
             EXEC_SRCDIR="${OPTARG}"
             ;;
         *)
-            usage
+            usage >&2
             exit 1
             ;;
     esac
 done
 
-if [ "${OUT_FILE}" == "" ]; then
-    usage
-    exit 1
-fi
-
+# Preparatory steps and temporary build directory.
 BASE_DIR=$(dirname "${BASH_SOURCE[0]}")/..
-source "${BASE_DIR}"/scripts/partitions.sh
+
+TOOL_DIR="${BASE_DIR}/../../toolchains/sysimage/"
 
 TMPDIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
 trap "rm -rf $TMPDIR" exit
 
-DISK_IMG="${OUT_FILE}"
+# Validate and process arguments
 
-# Build bootloader partitions.
-ESP_IMG="${TMPDIR}/esp.img"
-GRUB_IMG="${TMPDIR}/grub.img"
-truncate --size 100M "$ESP_IMG"
-truncate --size 100M "$GRUB_IMG"
-if [ "${BOOTLOADER_TAR}" == "" ]; then
-    "${BASE_DIR}"/scripts/build-docker-save.sh "${BASE_DIR}"/bootloader | build_bootloader_from_tar "$ESP_IMG" "$GRUB_IMG"
-else
-    build_bootloader_from_tar "$ESP_IMG" "$GRUB_IMG" <"${BOOTLOADER_TAR}"
+if [ "${OUT_FILE}" == "" ]; then
+    usage >&2
+    exit 1
 fi
 
-# Prepare empty config partition.
-CONFIG_IMG="${TMPDIR}/config.img"
-truncate --size 100M "$CONFIG_IMG"
-make_ext4fs -T 0 -l 100M "$CONFIG_IMG"
-
-# Prepare or grab partitions for system image A.
-if [ "${IN_BOOT_IMG}" != "" -a "${IN_ROOT_IMG}" != "" ]; then
-    BOOT_IMG="${IN_ROOT_IMG}"
-    BOOT_IMG="${IN_BOOT_IMG}"
-else
-    BOOT_IMG="${TMPDIR}/boot.img"
-    ROOT_IMG="${TMPDIR}/root.img"
-    if [ "${UBUNTU_TAR}" == "" ]; then
-        "${BASE_DIR}"/scripts/build-ubuntu.sh -r "${ROOT_IMG}" -b "${BOOT_IMG}" -p "${ROOT_PASSWORD}" -x "${EXEC_SRCDIR}" -v "${VERSION}"
-    else
-        "${BASE_DIR}"/scripts/build-ubuntu.sh -i "${UBUNTU_TAR}" -r "${ROOT_IMG}" -b "${BOOT_IMG}"
-    fi
+# For the moment we only support prod but soon also dev!
+if [ "${BUILD_TYPE}" != "prod" ]; then
+    echo "Unknown build type: ${BUILD_TYPE}" >&2
+    exit 1
 fi
 
-prepare_disk_image "$DISK_IMG"
-write_single_partition "$DISK_IMG" esp "$ESP_IMG"
-write_single_partition "$DISK_IMG" grub "$GRUB_IMG"
-write_single_partition "$DISK_IMG" config "$CONFIG_IMG"
-write_single_partition "$DISK_IMG" A_boot "$BOOT_IMG"
-write_single_partition "$DISK_IMG" A_root "$ROOT_IMG"
+if [ "${VERSION}" == "" ]; then
+    echo "Version needs to be specified for build to succeed" >&2
+    exit 1
+fi
 
-# XXX: enlarge so there is space after last partition to be used
-# -- only relevant for direct use in qemu
-truncate --size 50G "$DISK_IMG"
+if [ "${EXEC_SRCDIR}" == "" ]; then
+    echo "Executable source dir needs to be specified for build to succeed" >&2
+    exit 1
+fi
+
+BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base.${BUILD_TYPE}")
+
+# Compute arguments for actual build stage.
+
+declare -a IC_EXECUTABLES=(boundary-node-control-plane boundary-node-prober)
+declare -a INSTALL_EXEC_ARGS=()
+for IC_EXECUTABLE in "${IC_EXECUTABLES[@]}"; do
+    INSTALL_EXEC_ARGS+=("${EXEC_SRCDIR}/${IC_EXECUTABLE}:/opt/ic/bin/${IC_EXECUTABLE}:0755")
+done
+
+echo "${VERSION}" >"${TMPDIR}/version.txt"
+
+# Build all pieces and assemble the disk image.
+
+"${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/boot-tree.tar" "${BASE_DIR}/bootloader"
+"${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/rootfs-tree.tar" -- --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" --build-arg BASE_IMAGE="${BASE_IMAGE}" "${BASE_DIR}/rootfs"
+"${TOOL_DIR}"/build_vfat_image.py -o "${TMPDIR}/partition-esp.tar" -s 100M -p boot/efi -i "${TMPDIR}/boot-tree.tar"
+"${TOOL_DIR}"/build_vfat_image.py -o "${TMPDIR}/partition-grub.tar" -s 100M -p boot/grub -i "${TMPDIR}/boot-tree.tar" \
+    "${BASE_DIR}/bootloader/grub.cfg:/boot/grub/grub.cfg:644" \
+    "${BASE_DIR}/bootloader/grubenv:/boot/grub/grubenv:644"
+"${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-config.tar" -s 100M
+"${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-boot.tar" -s 1G -i "${TMPDIR}/rootfs-tree.tar" -p boot/ \
+    "${TMPDIR}/version.txt:/boot/version.txt:0644"
+"${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-root.tar" -s 3G -i "${TMPDIR}/rootfs-tree.tar" \
+    "${INSTALL_EXEC_ARGS[@]}" \
+    "${TMPDIR}/version.txt:/opt/ic/share/version.txt:0644"
+"${TOOL_DIR}"/build_disk_image.py -o "${TMPDIR}/disk.img.tar" -p "${BASE_DIR}/scripts/partitions.csv" \
+    ${TMPDIR}/partition-esp.tar \
+    ${TMPDIR}/partition-grub.tar \
+    ${TMPDIR}/partition-config.tar \
+    ${TMPDIR}/partition-boot.tar \
+    ${TMPDIR}/partition-root.tar
+
+# For compatibility with previous use of this script, provide the raw
+# image as output from this program.
+OUT_DIRNAME="$(dirname "${OUT_FILE}")"
+OUT_BASENAME="$(basename "${OUT_FILE}")"
+tar xf "${TMPDIR}/disk.img.tar" --transform="s/disk.img/${OUT_BASENAME}/" -C "${OUT_DIRNAME}"
+# increase size a bit, for immediate qemu use (legacy)
+truncate --size 50G "${OUT_FILE}"
