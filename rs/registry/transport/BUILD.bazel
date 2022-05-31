@@ -8,7 +8,7 @@ filegroup(
     srcs = glob(
         ["**"],
         exclude = ["target/**"],
-    ),
+    ) + ["//rs/registry/transport/protobuf_generator:sources"],
 )
 
 filegroup(
