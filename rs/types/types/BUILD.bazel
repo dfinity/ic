@@ -21,7 +21,7 @@ rust_library(
     ],
     deps = [
         "//rs/bitcoin/types/internal",
-        "//rs/constants:ic_constants",
+        "//rs/constants",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/sha",
         "//rs/crypto/tree_hash",

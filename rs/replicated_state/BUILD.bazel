@@ -1,0 +1,89 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "replicated_state",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_replicated_state",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:debug_stub_derive",
+    ],
+    deps = [
+        "//rs/bitcoin/types/internal",
+        "//rs/bitcoin/types/public",
+        "//rs/canonical_state/certification_version",
+        "//rs/config",
+        "//rs/constants",
+        "//rs/interfaces",
+        "//rs/monitoring/logger",
+        "//rs/phantom_newtype",
+        "//rs/protobuf",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/sys",
+        "//rs/types/base_types",
+        "//rs/types/error_types",
+        "//rs/types/ic00_types",
+        "//rs/types/types",
+        "//rs/types/wasm_types",
+        "//rs/utils",
+        "@crate_index//:bitcoin",
+        "@crate_index//:cvt",
+        "@crate_index//:lazy_static",
+        "@crate_index//:libc",
+        "@crate_index//:maplit",
+        "@crate_index//:nix",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+    ],
+)
+
+rust_binary(
+    name = "replicated_state_allocator_bench",
+    srcs = [
+        "benches/bench_allocator.rs",
+    ],
+    edition = "2018",
+    deps = [
+        ":replicated_state",
+        "//rs/criterion_time",
+        "//rs/sys",
+        "@crate_index//:criterion",
+        "@crate_index//:scoped_threadpool",
+    ],
+)
+
+rust_binary(
+    name = "replicated_state_intmap_bench",
+    srcs = [
+        "benches/bench_allocator.rs",
+    ],
+    edition = "2018",
+    deps = [
+        ":replicated_state",
+        "//rs/criterion_time",
+        "//rs/sys",
+        "@crate_index//:criterion",
+        "@crate_index//:scoped_threadpool",
+    ],
+)
+
+# Disabled due to https://github.com/bazelbuild/rules_rust/issues/1233
+#  rust_doc_test(
+#      name = "replicated_state_doc_test",
+#      crate = ":replicated_state",
+#  )
