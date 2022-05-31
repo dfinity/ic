@@ -7,7 +7,7 @@ use crate::consensus::{
 };
 use crate::ecdsa::complaints::EcdsaTranscriptLoader;
 use crate::ecdsa::utils::{load_transcripts, transcript_op_summary, EcdsaBlockReaderImpl};
-use ic_interfaces::consensus_pool::{ConsensusBlockCache, ConsensusBlockChain};
+use ic_interfaces::consensus_pool::ConsensusBlockCache;
 use ic_interfaces::crypto::{ErrorReplication, IDkgProtocol};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_logger::{debug, warn, ReplicaLogger};
@@ -941,15 +941,14 @@ pub(crate) struct EcdsaTranscriptBuilderImpl<'a> {
 
 impl<'a> EcdsaTranscriptBuilderImpl<'a> {
     pub(crate) fn new(
-        chain: Arc<dyn ConsensusBlockChain>,
+        block_reader: &'a dyn EcdsaBlockReader,
         crypto: &'a dyn ConsensusCrypto,
         ecdsa_pool: &'a dyn EcdsaPool,
         metrics: &'a EcdsaPayloadMetrics,
         log: ReplicaLogger,
     ) -> Self {
-        let block_reader = EcdsaBlockReaderImpl::new(chain);
         let requested_transcripts = resolve_transcript_refs(
-            &block_reader,
+            block_reader,
             "transcript_builder",
             metrics.payload_errors.clone(),
             &log,

@@ -470,7 +470,6 @@ pub(crate) fn create_data_payload(
     if !ecdsa_feature_is_enabled(subnet_id, registry_client, pool_reader, height)? {
         return Ok(None);
     }
-    let block_payload = &parent_block.payload.as_ref();
     let summary_block = pool_reader
         .dkg_summary_block(parent_block)
         .unwrap_or_else(|| {
@@ -479,32 +478,6 @@ pub(crate) fn create_data_payload(
                 parent_block.height()
             )
         });
-    let summary = summary_block.payload.as_ref().as_summary();
-    let summary_registry_version = summary.dkg.registry_version;
-    let next_summary_registry_version = summary_block.context.registry_version;
-    let ecdsa_config = registry_client
-        .get_ecdsa_config(subnet_id, summary_registry_version)?
-        .unwrap_or(EcdsaConfig {
-            quadruples_to_create_in_advance: 1, // default value
-            ..EcdsaConfig::default()
-        });
-    let mut ecdsa_payload;
-    if block_payload.is_summary() {
-        match &summary.ecdsa {
-            None => return Ok(None),
-            Some(ecdsa_summary) => {
-                ecdsa_payload = ecdsa_summary.clone();
-            }
-        }
-    } else {
-        match &block_payload.as_data().ecdsa {
-            None => return Ok(None),
-            Some(prev_payload) => {
-                ecdsa_payload = prev_payload.clone();
-            }
-        }
-    };
-    ecdsa_payload.uid_generator.update_height(height)?;
 
     // The notarized tip(parent) may be ahead of the finalized tip, and
     // the last few blocks may have references to heights after the finalized
@@ -521,17 +494,112 @@ pub(crate) fn create_data_payload(
             return Err(err.into());
         }
     };
-    let current_key_transcript = ecdsa_payload.key_transcript.current;
-    let current_key_transcript = current_key_transcript.as_ref();
-    let state = state_manager.get_state_at(context.certified_height)?;
     let ecdsa_pool = ecdsa_pool.read().unwrap();
+    let block_reader = EcdsaBlockReaderImpl::new(parent_chain);
 
     let signature_builder = EcdsaSignatureBuilderImpl::new(
+        &block_reader,
         crypto,
         ecdsa_pool.deref(),
         ecdsa_payload_metrics,
         log.clone(),
     );
+    let transcript_builder = EcdsaTranscriptBuilderImpl::new(
+        &block_reader,
+        crypto,
+        ecdsa_pool.deref(),
+        ecdsa_payload_metrics,
+        log.clone(),
+    );
+    let new_payload = create_data_payload_helper(
+        subnet_id,
+        context,
+        parent_block,
+        &summary_block,
+        &block_reader,
+        &transcript_builder,
+        &signature_builder,
+        state_manager,
+        registry_client,
+        log,
+    )?;
+    if let Some(ecdsa_payload) = &new_payload {
+        let is_key_transcript_created = |payload: &ecdsa::EcdsaPayload| {
+            matches!(
+                payload.key_transcript.next_in_creation,
+                ecdsa::KeyTranscriptCreation::Created(_)
+            )
+        };
+        if is_key_transcript_created(ecdsa_payload)
+            && parent_block
+                .payload
+                .as_ref()
+                .as_ecdsa()
+                .map(is_key_transcript_created)
+                .unwrap_or(false)
+        {
+            ecdsa_payload_metrics.payload_metrics_inc("key_transcripts_created");
+        }
+
+        ecdsa_payload_metrics.payload_metrics_set(
+            "signature_agreements",
+            ecdsa_payload.signature_agreements.len() as i64,
+        );
+        ecdsa_payload_metrics.payload_metrics_set(
+            "available_quadruples",
+            ecdsa_payload.available_quadruples.len() as i64,
+        );
+        ecdsa_payload_metrics.payload_metrics_set(
+            "ongoing_signatures",
+            ecdsa_payload.ongoing_signatures.len() as i64,
+        );
+        ecdsa_payload_metrics.payload_metrics_set(
+            "quaruples_in_creation",
+            ecdsa_payload.quadruples_in_creation.len() as i64,
+        );
+        ecdsa_payload_metrics.payload_metrics_set(
+            "ongoing_xnet_reshares",
+            ecdsa_payload.ongoing_xnet_reshares.len() as i64,
+        );
+        ecdsa_payload_metrics.payload_metrics_set(
+            "xnet_reshare_agreements",
+            ecdsa_payload.xnet_reshare_agreements.len() as i64,
+        );
+    };
+    Ok(new_payload)
+}
+
+pub(crate) fn create_data_payload_helper(
+    subnet_id: SubnetId,
+    context: &ValidationContext,
+    parent_block: &Block,
+    summary_block: &Block,
+    block_reader: &dyn EcdsaBlockReader,
+    transcript_builder: &dyn EcdsaTranscriptBuilder,
+    signature_builder: &dyn EcdsaSignatureBuilder,
+    state_manager: &dyn StateManager<State = ReplicatedState>,
+    registry_client: &dyn RegistryClient,
+    log: ReplicaLogger,
+) -> Result<Option<ecdsa::EcdsaPayload>, EcdsaPayloadError> {
+    let height = parent_block.height().increment();
+    let summary = summary_block.payload.as_ref().as_summary();
+    let summary_registry_version = summary.dkg.registry_version;
+    let next_summary_registry_version = summary_block.context.registry_version;
+    let ecdsa_config = registry_client
+        .get_ecdsa_config(subnet_id, summary_registry_version)?
+        .unwrap_or(EcdsaConfig {
+            quadruples_to_create_in_advance: 1, // default value
+            ..EcdsaConfig::default()
+        });
+    let mut ecdsa_payload = if let Some(prev_payload) = parent_block.payload.as_ref().as_ecdsa() {
+        prev_payload.clone()
+    } else {
+        return Ok(None);
+    };
+    ecdsa_payload.uid_generator.update_height(height)?;
+    let current_key_transcript = ecdsa_payload.key_transcript.current;
+    let current_key_transcript = current_key_transcript.as_ref();
+    let state = state_manager.get_state_at(context.certified_height)?;
     let all_signing_requests = &state
         .get_ref()
         .metadata
@@ -541,8 +609,7 @@ pub(crate) fn create_data_payload(
     let new_signing_requests = get_signing_requests(&ecdsa_payload, all_signing_requests);
     update_signature_agreements(
         all_signing_requests,
-        parent_chain.clone(),
-        &signature_builder,
+        signature_builder,
         &mut ecdsa_payload,
         log.clone(),
     );
@@ -560,18 +627,10 @@ pub(crate) fn create_data_payload(
         &mut ecdsa_payload,
     )?;
 
-    let transcript_builder = EcdsaTranscriptBuilderImpl::new(
-        parent_chain.clone(),
-        crypto,
-        ecdsa_pool.deref(),
-        ecdsa_payload_metrics,
-        log.clone(),
-    );
-
     let mut new_transcripts = update_quadruples_in_creation(
         current_key_transcript,
         &mut ecdsa_payload,
-        &transcript_builder,
+        transcript_builder,
         height,
         &log,
     )?;
@@ -583,12 +642,11 @@ pub(crate) fn create_data_payload(
         current_key_transcript,
         &mut ecdsa_payload.key_transcript.next_in_creation,
         &mut ecdsa_payload.uid_generator,
-        &transcript_builder,
+        transcript_builder,
         height,
         log.clone(),
     )? {
         new_transcripts.push(new_transcript);
-        ecdsa_payload_metrics.payload_metrics_inc("key_transcripts_created");
     };
 
     // Drop transcripts from last round and keep only the
@@ -600,12 +658,11 @@ pub(crate) fn create_data_payload(
             .insert(transcript.transcript_id, transcript);
     }
 
-    let block_reader = EcdsaBlockReaderImpl::new(parent_chain);
     update_completed_reshare_requests(
         &mut ecdsa_payload,
         current_key_transcript,
-        &block_reader,
-        &transcript_builder,
+        block_reader,
+        transcript_builder,
         &log,
     );
     let reshare_requests = get_reshare_requests(
@@ -622,30 +679,6 @@ pub(crate) fn create_data_payload(
         reshare_requests,
     );
 
-    ecdsa_payload_metrics.payload_metrics_set(
-        "signature_agreements",
-        ecdsa_payload.signature_agreements.len() as i64,
-    );
-    ecdsa_payload_metrics.payload_metrics_set(
-        "available_quadruples",
-        ecdsa_payload.available_quadruples.len() as i64,
-    );
-    ecdsa_payload_metrics.payload_metrics_set(
-        "ongoing_signatures",
-        ecdsa_payload.ongoing_signatures.len() as i64,
-    );
-    ecdsa_payload_metrics.payload_metrics_set(
-        "quaruples_in_creation",
-        ecdsa_payload.quadruples_in_creation.len() as i64,
-    );
-    ecdsa_payload_metrics.payload_metrics_set(
-        "ongoing_xnet_reshares",
-        ecdsa_payload.ongoing_xnet_reshares.len() as i64,
-    );
-    ecdsa_payload_metrics.payload_metrics_set(
-        "xnet_reshare_agreements",
-        ecdsa_payload.xnet_reshare_agreements.len() as i64,
-    );
     Ok(Some(ecdsa_payload))
 }
 
@@ -815,9 +848,8 @@ pub(crate) fn get_signing_requests<'a>(
 // shares in the ECDSA pool.
 // TODO: As an optimization we could also use the signatures we
 // are looking for to avoid traversing everything in the pool.
-fn update_signature_agreements(
+pub(crate) fn update_signature_agreements(
     all_requests: &BTreeMap<CallbackId, SignWithEcdsaContext>,
-    chain: Arc<dyn ConsensusBlockChain>,
     signature_builder: &dyn EcdsaSignatureBuilder,
     payload: &mut ecdsa::EcdsaPayload,
     log: ReplicaLogger,
@@ -840,7 +872,7 @@ fn update_signature_agreements(
     }
     payload.signature_agreements = new_agreements;
     // Then we collect new signatures into the signature_agreements
-    for (request_id, signature) in signature_builder.get_completed_signatures(chain) {
+    for (request_id, signature) in signature_builder.get_completed_signatures() {
         if payload.ongoing_signatures.remove(&request_id).is_none() {
             warn!(
                 log,
@@ -857,7 +889,7 @@ fn update_signature_agreements(
 
 /// For every new signing request, we only start to work on them if
 /// their matched quadruple has been fully produced.
-fn update_ongoing_signatures(
+pub(crate) fn update_ongoing_signatures(
     new_requests: BTreeMap<ecdsa::RequestId, &SignWithEcdsaContext>,
     current_key_transcript: Option<&ecdsa::UnmaskedTranscript>,
     payload: &mut ecdsa::EcdsaPayload,
@@ -1255,7 +1287,7 @@ pub(crate) fn build_signature_inputs(
 /// the processing.
 /// TODO: in future, we may need to maintain a key transcript per supported key_id,
 /// and reshare the one specified by reshare_request.key_id.
-fn initiate_reshare_requests(
+pub(crate) fn initiate_reshare_requests(
     payload: &mut ecdsa::EcdsaPayload,
     current_key_transcript: Option<&ecdsa::UnmaskedTranscript>,
     subnet_nodes: &[NodeId],
@@ -1298,7 +1330,7 @@ fn initiate_reshare_requests(
 }
 
 /// Checks and updates the completed reshare requests.
-fn update_completed_reshare_requests(
+pub(crate) fn update_completed_reshare_requests(
     payload: &mut ecdsa::EcdsaPayload,
     current_key_transcript: Option<&ecdsa::UnmaskedTranscript>,
     resolver: &dyn EcdsaBlockReader,
@@ -1405,7 +1437,6 @@ mod tests {
         generate_key_transcript, run_idkg_and_create_and_verify_transcript,
         CanisterThresholdSigTestEnvironment,
     };
-    use ic_ic00_types::EcdsaKeyId;
     use ic_logger::replica_logger::no_op_logger;
     use ic_protobuf::types::v1 as pb;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
@@ -1509,15 +1540,6 @@ mod tests {
             dealings: Dealings::new_empty(dkg_interval_start_height),
             ecdsa: Some(ecdsa_payload),
         })
-    }
-
-    fn create_reshare_request(num_nodes: u64, registry_version: u64) -> ecdsa::EcdsaReshareRequest {
-        use std::str::FromStr;
-        ecdsa::EcdsaReshareRequest {
-            key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
-            receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
-            registry_version: RegistryVersion::from(registry_version),
-        }
     }
 
     fn create_new_quadruple_in_creation(
@@ -2194,94 +2216,85 @@ mod tests {
 
     #[test]
     fn test_ecdsa_update_signature_agreements() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let num_of_nodes = 4;
-            let Dependencies { mut pool, .. } = dependencies(pool_config, num_of_nodes);
-            //let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes as usize);
-            let subnet_id = subnet_test_id(0);
-            let mut state = ReplicatedStateBuilder::default().build();
-            state
-                .metadata
-                .subnet_call_context_manager
-                .sign_with_ecdsa_contexts
-                .insert(
-                    CallbackId::from(1),
-                    SignWithEcdsaContext {
-                        request: RequestBuilder::new().build(),
-                        pseudo_random_id: [1; 32],
-                        message_hash: vec![],
-                        derivation_path: vec![],
-                        batch_time: mock_time(),
-                    },
-                );
-            state
-                .metadata
-                .subnet_call_context_manager
-                .sign_with_ecdsa_contexts
-                .insert(
-                    CallbackId::from(2),
-                    SignWithEcdsaContext {
-                        request: RequestBuilder::new().build(),
-                        pseudo_random_id: [2; 32],
-                        message_hash: vec![],
-                        derivation_path: vec![],
-                        batch_time: mock_time(),
-                    },
-                );
-            let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
-            pool.advance_round_normal_operation_n(1);
-            let pool_reader = PoolReader::new(&pool);
-            let block = pool_reader.get_finalized_block(Height::from(0)).unwrap();
-            let chain = build_consensus_block_chain(pool_reader.pool(), &block, &block);
-            let all_requests = &state
-                .metadata
-                .subnet_call_context_manager
-                .sign_with_ecdsa_contexts;
-
-            let quadruple_id_1 = ecdsa_payload.uid_generator.next_quadruple_id();
-            ecdsa_payload.signature_agreements.insert(
-                ecdsa::RequestId {
-                    quadruple_id: quadruple_id_1,
+        //let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes as usize);
+        let subnet_id = subnet_test_id(0);
+        let mut state = ReplicatedStateBuilder::default().build();
+        state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts
+            .insert(
+                CallbackId::from(1),
+                SignWithEcdsaContext {
+                    request: RequestBuilder::new().build(),
                     pseudo_random_id: [1; 32],
+                    message_hash: vec![],
+                    derivation_path: vec![],
+                    batch_time: mock_time(),
                 },
-                ecdsa::CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
-                    signature: vec![1; 32],
-                }),
             );
-            ecdsa_payload.signature_agreements.insert(
-                ecdsa::RequestId {
-                    quadruple_id: ecdsa_payload.uid_generator.next_quadruple_id(),
-                    pseudo_random_id: [0; 32],
+        state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts
+            .insert(
+                CallbackId::from(2),
+                SignWithEcdsaContext {
+                    request: RequestBuilder::new().build(),
+                    pseudo_random_id: [2; 32],
+                    message_hash: vec![],
+                    derivation_path: vec![],
+                    batch_time: mock_time(),
                 },
-                ecdsa::CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
-                    signature: vec![2; 32],
-                }),
             );
-            let signature_builder = TestEcdsaSignatureBuilder::new();
-            // old signature in the agreement AND in state is replaced by ReportedToExecution
-            // old signature in the agreement but NOT in state is removed.
-            update_signature_agreements(
-                all_requests,
-                chain,
-                &signature_builder,
-                &mut ecdsa_payload,
-                no_op_logger(),
-            );
-            assert_eq!(ecdsa_payload.signature_agreements.len(), 1);
-            assert_eq!(
-                ecdsa_payload
-                    .signature_agreements
-                    .keys()
-                    .next()
-                    .unwrap()
-                    .quadruple_id,
-                quadruple_id_1
-            );
-            assert!(matches!(
-                ecdsa_payload.signature_agreements.values().next().unwrap(),
-                ecdsa::CompletedSignature::ReportedToExecution
-            ));
-        })
+        let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+        let all_requests = &state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts;
+
+        let quadruple_id_1 = ecdsa_payload.uid_generator.next_quadruple_id();
+        ecdsa_payload.signature_agreements.insert(
+            ecdsa::RequestId {
+                quadruple_id: quadruple_id_1,
+                pseudo_random_id: [1; 32],
+            },
+            ecdsa::CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
+                signature: vec![1; 32],
+            }),
+        );
+        ecdsa_payload.signature_agreements.insert(
+            ecdsa::RequestId {
+                quadruple_id: ecdsa_payload.uid_generator.next_quadruple_id(),
+                pseudo_random_id: [0; 32],
+            },
+            ecdsa::CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
+                signature: vec![2; 32],
+            }),
+        );
+        let signature_builder = TestEcdsaSignatureBuilder::new();
+        // old signature in the agreement AND in state is replaced by ReportedToExecution
+        // old signature in the agreement but NOT in state is removed.
+        update_signature_agreements(
+            all_requests,
+            &signature_builder,
+            &mut ecdsa_payload,
+            no_op_logger(),
+        );
+        assert_eq!(ecdsa_payload.signature_agreements.len(), 1);
+        assert_eq!(
+            ecdsa_payload
+                .signature_agreements
+                .keys()
+                .next()
+                .unwrap()
+                .quadruple_id,
+            quadruple_id_1
+        );
+        assert!(matches!(
+            ecdsa_payload.signature_agreements.values().next().unwrap(),
+            ecdsa::CompletedSignature::ReportedToExecution
+        ));
     }
 
     #[test]
