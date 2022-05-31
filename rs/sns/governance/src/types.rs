@@ -940,11 +940,8 @@ impl From<u64> for ProposalId {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod tests {
+pub mod test_helpers {
     use super::*;
-    use crate::pb::v1::neuron::Followees;
-    use maplit::btreemap;
     use rand::{Rng, RngCore};
 
     /// An implementation of the Environment trait that behaves in a
@@ -1017,6 +1014,13 @@ pub(crate) mod tests {
             unimplemented!();
         }
     }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use crate::pb::v1::neuron::Followees;
+    use maplit::btreemap;
 
     #[test]
     fn test_nervous_system_parameters_validate() {

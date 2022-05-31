@@ -34,6 +34,7 @@ use crate::pb::v1::{
 use ic_base_types::PrincipalId;
 use lazy_static::lazy_static;
 use ledger_canister::{AccountIdentifier, Subaccount, Tokens};
+use num::{bigint::BigInt, rational::Ratio, Zero};
 use strum::IntoEnumIterator;
 
 #[cfg(target_arch = "wasm32")]
@@ -55,6 +56,7 @@ use crate::types::{is_registered_function_id, Environment, HeapGrowthPotential, 
 use candid::Encode;
 use dfn_core::api::{id, spawn, CanisterId};
 use ic_nervous_system_common::{
+    i2r,
     ledger::{self, Ledger},
     NervousSystemError,
 };
@@ -3078,118 +3080,220 @@ impl Governance {
             );
         }
         let periods = self.latest_reward_event().periods_since_genesis..periods_since_genesis;
-        let fraction: f64 = periods
+        let fraction: Ratio<BigInt> = periods
             .map(crate::reward::rewards_pool_to_distribute_in_supply_fraction_for_one_day)
             .sum();
+        assert!(fraction >= i2r(0), "{}", fraction);
 
-        let _distributed_e8s_equivalent_float = (supply.get_e8s() as f64) * fraction;
-        // We should not convert right away to integer! The
-        // "distributed_e8s_equivalent" recorded in the RewardEvent proto
-        // should match exactly the sum of the distributed integer e8
-        // equivalents. Due to rounding, we actually need to recompute this sum,
-        // even though it will be very close to distributed_e8s_equivalent_float.
-        let actually_distributed_e8s_equivalent = 0_u64;
+        // Because of rounding, and other possible shenanigans, it is possible
+        // that some of this amount will not be distributed.
+        let rewards_purse_e8s = fraction * i2r(supply.get_e8s());
+        assert!(rewards_purse_e8s >= i2r(0), "{}", rewards_purse_e8s);
 
         let considered_proposals: Vec<ProposalId> =
             self.ready_to_be_settled_proposal_ids().collect();
 
-        // Construct a map of voter ids (NeuronIds) to total voting power _exercised_
-        // for considered proposals.
+        // Add up reward shares based on voting power that was exercised.
         // TODO NNS1-925 - We keep the below calculation as it will be needed when enabling
         //                 generic voting reward.
-        let (voters_to_used_voting_right, _total_voting_rights) = {
-            let mut voters_to_used_voting_right: HashMap<NeuronId, f64> = HashMap::new();
-            let mut total_voting_rights = 0f64;
+        let mut neuron_id_to_reward_shares: HashMap<NeuronId, Ratio<BigInt>> = HashMap::new();
+        for proposal_id in &considered_proposals {
+            if let Some(proposal) = self.get_proposal_data(*proposal_id) {
+                for (voter, ballot) in &proposal.ballots {
+                    if !Vote::from(ballot.vote).eligible_for_rewards() {
+                        continue;
+                    }
 
-            for proposal_id in considered_proposals.iter() {
-                if let Some(proposal_data) = self.get_proposal_data(*proposal_id) {
-                    for (voter, ballot) in proposal_data.ballots.iter() {
-                        if !Vote::from(ballot.vote).eligible_for_rewards() {
-                            continue;
+                    match NeuronId::from_str(voter) {
+                        Ok(neuron_id) => {
+                            let reward_shares = i2r(ballot.voting_power);
+                            *neuron_id_to_reward_shares
+                                .entry(neuron_id)
+                                .or_insert_with(Ratio::zero) += reward_shares;
                         }
-                        match NeuronId::from_str(voter) {
-                            Ok(nid) => {
-                                let voting_power = ballot.voting_power as f64;
-                                *voters_to_used_voting_right.entry(nid).or_insert(0f64) +=
-                                    voting_power;
-                                total_voting_rights += voting_power;
-                            }
-                            Err(e) => {
-                                println!(
-                                    "{} Could not use voter {} to calculate total_voting_rights \
-                                        since it's NeuronId was invalid. Underlying error: {:?}.",
-                                    log_prefix(),
-                                    voter,
-                                    e
-                                )
-                            }
+                        Err(e) => {
+                            println!(
+                                "{} Could not use voter {} to calculate total_voting_rights \
+                                    since it's NeuronId was invalid. Underlying error: {:?}.",
+                                log_prefix(),
+                                voter,
+                                e
+                            );
                         }
                     }
                 }
             }
-            (voters_to_used_voting_right, total_voting_rights)
-        };
+        }
+        // Freeze reward shares, now that we are done adding them up.
+        let neuron_id_to_reward_shares = neuron_id_to_reward_shares;
+        let total_reward_shares: Ratio<BigInt> = neuron_id_to_reward_shares.values().sum();
+        assert!(
+            total_reward_shares >= i2r(0),
+            "total_reward_shares: {} neuron_id_to_reward_shares: {:#?}",
+            total_reward_shares,
+            neuron_id_to_reward_shares,
+        );
 
-        for (neuron_id, used_voting_rights) in voters_to_used_voting_right {
-            match self.get_neuron_result_mut(&neuron_id) {
-                Ok(mut _neuron) => {
-                    // TODO NNS1-925 - Generic Voting Rewards. Uncomment the following lines to
-                    //                 re-enable rewards for a neuron.
-                    // let reward = (used_voting_rights * _distributed_e8s_equivalent_float
-                    //     / _total_voting_rights) as u64;
-                    // neuron.maturity_e8s_equivalent += reward;
-                    // actually_distributed_e8s_equivalent += reward;
+        // As noted in an earlier comment, this could differ from
+        // rewards_purse_e8s due to rounding, and other degenerate
+        // circumstances.
+        let distributed_e8s_equivalent = 0_u64;
+        // Now that we know the size of the pie (rewards_purse_e8s), and how
+        // much of it each neuron is supposed to get (*_reward_shares), we now
+        // proceed to actually handing out those rewards.
+        if total_reward_shares == i2r(0) {
+            println!(
+                "{}Warning: total_reward_shares is 0. Therefore, we skip increasing \
+                 neuron maturity. neuron_id_to_reward_shares: {:#?}",
+                log_prefix(),
+                neuron_id_to_reward_shares,
+            );
+        } else {
+            for (neuron_id, neuron_reward_shares) in neuron_id_to_reward_shares {
+                match self.get_neuron_result_mut(&neuron_id) {
+                    Ok(mut _neuron) => {
+                        // TODO NNS1-925 - Generic Voting Rewards. Uncomment the following chunk to
+                        //                 re-enable rewards for a neuron.
+                        /*
+                        use ic_nervous_system_common::try_r2u64;
+                        use num::{CheckedDiv, CheckedMul};
+
+                        // reward = purse * neuron_shares / total_shares
+                        let reward = rewards_purse_e8s
+                            .checked_mul(&neuron_reward_shares)
+                            .expect("Multiplication of Ratio<BigInt>s is not supposed to overflow.")
+                            .checked_div(&total_reward_shares)
+                            .expect(
+                                "Division of Ratio<BigInt>s is not supposed to overflow \
+                                 nor underflow, and an earlier if should be gaurding against \
+                                 dividing by 0.",
+                            );
+
+                        // Round down, and convert to u64.
+                        let reward = try_r2u64(&reward.floor()).unwrap_or_else(|err| {
+                            panic!(
+                                "\
+                                    Calculating reward for neuron {:?}:\n\
+                                    neuron_reward_shares: {}\n\
+                                    rewards_purse_e8s: {}\n\
+                                    total_reward_shares: {}\n\
+                                    err: {}\n\
+                                ",
+                                neuron_id,
+                                neuron_reward_shares,
+                                rewards_purse_e8s,
+                                total_reward_shares,
+                                err,
+                            )
+                        });
+
+                        neuron.maturity_e8s_equivalent += reward;
+                        distributed_e8s_equivalent += reward;
+                        */
+                    }
+                    Err(e) => println!(
+                        "{}Cannot find neuron {}, despite having voted with power {} \
+                         in the considered reward period. The reward that should have been \
+                         distributed to this neuron is simply skipped, so the total amount \
+                         of distributed reward for this period will be lower than the maximum \
+                         allowed. Underlying error: {:?}.",
+                        log_prefix(),
+                        neuron_id,
+                        neuron_reward_shares,
+                        e
+                    ),
                 }
-                Err(e) => println!(
-                    "{}Cannot find neuron {}, despite having voted with power {} \
-                        in the considered reward period. The reward that should have been \
-                        distributed to this neuron is simply skipped, so the total amount \
-                        of distributed reward for this period will be lower than the maximum \
-                        allowed. Underlying error: {:?}.",
-                    log_prefix(),
-                    neuron_id,
-                    used_voting_rights,
-                    e
-                ),
             }
         }
+        // Freeze distributed_e8s_equivalent, now that we are done handing out rewards.
+        let distributed_e8s_equivalent = distributed_e8s_equivalent;
+        // Because we used floor to round rewards to integers (and everything is
+        // non-negative), it should be that the amount distributed is not more
+        // than the original purse.
+        debug_assert!(
+            i2r(distributed_e8s_equivalent) <= rewards_purse_e8s,
+            "rewards distributed ({}) > purse ({})",
+            distributed_e8s_equivalent,
+            rewards_purse_e8s,
+        );
 
         let now = self.env.now();
+        // Settle proposals.
         for pid in considered_proposals.iter() {
             // Before considering a proposal for reward, it must be fully processed --
             // because we're about to clear the ballots, so no further processing will be
             // possible.
             self.process_proposal(pid.id);
 
-            match self.get_proposal_data_mut(*pid) {
-                None =>  println!(
-                    "{}Cannot find proposal {}, despite it being considered for rewards distribution.",
-                    log_prefix(), pid.id
-                ),
-                Some(p) => {
-                    if p.status() == ProposalDecisionStatus::ProposalStatusOpen {
-                        println!("{}Proposal {} was considered for reward distribution despite \
-                          being open. This code line is expected not to be reachable. We need to \
-                          clear the ballots here to avoid a risk of the memory getting too large. \
-                          In doubt, reject the proposal", log_prefix(), pid.id);
-                        p.decided_timestamp_seconds = now;
-                        p.latest_tally = Some(Tally {
-                            timestamp_seconds: now,
-                            yes:0,
-                            no:0,
-                            total:0,
-                        })
-                    };
-                    p.reward_event_round = periods_since_genesis;
-                    p.ballots.clear();
+            let p = match self.get_proposal_data_mut(*pid) {
+                Some(p) => p,
+                None => {
+                    println!(
+                        "{}Cannot find proposal {}, despite it being considered for rewards distribution.",
+                        log_prefix(), pid.id
+                    );
+                    debug_assert!(
+                        false,
+                        "It appears that proposal {} has been deleted out from under us \
+                         while we were distributing rewards. This should never happen. \
+                         In production, this would be quietly swept under the rug and \
+                         we would continue processing. Current state (Governance):\n{:#?}",
+                        pid.id, self.proto,
+                    );
+                    continue;
                 }
             };
+
+            if p.status() == ProposalDecisionStatus::ProposalStatusOpen {
+                println!(
+                    "{}Proposal {} was considered for reward distribution despite \
+                     being open. We will now force the proposal's status to be Rejected.",
+                    log_prefix(),
+                    pid.id
+                );
+                debug_assert!(
+                    false,
+                    "This should be unreachable. Current governance state:\n{:#?}",
+                    self.proto,
+                );
+
+                // The next two statements put p into the Rejected status. Thus,
+                // process_proposal will consider that it has nothing more to do
+                // with the p.
+                p.decided_timestamp_seconds = now;
+                p.latest_tally = Some(Tally {
+                    timestamp_seconds: now,
+                    yes: 0,
+                    no: 0,
+                    total: 0,
+                });
+                debug_assert_eq!(
+                    p.status(),
+                    ProposalDecisionStatus::ProposalStatusRejected,
+                    "Failed to force ProposalData status to become Rejected. p:\n{:#?}",
+                    p,
+                );
+            }
+
+            // This is where the proposal becomes Settled, at least in the eyes
+            // of the ProposalData::reward_status method.
+            p.reward_event_round = periods_since_genesis;
+
+            // Ballots are used to determine two things:
+            //   1. (obviously and primarily) whether to execute the proposal.
+            //   2. rewards
+            // At this point, we no longer need ballots for either of these
+            // things, and since they take up a fair amount of space, we take
+            // this opportunity to jettison them.
+            p.ballots.clear();
         }
+
+        // Conclude this round of rewards.
         self.proto.latest_reward_event = Some(RewardEvent {
             periods_since_genesis,
             actual_timestamp_seconds: now,
             settled_proposals: considered_proposals,
-            distributed_e8s_equivalent: actually_distributed_e8s_equivalent,
+            distributed_e8s_equivalent,
         })
     }
 
@@ -3340,7 +3444,7 @@ mod tests {
             nervous_system_function::{FunctionType, GenericNervousSystemFunction},
             Motion, NeuronPermissionType, ProposalData, ProposalId, Tally, WaitForQuietState,
         },
-        types::tests::NativeEnvironment,
+        types::test_helpers::NativeEnvironment,
     };
     use async_trait::async_trait;
     use ic_canister_client::Sender;

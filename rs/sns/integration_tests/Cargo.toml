@@ -13,6 +13,7 @@ path = "test_canisters/sns_governance_mem_test_canister.rs"
 
 # Dependencies required to compile the test canisters.
 [dependencies]
+async-trait = "0.1.42"
 byteorder = "1.4.3"
 candid = "0.7.4"
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }

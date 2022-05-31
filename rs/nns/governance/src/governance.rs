@@ -6060,10 +6060,7 @@ impl Governance {
         }
         // Freeze reward shares, now that we are done adding them up.
         let neuron_id_to_reward_shares = neuron_id_to_reward_shares;
-        let total_reward_shares: Ratio<BigInt> = neuron_id_to_reward_shares
-            .iter()
-            .map(|(_, reward_shares)| reward_shares)
-            .sum();
+        let total_reward_shares: Ratio<BigInt> = neuron_id_to_reward_shares.values().sum();
         assert!(
             total_reward_shares >= i2r(0),
             "total_reward_shares: {} neuron_id_to_reward_shares: {:#?}",
@@ -6095,8 +6092,8 @@ impl Governance {
                             .checked_div(&total_reward_shares)
                             .expect(
                                 "Division of Ratio<BigInt>s is not supposed to overflow \
-                                 nor underflow, and an earlier if should be gaurding against \
-                                 dividing is not 0.",
+                                 nor underflow, and an earlier if should be guarding against \
+                                 dividing by 0.",
                             );
 
                         // Round down, and convert to u64.

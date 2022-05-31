@@ -121,7 +121,7 @@ impl Neuron {
     /// to 25%, for a neuron with max_neuron_age_for_age_bonus.
     /// max_dissolve_delay_seconds and max_neuron_age_for_age_bonus are defined in
     /// the nervous system parameters.
-    pub(crate) fn voting_power(
+    pub fn voting_power(
         &self,
         now_seconds: u64,
         max_dissolve_delay_seconds: u64,
