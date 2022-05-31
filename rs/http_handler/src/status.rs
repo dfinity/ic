@@ -1,5 +1,5 @@
 //! Module that deals with requests to /api/v2/status
-use crate::{common, state_reader_executor::StateReaderExecutor};
+use crate::{common, state_reader_executor::StateReaderExecutor, EndpointService};
 use hyper::{Body, Response};
 use ic_config::http_handler::Config;
 use ic_logger::{trace, warn, ReplicaLogger};
@@ -12,12 +12,17 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
-use tower::{BoxError, Service};
+use tower::{
+    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, BoxError, Service,
+    ServiceBuilder,
+};
 
 // TODO(NET-776)
 // The IC API version reported on status requests.
 const IC_API_VERSION: &str = "0.18.0";
+const MAX_STATUS_CONCURRENT_REQUESTS: usize = 100;
 
+#[derive(Clone)]
 pub(crate) struct StatusService {
     log: ReplicaLogger,
     config: Config,
@@ -27,20 +32,27 @@ pub(crate) struct StatusService {
 }
 
 impl StatusService {
-    pub(crate) fn new(
+    pub(crate) fn new_service(
         log: ReplicaLogger,
         config: Config,
         nns_subnet_id: SubnetId,
         state_reader_executor: StateReaderExecutor,
         replica_health_status: Arc<RwLock<ReplicaHealthStatus>>,
-    ) -> StatusService {
-        Self {
+    ) -> EndpointService {
+        let base_service = Self {
             log,
             config,
             nns_subnet_id,
             state_reader_executor,
             replica_health_status,
-        }
+        };
+        BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(GlobalConcurrencyLimitLayer::new(
+                    MAX_STATUS_CONCURRENT_REQUESTS,
+                ))
+                .service(base_service),
+        )
     }
 }
 

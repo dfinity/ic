@@ -1,11 +1,12 @@
 //! Module that deals with requests to /api/v2/canister/.../read_state
 
 use crate::{
+    body::BodyReceiverLayer,
     common::{cbor_response, into_cbor, make_plaintext_response},
     state_reader_executor::StateReaderExecutor,
     types::{to_legacy_request_type, ApiReqType},
     validator_executor::ValidatorExecutor,
-    HttpError, HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
+    EndpointService, HttpError, HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
 };
 use hyper::{Body, Response, StatusCode};
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path};
@@ -27,9 +28,13 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
-use tower::{BoxError, Service};
+use tower::{
+    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, BoxError, Service,
+    ServiceBuilder,
+};
 
 const MAX_READ_STATE_REQUEST_IDS: u8 = 100;
+const MAX_READ_STATE_CONCURRENT_REQUESTS: usize = 100;
 
 #[derive(Clone)]
 pub(crate) struct ReadStateService {
@@ -45,7 +50,7 @@ pub(crate) struct ReadStateService {
 
 impl ReadStateService {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    pub(crate) fn new_service(
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,
         health_status: Arc<RwLock<ReplicaHealthStatus>>,
@@ -54,8 +59,8 @@ impl ReadStateService {
         validator_executor: ValidatorExecutor,
         registry_client: Arc<dyn RegistryClient>,
         malicious_flags: MaliciousFlags,
-    ) -> Self {
-        Self {
+    ) -> EndpointService {
+        let base_service = Self {
             log,
             metrics,
             health_status,
@@ -64,7 +69,19 @@ impl ReadStateService {
             validator_executor,
             registry_client,
             malicious_flags,
-        }
+        };
+        let base_service = BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(GlobalConcurrencyLimitLayer::new(
+                    MAX_READ_STATE_CONCURRENT_REQUESTS,
+                ))
+                .service(base_service),
+        );
+        BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(BodyReceiverLayer::default())
+                .service(base_service),
+        )
     }
 }
 

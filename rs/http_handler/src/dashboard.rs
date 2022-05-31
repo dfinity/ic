@@ -4,6 +4,7 @@
 use crate::{
     common::{make_plaintext_response, CONTENT_TYPE_HTML},
     state_reader_executor::StateReaderExecutor,
+    EndpointService,
 };
 use askama::Template;
 use hyper::{Body, Response, StatusCode};
@@ -13,11 +14,17 @@ use ic_types::{Height, ReplicaVersion};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tower::{BoxError, Service};
+use tower::{
+    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, BoxError, Service,
+    ServiceBuilder,
+};
 
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
 
+const MAX_DASHBOARD_CONCURRENT_REQUESTS: usize = 100;
+
+#[derive(Clone)]
 pub(crate) struct DashboardService {
     config: Config,
     subnet_type: SubnetType,
@@ -25,16 +32,23 @@ pub(crate) struct DashboardService {
 }
 
 impl DashboardService {
-    pub(crate) fn new(
+    pub(crate) fn new_service(
         config: Config,
         subnet_type: SubnetType,
         state_reader_executor: StateReaderExecutor,
-    ) -> DashboardService {
-        Self {
+    ) -> EndpointService {
+        let base_service = Self {
             config,
             subnet_type,
             state_reader_executor,
-        }
+        };
+        BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(GlobalConcurrencyLimitLayer::new(
+                    MAX_DASHBOARD_CONCURRENT_REQUESTS,
+                ))
+                .service(base_service),
+        )
     }
 }
 
