@@ -55,6 +55,7 @@ filegroup(
         "//rs/protobuf:sources",
         "//rs/protobuf/generator:sources",
         "//rs/registry/keys:sources",
+        "//rs/registry/local_store:sources",
         "//rs/registry/proto:sources",
         "//rs/registry/proto_data_provider:sources",
         "//rs/registry/provisional_whitelist:sources",
