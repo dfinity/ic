@@ -1,3 +1,12 @@
+# BoundarGuestOS - Main Docker Image
+#
+# Build steps:
+# - `docker build --pull -t dfinity/boundaryos-main -f Dockerfile .`
+#
+# The base images are defined in docker-base.prod and docker-base.dev. Update
+# the references there when a new base image has been built. Note that this
+# argument MUST be given by the build script, otherwise build will fail.
+ARG BASE_IMAGE=
 
 # Service worker verion and sha256
 ARG sw_version=1.1.2
@@ -59,18 +68,12 @@ RUN \
    curl -L -O https://registry.npmjs.org/@dfinity/service-worker/-/service-worker-${sw_version}.tgz && \
    echo "${sw_sha256}  service-worker-${sw_version}.tgz" | shasum -c
 
-# Second build stage: construct the actual target image (root filesystem of the
-# boundary node VM).
-# The downloads from previous stage will be used and installed into the target
-# image.
 #
-# Build steps:
-# - `docker build --pull -t dfinity/boundaryos-main -f Dockerfile .`
-#
+# Second build stage:
 # - Construct the actual target image (IC-OS root filesystem)
+# - Copy downloaded archives from first build stage into the target image
 #
-# Update below image when new dfinity/boundaryos-base image gets produced (see deploy-guest-os-baseimg CI job on master/rc).
-FROM dfinity/boundaryos-base@sha256:dd7b44dbd166c0d6317860b1de86a88426295c19a6040d7ab72fc98d876e9f88
+FROM $BASE_IMAGE
 
 RUN mkdir -p /boot/config \
              /boot/efi \
@@ -290,12 +293,11 @@ RUN apt-get clean && \
 # Update POSIX permissions in /opt/ic/
 RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
-    chmod 0755 /opt/ic/bin/* && \
-    chmod 0644 /opt/ic/share/*
+    chmod 0755 /opt/ic/bin/*
 
 COPY boot /boot
 # Update POSIX permissions in /boot/
-RUN chmod 0644 /boot/extra_boot_args /boot/version.txt
+RUN chmod 0644 /boot/extra_boot_args
 
 
 
