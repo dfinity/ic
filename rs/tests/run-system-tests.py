@@ -44,10 +44,29 @@ NC = "\033[0m"
 # This timeout should be shorter than the CI job timeout.
 TIMEOUT_DEFAULT_SEC = 50 * 60
 SLACK_CHANNEL_NOTIFY = "test-failure-alerts"
+RUN_TESTS_SUBCOMMAND = "run-tests"
+PROCESS_TEST_RESULTS_SUBCOMMAND = "process-test-results"
+TEST_RESULT_FILE = "test-results.json"
+POT_SETUP_FILE = "pot_setup.json"
+SHELL_WRAPPER_DEFAULT = "/usr/bin/time"
 
 
 class GetImageShaException(Exception):
     pass
+
+
+def try_extract_arguments(search_args: List[str], separator: str, args: List[str]) -> Tuple[str, ...]:
+    arg_values: List[str] = []
+    for search_arg in search_args:
+        search_result = [search_arg in arg for arg in args]
+        arg_value = ""
+        try:
+            idx = search_result.index(True)
+            _, arg_value = args[idx].split(separator)
+        except ValueError:
+            pass
+        arg_values.append(arg_value)
+    return tuple(arg_values)
 
 
 def try_kill_pgid(pgid: int) -> None:
@@ -70,9 +89,21 @@ def notify_slack(slack_message: str, ci_project_dir: str) -> int:
     return returncode
 
 
-def run_help_command():
+def process_test_results_cmd(run_test_driver_cmd: List[str], working_dir: str, test_result_dir: str) -> List[str]:
+    return (
+        run_test_driver_cmd
+        + [PROCESS_TEST_RESULTS_SUBCOMMAND]
+        + [f"--working-dir={working_dir}", f"--test-result-dir={test_result_dir}"]
+    )
+
+
+def _test_driver_local_run_cmd() -> List[str]:
+    return ["cargo", "run", "--bin", "prod-test-driver", "--"]
+
+
+def run_help_command(shell_wrapper: str):
     # Help command is supposed to be run only locally.
-    help_command = ["/usr/bin/time", "cargo", "run", "--bin", "prod-test-driver", "--", "--help"]
+    help_command = [shell_wrapper] + _test_driver_local_run_cmd() + ["--help"]
     run_command(command=help_command)
 
 
@@ -184,7 +215,9 @@ def build_test_driver(shell_wrapper: str) -> int:
     return status_code
 
 
-def main(runner_args: List[str], folders_to_remove: List[str], keep_tmp_artifacts_folder: bool) -> int:
+def main(
+    runner_args: List[str], working_dir: str, folders_to_remove: List[str], keep_tmp_artifacts_folder: bool
+) -> int:
     # From this path the script was started.
     base_path = os.getcwd()
     # Set path to the script path (in case script is launched from non-parent dir).
@@ -194,11 +227,10 @@ def main(runner_args: List[str], folders_to_remove: List[str], keep_tmp_artifact
     # Read all environmental variables.
     CI_PROJECT_DIR = os.getenv("CI_PROJECT_DIR", default=root_ic_dir)
     TEST_ES_HOSTNAMES = os.getenv("TEST_ES_HOSTNAMES", default=None)
-    SHELL_WRAPPER = os.getenv("SHELL_WRAPPER", default="/usr/bin/time")
+    SHELL_WRAPPER = os.getenv("SHELL_WRAPPER", default=SHELL_WRAPPER_DEFAULT)
     SSH_KEY_DIR = os.getenv("SSH_KEY_DIR", default=None)
     IC_VERSION_ID = os.getenv("IC_VERSION_ID", default="")
     JOB_ID = os.getenv("CI_JOB_ID", default=None)
-    ADDITIONAL_ARGS = os.getenv("ADDITIONAL_ARGS", default=[])
     CI_PARENT_PIPELINE_SOURCE = os.getenv("CI_PARENT_PIPELINE_SOURCE", default="")
     CI_PIPELINE_SOURCE = os.getenv("CI_PIPELINE_SOURCE", default="")
     ROOT_PIPELINE_ID = os.getenv("ROOT_PIPELINE_ID", default="")
@@ -278,8 +310,7 @@ def main(runner_args: List[str], folders_to_remove: List[str], keep_tmp_artifact
 
     if is_local_run:
         JOB_ID = generate_default_job_id()
-        RUN_CMD = "cargo"
-        ADDITIONAL_ARGS = ["run", "--bin", "prod-test-driver", "--"]
+        RUN_CMD = _test_driver_local_run_cmd()
         artifacts_tmp_dir = tempfile.mkdtemp(prefix="tmp_artifacts_")
         if not keep_tmp_artifacts_folder:
             folders_to_remove.append(artifacts_tmp_dir)
@@ -288,15 +319,23 @@ def main(runner_args: List[str], folders_to_remove: List[str], keep_tmp_artifact
             logging.info(f"Copying prebuilt artifacts from {ARTIFACT_DIR} to {_tmp}")
             shutil.copytree(ARTIFACT_DIR, _tmp)
         ARTIFACT_DIR = _tmp
-        results_tmp_dir = tempfile.mkdtemp(prefix="tmp_results_")
-        folders_to_remove.append(results_tmp_dir)
-        RESULT_FILE = f"{results_tmp_dir}/test-results.json"
-        SUMMARY_ARGS = [f"--test_results={RESULT_FILE}", "--verbose"]
+        RESULT_DIR = tempfile.mkdtemp(prefix="tmp_results_")
+        folders_to_remove.append(RESULT_DIR)
+        RESULT_FILE = f"{RESULT_DIR}/{TEST_RESULT_FILE}"
     else:
         ARTIFACT_DIR = f"{CI_PROJECT_DIR}/artifacts"
-        RUN_CMD = f"{ARTIFACT_DIR}/prod-test-driver"
-        RESULT_FILE = f"{CI_PROJECT_DIR}/test-results.json"
-        SUMMARY_ARGS = [f"--test_results={RESULT_FILE}"]
+        RUN_CMD = [f"{ARTIFACT_DIR}/prod-test-driver"]
+        RESULT_DIR = CI_PROJECT_DIR
+        RESULT_FILE = f"{RESULT_DIR}/{TEST_RESULT_FILE}"
+
+    SUMMARY_ARGS = [
+        f"--test_results={RESULT_FILE}",
+        f"--working_dir={working_dir}",
+        f"--pot_setup_file={POT_SETUP_FILE}",
+    ]
+
+    if is_local_run:
+        SUMMARY_ARGS.append("--verbose")
 
     canisters_path = os.path.join(CI_PROJECT_DIR, f"{ARTIFACT_DIR}/canisters")
     release_path = os.path.join(CI_PROJECT_DIR, f"{ARTIFACT_DIR}/release")
@@ -319,7 +358,7 @@ def main(runner_args: List[str], folders_to_remove: List[str], keep_tmp_artifact
     # Print all input environmental variables.
     logging.debug(
         f"CI_PROJECT_DIR={CI_PROJECT_DIR}, TEST_ES_HOSTNAMES={TEST_ES_HOSTNAMES}, SHELL_WRAPPER={SHELL_WRAPPER}, "
-        f"SSH_KEY_DIR={SSH_KEY_DIR}, IC_VERSION_ID={IC_VERSION_ID}, JOB_ID={JOB_ID}, ADDITIONAL_ARGS={ADDITIONAL_ARGS}, "
+        f"SSH_KEY_DIR={SSH_KEY_DIR}, IC_VERSION_ID={IC_VERSION_ID}, JOB_ID={JOB_ID}, "
         f"CI_PIPELINE_SOURCE={CI_PIPELINE_SOURCE}, ROOT_PIPELINE_ID={ROOT_PIPELINE_ID}, CI_JOB_URL={CI_JOB_URL}, "
         f"CI_PROJECT_URL={CI_PROJECT_URL}, DEV_IMG_URL={IC_OS_DEV_IMG_URL}, CI_COMMIT_SHA={CI_COMMIT_SHA}, ARTIFACT_DIR={ARTIFACT_DIR}, "
         f"DEV_IMG_SHA256={IC_OS_DEV_IMG_SHA256}, CI_PARENT_PIPELINE_SOURCE={CI_PARENT_PIPELINE_SOURCE}, CI_JOB_NAME={CI_JOB_NAME}, "
@@ -368,11 +407,9 @@ def main(runner_args: List[str], folders_to_remove: List[str], keep_tmp_artifact
     os.system(f"ls -R {ARTIFACT_DIR}")
 
     run_test_driver_cmd = (
-        [
-            SHELL_WRAPPER,
-            RUN_CMD,
-        ]
-        + ADDITIONAL_ARGS
+        [SHELL_WRAPPER]
+        + RUN_CMD
+        + [RUN_TESTS_SUBCOMMAND]
         + runner_args
         + [
             f"--job-id={JOB_ID}",
@@ -393,29 +430,34 @@ def main(runner_args: List[str], folders_to_remove: List[str], keep_tmp_artifact
     testrun_returncode = run_command_with_timeout(
         command=run_test_driver_cmd, env=env_dict, timeout=SYSTEM_TESTS_TIMEOUT_SEC
     )
+    if testrun_returncode == 0:
+        logging.info("Execution of the `prod-test-driver` has succeeded without errors.")
+    else:
+        logging.error(f"Execution of the `prod-test-driver` terminated with code={testrun_returncode}.")
 
-    # Both 0 (successful suite execution) and 1 (case with some failed tests) exit codes are considered to be successful executions of the test suite.
-    # All other exit codes are treated as errors. For those we don't generate summary, or push messages to slack or honeycomb.
-    # The only exception is timeout error with code 124.
-    has_suite_completed = testrun_returncode == 0 or testrun_returncode == 1
-    if not has_suite_completed:
-        exit_message = f"Execution of prod-test-driver failed unexpectedly with {testrun_returncode} exit code."
-        if testrun_returncode == 124:
-            exit_message = "Execution of prod-test-driver failed due to timeout."
-            if is_slack_timeout_notify:
-                slack_message = "\n".join(
-                    [
-                        f"Scheduled job `{CI_JOB_NAME}` *timed out*. <{CI_JOB_URL}|log>.",  # noqa
-                        f"Commit: <{CI_PROJECT_URL}/-/commit/{CI_COMMIT_SHA}|{CI_COMMIT_SHORT_SHA}>.",
-                        f"IC_VERSION_ID: `{IC_VERSION_ID}`.",  # noqa
-                    ]
-                )
-                returncode = notify_slack(slack_message, CI_PROJECT_DIR)
-                if returncode == 0:
-                    logging.info("Successfully sent timeout slack notification.")
-                else:
-                    logging.error(f"Failed to send slack timeout notification, exit code={returncode}.")
-        exit_with_log(exit_message)
+    # In case of timeout error, we optionally send a slack notification.
+    if testrun_returncode == 124 and is_slack_timeout_notify:
+        slack_message = "\n".join(
+            [
+                f"Scheduled job `{CI_JOB_NAME}` *timed out*. <{CI_JOB_URL}|log>.",  # noqa
+                f"Commit: <{CI_PROJECT_URL}/-/commit/{CI_COMMIT_SHA}|{CI_COMMIT_SHORT_SHA}>.",
+                f"IC_VERSION_ID: `{IC_VERSION_ID}`.",  # noqa
+            ]
+        )
+        returncode = notify_slack(slack_message, CI_PROJECT_DIR)
+        if returncode == 0:
+            logging.info("Successfully sent timeout slack notification.")
+        else:
+            logging.error(f"Failed to send slack timeout notification, exit code={returncode}.")
+    # Process all test result files produced by the test-driver execution and infer overall suite execution success/failure.
+    process_results_cmd = process_test_results_cmd(
+        run_test_driver_cmd=RUN_CMD, working_dir=working_dir, test_result_dir=RESULT_DIR
+    )
+    test_suite_returncode = run_command(command=process_results_cmd)
+    # 0 - successful suite execution.
+    # 1 - suite failed, case with some failed or interrupted tests.
+    if not (test_suite_returncode == 0 or test_suite_returncode == 1):
+        exit_with_log(f"Processing of the test results failed unexpectedly with code={test_suite_returncode}")
 
     if is_honeycomb_push:
         logging.info("Pushing results to honeycomb.")
@@ -459,7 +501,7 @@ def main(runner_args: List[str], folders_to_remove: List[str], keep_tmp_artifact
     else:
         logging.error(f"{RED}Failed to create summary.{NC}")
 
-    return testrun_returncode
+    return test_suite_returncode
 
 
 if __name__ == "__main__":
@@ -471,25 +513,25 @@ if __name__ == "__main__":
     runner_args = sys.argv[1:]
     logging.debug(f"Input arguments are: {runner_args}")
     if any([i in runner_args for i in ["-h", "--help"]]):
-        run_help_command()
+        run_help_command(SHELL_WRAPPER_DEFAULT)
         sys.exit(0)
     keep_tmp_artifacts_folder = False
-    # Run main() in try/catch to delete tmp folders (marked for deletion) in case of exceptions or user interrupts.
     folders_to_remove: List[str] = []
     # Check if optional flag of keeping tmp artifact folder is set.
     if "--keep_artifacts" in runner_args:
         keep_tmp_artifacts_folder = True
         # Delete the flag from the arguments, as it is not intended for `prod-test-driver`
         runner_args.remove("--keep_artifacts")
-    if not any(["--working-dir" in arg for arg in runner_args]):
-        # create working dir
-        working_dir = tempfile.mkdtemp(prefix="tmp_working_dir_")
-        runner_args.append(f"--working-dir={working_dir}")
-        folders_to_remove.append(working_dir)
-    testrun_returncode = 1
+    (working_dir_arg,) = try_extract_arguments(search_args=["--working-dir"], separator="=", args=runner_args)
+    if not working_dir_arg:
+        working_dir_arg = tempfile.mkdtemp(prefix="tmp_working_dir_")
+        runner_args.append(f"--working-dir={working_dir_arg}")
+        folders_to_remove.append(working_dir_arg)
     logging.debug(f"runner_args arguments are: {runner_args}")
+    # Run main() in the try/catch to delete tmp folders (marked for deletion) in case of exceptions or user interrupts.
+    testrun_returncode = 1
     try:
-        testrun_returncode = main(runner_args, folders_to_remove, keep_tmp_artifacts_folder)
+        testrun_returncode = main(runner_args, working_dir_arg, folders_to_remove, keep_tmp_artifacts_folder)
     except Exception as e:
         logging.exception(f"Raised exception: {e}")
     finally:

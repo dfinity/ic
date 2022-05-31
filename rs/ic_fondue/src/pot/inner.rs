@@ -120,7 +120,7 @@ pub struct PotResult {
 
 impl PotResult {
     pub fn is_success(&self) -> bool {
-        infer_result(self.test_reports.as_slice()) == TestResult::Passed
+        infer_parent_result(self.test_reports.as_slice()) == TestResult::Passed
     }
 }
 
@@ -448,7 +448,6 @@ pub fn run_isolated_test(man: &IcManager, ctx: &Context, test: IsolatedTest) -> 
 
     TestResultNode {
         name,
-        group_name: None,
         started_at,
         duration,
         result,
@@ -477,7 +476,6 @@ pub fn run_composable_tests(
 
         results.push(TestResultNode {
             name,
-            group_name: None,
             started_at,
             duration,
             result,

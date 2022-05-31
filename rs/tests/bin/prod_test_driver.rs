@@ -1,8 +1,12 @@
 use clap::Parser;
 use ic_fondue::pot::execution::TestResult;
-use ic_tests::driver::cli::CliArgs;
+use ic_fondue::result::{propagate_children_results_to_parents, TestResultNode};
+use ic_tests::driver::cli::{
+    CliArgs, DriverSubCommand, ValidatedCliProcessTestsArgs, ValidatedCliRunTestsArgs,
+};
+use ic_tests::driver::config;
 use ic_tests::driver::driver_setup::{create_driver_context_from_cli, initialize_env, mk_logger};
-use ic_tests::driver::evaluation::evaluate;
+use ic_tests::driver::evaluation::{evaluate, generate_suite_execution_contract};
 use ic_tests::driver::ic::VmAllocationStrategy;
 use ic_tests::driver::pot_dsl::*;
 use ic_tests::driver::test_env::TestEnv;
@@ -14,20 +18,10 @@ use ic_tests::{
 use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
-fn main() -> anyhow::Result<()> {
-    let cli_args = CliArgs::parse();
-    let validated_args = cli_args.validate()?;
-
-    let mut writer = None;
-    if let Some(ref p) = validated_args.result_file {
-        let f = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(p)?;
-        writer = Some(std::io::BufWriter::new(Box::new(f)));
-    }
-
+fn run_tests(validated_args: ValidatedCliRunTestsArgs) -> anyhow::Result<()> {
     let mut suite = match get_test_suites().remove(&validated_args.suite) {
         Some(s) => s,
         None => anyhow::bail!(format!("Test suite {} is undefined", &validated_args.suite)),
@@ -38,24 +32,113 @@ fn main() -> anyhow::Result<()> {
         &validated_args.ignore_pattern,
         &validated_args.skip_pattern,
     );
-
-    let system_env = validated_args.working_dir.join("system_env");
+    let system_env = validated_args.working_dir.join(config::SYSTEM_ENV_DIR);
     fs::create_dir(&system_env)?;
     let logger = mk_logger();
     let env = TestEnv::new(system_env, logger.clone())?;
     initialize_env(&env, validated_args.clone())?;
-
     let context = create_driver_context_from_cli(validated_args, env, get_hostname());
-    let result = evaluate(&context, suite);
+    // Contract file is used in the processing stage of the test results.
+    // It is necessary to infer if tests/pots/suite were executed successfully according to the plan.
+    let suite_contract = generate_suite_execution_contract(&suite);
+    context
+        .env
+        .write_json_object(config::TEST_SUITE_CONTRACT_FILE, &suite_contract)
+        .expect("Couldn't save test suite execution contract file.");
+    // Run all tests. Each test dumps an execution result file, which indicates whether this test has succeeded or failed (with an error message).
+    evaluate(&context, suite);
+    Ok(())
+}
 
-    if let Some(mut w) = writer {
-        serde_json::to_writer_pretty(&mut w, &result)?;
+fn process_test_results(validated_args: ValidatedCliProcessTestsArgs) -> anyhow::Result<()> {
+    let working_dir: PathBuf = validated_args.working_dir;
+    // Final result object to be populated/updated with individual test results and saved.
+    let mut suite_result: TestResultNode = {
+        let suite_contract_file = working_dir
+            .join(Path::new(config::SYSTEM_ENV_DIR).join(config::TEST_SUITE_CONTRACT_FILE));
+        let file = fs::File::open(&suite_contract_file)
+            .unwrap_or_else(|_| panic!("Could not open: {:?}", suite_contract_file));
+        let suite_contract = serde_json::from_reader(&file)
+            .unwrap_or_else(|_| panic!("Could not read json. {:?}", &file));
+        TestResultNode::from(&suite_contract)
+    };
+    // Walk over all test result files and update suite object with corresponding results.
+    let test_depth_level: usize = 1;
+    let pot_depth_level: usize = 3;
+    for entry in WalkDir::new(working_dir) {
+        let path: PathBuf = entry.unwrap().into_path();
+        let file_name: &str = path.file_name().unwrap().to_str().unwrap();
+        if !file_name.contains(config::TEST_RESULT_FILE) {
+            continue;
+        }
+        let test_name = path
+            .ancestors()
+            .nth(test_depth_level)
+            .unwrap()
+            .file_name()
+            .unwrap();
+        let pot_name = path
+            .ancestors()
+            .nth(pot_depth_level)
+            .unwrap()
+            .file_name()
+            .unwrap();
+        let test_result: TestResultNode = {
+            let file =
+                fs::File::open(&path).unwrap_or_else(|_| panic!("Could not open: {:?}", path));
+            serde_json::from_reader(&file)
+                .unwrap_or_else(|_| panic!("Could not read json. {:?}", &file))
+        };
+        // Update suite result object with a test result.
+        let test: &mut TestResultNode = suite_result
+            .children
+            .iter_mut()
+            .find(|p| p.name.as_str() == pot_name)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Couldn't match the pot={} in the suite contract.",
+                    pot_name.to_str().unwrap()
+                )
+            })
+            .children
+            .iter_mut()
+            .find(|t| t.name.as_str() == test_name)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Couldn't match the test={} in the suite contract.",
+                    test_name.to_str().unwrap()
+                )
+            });
+        *test = test_result;
     }
-
-    if let TestResult::Failed(_) = result.result {
-        anyhow::bail!(format!("Test suite {} failed", result.name))
+    // Recursively infer suite and pot level results from individual tests results.
+    propagate_children_results_to_parents(&mut suite_result);
+    // Save the final result file of the test suite.
+    let suite_result_file = validated_args
+        .test_result_dir
+        .join(config::TEST_SUITE_RESULT_FILE);
+    let content = serde_json::to_string_pretty(&suite_result)
+        .unwrap_or_else(|e| panic!("Could not serialize suite result to string. error={:?}", e));
+    fs::write(suite_result_file, content)
+        .unwrap_or_else(|e| panic!("Could not save test suite result to a file. error={:?}", e));
+    if let TestResult::Failed(_) = suite_result.result {
+        anyhow::bail!(format!("Test suite {} failed", suite_result.name))
     } else {
         Ok(())
+    }
+}
+
+fn main() -> anyhow::Result<()> {
+    let cli_args = CliArgs::parse();
+    match cli_args.action {
+        DriverSubCommand::RunTests(args) => {
+            let validated_args = args.validate()?;
+            run_tests(validated_args)
+        }
+        DriverSubCommand::ProcessTestResults(args) => {
+            let validated_args = args.validate()?;
+            process_test_results(validated_args)
+        }
     }
 }
 

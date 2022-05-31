@@ -16,7 +16,7 @@ use std::{
 };
 use url::Url;
 
-use super::cli::ValidatedCliArgs;
+use super::cli::ValidatedCliRunTestsArgs;
 use super::farm::Farm;
 use super::pot_dsl::{self};
 use super::test_env::HasBaseLogDir;
@@ -46,7 +46,7 @@ impl TestEnvAttribute for IcSetup {
     }
 }
 
-pub fn initialize_env(env: &TestEnv, cli_args: ValidatedCliArgs) -> Result<()> {
+pub fn initialize_env(env: &TestEnv, cli_args: ValidatedCliRunTestsArgs) -> Result<()> {
     let farm_base_url = cli_args
         .farm_base_url
         .clone()
@@ -91,7 +91,7 @@ fn copy_ssh_keys(env: &TestEnv, authorized_ssh_accounts: PathBuf) -> Result<()> 
 }
 
 pub fn create_driver_context_from_cli(
-    cli_args: ValidatedCliArgs,
+    cli_args: ValidatedCliRunTestsArgs,
     env: TestEnv,
     hostname: Option<String>,
 ) -> DriverContext {

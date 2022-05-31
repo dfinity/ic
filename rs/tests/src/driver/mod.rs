@@ -1,6 +1,7 @@
 pub mod bootstrap;
 pub mod boundary_node;
 pub mod cli;
+pub mod config;
 pub mod driver_setup;
 pub mod evaluation;
 pub mod farm;
