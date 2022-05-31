@@ -768,7 +768,7 @@ mod tests {
     use crate::{
         pb::v1::Empty,
         tests::{assert_is_err, assert_is_ok},
-        types::tests::NativeEnvironment,
+        types::test_helpers::NativeEnvironment,
     };
     use futures::FutureExt;
     use ic_base_types::PrincipalId;

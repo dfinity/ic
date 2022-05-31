@@ -7046,6 +7046,7 @@ dependencies = [
  "lazy_static",
  "ledger-canister",
  "maplit",
+ "num",
  "on_wire",
  "pretty_assertions 1.0.0",
  "proptest 1.0.0",
@@ -7073,6 +7074,7 @@ name = "ic-sns-integration-tests"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
+ "async-trait",
  "byteorder",
  "candid",
  "canister-test",

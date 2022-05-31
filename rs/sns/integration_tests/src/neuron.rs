@@ -1,29 +1,33 @@
+use async_trait::async_trait;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
 use ic_crypto_sha::Sha256;
+use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
-use ic_sns_governance::neuron::NeuronState;
-use ic_sns_governance::pb::v1::governance_error::ErrorType;
-use ic_sns_governance::pb::v1::manage_neuron::{
-    claim_or_refresh::{By, MemoAndController},
-    configure::Operation,
-    AddNeuronPermissions, ClaimOrRefresh, Configure, IncreaseDissolveDelay,
+use ic_sns_governance::{
+    governance::Governance,
+    neuron::NeuronState,
+    pb::v1::{
+        governance_error::ErrorType,
+        manage_neuron::{
+            claim_or_refresh::{By, MemoAndController},
+            configure::Operation,
+            AddNeuronPermissions, ClaimOrRefresh, Command, Configure, DisburseMaturity,
+            IncreaseDissolveDelay, RemoveNeuronPermissions,
+        },
+        manage_neuron_response::Command as CommandResponse,
+        proposal::Action,
+        Ballot, Empty, Governance as GovernanceProto, ListNeurons, ListNeuronsResponse,
+        ManageNeuron, ManageNeuronResponse, Motion, NervousSystemParameters, Neuron, NeuronId,
+        NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+        ProposalId, ProposalRewardStatus, RewardEvent, Vote, WaitForQuietState,
+    },
+    types::{test_helpers::NativeEnvironment, Environment, ONE_YEAR_SECONDS},
 };
-use ic_sns_governance::pb::v1::manage_neuron::{
-    Command, DisburseMaturity, RemoveNeuronPermissions,
-};
-use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
-use ic_sns_governance::pb::v1::proposal::Action;
-use ic_sns_governance::pb::v1::{
-    Empty, ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion,
-    NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-    NeuronPermissionType, Proposal,
-};
-use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder, UserInfo, NONCE,
 };
@@ -31,8 +35,8 @@ use ic_sns_test_utils::now_seconds;
 use ic_types::PrincipalId;
 use ledger_canister::{AccountIdentifier, Tokens, TOKEN_SUBDIVIDABLE_BY};
 use ledger_canister::{Memo, SendArgs, Subaccount, DEFAULT_TRANSFER_FEE};
-use std::collections::HashSet;
-use std::iter::FromIterator;
+use maplit::btreemap;
+use std::{collections::HashSet, convert::TryInto, iter::FromIterator};
 
 // This tests the determinism of list_neurons, now that the subaccount is used for
 // the unique identifier of the Neuron.
@@ -784,6 +788,157 @@ fn test_disbursing_maturity_with_no_maturity_fails() {
 
         Ok(())
     });
+}
+
+#[tokio::test]
+async fn zero_total_reward_shares() {
+    // Step 1: Prepare the world.
+
+    struct EmptyLedger {}
+    #[async_trait]
+    impl Ledger for EmptyLedger {
+        async fn transfer_funds(
+            &self,
+            _amount_e8s: u64,
+            _fee_e8s: u64,
+            _from_subaccount: Option<Subaccount>,
+            _to: AccountIdentifier,
+            _memo: u64,
+        ) -> Result<u64, NervousSystemError> {
+            unimplemented!();
+        }
+
+        async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+            Ok(Tokens::from_e8s(0))
+        }
+
+        async fn account_balance(
+            &self,
+            _account: AccountIdentifier,
+        ) -> Result<Tokens, NervousSystemError> {
+            Ok(Tokens::from_e8s(0))
+        }
+    }
+
+    let environment = NativeEnvironment::default();
+    let now = environment.now();
+
+    let genesis_timestamp_seconds = 1;
+
+    // Step 1.1: Craft a neuron with a "net" stake (i.e. cached stake - fees) of 0.
+    let neuron_id = NeuronId { id: vec![1, 2, 3] };
+    // A number whose only significance is that it is not Protocol Buffers default (i.e. 0.0).
+    let maturity_e8s_equivalent = 3;
+    let depleted_neuron = Neuron {
+        id: Some(neuron_id.clone()),
+        cached_neuron_stake_e8s: 1_000_000_000,
+        neuron_fees_e8s: 1_000_000_000,
+        maturity_e8s_equivalent,
+        ..Default::default()
+    };
+    let voting_power = depleted_neuron.voting_power(now, 60, 60);
+    assert_eq!(voting_power, 0);
+
+    // Step 1.2: Craft a ProposalData that is ReadyToSettle.
+    let proposal_id = 99;
+    let do_nothing_proposal = Proposal {
+        action: Some(Action::Motion(Motion {
+            motion_text: "For great justice.".to_string(),
+        })),
+        ..Default::default()
+    };
+    let ready_to_settle_proposal_data = ProposalData {
+        id: Some(ProposalId { id: proposal_id }),
+        proposal: Some(do_nothing_proposal),
+        ballots: btreemap! {
+            depleted_neuron.id.as_ref().unwrap().to_string() => Ballot {
+                vote: Vote::Yes as i32,
+                voting_power,
+                cast_timestamp_seconds: now,
+            },
+        },
+        wait_for_quiet_state: Some(WaitForQuietState::default()),
+        ..Default::default()
+    };
+    assert_eq!(
+        ready_to_settle_proposal_data.reward_status(now),
+        ProposalRewardStatus::ReadyToSettle,
+    );
+
+    // Step 1.3: Craft a governance.
+    let root_canister_id = [1; 29];
+    let ledger_canister_id = [2; 29];
+    let proto = GovernanceProto {
+        // These won't be used, so we use garbage values.
+        root_canister_id: Some(PrincipalId::new(29, root_canister_id)),
+        ledger_canister_id: Some(PrincipalId::new(29, ledger_canister_id)),
+        parameters: Some(NervousSystemParameters::with_default_values()),
+
+        genesis_timestamp_seconds,
+
+        proposals: btreemap! {
+            ready_to_settle_proposal_data.id.unwrap().id => ready_to_settle_proposal_data,
+        },
+        neurons: btreemap! {
+            depleted_neuron.id.as_ref().unwrap().to_string() => depleted_neuron,
+        },
+
+        // Last reward event was a "long time ago".
+        // This should cause rewards to be distributed.
+        latest_reward_event: Some(RewardEvent {
+            periods_since_genesis: 1,
+            actual_timestamp_seconds: 1,
+            settled_proposals: vec![],
+            distributed_e8s_equivalent: 0,
+        }),
+
+        ..Default::default()
+    };
+    let mut governance = Governance::new(
+        proto.try_into().unwrap(),
+        Box::new(environment),
+        Box::new(EmptyLedger {}),
+    );
+    // Prevent gc.
+    governance.latest_gc_timestamp_seconds = now;
+
+    // Step 2: Run code under test.
+    governance.run_periodic_tasks().await;
+
+    // Step 3: Inspect results. The main thing is to make sure that we did not
+    // divide by zero. If that happened, it would show up in a couple places:
+    // neuron maturity, and latest_reward_event.
+
+    // Step 3.1: Inspect the neuron.
+    let neuron = governance
+        .proto
+        .neurons
+        .get(&neuron_id.to_string())
+        .unwrap();
+    // We expect no change to the neuron's maturity.
+    assert_eq!(
+        neuron.maturity_e8s_equivalent, maturity_e8s_equivalent,
+        "neuron: {:#?}",
+        neuron,
+    );
+
+    // Step 3.2: Inspect the latest_reward_event.
+    let reward_event = governance.proto.latest_reward_event.as_ref().unwrap();
+    assert_eq!(
+        reward_event
+            .settled_proposals
+            .iter()
+            .map(|p| p.id)
+            .collect::<Vec<_>>(),
+        vec![proposal_id],
+        "{:#?}",
+        reward_event,
+    );
+    assert_eq!(
+        reward_event.distributed_e8s_equivalent, 0,
+        "{:#?}",
+        reward_event,
+    );
 }
 
 async fn paginate_neurons(
