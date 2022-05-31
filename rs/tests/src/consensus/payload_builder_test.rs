@@ -43,7 +43,7 @@ const XNET_MAX_SIZE: usize = 2 * 1024 * 1024;
 // In both cases, we have to account for the extra command bytes of the unican,
 // that preceed the message. In the case of the ingress messages, we also have
 // to account for the ingress message header.
-const INGRESS_MSG_SIZE: usize = 4 * 1024 * 1024 - 348;
+const INGRESS_MSG_SIZE: usize = 4 * 1024 * 1024 - 360;
 const XNET_MSG_SIZE: usize = 2 * 1024 * 1024 - 20;
 
 /// Configuration that is used for the maximum payload size tests.
