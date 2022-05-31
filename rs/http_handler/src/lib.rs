@@ -77,8 +77,8 @@ use tokio::{
     time::{sleep, timeout, Instant},
 };
 use tower::{
-    buffer::Buffer, load_shed::LoadShed, service_fn, util::BoxService, Service, ServiceBuilder,
-    ServiceExt,
+    buffer::Buffer, load_shed::LoadShed, service_fn, util::BoxCloneService, util::BoxService,
+    BoxError, Service, ServiceBuilder, ServiceExt,
 };
 
 // Constants defining the limits of the HttpHandler.
@@ -155,20 +155,23 @@ impl std::fmt::Display for HttpError {
 
 impl std::error::Error for HttpError {}
 
+pub(crate) type EndpointService = BoxCloneService<Body, Response<Body>, BoxError>;
+
 /// The struct that handles incoming HTTP requests for the IC replica.
 /// This is collection of thread-safe data members.
 #[derive(Clone)]
 struct HttpHandler {
     log: ReplicaLogger,
-    config: Config,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
-    subnet_type: SubnetType,
-    state_reader_executor: StateReaderExecutor,
     registry_client: Arc<dyn RegistryClient>,
     validator_executor: ValidatorExecutor,
 
-    // External services  wrapped by tower::Buffer. It is safe to be
+    dashboard_service: EndpointService,
+    status_service: EndpointService,
+    read_state_service: EndpointService,
+
+    // External services wrapped by tower::Buffer. It is safe to be
     // cloned and passed to a single-threaded context.
     query_execution_service: QueryExecutionService,
     ingress_sender: Buffer<IngressIngestionService, SignedIngress>,
@@ -307,25 +310,54 @@ pub fn start_server(
             .buffer(MAX_BUFFERED_INGRESS_MESSAGES)
             .service(ingress_ingestion_service);
 
+        let delegation_from_nns = Arc::new(RwLock::new(None));
+        let health_status = Arc::new(RwLock::new(ReplicaHealthStatus::Starting));
+        let state_reader_executor = StateReaderExecutor::new(state_reader.clone());
+        let validator_executor = ValidatorExecutor::new(ingress_verifier, log.clone());
+
+        let read_state_service = ReadStateService::new_service(
+            log.clone(),
+            metrics.clone(),
+            Arc::clone(&health_status),
+            Arc::clone(&delegation_from_nns),
+            state_reader_executor.clone(),
+            validator_executor.clone(),
+            Arc::clone(&registry_client),
+            malicious_flags.clone(),
+        );
+
+        let status_service = StatusService::new_service(
+            log.clone(),
+            config.clone(),
+            nns_subnet_id,
+            state_reader_executor.clone(),
+            Arc::clone(&health_status),
+        );
+
+        let dashboard_service = DashboardService::new_service(
+            config.clone(),
+            subnet_type,
+            state_reader_executor.clone(),
+        );
+
         let http_handler = HttpHandler {
             log: log.clone(),
-            config,
             subnet_id,
             nns_subnet_id,
-            subnet_type,
-            state_reader_executor: StateReaderExecutor::new(state_reader.clone()),
+            validator_executor,
             registry_client,
-            validator_executor: ValidatorExecutor::new(ingress_verifier, log.clone()),
+            status_service,
+            dashboard_service,
+            read_state_service,
             query_execution_service,
             ingress_sender,
             ingress_filter,
             consensus_pool_cache,
             backup_spool_path,
             malicious_flags,
-            delegation_from_nns: Arc::new(RwLock::new(None)),
-            health_status: Arc::new(RwLock::new(ReplicaHealthStatus::Starting)),
+            delegation_from_nns,
+            health_status,
         };
-
         info!(log, "Binding HTTP server to address {}", addr);
         let tcp_listener = TcpListener::bind(addr).await.unwrap();
 
@@ -583,18 +615,8 @@ async fn make_router(
                 http_handler.malicious_flags.clone(),
             )),
     );
-    let status_service = BoxService::new(StatusService::new(
-        http_handler.log.clone(),
-        http_handler.config.clone(),
-        http_handler.nns_subnet_id,
-        http_handler.state_reader_executor.clone(),
-        Arc::clone(&http_handler.health_status),
-    ));
-    let dashboard_service = BoxService::new(DashboardService::new(
-        http_handler.config,
-        http_handler.subnet_type,
-        http_handler.state_reader_executor.clone(),
-    ));
+    let status_service = BoxService::new(http_handler.status_service.clone());
+
     let catch_up_package_service = BoxService::new(
         ServiceBuilder::new()
             .layer(BodyReceiverLayer::default())
@@ -603,20 +625,9 @@ async fn make_router(
                 http_handler.consensus_pool_cache,
             )),
     );
-    let read_state_service = BoxService::new(
-        ServiceBuilder::new()
-            .layer(BodyReceiverLayer::default())
-            .service(ReadStateService::new(
-                http_handler.log.clone(),
-                metrics.clone(),
-                Arc::clone(&http_handler.health_status),
-                Arc::clone(&http_handler.delegation_from_nns),
-                http_handler.state_reader_executor.clone(),
-                http_handler.validator_executor.clone(),
-                Arc::clone(&http_handler.registry_client),
-                http_handler.malicious_flags.clone(),
-            )),
-    );
+    let dashboard_service = BoxService::new(http_handler.dashboard_service.clone());
+    let read_state_service = BoxService::new(http_handler.read_state_service.clone());
+
     let call_service = BoxService::new(
         ServiceBuilder::new()
             .layer(BodyReceiverLayer::default())
