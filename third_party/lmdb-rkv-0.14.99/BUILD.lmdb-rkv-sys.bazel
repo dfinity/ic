@@ -1,0 +1,40 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+
+rust_library(
+    name = "lmdb-sys",
+    srcs = [
+        "src/lib.rs",
+    ],
+    crate_name = "lmdb_sys",
+    edition = "2015",
+    version = "0.11.99",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":lmdb_sys_build_script",
+        "@crate_index//:libc",
+        "@lmdb",
+    ],
+)
+
+cargo_build_script(
+    name = "lmdb_sys_build_script",
+    srcs = [
+        "bindgen.rs",
+        "build.rs",
+    ],
+    build_script_env = {
+        "LMDB_NO_BUILD": "1",
+        "LMDB_H_PATH": "$(location @lmdb//:lmdb.h)",
+    },
+    crate_root = "build.rs",
+    data = [
+        "@lmdb//:lmdb.h",
+    ],
+    edition = "2015",
+    deps = [
+        "@crate_index//:bindgen",
+        "@crate_index//:cc",
+        "@crate_index//:pkg-config",
+    ],
+)

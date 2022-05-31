@@ -1,0 +1,24 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+rust_library(
+    name = "lmdb_rkv",
+    srcs = glob(["src/**"]),
+    crate_name = "lmdb",
+    edition = "2015",
+    version = "0.14.99",
+    deps = [
+        "//lmdb-sys",
+        "@crate_index//:bitflags",
+        "@crate_index//:byteorder",
+        "@crate_index//:libc",
+    ],
+)
+
+rust_test(
+    name = "lmdb_rkv_test",
+    crate = ":lmdb_rkv",
+    deps = [
+        "@crate_index//:rand",
+        "@crate_index//:tempfile",
+    ],
+)
