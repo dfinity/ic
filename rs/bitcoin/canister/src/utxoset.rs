@@ -226,7 +226,8 @@ mod test {
             );
 
             // Spend the output to address 2.
-            let tx = TransactionBuilder::with_input(OutPoint::new(coinbase_tx.txid(), 0))
+            let tx = TransactionBuilder::new()
+                .with_input(OutPoint::new(coinbase_tx.txid(), 0))
                 .with_output(&address_2, 1000)
                 .build();
             insert_tx(&mut utxo, &tx, 1);

@@ -219,7 +219,8 @@ mod test {
         address_utxo_set.insert_tx(&coinbase_tx, 0);
 
         // Extend block 0 with block 1 that spends the 1000 satoshis and gives them to address 2.
-        let tx = TransactionBuilder::with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
+        let tx = TransactionBuilder::new()
+            .with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
             .with_output(&address_2, 1000)
             .build();
 
