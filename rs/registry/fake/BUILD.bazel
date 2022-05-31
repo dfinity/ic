@@ -1,0 +1,19 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "fake",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_registry_client_fake",
+    edition = "2018",
+    deps = [
+        "//rs/interfaces",
+        "//rs/types/types",
+    ],
+)
