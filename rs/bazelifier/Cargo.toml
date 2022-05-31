@@ -9,3 +9,4 @@ toml = "0.5.9"
 pathdiff = "0.2.1"
 serde = { version = "1.0.137", features = ["derive"] }
 eyre = "0.6.8"
+clap = { version = "3.1.18", features = ["derive"] }

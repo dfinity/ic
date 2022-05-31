@@ -623,6 +623,7 @@ name = "bazelifier"
 version = "0.1.0"
 dependencies = [
  "askama",
+ "clap 3.1.18",
  "eyre",
  "pathdiff",
  "serde",
@@ -906,7 +907,7 @@ dependencies = [
  "axum",
  "base64 0.13.0",
  "candid",
- "clap 3.1.9",
+ "clap 3.1.18",
  "futures",
  "garcon",
  "glob 0.3.0",
@@ -1294,9 +1295,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.1.9"
+version = "3.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6aad2534fad53df1cc12519c5cda696dd3e20e6118a027e24054aea14a0bdcbe"
+checksum = "d2dbdf4bdacb33466e854ce889eee8dfd5729abf7ccd7664d0a2d60cd384440b"
 dependencies = [
  "atty",
  "bitflags",
@@ -1311,9 +1312,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "3.1.7"
+version = "3.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3aab4734e083b809aaf5794e14e756d1c798d2c69c7f7de7a09a2f5214993c1"
+checksum = "25320346e922cffe59c0bbc5410c8d8784509efb321488971081313cb1e1a33c"
 dependencies = [
  "heck 0.4.0",
  "proc-macro-error",
@@ -1324,9 +1325,9 @@ dependencies = [
 
 [[package]]
 name = "clap_lex"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "189ddd3b5d32a70b35e7686054371742a937b0d99128e76dde6340210e966669"
+checksum = "a37c35f1112dad5e6e0b1adaff798507497a18fceeb30cceb3bae7d1427b9213"
 dependencies = [
  "os_str_bytes",
 ]
@@ -3055,7 +3056,7 @@ dependencies = [
  "bytes",
  "candid",
  "canister-test",
- "clap 3.1.9",
+ "clap 3.1.18",
  "dfn_candid",
  "garcon",
  "ic-agent 0.6.0",
@@ -3467,7 +3468,7 @@ dependencies = [
  "bytes",
  "candid",
  "chrono",
- "clap 3.1.9",
+ "clap 3.1.18",
  "cycles-minting-canister",
  "ed25519-dalek",
  "futures",
@@ -3654,7 +3655,7 @@ version = "0.8.0"
 dependencies = [
  "bincode",
  "byteorder",
- "clap 3.1.9",
+ "clap 3.1.18",
  "criterion",
  "ic-config",
  "ic-consensus-message",
@@ -3745,7 +3746,7 @@ name = "ic-btc-adapter"
 version = "0.1.0"
 dependencies = [
  "bitcoin",
- "clap 3.1.9",
+ "clap 3.1.18",
  "futures",
  "hashlink 0.8.0",
  "hex",
@@ -3797,7 +3798,7 @@ dependencies = [
  "bitcoin",
  "byteorder",
  "candid",
- "clap 3.1.9",
+ "clap 3.1.18",
  "ic-btc-test-utils",
  "ic-btc-types",
  "ic-btc-types-internal",
@@ -3923,7 +3924,7 @@ version = "0.1.0"
 dependencies = [
  "async-socks5",
  "async-stream",
- "clap 3.1.9",
+ "clap 3.1.18",
  "fast-socks5",
  "futures",
  "http",
@@ -4328,7 +4329,7 @@ dependencies = [
  "arrayvec 0.5.1",
  "async-trait",
  "base64 0.11.0",
- "clap 3.1.9",
+ "clap 3.1.18",
  "criterion",
  "ed25519-dalek",
  "hex",
@@ -5130,7 +5131,7 @@ dependencies = [
 name = "ic-drun"
 version = "0.8.0"
 dependencies = [
- "clap 3.1.9",
+ "clap 3.1.18",
  "hex",
  "ic-canister-sandbox-backend-lib",
  "ic-canister-sandbox-launcher",
@@ -5428,7 +5429,7 @@ name = "ic-identity"
 version = "0.8.0"
 dependencies = [
  "anyhow",
- "clap 3.1.9",
+ "clap 3.1.18",
  "ed25519-dalek",
  "ic-crypto-internal-types",
  "ic-crypto-utils-basic-sig",
@@ -5922,7 +5923,7 @@ version = "0.8.0"
 dependencies = [
  "candid",
  "canister-test",
- "clap 3.1.9",
+ "clap 3.1.18",
  "ic-base-types",
  "ic-canister-client",
  "ic-interfaces",
@@ -5946,7 +5947,7 @@ dependencies = [
 name = "ic-nns-inspector"
 version = "0.1.0"
 dependencies = [
- "clap 3.1.9",
+ "clap 3.1.18",
  "csv",
  "hex",
  "ic-base-types",
@@ -6127,7 +6128,7 @@ name = "ic-p8s-service-discovery"
 version = "0.8.0"
 dependencies = [
  "anyhow",
- "clap 3.1.9",
+ "clap 3.1.18",
  "crossbeam 0.8.0",
  "crossbeam-channel 0.5.1",
  "elastic_common_schema",
@@ -6208,7 +6209,7 @@ dependencies = [
  "assert_matches",
  "base64 0.11.0",
  "chrono",
- "clap 3.1.9",
+ "clap 3.1.18",
  "fs_extra",
  "ic-config",
  "ic-crypto",
@@ -6288,7 +6289,7 @@ name = "ic-recovery"
 version = "0.1.0"
 dependencies = [
  "candid",
- "clap 3.1.9",
+ "clap 3.1.18",
  "hex",
  "ic-base-types",
  "ic-cup-explorer",
@@ -6313,7 +6314,7 @@ name = "ic-regedit"
 version = "0.8.0"
 dependencies = [
  "anyhow",
- "clap 3.1.9",
+ "clap 3.1.18",
  "ic-base-types",
  "ic-crypto-sha",
  "ic-prep",
@@ -6590,7 +6591,7 @@ name = "ic-replay"
 version = "0.8.0"
 dependencies = [
  "candid",
- "clap 3.1.9",
+ "clap 3.1.18",
  "hex",
  "ic-artifact-pool",
  "ic-canister-client",
@@ -6646,7 +6647,7 @@ dependencies = [
  "assert_cmd",
  "base64 0.11.0",
  "canister-test",
- "clap 3.1.9",
+ "clap 3.1.18",
  "criterion",
  "hex",
  "ic-async-utils",
@@ -6841,7 +6842,7 @@ dependencies = [
  "async-trait",
  "base64 0.13.0",
  "candid",
- "clap 3.1.9",
+ "clap 3.1.18",
  "dfn_candid",
  "dfn_core",
  "dfn_macro",
@@ -6917,7 +6918,7 @@ dependencies = [
  "candid",
  "canister-test",
  "chrono",
- "clap 3.1.9",
+ "clap 3.1.18",
  "colored",
  "crossbeam-channel 0.5.1",
  "dfn_candid",
@@ -6983,7 +6984,7 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "candid",
- "clap 3.1.9",
+ "clap 3.1.18",
  "dfn_candid",
  "dfn_core",
  "dfn_protobuf",
@@ -7166,7 +7167,7 @@ name = "ic-starter"
 version = "0.8.0"
 dependencies = [
  "anyhow",
- "clap 3.1.9",
+ "clap 3.1.18",
  "ic-config",
  "ic-logger",
  "ic-prep",
@@ -7300,7 +7301,7 @@ dependencies = [
 name = "ic-state-tool"
 version = "0.8.0"
 dependencies = [
- "clap 3.1.9",
+ "clap 3.1.18",
  "hex",
  "ic-config",
  "ic-logger",
@@ -7532,7 +7533,7 @@ name = "ic-transport-test-client"
 version = "0.8.0"
 dependencies = [
  "async-trait",
- "clap 3.1.9",
+ "clap 3.1.18",
  "crossbeam-channel 0.5.1",
  "futures",
  "ic-config",
@@ -7746,7 +7747,7 @@ dependencies = [
  "byte-unit",
  "candid",
  "chrono",
- "clap 3.1.9",
+ "clap 3.1.18",
  "console 0.11.3",
  "ed25519-dalek",
  "futures",
@@ -8572,7 +8573,7 @@ name = "log_analyzer"
 version = "0.8.0"
 dependencies = [
  "chrono",
- "clap 3.1.9",
+ "clap 3.1.18",
  "criterion",
  "lazy_static",
  "regex",
@@ -9509,7 +9510,7 @@ version = "0.8.0"
 dependencies = [
  "assert_cmd",
  "candid",
- "clap 3.1.9",
+ "clap 3.1.18",
  "exec",
  "hex",
  "http",
@@ -12410,7 +12411,7 @@ dependencies = [
  "candid",
  "canister-test",
  "chrono",
- "clap 3.1.9",
+ "clap 3.1.18",
  "crossbeam-channel 0.5.1",
  "cycles-minting-canister",
  "dfn_candid",
@@ -13267,7 +13268,7 @@ dependencies = [
 name = "vsock_agent"
 version = "0.8.0"
 dependencies = [
- "clap 3.1.9",
+ "clap 3.1.18",
  "libc",
  "nix 0.23.0",
  "rand 0.8.4",

@@ -2,6 +2,11 @@ load("@rules_rust//rust:defs.bzl", "{{ build_type }}")
 
 package(default_visibility = ["//visibility:public"])
 
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
 {{ build_type }}(
     name = "{{ target_name }}",
     srcs = glob(["src/**"]),
