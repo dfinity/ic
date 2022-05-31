@@ -130,6 +130,7 @@ members = [
   "nns/gtc",
   "nns/gtc/protobuf_generator",
   "nns/gtc_accounts",
+  "nns/sns-wasm",
   "determinism_test",
   "orchestrator",
   "orchestrator/registry_replicator",
