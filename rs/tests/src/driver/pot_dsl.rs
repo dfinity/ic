@@ -169,7 +169,7 @@ pub struct Suite {
     pub pots: Vec<Pot>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub enum ExecutionMode {
     Run,
     Skip,

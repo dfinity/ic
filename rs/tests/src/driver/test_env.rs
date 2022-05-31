@@ -148,8 +148,6 @@ impl HasBaseLogDir for TestEnv {
 }
 
 pub trait HasTestPath {
-    /// This function is to be removed eventually as the path of the test env
-    /// itself is to serve as the test path.
     fn write_test_path(&self, test_path: &TestPath) -> Result<()>;
 
     /// # Panics

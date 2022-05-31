@@ -110,6 +110,7 @@ slog-term = "2.6.0"
 ssh2 = { git = "https://github.com/dfinity-lab/ssh2-rs", branch = "master" }
 tempfile = "3.1.0"
 thiserror = "1.0"
+walkdir = "2.3.1"
 tokio = {version = "1.15.0", features = ["full"]}
 tree-deserializer = { path = "../tree_deserializer" }
 url = "2.1.1"

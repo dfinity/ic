@@ -11,6 +11,31 @@ const RND_SEED_DEFAULT: u64 = 42;
 #[derive(Parser, Debug)]
 #[clap(name = "prod-test-driver", version)]
 pub struct CliArgs {
+    #[clap(subcommand)]
+    pub action: DriverSubCommand,
+}
+
+#[derive(clap::Subcommand, Debug)]
+#[allow(clippy::large_enum_variant)]
+pub enum DriverSubCommand {
+    RunTests(RunTestsArgs),
+    ProcessTestResults(ProcessTestsArgs),
+}
+
+#[derive(clap::Args, Debug)]
+pub struct ProcessTestsArgs {
+    #[clap(
+        long = "working-dir",
+        help = "Path to a working directory of the test driver."
+    )]
+    working_dir: PathBuf,
+
+    #[clap(long = "test-result-dir", help = "Path to the test result directory.")]
+    test_result_dir: PathBuf,
+}
+
+#[derive(clap::Args, Debug)]
+pub struct RunTestsArgs {
     #[clap(
         long = "log-base-dir",
         help = "If set, specifies where to write demultiplexed test-specific logs."
@@ -53,11 +78,11 @@ used."#
     ic_os_img_sha256: String,
 
     #[clap(
-        long = "ic-os-img-url",
-        help = r#"The URL of the IC-OS disk image used by default for all IC nodes
-        version."#,
-        parse(try_from_str = url::Url::parse)
-    )]
+            long = "ic-os-img-url",
+            help = r#"The URL of the IC-OS disk image used by default for all IC nodes
+            version."#,
+            parse(try_from_str = url::Url::parse)
+        )]
     ic_os_img_url: Url,
 
     #[clap(
@@ -67,18 +92,18 @@ used."#
     boundary_node_img_sha256: String,
 
     #[clap(
-        long = "boundary-node-img-url",
-        help = r#"The URL of the Boundary Node disk image"#,
-        parse(try_from_str = url::Url::parse)
-    )]
+            long = "boundary-node-img-url",
+            help = r#"The URL of the Boundary Node disk image"#,
+            parse(try_from_str = url::Url::parse)
+        )]
     boundary_node_img_url: Url,
 
     #[clap(
-        long = "farm-base-url",
-        help = r#"The base URL of the Farm-service to be used for resource
-        management. (default: https://farm.dfinity.systems)"#,
-        parse(try_from_str = url::Url::parse)
-    )]
+            long = "farm-base-url",
+            help = r#"The base URL of the Farm-service to be used for resource
+            management. (default: https://farm.dfinity.systems)"#,
+            parse(try_from_str = url::Url::parse)
+        )]
     farm_base_url: Option<Url>,
 
     #[clap(
@@ -86,77 +111,77 @@ used."#
         parse(from_os_str),
         help = "If set, specifies where to write results of executed tests."
     )]
-    pub result_file: Option<PathBuf>,
+    result_file: Option<PathBuf>,
 
     #[clap(
         long = "nns-canister-path",
         parse(from_os_str),
-        help = r#"Path to directory containing wasm-files of NNS canisters.
-        Required for tests that install NNS canisters."#
+        help = r#"Path to directory containing wasm-files of NNS canisters. 
+Required for tests that install NNS canisters."#
     )]
-    pub nns_canister_path: Option<PathBuf>,
+    nns_canister_path: Option<PathBuf>,
 
     #[clap(long = "suite", help = r#"Mandatory name of a test suite to run."#)]
-    pub suite: String,
+    suite: String,
 
-    #[structopt(
+    #[clap(
         long = "artifacts-path",
         parse(from_os_str),
         help = r#"Path containing test artifacts (additional binaries, canisters, etc.)."#
     )]
-    pub artifacts_path: Option<PathBuf>,
+    artifacts_path: Option<PathBuf>,
 
     #[clap(
         long = "include-pattern",
-        help = r#"If set, only tests matching this regex will be excercised
-        and all others will be ignored. Note: when `include-pattern` is set,
-        `ignore-pattern` and `skip-pattern` are not effective."#
+        help = r#"If set, only tests matching this regex will be exercised 
+and all others will be ignored. Note: when `include-pattern` is set, 
+`ignore-pattern` and `skip-pattern` are not effective."#
     )]
-    pub include_pattern: Option<String>,
+    include_pattern: Option<String>,
 
     #[clap(
         long = "ignore-pattern",
-        help = r#"If set, all tests matching this regex will be ignored,
-        i.e. completely omitted by the framework."#
+        help = r#"If set, all tests matching this regex will be ignored, 
+i.e. completely omitted by the framework."#
     )]
-    pub ignore_pattern: Option<String>,
+    ignore_pattern: Option<String>,
 
     #[clap(
         long = "skip-pattern",
-        help = r#"If set, all tests matching this regex will be skipped,
-        i.e. included in a summary, but not exercised."#
+        help = r#"If set, all tests matching this regex will be skipped, 
+i.e. included in a summary, but not exercised."#
     )]
-    pub skip_pattern: Option<String>,
+    skip_pattern: Option<String>,
 
     #[clap(
         long = "authorized-ssh-accounts",
         parse(from_os_str),
         help = r#"Path to directory containing ssh public/private key pairs
-        (file/file.pub) that are installed on the IC-OS by default."#
+(file/file.pub) that are installed on the IC-OS by default."#
     )]
-    pub authorized_ssh_accounts: Option<PathBuf>,
+    authorized_ssh_accounts: Option<PathBuf>,
 
     #[clap(
         long = "journalbeat-hosts",
-        help = r#"A comma-separated list of hostname/port-pairs that journalbeat
-        should use as target hosts. (e.g. "host1.target.com:443,host2.target.com:443")"#
+        help = r#"A comma-separated list of hostname/port-pairs that journalbeat 
+should use as target hosts. (e.g. "host1.target.com:443,host2.target.com:443")"#
     )]
-    pub journalbeat_hosts: Option<String>,
+    journalbeat_hosts: Option<String>,
 
     #[clap(
         long = "log-debug-overrides",
-        help = r#"A string containing debug overrides in terms of ic.json5.template 
-        (e.g. "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors")"#
+        help = r#"A string containing debug overrides in terms of ic.json5.template  
+(e.g. "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors")"#
     )]
-    pub log_debug_overrides: Option<String>,
+    log_debug_overrides: Option<String>,
 
     #[clap(
-    long = "pot-timeout",
-    default_value = "600s",
-    parse(try_from_str = parse_duration),
-    help = r#"Amount of time to wait before releasing resources allocated for a pot."#
-    )]
-    pub pot_timeout: Duration,
+        long = "pot-timeout",
+        default_value = "600s",
+        parse(try_from_str = parse_duration),
+        help = r#"Amount of time to wait before releasing resources allocated for a pot."#
+        )]
+    pot_timeout: Duration,
 
     #[clap(
         long = "working-dir",
@@ -165,8 +190,17 @@ used."#
     working_dir: PathBuf,
 }
 
-impl CliArgs {
-    pub fn validate(self) -> Result<ValidatedCliArgs> {
+impl ProcessTestsArgs {
+    pub fn validate(self) -> Result<ValidatedCliProcessTestsArgs> {
+        Ok(ValidatedCliProcessTestsArgs {
+            working_dir: self.working_dir,
+            test_result_dir: self.test_result_dir,
+        })
+    }
+}
+
+impl RunTestsArgs {
+    pub fn validate(self) -> Result<ValidatedCliRunTestsArgs> {
         let lvl_str = self.log_level.unwrap_or_else(|| "info".to_string());
         let log_level = if let Ok(v) = slog::Level::from_str(&lvl_str) {
             v
@@ -209,7 +243,7 @@ impl CliArgs {
 
         let log_debug_overrides = parse_log_debug_overrides(self.log_debug_overrides)?;
 
-        Ok(ValidatedCliArgs {
+        Ok(ValidatedCliRunTestsArgs {
             log_base_dir: self.log_base_dir,
             log_level,
             rand_seed: self.rand_seed.unwrap_or(RND_SEED_DEFAULT),
@@ -245,7 +279,13 @@ fn parse_pattern(p: Option<String>) -> Result<Option<Regex>, regex::Error> {
 }
 
 #[derive(Clone, Debug)]
-pub struct ValidatedCliArgs {
+pub struct ValidatedCliProcessTestsArgs {
+    pub working_dir: PathBuf,
+    pub test_result_dir: PathBuf,
+}
+
+#[derive(Clone, Debug)]
+pub struct ValidatedCliRunTestsArgs {
     pub log_base_dir: Option<PathBuf>,
     pub log_level: slog::Level,
     pub rand_seed: u64,

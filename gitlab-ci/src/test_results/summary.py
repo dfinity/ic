@@ -1,4 +1,6 @@
 import argparse
+import glob
+import json
 import logging
 from collections import Counter
 from collections import defaultdict
@@ -14,14 +16,24 @@ NODE_LOGS = "/app/kibana#/discover?_g=(time:(from:now-1y,to:now))&_a=(columns:!(
 KIBANA_BASE_URL = "https://kibana.testnet.dfinity.systems"
 
 
-def summarize(root, verbose, message):
+def summarize(root, working_dir, pot_setup_file, verbose, message):
     """Print an execution summary for a given test results tree."""
     print_statistics(root)
     pots = root.children
+    all_pots_setup_files = glob.glob(f"{working_dir}/**/{pot_setup_file}", recursive=True)
     for p in pots:
         pot_result, _ = input.format_node_result(p.result)
+        group_name = ""
+        try:
+            search_idx = [p.name in s for s in all_pots_setup_files].index(True)
+            group_name_file = all_pots_setup_files[search_idx]
+            with open(group_name_file) as file:
+                data = json.load(file)
+                group_name = data["farm_group_name"]
+        except Exception:
+            print(f"Couldn't establish `group_name` of the pot {p.name}.")
         if verbose or pot_result == "Failed":
-            pot_summary(p)
+            pot_summary(p, group_name)
             if message:
                 import notify_slack
 
@@ -31,7 +43,7 @@ def summarize(root, verbose, message):
                 )
 
 
-def pot_summary(p):
+def pot_summary(p, group_name):
     pot_result, _ = input.format_node_result(p.result)
     result_to_color = {"Failed": "red", "Passed": "green", "Skipped": "white"}
     print(
@@ -43,8 +55,8 @@ def pot_summary(p):
     for t in p.children:
         test_result, _ = input.format_node_result(t.result)
         print(colored("* {} (duration: {}s)".format(t.name, t.duration.secs), result_to_color[test_result]))
-    if p.group_name:
-        print(colored("Node logs: {}\n".format(create_link(p.group_name)), result_to_color[pot_result]))
+    if group_name:
+        print(colored("Node logs: {}\n".format(create_link(group_name)), result_to_color[pot_result]))
 
 
 def create_link(group_name):
@@ -87,6 +99,16 @@ def main():
         help="Path to a file containing results of a test suite.",
     )
     parser.add_argument(
+        "--working_dir",
+        type=str,
+        help="Path to the working directory of the test suite.",
+    )
+    parser.add_argument(
+        "--pot_setup_file",
+        type=str,
+        help="Name of the pot setup file.",
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="If true, list all pots contained in a test suite, instead of only failing ones.",
@@ -99,7 +121,7 @@ def main():
     args = parser.parse_args()
 
     results = input.read_test_results(args.test_results)
-    summarize(results, args.verbose, args.slack_message)
+    summarize(results, args.working_dir, args.pot_setup_file, args.verbose, args.slack_message)
 
 
 if __name__ == "__main__":
