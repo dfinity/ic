@@ -1,0 +1,5 @@
+define ipv6_unique_local_accept = {
+  fd00:2:1:1::/64 # Unique Local IPv6 Unicast Addresses (RFC 4193)
+}
+
+ip6 saddr $ipv6_unique_local_accept ct state new tcp dport ssh accept

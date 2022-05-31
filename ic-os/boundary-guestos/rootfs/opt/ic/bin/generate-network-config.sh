@@ -103,10 +103,12 @@ EOF
 function setup_dev_nftables() {
     if [ $(cat /boot/config/deployment_type) == "dev" ]; then
         pushd /etc
-        cp ./ivp4-dev-ruleset.contents ./ipv4-dev.ruleset
+        cp ./ipv4-dev-ruleset.contents ./ipv4-dev.ruleset
+        cp ./ipv6-dev-ruleset.contents ./ipv6-dev.ruleset
         popd
     else
         echo "" >./ipv4-dev.ruleset
+        echo "" >./ipv6-dev.ruleset
     fi
 }
 
