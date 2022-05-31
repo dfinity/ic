@@ -11,7 +11,7 @@ filegroup(
 )
 
 rust_library(
-    name = "ic_constants",
+    name = "constants",
     srcs = glob(["src/**"]),
     crate_name = "ic_constants",
     edition = "2018",

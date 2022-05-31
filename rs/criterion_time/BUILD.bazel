@@ -11,7 +11,7 @@ filegroup(
 )
 
 rust_library(
-    name = "cirterion_time",
+    name = "criterion_time",
     srcs = glob(["src/**"]),
     edition = "2018",
     deps = [
