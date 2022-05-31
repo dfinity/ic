@@ -284,7 +284,8 @@ mod test {
         );
 
         // Extend block 0 with block 1 that spends the 1000 satoshis and gives them to address 2.
-        let tx = TransactionBuilder::with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
+        let tx = TransactionBuilder::new()
+            .with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
             .with_output(&address_2, 1000)
             .build();
         let block_1 = BlockBuilder::with_prev_header(block_0.header)
@@ -323,7 +324,8 @@ mod test {
 
         // Extend block 0 (again) with block 1 that spends the 1000 satoshis to address 3
         // This causes a fork.
-        let tx = TransactionBuilder::with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
+        let tx = TransactionBuilder::new()
+            .with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
             .with_output(&address_3, 1000)
             .build();
         let block_1_prime = BlockBuilder::with_prev_header(block_0.header)
@@ -359,7 +361,8 @@ mod test {
         // Now extend block 1' with another block that transfers the funds to address 4.
         // In this case, the fork of [block 1', block 2'] will be considered the "main"
         // chain, and will be part of the UTXOs.
-        let tx = TransactionBuilder::with_input(bitcoin::OutPoint::new(tx.txid(), 0))
+        let tx = TransactionBuilder::new()
+            .with_input(bitcoin::OutPoint::new(tx.txid(), 0))
             .with_output(&address_4, 1000)
             .build();
         let block_2_prime = BlockBuilder::with_prev_header(block_1_prime.header)
@@ -654,7 +657,8 @@ mod test {
             let block_0 = BlockBuilder::genesis()
                 .with_transaction(coinbase_tx.clone())
                 .build();
-            let tx = TransactionBuilder::with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
+            let tx = TransactionBuilder::new()
+                .with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
                 .with_output(&address_2, 1000)
                 .build();
             let block_1 = BlockBuilder::with_prev_header(block_0.header)

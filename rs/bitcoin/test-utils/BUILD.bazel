@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -17,4 +17,9 @@ rust_library(
     deps = [
         "@crate_index//:bitcoin",
     ],
+)
+
+rust_test(
+    name = "ic_btc_test_utils_test",
+    crate = ":ic_btc_test_utils",
 )

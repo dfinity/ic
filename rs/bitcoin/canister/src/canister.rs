@@ -180,7 +180,8 @@ mod test {
             let block_0 = BlockBuilder::genesis()
                 .with_transaction(coinbase_tx.clone())
                 .build();
-            let tx = TransactionBuilder::with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
+            let tx = TransactionBuilder::new()
+                .with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
                 .with_output(&address_2, 1000)
                 .build();
             let block_1 = BlockBuilder::with_prev_header(block_0.header)
@@ -259,7 +260,8 @@ mod test {
             let block_0 = BlockBuilder::genesis()
                 .with_transaction(coinbase_tx.clone())
                 .build();
-            let tx = TransactionBuilder::with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
+            let tx = TransactionBuilder::new()
+                .with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
                 .with_output(&address_2, 1000)
                 .build();
             let block_1 = BlockBuilder::with_prev_header(block_0.header)
