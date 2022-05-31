@@ -1,0 +1,30 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "helpers",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_registry_client_helpers",
+    edition = "2018",
+    deps = [
+        "//rs/interfaces",
+        "//rs/protobuf",
+        "//rs/registry/keys",
+        "//rs/registry/proto",
+        "//rs/registry/provisional_whitelist",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_features",
+        "//rs/types/ic00_types",
+        "//rs/types/types",
+        "@crate_index//:serde_cbor",
+    ],
+)
