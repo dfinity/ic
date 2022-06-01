@@ -1,0 +1,34 @@
+= IC_NNS_SubnetMessageInstructionsNearLimit
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+A subnet message execution on the NNS subnet used more than 200B instructions.
+NNS subnet message instruction limit is 1T. Relevant histogram buckets are 70B,
+200B and 1T.
+
+== Impact
+
+Heavy (in terms of instructions) NNS subnet message execution (likely related to
+a canister upgrade) may point to a risk of exceeding the instruction limit and
+failing to upgrade an NNS canister.
+
+Furthermore, long message executions result in increased latency, as perceived
+by both users and other canisters.
+
+== Possible causes (non-exhaustive)
+
+This is usually triggered by canister upgrades, which would mean that further
+increases in the number of instructions required, e.g. due to a growing state,
+might result in failed upgrades.
+
+== Troubleshooting and remediation
+
+Assuming this was triggered by a canister upgrade, look for NNS canister upgrade
+proposals that were executed around the time of the alert, either in the
+link:https://nns.ic0.app/[NNS UI] or on the link:https://dashboard.internetcomputer.org/governance?topic=TOPIC_NETWORK_CANISTER_MANAGEMENT[public dashboard].
+
+If that fails, the full NNS blockchain is persisted, so it should be easy to
+identify the offending message. Contact the `#backup-ops` Slack channel or the
+members of `@dfinity-lab/teams/consensus-owners`.
