@@ -7,6 +7,7 @@ type CanisterStatusResultV2 = record {
   cycles : nat;
   settings : DefiniteCanisterSettingsArgs;
   module_hash : opt vec nat8;
+  idle_cycles_burned_per_second : nat;
 };
 type CanisterStatusType_1 = variant { stopped; stopping; running };
 type DefiniteCanisterSettingsArgs = record {
