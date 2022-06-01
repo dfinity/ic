@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_proc_macro")
+load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_proc_macro(
+    name = "dfn_macro",
+    srcs = glob(["src/**"]),
+    crate_name = "dfn_macro",
+    edition = "2018",
+    deps = [
+        ":build_script",
+        "@crate_index//:proc-macro2",
+        "@crate_index//:quote",
+        "@crate_index//:syn",
+    ],
+)
+
+rust_doc_test(
+    name = "dfn_macro_doc_test",
+    crate = ":dfn_macro",
+)
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:rustversion",
+    ],
+    visibility = ["//visibility:private"],
+)
