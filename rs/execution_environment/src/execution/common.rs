@@ -3,6 +3,7 @@
 
 use ic_base_types::CanisterId;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{ExecResult, HypervisorError};
 use ic_logger::{fatal, warn, ReplicaLogger};
 use ic_replicated_state::{CallContextAction, CallOrigin, CanisterState};
@@ -10,6 +11,20 @@ use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{CallbackId, MessageId, Payload, RejectContext, Response};
 use ic_types::methods::WasmMethod;
 use ic_types::{Cycles, Time, UserId};
+
+pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserError> {
+    if CanisterStatusType::Running != canister.status() {
+        let canister_id = canister.canister_id();
+        let err_code = match canister.status() {
+            CanisterStatusType::Running => unreachable!(),
+            CanisterStatusType::Stopping => ErrorCode::CanisterStopping,
+            CanisterStatusType::Stopped => ErrorCode::CanisterStopped,
+        };
+        let err_msg = format!("Canister {} is not running", canister_id);
+        return Err(UserError::new(err_code, err_msg));
+    }
+    Ok(())
+}
 
 pub(crate) fn action_to_result(
     canister: &CanisterState,
