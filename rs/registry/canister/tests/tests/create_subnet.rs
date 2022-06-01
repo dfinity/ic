@@ -17,7 +17,7 @@ use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetListRecord, SubnetRec
 use ic_registry_keys::{
     make_ecdsa_signing_subnet_list_key, make_subnet_list_record_key, make_subnet_record_key,
 };
-use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_features::{SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, upsert};
 
@@ -267,6 +267,7 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
             subnet_record.ecdsa_config = Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 100,
                 key_ids: vec![(&key_1).into(), (&key_2).into()],
+                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             });
 
             let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
@@ -324,6 +325,7 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
                             subnet_id: Some(*system_subnet_principal),
                         },
                     ],
+                    max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 });
                 payload
             };
@@ -367,6 +369,7 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
             let ecdsa_config = subnet_record.ecdsa_config.unwrap();
 
             assert_eq!(ecdsa_config.quadruples_to_create_in_advance, 101);
+            assert_eq!(ecdsa_config.max_queue_size, DEFAULT_ECDSA_MAX_QUEUE_SIZE);
             let key_ids = ecdsa_config.key_ids;
             assert_eq!(key_ids.len(), 2);
             assert_eq!(

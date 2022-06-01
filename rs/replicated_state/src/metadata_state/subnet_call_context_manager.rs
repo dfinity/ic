@@ -16,8 +16,6 @@ use std::{
     convert::{From, TryFrom},
 };
 
-const MAX_ECDSA_QUEUE_SIZE: usize = 1_000;
-
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SubnetCallContextManager {
     next_callback_id: u64,
@@ -38,8 +36,9 @@ impl SubnetCallContextManager {
     pub fn push_sign_with_ecdsa_request(
         &mut self,
         context: SignWithEcdsaContext,
+        max_queue_size: u32,
     ) -> Result<(), UserError> {
-        if self.sign_with_ecdsa_contexts.len() >= MAX_ECDSA_QUEUE_SIZE {
+        if self.sign_with_ecdsa_contexts.len() >= max_queue_size as usize {
             Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 "sign_with_ecdsa request could not be handled, the ECDSA signature queue is full."

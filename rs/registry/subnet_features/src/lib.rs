@@ -4,6 +4,8 @@ use ic_protobuf::{proxy::ProxyDecodeError, registry::subnet::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, str::FromStr};
 
+pub const DEFAULT_ECDSA_MAX_QUEUE_SIZE: u32 = 20;
+
 /// List of features that can be enabled or disabled on the given subnet.
 #[derive(CandidType, Clone, Copy, Default, Deserialize, Debug, Eq, PartialEq, Serialize)]
 pub struct SubnetFeatures {
@@ -218,6 +220,7 @@ impl From<i32> for BitcoinFeatureStatus {
 pub struct EcdsaConfig {
     pub quadruples_to_create_in_advance: u32,
     pub key_ids: Vec<EcdsaKeyId>,
+    pub max_queue_size: Option<u32>,
 }
 
 impl From<EcdsaConfig> for pb::EcdsaConfig {
@@ -225,6 +228,7 @@ impl From<EcdsaConfig> for pb::EcdsaConfig {
         pb::EcdsaConfig {
             quadruples_to_create_in_advance: item.quadruples_to_create_in_advance,
             key_ids: item.key_ids.iter().map(|key| key.into()).collect(),
+            max_queue_size: item.max_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         }
     }
 }
@@ -240,6 +244,7 @@ impl TryFrom<pb::EcdsaConfig> for EcdsaConfig {
         Ok(EcdsaConfig {
             quadruples_to_create_in_advance: value.quadruples_to_create_in_advance,
             key_ids,
+            max_queue_size: Some(value.max_queue_size),
         })
     }
 }

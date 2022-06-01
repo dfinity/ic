@@ -315,7 +315,7 @@ mod test {
     use ic_base_types::SubnetId;
     use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
-    use ic_registry_subnet_features::EcdsaConfig;
+    use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_registry_transport::{delete, upsert};
     use ic_test_utilities::types::ids::subnet_test_id;
 
@@ -346,6 +346,7 @@ mod test {
             EcdsaConfig {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![key_id.clone()],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }
             .into(),
         );
@@ -460,6 +461,7 @@ mod test {
                 },
                 subnet_id: None,
             }],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
@@ -489,6 +491,7 @@ mod test {
                 key_id,
                 subnet_id: Some(subnet_id_to_request_key_from.get()),
             }],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
@@ -516,6 +519,7 @@ mod test {
                 key_id,
                 subnet_id: Some(subnet_id.get()),
             }],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
@@ -543,6 +547,7 @@ mod test {
                 key_id,
                 subnet_id: None,
             }],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));

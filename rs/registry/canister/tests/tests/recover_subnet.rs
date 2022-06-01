@@ -26,6 +26,7 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_ecdsa_signing_subnet_list_key, make_subnet_list_record_key, make_subnet_record_key,
 };
+use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_registry_transport::{insert, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
@@ -250,6 +251,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
             subnet_record.ecdsa_config = Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 100,
                 key_ids: vec![(&key_1).into(), (&key_2).into()],
+                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             });
 
             let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
@@ -350,6 +352,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                         key_id: key_2.clone(),
                         subnet_id: None,
                     }],
+                    max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 }),
             };
 
@@ -379,6 +382,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
             // Check EcdsaConfig is correctly updated
             let subnet_record = get_subnet_record(&registry, subnet_to_recover_subnet_id).await;
             let ecdsa_config = subnet_record.ecdsa_config.unwrap();
+            assert_eq!(ecdsa_config.max_queue_size, DEFAULT_ECDSA_MAX_QUEUE_SIZE);
 
             let key_ids = ecdsa_config.key_ids;
             assert_eq!(key_ids.len(), 1);

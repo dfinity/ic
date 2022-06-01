@@ -340,6 +340,9 @@ pub struct EcdsaConfig {
     /// Identifiers for threshold ECDSA keys held by the subnet.
     #[prost(message, repeated, tag="3")]
     pub key_ids: ::prost::alloc::vec::Vec<super::super::crypto::v1::EcdsaKeyId>,
+    /// The maximum number of signature requests that can be enqueued at once.
+    #[prost(uint32, tag="4")]
+    pub max_queue_size: u32,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

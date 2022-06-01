@@ -40,7 +40,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{governance::submit_external_update_proposal, ids::TEST_NEURON_1_ID};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
+use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::p2p::{self};
 use ic_types::{Height, ReplicaVersion};
@@ -364,6 +364,7 @@ pub(crate) async fn enable_ecdsa_signing(
         ecdsa_config: Some(EcdsaConfig {
             quadruples_to_create_in_advance: 10,
             key_ids: vec![key_id.clone()],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         }),
         ..empty_subnet_update()
     };
@@ -428,6 +429,7 @@ async fn create_new_subnet_with_keys(
         ecdsa_config: Some(EcdsaInitialConfig {
             quadruples_to_create_in_advance: 4,
             keys,
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         }),
     };
     execute_create_subnet_proposal(governance, payload).await;
