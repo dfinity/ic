@@ -43,6 +43,7 @@ use prometheus::{Encoder, TextEncoder};
 use serde::Deserialize;
 use tokio::{task, time::Instant};
 use tracing::info;
+use tracing_subscriber::prelude::*;
 
 mod metrics;
 use metrics::{MetricParams, WithMetrics};
@@ -53,6 +54,8 @@ const MINUTE: Duration = Duration::from_secs(60);
 const BILLION: u64 = 1_000_000_000;
 
 const CANISTER_WAT: &[u8] = include_bytes!("canister.wat");
+
+const LOG_PREFIX: &str = "prober.log";
 
 #[derive(Parser)]
 #[clap(name = "Prober")]
@@ -81,15 +84,22 @@ struct Cli {
 
     #[clap(long, default_value = "127.0.0.1:9090")]
     metrics_addr: SocketAddr,
+
+    #[clap(long, default_value = "/var/log/prober")]
+    log_dir: PathBuf,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
+    let mk_writer = std::io::stdout;
+    let mk_writer = mk_writer.and(tracing_appender::rolling::hourly(cli.log_dir, LOG_PREFIX));
+
     let subscriber = tracing_subscriber::fmt()
         .json()
         .flatten_event(true)
+        .with_writer(mk_writer)
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("failed to set global subscriber");
