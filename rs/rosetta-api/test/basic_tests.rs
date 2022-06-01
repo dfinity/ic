@@ -35,7 +35,7 @@ async fn smoke_test() {
         transfer_fee: transaction_fee,
         ..Default::default()
     });
-    let req_handler = RosettaRequestHandler::new(ledger.clone());
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
     for b in &scribe.blockchain {
         ledger.add_block(b.clone()).await.ok();
     }
@@ -231,7 +231,7 @@ async fn blocks_test() {
     init_test_logger();
 
     let ledger = Arc::new(TestLedger::new());
-    let req_handler = RosettaRequestHandler::new(ledger.clone());
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
     let mut scribe = Scribe::new();
     let num_transactions: usize = 100;
     let num_accounts = 10;
@@ -365,7 +365,7 @@ async fn balances_test() {
     init_test_logger();
 
     let ledger = Arc::new(TestLedger::new());
-    let req_handler = RosettaRequestHandler::new(ledger.clone());
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger.clone());
     let mut scribe = Scribe::new();
 
     scribe.gen_accounts(2, 1_000_000);
@@ -611,7 +611,7 @@ async fn load_from_store_test() {
     assert!(blocks.get_balance(&some_acc, 20).is_err());
 
     let ledger = Arc::new(TestLedger::from_blockchain(blocks));
-    let req_handler = RosettaRequestHandler::new(ledger);
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger);
     verify_account_search(&scribe, &req_handler, 0, last_verified).await;
 
     drop(req_handler);
@@ -649,7 +649,7 @@ async fn load_from_store_test() {
     // height 10 is the first block available for balance query, but not for
     // transaction search. Transaction search is available from 11
     let ledger = Arc::new(TestLedger::from_blockchain(blocks));
-    let req_handler = RosettaRequestHandler::new(ledger);
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger);
     verify_account_search(&scribe, &req_handler, 11, last_verified).await;
 
     drop(req_handler);
@@ -660,7 +660,7 @@ async fn load_from_store_test() {
     verify_balances(&scribe, &blocks, 10);
 
     let ledger = Arc::new(TestLedger::from_blockchain(blocks));
-    let req_handler = RosettaRequestHandler::new(ledger);
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger);
     verify_account_search(&scribe, &req_handler, 11, last_verified).await;
 
     let resp = req_handler
@@ -721,7 +721,7 @@ async fn load_unverified_test() {
     verify_balances(&scribe, &blocks, 50);
 
     let ledger = Arc::new(TestLedger::from_blockchain(blocks));
-    let req_handler = RosettaRequestHandler::new(ledger);
+    let req_handler = RosettaRequestHandler::new_with_default_blockchain(ledger);
     verify_account_search(&scribe, &req_handler, 51, last_verified).await;
 }
 

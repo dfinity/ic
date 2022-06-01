@@ -3,7 +3,7 @@ use ic_crypto_internal_threshold_sig_bls12381 as bls12_381;
 use ic_crypto_utils_threshold_sig::parse_threshold_sig_key;
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::rosetta_server::{RosettaApiServer, RosettaApiServerOpt};
-use ic_rosetta_api::{ledger_client, DEFAULT_TOKEN_SYMBOL};
+use ic_rosetta_api::{ledger_client, DEFAULT_BLOCKCHAIN, DEFAULT_TOKEN_SYMBOL};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{CanisterId, PrincipalId};
 use std::{path::Path, path::PathBuf, str::FromStr, sync::Arc};
@@ -46,6 +46,9 @@ struct Opt {
     offline: bool,
     #[clap(long = "mainnet", help = "Connect to the Internet Computer Mainnet")]
     mainnet: bool,
+    /// The name of the blockchain reported in the network identifier.
+    #[clap(long = "blockchain", default_value = DEFAULT_BLOCKCHAIN)]
+    blockchain: String,
     #[clap(long = "not-whitelisted")]
     not_whitelisted: bool,
     #[clap(long = "expose-metrics")]
@@ -157,6 +160,7 @@ async fn main() -> std::io::Result<()> {
         mainnet,
         not_whitelisted,
         expose_metrics,
+        blockchain,
         ..
     } = opt;
     let client = ledger_client::LedgerClient::new(
@@ -179,7 +183,7 @@ async fn main() -> std::io::Result<()> {
     .unwrap_or_else(|(e, is_403)| panic!("Failed to initialize ledger client{}: {:?}", is_403, e));
 
     let ledger = Arc::new(client);
-    let req_handler = RosettaRequestHandler::new(ledger.clone());
+    let req_handler = RosettaRequestHandler::new(blockchain, ledger.clone());
 
     log::info!("Network id: {:?}", req_handler.network_id());
     let serv = RosettaApiServer::new(ledger, req_handler, addr, expose_metrics)

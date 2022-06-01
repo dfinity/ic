@@ -35,19 +35,29 @@ use crate::store::HashedBlock;
 
 #[derive(Clone)]
 pub struct RosettaRequestHandler {
+    blockchain: String,
     ledger: Arc<dyn LedgerAccess + Send + Sync>,
 }
 
 // construction requests are implemented in their own module.
 impl RosettaRequestHandler {
-    pub fn new<T: 'static + LedgerAccess + Send + Sync>(ledger: Arc<T>) -> Self {
-        Self { ledger }
+    pub fn new<T: 'static + LedgerAccess + Send + Sync>(
+        blockchain: String,
+        ledger: Arc<T>,
+    ) -> Self {
+        Self { blockchain, ledger }
+    }
+
+    pub fn new_with_default_blockchain<T: 'static + LedgerAccess + Send + Sync>(
+        ledger: Arc<T>,
+    ) -> Self {
+        Self::new(crate::DEFAULT_BLOCKCHAIN.to_string(), ledger)
     }
 
     pub fn network_id(&self) -> NetworkIdentifier {
         let canister_id = self.ledger.ledger_canister_id();
         let net_id = hex::encode(canister_id.get().into_vec());
-        NetworkIdentifier::new("Internet Computer".to_string(), net_id)
+        NetworkIdentifier::new(self.blockchain.clone(), net_id)
     }
 
     /// Get an Account Balance
