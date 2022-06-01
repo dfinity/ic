@@ -167,7 +167,7 @@ pub fn test(env: TestEnv) {
 
         assert_eq!(read_result, [0; 4]);
 
-        let host = format!("{}.raw.ic0.dev", http_counter_canister_id);
+        let host = format!("{}.raw.ic0.app", http_counter_canister_id);
         let client = reqwest::ClientBuilder::new()
             // FIXME: use `ClientBuilder::add_root_certificate` instead
             .danger_accept_invalid_certs(true)
