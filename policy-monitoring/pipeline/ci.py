@@ -90,7 +90,7 @@ class Ci:
             if not group_ids:
                 eprint(f"Warning: cannot find test group id for job {Ci.job_url(job)}")
             for gid in group_ids:
-                eprint(" + {gid}\n")
+                eprint(f" + {gid}\n")
                 groups[gid] = Group(gid, url=Ci.job_url(job))
 
         return groups
