@@ -37,14 +37,15 @@
 
 use super::query_allocations::QueryAllocationsUsed;
 use crate::{
+    execution::nonreplicated_query::execute_non_replicated_query,
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
-    NonReplicatedQueryKind, QueryExecutionType,
+    NonReplicatedQueryKind,
 };
 use ic_base_types::NumBytes;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
-    ExecutionMode, ExecutionParameters, HypervisorError, HypervisorResult, SubnetAvailableMemory,
+    ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
 };
 use ic_logger::{debug, error, fatal, warn, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
@@ -54,8 +55,7 @@ use ic_replicated_state::{
 use ic_types::{
     ingress::WasmResult,
     messages::{
-        CallContextId, CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
-        UserQuery,
+        CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response, UserQuery,
     },
     CanisterId, Cycles, NumInstructions, NumMessages, PrincipalId, QueryAllocation,
 };
@@ -195,21 +195,23 @@ impl<'a> QueryContext<'a> {
         // An attempt to call another query will result in `ContractViolation`.
         // If that's the case then retry query execution as `Stateful`.
         if query_kind == NonReplicatedQueryKind::Pure && cross_canister_query_calls_enabled {
-            if let Err(HypervisorError::ContractViolation(..)) = result {
-                let measurement_scope =
-                    MeasurementScope::nested(&metrics.query_retry_call, measurement_scope);
-                let old_canister = self.state.get_active_canister(&canister_id)?;
-                let (new_canister, new_result) = self.execute_query(
-                    old_canister,
-                    call_origin,
-                    query.method_name.as_str(),
-                    query.method_payload.as_slice(),
-                    query.source.get(),
-                    NonReplicatedQueryKind::Stateful,
-                    &measurement_scope,
-                );
-                canister = new_canister;
-                result = new_result;
+            if let Err(err) = &result {
+                if err.code() == ErrorCode::CanisterContractViolation {
+                    let measurement_scope =
+                        MeasurementScope::nested(&metrics.query_retry_call, measurement_scope);
+                    let old_canister = self.state.get_active_canister(&canister_id)?;
+                    let (new_canister, new_result) = self.execute_query(
+                        old_canister,
+                        call_origin,
+                        query.method_name.as_str(),
+                        query.method_payload.as_slice(),
+                        query.source.get(),
+                        NonReplicatedQueryKind::Stateful,
+                        &measurement_scope,
+                    );
+                    canister = new_canister;
+                    result = new_result;
+                }
             };
         }
 
@@ -217,7 +219,7 @@ impl<'a> QueryContext<'a> {
             // If the canister produced a result or if execution failed then it
             // does not matter whether or not it produced any outgoing requests.
             // We can simply return the response we have.
-            Err(err) => Err(err.into_user_error(&canister_id)),
+            Err(err) => Err(err),
             Ok(Some(wasm_result)) => Ok(wasm_result),
 
             Ok(None) => match self.enqueue_requests(&mut canister) {
@@ -289,29 +291,6 @@ impl<'a> QueryContext<'a> {
                 ),
             ));
         }
-    }
-
-    // A helper function to lookup the CallContextManager and create a new
-    // CallContext in it.
-    fn new_call_context(
-        &self,
-        canister: &mut CanisterState,
-        call_origin: CallOrigin,
-    ) -> CallContextId {
-        let canister_id = canister.canister_id();
-        // The `unwrap()` here is safe as we ensured that the canister has a call
-        // context manager in `get_active_canister()`.
-        let manager = canister
-            .system_state
-            .call_context_manager_mut()
-            .unwrap_or_else(|| {
-                fatal!(
-                    self.log,
-                    "Canister {}: Expected to find a CallContextManager",
-                    canister_id
-                )
-            });
-        manager.new_call_context(call_origin, Cycles::from(0), self.state.time())
     }
 
     // A helper function that enqueues any outgoing requests that the canister
@@ -392,15 +371,14 @@ impl<'a> QueryContext<'a> {
     #[allow(clippy::too_many_arguments)]
     fn execute_query(
         &mut self,
-        mut canister: CanisterState,
+        canister: CanisterState,
         call_origin: CallOrigin,
         method_name: &str,
         method_payload: &[u8],
         source: PrincipalId,
         query_kind: NonReplicatedQueryKind,
         measurement_scope: &MeasurementScope,
-    ) -> (CanisterState, HypervisorResult<Option<WasmResult>>) {
-        let call_context_id = self.new_call_context(&mut canister, call_origin);
+    ) -> (CanisterState, Result<Option<WasmResult>, UserError>) {
         let instruction_limit = self.max_instructions_per_message.min(
             self.query_allocations_used
                 .write()
@@ -409,12 +387,10 @@ impl<'a> QueryContext<'a> {
                 .into(),
         );
         let execution_parameters = self.execution_parameters(&canister, instruction_limit);
-        let (canister, instructions_left, result) = self.hypervisor.execute_query(
-            QueryExecutionType::NonReplicated {
-                call_context_id,
-                query_kind,
-                network_topology: Arc::clone(&self.network_topology),
-            },
+
+        let (canister, instructions_left, result) = execute_non_replicated_query(
+            query_kind,
+            call_origin,
             method_name,
             method_payload,
             source,
@@ -423,6 +399,7 @@ impl<'a> QueryContext<'a> {
             self.state.time(),
             execution_parameters,
             &self.network_topology,
+            self.hypervisor,
         );
         let instructions_executed = instruction_limit - instructions_left;
         measurement_scope.add(instructions_executed, NumMessages::from(1));
@@ -544,7 +521,6 @@ impl<'a> QueryContext<'a> {
             // Execution of the message failed. We do not need to bother with
             // any outstanding requests and we can return a response.
             Err(err) => {
-                let err = err.into_user_error(&request.receiver);
                 let payload = Payload::Reject(RejectContext::from(err));
                 let response = generate_response(request, payload);
                 self.outstanding_response = Some(response);

@@ -4,7 +4,7 @@ pub mod heartbeat;
 pub mod response;
 
 // Non-replicated messages.
-mod nonreplicated_query;
+pub(crate) mod nonreplicated_query;
 mod nonreplicated_response;
 
 // Common helpers.

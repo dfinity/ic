@@ -5,12 +5,11 @@
 // context.
 
 use crate::execution::common::{
-    action_to_result, validate_method, wasm_result_to_query_exec_result,
+    action_to_result, validate_canister, validate_method, wasm_result_to_query_exec_result,
 };
 use crate::hypervisor::Hypervisor;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::{
     execution_environment::{
         AvailableMemory, ExecResult, ExecuteMessageResult, ExecutionMode, ExecutionParameters,
@@ -66,20 +65,6 @@ fn early_error_to_result(
         result,
         heap_delta: NumBytes::from(0),
     }
-}
-
-fn validate_canister(canister: &CanisterState) -> Result<(), UserError> {
-    if CanisterStatusType::Running != canister.status() {
-        let canister_id = canister.canister_id();
-        let err_code = match canister.status() {
-            CanisterStatusType::Running => unreachable!(),
-            CanisterStatusType::Stopping => ErrorCode::CanisterStopping,
-            CanisterStatusType::Stopped => ErrorCode::CanisterStopped,
-        };
-        let err_msg = format!("Canister {} is not running", canister_id);
-        return Err(UserError::new(err_code, err_msg));
-    }
-    Ok(())
 }
 
 fn validate_message(

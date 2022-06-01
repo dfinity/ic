@@ -99,6 +99,10 @@ pub struct Hypervisor {
 }
 
 impl Hypervisor {
+    pub(crate) fn subnet_id(&self) -> SubnetId {
+        self.own_subnet_id
+    }
+
     pub(crate) fn subnet_type(&self) -> SubnetType {
         self.own_subnet_type
     }
