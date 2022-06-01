@@ -11,5 +11,8 @@ filegroup(
             "*.swp",
             "nervous_system/common/bazel-out/**",
         ],
-    ) + ["//rs/%s:sources" % p for p in subpackages(include = ["**"])],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(include = ["**"])],
 )
