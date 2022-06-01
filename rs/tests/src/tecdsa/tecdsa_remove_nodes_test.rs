@@ -67,6 +67,7 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         nns_endpoint.assert_ready(ctx).await;
         let nns = runtime_from_url(nns_endpoint.url.clone());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
+        info!(logger, "Enable ECDSA signing");
         enable_ecdsa_signing(
             &governance,
             nns_endpoint.subnet.as_ref().unwrap().id,
@@ -74,9 +75,11 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         )
         .await;
 
+        info!(logger, "Asserting endpoint reachability");
         assert_endpoints_reachability(endpoints.as_slice(), EndpointsStatus::AllReachable).await;
         let agent = assert_create_agent(endpoints[0].url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
+        info!(logger, "Getting public key");
         let public_key = get_public_key(make_key(KEY_ID1), &uni_can, ctx)
             .await
             .unwrap();
