@@ -236,7 +236,7 @@ fn wait_node_healthy(logger: &Logger, node: &IcNodeSnapshot) {
     .expect("Node not healty");
 }
 
-fn wait_node_unreachable(logger: &Logger, node: &IcNodeSnapshot) {
+pub fn wait_node_unreachable(logger: &Logger, node: &IcNodeSnapshot) {
     retry(logger.clone(), secs(600), secs(20), || {
         match node.status_is_healthy() {
             Ok(true) => bail!("Still ready!"),

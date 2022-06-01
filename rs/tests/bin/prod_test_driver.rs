@@ -275,10 +275,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     nns_tests::node_removal_from_registry::config(),
                     par(vec![t("node_removal_from_registry_test", nns_tests::node_removal_from_registry::test)]),
                 ),
-                pot(
+                pot_with_setup(
                     "node_assign_pot",
-                    orchestrator::node_assign_test::config(),
-                    par(vec![t("node_assign_test", orchestrator::node_assign_test::test)]),
+                    orchestrator::node_assign_test::config,
+                    par(vec![sys_t("node_assign_test", orchestrator::node_assign_test::test)]),
                 ),
                 pot(
                     "node_graceful_leaving_pot",
