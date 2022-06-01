@@ -14,8 +14,8 @@ use ic_execution_environment::{
     IngressHistoryWriterImpl,
 };
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterInstallMode, EcdsaKeyId, EmptyBlob, InstallCodeArgs, Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, SetControllerArgs,
+    CanisterIdRecord, CanisterInstallMode, CanisterStatusType, EcdsaKeyId, EmptyBlob,
+    InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, SetControllerArgs,
 };
 use ic_interfaces::execution_environment::{IngressHistoryWriter, RegistryExecutionSettings};
 use ic_interfaces::messages::RequestOrIngress;
@@ -34,12 +34,12 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::QUEUE_INDEX_NONE,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    CanisterState, ExecutionState, InputQueueType, ReplicatedState,
+    CallContext, CanisterState, ExecutionState, InputQueueType, ReplicatedState,
 };
-use ic_types::messages::{MessageId, RequestOrResponse};
 use ic_types::Time;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
+    messages::{CallbackId, MessageId, RequestOrResponse, Response},
     CanisterId, Cycles, NumInstructions, UserId,
 };
 use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
@@ -48,6 +48,7 @@ use maplit::btreemap;
 
 use crate::types::messages::{RequestBuilder, SignedIngressBuilder};
 use crate::{crypto::mock_random_number_generator, mock_time, types::messages::IngressBuilder};
+use ic_execution_environment::execution::response::ExecutionCyclesRefund;
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
 
@@ -226,6 +227,31 @@ impl ExecutionTest {
 
     pub fn ingress_status(&self, message_id: MessageId) -> IngressStatus {
         self.state().get_ingress_status(&message_id)
+    }
+
+    pub fn get_call_context(
+        &self,
+        canister_id: CanisterId,
+        callback_id: CallbackId,
+    ) -> &CallContext {
+        match self.canister_state(canister_id).status() {
+            CanisterStatusType::Stopping => {
+                panic!("Canister status is not running");
+            }
+            CanisterStatusType::Running | CanisterStatusType::Stopped => {
+                let call_context_manager = self
+                    .canister_state(canister_id)
+                    .system_state
+                    .call_context_manager()
+                    .unwrap();
+                let callback = call_context_manager
+                    .callback(&callback_id)
+                    .expect("Unknown callback id.");
+                call_context_manager
+                    .call_context(callback.call_context_id)
+                    .expect("Unknown call context id.")
+            }
+        }
     }
 
     /// Sends a `create_canister` message to the IC management canister.
@@ -527,6 +553,39 @@ impl ExecutionTest {
         state.put_canister_state(canister);
         self.state = Some(state);
         result
+    }
+
+    pub fn execute_response(
+        &mut self,
+        canister_id: CanisterId,
+        response: Response,
+    ) -> (ExecutionCyclesRefund, ExecResult) {
+        let mut state = self.state.take().unwrap();
+        let canister = state.take_canister_state(&canister_id).unwrap();
+        let network_topology = Arc::new(state.metadata.network_topology.clone());
+        let (execution_cycles_refund, result) = self.exec_env.execute_canister_response(
+            canister,
+            response,
+            self.instruction_limit,
+            mock_time(),
+            network_topology,
+            self.subnet_available_memory.clone(),
+        );
+
+        let execution_cycles_refund = match execution_cycles_refund {
+            true => ExecutionCyclesRefund::Yes,
+            false => ExecutionCyclesRefund::No,
+        };
+
+        state.metadata.heap_delta_estimate += result.heap_delta;
+        self.update_execution_stats(
+            canister_id,
+            self.instruction_limit,
+            result.num_instructions_left,
+        );
+        state.put_canister_state(result.canister);
+        self.state = Some(state);
+        (execution_cycles_refund, result.result)
     }
 
     // A low-level helper to send subnet messages to the IC management canister.
