@@ -586,14 +586,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )])
             ),
             pot(
-                "update_registry_idkg_key_pot",
-                orchestrator::update_registry_idkg_key::config(),
-                par(vec![t(
-                    "update_registry_idkg_key_test",
-                    orchestrator::update_registry_idkg_key::test,
-                )]),
-            ),
-            pot(
                 "workload_counter_canister_pot",
                 workload_counter_canister_test::config(),
                 par(vec![t(

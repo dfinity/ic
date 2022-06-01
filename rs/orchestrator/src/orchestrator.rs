@@ -38,7 +38,6 @@ pub struct Orchestrator {
     firewall_deprecated: Option<FirewallDeprecated>,
     firewall: Option<Firewall>,
     ssh_access_manager: Option<SshAccessManager>,
-    registration: Option<NodeRegistration>,
     // A flag used to communicate to async tasks, that their job is done.
     exit_signal: Arc<RwLock<bool>>,
     // The subnet id of the node.
@@ -192,7 +191,6 @@ impl Orchestrator {
             firewall_deprecated,
             firewall,
             ssh_access_manager,
-            registration: Some(registration),
             exit_signal: Default::default(),
             subnet_id: Default::default(),
             task_handles: Default::default(),
@@ -259,23 +257,6 @@ impl Orchestrator {
             }
             info!(log, "Shut down the ssh keys & firewall monitoring loop");
         }
-        async fn update_keys_in_registry(
-            log: ReplicaLogger,
-            exit_signal: Arc<RwLock<bool>>,
-            registration: NodeRegistration,
-        ) {
-            while !*exit_signal.read().await {
-                if registration
-                    .check_additional_key_registered_otherwise_register()
-                    .await
-                {
-                    // additional key was successfully registered
-                    break;
-                };
-                tokio::time::sleep(CHECK_INTERVAL_SECS).await;
-            }
-            info!(log, "Shut down update keys in registration loop");
-        }
 
         if let Some(upgrade) = self.upgrade.take() {
             info!(self.logger, "Spawning the upgrade loop");
@@ -305,15 +286,6 @@ impl Orchestrator {
                     Arc::clone(&self.exit_signal),
                     self.logger.clone(),
                 )));
-        }
-
-        if let Some(registration) = self.registration.take() {
-            info!(self.logger, "Spawning the additional key registration loop");
-            self.task_handles.push(tokio::spawn(update_keys_in_registry(
-                self.logger.clone(),
-                Arc::clone(&self.exit_signal),
-                registration,
-            )));
         }
     }
 
