@@ -9,6 +9,7 @@ filegroup(
         exclude = [
             "target/**/*",
             "*.swp",
+            ".*.swp",
             "nervous_system/common/bazel-out/**",
         ],
     ) + ["//rs/%s:sources" % p for p in subpackages(include = ["**"])],
