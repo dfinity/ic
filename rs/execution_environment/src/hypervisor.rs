@@ -1077,7 +1077,7 @@ impl Hypervisor {
         let (output, execution_state, system_state_changes) =
             if let Some(sandbox_executor) = self.sandbox_executor.as_ref() {
                 sandbox_executor.process(WasmExecutionInput {
-                    api_type: api_type.clone(),
+                    api_type,
                     sandbox_safe_system_state: static_system_state,
                     canister_current_memory_usage,
                     execution_parameters,
@@ -1086,7 +1086,7 @@ impl Hypervisor {
                 })
             } else {
                 self.wasm_executor.process(WasmExecutionInput {
-                    api_type: api_type.clone(),
+                    api_type,
                     sandbox_safe_system_state: static_system_state,
                     canister_current_memory_usage,
                     execution_parameters,
