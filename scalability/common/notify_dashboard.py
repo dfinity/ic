@@ -88,7 +88,7 @@ class NotifyDashboard:
                 time.sleep(3)
         return False
 
-    def notify_spot_run(name, is_success, request_type, revision, summaries):
+    def notify_spot_run(name, is_success, request_type, revision, summaries, out_dir):
         """Send a performance nightly data point performance-trend index in ElasticSearch."""
         (
             failure_rate,
@@ -104,6 +104,7 @@ class NotifyDashboard:
             "rev": revision,
             "branch": FLAGS.branch,
             "package": "replica-perf-trend",
+            "report_url": f"https://dfinity-lab.gitlab.io/-/public/ic/-/jobs/{FLAGS.gitlab_job_id}/artifacts/scalability/{out_dir}/report.html",
             "performance": {
                 "title": name,
                 "request_type": request_type,
@@ -179,4 +180,5 @@ if __name__ == "__main__":
                 throughput,
                 target_load,
             ),
+            dir,
         )

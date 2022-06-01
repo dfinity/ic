@@ -10,6 +10,8 @@ sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 import common.misc as misc  # noqa
 from common.base_experiment import BaseExperiment  # noqa
 from common.workload_experiment import WorkloadExperiment  # noqa
+from common import report  # noqa
+from common.workload import Workload  # noqa
 from common import ssh  # noqa
 
 
@@ -67,6 +69,8 @@ class Test_Experiment(TestCase):
         ExperimentMock._WorkloadExperiment__check_workload_generator_installed = Mock(return_value=True)
         ExperimentMock.get_ic_version = MagicMock(return_value="deadbeef")
         ExperimentMock._WorkloadExperiment__wait_for_quiet = MagicMock(return_value=None)
+        Workload.fetch_results = MagicMock()
+        report.evaluate_summaries = MagicMock()
 
         exp = ExperimentMock()
         exp.canister_ids = ["abc"]
@@ -81,6 +85,8 @@ class Test_Experiment(TestCase):
         exp.end_experiment()
 
         exp.install_canister.assert_called_once()
+        Workload.fetch_results.assert_called_once()
+        report.evaluate_summaries.assert_called_once()
 
 
 if __name__ == "__main__":
