@@ -45,13 +45,7 @@ class Test_NotifyDashboard(TestCase):
             rps,
             target_load,
         )
-        sent = NotifyDashboard.notify_spot_run(
-            name,
-            is_success,
-            request_type,
-            revision,
-            summaries,
-        )
+        sent = NotifyDashboard.notify_spot_run(name, is_success, request_type, revision, summaries, "./")
         self.assertTrue(sent)
 
     def test_send_maximum_capacity_success(self):
