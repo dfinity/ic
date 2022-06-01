@@ -117,7 +117,7 @@ files_read_etc_files(ic_manageboot_t)
 allow ic_manageboot_t ic_manageboot_t : process { setrlimit };
 
 # Allow IPC (internally used by tools run from the script).
-allow ic_manageboot_t ic_manageboot_t : fifo_file { getattr read write };
+allow ic_manageboot_t ic_manageboot_t : fifo_file { getattr read write ioctl };
 allow ic_manageboot_t ic_manageboot_t : unix_stream_socket { connect create getattr getopt read setopt write };
 
 # Allow searching runtime process directories (/var/run which is symlinked to /run).
