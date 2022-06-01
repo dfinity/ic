@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "cycles_account_manager",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_cycles_account_manager",
+    edition = "2018",
+    deps = [
+        "//rs/config",
+        "//rs/interfaces",
+        "//rs/monitoring/logger",
+        "//rs/nns/constants",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/types/base_types",
+        "//rs/types/ic00_types",
+        "//rs/types/types",
+        "@crate_index//:prometheus",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+    ],
+)

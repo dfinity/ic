@@ -1,0 +1,42 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "state_layout",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_state_layout",
+    edition = "2018",
+    deps = [
+        "//rs/monitoring/logger",
+        "//rs/protobuf",
+        "//rs/replicated_state",
+        "//rs/sys",
+        "//rs/types/base_types",
+        "//rs/types/ic00_types",
+        "//rs/types/types",
+        "//rs/types/wasm_types",
+        "//rs/utils",
+        "@crate_index//:bitcoin",
+        "@crate_index//:hex",
+        "@crate_index//:libc",
+        "@crate_index//:prost",
+        "@crate_index//:scoped_threadpool",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+    ],
+)
+
+# Disabled due to https://github.com/bazelbuild/rules_rust/issues/1233
+# rust_doc_test(
+#     name = "state_layout_doc_test",
+#     crate = ":state_layout",
+# )

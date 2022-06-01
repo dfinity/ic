@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(
+    default_visibility = [
+        "//rs/canister_client:__pkg__",
+        "//rs/crypto/internal:__subpackages__",
+    ],
+)
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "ecdsa_secp256k1",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_internal_basic_sig_ecdsa_secp256k1",
+    edition = "2018",
+    deps = [
+        "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/secrets_containers",
+        "//rs/types/types",
+        "@crate_index//:base64",
+        "@crate_index//:hex",
+        "@crate_index//:openssl",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:simple_asn1",
+        "@crate_index//:zeroize",
+    ],
+)

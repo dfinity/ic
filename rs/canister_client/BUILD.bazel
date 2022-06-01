@@ -1,0 +1,43 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "canister_client",
+    srcs = glob(["src/**"]),
+    aliases = {
+        "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1": "ecdsa_secp256k1",
+    },
+    crate_name = "ic_canister_client",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
+        "//rs/crypto/sha",
+        "//rs/crypto/tree_hash",
+        "//rs/interfaces",
+        "//rs/protobuf",
+        "//rs/tree_deserializer",
+        "//rs/types/ic00_types",
+        "//rs/types/types",
+        "@crate_index//:backoff",
+        "@crate_index//:bytes",
+        "@crate_index//:ed25519-dalek",
+        "@crate_index//:hyper",
+        "@crate_index//:hyper-tls",
+        "@crate_index//:native-tls",
+        "@crate_index//:prost",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
+)

@@ -1,0 +1,39 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "client",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_registry_client",
+    edition = "2018",
+    deps = [
+        "//rs/config",
+        "//rs/interfaces",
+        "//rs/monitoring/metrics",
+        "//rs/protobuf",
+        "//rs/registry/helpers",
+        "//rs/registry/keys",
+        "//rs/registry/proto",
+        "//rs/registry/provisional_whitelist",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_features",
+        "//rs/registry/transport",
+        "//rs/types/types",
+        "//rs/utils",
+        "@crate_index//:anyhow",
+        "@crate_index//:crossbeam-channel",
+        "@crate_index//:prometheus",
+        "@crate_index//:prost",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:slog",
+        "@crate_index//:thiserror",
+        "@crate_index//:url",
+    ],
+)
