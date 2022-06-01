@@ -259,7 +259,7 @@ pub struct ExecutionParameters {
 /// or `ic0.msg_reject()` System API functions.
 /// If the execution failed or did not call these System API functions,
 /// then the response is empty.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ExecResult {
     IngressResult((MessageId, IngressStatus)),
     ResponseResult(Response),

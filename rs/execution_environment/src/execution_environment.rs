@@ -1103,7 +1103,7 @@ impl ExecutionEnvironmentImpl {
     // Returns a tuple with the result, along with a boolean indicating whether or
     // not to refund the remaining cycles to the canister.
     #[allow(clippy::too_many_arguments)]
-    fn execute_canister_response(
+    pub fn execute_canister_response(
         &self,
         mut canister: CanisterState,
         mut resp: Response,

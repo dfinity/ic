@@ -22,6 +22,7 @@ use prometheus::IntCounter;
 use std::sync::Arc;
 
 // Indicates whether or not to refund the remaining cycles to the canister.
+#[derive(Debug, PartialEq, Eq)]
 pub enum ExecutionCyclesRefund {
     Yes,
     No,
