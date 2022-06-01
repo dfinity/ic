@@ -1,0 +1,41 @@
+.build-determinism-release:
+  extends:
+    - .ubuntu-nix-docker-pinned-dc
+    - .rules-scheduled-reproducibility
+  stage: build-determinism-test
+  needs:
+    - job: docker-build-ic-release
+  variables:
+    PATH0: "docker-build-ic-release/release"
+    PATH1: "release"
+  script:
+    - |
+      set -eExuo pipefail
+
+      # what we've build in docker-build-ic-release
+      P0=$PATH0
+      # what is live and available under $NNS_RELEASE_VERSION
+      P1="/${NNS_RELEASE_VERSION}/${PATH1}"
+
+      ./gitlab-ci/tools/build-diff.sh "$P0" "$P1"
+
+build-determinism-binaries-release:
+  extends:
+    - .build-determinism-release
+  variables:
+    PATH0: "docker-build-ic-release/release"
+    PATH1: "release"
+
+build-determinism-canisters-release:
+  extends:
+    - .build-determinism-release
+  variables:
+    PATH0: "docker-build-ic-release/canisters"
+    PATH1: "canisters"
+
+build-determinism-guest-update-img-release:
+  extends:
+    - .build-determinism-release
+  variables:
+    PATH0: "docker-build-ic-release/guest-os/update-img"
+    PATH1: "guest-os/update-img"

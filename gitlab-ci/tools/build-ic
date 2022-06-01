@@ -96,7 +96,7 @@ if [ "$BUILD_CANISTERS" == "true" ]; then
     gitlab-ci/tools/job-driver.py cargo-build-canisters "${CANISTERS_DIR}"
 fi
 if [ "$BUILD_IMAGES" == "true" ]; then
-    echo "Building IC-OS Update Image"
+    echo "Building IC-OS Guest Update Image"
     gitlab-ci/src/job_scripts/lib/guest-os-updateimg.sh "${DISK_DIR}"
 fi
 
@@ -120,3 +120,5 @@ if [ "$BUILD_IMAGES" == "true" ] && [ "$BUILD_BINARIES" == "true" ] && [ "$BUILD
     # shellcheck disable=SC2035
     sha256sum -b *.tar.*
 fi
+
+echo "Build complete for revision $(git rev-parse HEAD)."

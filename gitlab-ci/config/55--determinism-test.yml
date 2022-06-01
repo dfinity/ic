@@ -10,34 +10,13 @@ build-determinism-binaries:
       artifacts: false
     - job: artifacts-upload-to-s3
       artifacts: false
+  variables:
+    PATH0: "release"
+    PATH1: "docker-build-ic/release"
   script:
     - |
-      set -eux
-      VERSION=$(git rev-parse HEAD)
-
-      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/release/SHA256SUMS" \
-          -o SHA256SUMS-cargo-build-release-linux-native
-      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/release/SHA256SUMS" \
-          -o SHA256SUMS-docker-build-ic
-
-      echo "cargo-build-release-linux-native:"
-      cat SHA256SUMS-cargo-build-release-linux-native
-      echo "docker-build-ic:"
-      cat SHA256SUMS-docker-build-ic
-
-      if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
-          set +x
-          echo "Build determinism check compares two binaries built on a separate CI jobs:"
-          echo " - cargo-build-release-linux-native"
-          echo " - docker-build-ic"
-          echo "Difference indicates that this MR introduced changes that break Build Determinism."
-          echo -e "If this job fails, pull the binaries (scroll up for curl info) and run diffoscope on them. \xF0\x9F\x99\x8F"
-          set -x
-      else
-          echo "Difference indicates that Build Determinism is broken for binaries that differ!"
-      fi
-      diff -u SHA256SUMS-cargo-build-release-linux-native SHA256SUMS-docker-build-ic
-
+      set -eExuo pipefail
+      ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
 
 build-determinism-canisters:
   extends:
@@ -45,43 +24,19 @@ build-determinism-canisters:
     - .rules-parent-pipeline
   stage: build-determinism-test
   needs:
-    - job: cargo-build-canisters
+    - job: cargo-build-release-linux-native
       artifacts: false
     - job: docker-build-ic
       artifacts: false
     - job: artifacts-upload-to-s3
       artifacts: false
+  variables:
+    PATH0: "canisters"
+    PATH1: "docker-build-ic/canisters"
   script:
     - |
-      set -eux
-      VERSION=$(git rev-parse HEAD)
-
-      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/canisters/SHA256SUMS" \
-          -o SHA256SUMS-cargo-build-canisters
-      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/canisters/SHA256SUMS" \
-          -o SHA256SUMS-docker-build-ic
-
-      echo "cargo-build-release-linux-native:"
-      cat SHA256SUMS-cargo-build-canisters
-      echo "docker-build-ic:"
-      cat SHA256SUMS-docker-build-ic
-
-      # we ignore panics and sns-test-dapp-canister
-      sed -i -E '/(panics.wasm|sns-test-dapp-canister.wasm)/d' SHA256SUMS-*
-
-      if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
-          set +x
-          echo "Build determinism check compares two canister binaries built on a separate CI jobs:"
-          echo " - cargo-build-canisters"
-          echo " - docker-build-ic"
-          echo "Difference indicates that this MR introduced changes that break Build Determinism."
-          echo -e "If this job fails, pull the canisters (scroll up for curl info) and run diffoscope on them. \xF0\x9F\x99\x8F"
-          set -x
-      else
-          echo "Difference indicates that Build Determinism is broken for canister binaries that differ!"
-      fi
-      diff -u SHA256SUMS-cargo-build-canisters SHA256SUMS-docker-build-ic
-
+      set -eExuo pipefail
+      ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
 
 build-determinism-guest-update-img:
   extends:
@@ -89,66 +44,20 @@ build-determinism-guest-update-img:
     - .rules-parent-pipeline
   stage: build-determinism-test
   needs:
-    - job: build-determinism-binaries
-      artifacts: false
     - job: guest-os-updateimg-build
       artifacts: false
     - job: docker-build-ic
       artifacts: false
+  artifacts:
+    paths:
+      - artifacts
+  variables:
+    PATH0: "guest-os/update-img"
+    PATH1: "docker-build-ic/guest-os/update-img"
   script:
     - |
-      set -eux
-      VERSION=$(git rev-parse HEAD)
-
-      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/guest-os/update-img/SHA256SUMS" \
-          -o SHA256SUMS-guest-os-updateimg-build
-      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/guest-os/update-img/SHA256SUMS" \
-          -o SHA256SUMS-docker-build-ic
-
-      echo "guest-os-updateimg-build:"
-      cat SHA256SUMS-guest-os-updateimg-build
-      echo "docker-build-ic:"
-      cat SHA256SUMS-docker-build-ic
-
-      if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
-          set +x
-          echo "Build determinism check compares two IC-OS guest update images built on a separate CI jobs:"
-          echo " - guest-os-updateimg-build"
-          echo " - docker-build-ic"
-          echo "Difference indicates that this MR introduced changes that break Build Determinism for IC-OS guest image."
-          echo -e "If this job fails, please identify the cause of breaking Build Determinism and fix it. \xF0\x9F\x99\x8F"
-          set -x
-      else
-          echo "Difference indicates that Build Determinism is broken IC-OS guest image!"
-      fi
-
-      if ! diff -u SHA256SUMS-guest-os-updateimg-build SHA256SUMS-docker-build-ic; then
-          # diffoscope runs kvm when doing diff and we need kernel image for that
-          sudo apt-get update && sudo apt-get --no-install-recommends --yes install "linux-image-$(uname -r)" \
-              diffoscope python3-tlsh libguestfs-tools python3-guestfs squashfs-tools
-
-          mkdir guest-os-updateimg-build docker-build-ic artifacts
-          curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/guest-os/update-img/update-img.tar.gz" \
-              -o guest-os-updateimg-build/update-img.tar.gz
-          curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/docker-build-ic/guest-os/update-img/update-img.tar.gz" \
-              -o docker-build-ic/update-img.tar.gz
-
-          cd guest-os-updateimg-build
-          tar -xzf update-img.tar.gz
-          cd ../docker-build-ic
-          tar -xzf update-img.tar.gz
-          cd ..
-
-          # we give diffoscope 20min to find the diff
-          timeout 20m sudo diffoscope \
-              guest-os-updateimg-build/boot.img \
-              docker-build-ic/boot.img \
-              --html artifacts/output-boot.html --text -
-          timeout 20m sudo diffoscope \
-              guest-os-updateimg-build/root.img \
-              docker-build-ic/root.img \
-              --html artifacts/output-root.html --text -
-      fi
+      set -eExuo pipefail
+      ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
 
 build-determinism-host-update-img:
   extends:
@@ -160,60 +69,15 @@ build-determinism-host-update-img:
       artifacts: false
     - job: host-os-updateimg-determinism
       artifacts: false
+    - job: build-determinism-binaries
+      artifacts: false
   artifacts:
     paths:
       - artifacts
+  variables:
+    PATH0: "host-os/update-img"
+    PATH1: "host-os/update-img-determinism"
   script:
     - |
-      set -eux
-      VERSION=$(git rev-parse HEAD)
-
-      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/host-os/update-img/SHA256SUMS" \
-          -o SHA256SUMS-host-os-updateimg
-      curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/host-os/update-img-determinism/SHA256SUMS" \
-          -o SHA256SUMS-host-os-updateimg-determinism
-
-      echo "host-os-updateimg:"
-      cat SHA256SUMS-host-os-updateimg
-      echo "host-os-updateimg-determinism:"
-      cat SHA256SUMS-host-os-updateimg-determinism
-
-      if [ "${CI_COMMIT_REF_PROTECTED:-}" != "true" ]; then
-          set +x
-          echo "Build determinism check compares two IC-OS host update images built on a separate CI jobs:"
-          echo " - host-os-updateimg"
-          echo " - host-os-updateimg-determinism"
-          echo "Difference indicates that this MR introduced changes that break Build Determinism for IC-OS host image."
-          echo -e "If this job fails, please identify the cause of breaking Build Determinism and fix it. \xF0\x9F\x99\x8F"
-          set -x
-      else
-          echo "Difference indicates that Build Determinism is broken IC-OS host image!"
-      fi
-
-      if ! diff -u SHA256SUMS-host-os-updateimg SHA256SUMS-host-os-updateimg-determinism; then
-          # diffoscope runs kvm when doing diff and we need kernel image for that
-          sudo apt-get update && sudo apt-get --no-install-recommends --yes install "linux-image-$(uname -r)" \
-              diffoscope python3-tlsh libguestfs-tools python3-guestfs squashfs-tools
-
-          mkdir host-os-updateimg host-os-updateimg-determinism artifacts
-          curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/host-os/update-img/host-update-img.tar.gz" \
-              -o host-os-updateimg/host-update-img.tar.gz
-          curl -sS --retry 5 --retry-delay 10 "https://download.dfinity.systems/ic/$VERSION/host-os/update-img-determinism/host-update-img.tar.gz" \
-              -o host-os-updateimg-determinism/host-update-img.tar.gz
-
-          cd host-os-updateimg
-          tar -xzf host-update-img.tar.gz
-          cd ../host-os-updateimg-determinism
-          tar -xzf host-update-img.tar.gz
-          cd ..
-
-          # we give diffoscope 20min to find the diff
-          timeout 20m sudo diffoscope \
-              host-os-updateimg/boot.img \
-              host-os-updateimg-determinism/boot.img \
-              --html artifacts/output-boot.html --text -
-          timeout 20m sudo diffoscope \
-              host-os-updateimg/root.img \
-              host-os-updateimg-determinism/root.img \
-              --html artifacts/output-root.html --text -
-      fi
+      set -eExuo pipefail
+      ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"

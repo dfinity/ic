@@ -9,6 +9,7 @@ include:
   - local: /gitlab-ci/config/10--init--github-integration.yml
   - local: /gitlab-ci/config/20--build-nix-shell.yml
   - local: /gitlab-ci/config/20--build-boundary-node-service-worker.yml
+  - local: /gitlab-ci/config/20--test--docker-build-ic.yml
   - local: /gitlab-ci/config/20--test--cargo-pipeline.yml
   - local: /gitlab-ci/config/20--test--bazel-pipeline.yml
   - local: /gitlab-ci/config/20--test--pre-commit.yml
@@ -22,6 +23,7 @@ include:
   - local: /gitlab-ci/config/20--test--dependencies.yml
   - local: /gitlab-ci/config/20--test--shellcheck.yml
   - local: /gitlab-ci/config/40--cargo-test--benchmarks.yml
+  - local: /gitlab-ci/config/55--determinism-test-release.yml
   - local: /gitlab-ci/config/60--prod-test--spawn-test-pipeline.yml
   - local: /gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml
   - local: /gitlab-ci/config/70--policy-monitoring-deployment.yml
