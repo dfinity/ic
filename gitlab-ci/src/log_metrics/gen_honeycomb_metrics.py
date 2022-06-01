@@ -28,6 +28,7 @@ def main():
         "CI_JOB_NAME",
         "CI_JOB_STAGE",
         "CI_JOB_STATUS",
+        "CI_JOB_URL",
         "CI_NODE_INDEX",
         "CI_NODE_TOTAL",
         "CI_PIPELINE_ID",
