@@ -133,7 +133,7 @@
 #    then allow manual execution of prod hourly and nightly tests.
 # 2. Otherwise, if on the RC branch then perform automatic execution of prod hourly and nightly
 #    tests.
-# 3. Otherwise, if on any other branch and "[hotfix]" is in the commit message, then allow manual
+# 3. Otherwise, if on any other branch and triggered by a merge request allow for manual 
 #    execution of prod hourly and nightly tests.
 .rules-rollout-pipeline-auto:
   rules:
@@ -142,7 +142,7 @@
       allow_failure: true
     - if: '$CI_COMMIT_BRANCH =~ /^rc--/ && $CI_PIPELINE_SOURCE != "trigger"'
       when: always
-    - if: '$CI_MERGE_REQUEST_TITLE =~ /\[rc\]/'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       when: manual
       allow_failure: true
     - if: '$CI_PIPELINE_SOURCE == "trigger"'
@@ -163,6 +163,9 @@
     - if: '$CI_MERGE_REQUEST_TITLE =~ /(\[rc\]|hotfix)/i'
       when: manual
       allow_failure: true  # the pipeline continues running even if the manual job is not run
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
 
 .rules-prod-hotfix-tests:
   rules:
@@ -173,6 +176,9 @@
       when: always
     - if: '$CD_ENV == $cd_target_env && ( $CI_MERGE_REQUEST_TITLE =~ /\[rc\]/ || $CI_MERGE_REQUEST_TITLE =~ /hotfix/i )'
     - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /(\[rc\]|hotfix)/i'
+      when: manual
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       when: manual
       allow_failure: true
 
