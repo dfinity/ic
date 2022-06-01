@@ -638,6 +638,15 @@ impl BatchProcessorImpl {
         let record = self.get_subnet_record(subnet_id, registry_version);
         record.max_number_of_canisters
     }
+
+    fn get_max_ecdsa_queue_size(
+        &self,
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
+    ) -> u32 {
+        let record = self.get_subnet_record(subnet_id, registry_version);
+        record.ecdsa_config.map(|c| c.max_queue_size).unwrap_or(0)
+    }
 }
 
 fn get_subnet_public_key(
@@ -704,6 +713,8 @@ impl BatchProcessor for BatchProcessorImpl {
             self.get_subnet_features(state.metadata.own_subnet_id, batch.registry_version);
         let max_number_of_canisters =
             self.get_max_number_of_canisters(state.metadata.own_subnet_id, batch.registry_version);
+        let max_ecdsa_queue_size =
+            self.get_max_ecdsa_queue_size(state.metadata.own_subnet_id, batch.registry_version);
 
         self.remove_canisters_not_in_routing_table(&mut state);
 
@@ -715,6 +726,7 @@ impl BatchProcessor for BatchProcessorImpl {
             &RegistryExecutionSettings {
                 max_number_of_canisters,
                 provisional_whitelist,
+                max_ecdsa_queue_size,
             },
         );
         self.observe_canisters_memory_usage(&state_after_round);

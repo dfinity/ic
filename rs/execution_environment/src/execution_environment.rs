@@ -612,6 +612,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                 args.message_hash,
                                 args.derivation_path,
                                 &args.key_id,
+                                registry_settings.max_ecdsa_queue_size,
                                 &mut state,
                                 rng,
                             )
@@ -1626,6 +1627,7 @@ impl ExecutionEnvironmentImpl {
         derivation_path: Vec<Vec<u8>>,
         // TODO EXC-1061: pass key_id to consensus.
         _key_id: &EcdsaKeyId,
+        max_queue_size: u32,
         state: &mut ReplicatedState,
         rng: &mut (dyn RngCore + 'static),
     ) -> Result<(), UserError> {
@@ -1670,13 +1672,16 @@ impl ExecutionEnvironmentImpl {
         state
             .metadata
             .subnet_call_context_manager
-            .push_sign_with_ecdsa_request(SignWithEcdsaContext {
-                request,
-                message_hash,
-                derivation_path,
-                pseudo_random_id,
-                batch_time: state.metadata.batch_time,
-            })?;
+            .push_sign_with_ecdsa_request(
+                SignWithEcdsaContext {
+                    request,
+                    message_hash,
+                    derivation_path,
+                    pseudo_random_id,
+                    batch_time: state.metadata.batch_time,
+                },
+                max_queue_size,
+            )?;
         Ok(())
     }
 

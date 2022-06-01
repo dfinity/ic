@@ -14,7 +14,7 @@ use ic_registry_keys::{
     make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_test_utilities::crypto::temp_dir::temp_dir;
@@ -58,6 +58,7 @@ pub fn get_subnet_holding_ecdsa_keys(
         EcdsaConfig {
             quadruples_to_create_in_advance: 1,
             key_ids: ecdsa_key_ids.to_vec(),
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         }
         .into(),
     );

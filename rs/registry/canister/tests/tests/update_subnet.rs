@@ -1,3 +1,5 @@
+use crate::test_helpers::get_subnet_record;
+
 use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
@@ -16,7 +18,7 @@ use ic_protobuf::registry::{
     subnet::v1::{GossipAdvertConfig, GossipConfig, SubnetRecord},
 };
 use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_key};
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
 use ic_types::p2p::{
@@ -471,6 +473,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec![make_ecdsa_key("key_id_1")],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }),
             ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
             ..empty_update_subnet_payload(subnet_id)
@@ -522,6 +525,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec![make_ecdsa_key("key_id_1")],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }),
             ecdsa_key_signing_enable: None,
             ..empty_update_subnet_payload(subnet_id)
@@ -548,6 +552,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
                     EcdsaConfig {
                         quadruples_to_create_in_advance: 10,
                         key_ids: vec![make_ecdsa_key("key_id_1")],
+                        max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                     }
                     .into()
                 ),
@@ -560,6 +565,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec![make_ecdsa_key("key_id_1")],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }),
             ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
             ..empty_update_subnet_payload(subnet_id)
@@ -573,6 +579,10 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
         )
         .await
         .is_ok());
+
+        let subnet_record = get_subnet_record(&registry, subnet_id).await;
+        let ecdsa_config = subnet_record.ecdsa_config.unwrap();
+        assert_eq!(ecdsa_config.max_queue_size, DEFAULT_ECDSA_MAX_QUEUE_SIZE);
 
         let new_signing_subnet_list: Vec<_> = get_value::<EcdsaSigningSubnetList>(
             &registry,

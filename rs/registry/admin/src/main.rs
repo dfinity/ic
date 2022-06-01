@@ -84,7 +84,7 @@ use ic_registry_local_store::{
 use ic_registry_nns_data_provider::data_provider::NnsDataProvider;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::CanisterIdRange;
-use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
+use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
 use ic_types::{
@@ -962,6 +962,11 @@ struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     pub ecdsa_keys_to_request: Option<String>,
 
+    /// The maximum number of ECDSA signature requests that can be enqueued at a
+    /// given time. Signature requests will be rejected if the queue is full.
+    #[clap(long)]
+    pub max_ecdsa_queue_size: Option<u32>,
+
     /// The list of public keys whose owners have "readonly" SSH access to all
     /// replicas on this subnet.
     #[clap(long, multiple_values(true))]
@@ -984,6 +989,7 @@ struct ProposeToCreateSubnetCmd {
 fn parse_initial_ecdsa_config_options(
     ecdsa_quadruples_to_create_in_advance: &Option<u32>,
     ecdsa_keys_to_request: &Option<String>,
+    max_ecdsa_queue_size: &Option<u32>,
 ) -> Option<EcdsaInitialConfig> {
     if ecdsa_quadruples_to_create_in_advance.is_none() && ecdsa_keys_to_request.is_none() {
         return None;
@@ -1020,6 +1026,7 @@ fn parse_initial_ecdsa_config_options(
                     })
                     .collect()
             }),
+        max_queue_size: Some(max_ecdsa_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE)),
     })
 }
 
@@ -1046,6 +1053,7 @@ impl ProposalTitleAndPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
         let ecdsa_config = parse_initial_ecdsa_config_options(
             &self.ecdsa_quadruples_to_create_in_advance,
             &self.ecdsa_keys_to_request,
+            &self.max_ecdsa_queue_size,
         );
 
         let scheduler_config = SchedulerConfig::default_for_subnet_type(self.subnet_type);
@@ -1209,6 +1217,12 @@ struct ProposeToUpdateRecoveryCupCmd {
     /// ]'
     #[clap(long)]
     pub ecdsa_keys_to_request: Option<String>,
+
+    /// Configuration for ECDSA:
+    /// The maximum number of signature requests that can be enqueued at any one
+    /// time. Requests will be rejected if the queue is full.
+    #[clap(long)]
+    pub max_ecdsa_queue_size: Option<u32>,
 }
 
 #[async_trait]
@@ -1242,6 +1256,7 @@ impl ProposalTitleAndPayload<RecoverSubnetPayload> for ProposeToUpdateRecoveryCu
         let ecdsa_config = parse_initial_ecdsa_config_options(
             &self.ecdsa_quadruples_to_create_in_advance,
             &self.ecdsa_keys_to_request,
+            &self.max_ecdsa_queue_size,
         );
         RecoverSubnetPayload {
             subnet_id,
@@ -1435,6 +1450,13 @@ struct ProposeToUpdateSubnetCmd {
     #[clap(long)]
     pub ecdsa_keys_to_remove: Option<Vec<String>>,
 
+    /// Configuration for ECDSA:
+    /// The maximum number of signature requests that can be enqueued at once.
+    /// If the queue fills up, signature requests will be rejected until there
+    /// is space.
+    #[clap(long)]
+    pub max_ecdsa_queue_size: Option<u32>,
+
     /// The features that are enabled and disabled on the subnet.
     #[clap(long)]
     pub features: Option<SubnetFeatures>,
@@ -1500,6 +1522,8 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
                 .ecdsa_config
                 .as_ref()
                 .map(|c| c.quadruples_to_create_in_advance);
+            let current_max_queue_size =
+                subnet.ecdsa_config.as_ref().and_then(|c| c.max_queue_size);
 
             let keys_to_remove = parse_ecdsa_keys_option(&self.ecdsa_keys_to_remove);
             let mut keys_to_add = parse_ecdsa_keys_option(&self.ecdsa_keys_to_generate);
@@ -1518,6 +1542,9 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
                     .ecdsa_quadruples_to_create_in_advance
                     .unwrap_or_else(|| current_quadruples_value.unwrap_or(1)),
                 key_ids: current_keys,
+                max_queue_size: Some(self.max_ecdsa_queue_size.unwrap_or_else(|| {
+                    current_max_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE)
+                })),
             })
         };
 

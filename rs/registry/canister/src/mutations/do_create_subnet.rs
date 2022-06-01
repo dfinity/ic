@@ -27,7 +27,7 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_subnet_list_record_key, make_subnet_record_key,
 };
-use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_features::{SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 
@@ -294,6 +294,8 @@ pub struct CreateSubnetPayload {
 pub struct EcdsaInitialConfig {
     pub quadruples_to_create_in_advance: u32,
     pub keys: Vec<EcdsaKeyRequest>,
+    /// Must be optional for registry candid backwards compatibility.
+    pub max_queue_size: Option<u32>,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -311,6 +313,7 @@ impl From<EcdsaInitialConfig> for EcdsaConfig {
                 .iter()
                 .map(|val| (&val.key_id).into())
                 .collect::<Vec<_>>(),
+            max_queue_size: val.max_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         }
     }
 }
@@ -379,7 +382,7 @@ mod test {
     use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
-    use ic_registry_subnet_features::EcdsaConfig;
+    use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 
     // Note: this can only be unit-tested b/c it fails before we hit inter-canister calls
     // for DKG + ECDSA
@@ -397,6 +400,7 @@ mod test {
                     },
                     subnet_id: None,
                 }],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }),
             ..Default::default()
         };
@@ -427,6 +431,7 @@ mod test {
             EcdsaConfig {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![key_id.clone()],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }
             .into(),
         );
@@ -443,6 +448,7 @@ mod test {
                     key_id,
                     subnet_id: Some(*TEST_USER2_PRINCIPAL),
                 }],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }),
             ..Default::default()
         };

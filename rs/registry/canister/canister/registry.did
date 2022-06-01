@@ -92,11 +92,13 @@ type DataCenterRecord = record {
 type DeleteSubnetPayload = record { subnet_id : opt principal };
 type EcdsaConfig = record {
   quadruples_to_create_in_advance : nat32;
+  max_queue_size : opt nat32;
   key_ids : vec EcdsaKeyId;
 };
 type EcdsaCurve = variant { secp256k1 };
 type EcdsaInitialConfig = record {
   quadruples_to_create_in_advance : nat32;
+  max_queue_size : opt nat32;
   keys : vec EcdsaKeyRequest;
 };
 type EcdsaKeyId = record { name : text; curve : EcdsaCurve };

@@ -364,4 +364,6 @@ message EcdsaConfig {
   reserved 2;
   // Identifiers for threshold ECDSA keys held by the subnet.
   repeated registry.crypto.v1.EcdsaKeyId key_ids = 3;
+  // The maximum number of signature requests that can be enqueued at once.
+  uint32 max_queue_size = 4;
 }

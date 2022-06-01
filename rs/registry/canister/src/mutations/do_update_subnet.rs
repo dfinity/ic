@@ -354,6 +354,7 @@ mod tests {
     use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{GossipAdvertConfig, GossipConfig, SubnetRecord};
+    use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::types::ids::subnet_test_id;
     use ic_types::p2p::{
@@ -410,6 +411,7 @@ mod tests {
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec![make_ecdsa_key("key_id_1")],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }),
             ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_2")]),
             ecdsa_key_signing_disable: None,
@@ -530,6 +532,7 @@ mod tests {
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
                 key_ids: vec![make_ecdsa_key("key_id_1")],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }),
             ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_2")]),
             ecdsa_key_signing_disable: None,
@@ -581,7 +584,8 @@ mod tests {
                 ecdsa_config: Some(
                     EcdsaConfig {
                         quadruples_to_create_in_advance: 10,
-                        key_ids: vec![make_ecdsa_key("key_id_1")]
+                        key_ids: vec![make_ecdsa_key("key_id_1")],
+                        max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                     }
                     .into()
                 ),
@@ -1056,6 +1060,7 @@ mod tests {
         payload.ecdsa_config = Some(EcdsaConfig {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![key.clone()],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         });
         payload.ecdsa_key_signing_enable = Some(vec![key]);
 
@@ -1093,6 +1098,7 @@ mod tests {
             EcdsaConfig {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![existing_key_id],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }
             .into(),
         );
@@ -1122,6 +1128,7 @@ mod tests {
                 curve: EcdsaCurve::Secp256k1,
                 name: "existing_key_id".to_string(),
             }],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         });
 
         registry.do_update_subnet(payload);
@@ -1158,6 +1165,7 @@ mod tests {
         payload.ecdsa_config = Some(EcdsaConfig {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![first_key.clone()],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         });
 
         registry.do_update_subnet(payload);
@@ -1175,6 +1183,7 @@ mod tests {
         payload.ecdsa_config = Some(EcdsaConfig {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![first_key.clone(), second_key.clone()],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         });
 
         registry.do_update_subnet(payload);
@@ -1210,6 +1219,7 @@ mod tests {
             EcdsaConfig {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![key.clone()],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }
             .into(),
         );
@@ -1225,6 +1235,7 @@ mod tests {
         payload.ecdsa_config = Some(EcdsaConfig {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![key.clone()],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         });
         payload.ecdsa_key_signing_enable = Some(vec![key.clone()]);
 
@@ -1250,6 +1261,7 @@ mod tests {
         payload.ecdsa_config = Some(EcdsaConfig {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         });
         payload.ecdsa_key_signing_disable = Some(vec![key.clone()]);
         registry.do_update_subnet(payload);
@@ -1291,6 +1303,7 @@ mod tests {
             EcdsaConfig {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![key_held_by_subnet.clone()],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }
             .into(),
         );
@@ -1306,6 +1319,7 @@ mod tests {
         payload.ecdsa_config = Some(EcdsaConfig {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![key_held_by_subnet.clone()],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         });
         payload.ecdsa_key_signing_enable = Some(vec![key_held_by_subnet.clone()]);
 
@@ -1372,6 +1386,7 @@ mod tests {
             EcdsaConfig {
                 quadruples_to_create_in_advance: 1,
                 key_ids: vec![key.clone()],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }
             .into(),
         );
@@ -1387,6 +1402,7 @@ mod tests {
         payload.ecdsa_config = Some(EcdsaConfig {
             quadruples_to_create_in_advance: 1,
             key_ids: vec![key.clone()],
+            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
         });
         payload.ecdsa_key_signing_enable = Some(vec![key.clone()]);
         payload.ecdsa_key_signing_disable = Some(vec![key]);
