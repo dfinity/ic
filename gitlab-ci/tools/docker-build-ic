@@ -31,6 +31,8 @@ else
     docker volume rm -f "$ARTIFACTS_VOLUME" 2>/dev/null || true
 fi
 
+git clean -ffdx
+
 GIT_REV=$(git rev-parse HEAD)
 docker image build --no-cache -t ic-build-bd:$TAG -f- . <<EOF
 FROM dfinity/ic-build:$DOCKER_IMG_VERSION

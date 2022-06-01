@@ -1,12 +1,30 @@
-docker-build-ic:
+.docker-build-ic:
   extends:
-    - .ubuntu-nix-docker-pinned-dc
-    - .rules-parent-pipeline
+    - .ubuntu-nix-docker
   needs: []
   stage: test
+  artifacts:
+    reports:
+      dotenv: nns.release.env
   script:
     - |
       set -euo pipefail
+      VERSION=$(git rev-parse HEAD)
+
+      if [ "$CI_JOB_NAME" != "docker-build-ic" ]; then
+          # use ic-admin to get the current "git version" of NNS subnet
+          cd rs
+          NNS_RELEASE_VERSION=$(cargo run -p ic-admin -- --nns-url=https://nns.ic0.app get-subnet 0 | jq -r '.records[0].value.replica_version_id')
+          cd -
+          # we pass nss version info to build-determinism-*-release jobs
+          echo "NNS_RELEASE_VERSION=$NNS_RELEASE_VERSION" > nns.release.env
+
+          # fetch and checkout this version
+          git fetch origin "$NNS_RELEASE_VERSION"
+          git checkout "$NNS_RELEASE_VERSION"
+          # NOTE: ic/$VERSION in S3 will have artifacts
+          #       for revision $NNS_RELEASE_VERSION !!!
+      fi
 
       # run docker-build-ic
       gitlab-ci/tools/docker-build-ic
@@ -27,16 +45,27 @@ docker-build-ic:
       sha256sum -b *.tar.* | tee SHA256SUMS
       cd ../../..
 
-      VERSION=$(git rev-parse HEAD)
       # release binaries
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-          "artifacts/docker-build-ic/release" docker-build-ic/release
+          "artifacts/docker-build-ic/release" "${CI_JOB_NAME}/release"
       # canister binaries
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-          "artifacts/docker-build-ic/canisters" docker-build-ic/canisters
+          "artifacts/docker-build-ic/canisters" "${CI_JOB_NAME}/canisters"
       # ic-os update img
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-          "artifacts/docker-build-ic/icos" docker-build-ic/guest-os/update-img
+          "artifacts/docker-build-ic/icos" "${CI_JOB_NAME}/guest-os/update-img"
+
+# MR Pipeline
+docker-build-ic:
+  extends:
+    - .docker-build-ic
+    - .rules-parent-pipeline
+
+# Scheduled Pipeline
+docker-build-ic-release:
+  extends:
+    - .docker-build-ic
+    - .rules-scheduled-reproducibility
