@@ -36,12 +36,13 @@ from .global_infra import GlobalInfra
 
 
 class Timed:
-
-    DEFAULT = {
-        "wall_clock_time_seconds": 0.0,
-        "process_time_seconds": 0.0,
-        "perf_counter_seconds": 0.0,
-    }
+    @staticmethod
+    def default() -> Dict[str, float]:
+        return {
+            "wall_clock_time_seconds": 0.0,
+            "process_time_seconds": 0.0,
+            "perf_counter_seconds": 0.0,
+        }
 
     def __init__(self, accumulator: Dict[str, str]):
         self.accumulator = accumulator
@@ -83,7 +84,7 @@ class PreProcessor:
         self.name = name
         self.stat = {
             "test_runtime_seconds": 0.0,
-            "pre_processing": Timed.DEFAULT,
+            "pre_processing": Timed.default(),
         }
         self._elapsed_time = 0.0
 
