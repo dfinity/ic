@@ -495,10 +495,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 basic_health_test::config_single_host,
                 par(vec![sys_t("basic_health_test", basic_health_test::test)]),
             ),
-            pot(
+            pot_with_setup(
                 "node_reassignment_pot",
-                orchestrator::node_reassignment_test::config(),
-                par(vec![t(
+                orchestrator::node_reassignment_test::config,
+                par(vec![sys_t(
                     "node_reassignment_test",
                     orchestrator::node_reassignment_test::test,
                 )]),
