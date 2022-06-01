@@ -9,27 +9,49 @@ System Tests (declared in `rs/tests/bin/prod_test_driver.rs`) can involve all
 components in combination in the form of a functioning IC. The test API is
 implemented in Rust.
 
-In System Tests, every node is instantiated as a virtual machine running the
+In System Tests, the smallest unit under test is a virtual machine. In
+particular, when deploying an Internet Computer instance, every node is
+instantiated as a virtual machine running the
 [ic-os](https://sourcegraph.com/github.com/dfinity/ic/-/tree/ic-os/guestos). The
 test driver allocates virtual machines using a backend service called
-[Farm](https://github.com/dfinity-lab/infra/tree/master/farm/). Resources
-allocated with farm are collected after a maximum time-to-live.
+[Farm](https://github.com/dfinity-lab/infra/tree/master/farm/). Farm actively
+manages all allocated resources. In particular, all virtual machines allocated
+by the test driver are collected after a maximum time-to-live.
 
 System Tests are organized in a hierarchy: every test belongs to a _pot_. A pot
 declares the test system (Internet Computer under test). Multiple tests can run
 using the same test instance (of a pot) either in parallel or in sequence. Pots
 in turn are grouped into _test suites_.
 
+```
+Suite0
+ |
+ | -- Pot0
+ |     |
+ |     | -- Test0
+ |     | -- Test1
+ |
+ | -- Pot1
+ |     | -- Test0
+ ...
+```
+
 ### How can I run system tests?
 
-Make sure you're in the nix-shell.
+First, make sure you're in the `nix-shell` started from `ic/rs`.
+
 When running system tests, the base ic-os version has to be set manually.
-Currently, only images built by CI can be used. Thus, you first need to find out
-the `IC_VERSION_ID` that belongs to the image that you want to use. Note that
-alongside the image itself, also all other build artifacts that belong to that
-version are downloaded from CI/CD (NNS canisters, auxiliary binaries, etc.).
-When run locally, only the test driver (including tests) is re-compiled and
-includes local changes.
+Currently, only disk images built by CI/CD can be used. Thus, you first need to
+find out the `IC_VERSION_ID` that belongs to the image that you want to use.
+Note that alongside the image itself, also all other build artifacts that belong
+to that version are downloaded from CI/CD (NNS canisters, auxiliary binaries,
+etc.). When run locally, only the test driver (including tests) is re-compiled
+and includes local changes.
+
+When running tests locally, it is possible, however, to provide all the test
+artifacts and build dependencies (with the exception of disk images) in a folder
+by specifying a corresponding directory in the `ARTIFACT_DIR` environment
+variable.
 
 You have two options to find the desired `IC_VERSION_ID`:
 
@@ -63,53 +85,126 @@ IC_VERSION_ID=<version> ./run-system-tests.py --suite hourly --include-pattern b
 
 If you have further questions, please contact the testing team on #eng-testing.
 
-### High Level Overview
+# How to write a System Test
 
-The `rs/tests` crate builds our `system-tests` binary, whose sole responsibility is to run our system tests 
-Underneath `system-tests` we have two auxiliary libraries: `ic_fondue` and `fondue`.
+Before progressing, it is worth understanding how system tests work
+conceptually and what makes them different from unit tests.
 
-1. `fondue` is a general-purpose abstraction for running distributed system
-	 tests. It enables us to specify a initial configuration describing the
-	 initial state of the system, an active test that interacts with the
-	 configured system and a passive pipeline that monitors the signals from the
-	 different system components. Fondue is paramount to our tests by abstracting
-	 away the meta environment setup: which thread processes what? Where do the
-	 log messages go? How do we access the passive pipeline from within a test?
-	 How do we pass a PRNG through ensuring they are reproducible? etc...
-	 Moreover, having a general purpose library ensures we can test that these
-	 features are all working properly with toy systems, increasing the
-	 confidence in `fondue`'s reliability.
-1. `ic_fondue` is an instantiation of `fondue` for the IC: the initial
-	 configuration corresponds with a topology, each `fondue` process is a
-	 `orchestrator` and we look at the logs produced by each replica as the source
-	 of passive information. This minimizes the chance of a test writer wiring
-	 everything in the wrong way.
+System tests are a form of end-to-end tests. Currently, they integrate all
+layers of the Internet Computer software stack with the exception of the Host
+OS. E.g., it is not possible at the moment to test host os upgrades.
 
-### So You Want to Write a Test?
+Technically, the testing infrastructure can be used to deploy any kind of
+virtual machine (e.g. auxiliary services like rosetta node), provided the images
+are available in the correct format. However, typically, a setup procedure of a
+pot instantiates one Internet Computer instance and possibly some auxiliary
+virtual machines.
 
-You've got the urge to write a test? Need a little guidance? you can start
-looking at `src/basic_health_test`. It is a small, documented and rich example.
-Please, ask your questions away on #eng-testing! We're happy to answer them.
+When instantiating an IC, the IC is «bootstrapped». For all intends and
+purposes, this is the same procedure as was used when mainnet was launched:
+`ic-prep` is used to generate the initial registry reflecting the initial
+topology of the network.
+
+## Test Environment
+
+A *test environment* is essentially a directory structure that contains
+information about the environment in which the test is executed. For example, it
+contains infrastructure configuration, such as the URL of Farm is located. Or,
+when a Internet Computer is deployed in the setup of a pot, the corresponding
+topology data is stored in the test env—which can then be picked up by the
+tests.
+
+From the point of view of the test driver, both a test and a setup function are
+just procedures that operate on the test environment. They both have the
+same signature:
+
+```rust
+fn setup(test_env: TestEnv) { /* ... */ }
+fn test(test_env: TestEnv) { /* ... */ }
+```
+
+For example, when an Internet Computer is instantiated, information about the
+internet computer is stored in the test environment which can then be picked up
+in the test:
+
+```rust
+fn setup(test_env: TestEnv) {
+	InternetComputer::new()
+	    .with_subnet(/* ... */)
+		.setup_and_start(&test_env); // (1)
+}
+
+fn test(test_env: TestEnv) {
+	use crate::test_env_api::*;
+	let root_subnet = test_env
+		.topology_snapshot()         // (2)
+		.root_subnet();              // (3)
+}
+```
+
+The module
+[`test_env_api`](https://sourcegraph.com/github.com/dfinity/ic/-/blob/rs/tests/src/driver/test_env_api.rs)
+contains traits and functions to access the information contained in the test
+environment in a structured way. For example,
+the above call (1), initializes the IC and stores the initial registry (and
+further config data) under `<test_env>/ic_prep`. 
+
+The call in (2), in turn, reads this information to construct a data structure
+that reflects the initial topology. So, e.g., the call (3) returns a data
+structure that represents to root_subnet.
+
+For more information about the test environment API, check out the module
+`test_env_api.rs` and its module documentation!
+
+## Working Directory
+
+As stated in the previous section, any test works within a test environment.
+Before a test starts, the test driver «forks» the test environment of the
+corresponding pot setup; that just means, the directory is copied as is. Thus,
+every test *inherits* the environment of the pot's setup, but no two tests share
+the same test environment.
+
+All tests environment are placed in the working directory of the test driver
+(see CLI options for more information). The working directory's structure
+follows the hierarchical structure of the tests. For example:
+
+```
+── working_dir
+   └── 20220428_224049         <<== timestamp of test run
+       ├── api_test            <<== POT name
+       │   ├── setup           <<== data related to the setup of this pot
+       │   │   ├── ic_prep
+       │   │   │   ├── blessed_replica_versions.pb
+       │   │   │   <... etc. etc. ...>
+       │   │   └── test.log    <<== logs produced during the setup
+       │   └── tests
+       │       ├── ics_have_correct_subnet_count  <<== test name
+       │       │   <... more files ...>
+       │       │   ├── test.log                   <<== test (driver) log
+       │       |   ├── test_execution_result.json <<== test result
+	   <... etc. ...>
+       ├── system_env           <<== global system env that all pots inherit
+       │   ├──suite_execution_contract.json
+<... etc. ...>
+```
+
+
+## Example Test
+
+The `basic_health_test` is an example test that should act as guidance on how to
+use the test API.
+
+## Guiding principles when writing tests
 
 When writing your test, please keep in mind a few important things:
 
-. Make sure to add a ASCIIDOC description to the beginning of your file, just
-	 like `basic_health_test`.
-. Keep reproducibility in mind. All the tests receive a PRNG to be used to do
-	 any sort of random operation, please use it as much as reasonably possible.
-. Refrain from `println!` and use the logging primitives instead.
-. Do not make too many environment assumptions: `fondue` enables us to easily
-	 re-use a setup, providing a simple way to decrease runtime of our tests. In
-	 fact, `fondue` divides tests in two categories: (A) isolated tests and (B)
-	 composable tests. Isolated tests have full freedom to change their
-	 environment by starting, stopping and restarting nodes.  Composable tests,
-	 on the other hand, can only _read_ from their environment. Hence, if you
-	 write your test as a composable test, chances are we can group it with some
-	 other composable tests and share the same IC instance to run them.
-. Put your test in a suitable folder in the src directory or create a new sub-directory.
-     Don't forget to modify CODEOWNERS accordingly.
-. Go ahead and write a test that we can run!
-
+* Make sure to add a ASCIIDOC description to the beginning of your file, just
+like `basic_health_test`.
+* Keep reproducibility in mind. For example, if you use a RNG in the test, make sure the seed is fixed (or at least logged).
+* Refrain from `println!` and use the logging primitives of the test environment instead.
+* In general, do not make too many environment assumptions. For example, never access the file system directory or only through information available through the test environment.
+* Put your test in a suitable folder in the src directory or create a new
+sub-directory. Don't forget to modify CODEOWNERS accordingly.
 
 ### A note on the CLI
 
