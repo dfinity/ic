@@ -24,6 +24,8 @@ use wasmtime::Config;
 #[doc(hidden)] // pub for usage in tests
 pub const RESERVED_SYMBOLS: [&str; 2] = ["canister counter_instructions", "canister_start"];
 
+const WASM_FUNCTION_COMPLEXITY_LIMIT: usize = 10_000;
+
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
 struct FunctionSignature {
@@ -1016,6 +1018,35 @@ pub fn validate_custom_section(
     Ok(WasmMetadata::new(validated_custom_sections))
 }
 
+fn validate_code_section(module: &Module) -> Result<(), WasmValidationError> {
+    if let Some(code_section) = module.code_section() {
+        for func_body in code_section.bodies().iter() {
+            let complexity_count = func_body
+                .code()
+                .elements()
+                .iter()
+                .filter(|instruction| {
+                    matches!(
+                        instruction,
+                        Instruction::Block(_)
+                            | Instruction::Loop(_)
+                            | Instruction::If(_)
+                            | Instruction::Br(_)
+                            | Instruction::BrIf(_)
+                            | Instruction::BrTable(_)
+                            | Instruction::Call(_)
+                            | Instruction::CallIndirect(_, _)
+                    )
+                })
+                .count();
+            if complexity_count >= WASM_FUNCTION_COMPLEXITY_LIMIT {
+                return Err(WasmValidationError::FunctionComplexityTooHigh);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Sets Wasmtime flags to ensure deterministic execution.
 pub fn ensure_determinism(config: &mut Config) {
     config
@@ -1089,6 +1120,7 @@ pub fn validate_wasm_binary(
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;
+    validate_code_section(&module)?;
     let wasm_metadata = validate_custom_section(&module, config)?;
     Ok(WasmValidationDetails {
         reserved_exports,
