@@ -22,10 +22,10 @@ Coverage::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::nns::{add_nodes_to_subnet, remove_nodes_via_endpoint, NnsExt};
+use crate::driver::{test_env::TestEnv, test_env_api::*};
+use crate::nns::{add_nodes_to_subnet, remove_nodes_via_endpoint};
 use crate::util::*;
 use ic_agent::export::Principal;
-use ic_fondue::ic_manager::IcHandle;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::{debug, info};
@@ -34,7 +34,7 @@ use url::Url;
 const DKG_INTERVAL: u64 = 14;
 const SUBNET_SIZE: usize = 4;
 
-pub fn config() -> InternetComputer {
+pub fn config(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -46,123 +46,164 @@ pub fn config() -> InternetComputer {
                 .add_nodes(SUBNET_SIZE)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
         )
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let log = &ctx.logger;
-    ctx.install_nns_canisters(&handle, true);
-    info!(ctx.logger, "NNS canisters installed");
+pub fn test(env: TestEnv) {
+    let log = &env.logger();
+    let topo_snapshot = env.topology_snapshot();
+    topo_snapshot.subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 
-    let mut rng = ctx.rng.clone();
-    // // Take all nns nodes
-    let nodes = &handle
-        .as_permutation(&mut rng)
-        .filter(|ep| ep.is_root_subnet)
-        .collect::<Vec<_>>();
+    let nns_node = topo_snapshot
+        .root_subnet()
+        .nodes()
+        .next()
+        .expect("there is no NNS node");
+    nns_node
+        .install_nns_canisters()
+        .expect("NNS canisters not installed");
+    info!(log, "NNS canisters installed");
+
+    // Take all nns nodes
+    let mut nodes = topo_snapshot.root_subnet().nodes();
 
     // these nodes will be reassigned
-    let node1 = nodes[0];
-    let node2 = nodes[1];
+    let node1 = nodes.next().unwrap();
+    let node2 = nodes.next().unwrap();
     // These nodes will stay
-    let node3 = nodes[2];
-    let node4 = nodes[3];
+    let node3 = nodes.next().unwrap();
+    let node4 = nodes.next().unwrap();
 
     // Before we move the nodes, we store a message and make sure the message is shared across
     // NNS nodes.
-    block_on(node1.assert_ready(ctx));
-    block_on(node2.assert_ready(ctx));
-
     let nns_msg = "hello world from nns!";
 
-    let nns_can_id = block_on(store_message(&node1.url, nns_msg));
-    assert!(block_on(can_read_msg(log, &node1.url, nns_can_id, nns_msg)));
-    assert!(block_on(can_read_msg_with_retries(
-        log, &node2.url, nns_can_id, nns_msg, 5
-    )));
-
-    info!(ctx.logger, "Message on both nns nodes verified!");
-
-    // Now we store another message on the app subnet.
-    let app_node = get_random_application_node_endpoint(&handle, &mut rng);
-    block_on(app_node.assert_ready(ctx));
-    let app_msg = "hello world from app subnet!";
-    let app_can_id = block_on(store_message(&app_node.url, app_msg));
+    let nns_can_id = block_on(store_message(&node1.get_public_url(), nns_msg));
     assert!(block_on(can_read_msg(
         log,
-        &app_node.url,
+        &node1.get_public_url(),
+        nns_can_id,
+        nns_msg
+    )));
+    assert!(block_on(can_read_msg_with_retries(
+        log,
+        &node2.get_public_url(),
+        nns_can_id,
+        nns_msg,
+        5
+    )));
+
+    info!(log, "Message on both nns nodes verified!");
+
+    // Now we store another message on the app subnet.
+    let app_subnet = topo_snapshot
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .expect("there is no application subnet");
+    let app_node = app_subnet
+        .nodes()
+        .next()
+        .expect("there is no application node");
+    app_node.await_status_is_healthy().unwrap();
+    let app_msg = "hello world from app subnet!";
+    let app_can_id = block_on(store_message(&app_node.get_public_url(), app_msg));
+    assert!(block_on(can_read_msg(
+        log,
+        &app_node.get_public_url(),
         app_can_id,
         app_msg
     )));
-    info!(ctx.logger, "Message on app node verified!");
+    info!(log, "Message on app node verified!");
 
     // Unassign 2 nns nodes
-    block_on(node3.assert_ready(ctx));
-    block_on(node4.assert_ready(ctx));
+    node3.await_status_is_healthy().unwrap();
+    node4.await_status_is_healthy().unwrap();
     let node_ids: Vec<_> = vec![node1.node_id, node2.node_id];
-    block_on(remove_nodes_via_endpoint(node3.url.clone(), &node_ids)).unwrap();
-    info!(
-        ctx.logger,
-        "Removed node ids {:?} from the NNS subnet", node_ids
-    );
+    block_on(remove_nodes_via_endpoint(node3.get_public_url(), &node_ids)).unwrap();
+    info!(log, "Removed node ids {:?} from the NNS subnet", node_ids);
 
-    let subnet_id = app_node.subnet_id().unwrap();
-    block_on(add_nodes_to_subnet(node3.url.clone(), subnet_id, &node_ids)).unwrap();
+    block_on(add_nodes_to_subnet(
+        node3.get_public_url(),
+        app_subnet.subnet_id,
+        &node_ids,
+    ))
+    .unwrap();
     info!(
-        ctx.logger,
-        "Added node ids {:?} to subnet {}", node_ids, subnet_id
+        log,
+        "Added node ids {:?} to subnet {}", node_ids, app_subnet.subnet_id
     );
     info!(
-        ctx.logger,
+        log,
         "Waiting for moved nodes to return the app subnet message..."
     );
-    block_on(node1.assert_ready(ctx));
-    block_on(node2.assert_ready(ctx));
+    node1.await_status_is_healthy().unwrap();
+    node2.await_status_is_healthy().unwrap();
     assert!(block_on(can_read_msg_with_retries(
-        log, &node1.url, app_can_id, app_msg, 50
+        log,
+        &node1.get_public_url(),
+        app_can_id,
+        app_msg,
+        50
     )));
     assert!(block_on(can_read_msg_with_retries(
-        log, &node2.url, app_can_id, app_msg, 5
+        log,
+        &node2.get_public_url(),
+        app_can_id,
+        app_msg,
+        5
     )));
-    info!(
-        ctx.logger,
-        "App message on former NNS nodes could be retrieved!"
-    );
+    info!(log, "App message on former NNS nodes could be retrieved!");
 
-    assert!(block_on(can_read_msg(log, &node3.url, nns_can_id, nns_msg)));
-    assert!(block_on(can_read_msg(log, &node4.url, nns_can_id, nns_msg)));
+    assert!(block_on(can_read_msg(
+        log,
+        &node3.get_public_url(),
+        nns_can_id,
+        nns_msg
+    )));
+    assert!(block_on(can_read_msg(
+        log,
+        &node4.get_public_url(),
+        nns_can_id,
+        nns_msg
+    )));
     info!(
-        ctx.logger,
+        log,
         "NNS message on remaining NNS nodes could be retrieved!"
     );
 
     // Now make sure the subnets are able to store new messages
-    info!(ctx.logger, "Try to store new messages on NNS...");
+    info!(log, "Try to store new messages on NNS...");
     let nns_msg_2 = "hello again on nns!";
-    let nns_can_id_2 = block_on(store_message(&node3.url, nns_msg_2));
+    let nns_can_id_2 = block_on(store_message(&node3.get_public_url(), nns_msg_2));
     assert!(block_on(can_read_msg_with_retries(
         log,
-        &node4.url,
+        &node4.get_public_url(),
         nns_can_id_2,
         nns_msg_2,
         5
     )));
 
-    info!(ctx.logger, "Try to store new messages on app subnet...");
+    info!(log, "Try to store new messages on app subnet...");
     let app_msg_2 = "hello again on app subnet!";
-    let app_can_id_2 = block_on(store_message(&app_node.url, app_msg_2));
+    let app_can_id_2 = block_on(store_message(&app_node.get_public_url(), app_msg_2));
     assert!(block_on(can_read_msg_with_retries(
         log,
-        &node1.url,
+        &node1.get_public_url(),
         app_can_id_2,
         app_msg_2,
         5
     )));
     info!(
-        ctx.logger,
+        log,
         "New messages could be written and retrieved on both subnets!"
     );
 
-    info!(ctx.logger, "Test finished successfully");
+    info!(log, "Test finished successfully");
 }
 
 pub async fn store_message(url: &Url, msg: &str) -> Principal {
