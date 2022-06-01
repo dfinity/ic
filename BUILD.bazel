@@ -35,6 +35,11 @@ buildifier_test(
     ],
 )
 
+alias(
+    name = "bazelifier",
+    actual = "//rs/bazelifier",
+)
+
 cargo_build(
     name = "binaries",
     srcs = ["//rs:all_sources"],

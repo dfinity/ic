@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 askama = { version = "0.11.1", features = ["serde-json"] }
-toml = "0.5.9"
+clap = { version = "3.1.18", features = ["derive"] }
+eyre = "0.6.8"
 pathdiff = "0.2.1"
 serde = { version = "1.0.137", features = ["derive"] }
-eyre = "0.6.8"
-clap = { version = "3.1.18", features = ["derive"] }
+toml = "0.5.9"
