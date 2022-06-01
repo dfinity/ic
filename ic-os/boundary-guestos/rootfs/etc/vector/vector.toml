@@ -7,6 +7,8 @@ inputs = ["vector_metrics"]
 address = "0.0.0.0:9598"
 default_namespace = "vector"
 
+# nginx
+
 [sources.nginx_access]
 type = "file"
 include = ["/var/log/nginx/access_json.log"]
@@ -34,5 +36,34 @@ inputs = ["nginx_access_json"]
 endpoint = "${ELASTICSEARCH_URL}"
 mode = "bulk"
 bulk.index = "boundary-node-nginx-access-%Y.%m.%d"
+tls.enabled = true
+tls.verify_certificate = false
+
+# prober
+
+[sources.prober]
+type = "file"
+include = ["/var/log/prober/prober.log.*"]
+
+[transforms.prober_json]
+type = "remap"
+inputs = ["prober"]
+source = """
+. = parse_json!(.message)
+
+.@timestamp = to_timestamp!(.timestamp, unit: "milliseconds")
+.@timestamp = to_unix_timestamp!(.@timestamp, unit: "milliseconds")
+del(.timestamp)
+
+. = merge!(., .span)
+del(.span)
+"""
+
+[sinks.elasticsearch_prober]
+type = "elasticsearch"
+inputs = ["prober_json"]
+endpoint = "${ELASTICSEARCH_URL}"
+mode = "bulk"
+bulk.index = "boundary-node-prober-%Y.%m.%d"
 tls.enabled = true
 tls.verify_certificate = false
