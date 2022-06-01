@@ -1,0 +1,34 @@
+= IC_NNS_CanisterMessageInstructionsNearLimit
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+
+== Triggered by
+
+A message execution on an NNS canister used more than 20B instructions. NNS
+message instruction limit is 50B. Relevant histogram buckets are 20B, 50B and
+70B.
+
+== Impact
+
+Consistently heavy (in terms of instructions) NNS canister message execution may
+point to e.g. registry or other certification nearing the hard instruction limit
+and being at risk of persistent failure.
+
+Furthermore, long message executions result in increased latency, as perceived
+by both users and other canisters.
+
+== Possible causes (non-exhaustive)
+
+Some NNS canister message (likely related to registry certification; or
+governance rewards calculation) required a large number of instructions to
+execute. This may have to do with a growing registry size; or, respectively,
+a growing number of voting neurons.
+
+== Troubleshooting and remediation
+
+The full NNS blockchain is persisted, so it should be easy to identify the
+offending message and canister. Contact the `#backup-ops` Slack channel or the
+members of `@dfinity-lab/teams/consensus-owners` for help.
+
+Once the offending canister is identified, contact `#eng-nns` or `#eng-nns-dapp`
+for mitigation and remediation.
