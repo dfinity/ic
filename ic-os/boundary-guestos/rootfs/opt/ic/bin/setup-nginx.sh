@@ -45,7 +45,7 @@ function setup_domain_name() {
         exit 1
     fi
     pushd /etc/nginx/conf.d
-    for filename in ./001-mainnet-nginx.conf ./002-rosetta-nginx.conf; do
+    for filename in ./001-mainnet-nginx.conf ./002-rosetta-nginx.conf ./999-test-ic-nginx.conf.exclude; do
         sed -i -e "s/{{DOMAIN}}/${DOMAIN}/g" -e "s/{{TLD}}/${TLD}/g" ${filename}
     done
     popd
