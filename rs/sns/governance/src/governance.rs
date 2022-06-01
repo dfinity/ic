@@ -709,7 +709,7 @@ impl Governance {
 
     /// Returns a neuron given the neuron's ID or an error if no neuron with the given ID
     /// is found.
-    pub fn get_neuron(&self, req: &GetNeuron) -> GetNeuronResponse {
+    pub fn get_neuron(&self, req: GetNeuron) -> GetNeuronResponse {
         let nid = &req
             .neuron_id
             .as_ref()

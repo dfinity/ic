@@ -316,7 +316,7 @@ fn get_neuron() {
 /// Internal method for calling get_neuron.
 #[candid_method(query, rename = "get_neuron")]
 fn get_neuron_(get_neuron: GetNeuron) -> GetNeuronResponse {
-    governance().get_neuron(&get_neuron)
+    governance().get_neuron(get_neuron)
 }
 
 /// Returns a list of neurons of size `limit` using `start_page_at` to
