@@ -4,13 +4,17 @@ use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client::Sender;
+use ic_ledger_core::{
+    block::{BlockType, EncodedBlock},
+    timestamp::TimeStamp,
+};
 use ledger_canister::{
     AccountBalanceArgs, AccountIdentifier, ArchiveOptions, Archives, BinaryAccountBalanceArgs,
-    Block, BlockArg, BlockHeight, BlockRange, BlockRes, CandidBlock, EncodedBlock, GetBlocksArgs,
-    GetBlocksError, GetBlocksRes, GetBlocksResult, IterBlocksArgs, IterBlocksRes,
-    LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, Operation, QueryBlocksResponse, SendArgs,
-    Subaccount, TimeStamp, Tokens, TotalSupplyArgs, Transaction, TransferArgs, TransferError,
-    TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE,
+    Block, BlockArg, BlockHeight, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError,
+    GetBlocksRes, GetBlocksResult, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, Memo,
+    NotifyCanisterArgs, Operation, QueryBlocksResponse, SendArgs, Subaccount, Tokens,
+    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
+    DEFAULT_TRANSFER_FEE,
 };
 use on_wire::IntoWire;
 use serde::Deserialize;
@@ -151,7 +155,10 @@ async fn get_archives(canister: &Canister<'_>) -> Result<Archives, String> {
 fn assert_same_blocks(pb: &[EncodedBlock], candid: &[CandidBlock]) {
     assert_eq!(pb.len(), candid.len());
     for (pb_block, did_block) in pb.iter().zip(candid.iter()) {
-        assert_eq!(&CandidBlock::from(pb_block.decode().unwrap()), did_block);
+        assert_eq!(
+            &CandidBlock::from(Block::decode(pb_block.clone()).unwrap()),
+            did_block
+        );
     }
 }
 
@@ -234,7 +241,7 @@ fn archive_blocks_small_test() {
         // time
         let max_message_size_bytes = 192;
         let node_max_memory_size_bytes =
-            example_block().encode().unwrap().size_bytes() * blocks_per_archive_node;
+            example_block().encode().size_bytes() * blocks_per_archive_node;
         let archive_options = ArchiveOptions {
             trigger_threshold: 12,
             num_blocks_to_archive: 12,
@@ -344,7 +351,7 @@ fn archive_blocks_small_test() {
                     },
                     result: all_blocks
                         .iter()
-                        .map(|eb| CandidBlock::from(eb.decode().unwrap()))
+                        .map(|eb| CandidBlock::from(Block::decode(eb.clone()).unwrap()))
                         .collect(),
                 },
             )
@@ -368,7 +375,7 @@ fn archive_blocks_large_test() {
         // 1 MiB
         let max_message_size_bytes: usize = 1024 * 1024;
         let node_max_memory_size_bytes: usize =
-            example_block().encode().unwrap().size_bytes() * blocks_per_archive_node;
+            example_block().encode().size_bytes() * blocks_per_archive_node;
         let archive_options = ArchiveOptions {
             trigger_threshold: 64 * 64,
             num_blocks_to_archive: 64 * 64,
@@ -652,7 +659,7 @@ fn notify_test() {
 
             let blocks_per_archive_call = 3;
 
-            let e = example_block().encode().unwrap();
+            let e = example_block().encode();
             println!("[test] encoded block size: {}", e.size_bytes());
             (
                 e.size_bytes() * blocks_per_archive_node,
@@ -827,7 +834,7 @@ fn notify_disabled_test() {
 
             let blocks_per_archive_call = 3;
 
-            let e = example_block().encode().unwrap();
+            let e = example_block().encode();
             println!("[test] encoded block size: {}", e.size_bytes());
             (
                 e.size_bytes() * blocks_per_archive_node,
@@ -1214,7 +1221,10 @@ fn transaction_test() {
                     IterBlocksArgs::new(0usize, 100usize),
                 )
                 .await?;
-            blocks.iter().map(|rb| rb.decode().unwrap()).collect()
+            blocks
+                .iter()
+                .map(|rb| Block::decode(rb.clone()).unwrap())
+                .collect()
         };
 
         let mint_transaction = blocks
@@ -1293,7 +1303,7 @@ fn get_block_test() {
 
         let max_message_size_bytes: usize = 1024 * 1024;
         let node_max_memory_size_bytes: usize = {
-            let e = example_block().encode().unwrap();
+            let e = example_block().encode();
             println!("[test] encoded block size: {}", e.size_bytes());
             e.size_bytes() * blocks_per_archive_node
         };
@@ -1335,11 +1345,7 @@ fn get_block_test() {
         for i in 0..num_blocks - 1 {
             let BlockRes(block) = ledger.query_("block_pb", protobuf, i).await?;
             // Since blocks are still in the Ledger we should get Some(Ok(block))
-            let block = block
-                .unwrap()
-                .unwrap()
-                .decode()
-                .expect("unable to decode block");
+            let block = Block::decode(block.unwrap().unwrap()).expect("unable to decode block");
             blocks_from_ledger_before_archive.push(blk(&block))
         }
 
@@ -1364,7 +1370,7 @@ fn get_block_test() {
                 let BlockRes(block) = node.query_("get_block_pb", protobuf, BlockArg(i)).await?;
                 // We should get Some(Ok(block))
                 let block = block.expect("block not found in the archive node").unwrap();
-                block.decode().unwrap()
+                Block::decode(block).unwrap()
             };
             println!("[test] retrieved block: {:?}", blk(&block));
             blocks_from_archive.push(blk(&block))
@@ -1388,7 +1394,7 @@ fn get_block_test() {
         let BlockRes(block_from_ledger) = ledger
             .query_("block_pb", protobuf, BlockArg(block_index))
             .await?;
-        let block_from_ledger = block_from_ledger.unwrap().unwrap().decode().unwrap();
+        let block_from_ledger = Block::decode(block_from_ledger.unwrap().unwrap()).unwrap();
         println!(
             "[test] retrieved block [{}]: {:?}",
             block_index,
@@ -1417,7 +1423,7 @@ fn get_block_test() {
                 .await?;
             block.unwrap().unwrap()
         };
-        let block_from_archive = block_from_archive.decode().unwrap();
+        let block_from_archive = Block::decode(block_from_archive).unwrap();
         println!(
             "[test] retrieved block [{}]: {:?}",
             block_index,
@@ -1456,7 +1462,7 @@ fn get_multiple_blocks_test() {
 
         let max_message_size_bytes: usize = 1024 * 1024;
         let node_max_memory_size_bytes: usize = {
-            let e = example_block().encode().unwrap();
+            let e = example_block().encode();
             println!("[test] encoded block size: {}", e.size_bytes());
             e.size_bytes() * blocks_per_archive_node
         };
@@ -1630,7 +1636,7 @@ fn only_ledger_can_append_blocks_to_archive_nodes() {
         let blocks_per_archive_node: usize = 128;
 
         let node_max_memory_size_bytes: usize = {
-            let e = example_block().encode().unwrap();
+            let e = example_block().encode();
             println!("[test] encoded block size: {}", e.size_bytes());
             e.size_bytes() * blocks_per_archive_node
         };
@@ -1863,7 +1869,7 @@ fn test_transfer_candid() {
                 fee: Tokens::from_e8s(10_000),
                 from_subaccount: None,
                 to: acc2_address.to_address(),
-                created_at_time: Some(TimeStamp { timestamp_nanos }),
+                created_at_time: Some(TimeStamp::from_nanos_since_unix_epoch(timestamp_nanos)),
             },
         )
         .await
@@ -1889,7 +1895,7 @@ fn test_transfer_candid() {
                     fee: Tokens::from_e8s(10_000),
                     from_subaccount: None,
                     to: acc2_address.to_address(),
-                    created_at_time: Some(TimeStamp { timestamp_nanos }),
+                    created_at_time: Some(TimeStamp::from_nanos_since_unix_epoch(timestamp_nanos)),
                 },
             )
             .await,
@@ -1946,9 +1952,9 @@ fn test_transfer_candid() {
                     fee: Tokens::from_e8s(10_000),
                     from_subaccount: None,
                     to: acc2_address.to_address(),
-                    created_at_time: Some(TimeStamp {
-                        timestamp_nanos: timestamp_nanos.saturating_sub(NANOS_PER_YEAR)
-                    }),
+                    created_at_time: Some(TimeStamp::from_nanos_since_unix_epoch(
+                        timestamp_nanos.saturating_sub(NANOS_PER_YEAR)
+                    )),
                 },
             )
             .await,
@@ -1967,9 +1973,9 @@ fn test_transfer_candid() {
                     fee: Tokens::from_e8s(10_000),
                     from_subaccount: None,
                     to: acc2_address.to_address(),
-                    created_at_time: Some(TimeStamp {
-                        timestamp_nanos: timestamp_nanos.saturating_add(NANOS_PER_YEAR)
-                    }),
+                    created_at_time: Some(TimeStamp::from_nanos_since_unix_epoch(
+                        timestamp_nanos.saturating_add(NANOS_PER_YEAR)
+                    )),
                 },
             )
             .await,

@@ -2,10 +2,13 @@ use candid::CandidType;
 use dfn_protobuf::ProtoBuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
+use ic_ledger_core::{
+    block::{BlockType, EncodedBlock, HashOf, HASH_LENGTH},
+    timestamp::TimeStamp,
+};
 use intmap::IntMap;
 use lazy_static::lazy_static;
 use on_wire::{FromWire, IntoWire};
-use phantom_newtype::Id;
 use serde::{
     de::{Deserializer, MapAccess, Visitor},
     ser::SerializeMap,
@@ -15,11 +18,9 @@ use std::borrow::Cow;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::convert::TryFrom;
-use std::convert::TryInto;
 use std::fmt;
 use std::hash::Hash;
 use std::marker::PhantomData;
-use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
@@ -30,7 +31,6 @@ pub mod tokens;
 #[path = "../gen/ic_ledger.pb.v1.rs"]
 pub mod protobuf;
 pub mod range_utils;
-pub mod timestamp;
 pub mod validate_endpoints;
 
 pub mod archive;
@@ -41,151 +41,9 @@ use dfn_core::api::now;
 
 pub mod spawn;
 pub use account_identifier::{AccountIdentifier, Subaccount};
-pub use protobuf::TimeStamp;
 pub use tokens::{Tokens, DECIMAL_PLACES, DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
 
-pub const HASH_LENGTH: usize = 32;
 pub const MAX_BLOCKS_PER_REQUEST: usize = 2000;
-
-#[derive(CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct HashOf<T> {
-    inner: Id<T, [u8; HASH_LENGTH]>,
-}
-
-impl<T: std::clone::Clone> Copy for HashOf<T> {}
-
-impl<T> HashOf<T> {
-    pub fn into_bytes(self) -> [u8; HASH_LENGTH] {
-        self.inner.get()
-    }
-
-    pub fn new(bs: [u8; HASH_LENGTH]) -> Self {
-        HashOf { inner: Id::new(bs) }
-    }
-}
-
-impl<T> fmt::Display for HashOf<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let res = hex::encode(self.inner.get());
-        write!(f, "{}", res)
-    }
-}
-
-impl<T> FromStr for HashOf<T> {
-    type Err = String;
-    fn from_str(s: &str) -> Result<HashOf<T>, String> {
-        let v = hex::decode(s).map_err(|e| e.to_string())?;
-        let slice = v.as_slice();
-        match slice.try_into() {
-            Ok(ba) => Ok(HashOf::new(ba)),
-            Err(_) => Err(format!(
-                "Expected a Vec of length {} but it was {}",
-                HASH_LENGTH,
-                v.len(),
-            )),
-        }
-    }
-}
-
-impl<T> Serialize for HashOf<T> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        if serializer.is_human_readable() {
-            serializer.serialize_str(&self.to_string())
-        } else {
-            serializer.serialize_bytes(self.inner.get_ref())
-        }
-    }
-}
-
-impl<'de, T> Deserialize<'de> for HashOf<T> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct HashOfVisitor<T> {
-            phantom: PhantomData<T>,
-        }
-
-        impl<'de, T> Visitor<'de> for HashOfVisitor<T> {
-            type Value = HashOf<T>;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(
-                    formatter,
-                    "a hash of type {}: a blob with at most {} bytes",
-                    std::any::type_name::<T>(),
-                    HASH_LENGTH
-                )
-            }
-
-            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                Ok(HashOf::new(
-                    v.try_into().expect("hash does not have correct length"),
-                ))
-            }
-
-            fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                HashOf::from_str(s).map_err(E::custom)
-            }
-        }
-
-        if deserializer.is_human_readable() {
-            deserializer.deserialize_str(HashOfVisitor {
-                phantom: PhantomData,
-            })
-        } else {
-            deserializer.deserialize_bytes(HashOfVisitor {
-                phantom: PhantomData,
-            })
-        }
-    }
-}
-
-#[derive(
-    Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash,
-)]
-#[serde(transparent)]
-pub struct EncodedBlock(pub serde_bytes::ByteBuf);
-
-impl From<Vec<u8>> for EncodedBlock {
-    fn from(bytes: Vec<u8>) -> Self {
-        Self::from_vec(bytes)
-    }
-}
-
-impl EncodedBlock {
-    pub fn hash(&self) -> HashOf<Self> {
-        let mut state = Sha256::new();
-        state.write(&self.0);
-        HashOf::new(state.finish())
-    }
-
-    pub fn decode(&self) -> Result<Block, String> {
-        let bytes = self.0.to_vec();
-        Ok(ProtoBuf::from_bytes(bytes)?.get())
-    }
-
-    pub fn from_vec(bytes: Vec<u8>) -> Self {
-        Self(serde_bytes::ByteBuf::from(bytes))
-    }
-
-    pub fn into_vec(self) -> Vec<u8> {
-        self.0.to_vec()
-    }
-
-    pub fn size_bytes(&self) -> usize {
-        self.0.len()
-    }
-}
 
 #[derive(
     Serialize,
@@ -507,20 +365,29 @@ impl Block {
         }
     }
 
-    pub fn encode(self) -> Result<EncodedBlock, String> {
-        let bytes = ProtoBuf::new(self).into_bytes()?;
-        Ok(EncodedBlock::from(bytes))
-    }
-
-    pub fn parent_hash(&self) -> Option<HashOf<EncodedBlock>> {
-        self.parent_hash
-    }
-
     pub fn transaction(&self) -> Cow<Transaction> {
         Cow::Borrowed(&self.transaction)
     }
+}
 
-    pub fn timestamp(&self) -> TimeStamp {
+impl BlockType for Block {
+    fn encode(self) -> EncodedBlock {
+        EncodedBlock::from_vec(
+            ProtoBuf::new(self)
+                .into_bytes()
+                .expect("unreachable: failed to encode a block"),
+        )
+    }
+
+    fn decode(encoded_block: EncodedBlock) -> Result<Self, String> {
+        Ok(ProtoBuf::from_bytes(encoded_block.into_vec())?.get())
+    }
+
+    fn parent_hash(&self) -> Option<HashOf<EncodedBlock>> {
+        self.parent_hash
+    }
+
+    fn timestamp(&self) -> TimeStamp {
         self.timestamp
     }
 }
@@ -559,26 +426,18 @@ impl Default for Blockchain {
 
 impl Blockchain {
     pub fn add_block(&mut self, block: Block) -> Result<BlockHeight, String> {
-        let raw_block = block.clone().encode()?;
-        self.add_block_with_encoded(block, raw_block)
-    }
-
-    pub fn add_block_with_encoded(
-        &mut self,
-        block: Block,
-        encoded_block: EncodedBlock,
-    ) -> Result<BlockHeight, String> {
-        if block.parent_hash != self.last_hash {
+        if block.parent_hash() != self.last_hash {
             return Err("Cannot apply block because its parent hash doesn't match.".to_string());
         }
-        if block.timestamp < self.last_timestamp {
+        if block.timestamp() < self.last_timestamp {
             return Err(
                 "Cannot apply block because its timestamp is older than the previous tip."
                     .to_owned(),
             );
         }
+        self.last_timestamp = block.timestamp();
+        let encoded_block = block.encode();
         self.last_hash = Some(encoded_block.hash());
-        self.last_timestamp = block.timestamp;
         self.blocks.push(encoded_block);
         Ok(self.chain_length().checked_sub(1).unwrap())
     }
@@ -1481,14 +1340,12 @@ mod tests {
             timestamp: (SystemTime::UNIX_EPOCH + Duration::new(2000000000, 123456789)).into(),
         };
 
-        let block_bytes = block.clone().encode().unwrap();
+        let block_bytes = block.clone().encode();
         println!("block bytes = {:02x?}", block_bytes.0);
         let block_hash = block_bytes.hash();
         println!("block hash = {}", block_hash);
-        let block_decoded = block_bytes.decode().unwrap();
+        let block_decoded = Block::decode(block_bytes).unwrap();
         println!("block decoded = {:#?}", block_decoded);
-
-        let block_decoded = block_bytes.decode().unwrap();
         assert_eq!(block, block_decoded);
 
         state.add_block(block).unwrap();
@@ -1824,13 +1681,13 @@ mod tests {
 
         let first_blocks = super::get_blocks(blocks, 0, 1, 5).0.unwrap();
         for i in 0..first_blocks.len() {
-            let block = first_blocks.get(i).unwrap().decode().unwrap();
+            let block = Block::decode(first_blocks.get(i).unwrap().clone()).unwrap();
             assert_eq!(block.transaction.memo.0, i as u64);
         }
 
         let last_blocks = super::get_blocks(blocks, 0, 6, 5).0.unwrap();
         for i in 0..last_blocks.len() {
-            let block = last_blocks.get(i).unwrap().decode().unwrap();
+            let block = Block::decode(last_blocks.get(i).unwrap().clone()).unwrap();
             assert_eq!(block.transaction.memo.0, 5 + i as u64);
         }
     }
@@ -2024,8 +1881,7 @@ mod tests {
             TimeStamp::new(1, 0),
         );
         let transaction_hash = transaction.hash();
-        // panic!("Transaction hash: {}",transaction_hash);
-        let hash_string = hex::encode(transaction_hash.inner.get());
+        let hash_string = transaction_hash.to_string();
         assert_eq!(
             hash_string, "f39130181586ea3d166185104114d7697d1e18af4f65209a53627f39b2fa0996",
             "Transaction hash must be stable."

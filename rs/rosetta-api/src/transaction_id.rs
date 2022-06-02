@@ -1,10 +1,11 @@
 use std::{convert::TryFrom, str::FromStr};
 
+use ic_ledger_core::block::HashOf;
 use ic_types::{
     messages::{HttpCallContent, HttpRequestEnvelope},
     PrincipalId,
 };
-use ledger_canister::{HashOf, SendArgs, Transaction};
+use ledger_canister::{SendArgs, Transaction};
 use serde::{Deserialize, Serialize};
 
 use crate::{convert, errors::ApiError, request_types::RequestType};

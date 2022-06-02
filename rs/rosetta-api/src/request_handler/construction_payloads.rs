@@ -65,9 +65,9 @@ impl RosettaRequestHandler {
             .map(ic_types::time::Time::from_nanos_since_unix_epoch)
             .unwrap_or_else(|| ingress_start + interval);
 
-        let created_at_time: ledger_canister::TimeStamp = meta
+        let created_at_time: ic_ledger_core::timestamp::TimeStamp = meta
             .and_then(|meta| meta.created_at_time)
-            .map(ledger_canister::TimeStamp::from_nanos_since_unix_epoch)
+            .map(ic_ledger_core::timestamp::TimeStamp::from_nanos_since_unix_epoch)
             .unwrap_or_else(|| std::time::SystemTime::now().into());
 
         // FIXME: the memo field needs to be associated with the operation
@@ -204,7 +204,7 @@ impl RosettaRequestHandler {
 fn handle_transfer(
     req: Operation,
     memo: Memo,
-    created_at_time: ledger_canister::TimeStamp,
+    created_at_time: ic_ledger_core::timestamp::TimeStamp,
     ledger: &Arc<dyn LedgerAccess + Send + Sync>,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
@@ -245,7 +245,7 @@ fn handle_transfer_operation(
     amount: Tokens,
     fee: Tokens,
     memo: Memo,
-    created_at_time: ledger_canister::TimeStamp,
+    created_at_time: ic_ledger_core::timestamp::TimeStamp,
     ledger: &Arc<dyn LedgerAccess + Send + Sync>,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,

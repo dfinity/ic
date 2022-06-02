@@ -2,10 +2,11 @@ use crate::errors::ApiError;
 
 use dfn_protobuf::{ProtoBuf, ToProto};
 use ic_canister_client::{Agent, HttpClient, Sender};
+use ic_ledger_core::block::EncodedBlock;
 use ic_types::CanisterId;
 use ledger_canister::protobuf::{ArchiveIndexEntry, ArchiveIndexResponse, TipOfChainRequest};
 use ledger_canister::{
-    BlockArg, BlockHeight, BlockRes, EncodedBlock, GetBlocksArgs, GetBlocksRes, TipOfChainRes,
+    BlockArg, BlockHeight, BlockRes, GetBlocksArgs, GetBlocksRes, TipOfChainRes,
 };
 use log::{debug, trace, warn};
 use on_wire::{FromWire, IntoWire};

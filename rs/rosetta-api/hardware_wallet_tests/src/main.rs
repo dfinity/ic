@@ -1,5 +1,6 @@
 pub use ed25519_dalek::Keypair as EdKeypair;
 use ed25519_dalek::Signer;
+use ic_ledger_core::timestamp::TimeStamp;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_rosetta_api::{
     convert::{from_hex, from_public_key, to_arg, to_hex, to_model_account_identifier},
@@ -12,7 +13,7 @@ use ic_types::{
     },
     PrincipalId,
 };
-use ledger_canister::{AccountIdentifier, SendArgs, Subaccount, TimeStamp, Tokens};
+use ledger_canister::{AccountIdentifier, SendArgs, Subaccount, Tokens};
 use rand::{Rng, RngCore};
 use rand_distr::Distribution;
 use rand_distr::Uniform;
@@ -346,9 +347,7 @@ fn main() {
                 let created_at_time = if rng.gen::<bool>() {
                     None
                 } else {
-                    Some(TimeStamp {
-                        timestamp_nanos: rng.next_u64(),
-                    })
+                    Some(TimeStamp::from_nanos_since_unix_epoch(rng.next_u64()))
                 };
 
                 let send_args = SendArgs {

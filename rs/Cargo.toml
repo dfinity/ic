@@ -167,6 +167,7 @@ members = [
   "rosetta-api",
   "rosetta-api/ledger_canister",
   "rosetta-api/ledger_canister/protobuf_generator",
+  "rosetta-api/ledger_core",
   "rosetta-api/hardware_wallet_tests",
   "rosetta-api/test_utils",
   "rust_canisters/canister_test",

@@ -1,3 +1,4 @@
+use ic_ledger_core::block::BlockType;
 use ledger_canister::{
     AccountIdentifier, Block, BlockHeight, Memo, Operation, Tokens, Transaction,
     DEFAULT_TRANSFER_FEE,
@@ -103,11 +104,8 @@ impl Scribe {
 
         let block = Block::new_from_transaction(parent_hash, transaction, self.time().into());
 
-        self.blockchain.push_back(HashedBlock::hash_block(
-            block.encode().unwrap(),
-            parent_hash,
-            index,
-        ));
+        self.blockchain
+            .push_back(HashedBlock::hash_block(block.encode(), parent_hash, index));
     }
 
     pub fn buy(&mut self, uid: AccountIdentifier, amount: u64) {

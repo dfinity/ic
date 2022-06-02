@@ -6,6 +6,10 @@ use dfn_core::{
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
+use ic_ledger_core::{
+    block::{BlockType, EncodedBlock},
+    timestamp::TimeStamp,
+};
 use ledger_canister::*;
 use std::time::Duration;
 use std::{
@@ -93,7 +97,7 @@ fn add_payment(
     memo: Memo,
     operation: Operation,
     created_at_time: Option<TimeStamp>,
-) -> (BlockHeight, HashOf<EncodedBlock>) {
+) -> (BlockHeight, ic_ledger_core::block::HashOf<EncodedBlock>) {
     let (height, hash) = ledger_canister::add_payment(memo, operation, created_at_time);
     set_certified_data(&hash.into_bytes());
     (height, hash)
@@ -252,7 +256,7 @@ pub async fn notify(
             }
         };
 
-    let block = raw_block.decode().unwrap();
+    let block = Block::decode(raw_block).unwrap();
 
     let (from, to, amount) = match block.transaction().operation {
         Operation::Transfer {
@@ -802,8 +806,7 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
     let local_blocks: Vec<CandidBlock> = ledger.blockchain.blocks[local_start..local_end]
         .iter()
         .map(|enc_block| -> CandidBlock {
-            enc_block
-                .decode()
+            Block::decode(enc_block.clone())
                 .expect("bug: failed to decode encoded block")
                 .into()
         })
@@ -934,7 +937,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "ledger_most_recent_block_time_seconds",
-        ledger.blockchain.last_timestamp.timestamp_nanos as f64 / 1_000_000_000.0,
+        ledger.blockchain.last_timestamp.as_nanos_since_unix_epoch() as f64 / 1_000_000_000.0,
         "IC timestamp of the most recent block.",
     )?;
     Ok(())

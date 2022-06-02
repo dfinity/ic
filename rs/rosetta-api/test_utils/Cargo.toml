@@ -9,6 +9,7 @@ base64 = "0.11"
 ed25519-dalek = "1.0.1"
 hex = "0.4.2"
 ic-canister-client = { path = "../../canister_client" }
+ic-ledger-core = { path = "../ledger_core" }
 ic-rosetta-api = {path = "../"}
 ic-types = { path = "../../types/types" }
 ledger-canister = {path = "../ledger_canister"}

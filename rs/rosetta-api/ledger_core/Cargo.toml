@@ -1,0 +1,12 @@
+[package]
+name = "ic-ledger-core"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+
+[dependencies]
+candid = "0.7.10"
+hex = "0.4.2"
+ic-crypto-sha = {path = "../../crypto/sha/"}
+serde = "1.0"
+serde_bytes = "0.11"

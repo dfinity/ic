@@ -1,7 +1,8 @@
 use crate::balance_book::BalanceBook;
 use crate::errors::ApiError;
 use crate::store::{BlockStoreError, HashedBlock, SQLiteStore};
-use ledger_canister::{AccountIdentifier, BlockHeight, EncodedBlock, HashOf, Tokens, Transaction};
+use ic_ledger_core::block::{BlockType, EncodedBlock, HashOf};
+use ledger_canister::{AccountIdentifier, Block, BlockHeight, Tokens, Transaction};
 use log::{error, info};
 use std::collections::HashMap;
 
@@ -60,7 +61,7 @@ impl Blocks {
 
             self.hash_location.insert(first.hash, first.index);
 
-            let tx = first.block.decode().unwrap().transaction;
+            let tx = Block::decode(first.block).unwrap().transaction;
             self.tx_hash_location.insert(tx.hash(), first.index);
             self.last_hash = Some(first.hash);
         }
@@ -182,7 +183,7 @@ impl Blocks {
             "When adding a block the parent_hash must match the last added block"
         );
 
-        let block = block.decode().unwrap();
+        let block = Block::decode(block).unwrap();
 
         match last_index {
             Some(i) => assert_eq!(i + 1, index),
@@ -260,9 +261,7 @@ impl Blocks {
                     self.hash_location
                         .remove(&hb.hash)
                         .expect("failed to remove block by hash");
-                    let tx_hash = hb
-                        .block
-                        .decode()
+                    let tx_hash = Block::decode(hb.block)
                         .expect("failed to decode block")
                         .transaction
                         .hash();

@@ -22,6 +22,7 @@ ic-base-types = { path="../../types/base_types" }
 ic-constants = { path = "../../constants" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-ic00-types = { path="../../types/ic00_types" }
+ic-ledger-core = { path = "../ledger_core" }
 ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
 ic-nns-constants = {path = "../../nns/constants" }
 ic-utils = { path = "../../utils" }

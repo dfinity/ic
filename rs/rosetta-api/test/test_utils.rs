@@ -2,6 +2,7 @@ mod basic_tests;
 mod rosetta_cli_tests;
 mod store_tests;
 
+use ic_ledger_core::block::BlockType;
 use ic_rosetta_api::errors::ApiError;
 use ic_rosetta_api::models::{
     AccountBalanceRequest, EnvelopePair, PartialBlockIdentifier, SignedTransaction,
@@ -190,7 +191,7 @@ impl LedgerAccess for TestLedger {
             )
             .map_err(ApiError::internal_error)?;
 
-            let raw_block = block.clone().encode().map_err(ApiError::internal_error)?;
+            let raw_block = block.clone().encode();
 
             let hb = HashedBlock::hash_block(raw_block, parent_hash, index);
 

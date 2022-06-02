@@ -4,10 +4,11 @@ use crate::{
     AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockRes, CyclesResponse, EncodedBlock,
     GetBlocksArgs, GetBlocksRes, HashOf, IterBlocksArgs, IterBlocksRes, Memo, NotifyCanisterArgs,
     Operation, SendArgs, Subaccount, TimeStamp, TipOfChainRes, Tokens, TotalSupplyArgs,
-    Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE, HASH_LENGTH,
+    Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, CanisterIdError};
+use ic_ledger_core::block::HASH_LENGTH;
 use protobuf::cycles_notification_response::Response;
 use std::convert::{TryFrom, TryInto};
 
@@ -352,7 +353,7 @@ impl ToProto for SendArgs {
             fee,
             from_subaccount,
             to,
-            created_at_time,
+            created_at_time: created_at_time.map(timestamp_from_proto),
         })
     }
     fn into_proto(self) -> Self::Proto {
@@ -375,7 +376,7 @@ impl ToProto for SendArgs {
             from_subaccount: from_subaccount.map(|sa| sa.into_proto()),
             to: Some(to.into_proto()),
             created_at: None,
-            created_at_time,
+            created_at_time: created_at_time.map(timestamp_into_proto),
         }
     }
 }
@@ -539,7 +540,7 @@ impl ToProto for Block {
 
     fn from_proto(pb: Self::Proto) -> Result<Self, String> {
         let parent_hash = match pb.parent_hash {
-            Some(h) => Some(HashOf::from_proto(h)?),
+            Some(h) => Some(hash_from_proto(h)?),
             None => None,
         };
 
@@ -550,15 +551,15 @@ impl ToProto for Block {
         Ok(Block {
             parent_hash,
             transaction: Transaction::from_proto(transaction)?,
-            timestamp: TimeStamp::from_proto(timestamp)?,
+            timestamp: timestamp_from_proto(timestamp),
         })
     }
 
     fn into_proto(self) -> Self::Proto {
         protobuf::Block {
-            parent_hash: self.parent_hash.map(|h| h.into_proto()),
+            parent_hash: self.parent_hash.map(hash_into_proto),
             transaction: Some(self.transaction.into_proto()),
-            timestamp: Some(self.timestamp.into_proto()),
+            timestamp: Some(timestamp_into_proto(self.timestamp)),
         }
     }
 }
@@ -571,7 +572,10 @@ impl ToProto for Transaction {
             Some(m) => Memo(m.memo),
             None => Memo(0),
         };
-        let created_at_time: TimeStamp = pb.created_at_time.unwrap_or_else(|| TimeStamp::new(0, 0));
+        let created_at_time: TimeStamp = pb
+            .created_at_time
+            .map(timestamp_from_proto)
+            .unwrap_or_else(|| TimeStamp::new(0, 0));
         let operation = match pb.transfer.ok_or("This block has no transaction")? {
             PTransfer::Burn(protobuf::Burn {
                 from: Some(from),
@@ -642,33 +646,39 @@ impl ToProto for Transaction {
         protobuf::Transaction {
             memo: Some(protobuf::Memo { memo: memo.0 }),
             created_at: None,
-            created_at_time: Some(created_at_time),
+            created_at_time: Some(timestamp_into_proto(created_at_time)),
             transfer: Some(transfer),
         }
     }
 }
 
-impl<T> ToProto for HashOf<T> {
-    type Proto = protobuf::Hash;
+pub fn timestamp_from_proto(pb: protobuf::TimeStamp) -> ic_ledger_core::timestamp::TimeStamp {
+    ic_ledger_core::timestamp::TimeStamp::from_nanos_since_unix_epoch(pb.timestamp_nanos)
+}
 
-    fn from_proto(pb: Self::Proto) -> Result<Self, String> {
-        let boxed_slice = pb.hash.into_boxed_slice();
-        let hash: Box<[u8; 32]> = match boxed_slice.clone().try_into() {
-            Ok(s) => s,
-            Err(_) => {
-                return Err(format!(
-                    "Expected a Vec of length {} but it was {}",
-                    HASH_LENGTH,
-                    boxed_slice.len(),
-                ))
-            }
-        };
-        Ok(HashOf::new(*hash))
+pub fn timestamp_into_proto(ts: ic_ledger_core::timestamp::TimeStamp) -> protobuf::TimeStamp {
+    protobuf::TimeStamp {
+        timestamp_nanos: ts.as_nanos_since_unix_epoch(),
     }
+}
 
-    fn into_proto(self) -> Self::Proto {
-        protobuf::Hash {
-            hash: self.into_bytes().to_vec(),
+pub fn hash_from_proto<T>(pb: protobuf::Hash) -> Result<HashOf<T>, String> {
+    let boxed_slice = pb.hash.into_boxed_slice();
+    let hash: Box<[u8; 32]> = match boxed_slice.clone().try_into() {
+        Ok(s) => s,
+        Err(_) => {
+            return Err(format!(
+                "Expected a Vec of length {} but it was {}",
+                HASH_LENGTH,
+                boxed_slice.len(),
+            ))
         }
+    };
+    Ok(HashOf::new(*hash))
+}
+
+pub fn hash_into_proto<T>(hash: HashOf<T>) -> protobuf::Hash {
+    protobuf::Hash {
+        hash: hash.into_bytes().to_vec(),
     }
 }

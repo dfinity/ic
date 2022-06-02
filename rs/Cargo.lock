@@ -1912,6 +1912,7 @@ dependencies = [
  "ic-certified-map",
  "ic-crypto-tree-hash",
  "ic-ic00-types",
+ "ic-ledger-core",
  "ic-metrics-encoder",
  "ic-nervous-system-common-build-metadata",
  "ic-nns-common",
@@ -3127,6 +3128,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "ic-canister-client",
+ "ic-ledger-core",
  "ic-nns-constants",
  "ic-rosetta-api",
  "ic-rosetta-test-utils",
@@ -5559,6 +5561,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-ledger-core"
+version = "0.8.0"
+dependencies = [
+ "candid",
+ "hex",
+ "ic-crypto-sha",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-ledger-types"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5989,6 +6002,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-error-types",
  "ic-ic00-types",
+ "ic-ledger-core",
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-root",
@@ -6861,6 +6875,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig",
  "ic-interfaces",
+ "ic-ledger-core",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
@@ -6896,6 +6911,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "ic-canister-client",
+ "ic-ledger-core",
  "ic-nns-constants",
  "ic-rosetta-api",
  "ic-types 0.8.0",
@@ -8279,6 +8295,7 @@ dependencies = [
  "ic-constants",
  "ic-crypto-sha",
  "ic-ic00-types",
+ "ic-ledger-core",
  "ic-metrics-encoder",
  "ic-nns-constants",
  "ic-test-utilities-compare-dirs",
@@ -12455,6 +12472,7 @@ dependencies = [
  "ic-http-utils",
  "ic-ic00-types",
  "ic-interfaces",
+ "ic-ledger-core",
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-root",

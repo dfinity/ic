@@ -1,5 +1,6 @@
 use super::*;
 
+use ic_ledger_core::block::BlockType;
 use ic_rosetta_api::convert::{block_id, from_hash, to_hash};
 use ic_rosetta_api::ledger_client::LedgerAccess;
 use ic_rosetta_api::models::amount::{tokens_to_amount, Amount};
@@ -67,12 +68,7 @@ async fn smoke_test() {
         Ok(NetworkStatusResponse::new(
             block_id(scribe.blockchain.back().unwrap()).unwrap(),
             models::timestamp::from_system_time(
-                scribe
-                    .blockchain
-                    .back()
-                    .unwrap()
-                    .block
-                    .decode()
+                Block::decode(scribe.blockchain.back().unwrap().block.clone())
                     .unwrap()
                     .timestamp()
                     .into()
@@ -480,7 +476,11 @@ async fn verify_account_search(
 ) {
     let mut history = BTreeMap::new();
     for hb in &scribe.blockchain {
-        match hb.block.decode().unwrap().transaction.operation {
+        match Block::decode(hb.block.clone())
+            .unwrap()
+            .transaction
+            .operation
+        {
             ledger_canister::Operation::Burn { from, .. } => {
                 history.entry(from).or_insert_with(Vec::new).push(hb.index);
             }

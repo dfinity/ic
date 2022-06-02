@@ -1,0 +1,22 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "ledger_core",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_ledger_core",
+    edition = "2018",
+    deps = [
+        "//rs/crypto/sha",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+    ],
+)

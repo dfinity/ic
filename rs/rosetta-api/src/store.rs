@@ -6,7 +6,8 @@ use std::sync::Mutex;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
-use ledger_canister::{AccountIdentifier, BlockHeight, EncodedBlock, HashOf, Tokens};
+use ic_ledger_core::block::{EncodedBlock, HashOf};
+use ledger_canister::{AccountIdentifier, BlockHeight, Tokens};
 
 use crate::balance_book::BalanceBook;
 use crate::errors::ApiError;

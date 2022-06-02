@@ -19,10 +19,11 @@ use crate::transaction_id::TransactionIdentifier;
 use crate::{convert, errors};
 use dfn_protobuf::ProtoBuf;
 use ic_crypto_tree_hash::Path;
+use ic_ledger_core::block::{BlockType, HashOf};
 use ic_types::messages::{HttpCanisterUpdate, HttpReadState};
 use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::{
-    BlockHeight, HashOf, Operation as LedgerOperation, SendArgs, Subaccount, Tokens,
+    Block, BlockHeight, Operation as LedgerOperation, SendArgs, Subaccount, Tokens,
 };
 use on_wire::{FromWire, IntoWire};
 use serde_json::map::Map;
@@ -36,9 +37,7 @@ pub fn block_to_transaction(
     hb: &HashedBlock,
     token_name: &str,
 ) -> Result<models::Transaction, ApiError> {
-    let block = hb
-        .block
-        .decode()
+    let block = Block::decode(hb.block.clone())
         .map_err(|err| ApiError::internal_error(format!("Cannot decode block: {}", err)))?;
     let transaction = block.transaction;
     let transaction_identifier = TransactionIdentifier::from(&transaction);
