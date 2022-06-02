@@ -22,7 +22,7 @@ def main():
         "-g",
         type=str,
         nargs="*",
-        help='The group ID(s) for this Farm test run (search for "creating group" in Farm logs).',
+        help='The group name(s) for this Farm test run (search for "creating group" in Farm logs).',
     )
     parser.add_argument(
         "--limit",
@@ -154,7 +154,7 @@ def main():
             formulas=set(args.policy) if args.policy else None,
         )
 
-        # Get group IDs
+        # Get group names
         if args.read:
             groups = p.read_logs(log_file=args.read)
         else:

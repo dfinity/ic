@@ -541,7 +541,9 @@ wasm-generator-hourly:
     NUMBER_OF_CANISTERS: 100
 
 wasm-generator-nightly:
-  extends: .system-tests-wasm-generator
+  extends: 
+    - .system-tests-wasm-generator
+    - .with-monitoring
   stage: prod-tests-04
   variables:
     NUMBER_OF_CANISTERS: 1000
