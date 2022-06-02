@@ -141,9 +141,9 @@ if ! diff -u SHA256SUMS-0 SHA256SUMS-1; then
             --html artifacts/output-root.html --text -
     else
         set +x
-        echo -e "Investigate with diffoscope: \xF0\x9F\x99\x8F"
+        echo -e "Investigate with diffoscope [\xF0\x9F\x99\x8F]:"
         echo "  BIN=ic-admin.gz # (specify the right artifact)"
-        echo "  $0 $PATH0/\$BIN $PATH1/\$BIN $VERSION"
+        echo "  $0 /${PATH0}/\$BIN /${PATH1}/\$BIN $VERSION"
         set -x
         exit 1
     fi
