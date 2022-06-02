@@ -56,6 +56,14 @@ crates_repository(
                 "opt-level=3",
             ],
         )],
+        "pprof": [crate.annotation(
+            build_script_data = [
+                "@com_google_protobuf//:protoc",
+            ],
+            build_script_env = {
+                "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+            },
+        )],
         "prost-build": [crate.annotation(
             build_script_env = {
                 "PROTOC_NO_VENDOR": "1",
@@ -162,6 +170,15 @@ crates_repository(
         "openssl-sys": crate.spec(version = "=0.9.70"),
         "pathdiff": crate.spec(version = "=0.2.1"),
         "pkg-config": crate.spec(version = "=0.3.25"),
+        "pprof": crate.spec(
+            default_features = False,
+            features = [
+                "backtrace-rs",
+                "flamegraph",
+                "prost-codec",
+            ],
+            version = "=0.9.1",
+        ),
         "proc-macro2": crate.spec(version = "=1.0.36"),
         "procfs": crate.spec(
             default_features = False,
