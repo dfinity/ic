@@ -13,7 +13,7 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
+    canister_state::QUEUE_INDEX_NONE,
     replicated_state::{LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_OUT_OF_MEMORY},
     testing::ReplicatedStateTesting,
     CanisterState, ReplicatedState, Stream,
@@ -396,19 +396,11 @@ fn induct_loopback_stream_with_canister_memory_limit() {
         let (stream_handler, initial_state, metrics_registry) =
             new_fixture_with_config(&log, config);
 
-        if ENFORCE_MESSAGE_MEMORY_USAGE {
-            induct_loopback_stream_with_memory_limit_impl(
-                stream_handler,
-                initial_state,
-                metrics_registry,
-            );
-        } else {
-            induct_loopback_stream_ignores_memory_limit_impl(
-                stream_handler,
-                initial_state,
-                metrics_registry,
-            );
-        }
+        induct_loopback_stream_with_memory_limit_impl(
+            stream_handler,
+            initial_state,
+            metrics_registry,
+        );
     });
 }
 
@@ -425,19 +417,11 @@ fn induct_loopback_stream_with_subnet_memory_limit() {
         let (stream_handler, initial_state, metrics_registry) =
             new_fixture_with_config(&log, config);
 
-        if ENFORCE_MESSAGE_MEMORY_USAGE {
-            induct_loopback_stream_with_memory_limit_impl(
-                stream_handler,
-                initial_state,
-                metrics_registry,
-            );
-        } else {
-            induct_loopback_stream_ignores_memory_limit_impl(
-                stream_handler,
-                initial_state,
-                metrics_registry,
-            );
-        }
+        induct_loopback_stream_with_memory_limit_impl(
+            stream_handler,
+            initial_state,
+            metrics_registry,
+        );
     });
 }
 
@@ -454,19 +438,11 @@ fn induct_loopback_stream_with_subnet_message_memory_limit() {
         let (stream_handler, initial_state, metrics_registry) =
             new_fixture_with_config(&log, config);
 
-        if ENFORCE_MESSAGE_MEMORY_USAGE {
-            induct_loopback_stream_with_memory_limit_impl(
-                stream_handler,
-                initial_state,
-                metrics_registry,
-            );
-        } else {
-            induct_loopback_stream_ignores_memory_limit_impl(
-                stream_handler,
-                initial_state,
-                metrics_registry,
-            );
-        }
+        induct_loopback_stream_with_memory_limit_impl(
+            stream_handler,
+            initial_state,
+            metrics_registry,
+        );
     });
 }
 
@@ -2148,10 +2124,6 @@ fn induct_stream_slices_with_messages_from_migrated_canister() {
 /// `StreamHandlerImpl::induct_stream_slices()`.
 #[test]
 fn induct_stream_slices_with_canister_memory_limit() {
-    if !ENFORCE_MESSAGE_MEMORY_USAGE {
-        return;
-    }
-
     with_test_replica_logger(|log| {
         // Canister memory limit only allows for one in-flight request (plus epsilon).
         let (stream_handler, initial_state, metrics_registry) = new_fixture_with_config(
@@ -2174,10 +2146,6 @@ fn induct_stream_slices_with_canister_memory_limit() {
 /// `StreamHandlerImpl::induct_stream_slices()`.
 #[test]
 fn induct_stream_slices_with_subnet_memory_limit() {
-    if !ENFORCE_MESSAGE_MEMORY_USAGE {
-        return;
-    }
-
     with_test_replica_logger(|log| {
         // Subnet memory limit only allows for one in-flight request (plus epsilon).
         let (stream_handler, initial_state, metrics_registry) = new_fixture_with_config(
@@ -2200,10 +2168,6 @@ fn induct_stream_slices_with_subnet_memory_limit() {
 /// `StreamHandlerImpl::induct_stream_slices()`.
 #[test]
 fn induct_stream_slices_with_subnet_message_memory_limit() {
-    if !ENFORCE_MESSAGE_MEMORY_USAGE {
-        return;
-    }
-
     with_test_replica_logger(|log| {
         // Subnet message memory limit only allows for one in-flight request (plus epsilon).
         let (stream_handler, initial_state, metrics_registry) = new_fixture_with_config(
@@ -2228,10 +2192,6 @@ fn induct_stream_slices_with_subnet_message_memory_limit() {
 /// `StreamHandlerImpl::induct_stream_slices()` on system subnets.
 #[test]
 fn system_subnet_induct_stream_slices_with_canister_memory_limit() {
-    if !ENFORCE_MESSAGE_MEMORY_USAGE {
-        return;
-    }
-
     with_test_replica_logger(|log| {
         // Canister memory limit only allows for one in-flight request (plus epsilon).
         let (stream_handler, mut initial_state, metrics_registry) = new_fixture_with_config(
@@ -2255,10 +2215,6 @@ fn system_subnet_induct_stream_slices_with_canister_memory_limit() {
 /// `StreamHandlerImpl::induct_stream_slices()` on system subnets.
 #[test]
 fn system_subnet_induct_stream_slices_with_subnet_memory_limit() {
-    if !ENFORCE_MESSAGE_MEMORY_USAGE {
-        return;
-    }
-
     with_test_replica_logger(|log| {
         // Subnet memory limit only allows for one in-flight request (plus epsilon).
         let (stream_handler, mut initial_state, metrics_registry) = new_fixture_with_config(
@@ -2282,10 +2238,6 @@ fn system_subnet_induct_stream_slices_with_subnet_memory_limit() {
 /// `StreamHandlerImpl::induct_stream_slices()` on system subnets.
 #[test]
 fn system_subnet_induct_stream_slices_with_subnet_message_memory_limit() {
-    if !ENFORCE_MESSAGE_MEMORY_USAGE {
-        return;
-    }
-
     with_test_replica_logger(|log| {
         // Subnet message memory limit only allows for one in-flight request (plus epsilon).
         let (stream_handler, mut initial_state, metrics_registry) = new_fixture_with_config(

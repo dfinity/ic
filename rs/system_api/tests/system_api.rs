@@ -7,8 +7,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::ENFORCE_MESSAGE_MEMORY_USAGE, testing::CanisterQueuesTesting, CallOrigin,
-    Memory, NumWasmPages, PageMap, SystemState,
+    testing::CanisterQueuesTesting, CallOrigin, Memory, NumWasmPages, PageMap, SystemState,
 };
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
@@ -1680,59 +1679,47 @@ fn push_output_request_respects_memory_limits() {
         // First push succeeds with or without message memory usage accounting, as the
         // initial subnet available memory is `MAX_RESPONSE_COUNT_BYTES + 13`.
         assert_eq!(0, api.push_output_request(req.clone()).unwrap());
-        if ENFORCE_MESSAGE_MEMORY_USAGE {
-            // With message memory usage enabled, `MAX_RESPONSE_COUNT_BYTES` are consumed.
-            assert_eq!(
-                subnet_available_memory_bytes - MAX_RESPONSE_COUNT_BYTES as i64,
-                subnet_available_memory.get_total_memory()
-            );
-            assert_eq!(
-                subnet_available_message_memory_bytes - MAX_RESPONSE_COUNT_BYTES as i64,
-                subnet_available_memory.get_message_memory()
-            );
-            assert_eq!(
-                CANISTER_CURRENT_MEMORY_USAGE + NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
-                api.get_current_memory_usage()
-            );
 
-            // And the second push fails.
-            assert_eq!(
-                RejectCode::SysTransient as i32,
-                api.push_output_request(req).unwrap()
-            );
-            // Without altering memory usage.
-            assert_eq!(
-                subnet_available_memory_bytes - MAX_RESPONSE_COUNT_BYTES as i64,
-                subnet_available_memory.get_total_memory()
-            );
-            assert_eq!(
-                subnet_available_message_memory_bytes - MAX_RESPONSE_COUNT_BYTES as i64,
-                subnet_available_memory.get_message_memory()
-            );
-            assert_eq!(
-                CANISTER_CURRENT_MEMORY_USAGE + NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
-                api.get_current_memory_usage()
-            );
-            assert_eq!(
-                NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
-                api.get_allocated_memory()
-            );
-            assert_eq!(
-                NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
-                api.get_allocated_message_memory()
-            );
-        } else {
-            // With message memory usage disabled, any number of pushes will succeed, as the
-            // memory usage is not affected.
-            assert_eq!(
-                subnet_available_memory_bytes,
-                subnet_available_memory.get_total_memory()
-            );
-            assert_eq!(
-                CANISTER_CURRENT_MEMORY_USAGE,
-                api.get_current_memory_usage()
-            );
-        }
+        // `MAX_RESPONSE_COUNT_BYTES` are consumed.
+        assert_eq!(
+            subnet_available_memory_bytes - MAX_RESPONSE_COUNT_BYTES as i64,
+            subnet_available_memory.get_total_memory()
+        );
+        assert_eq!(
+            subnet_available_message_memory_bytes - MAX_RESPONSE_COUNT_BYTES as i64,
+            subnet_available_memory.get_message_memory()
+        );
+        assert_eq!(
+            CANISTER_CURRENT_MEMORY_USAGE + NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
+            api.get_current_memory_usage()
+        );
+
+        // And the second push fails.
+        assert_eq!(
+            RejectCode::SysTransient as i32,
+            api.push_output_request(req).unwrap()
+        );
+        // Without altering memory usage.
+        assert_eq!(
+            subnet_available_memory_bytes - MAX_RESPONSE_COUNT_BYTES as i64,
+            subnet_available_memory.get_total_memory()
+        );
+        assert_eq!(
+            subnet_available_message_memory_bytes - MAX_RESPONSE_COUNT_BYTES as i64,
+            subnet_available_memory.get_message_memory()
+        );
+        assert_eq!(
+            CANISTER_CURRENT_MEMORY_USAGE + NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
+            api.get_current_memory_usage()
+        );
+        assert_eq!(
+            NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
+            api.get_allocated_memory()
+        );
+        assert_eq!(
+            NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
+            api.get_allocated_message_memory()
+        );
 
         // Ensure that exactly one output request was pushed.
         let system_state_changes = api.into_system_state_changes();
@@ -1790,54 +1777,40 @@ fn push_output_request_oversized_request_memory_limits() {
         .method_payload(vec![13; 4 * MAX_RESPONSE_COUNT_BYTES])
         .build();
 
-    if ENFORCE_MESSAGE_MEMORY_USAGE {
-        // With message memory usage enabled, not enough memory to push the request.
-        assert_eq!(
-            RejectCode::SysTransient as i32,
-            api.push_output_request(req).unwrap()
-        );
-        // Memory usage unchanged.
-        assert_eq!(
-            3 * MAX_RESPONSE_COUNT_BYTES as i64,
-            subnet_available_memory.get_total_memory()
-        );
-        assert_eq!(
-            CANISTER_CURRENT_MEMORY_USAGE,
-            api.get_current_memory_usage()
-        );
+    // Not enough memory to push the request.
+    assert_eq!(
+        RejectCode::SysTransient as i32,
+        api.push_output_request(req).unwrap()
+    );
+    // Memory usage unchanged.
+    assert_eq!(
+        3 * MAX_RESPONSE_COUNT_BYTES as i64,
+        subnet_available_memory.get_total_memory()
+    );
+    assert_eq!(
+        CANISTER_CURRENT_MEMORY_USAGE,
+        api.get_current_memory_usage()
+    );
 
-        // Slightly smaller, still oversized request.
-        let req = RequestBuilder::default()
-            .sender(own_canister_id)
-            .method_payload(vec![13; 2 * MAX_RESPONSE_COUNT_BYTES])
-            .build();
-        let req_size_bytes = req.count_bytes();
-        assert!(req_size_bytes > MAX_RESPONSE_COUNT_BYTES);
+    // Slightly smaller, still oversized request.
+    let req = RequestBuilder::default()
+        .sender(own_canister_id)
+        .method_payload(vec![13; 2 * MAX_RESPONSE_COUNT_BYTES])
+        .build();
+    let req_size_bytes = req.count_bytes();
+    assert!(req_size_bytes > MAX_RESPONSE_COUNT_BYTES);
 
-        // Pushing succeeds.
-        assert_eq!(0, api.push_output_request(req).unwrap());
-        // `req_size_bytes` are consumed.
-        assert_eq!(
-            (3 * MAX_RESPONSE_COUNT_BYTES - req_size_bytes) as i64,
-            subnet_available_memory.get_total_memory()
-        );
-        assert_eq!(
-            CANISTER_CURRENT_MEMORY_USAGE + NumBytes::from(req_size_bytes as u64),
-            api.get_current_memory_usage()
-        );
-    } else {
-        // With message memory usage disabled, push always succeeds.
-        assert_eq!(0, api.push_output_request(req).unwrap());
-        // And memory usage is not affected.
-        assert_eq!(
-            subnet_available_memory_bytes,
-            subnet_available_memory.get_total_memory()
-        );
-        assert_eq!(
-            CANISTER_CURRENT_MEMORY_USAGE,
-            api.get_current_memory_usage()
-        );
-    }
+    // Pushing succeeds.
+    assert_eq!(0, api.push_output_request(req).unwrap());
+    // `req_size_bytes` are consumed.
+    assert_eq!(
+        (3 * MAX_RESPONSE_COUNT_BYTES - req_size_bytes) as i64,
+        subnet_available_memory.get_total_memory()
+    );
+    assert_eq!(
+        CANISTER_CURRENT_MEMORY_USAGE + NumBytes::from(req_size_bytes as u64),
+        api.get_current_memory_usage()
+    );
 
     // Ensure that exactly one output request was pushed.
     let system_state_changes = api.into_system_state_changes();

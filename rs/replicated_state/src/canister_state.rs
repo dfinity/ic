@@ -24,12 +24,6 @@ pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY, QUEUE_INDEX_NONE};
 use std::collections::BTreeSet;
 use std::convert::From;
 
-/// Feature flag controlling whether in-flight canister messages are counted
-/// against and limited by a canister's available memory.
-///
-/// TODO(MR-83) Remove when the feature is deemed stable.
-pub const ENFORCE_MESSAGE_MEMORY_USAGE: bool = true;
-
 #[derive(Clone, Debug, PartialEq)]
 /// State maintained by the scheduler.
 pub struct SchedulerState {
@@ -312,9 +306,6 @@ impl CanisterState {
 
     /// Internal `memory_usage()` implementation that allows the caller to
     /// explicitly select whether message memory usage should be included.
-    ///
-    /// This is still subject to the `ENFORCE_MESSAGE_MEMORY_USAGE` flag. If the
-    /// flag is unset, message memory usage will always be zero regardless.
     pub(crate) fn memory_usage_impl(&self, with_messages: bool) -> NumBytes {
         let message_memory_usage = if with_messages {
             self.system_state.memory_usage()

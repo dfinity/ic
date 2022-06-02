@@ -315,7 +315,7 @@ fn canister_state_push_input_request_memory_limit_test_impl(
             input_queue_type,
         );
 
-        if ENFORCE_MESSAGE_MEMORY_USAGE && should_enforce_limit {
+        if should_enforce_limit {
             assert_eq!(
                 Err((
                     StateError::OutOfMemory {
@@ -488,14 +488,10 @@ fn canister_state_push_input_response_memory_limit_test_impl(
             )
             .unwrap();
 
-        if ENFORCE_MESSAGE_MEMORY_USAGE {
-            assert_eq!(
-                -13 + MAX_RESPONSE_COUNT_BYTES as i64 - response.count_bytes() as i64,
-                subnet_available_memory
-            );
-        } else {
-            assert_eq!(-13, subnet_available_memory);
-        }
+        assert_eq!(
+            -13 + MAX_RESPONSE_COUNT_BYTES as i64 - response.count_bytes() as i64,
+            subnet_available_memory
+        );
     })
 }
 

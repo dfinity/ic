@@ -8,9 +8,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
-    canister_state::ENFORCE_MESSAGE_MEMORY_USAGE, replicated_state::PeekableOutputIterator,
-    replicated_state::ReplicatedStateMessageRouting, BitcoinStateError, CanisterState,
-    InputQueueType, ReplicatedState, SchedulerState, StateError, SystemState,
+    replicated_state::PeekableOutputIterator, replicated_state::ReplicatedStateMessageRouting,
+    BitcoinStateError, CanisterState, InputQueueType, ReplicatedState, SchedulerState, StateError,
+    SystemState,
 };
 use ic_test_utilities::state::{
     arb_replicated_state_with_queues, assert_next_eq, get_running_canister, register_callback,
@@ -56,36 +56,21 @@ where
 }
 
 fn assert_total_memory_taken(queues_memory_usage: usize, state: &ReplicatedState) {
-    if ENFORCE_MESSAGE_MEMORY_USAGE {
-        assert_eq!(queues_memory_usage as u64, state.total_memory_taken().get());
-    } else {
-        // Expect zero memory used if we don't account for messages.
-        assert_eq!(0, state.total_memory_taken().get());
-    }
+    assert_eq!(queues_memory_usage as u64, state.total_memory_taken().get());
 }
 
 fn assert_total_memory_taken_with_messages(queues_memory_usage: usize, state: &ReplicatedState) {
-    if ENFORCE_MESSAGE_MEMORY_USAGE {
-        assert_eq!(
-            queues_memory_usage as u64,
-            state.total_memory_taken_with_messages().get()
-        );
-    } else {
-        // Expect zero memory used if we don't account for messages.
-        assert_eq!(0, state.total_memory_taken_with_messages().get());
-    }
+    assert_eq!(
+        queues_memory_usage as u64,
+        state.total_memory_taken_with_messages().get()
+    );
 }
 
 fn assert_message_memory_taken(queues_memory_usage: usize, state: &ReplicatedState) {
-    if ENFORCE_MESSAGE_MEMORY_USAGE {
-        assert_eq!(
-            queues_memory_usage as u64,
-            state.message_memory_taken().get()
-        );
-    } else {
-        // Expect zero memory used if we don't account for messages.
-        assert_eq!(0, state.message_memory_taken().get());
-    }
+    assert_eq!(
+        queues_memory_usage as u64,
+        state.message_memory_taken().get()
+    );
 }
 
 fn assert_subnet_available_memory(
@@ -93,15 +78,10 @@ fn assert_subnet_available_memory(
     queues_memory_usage: usize,
     actual: i64,
 ) {
-    if ENFORCE_MESSAGE_MEMORY_USAGE {
-        assert_eq!(
-            initial_available_memory - queues_memory_usage as i64,
-            actual
-        );
-    } else {
-        // Expect all memory to be available if we don't account for messages.
-        assert_eq!(initial_available_memory, actual);
-    }
+    assert_eq!(
+        initial_available_memory - queues_memory_usage as i64,
+        actual
+    );
 }
 
 #[test]
@@ -410,33 +390,24 @@ fn push_subnet_queues_input_respects_subnet_available_memory() {
             &mut subnet_available_memory,
         );
 
-        if ENFORCE_MESSAGE_MEMORY_USAGE {
-            // No more memory for a second request.
-            assert_eq!(
-                Err((
-                    StateError::OutOfMemory {
-                        requested: (MAX_RESPONSE_COUNT_BYTES as u64).into(),
-                        available: 0.into()
-                    },
-                    request
-                )),
-                res
-            );
+        // No more memory for a second request.
+        assert_eq!(
+            Err((
+                StateError::OutOfMemory {
+                    requested: (MAX_RESPONSE_COUNT_BYTES as u64).into(),
+                    available: 0.into()
+                },
+                request
+            )),
+            res
+        );
 
-            // Unchanged memory usage.
-            assert_eq!(
-                MAX_RESPONSE_COUNT_BYTES as u64,
-                state.total_memory_taken().get()
-            );
-            assert_eq!(0, subnet_available_memory);
-        } else {
-            // Inserting a second request succeeds if we don't account for message memory
-            // usage.
-            assert!(res.is_ok());
-            // No memory taken, subnet available memory unchanged.
-            assert_eq!(0, state.total_memory_taken().get());
-            assert_eq!(initial_available_memory, subnet_available_memory);
-        }
+        // Unchanged memory usage.
+        assert_eq!(
+            MAX_RESPONSE_COUNT_BYTES as u64,
+            state.total_memory_taken().get()
+        );
+        assert_eq!(0, subnet_available_memory);
     })
 }
 

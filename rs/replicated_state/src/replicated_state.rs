@@ -4,10 +4,7 @@ use super::{
 };
 use crate::{
     bitcoin_state::{BitcoinState, BitcoinStateError},
-    canister_state::{
-        system_state::{push_input, CanisterOutputQueuesIterator},
-        ENFORCE_MESSAGE_MEMORY_USAGE,
-    },
+    canister_state::system_state::{push_input, CanisterOutputQueuesIterator},
     metadata_state::StreamMap,
     CanisterQueues,
 };
@@ -573,7 +570,7 @@ impl ReplicatedState {
                 MemoryAllocation::BestEffort => canister.memory_usage_impl(with_messages),
             })
             .sum();
-        if ENFORCE_MESSAGE_MEMORY_USAGE && with_messages {
+        if with_messages {
             memory_taken += (self.subnet_queues.memory_usage() as u64).into();
         }
         memory_taken
@@ -581,15 +578,11 @@ impl ReplicatedState {
 
     /// Returns the total memory taken by canister messages in bytes.
     pub fn message_memory_taken(&self) -> NumBytes {
-        if ENFORCE_MESSAGE_MEMORY_USAGE {
-            NumBytes::new(self.subnet_queues.memory_usage() as u64)
-                + self
-                    .canisters_iter()
-                    .map(|canister| canister.system_state.memory_usage())
-                    .sum()
-        } else {
-            0.into()
-        }
+        NumBytes::new(self.subnet_queues.memory_usage() as u64)
+            + self
+                .canisters_iter()
+                .map(|canister| canister.system_state.memory_usage())
+                .sum()
     }
 
     /// Returns the total memory taken by the ingress history in bytes.
