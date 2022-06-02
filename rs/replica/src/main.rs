@@ -86,6 +86,31 @@ fn main() -> io::Result<()> {
     #[cfg(feature = "profiler")]
     let guard = pprof::ProfilerGuard::new(100).unwrap();
 
+    // We create 3 separate Tokio runtimes. The main one is for the most important
+    // IC operations (e.g. transport). Then the `http` is for serving user requests.
+    // This is also crucial because IC upgrades go through this code path.
+    // The 3rd one is for XNet.
+    // In a bug-free system with quotas in place we would use just a single runtime.
+    // We do have 3 currently as risk management measure. We don't want to risk
+    // a potential bug (e.g. blocking some thread) in one component to yield the
+    // Tokio scheduler irresponsive and block progress on other components.
+    let rt_main = tokio::runtime::Runtime::new().unwrap();
+    // Runtime used for serving user requests.
+    let http_rt_worker_threads = std::cmp::max(num_cpus::get() / 2, 1);
+    let rt_http = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(http_rt_worker_threads)
+        .thread_name("HTTP_Thread".to_string())
+        .enable_all()
+        .build()
+        .unwrap();
+
+    let rt_xnet = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .thread_name("XNet_Thread".to_string())
+        .enable_all()
+        .build()
+        .unwrap();
+
     // Before setup of execution, we disable SIGPIPEs. In particular,
     // we install the corresponding signal handler. We are setting up
     // a series of socket based IPC connections for communication with
@@ -110,8 +135,7 @@ fn main() -> io::Result<()> {
     // And SO_NOSIGPIPE is kernel dependent (>2.2) and has spotty
     // support. (And thus both options lead to sporadic problems
     // commonly if we simply depend on them.)
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let sigpipe_handler = rt.block_on(async {
+    let sigpipe_handler = rt_main.block_on(async {
         signal(SignalKind::pipe()).expect("failed to install SIGPIPE signal handler")
     });
     // Parse command-line args
@@ -228,7 +252,7 @@ fn main() -> io::Result<()> {
 
     let crypto = Arc::new(crypto);
     let _metrics = MetricsRuntimeImpl::new(
-        rt.handle().clone(),
+        rt_http.handle().clone(),
         config.metrics.clone(),
         metrics_registry.clone(),
         registry.clone(),
@@ -259,7 +283,8 @@ fn main() -> io::Result<()> {
         _xnet_endpoint,
     ) = ic_replica::setup_p2p::construct_ic_stack(
         logger.clone(),
-        rt.handle().clone(),
+        rt_main.handle().clone(),
+        rt_xnet.handle().clone(),
         config.clone(),
         subnet_config,
         node_id,
@@ -276,7 +301,7 @@ fn main() -> io::Result<()> {
     let malicious_behaviour = &config.malicious_behaviour;
 
     ic_http_handler::start_server(
-        rt.handle().clone(),
+        rt_http.handle().clone(),
         metrics_registry,
         config.http_handler.clone(),
         ingress_message_filter,
@@ -298,7 +323,7 @@ fn main() -> io::Result<()> {
     std::thread::sleep(Duration::from_millis(5000));
 
     if config.malicious_behaviour.maliciously_seg_fault() {
-        rt.spawn(async move {
+        rt_main.spawn(async move {
             loop {
                 // Exit roughly every 8 seconds.
                 tokio::time::sleep(Duration::from_millis(500)).await;
@@ -313,7 +338,7 @@ fn main() -> io::Result<()> {
         });
     }
 
-    rt.block_on(async move {
+    rt_main.block_on(async move {
         let _drop_async_log_guard = async_log_guard;
         let _drop_sigpipe_handler = sigpipe_handler;
         info!(logger, "IC Replica Terminated");

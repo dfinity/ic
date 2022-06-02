@@ -31,6 +31,7 @@ use std::sync::Arc;
 pub fn construct_ic_stack(
     replica_logger: ReplicaLogger,
     rt_handle: tokio::runtime::Handle,
+    rt_handle_xnet: tokio::runtime::Handle,
     config: Config,
     subnet_config: SubnetConfig,
     node_id: NodeId,
@@ -197,7 +198,7 @@ pub fn construct_ic_stack(
         XNetEndpointConfig::from(Arc::clone(&registry) as Arc<_>, node_id, &replica_logger);
 
     let xnet_endpoint = XNetEndpoint::new(
-        rt_handle.clone(),
+        rt_handle_xnet,
         Arc::clone(&certified_stream_store),
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&registry),
