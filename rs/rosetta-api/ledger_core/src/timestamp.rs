@@ -1,7 +1,15 @@
-use crate::protobuf::TimeStamp;
+use candid::CandidType;
+use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::ops::{Add, Sub};
 use std::time::{Duration, SystemTime};
+
+#[derive(
+    Debug, Clone, Copy, CandidType, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash,
+)]
+pub struct TimeStamp {
+    timestamp_nanos: u64,
+}
 
 impl TimeStamp {
     pub fn new(secs: u64, nanos: u32) -> Self {

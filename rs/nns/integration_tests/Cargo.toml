@@ -24,6 +24,7 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_json = { path = "../../rust_canisters/dfn_json" }
 futures = "0.3.8"
 ic-base-types = { path = "../../types/base_types" }
+ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-common = { path = "../common" }
 ic-nns-governance = { path = "../governance" }

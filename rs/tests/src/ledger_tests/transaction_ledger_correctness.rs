@@ -36,6 +36,7 @@ use dfn_protobuf::protobuf;
 use ed25519_dalek::{Keypair, PublicKey, SecretKey};
 use ic_agent::Agent;
 use ic_canister_client::Sender;
+use ic_ledger_core::block::BlockType;
 use ic_nervous_system_common_test_keys::ed25519_public_key_to_der;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
@@ -43,8 +44,8 @@ use ic_nns_constants::{
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId};
 use ledger_canister::{
-    AccountIdentifier, BinaryAccountBalanceArgs, BlockArg, BlockHeight, BlockRes, Memo, Operation,
-    Tokens, Transaction, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, BinaryAccountBalanceArgs, Block, BlockArg, BlockHeight, BlockRes, Memo,
+    Operation, Tokens, Transaction, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
 };
 use quickcheck::{Arbitrary, Gen};
 use rand::Rng;
@@ -569,11 +570,7 @@ async fn obtain_block(ledger: &Canister<'_>, block: BlockHeight) -> Transaction 
         .await
         .unwrap();
 
-    let block = result
-        .unwrap()
-        .unwrap()
-        .decode()
-        .expect("unable to decode block");
+    let block = Block::decode(result.unwrap().unwrap()).expect("unable to decode block");
 
     block.transaction
 }

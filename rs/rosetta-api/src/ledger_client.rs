@@ -28,12 +28,13 @@ use tokio::sync::RwLock;
 
 use dfn_candid::CandidOne;
 use ic_canister_client::HttpClient;
+use ic_ledger_core::block::BlockType;
 use ic_nns_governance::pb::v1::{manage_neuron::NeuronIdOrSubaccount, GovernanceError, NeuronInfo};
 use ic_types::messages::{HttpCallContent, MessageId};
 use ic_types::CanisterId;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::SignedRequestBytes};
 use ledger_canister::{
-    BlockHeight, Symbol, TipOfChainRes, TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE,
+    Block, BlockHeight, Symbol, TipOfChainRes, TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::{FromWire, IntoWire};
 
@@ -362,7 +363,7 @@ impl LedgerAccess for LedgerClient {
             let mut hashed_batch = Vec::new();
             hashed_batch.reserve_exact(batch.len());
             for raw_block in batch {
-                let block = raw_block.decode().map_err(|err| {
+                let block = Block::decode(raw_block.clone()).map_err(|err| {
                     ApiError::internal_error(format!("Cannot decode block: {}", err))
                 })?;
                 if block.parent_hash != last_block_hash {

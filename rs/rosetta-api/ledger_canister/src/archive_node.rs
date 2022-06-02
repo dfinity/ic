@@ -3,9 +3,10 @@ use dfn_candid::candid_one;
 use dfn_core::api::{print, stable_memory_size_in_pages};
 use dfn_core::{over_init, stable, BytesS};
 use dfn_protobuf::protobuf;
+use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_metrics_encoder::MetricsEncoder;
 use ledger_canister::{
-    BlockHeight, BlockRange, BlockRes, CandidBlock, EncodedBlock, GetBlocksArgs, GetBlocksError,
+    Block, BlockHeight, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError,
     GetBlocksResult, IterBlocksArgs, MAX_BLOCKS_PER_REQUEST,
 };
 use serde::{Deserialize, Serialize};
@@ -207,8 +208,9 @@ fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult
 
     for i in effective_range {
         let encoded_block = &blocks[(i - block_range.start) as usize];
-        let candid_block =
-            CandidBlock::from(encoded_block.decode().expect("failed to decode a block"));
+        let candid_block = CandidBlock::from(
+            Block::decode(encoded_block.clone()).expect("failed to decode a block"),
+        );
         candid_blocks.push(candid_block);
     }
 

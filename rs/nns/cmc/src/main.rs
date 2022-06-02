@@ -16,6 +16,7 @@ use ic_crypto_tree_hash::{
     WitnessGeneratorImpl,
 };
 use ic_ic00_types::{CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, Method, IC_00};
+use ic_ledger_core::block::BlockType;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ledger_canister::{
@@ -654,7 +655,7 @@ async fn query_block(
         .await
         .map_err(|e| failed_to_fetch_block(format!("Failed to fetch block: {}", e.1)))?;
 
-    match b {
+    let raw_block = match b {
         None => {
             return Err(NotifyError::InvalidTransaction(format!(
                 "Block {} not found",
@@ -684,9 +685,9 @@ async fn query_block(
                 ))
             })?
         }
-    }
-    .decode()
-    .map_err(|e| failed_to_fetch_block(format!("Failed to decode block: {}", e)))
+    };
+    Block::decode(raw_block)
+        .map_err(|e| failed_to_fetch_block(format!("Failed to decode block: {}", e)))
 }
 
 fn memo_to_intent_str(memo: Memo) -> String {

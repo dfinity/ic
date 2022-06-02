@@ -1,6 +1,6 @@
 use ic_certified_vars::verify_certificate;
+use ic_ledger_core::block::{EncodedBlock, HashOf};
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, CanisterId};
-use ledger_canister::{EncodedBlock, HashOf};
 
 pub(crate) fn verify_block_hash(
     cert: &ledger_canister::Certification,

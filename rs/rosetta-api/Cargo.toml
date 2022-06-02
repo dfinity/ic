@@ -27,6 +27,7 @@ ic-crypto-sha = {path = "../crypto/sha/"}
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 ic-interfaces = { path = "../interfaces" }
+ic-ledger-core = { path = "ledger_core" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-nns-governance = { path = "../nns/governance" }

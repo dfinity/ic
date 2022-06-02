@@ -23,6 +23,7 @@ use ic_crypto::threshold_sig_public_key_from_der;
 use ic_crypto_tree_hash::MixedHashTree;
 use ic_fondue::ic_manager::IcHandle;
 use ic_ic00_types::{CanisterIdRecord, CanisterStatusResult};
+use ic_ledger_core::block::BlockType;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
 };
@@ -814,7 +815,7 @@ impl TestAgent {
             .await?
         {
             BlockRes(None) => Ok(None),
-            BlockRes(Some(Ok(block))) => Ok(Some(block.decode().unwrap())),
+            BlockRes(Some(Ok(block))) => Ok(Some(Block::decode(block).unwrap())),
             BlockRes(Some(Err(canister_id))) => unimplemented! {"FIXME: {}", canister_id},
         }
     }

@@ -8,6 +8,7 @@ use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client::Sender;
+use ic_ledger_core::{block::BlockType, timestamp::TimeStamp};
 use ic_nervous_system_common::ledger;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
@@ -31,8 +32,8 @@ use ic_nns_test_utils::itest_helpers::{
 };
 use ledger_canister::{
     protobuf::TipOfChainRequest, AccountBalanceArgs, AccountIdentifier, ArchiveOptions, Block,
-    BlockHeight, LedgerCanisterInitPayload, Memo, SendArgs, TimeStamp, TipOfChainRes, Tokens,
-    Transaction, DEFAULT_TRANSFER_FEE,
+    BlockHeight, LedgerCanisterInitPayload, Memo, SendArgs, TipOfChainRes, Tokens, Transaction,
+    DEFAULT_TRANSFER_FEE,
 };
 use tokio::time::{timeout_at, Instant};
 
@@ -99,7 +100,7 @@ fn test_rosetta1_92() {
         let blocks_per_archive_node = 8usize;
         let blocks_per_archive_call = 3usize;
         let (node_max_memory_size_bytes, max_message_size_bytes): (usize, usize) = {
-            let e = example_block().encode().unwrap();
+            let e = example_block().encode();
             println!("[test] encoded block size: {}", e.size_bytes());
             (
                 e.size_bytes() * blocks_per_archive_node,

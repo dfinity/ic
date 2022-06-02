@@ -10,11 +10,12 @@ mod construction_submit;
 use crate::ledger_client::blocks::Blocks;
 use crate::{convert, models, API_VERSION, NODE_VERSION};
 use ic_interfaces::crypto::DOMAIN_IC_REQUEST;
+use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
 use ic_types::messages::MessageId;
 use ic_types::CanisterId;
-use ledger_canister::BlockHeight;
+use ledger_canister::{Block, BlockHeight};
 use std::convert::{TryFrom, TryInto};
 use std::sync::Arc;
 use strum::IntoEnumIterator;
@@ -162,9 +163,7 @@ impl RosettaRequestHandler {
 
         let blocks = self.ledger.read_blocks().await;
         let hb = get_block(&blocks, Some(msg.block_identifier))?;
-        let block = hb
-            .block
-            .decode()
+        let block = Block::decode(hb.block.clone())
             .map_err(|err| ApiError::internal_error(format!("Cannot decode block: {}", err)))?;
         let b_id = convert::block_id(&hb)?;
         let parent_id = create_parent_block_id(&blocks, &hb)?;
@@ -299,8 +298,9 @@ impl RosettaRequestHandler {
             .last_verified()?
             .ok_or_else(|| ApiError::BlockchainEmpty(true, Default::default()))?;
         let tip_id = convert::block_id(&tip)?;
-        let tip_timestamp =
-            models::timestamp::from_system_time(tip.block.decode().unwrap().timestamp.into())?;
+        let tip_timestamp = models::timestamp::from_system_time(
+            Block::decode(tip.block).unwrap().timestamp.into(),
+        )?;
         // Block at index 0 has to be there if tip was present
         let genesis_block = blocks.get_verified_at(0)?;
         let genesis_block_id = convert::block_id(&genesis_block)?;
@@ -475,7 +475,7 @@ impl RosettaRequestHandler {
                 ));
             }
 
-            let tid = ledger_canister::HashOf::try_from(tid)
+            let tid = ic_ledger_core::block::HashOf::try_from(tid)
                 .map_err(|e| ApiError::InvalidTransactionId(false, e.into()))?;
 
             if let Some(i) = blocks.tx_hash_location.get(&tid) {
@@ -589,7 +589,7 @@ fn get_block(
             index: Some(block_height),
             hash: Some(block_hash),
         }) => {
-            let hash: ledger_canister::HashOf<ledger_canister::EncodedBlock> =
+            let hash: ic_ledger_core::block::HashOf<ic_ledger_core::block::EncodedBlock> =
                 convert::to_hash(&block_hash)?;
             if block_height < 0 {
                 return Err(ApiError::InvalidBlockId(false, Default::default()));
@@ -616,7 +616,7 @@ fn get_block(
             index: None,
             hash: Some(block_hash),
         }) => {
-            let hash: ledger_canister::HashOf<ledger_canister::EncodedBlock> =
+            let hash: ic_ledger_core::block::HashOf<ic_ledger_core::block::EncodedBlock> =
                 convert::to_hash(&block_hash)?;
             blocks.get_verified(hash)?
         }
