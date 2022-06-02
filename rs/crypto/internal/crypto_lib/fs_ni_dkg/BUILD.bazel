@@ -1,0 +1,54 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+ALIASES = {
+    "@crate_index//:miracl_core_bls12381": "miracl_core",
+}
+
+rust_library(
+    name = "fs_ni_dkg",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_crypto_internal_fs_ni_dkg",
+    edition = "2018",
+    deps = [
+        "//rs/crypto/internal/crypto_lib/bls12_381/common",
+        "//rs/crypto/internal/crypto_lib/bls12_381/serde/miracl",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/sha",
+        "@crate_index//:hex",
+        "@crate_index//:lazy_static",
+        "@crate_index//:miracl_core_bls12381",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:zeroize",
+    ],
+)
+
+rust_test(
+    name = "fs_ni_dkg_test",
+    aliases = ALIASES,
+    crate = ":fs_ni_dkg",
+    deps = [
+        "@crate_index//:proptest",
+    ],
+)
+
+rust_test_suite(
+    name = "test_suite",
+    srcs = glob(["tests/**"]),
+    aliases = ALIASES,
+    edition = "2018",
+    deps = [
+        ":fs_ni_dkg",
+        "//rs/crypto/internal/crypto_lib/bls12_381/serde/miracl",
+        "//rs/crypto/internal/crypto_lib/types",
+        "@crate_index//:miracl_core_bls12381",
+        "@crate_index//:rand",
+    ],
+)

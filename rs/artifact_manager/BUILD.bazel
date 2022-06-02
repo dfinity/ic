@@ -1,0 +1,31 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "artifact_manager",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_artifact_manager",
+    edition = "2018",
+    deps = [
+        "//rs/consensus/ecdsa_object",
+        "//rs/consensus/message",
+        "//rs/constants",
+        "//rs/crypto/hash",
+        "//rs/interfaces",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/types/types",
+        "@crate_index//:bincode",
+        "@crate_index//:crossbeam-channel",
+        "@crate_index//:prometheus",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+    ],
+)

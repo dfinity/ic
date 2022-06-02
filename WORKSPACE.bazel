@@ -168,6 +168,7 @@ crates_repository(
         "once_cell": crate.spec(version = "=1.10.0"),
         "openssl": crate.spec(version = "=0.10.38"),
         "openssl-sys": crate.spec(version = "=0.9.70"),
+        "pairing": crate.spec(version = "=0.20.0"),
         "pathdiff": crate.spec(version = "=0.2.1"),
         "pkg-config": crate.spec(version = "=0.3.25"),
         "pprof": crate.spec(
