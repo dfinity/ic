@@ -132,6 +132,10 @@ message TimeOfLastAllocationCharge {
     uint64 time_of_last_allocation_charge_nanos = 1;
 }
 
+message SubnetMetrics {
+    types.v1.NominalCycles consumed_cycles_by_deleted_canisters = 1;
+}
+
 message SystemMetadata {
     uint64 generated_id_counter = 1;
     google.protobuf.BytesValue prev_state_hash = 2;
@@ -158,6 +162,7 @@ message SystemMetadata {
     registry.subnet.v1.SubnetFeatures own_subnet_features = 13;
 
     TimeOfLastAllocationCharge time_of_last_allocation_charge_nanos = 14;
+    SubnetMetrics subnet_metrics = 15;
 }
 
 message StableMemory {
