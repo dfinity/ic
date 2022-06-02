@@ -12,7 +12,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
+    canister_state::QUEUE_INDEX_NONE,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CallOrigin, ExportedFunctions,
 };
@@ -806,7 +806,7 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
                 let dest_canister = canisters.remove(&dest_canister_id).unwrap();
                 let source_canister_queues = source_canister.system_state.queues();
                 let dest_canister_queues = dest_canister.system_state.queues();
-                if ENFORCE_MESSAGE_MEMORY_USAGE && subnet_type == SubnetType::Application {
+                if subnet_type == SubnetType::Application {
                     // Only one message should have been inducted from each queue: we first induct
                     // messages to self and hit the canister memory limit (1 more reserved slot);
                     // then induct messages for `dest_canister` and hit the subnet memory limit (2
@@ -815,7 +815,8 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
                     assert_eq!(1, source_canister_queues.input_queues_message_count());
                     assert_eq!(1, dest_canister_queues.input_queues_message_count());
                 } else {
-                    // Without memory limits all messages should have been inducted.
+                    // On a system subnet, with no message memory limits, all messages should have
+                    // been inducted.
                     assert_eq!(0, source_canister_queues.output_message_count());
                     assert_eq!(2, source_canister_queues.input_queues_message_count());
                     assert_eq!(2, dest_canister_queues.input_queues_message_count());

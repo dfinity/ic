@@ -12,7 +12,6 @@ use ic_interfaces::execution_environment::{ExecResult, HypervisorError};
 
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::ENFORCE_MESSAGE_MEMORY_USAGE,
     canister_state::WASM_PAGE_SIZE_IN_BYTES,
     testing::{CanisterQueuesTesting, SystemStateTesting},
     CanisterStatus, SystemState,
@@ -250,13 +249,8 @@ fn output_requests_on_application_subnets_respect_canister_memory_allocation() {
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
     );
-    let system_state = &mut test.canister_state_mut(canister_id).system_state;
-    if ENFORCE_MESSAGE_MEMORY_USAGE {
-        assert!(!system_state.queues().has_output());
-    } else {
-        assert_eq!(1, system_state.queues().reserved_slots());
-        assert_correct_request(system_state, canister_id);
-    }
+    let system_state = &test.canister_state(canister_id).system_state;
+    assert!(!system_state.queues().has_output());
 }
 
 #[test]
@@ -271,13 +265,8 @@ fn output_requests_on_application_subnets_respect_subnet_total_memory() {
     test.execute_message(canister_id);
     assert_eq!(13, test.subnet_available_memory().get_total_memory());
     assert_eq!(1 << 30, test.subnet_available_memory().get_message_memory());
-    let system_state = &mut test.canister_state_mut(canister_id).system_state;
-    if ENFORCE_MESSAGE_MEMORY_USAGE {
-        assert!(!system_state.queues().has_output());
-    } else {
-        assert_eq!(2, system_state.queues().reserved_slots());
-        assert_correct_request(system_state, canister_id);
-    }
+    let system_state = &test.canister_state(canister_id).system_state;
+    assert!(!system_state.queues().has_output());
 }
 
 #[test]
@@ -292,13 +281,8 @@ fn output_requests_on_application_subnets_respect_subnet_message_memory() {
     test.execute_message(canister_id);
     assert_eq!(1 << 30, test.subnet_available_memory().get_total_memory());
     assert_eq!(13, test.subnet_available_memory().get_message_memory());
-    let system_state = &mut test.canister_state_mut(canister_id).system_state;
-    if ENFORCE_MESSAGE_MEMORY_USAGE {
-        assert!(!system_state.queues().has_output());
-    } else {
-        assert_eq!(2, system_state.queues().reserved_slots());
-        assert_correct_request(system_state, canister_id);
-    }
+    let system_state = &test.canister_state(canister_id).system_state;
+    assert!(!system_state.queues().has_output());
 }
 
 #[test]
@@ -314,23 +298,17 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
     let subnet_total_memory = test.subnet_available_memory().get_total_memory();
     let subnet_message_memory = test.subnet_available_memory().get_message_memory();
     let system_state = &mut test.canister_state_mut(canister_id).system_state;
-    if ENFORCE_MESSAGE_MEMORY_USAGE {
-        // There should be one reserved slot in the queues.
-        assert_eq!(1, system_state.queues().reserved_slots());
-        // Subnet available memory should have decreased by `MAX_RESPONSE_COUNT_BYTES`.
-        assert_eq!(
-            (1 << 30) - MAX_RESPONSE_COUNT_BYTES as i64,
-            subnet_total_memory
-        );
-        assert_eq!(
-            (1 << 30) - MAX_RESPONSE_COUNT_BYTES as i64,
-            subnet_message_memory
-        )
-    } else {
-        assert_eq!(4, system_state.queues().reserved_slots());
-        assert_eq!(1 << 30, subnet_total_memory);
-        assert_eq!(1 << 30, subnet_message_memory);
-    }
+    // There should be one reserved slot in the queues.
+    assert_eq!(1, system_state.queues().reserved_slots());
+    // Subnet available memory should have decreased by `MAX_RESPONSE_COUNT_BYTES`.
+    assert_eq!(
+        (1 << 30) - MAX_RESPONSE_COUNT_BYTES as i64,
+        subnet_total_memory
+    );
+    assert_eq!(
+        (1 << 30) - MAX_RESPONSE_COUNT_BYTES as i64,
+        subnet_message_memory
+    );
     assert_correct_request(system_state, canister_id);
 }
 

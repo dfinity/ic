@@ -2,7 +2,7 @@ use ic_base_types::{NumBytes, NumSeconds};
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{DEFAULT_QUEUE_CAPACITY, ENFORCE_MESSAGE_MEMORY_USAGE, QUEUE_INDEX_NONE},
+    canister_state::{DEFAULT_QUEUE_CAPACITY, QUEUE_INDEX_NONE},
     testing::{CanisterQueuesTesting, SystemStateTesting},
     InputQueueType, SystemState,
 };
@@ -188,9 +188,7 @@ fn system_subnet_induct_messages_to_self_ignores_canister_memory_limit() {
         SubnetType::System,
         false,
     );
-    if ENFORCE_MESSAGE_MEMORY_USAGE {
-        expected_subnet_available_memory -= MAX_RESPONSE_COUNT_BYTES as i64
-    };
+    expected_subnet_available_memory -= MAX_RESPONSE_COUNT_BYTES as i64;
     assert_eq!(expected_subnet_available_memory, subnet_available_memory);
 }
 
@@ -204,9 +202,7 @@ fn system_subnet_induct_messages_to_self_ignores_subnet_memory_limit() {
         SubnetType::System,
         false,
     );
-    if ENFORCE_MESSAGE_MEMORY_USAGE {
-        expected_subnet_available_memory -= MAX_RESPONSE_COUNT_BYTES as i64
-    };
+    expected_subnet_available_memory -= MAX_RESPONSE_COUNT_BYTES as i64;
     assert_eq!(expected_subnet_available_memory, subnet_available_memory);
 }
 
@@ -276,7 +272,7 @@ fn induct_messages_to_self_memory_limit_test_impl(
         system_state.queues_mut().pop_input()
     );
 
-    if ENFORCE_MESSAGE_MEMORY_USAGE && should_enforce_limit {
+    if should_enforce_limit {
         assert_eq!(None, system_state.queues_mut().pop_input());
 
         // Expect the second request to still be in the output queue.

@@ -1,7 +1,7 @@
 mod call_context_manager;
 
+use super::queues::can_push;
 pub use super::queues::memory_required_to_push_request;
-use super::{queues::can_push, ENFORCE_MESSAGE_MEMORY_USAGE};
 pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::{CanisterQueues, InputQueueType, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
@@ -555,11 +555,7 @@ impl SystemState {
 
     /// Returns the memory currently in use by the `SystemState`.
     pub fn memory_usage(&self) -> NumBytes {
-        if ENFORCE_MESSAGE_MEMORY_USAGE {
-            ((self.queues.memory_usage()) as u64).into()
-        } else {
-            NumBytes::from(0)
-        }
+        (self.queues.memory_usage() as u64).into()
     }
 
     /// Sets the (transient) size in bytes of responses from this canister
@@ -605,11 +601,6 @@ impl SystemState {
         match self.status {
             CanisterStatus::Running { .. } => (),
             CanisterStatus::Stopped | CanisterStatus::Stopping { .. } => return,
-        }
-
-        if !ENFORCE_MESSAGE_MEMORY_USAGE {
-            while self.queues.induct_message_to_self(self.canister_id).is_ok() {}
-            return;
         }
 
         let mut available_memory = canister_available_memory.min(*subnet_available_memory);
@@ -662,10 +653,6 @@ pub(crate) fn push_input(
     own_subnet_type: SubnetType,
     input_queue_type: InputQueueType,
 ) -> Result<(), (StateError, RequestOrResponse)> {
-    if !ENFORCE_MESSAGE_MEMORY_USAGE {
-        return queues.push_input(index, msg, input_queue_type);
-    }
-
     // Do not enforce limits for local messages on system subnets.
     if own_subnet_type != SubnetType::System || input_queue_type != InputQueueType::LocalSubnet {
         let available_memory = queues_available_memory.min(*subnet_available_memory);

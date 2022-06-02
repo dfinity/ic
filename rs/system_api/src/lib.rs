@@ -16,8 +16,8 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::ENFORCE_MESSAGE_MEMORY_USAGE, memory_required_to_push_request,
-    page_map::PAGE_SIZE, Memory, NumWasmPages, PageIndex, StateError,
+    memory_required_to_push_request, page_map::PAGE_SIZE, Memory, NumWasmPages, PageIndex,
+    StateError,
 };
 use ic_sys::PageBytes;
 use ic_types::{
@@ -1026,8 +1026,8 @@ impl SystemApiImpl {
         };
 
         let reservation_bytes = (memory_required_to_push_request(&req) as u64).into();
-        let enforce_message_memory_usage = ENFORCE_MESSAGE_MEMORY_USAGE
-            && self.execution_parameters.subnet_type != SubnetType::System;
+        let enforce_message_memory_usage =
+            self.execution_parameters.subnet_type != SubnetType::System;
         if enforce_message_memory_usage
             && self
                 .memory_usage
