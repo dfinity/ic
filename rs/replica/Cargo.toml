@@ -48,6 +48,7 @@ jemallocator = "0.3.2"
 jemalloc-ctl = "0.3.3"
 libc = "0.2.91"
 nix = "0.23.0"
+num_cpus = "1.13.1"
 pprof = { version = "0.9.1", default-features = false, features = ["backtrace-rs", "flamegraph", "prost-codec"], optional = true }
 prometheus = "0.12.0"
 prost = "0.10.4"
