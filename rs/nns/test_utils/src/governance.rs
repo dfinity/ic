@@ -369,9 +369,6 @@ pub async fn upgrade_root_canister_by_proposal(
         ProposalStatus::Executed
     );
 
-    let pending_proposals = get_pending_proposals(governance).await;
-    assert_eq!(pending_proposals.len(), 0);
-
     loop {
         let status: CanisterStatusResult = lifeline
             .update_(

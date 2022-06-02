@@ -14,6 +14,7 @@ from ci import sh
 from ci import show_sccache_stats
 
 BIN_CANISTERS = [
+    "candid-test-canister",
     "cycles-minting-canister",
     "genesis-token-canister",
     "governance-canister",

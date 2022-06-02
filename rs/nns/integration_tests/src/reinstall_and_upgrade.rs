@@ -111,7 +111,6 @@ fn test_reinstall_and_upgrade_canisters_canonical_ordering() {
 }
 
 #[test]
-#[ignore]
 fn test_reinstall_and_upgrade_canisters_with_state_changes() {
     local_test_on_nns_subnet(|runtime| async move {
         let init_state = construct_init_state();
@@ -299,7 +298,7 @@ fn get_nns_canister_wasm<'a>(
         },
         CanisterInstallInfo {
             wasm: Project::cargo_bin_maybe_use_path_relative_to_rs(
-                "rosetta-api/cycles_minting_canister",
+                "nns/cmc",
                 "cycles-minting-canister",
                 &[],
             ),

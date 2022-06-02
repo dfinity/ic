@@ -11,6 +11,7 @@ use std::time::SystemTime;
 
 use crossbeam::channel::{bounded, Receiver as CBReceiver, Sender as CBSender};
 use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
+use maplit::hashset;
 use rand::distributions::Distribution;
 use rand::distributions::WeightedIndex;
 use rand::rngs::StdRng;
@@ -362,7 +363,7 @@ impl Operation {
     }
 
     /// Returns the ids of the neurons/accounts involved.
-    fn data_dependendencies(&self) -> Vec<u64> {
+    fn data_dependencies(&self) -> Vec<u64> {
         match self {
             Operation::LedgerTransfer {
                 id: _,
@@ -464,13 +465,13 @@ struct FuzzParams {
     /// The number of unstaked neurons to start with.
     initial_num_unstaked_neurons: u64,
     /// The total number of e8s to distribute across all ledger
-    /// acounts and neurons.
+    /// accounts and neurons.
     total_e8s_to_distribute: u64,
     /// Number of operations to perform in total.
     total_num_ops: u64,
     /// Number of batches to divide the total operations in.
     num_batches: u64,
-    /// Weighted probabilies of generating each of the operation types.
+    /// Weighted probabilities of generating each of the operation types.
     /// E.g. vec![(0, 1.0), (3, 2.0)] will generate only operations 0
     /// (ledger transfers) and 3 (verify one) in a 2:1 ratio.
     ops_to_generate: Vec<(usize, f64)>,
@@ -949,16 +950,16 @@ impl LocalNnsFuzzDriver {
     /// Splits operations in parallizable groups by running a naive connected
     /// components algorithm.
     ///
-    /// Operations that have data depencies are not parallelizable, so end up
-    /// being grouped together. An operation has a data dependeny on another
+    /// Operations that have data dependencies are not parallelizable, so end up
+    /// being grouped together. An operation has a data dependency on another
     /// operation it it interacts with the same account or neuron.
     fn split_parallelizable_operations(operations: &[Operation]) -> Vec<Vec<Operation>> {
-        // Build an adjancency list of data items
+        // Build an adjacency list of data items
         let mut adj = BTreeMap::new();
         for operation in operations {
-            for it0 in operation.data_dependendencies() {
+            for it0 in operation.data_dependencies() {
                 let list = adj.entry(it0).or_insert_with(BTreeSet::new);
-                for it1 in operation.data_dependendencies() {
+                for it1 in operation.data_dependencies() {
                     if it1 != it0 {
                         list.insert(it1);
                     }
@@ -982,7 +983,7 @@ impl LocalNnsFuzzDriver {
             }
         }
 
-        // Go through the adjancency list to find the connected components
+        // Go through the adjacency list to find the connected components
         let mut components = Vec::new();
         let mut visited = BTreeSet::new();
         for key in adj.keys() {
@@ -998,7 +999,7 @@ impl LocalNnsFuzzDriver {
         for component in components {
             let mut final_component = BTreeSet::new();
             for operation in operations {
-                for data_item in operation.data_dependendencies() {
+                for data_item in operation.data_dependencies() {
                     if component.contains(&data_item) {
                         final_component.insert(operation);
                     }
@@ -1314,9 +1315,9 @@ impl FuzzDriver for LocalNnsFuzzDriver {
                 let mut governance = GovernanceCanisterInitPayloadBuilder::new().proto;
 
                 governance.economics = Some(economics);
-                // Note that we're introducing some indeterminism by allowing the ledger
+                // Note that we're introducing some nondeterminism by allowing the ledger
                 // to receive a list of accounts that is different each time (since it
-                // uses a HashMap). Something to dig into if we see indet problems.
+                // uses a HashMap). Something to dig into if we see nondeterministic problems.
                 let mut ledger_init_state = HashMap::new();
                 for account in state.accounts.values() {
                     ledger_init_state.insert(account.clone().into(), account.balance);
@@ -1333,6 +1334,7 @@ impl FuzzDriver for LocalNnsFuzzDriver {
                 }
 
                 let ledger_init_args = LedgerCanisterInitPayload::builder()
+                    .send_whitelist(hashset! {GOVERNANCE_CANISTER_ID})
                     .minting_account(GOVERNANCE_CANISTER_ID.into())
                     .initial_values(ledger_init_state)
                     .build()
@@ -1348,7 +1350,7 @@ impl FuzzDriver for LocalNnsFuzzDriver {
                 let runtime = Box::new(runtime);
                 let runtime: &'static canister_test::Runtime = Box::leak(runtime);
 
-                // Surroung the canisters struct in Arc so that we can pass it to operation
+                // Surround the canisters struct in Arc so that we can pass it to operation
                 // execution threads below.
                 let nns_canisters = Arc::new(NnsCanisters::set_up(runtime, nns_init_payload).await);
                 println!("NNS initialized. Starting to send operations.");
@@ -1539,8 +1541,7 @@ fn test_ledger_transfers() {
 
 // Tests neuron stake/disburse in isolation.
 // TODO(NNS1-901) remove the ignore. Still some (test-only) stuff to address.
-#[test]
-#[ignore]
+#[allow(dead_code)]
 fn test_neurons() {
     let params = FuzzParams {
         network_economics: NetworkEconomics::with_default_values(),
