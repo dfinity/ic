@@ -1,5 +1,5 @@
 {
-  "checksum": "6e2ba517e16541b1372a2d87e2a4e8a0707a8889b208fae5280ebbe5721b6f55",
+  "checksum": "4dcbd8da643e276bc7315ad6db28cc61b589cd155779b99fee4060af8bae2a7c",
   "crates": {
     "adler 1.0.2": {
       "name": "adler",
@@ -2098,13 +2098,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "bumpalo 3.9.1": {
+    "bumpalo 3.10.0": {
       "name": "bumpalo",
-      "version": "3.9.1",
+      "version": "3.10.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/bumpalo/3.9.1/download",
-          "sha256": "a4a45a46ab1f2412e53d3a0ade76ffad2025804294569aae387231a0cd6e0899"
+          "url": "https://crates.io/api/v1/crates/bumpalo/3.10.0/download",
+          "sha256": "37ccbd214614c6783386c1af30caf03192f17891059cecc394b4fb119e363de3"
         }
       },
       "targets": [
@@ -2130,7 +2130,7 @@
           "default"
         ],
         "edition": "2018",
-        "version": "3.9.1"
+        "version": "3.10.0"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -9868,7 +9868,7 @@
                 "target": "openssl_probe"
               },
               {
-                "id": "openssl-sys 0.9.73",
+                "id": "openssl-sys 0.9.74",
                 "target": "openssl_sys"
               }
             ],
@@ -10663,7 +10663,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "openssl-sys 0.9.73",
+              "id": "openssl-sys 0.9.74",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -10689,7 +10689,7 @@
         "deps": {
           "common": [
             {
-              "id": "openssl-sys 0.9.73",
+              "id": "openssl-sys 0.9.74",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -10782,13 +10782,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "openssl-sys 0.9.73": {
+    "openssl-sys 0.9.74": {
       "name": "openssl-sys",
-      "version": "0.9.73",
+      "version": "0.9.74",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/openssl-sys/0.9.73/download",
-          "sha256": "9d5fd19fb3e0a8191c1e34935718976a3e70c112ab9a24af6d7cadccd9d90bc0"
+          "url": "https://crates.io/api/v1/crates/openssl-sys/0.9.74/download",
+          "sha256": "835363342df5fba8354c5b453325b110ffd54044e588c539cf2f20a8014e4cb1"
         }
       },
       "targets": [
@@ -10829,14 +10829,14 @@
               "target": "libc"
             },
             {
-              "id": "openssl-sys 0.9.73",
+              "id": "openssl-sys 0.9.74",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.9.73"
+        "version": "0.9.74"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -20453,7 +20453,7 @@
         "deps": {
           "common": [
             {
-              "id": "bumpalo 3.9.1",
+              "id": "bumpalo 3.10.0",
               "target": "bumpalo"
             },
             {
