@@ -18,7 +18,7 @@ Usage:
   -v version: The version written into the image; mandatory
   -x execdir: Set executable source dir. Will take all required IC executables
      from source directory and install it into the correct location before
-     building the image; mandatroy
+     building the image; mandatory
 EOF
 }
 
