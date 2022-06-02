@@ -13,6 +13,7 @@ build --bes_results_url=https://dash.buildfarm.dfinity.systems/invocation/
 build --bes_backend=bes.buildfarm.dfinity.systems
 
 build --remote_local_fallback
+build --workspace_status_command=$(pwd)/bazel/workspace_status.sh
 
 build:ci --noremote_local_fallback
 build:ci --repository_cache=/cache/bazel
