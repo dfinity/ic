@@ -6,30 +6,27 @@ set -eo pipefail
 
 function usage() {
     cat <<EOF
+
 Usage:
-  build-disk-image -o outfile [-t dev] [-u ubuntu.tar] [-b boot.img] [-r root.img] [-x execdir]
+  build-disk-image -o outfile -v version -x execdir [-t dev] [-p password]
 
   Build whole disk of IC guest OS VM image.
 
   -o outfile: Name of output file; mandatory
+  -v version: The version written into the image; mandatory
+  -x execdir: Set executable source dir. Will take all required IC executables
+       from source directory and install it into the correct location before
+       building the image; mandatory
   -t image type: The type of image to build. Must be either "dev" or "prod".
      If nothing is specified, defaults to building "prod" image.
   -p password: Set root password for console access. This is only allowed
      for "dev" images
-  -v version: The version written into the image.
-  -x execdir: Set executable source dir. Will take all required IC executables
-     from source directory and install it into the correct location before
-     building the image.
 
-  -b and -r should be given together, and they are mutually exclusive
-  with -u. Both designate where to take the ubuntu system from.
-  If neither are given, then this will build the ubuntu system using
-  docker behind the scenes.
 EOF
 }
 
 BUILD_TYPE=prod
-while getopts "o:t:u:b:r:v:p:x:" OPT; do
+while getopts "o:t:v:p:x:" OPT; do
     case "${OPT}" in
         o)
             OUT_FILE="${OPTARG}"
@@ -80,6 +77,13 @@ fi
 
 if [ "${VERSION}" == "" ]; then
     echo "Version needs to be specified for build to succeed" >&2
+    usage >&2
+    exit 1
+fi
+
+if [ "${EXEC_SRCDIR}" == "" ]; then
+    echo "Execdir needs to be specified for build to succeed" >&2
+    usage >&2
     exit 1
 fi
 

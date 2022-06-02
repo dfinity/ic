@@ -14,40 +14,11 @@ Before you start, ensure that you have the prerequisites:
 install the OVMF package, and then download the `OVMF_CODE.fd` file to your
 local machine for testing.
 
-To build a full system image, run:
+== Quick build and test instructions (Linux required)
 
-[source,shell]
-----
-scripts/build-macos.sh
-----
+To build a full system image for development, run:
 
-This should build an IC-OS image tarball `ic-os.img.tar`. Once the image tarball
-is available, you can extract the disk image.
-
-[source,shell]
-----
-tar -xf ic-os.img.tar
-----
-
-Then run it on qemu:
-
-[source,shell]
-----
-qemu-system-x86_64 \
-  -display none -serial mon:stdio \
-  -machine type=q35 \
-  -m 2G \
-  -bios scripts/OVMF_CODE.fd \
-  -device virtio-blk-pci,drive=drive0,addr=2.0 -drive file=ic-os.img,format=raw,id=drive0,if=none \
-  -device pcie-root-port,id=pcie.1,chassis=1 \
-  -netdev user,id=enp1s0 -device virtio-net-pci,netdev=enp1s0,bus=pcie.1,addr=0.0 \
-----
-
-== Quick build and test instructions (Linux)
-
-To build a full system image, run:
-
-  scripts/build-disk-image.sh -o /tmp/disk.img
+  scripts/build-disk-image.sh -o /tmp/disk.img -v <version>  -t dev -p <password> -x ../../artifacts/docker-build-ic/artifacts/release
 
 When building your replica, nodemanger and other IC binaries, be sure *not* to use Nix to build those.
 Instead do a docker based build as described here: https://github.com/dfinity/ic#building-the-code
@@ -58,14 +29,6 @@ Instead do a docker based build as described here: https://github.com/dfinity/ic
   # To build the NNS canisters needed for installing the NNS
   cd ../ic-os/guestos
   ../../gitlab-ci/tools/docker-run gitlab-ci/tools/cargo-build-canisters
-
-If you want to include binaries that you have been locally building, append `-x`.
-You might also want to set the version number to be used `-v`.
-
-  scripts/build-disk-image.sh -o "/tmp/disk.img" -x ~/.cache/dfinity/cargo_target/debug/ -v skaestle-test
-
-(Expected build time: ~90 seconds, including docker downloads and container
-builds; ~20 seconds if docker cached).
 
 This can then be booted in qemu, e.g.:
 
