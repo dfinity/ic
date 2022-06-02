@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "message",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_consensus_message",
+    edition = "2018",
+    deps = [
+        "//rs/crypto/hash",
+        "//rs/interfaces",
+        "//rs/types/types",
+    ],
+)

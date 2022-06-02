@@ -1,5 +1,5 @@
 {
-  "checksum": "b26203fa8b4f8e42432c44a6fd62aa68091b4b13578dec8a19d83050f69c8b88",
+  "checksum": "932b33ae7f6da3fccc71148d8393191a3ff80b5742edc5a6fb37448697b2ad51",
   "crates": {
     "addr2line 0.17.0": {
       "name": "addr2line",
@@ -5392,6 +5392,10 @@
             {
               "id": "openssl-sys 0.9.70",
               "target": "openssl_sys"
+            },
+            {
+              "id": "pairing 0.20.0",
+              "target": "pairing"
             },
             {
               "id": "pathdiff 0.2.1",
@@ -21487,8 +21491,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -21511,8 +21515,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
