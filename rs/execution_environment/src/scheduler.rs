@@ -1473,6 +1473,12 @@ fn observe_replicated_state_metrics(
     metrics
         .current_heap_delta
         .set(state.metadata.heap_delta_estimate.get() as i64);
+
+    // Add the consumed cycles by canisters that were deleted.
+    consumed_cycles_total += state
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_by_deleted_canisters;
     metrics.observe_consumed_cycles(consumed_cycles_total);
 
     let observe_reading = |status: CanisterStatusType, num: i64| {

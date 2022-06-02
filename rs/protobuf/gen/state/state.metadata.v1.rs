@@ -160,6 +160,11 @@ pub struct TimeOfLastAllocationCharge {
     pub time_of_last_allocation_charge_nanos: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SubnetMetrics {
+    #[prost(message, optional, tag="1")]
+    pub consumed_cycles_by_deleted_canisters: ::core::option::Option<super::super::super::types::v1::NominalCycles>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SystemMetadata {
     #[prost(uint64, tag="1")]
     pub generated_id_counter: u64,
@@ -191,6 +196,8 @@ pub struct SystemMetadata {
     pub own_subnet_features: ::core::option::Option<super::super::super::registry::subnet::v1::SubnetFeatures>,
     #[prost(message, optional, tag="14")]
     pub time_of_last_allocation_charge_nanos: ::core::option::Option<TimeOfLastAllocationCharge>,
+    #[prost(message, optional, tag="15")]
+    pub subnet_metrics: ::core::option::Option<SubnetMetrics>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {

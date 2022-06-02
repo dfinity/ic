@@ -20,6 +20,7 @@ use ic_protobuf::{
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
+use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
@@ -122,6 +123,8 @@ pub struct SystemMetadata {
     /// needed to calculate how much time should be charged for when charging
     /// does occur.
     pub time_of_last_allocation_charge: Time,
+
+    pub subnet_metrics: SubnetMetrics,
 }
 
 /// Full description of the IC network toplogy.
@@ -359,6 +362,33 @@ impl TryFrom<pb_metadata::NodeTopology> for NodeTopology {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct SubnetMetrics {
+    pub consumed_cycles_by_deleted_canisters: NominalCycles,
+}
+
+impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
+    fn from(item: &SubnetMetrics) -> Self {
+        Self {
+            consumed_cycles_by_deleted_canisters: Some(
+                (&item.consumed_cycles_by_deleted_canisters).into(),
+            ),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_metadata::SubnetMetrics) -> Result<Self, Self::Error> {
+        Ok(Self {
+            consumed_cycles_by_deleted_canisters: try_from_option_field(
+                item.consumed_cycles_by_deleted_canisters,
+                "SubnetMetrics::consumed_cycles_by_deleted_canisters",
+            )?,
+        })
+    }
+}
+
 impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
     fn from(item: &SystemMetadata) -> Self {
         // We do not store the subnet type when we serialize SystemMetadata. We rely on
@@ -391,6 +421,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                     .time_of_last_allocation_charge
                     .as_nanos_since_unix_epoch(),
             }),
+            subnet_metrics: Some((&item.subnet_metrics).into()),
         }
     }
 }
@@ -450,6 +481,10 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
                 ),
                 None => Time::from_nanos_since_unix_epoch(item.batch_time_nanos),
             },
+            subnet_metrics: match item.subnet_metrics {
+                Some(subnet_metrics) => subnet_metrics.try_into()?,
+                None => SubnetMetrics::default(),
+            },
         })
     }
 }
@@ -474,6 +509,7 @@ impl SystemMetadata {
             certification_version: CertificationVersion::V0,
             heap_delta_estimate: NumBytes::from(0),
             time_of_last_allocation_charge: UNIX_EPOCH,
+            subnet_metrics: Default::default(),
         }
     }
 
