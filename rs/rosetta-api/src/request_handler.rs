@@ -33,6 +33,9 @@ use crate::models::{
 };
 use crate::store::HashedBlock;
 
+/// The maximum amount of blocks to retrieve in a single search.
+const MAX_SEARCH_LIMIT: usize = 10_000;
+
 #[derive(Clone)]
 pub struct RosettaRequestHandler {
     blockchain: String,
@@ -449,7 +452,7 @@ impl RosettaRequestHandler {
                 .map_err(|e| ApiError::invalid_request(format!("Invalid limit: {}", e)))?,
             None => usize::MAX,
         };
-        let limit = std::cmp::min(limit, 10_000);
+        let limit = std::cmp::min(limit, MAX_SEARCH_LIMIT);
 
         if msg.transaction_identifier.is_none() && msg.account_identifier.is_none() {
             return self.get_blocks_range(max_block, offset, limit).await;
