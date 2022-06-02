@@ -1,0 +1,40 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "system_api",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_system_api",
+    edition = "2018",
+    deps = [
+        "//rs/cycles_account_manager",
+        "//rs/interfaces",
+        "//rs/monitoring/logger",
+        "//rs/nns/constants",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/sys",
+        "//rs/types/base_types",
+        "//rs/types/error_types",
+        "//rs/types/ic00_types",
+        "//rs/types/types",
+        "//rs/utils",
+        "@crate_index//:candid",
+        "@crate_index//:prometheus",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:slog",
+    ],
+)
+
+# TODO(IC-1207): migrate rust_test when unblocked dependencies.
