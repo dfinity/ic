@@ -116,7 +116,7 @@ pub trait CanisterHttpGossip: Send + Sync {
 pub trait CanisterHttpPoolManager: Send {
     /// A function to be invoked every time the canister http pool is changed.
     fn on_state_change(
-        &self,
+        &mut self,
         consensus_cache: &dyn ConsensusPoolCache,
         canister_http_pool: &dyn CanisterHttpPool,
     ) -> CanisterHttpChangeSet;

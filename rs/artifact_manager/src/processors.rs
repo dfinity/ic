@@ -834,7 +834,7 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> ArtifactProcessor<Ecds
 pub struct CanisterHttpProcessor<PoolCanisterHttp> {
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
-    client: Box<dyn CanisterHttpPoolManager>,
+    client: Arc<RwLock<dyn CanisterHttpPoolManager + Sync + 'static>>,
     log: ReplicaLogger,
 }
 
@@ -843,7 +843,7 @@ impl<
     > CanisterHttpProcessor<PoolCanisterHttp>
 {
     pub fn build<
-        C: CanisterHttpPoolManager + 'static,
+        C: CanisterHttpPoolManager + Sync + 'static,
         G: CanisterHttpGossip + Send + Sync + 'static,
         S: Fn(AdvertSendRequest<CanisterHttpArtifact>) + Send + 'static,
         F: FnOnce() -> (C, G),
@@ -863,7 +863,7 @@ impl<
         let client = Self {
             consensus_pool_cache: consensus_pool_cache.clone(),
             canister_http_pool: canister_http_pool.clone(),
-            client: Box::new(pool_manager),
+            client: Arc::new(RwLock::new(pool_manager)),
             log,
         };
         let manager = ArtifactProcessorManager::new(
@@ -902,6 +902,8 @@ impl<PoolCanisterHttp: MutableCanisterHttpPool + Send + Sync + 'static>
             let canister_http_pool = self.canister_http_pool.read().unwrap();
             let change_set = self
                 .client
+                .write()
+                .unwrap()
                 .on_state_change(self.consensus_pool_cache.as_ref(), &*canister_http_pool);
 
             for change_action in change_set.iter() {
