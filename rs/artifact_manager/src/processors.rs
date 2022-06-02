@@ -939,6 +939,11 @@ impl<PoolCanisterHttp: MutableCanisterHttpPool + Send + Sync + 'static>
         } else {
             ProcessingResult::StateUnchanged
         };
+
+        self.canister_http_pool
+            .write()
+            .unwrap()
+            .apply_changes(change_set);
         (adverts, changed)
     }
 }
