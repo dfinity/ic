@@ -1257,7 +1257,7 @@ impl ProposalData {
         }
 
         // Returns whether the vote has turned, i.e. if the vote is now yes, when it was
-        // previously no, or if the vote is now no if it was previsouly yes.
+        // previously no, or if the vote is now no if it was previously yes.
         fn vote_has_turned(old_tally: &Tally, new_tally: &Tally) -> bool {
             (old_tally.yes > old_tally.no && new_tally.yes <= new_tally.no)
                 || (old_tally.yes <= old_tally.no && new_tally.yes > new_tally.no)
@@ -1279,7 +1279,7 @@ impl ProposalData {
         // reaching the limit where required_margin remains at zero. This
         // occurs when:
         //
-        //     elasped = voting_period + 2 * W
+        //     elapsed = voting_period + 2 * W
         //
         // As an example, given that W = 12h, if the initial voting_period is
         // 24h then the maximum deadline will be 48h.

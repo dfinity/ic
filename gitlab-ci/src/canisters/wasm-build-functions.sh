@@ -5,6 +5,7 @@
 set -exuo pipefail
 
 wasm_canister_list=(
+    candid-test-canister
     cycles-minting-canister
     genesis-token-canister
     governance-canister

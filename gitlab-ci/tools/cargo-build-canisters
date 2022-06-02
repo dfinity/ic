@@ -17,6 +17,7 @@ mkdir -p "${ARTIFACTS}"
 cd "$ROOT_DIR/rs" || exit 1
 
 wasm_canister_build_list=(
+    candid-test-canister
     cycles-minting-canister
     genesis-token-canister
     governance-canister
