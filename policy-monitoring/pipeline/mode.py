@@ -4,7 +4,7 @@ from typing import Set
 
 class Mode(Enum):
     raw = "raw"  # Simply pretty-print all log entries
-    save_logs = "save_logs"  # TODO Rename to event stream
+    save_event_stream = "save_event_stream"
 
     universal_policy = "universal_policy"
 

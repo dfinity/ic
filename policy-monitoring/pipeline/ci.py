@@ -20,7 +20,15 @@ class Group:
 
 
 class Ci:
-    _MONITORED_JOB_TYPES = set(["rosetta-hourly", "system-tests-hourly", "wasm-generator-hourly"])
+    _MONITORED_JOB_TYPES = set(
+        [
+            "rosetta-hourly",
+            "system-tests-hourly",
+            "system-tests-nightly",
+            "wasm-generator-hourly",
+            "wasm-generator-nightly",
+        ]
+    )
 
     def __init__(self, url: str, project: str, token: Optional[str]):
         if not token:
@@ -77,18 +85,18 @@ class Ci:
                 return jobs
 
     def get_hourly_group_ids(self) -> Dict[str, Group]:
-        """Returns: Map from group ids to Groups"""
+        """Returns: Map from group names to Groups"""
         jobs = self.get_last_hourly_jobs()
         eprint(f"Found {len(jobs)} jobs")
 
         groups: Dict[str, Group] = dict()
 
         for job in jobs:
-            eprint(f"Searching for group IDs for job `{job.name}` ...")
+            eprint(f"Searching for group names for job `{job.name}` ...")
             trace = str(job.trace())
             group_ids = re.findall("creating group \\\\\\'(.*?)\\\\\\'", trace)
             if not group_ids:
-                eprint(f"Warning: cannot find test group id for job {Ci.job_url(job)}")
+                eprint(f"Warning: cannot find test group name for job {Ci.job_url(job)}")
             for gid in group_ids:
                 eprint(f" + {gid}\n")
                 groups[gid] = Group(gid, url=Ci.job_url(job))

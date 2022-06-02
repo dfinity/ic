@@ -79,7 +79,7 @@ class Pipeline:
 
         self.stat: Dict[str, Dict] = dict()
 
-        # maps group ID to formula to set of repro cmds
+        # maps group names to formula to set of repro cmds
         self.repros: Dict[str, Dict[str, Set[Tuple[str, ...]]]] = dict()
 
         # maps formula to tuple of variable names
@@ -261,7 +261,7 @@ class Pipeline:
                 if formula not in self.repros[group.gid]:
                     self.repros[group.gid][formula] = set()
                 else:
-                    print(f"REPRO WARNING: multiple violations of " f"policy {formula} by group ID {group.gid}")
+                    print(f"REPRO WARNING: multiple violations of " f"policy {formula} by group name {group.gid}")
 
                 s: Set[Tuple[str, ...]]
                 s = self.repros[group.gid][formula]
@@ -416,7 +416,7 @@ class Pipeline:
         print("Starting policy monitoring ...")
 
         for group in groups.values():
-            # Init statistics object for this group ID
+            # Init statistics object for this group name
             self.stat[group.gid] = {
                 "pre_processor": dict(),
                 "global_infra": dict(),
@@ -433,7 +433,7 @@ class Pipeline:
                 self.write_to_file(group)
 
             if self.modes == set([Mode.raw]):
-                # nothing else to do for this group id
+                # nothing else to do for this group name
                 continue
 
             infra: Optional[GlobalInfra]
@@ -456,7 +456,7 @@ class Pipeline:
             if multiple_preprocessing_needed(self.modes):
                 event_stream = list(event_stream)
 
-            if Mode.save_logs in self.modes:
+            if Mode.save_event_stream in self.modes:
                 self.stream_into_file(group, pproc, event_stream)
 
             if Mode.universal_policy in self.modes:
