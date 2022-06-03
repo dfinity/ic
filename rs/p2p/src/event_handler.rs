@@ -456,10 +456,10 @@ impl Drop for P2PThreadJoiner {
 
 /// The struct is used by `Consensus` to broadcast adverts. After creation a mutable
 /// references must be pass to `setup_p2p` in order to activate broadcasting.
-/// The `broadcast_advert` call blocks until AdvertSubscriber is activated by
+/// The `broadcast_advert` call blocks until AdvertBroadcaster is activated by
 /// `setup_p2p`.
 #[derive(Clone)]
-pub struct AdvertSubscriber {
+pub struct AdvertBroadcaster {
     log: ReplicaLogger,
     threadpool: ThreadPool,
     /// The shared *Gossip* instance (using automatic reference counting).
@@ -471,7 +471,7 @@ pub struct AdvertSubscriber {
 }
 
 #[allow(clippy::mutex_atomic)]
-impl AdvertSubscriber {
+impl AdvertBroadcaster {
     pub fn new(
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
@@ -534,7 +534,6 @@ impl AdvertSubscriber {
 }
 
 #[cfg(test)]
-#[allow(dead_code)]
 pub mod tests {
     use super::*;
     use crate::{
@@ -569,8 +568,6 @@ pub mod tests {
         num_chunks: ItemCountCollector,
         /// The item count collector, counting the number of chunk requests.
         num_reqs: ItemCountCollector,
-        /// The item count collector, counting the number of ingress messages.
-        num_ingress: ItemCountCollector,
         /// The item count collector, counting the number of *Transport* state
         /// changes.
         num_changes: ItemCountCollector,
@@ -587,7 +584,6 @@ pub mod tests {
                 num_adverts: Default::default(),
                 num_chunks: Default::default(),
                 num_reqs: Default::default(),
-                num_ingress: Default::default(),
                 num_changes: Default::default(),
                 num_advert_bcasts: Default::default(),
             }
@@ -670,7 +666,7 @@ pub mod tests {
     pub(crate) fn new_test_event_handler(
         advert_max_depth: usize,
         node_id: NodeId,
-    ) -> (AsyncTransportEventHandlerImpl, AdvertSubscriber) {
+    ) -> (AsyncTransportEventHandlerImpl, AdvertBroadcaster) {
         let mut channel_config = ChannelConfig::from(ic_types::p2p::build_default_gossip_config());
         channel_config
             .map
@@ -683,7 +679,7 @@ pub mod tests {
             channel_config,
         );
 
-        let advert_subscriber = AdvertSubscriber::new(
+        let advert_subscriber = AdvertBroadcaster::new(
             p2p_test_setup_logger().root.clone().into(),
             &MetricsRegistry::new(),
             ic_types::p2p::build_default_gossip_config(),
@@ -711,7 +707,7 @@ pub mod tests {
     }
 
     /// The function broadcasts the given number of adverts.
-    async fn broadcast_advert(count: usize, handler: &AdvertSubscriber) {
+    async fn broadcast_advert(count: usize, handler: &AdvertBroadcaster) {
         for i in 0..count {
             let message = make_gossip_advert(i as u64);
             handler.broadcast_advert(message, AdvertClass::Critical);

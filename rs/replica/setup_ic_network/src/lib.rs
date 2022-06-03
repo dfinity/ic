@@ -38,7 +38,7 @@ use ic_interfaces_state_manager::StateManager;
 use ic_interfaces_transport::Transport;
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_p2p::{fetch_gossip_config, start_p2p, AdvertSubscriber, P2PThreadJoiner};
+use ic_p2p::{fetch_gossip_config, start_p2p, AdvertBroadcaster, P2PThreadJoiner};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
@@ -118,7 +118,7 @@ pub fn create_networking_stack(
 ) -> (IngressIngestionService, P2PThreadJoiner) {
     let gossip_config = fetch_gossip_config(registry_client.clone(), subnet_id);
     let advert_subscriber =
-        AdvertSubscriber::new(log.clone(), &metrics_registry, gossip_config.clone());
+        AdvertBroadcaster::new(log.clone(), &metrics_registry, gossip_config.clone());
 
     // Now we setup the Artifact Pools and the manager.
     let artifact_manager = setup_artifact_manager(
@@ -214,7 +214,7 @@ fn setup_artifact_manager(
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
     registry_poll_delay_duration_ms: u64,
-    event_handler: AdvertSubscriber,
+    advert_broadcaster: AdvertBroadcaster,
 ) -> std::io::Result<Arc<dyn ArtifactManager>> {
     // Initialize the time source.
     let time_source = Arc::new(SysTimeSource::new());
@@ -229,23 +229,23 @@ fn setup_artifact_manager(
 
     if let P2PStateSyncClient::TestChunkingPool(client, client_on_state_change) = state_sync_client
     {
-        let c_event_handler = event_handler;
+        let advert_broadcaster = advert_broadcaster;
         let addr = processors::ArtifactProcessorManager::new(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry,
             processors::BoxOrArcClient::ArcClient(client_on_state_change),
-            move |req| c_event_handler.broadcast_advert(req.advert.into(), req.advert_class),
+            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
         );
         artifact_manager_maker.add_arc_client(client, addr);
         return Ok(artifact_manager_maker.finish());
     }
     if let P2PStateSyncClient::Client(state_sync_client) = state_sync_client {
-        let event_handler = event_handler.clone();
+        let advert_broadcaster = advert_broadcaster.clone();
         let addr = processors::ArtifactProcessorManager::new(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry.clone(),
             processors::BoxOrArcClient::ArcClient(Arc::clone(&state_sync_client) as Arc<_>),
-            move |req| event_handler.broadcast_advert(req.advert.into(), req.advert_class),
+            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
         );
         artifact_manager_maker.add_arc_client(state_sync_client, addr);
     }
@@ -297,9 +297,9 @@ fn setup_artifact_manager(
 
     {
         // Create the consensus client.
-        let event_handler = event_handler.clone();
+        let advert_broadcaster = advert_broadcaster.clone();
         let (consensus_client, actor) = processors::ConsensusProcessor::build(
-            move |req| event_handler.broadcast_advert(req.advert.into(), req.advert_class),
+            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
             || {
                 ic_consensus::consensus::setup(
                     consensus_replica_config.clone(),
@@ -335,9 +335,9 @@ fn setup_artifact_manager(
 
     {
         // Create the ingress client.
-        let event_handler = event_handler.clone();
+        let advert_broadcaster = advert_broadcaster.clone();
         let (ingress_client, actor) = processors::IngressProcessor::build(
-            move |req| event_handler.broadcast_advert(req.advert.into(), req.advert_class),
+            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.ingress_pool),
             ingress_manager,
@@ -351,9 +351,9 @@ fn setup_artifact_manager(
 
     {
         // Create the certification client.
-        let event_handler = event_handler.clone();
+        let advert_broadcaster = advert_broadcaster.clone();
         let (certification_client, actor) = processors::CertificationProcessor::build(
-            move |req| event_handler.broadcast_advert(req.advert.into(), req.advert_class),
+            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
             || {
                 certification::setup(
                     consensus_replica_config.clone(),
@@ -375,9 +375,9 @@ fn setup_artifact_manager(
 
     {
         // Create the DKG client.
-        let event_handler = event_handler.clone();
+        let advert_broadcaster = advert_broadcaster.clone();
         let (dkg_client, actor) = processors::DkgProcessor::build(
-            move |req| event_handler.broadcast_advert(req.advert.into(), req.advert_class),
+            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
             || {
                 (
                     dkg::DkgImpl::new(
@@ -410,7 +410,7 @@ fn setup_artifact_manager(
         {
             info!(replica_logger, "ECDSA feature enabled");
             let (ecdsa_client, actor) = processors::EcdsaProcessor::build(
-                move |req| event_handler.broadcast_advert(req.advert.into(), req.advert_class),
+                move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
                 || {
                     (
                         ecdsa::EcdsaImpl::new(
