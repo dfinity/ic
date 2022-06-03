@@ -4,6 +4,7 @@ use bitcoin::{
     {consensus::encode, network::message::NetworkMessage},
 };
 use futures::future::TryFutureExt;
+use http::Uri;
 use ic_logger::{debug, error, ReplicaLogger};
 use std::{io, net::SocketAddr, time::Duration};
 use thiserror::Error;
@@ -147,7 +148,19 @@ impl Stream {
             timeout(timeout_duration, async {
                 match socks_proxy {
                     Some(socks_proxy_addr) => {
-                        Ok(Socks5Stream::connect(socks_proxy_addr.as_str(), address)
+                        // The socks stream::connect takes a socks proxy address that implements 'tokio_socks::ToProxyAddrs'.
+                        // It uses the trait implementation to resolve the socks proxy address to a 'std::net::SocketAddr'
+                        // The resolving assumes that the string has the following format: <host>:<port>.
+                        // A badly formatted string is hard to spot since it can just resolve to nothing and a timeouts occur.
+                        // By validating the proxy address config we are reasonably sure that we have a valid socks url.
+                        let socks_addr_authority =  socks_proxy_addr.parse::<Uri>().map_err(|_| {
+                                // This should never happen since we validate the socks_proxy to be valid 'http::Uri' when reading the config.
+                                StreamError::Socks(SocksError::AddressTypeNotSupported)
+                            })?.authority().ok_or(
+                                // This should never happen since we validate the socks_proxy to be valid 'http::Uri' when reading the config.
+                                StreamError::Socks(SocksError::AddressTypeNotSupported)
+                            )?.to_owned();
+                        Ok(Socks5Stream::connect(socks_addr_authority.as_str(), address)
                             .map_err(|socks_err| StreamError::Socks(socks_err))
                             .await?.into_inner())
                     }

@@ -3753,6 +3753,7 @@ dependencies = [
  "futures",
  "hashlink 0.8.0",
  "hex",
+ "http",
  "ic-async-utils",
  "ic-btc-service",
  "ic-btc-validation",
@@ -3949,7 +3950,6 @@ dependencies = [
  "tokio",
  "tonic",
  "tower",
- "url",
  "uuid",
  "wiremock",
 ]

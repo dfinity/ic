@@ -1,6 +1,7 @@
 //! A parser for the command line flags and configuration file.
 use crate::config::Config;
 use clap::Parser;
+use http::Uri;
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
 
@@ -11,6 +12,8 @@ pub enum CliError {
     Io(io::Error),
     #[error("An error occurred while deserialized the provided configuration: {0}")]
     Deserialize(String),
+    #[error("An error occurred while validating the provided configuration: {0}")]
+    Validation(String),
 }
 /// This struct is use to provide a command line interface to the adapter.
 #[derive(Parser)]
@@ -25,7 +28,23 @@ impl Cli {
     pub fn get_config(&self) -> Result<Config, CliError> {
         // The expected JSON config.
         let file = File::open(&self.config).map_err(CliError::Io)?;
-        serde_json::from_reader(file).map_err(|err| CliError::Deserialize(err.to_string()))
+        let config: Config =
+            serde_json::from_reader(file).map_err(|err| CliError::Deserialize(err.to_string()))?;
+
+        // Validate proxy URL.
+        // Check for general validation errors.
+        if let Some(socks_proxy) = &config.socks_proxy {
+            let uri = socks_proxy
+                .parse::<Uri>()
+                .map_err(|_| CliError::Validation("Failed to parse socks_proxy url".to_string()))?;
+            // scheme, host, port should be present. 'socks5://someproxy.com:80'
+            if uri.scheme().is_none() || uri.host().is_none() || uri.port().is_none() {
+                return Err(CliError::Validation(
+                    "Make sure socks proxy url contains (scheme,host,port)".to_string(),
+                ));
+            }
+        }
+        Ok(config)
     }
 }
 
@@ -72,6 +91,11 @@ pub mod test {
         "ipv6_only": true    
     }"#;
 
+    const TESTNET_BAD_SOCKS_CONFIG: &str = r#"{
+        "network": "testnet",
+        "socks_proxy": "socks5.notaproxy.com"        
+    }"#;
+
     #[test]
     fn test_cli_get_config_error_opening_file() {
         let cli = Cli {
@@ -97,6 +121,23 @@ pub mod test {
             CliError::Deserialize(message) => {
                 message == "missing field `network` at line 1 column 2"
             }
+            _ => false,
+        };
+        assert!(matches);
+    }
+
+    #[test]
+    fn test_cli_bad_socks_url() {
+        let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
+        writeln!(tmpfile, "{}", TESTNET_BAD_SOCKS_CONFIG).expect("Failed to write to tmp file");
+        let cli = Cli {
+            config: tmpfile.path().to_owned(),
+        };
+        let result = cli.get_config();
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        let matches = match error {
+            CliError::Validation(message) => message.contains("Make sure socks proxy url contains"),
             _ => false,
         };
         assert!(matches);
