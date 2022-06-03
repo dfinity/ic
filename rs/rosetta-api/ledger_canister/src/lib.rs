@@ -2,6 +2,7 @@ use candid::CandidType;
 use dfn_protobuf::ProtoBuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
+pub use ic_ledger_core::archive::{ArchiveCanisterWasm, ArchiveOptions};
 use ic_ledger_core::{
     block::{BlockType, EncodedBlock, HashOf, HASH_LENGTH},
     timestamp::TimeStamp,
@@ -32,16 +33,15 @@ pub mod tokens;
 pub mod protobuf;
 pub mod range_utils;
 pub mod validate_endpoints;
-
-pub mod archive;
-
-use archive::Archive;
-pub use archive::ArchiveOptions;
-use dfn_core::api::now;
-
-pub mod spawn;
 pub use account_identifier::{AccountIdentifier, Subaccount};
 pub use tokens::{Tokens, DECIMAL_PLACES, DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
+
+use dfn_core::api::now;
+use ic_ledger_core::archive::Archive;
+
+// Wasm bytecode of an Archive Node
+pub const ARCHIVE_NODE_BYTECODE: &[u8] =
+    std::include_bytes!(std::env!("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH"));
 
 pub const MAX_BLOCKS_PER_REQUEST: usize = 2000;
 
@@ -392,6 +392,15 @@ impl BlockType for Block {
     }
 }
 
+#[derive(Debug)]
+pub struct IcpLedgerArchiveWasm;
+
+impl ArchiveCanisterWasm for IcpLedgerArchiveWasm {
+    fn archive_wasm() -> Cow<'static, [u8]> {
+        Cow::Borrowed(ARCHIVE_NODE_BYTECODE)
+    }
+}
+
 /// Stores a chain of transactions with their metadata
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Blockchain {
@@ -406,7 +415,7 @@ pub struct Blockchain {
     /// by the canister upgrade procedure.
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
     #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-    pub archive: Arc<RwLock<Option<Archive>>>,
+    pub archive: Arc<RwLock<Option<Archive<IcpLedgerArchiveWasm>>>>,
 
     /// How many blocks have been sent to the archive
     pub num_archived_blocks: u64,
@@ -1469,15 +1478,14 @@ mod tests {
     fn duplicate_txns() {
         let mut state = Ledger::default();
 
-        state.blockchain.archive =
-            Arc::new(RwLock::new(Some(archive::Archive::new(ArchiveOptions {
-                trigger_threshold: 2000,
-                num_blocks_to_archive: 1000,
-                node_max_memory_size_bytes: None,
-                max_message_size_bytes: None,
-                controller_id: CanisterId::from_u64(876),
-                cycles_for_archive_creation: Some(0),
-            }))));
+        state.blockchain.archive = Arc::new(RwLock::new(Some(Archive::new(ArchiveOptions {
+            trigger_threshold: 2000,
+            num_blocks_to_archive: 1000,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: CanisterId::from_u64(876),
+            cycles_for_archive_creation: Some(0),
+        }))));
 
         let user1 = PrincipalId::new_user_test_id(1).into();
 
