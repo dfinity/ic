@@ -547,14 +547,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
             ),
             pot(
-                "upgrade_reject_pot",
-                orchestrator::upgrade_reject::config(),
-                par(vec![t(
-                    "upgrade_reject_test",
-                    orchestrator::upgrade_reject::test,
-                )]),
-            ),
-            pot(
                 "rejoin",
                 message_routing::rejoin_test::config(),
                 par(vec![t("rejoin", message_routing::rejoin_test::test)]),

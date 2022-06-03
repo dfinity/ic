@@ -6,5 +6,4 @@ pub mod subnet_recovery_app_subnet;
 pub mod unassigned_node_upgrade_test;
 pub mod unstuck_subnet_test;
 pub mod upgrade_downgrade;
-pub mod upgrade_reject;
 pub mod utils;
