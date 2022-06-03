@@ -764,6 +764,8 @@ pub struct Governance {
     /// ID to NervousSystemFunction (which has an id field).
     #[prost(btree_map="uint64, message", tag="18")]
     pub id_to_nervous_system_functions: ::prost::alloc::collections::BTreeMap<u64, NervousSystemFunction>,
+    #[prost(enumeration="governance::Mode", tag="19")]
+    pub mode: i32,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -881,6 +883,14 @@ pub mod governance {
         /// less than six months.
         #[prost(uint64, tag="15")]
         pub neurons_with_less_than_6_months_dissolve_delay_e8s: u64,
+    }
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[repr(i32)]
+    pub enum Mode {
+        Normal = 0,
+        /// In this mode, various operations are not allowed in order to ensure the
+        /// integrity of the initial token sale.
+        PreGenesis = 1,
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1448,6 +1458,12 @@ pub struct ListNervousSystemFunctionsResponse {
     /// used to add new NervousSystemFunctions.
     #[prost(uint64, repeated, tag="2")]
     pub reserved_ids: ::prost::alloc::vec::Vec<u64>,
+}
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SetMode {
+    #[prost(enumeration="governance::Mode", tag="1")]
+    pub mode: i32,
 }
 /// The different types of neuron permissions, i.e., privileges to modify a neuron,
 /// that principals can have.

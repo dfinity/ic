@@ -32,14 +32,16 @@ use dfn_core::{
 use ic_base_types::CanisterId;
 use ic_ic00_types::CanisterStatusResultV2;
 use ic_nervous_system_common::{get_canister_status, ledger::LedgerCanister};
-use ic_sns_governance::governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto};
-use ic_sns_governance::pb::v1::{
-    GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse, Governance as GovernanceProto,
-    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
-    RewardEvent,
+use ic_sns_governance::{
+    governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
+    pb::v1::{
+        governance, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+        Governance as GovernanceProto, ListNervousSystemFunctionsResponse, ListNeurons,
+        ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
+        ManageNeuronResponse, NervousSystemParameters, RewardEvent, SetMode,
+    },
+    types::{Environment, HeapGrowthPotential},
 };
-use ic_sns_governance::types::{Environment, HeapGrowthPotential};
 
 /// Size of the buffer for stable memory reads and writes.
 ///
@@ -171,7 +173,25 @@ impl Environment for CanisterEnv {
 
 #[export_name = "canister_init"]
 fn canister_init() {
-    over_init(|CandidOne(arg)| canister_init_(arg))
+    over_init(|CandidOne(arg)| canister_init_(set_pre_genesis_mode(arg)))
+}
+
+/// Returns g, except with g.mode set to PreGenesis.
+///
+/// Panics unless the value of the mode field is Normal (the default) or PreGenesis.
+fn set_pre_genesis_mode(mut g: GovernanceProto) -> GovernanceProto {
+    use governance::Mode::{Normal, PreGenesis};
+    let ok = [Normal as i32, PreGenesis as i32].contains(&g.mode);
+    if !ok {
+        panic!(
+            "The mode field was explicitly set to some value other than Normal \
+             (the default) or PreGensis: {:#?}",
+            g
+        );
+    }
+
+    g.mode = PreGenesis as i32;
+    g
 }
 
 /// In contrast to canister_init(), this method does not do deserialization.
@@ -437,6 +457,23 @@ async fn get_root_canister_status_(_: ()) -> CanisterStatusResultV2 {
     .await
 }
 
+/// Sets the mode. Only the sale canister is allowed to call this.
+///
+/// In practice, the only mode that the sale canister would ever choose is
+/// Normal. Also, in practice, the current value of mode should be PreGenesis
+/// whenever the sale canister calls this.
+#[export_name = "canister_update set_mode"]
+fn set_mode() {
+    println!("{}set_mode", log_prefix());
+    over(candid_one, set_mode_);
+}
+
+/// Internal method for calling set_mode.
+#[candid_method(update, rename = "set_mode")]
+fn set_mode_(request: SetMode) {
+    governance_mut().set_mode(request.mode, &caller());
+}
+
 /// The canister's heartbeat.
 #[export_name = "canister_heartbeat"]
 fn canister_heartbeat() {
@@ -521,4 +558,36 @@ fn test_set_time_warp() {
 
     assert!(delta_s >= 1000, "delta_s = {}", delta_s);
     assert!(delta_s < 1005, "delta_s = {}", delta_s);
+}
+
+#[test]
+fn test_set_pre_genesis_mode() {
+    use governance::Mode::{Normal, PreGenesis};
+
+    let normal_governance = GovernanceProto::default();
+    assert_eq!(normal_governance.mode, Normal as i32);
+
+    let pre_genesis_governance = GovernanceProto {
+        mode: PreGenesis as i32,
+        ..Default::default()
+    };
+
+    assert_eq!(
+        set_pre_genesis_mode(normal_governance),
+        pre_genesis_governance
+    );
+    assert_eq!(
+        set_pre_genesis_mode(pre_genesis_governance.clone()),
+        pre_genesis_governance
+    );
+}
+
+#[should_panic]
+#[test]
+fn test_set_pre_genesis_mode_panics() {
+    #[allow(clippy::mixed_case_hex_literals)]
+    set_pre_genesis_mode(GovernanceProto {
+        mode: 0xDeadBef, // Bef is like Beef, except that it fits into an i32.
+        ..Default::default()
+    });
 }

@@ -126,6 +126,7 @@ type Governance = record {
   root_canister_id : opt principal;
   id_to_nervous_system_functions : vec record { nat64; NervousSystemFunction };
   metrics : opt GovernanceCachedMetrics;
+  mode : int32;
   parameters : opt NervousSystemParameters;
   latest_reward_event : opt RewardEvent;
   ledger_canister_id : opt principal;
@@ -271,6 +272,7 @@ type RewardEvent = record {
   settled_proposals : vec ProposalId;
 };
 type SetDissolveTimestamp = record { dissolve_timestamp_seconds : nat64 };
+type SetMode = record { mode : int32 };
 type Split = record { memo : nat64; amount_e8s : nat64 };
 type SplitResponse = record { created_neuron_id : opt NeuronId };
 type Tally = record {
@@ -296,4 +298,5 @@ service : (Governance) -> {
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_proposals : (ListProposals) -> (ListProposalsResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
+  set_mode : (SetMode) -> ();
 }

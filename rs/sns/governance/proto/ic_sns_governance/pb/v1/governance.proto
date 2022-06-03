@@ -884,6 +884,16 @@ message Governance {
 
   // ID to NervousSystemFunction (which has an id field).
   map<uint64, NervousSystemFunction> id_to_nervous_system_functions = 18;
+
+  enum Mode {
+    MODE_NORMAL = 0;
+
+    // In this mode, various operations are not allowed in order to ensure the
+    // integrity of the initial token sale.
+    MODE_PRE_GENESIS = 1;
+  }
+
+  Mode mode = 19;
 }
 
 // Empty message to use in oneof fields that represent empty
@@ -1298,4 +1308,8 @@ message ListNervousSystemFunctionsResponse {
   // Set of nervous system function ids that are reserved and cannot be
   // used to add new NervousSystemFunctions.
   repeated uint64 reserved_ids = 2;
+}
+
+message SetMode {
+  Governance.Mode mode = 1;
 }
