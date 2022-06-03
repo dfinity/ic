@@ -44,6 +44,7 @@ RUST_BINARIES = [
     "prod-test-driver",
     "replica",
     "sandbox_launcher",
+    "sns",
     "state-tool",
     "system-tests",
     "vsock_agent",

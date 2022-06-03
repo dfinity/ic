@@ -41,6 +41,7 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin system-tests \
     --bin prod-test-driver \
     --bin e2e-test-driver \
+    --bin sns \
     --bin ic-nns-init
 
 cargo build --target $CARGO_BUILD_TARGET --profile release-stripped \
