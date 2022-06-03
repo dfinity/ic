@@ -12,42 +12,70 @@ Coverage::
 end::catalog[] */
 
 use crate::{
-    nns::NnsExt,
+    driver::{test_env::TestEnv, test_env_api::*},
     orchestrator::utils::ssh_access::*,
-    util::{
-        block_on, get_random_application_node_endpoint, get_random_nns_node_endpoint,
-        get_random_unassigned_node_endpoint,
-    },
+    util::block_on,
 };
 
 use crate::driver::ic::InternetComputer;
-use ic_fondue::ic_manager::IcHandle;
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_registry_subnet_type::SubnetType;
 
 use std::net::IpAddr;
 
-pub fn config() -> InternetComputer {
+pub fn config(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
         .with_unassigned_nodes(1)
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-pub fn root_cannot_authenticate(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let mut rng = ctx.rng.clone();
+fn topology_entities(
+    topo_snapshot: TopologySnapshot,
+) -> (
+    IcNodeSnapshot,
+    IcNodeSnapshot,
+    IcNodeSnapshot,
+    SubnetSnapshot,
+) {
+    // Fetch the nodes
+    let nns_node = topo_snapshot
+        .root_subnet()
+        .nodes()
+        .next()
+        .expect("there is no NNS node");
+    let app_subnet = topo_snapshot
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .expect("there is no application subnet");
+    let app_node = app_subnet
+        .nodes()
+        .next()
+        .expect("there is no application node");
+    let unassigned_node = topo_snapshot.unassigned_nodes().next().unwrap();
 
-    // Choose a random nodes
-    let nns_node = get_random_nns_node_endpoint(&handle, &mut rng);
-    let app_node = get_random_application_node_endpoint(&handle, &mut rng);
-    let unassigned_node = get_random_unassigned_node_endpoint(&handle, &mut rng);
-    block_on(nns_node.assert_ready(ctx));
-    block_on(app_node.assert_ready(ctx));
-    block_on(unassigned_node.assert_ready(ctx));
+    // check they are all ready
+    nns_node.await_status_is_healthy().unwrap();
+    app_node.await_status_is_healthy().unwrap();
+    unassigned_node.await_can_login_as_admin_via_ssh().unwrap();
 
-    let nns_node_ip: IpAddr = nns_node.ip_address().unwrap();
-    let app_node_ip: IpAddr = app_node.ip_address().unwrap();
-    let unassigned_node_ip: IpAddr = unassigned_node.ip_address().unwrap();
+    (nns_node, app_node, unassigned_node, app_subnet)
+}
+
+fn fetch_nodes_ips(topo_snapshot: TopologySnapshot) -> (IpAddr, IpAddr, IpAddr) {
+    let (nns_node, app_node, unassigned_node, _) = topology_entities(topo_snapshot);
+
+    let nns_node_ip: IpAddr = nns_node.get_ip_addr();
+    let app_node_ip: IpAddr = app_node.get_ip_addr();
+    let unassigned_node_ip: IpAddr = unassigned_node.get_ip_addr();
+
+    (nns_node_ip, app_node_ip, unassigned_node_ip)
+}
+
+pub fn root_cannot_authenticate(env: TestEnv) {
+    let (nns_node_ip, app_node_ip, unassigned_node_ip) = fetch_nodes_ips(env.topology_snapshot());
 
     let mean = AuthMean::Password("root".to_string());
     assert_authentication_fails(&nns_node_ip, "root", &mean);
@@ -55,17 +83,8 @@ pub fn root_cannot_authenticate(handle: IcHandle, ctx: &ic_fondue::pot::Context)
     assert_authentication_fails(&unassigned_node_ip, "root", &mean);
 }
 
-pub fn readonly_cannot_authenticate_without_a_key(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let mut rng = ctx.rng.clone();
-
-    // Choose a random nodes
-    let nns_node = get_random_nns_node_endpoint(&handle, &mut rng);
-    let app_node = get_random_application_node_endpoint(&handle, &mut rng);
-    let unassigned_node = get_random_unassigned_node_endpoint(&handle, &mut rng);
-
-    let nns_node_ip: IpAddr = nns_node.ip_address().unwrap();
-    let app_node_ip: IpAddr = app_node.ip_address().unwrap();
-    let unassigned_node_ip: IpAddr = unassigned_node.ip_address().unwrap();
+pub fn readonly_cannot_authenticate_without_a_key(env: TestEnv) {
+    let (nns_node_ip, app_node_ip, unassigned_node_ip) = fetch_nodes_ips(env.topology_snapshot());
 
     let mean = AuthMean::None;
     assert_authentication_fails(&nns_node_ip, "readonly", &mean);
@@ -73,20 +92,8 @@ pub fn readonly_cannot_authenticate_without_a_key(handle: IcHandle, ctx: &ic_fon
     assert_authentication_fails(&unassigned_node_ip, "readonly", &mean);
 }
 
-pub fn readonly_cannot_authenticate_with_random_key(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
-    let mut rng = ctx.rng.clone();
-
-    // Choose a random nodes
-    let nns_node = get_random_nns_node_endpoint(&handle, &mut rng);
-    let app_node = get_random_application_node_endpoint(&handle, &mut rng);
-    let unassigned_node = get_random_unassigned_node_endpoint(&handle, &mut rng);
-
-    let nns_node_ip: IpAddr = nns_node.ip_address().unwrap();
-    let app_node_ip: IpAddr = app_node.ip_address().unwrap();
-    let unassigned_node_ip: IpAddr = unassigned_node.ip_address().unwrap();
+pub fn readonly_cannot_authenticate_with_random_key(env: TestEnv) {
+    let (nns_node_ip, app_node_ip, unassigned_node_ip) = fetch_nodes_ips(env.topology_snapshot());
 
     let (private_key, _public_key) = generate_key_strings();
     let mean = AuthMean::PrivateKey(private_key);
@@ -95,19 +102,16 @@ pub fn readonly_cannot_authenticate_with_random_key(
     assert_authentication_fails(&unassigned_node_ip, "readonly", &mean);
 }
 
-pub fn keys_in_the_subnet_record_can_be_updated(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let mut rng = ctx.rng.clone();
+pub fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
+    let (nns_node, app_node, _unassigned_node, app_subnet) =
+        topology_entities(env.topology_snapshot());
 
-    // Install NNS canisters
-    ctx.install_nns_canisters(&handle, true);
+    nns_node
+        .install_nns_canisters()
+        .expect("NNS canisters not installed");
 
-    // Choose a random node from the nns subnet
-    let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-    block_on(nns_endpoint.assert_ready(ctx));
-
-    let app_node = get_random_application_node_endpoint(&handle, &mut rng);
-    let app_subnet_id = app_node.subnet_id().unwrap();
-    let node_ip: IpAddr = app_node.ip_address().unwrap();
+    let app_subnet_id = app_subnet.subnet_id;
+    let node_ip: IpAddr = app_node.get_ip_addr();
 
     // Update the registry with two new pairs of keys.
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
@@ -117,7 +121,7 @@ pub fn keys_in_the_subnet_record_can_be_updated(handle: IcHandle, ctx: &ic_fondu
         Some(vec![readonly_public_key]),
         Some(vec![backup_public_key]),
     );
-    block_on(update_subnet_record(nns_endpoint.url.clone(), payload));
+    block_on(update_subnet_record(nns_node.get_public_url(), payload));
 
     let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
@@ -132,7 +136,7 @@ pub fn keys_in_the_subnet_record_can_be_updated(handle: IcHandle, ctx: &ic_fondu
     let no_key_payload =
         get_updatesubnetpayload_with_keys(app_subnet_id, Some(vec![]), Some(vec![]));
     block_on(update_subnet_record(
-        nns_endpoint.url.clone(),
+        nns_node.get_public_url(),
         no_key_payload,
     ));
 
@@ -141,21 +145,16 @@ pub fn keys_in_the_subnet_record_can_be_updated(handle: IcHandle, ctx: &ic_fondu
     assert_authentication_fails(&node_ip, "readonly", &readonly_mean);
 }
 
-pub fn keys_for_unassigned_nodes_can_be_updated(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let mut rng = ctx.rng.clone();
+pub fn keys_for_unassigned_nodes_can_be_updated(env: TestEnv) {
+    let (nns_node, _, unassigned_node, _) = topology_entities(env.topology_snapshot());
 
-    // Choose a random node from the nns subnet
-    let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-    block_on(nns_endpoint.assert_ready(ctx));
-
-    let unassigned_node = get_random_unassigned_node_endpoint(&handle, &mut rng);
-    let node_ip: IpAddr = unassigned_node.ip_address().unwrap();
+    let node_ip: IpAddr = unassigned_node.get_ip_addr();
 
     // Update the registry with two new pairs of keys.
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
     let payload = get_updateunassignednodespayload(Some(vec![readonly_public_key]));
     block_on(update_ssh_keys_for_all_unassigned_nodes(
-        nns_endpoint.url.clone(),
+        nns_node.get_public_url(),
         payload,
     ));
 
@@ -165,7 +164,7 @@ pub fn keys_for_unassigned_nodes_can_be_updated(handle: IcHandle, ctx: &ic_fondu
     // Clear the keys in the registry
     let no_key_payload = get_updateunassignednodespayload(Some(vec![]));
     block_on(update_ssh_keys_for_all_unassigned_nodes(
-        nns_endpoint.url.clone(),
+        nns_node.get_public_url(),
         no_key_payload,
     ));
 
@@ -173,16 +172,11 @@ pub fn keys_for_unassigned_nodes_can_be_updated(handle: IcHandle, ctx: &ic_fondu
     wait_until_authentication_fails(&node_ip, "readonly", &readonly_mean);
 }
 
-pub fn multiple_keys_can_access_one_account(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    let mut rng = ctx.rng.clone();
+pub fn multiple_keys_can_access_one_account(env: TestEnv) {
+    let (nns_node, app_node, _, app_subnet) = topology_entities(env.topology_snapshot());
 
-    // Choose a random node from the nns subnet
-    let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-    block_on(nns_endpoint.assert_ready(ctx));
-
-    let app_node = get_random_application_node_endpoint(&handle, &mut rng);
-    let app_subnet_id = app_node.subnet_id().unwrap();
-    let node_ip: IpAddr = app_node.ip_address().unwrap();
+    let app_subnet_id = app_subnet.subnet_id;
+    let node_ip: IpAddr = app_node.get_ip_addr();
 
     // Update the registry with two new pairs of keys.
     let (readonly_private_key1, readonly_public_key1) = generate_key_strings();
@@ -204,7 +198,7 @@ pub fn multiple_keys_can_access_one_account(handle: IcHandle, ctx: &ic_fondue::p
             backup_public_key3,
         ]),
     );
-    block_on(update_subnet_record(nns_endpoint.url.clone(), payload));
+    block_on(update_subnet_record(nns_node.get_public_url(), payload));
 
     let readonly_mean1 = AuthMean::PrivateKey(readonly_private_key1);
     let readonly_mean2 = AuthMean::PrivateKey(readonly_private_key2);
@@ -224,18 +218,10 @@ pub fn multiple_keys_can_access_one_account(handle: IcHandle, ctx: &ic_fondue::p
     assert_authentication_works(&node_ip, "readonly", &readonly_mean3);
 }
 
-pub fn multiple_keys_can_access_one_account_on_unassigned_nodes(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
-    let mut rng = ctx.rng.clone();
+pub fn multiple_keys_can_access_one_account_on_unassigned_nodes(env: TestEnv) {
+    let (nns_node, _, unassigned_node, _) = topology_entities(env.topology_snapshot());
 
-    // Choose a random node from the nns subnet
-    let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-    block_on(nns_endpoint.assert_ready(ctx));
-
-    let unassigned_node = get_random_unassigned_node_endpoint(&handle, &mut rng);
-    let node_ip: IpAddr = unassigned_node.ip_address().unwrap();
+    let node_ip: IpAddr = unassigned_node.get_ip_addr();
 
     // Update the registry with two new pairs of keys.
     let (readonly_private_key1, readonly_public_key1) = generate_key_strings();
@@ -247,7 +233,7 @@ pub fn multiple_keys_can_access_one_account_on_unassigned_nodes(
         readonly_public_key3,
     ]));
     block_on(update_ssh_keys_for_all_unassigned_nodes(
-        nns_endpoint.url.clone(),
+        nns_node.get_public_url(),
         payload,
     ));
 
@@ -263,25 +249,17 @@ pub fn multiple_keys_can_access_one_account_on_unassigned_nodes(
     assert_authentication_works(&node_ip, "readonly", &readonly_mean3);
 }
 
-pub fn updating_readonly_does_not_remove_backup_keys(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
-    let mut rng = ctx.rng.clone();
+pub fn updating_readonly_does_not_remove_backup_keys(env: TestEnv) {
+    let (nns_node, app_node, _, app_subnet) = topology_entities(env.topology_snapshot());
 
-    // Choose a random node from the nns subnet
-    let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-    block_on(nns_endpoint.assert_ready(ctx));
-
-    let app_node = get_random_application_node_endpoint(&handle, &mut rng);
-    let app_subnet_id = app_node.subnet_id().unwrap();
-    let node_ip: IpAddr = app_node.ip_address().unwrap();
+    let app_subnet_id = app_subnet.subnet_id;
+    let node_ip: IpAddr = app_node.get_ip_addr();
 
     // Add a backup key.
     let (backup_private_key, backup_public_key) = generate_key_strings();
     let payload1 =
         get_updatesubnetpayload_with_keys(app_subnet_id, None, Some(vec![backup_public_key]));
-    block_on(update_subnet_record(nns_endpoint.url.clone(), payload1));
+    block_on(update_subnet_record(nns_node.get_public_url(), payload1));
 
     // Check that the backup key can authenticate.
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
@@ -291,7 +269,7 @@ pub fn updating_readonly_does_not_remove_backup_keys(
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
     let payload2 =
         get_updatesubnetpayload_with_keys(app_subnet_id, Some(vec![readonly_public_key]), None);
-    block_on(update_subnet_record(nns_endpoint.url.clone(), payload2));
+    block_on(update_subnet_record(nns_node.get_public_url(), payload2));
 
     // Check that the readonly key can authenticate now and the backup key can still
     // authenticate too.
@@ -301,7 +279,7 @@ pub fn updating_readonly_does_not_remove_backup_keys(
 
     // Now send a proposal that only removes the readonly keys.
     let payload3 = get_updatesubnetpayload_with_keys(app_subnet_id, Some(vec![]), None);
-    block_on(update_subnet_record(nns_endpoint.url.clone(), payload3));
+    block_on(update_subnet_record(nns_node.get_public_url(), payload3));
 
     // Wait until the readonly key loses its access and ensure backup key still has
     // access.
@@ -309,19 +287,10 @@ pub fn updating_readonly_does_not_remove_backup_keys(
     assert_authentication_works(&node_ip, "backup", &backup_mean);
 }
 
-pub fn can_add_max_number_of_readonly_and_backup_keys(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
-    let mut rng = ctx.rng.clone();
+pub fn can_add_max_number_of_readonly_and_backup_keys(env: TestEnv) {
+    let (nns_node, _, _, app_subnet) = topology_entities(env.topology_snapshot());
 
-    // Choose a random node from the nns subnet
-    let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-    block_on(nns_endpoint.assert_ready(ctx));
-
-    let app_subnet_id = get_random_application_node_endpoint(&handle, &mut rng)
-        .subnet_id()
-        .unwrap();
+    let app_subnet_id = app_subnet.subnet_id;
 
     let (_private_key, public_key) = generate_key_strings();
     // Update the registry with MAX_NUM_SSH_KEYS new pairs of keys.
@@ -331,31 +300,21 @@ pub fn can_add_max_number_of_readonly_and_backup_keys(
         Some(vec![public_key.clone(); MAX_NUM_SSH_KEYS]),
     );
     block_on(update_subnet_record(
-        nns_endpoint.url.clone(),
+        nns_node.get_public_url(),
         payload_for_subnet,
     ));
 
     // Also do that for unassigned nodes
     let payload_for_the_unassigned = get_updateunassignednodespayload(Some(vec![public_key; 50]));
     block_on(update_ssh_keys_for_all_unassigned_nodes(
-        nns_endpoint.url.clone(),
+        nns_node.get_public_url(),
         payload_for_the_unassigned,
     ));
 }
 
-pub fn cannot_add_more_than_max_number_of_readonly_or_backup_keys(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
-    let mut rng = ctx.rng.clone();
-
-    // Choose a random node from the nns subnet
-    let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-    block_on(nns_endpoint.assert_ready(ctx));
-
-    let app_subnet_id = get_random_application_node_endpoint(&handle, &mut rng)
-        .subnet_id()
-        .unwrap();
+pub fn cannot_add_more_than_max_number_of_readonly_or_backup_keys(env: TestEnv) {
+    let (nns_node, _, _, app_subnet) = topology_entities(env.topology_snapshot());
+    let app_subnet_id = app_subnet.subnet_id;
 
     let (_private_key, public_key) = generate_key_strings();
 
@@ -365,7 +324,10 @@ pub fn cannot_add_more_than_max_number_of_readonly_or_backup_keys(
         Some(vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1]),
         Some(vec![]),
     );
-    block_on(fail_to_update_subnet_record(nns_endpoint, readonly_payload));
+    block_on(fail_to_update_subnet_record(
+        nns_node.get_public_url(),
+        readonly_payload,
+    ));
 
     // Try to update the registry with MAX_NUM_SSH_KEYS backup keys.
     let backup_payload = get_updatesubnetpayload_with_keys(
@@ -373,13 +335,16 @@ pub fn cannot_add_more_than_max_number_of_readonly_or_backup_keys(
         Some(vec![]),
         Some(vec![public_key.clone(); MAX_NUM_SSH_KEYS + 1]),
     );
-    block_on(fail_to_update_subnet_record(nns_endpoint, backup_payload));
+    block_on(fail_to_update_subnet_record(
+        nns_node.get_public_url(),
+        backup_payload,
+    ));
 
     // Also do that for unassigned nodes
     let readonly_payload_for_the_unassigned =
         get_updateunassignednodespayload(Some(vec![public_key; MAX_NUM_SSH_KEYS + 1]));
     block_on(fail_updating_ssh_keys_for_all_unassigned_nodes(
-        nns_endpoint,
+        nns_node.get_public_url(),
         readonly_payload_for_the_unassigned,
     ));
 }

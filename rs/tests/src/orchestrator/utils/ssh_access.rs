@@ -7,7 +7,6 @@ use crate::{
     util::runtime_from_url,
 };
 
-use ic_fondue::ic_manager::IcEndpoint;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_types::{time::current_time, SubnetId};
 use openssh_keys::PublicKey;
@@ -192,11 +191,8 @@ pub(crate) async fn update_subnet_record(nns_url: Url, payload: UpdateSubnetPayl
     vote_execute_proposal_assert_executed(&gov_can, proposal_id).await;
 }
 
-pub(crate) async fn fail_to_update_subnet_record(
-    nns_endpoint: &IcEndpoint,
-    payload: UpdateSubnetPayload,
-) {
-    let r = runtime_from_url(nns_endpoint.url.clone());
+pub(crate) async fn fail_to_update_subnet_record(nns_url: Url, payload: UpdateSubnetPayload) {
+    let r = runtime_from_url(nns_url);
     let gov_can = get_governance_canister(&r);
 
     let proposal_id =
@@ -233,10 +229,10 @@ pub(crate) async fn update_ssh_keys_for_all_unassigned_nodes(
 }
 
 pub(crate) async fn fail_updating_ssh_keys_for_all_unassigned_nodes(
-    nns_endpoint: &IcEndpoint,
+    nns_url: Url,
     payload: UpdateUnassignedNodesConfigPayload,
 ) {
-    let r = runtime_from_url(nns_endpoint.url.clone());
+    let r = runtime_from_url(nns_url);
     let gov_can = get_governance_canister(&r);
 
     let proposal_id = submit_external_proposal_with_test_id(
