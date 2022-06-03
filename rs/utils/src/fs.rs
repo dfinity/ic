@@ -558,6 +558,24 @@ pub fn copy_file_range_all(
     Ok(())
 }
 
+/// Reads and then writes a chunk of size `size` starting at `offset` in the file at `path`.
+/// This defragments the file partially on some COW capable file systems
+#[cfg(target_family = "unix")]
+pub fn defrag_file_partially(path: &Path, offset: u64, size: usize) -> std::io::Result<()> {
+    use std::os::unix::prelude::FileExt;
+
+    let mut content = vec![0; size];
+    let f = std::fs::OpenOptions::new()
+        .write(true)
+        .read(true)
+        .create(false)
+        .open(path)?;
+    f.read_exact_at(&mut content[..], offset)?;
+    f.write_all_at(&content, offset)?;
+    sync_path(path)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::write_atomically_using_tmp_file;
