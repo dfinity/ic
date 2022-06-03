@@ -6140,7 +6140,6 @@ dependencies = [
  "tempfile",
  "threadpool",
  "tokio",
- "tower",
 ]
 
 [[package]]
@@ -6758,7 +6757,9 @@ dependencies = [
  "ic-state-manager",
  "ic-transport",
  "ic-types 0.8.0",
+ "parking_lot 0.11.1",
  "slog",
+ "threadpool",
  "tokio",
  "tower",
 ]

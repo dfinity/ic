@@ -56,7 +56,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
-        HttpReadStateResponse, HttpRequestEnvelope, ReplicaHealthStatus, SignedIngress,
+        HttpReadStateResponse, HttpRequestEnvelope, ReplicaHealthStatus,
     },
     time::current_time_and_expiry_time,
     SubnetId,
@@ -77,8 +77,8 @@ use tokio::{
     time::{sleep, timeout, Instant},
 };
 use tower::{
-    buffer::Buffer, load_shed::LoadShed, service_fn, util::BoxCloneService, util::BoxService,
-    BoxError, Service, ServiceBuilder, ServiceExt,
+    load_shed::LoadShed, service_fn, util::BoxCloneService, util::BoxService, BoxError, Service,
+    ServiceBuilder, ServiceExt,
 };
 
 // Constants defining the limits of the HttpHandler.
@@ -134,13 +134,6 @@ const CONTENT_TYPE_CBOR: &str = "application/cbor";
 // Placeholder used when we can't determine the approriate prometheus label.
 const UNKNOWN_LABEL: &str = "unknown";
 
-/// Max number of ingress message we can buffer until the P2P layer is ready to
-/// accept them.
-// The latency SLO for 'call' requests is set for 2s. Given the rate limiter of
-// 100 per second this buffer should not be bigger than 200. We are conservite
-// setting it to 100.
-const MAX_BUFFERED_INGRESS_MESSAGES: usize = 100;
-
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct HttpError {
     pub status: StatusCode,
@@ -174,7 +167,7 @@ struct HttpHandler {
     // External services wrapped by tower::Buffer. It is safe to be
     // cloned and passed to a single-threaded context.
     query_execution_service: QueryExecutionService,
-    ingress_sender: Buffer<IngressIngestionService, SignedIngress>,
+    ingress_sender: IngressIngestionService,
     ingress_filter: IngressFilterService,
 
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
@@ -280,7 +273,7 @@ pub fn start_server(
     metrics_registry: MetricsRegistry,
     config: Config,
     ingress_filter: IngressFilterService,
-    ingress_ingestion_service: IngressIngestionService,
+    ingress_sender: IngressIngestionService,
     query_execution_service: QueryExecutionService,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     registry_client: Arc<dyn RegistryClient>,
@@ -306,10 +299,6 @@ pub fn start_server(
     addr.set_port(listen_addr.port());
     info!(log, "Starting HTTP server...");
     rt_handle.clone().spawn(async move {
-        let ingress_sender = ServiceBuilder::new()
-            .buffer(MAX_BUFFERED_INGRESS_MESSAGES)
-            .service(ingress_ingestion_service);
-
         let delegation_from_nns = Arc::new(RwLock::new(None));
         let health_status = Arc::new(RwLock::new(ReplicaHealthStatus::Starting));
         let state_reader_executor = StateReaderExecutor::new(state_reader.clone());
