@@ -101,7 +101,7 @@ EOF
 }
 
 function setup_dev_nftables() {
-    if [ $(cat /boot/config/deployment_type) == "dev" ]; then
+    if [ $(cat /boot/config/deployment_type) == "dev" -o $(cat /boot/config/deployment_type) == "staging" ]; then
         pushd /etc
         cp ./ipv4-dev-ruleset.contents ./ipv4-dev.ruleset
         cp ./ipv6-dev-ruleset.contents ./ipv6-dev.ruleset

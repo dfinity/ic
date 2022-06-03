@@ -334,10 +334,10 @@ function copy_deny_list() {
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
             if [[ -f ${DENY_LIST} ]]; then
                 echo "Using deny list ${DENY_LIST}"
-                cp ${DENY_LIST} ${CONFIG_DIR}/$NODE_PREFIX/denylist.map
+                cp ${DENY_LIST} ${CONFIG_DIR}/${NODE_PREFIX}/denylist.map
             else
                 echo "Using empty denylist"
-                touch ${CONFIG_DIR}/$NODE_PREFIX/denylist.map
+                touch ${CONFIG_DIR}/${NODE_PREFIX}/denylist.map
             fi
         fi
     done
