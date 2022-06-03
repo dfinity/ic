@@ -28,5 +28,19 @@ fn main() {
             subnet_recovery_args,
             args.test,
         ),
+        SubCommand::NNSRecoverySameNodes(nns_recovery_args) => cli::nns_recovery_same_nodes(
+            logger.clone(),
+            recovery_args,
+            nns_recovery_args,
+            args.test,
+        ),
+        SubCommand::NNSRecoveryFailoverNodes(nns_recovery_args) => {
+            cli::nns_recovery_failover_nodes(
+                logger.clone(),
+                recovery_args,
+                nns_recovery_args,
+                args.test,
+            )
+        }
     }
 }

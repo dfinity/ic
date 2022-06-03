@@ -1,14 +1,23 @@
+use ic_base_types::{NodeId, RegistryVersion};
 use ic_types::Height;
 use ic_types::{ReplicaVersion, SubnetId};
 
 use crate::NeuronArgs;
 use std::path::PathBuf;
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
 
 pub type IcAdmin = Vec<String>;
 
+pub struct RegistryParams {
+    pub registry_store_uri: Url,
+    pub registry_store_hash: String,
+    pub registry_version: RegistryVersion,
+}
+
 /// Struct simplyfiying the creation of `ic-admin` commands for a given NNS Url.
+#[derive(Debug, Clone)]
 pub struct AdminHelper {
     pub binary: PathBuf,
     pub nns_url: Url,
@@ -127,7 +136,8 @@ impl AdminHelper {
         subnet_id: SubnetId,
         checkpoint_height: Height,
         state_hash: String,
-        replacement_nodes: &[String],
+        replacement_nodes: &[NodeId],
+        registry_params: Option<RegistryParams>,
     ) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
         ic_admin.push("propose-to-update-recovery-cup".to_string());
@@ -144,6 +154,15 @@ impl AdminHelper {
                 .for_each(|n| ic_admin.push(format!("\"{}\"", n)));
         }
 
+        if let Some(params) = registry_params {
+            ic_admin.push("--registry-store-uri".to_string());
+            ic_admin.push(params.registry_store_uri.to_string());
+            ic_admin.push("--registry-store-hash".to_string());
+            ic_admin.push(params.registry_store_hash);
+            ic_admin.push("--registry-version".to_string());
+            ic_admin.push(params.registry_version.to_string());
+        }
+
         ic_admin.push("--summary".to_string());
         ic_admin.push(format!("\"Recover subnet {}.\"", subnet_id));
 
@@ -158,6 +177,58 @@ impl AdminHelper {
         ic_admin
     }
 
+    /// Return an ic_admin command string to create a system subnet with dkg interval of 12
+    pub fn get_propose_to_create_test_system_subnet(
+        &self,
+        subnet_id_override: SubnetId,
+        replica_version: ReplicaVersion,
+        node_ids: &[NodeId],
+    ) -> IcAdmin {
+        let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
+        ic_admin.append(&mut vec![
+            "propose-to-create-subnet".to_string(),
+            "--unit-delay-millis".to_string(),
+            "2000".to_string(),
+            "--subnet-handler-id".to_string(),
+            "unused".to_string(),
+            "--replica-version-id".to_string(),
+            replica_version.to_string(),
+            "--subnet-id-override".to_string(),
+            subnet_id_override.to_string(),
+            "--dkg-interval-length".to_string(),
+            "12".to_string(),
+            "--is-halted".to_string(),
+            "--subnet-type".to_string(),
+            "system".to_string(),
+        ]);
+        node_ids.iter().for_each(|id| ic_admin.push(id.to_string()));
+        AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);
+        ic_admin
+    }
+
+    pub fn get_extract_cup_command(
+        &self,
+        subnet_id: SubnetId,
+        registry_store: PathBuf,
+        output_file: PathBuf,
+    ) -> IcAdmin {
+        let mut ic_admin = self.get_ic_admin_cmd_base(&None);
+        ic_admin.push("get-recovery-cup".to_string());
+        ic_admin.push(subnet_id.to_string());
+        ic_admin.push("--registry-local-store".to_string());
+        ic_admin.push(format!("{:?}", registry_store));
+        ic_admin.push("--output-file".to_string());
+        ic_admin.push(format!("{:?}", output_file));
+        ic_admin
+    }
+
+    pub fn get_node_command(&self, node_id: &NodeId) -> IcAdmin {
+        let mut ic_admin = self.get_ic_admin_cmd_base(&None);
+        ic_admin.push("get-node".to_string());
+        ic_admin.push(node_id.to_string());
+        ic_admin
+    }
+
     pub fn get_subnet_command(&self, subnet_id: SubnetId) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base(&None);
         ic_admin.push("get-subnet".to_string());
@@ -169,5 +240,11 @@ impl AdminHelper {
         let mut ic_admin = self.get_ic_admin_cmd_base(&None);
         ic_admin.push("get-topology".to_string());
         ic_admin
+    }
+
+    pub fn to_system_command(ic_admin: &IcAdmin) -> Command {
+        let mut cmd = Command::new(&ic_admin[0]);
+        cmd.args(ic_admin[1..].iter().map(|s| s.replace('\"', "")));
+        cmd
     }
 }

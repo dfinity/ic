@@ -1,11 +1,16 @@
-use crate::admin_helper::IcAdmin;
-use crate::command_helper::pipe_all;
+use crate::admin_helper::{AdminHelper, IcAdmin};
+use crate::command_helper::{exec_cmd, pipe_all};
 use crate::error::{RecoveryError, RecoveryResult};
 use crate::file_sync_helper::{remove_dir, rsync, write_file};
 use crate::ssh_helper::SshHelper;
 use crate::util::{block_on, parse_hex_str};
 use crate::{replay_helper, ADMIN, CHECKPOINTS, IC_STATE, NEW_IC_STATE, READONLY};
-use crate::{Recovery, IC_CHECKPOINTS_PATH, IC_DATA_PATH, IC_JSON5_PATH, IC_STATE_EXCLUDES};
+use crate::{
+    Recovery, IC_CHECKPOINTS_PATH, IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE,
+    IC_STATE_EXCLUDES,
+};
+use ic_base_types::CanisterId;
+use ic_replay::cmd::{SetRecoveryCupCmd, SubCommand};
 use ic_types::{Height, SubnetId};
 use slog::{info, Logger};
 use std::net::IpAddr;
@@ -41,7 +46,7 @@ impl Step for AdminStep {
 
     // Execute the ic-admin CLI string as a system command
     fn exec(&self) -> RecoveryResult<()> {
-        Recovery::exec_admin_cmd(self.logger.clone(), &self.ic_admin_cmd)
+        Recovery::exec_admin_cmd(&self.logger, &self.ic_admin_cmd)
     }
 }
 
@@ -118,36 +123,32 @@ impl Step for DownloadIcStateStep {
             excludes.push(cp);
         });
 
-        if let Some(res) = rsync(
+        rsync(
             &self.logger,
             excludes,
             &data_src,
             &self.target,
             self.require_confirmation,
             self.key_file.as_ref(),
-        )? {
-            info!(self.logger, "{}", res);
-        }
-        if let Some(res) = rsync(
+        )?;
+
+        rsync(
             &self.logger,
             vec![],
             &config_src,
             &self.target,
             self.require_confirmation,
             self.key_file.as_ref(),
-        )? {
-            info!(self.logger, "{}", res);
-        }
-        if let Some(res) = rsync(
+        )?;
+
+        rsync(
             &self.logger,
             vec![],
             &format!("{}/", self.target),
             &self.working_dir,
             self.require_confirmation,
             None,
-        )? {
-            info!(self.logger, "{}", res);
-        }
+        )?;
 
         Ok(())
     }
@@ -191,23 +192,34 @@ impl Step for UpdateConfigStep {
     }
 }
 
+pub struct ReplaySubCmd {
+    pub cmd: SubCommand,
+    pub descr: String,
+}
+
 pub struct ReplayStep {
     pub logger: Logger,
     pub subnet_id: SubnetId,
     pub work_dir: PathBuf,
     pub config: PathBuf,
+    pub subcmd: Option<ReplaySubCmd>,
+    pub canister_caller_id: Option<CanisterId>,
     pub result: PathBuf,
 }
 
 impl Step for ReplayStep {
     fn descr(&self) -> String {
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
-        format!(
+        let mut base = format!(
             "Delete old checkpoints found in {}, and execute:\nic-replay {} --subnet-id {:?}",
             checkpoint_path.display(),
             self.config.display(),
             self.subnet_id,
-        )
+        );
+        if let Some(subcmd) = &self.subcmd {
+            base.push_str(&subcmd.descr);
+        }
+        base
     }
 
     fn exec(&self) -> RecoveryResult<()> {
@@ -235,11 +247,16 @@ impl Step for ReplayStep {
             delete_checkpoints(max)?;
             let height = Height::from(*max);
 
-            let (latest_height, state_hash) = block_on(replay_helper::replay(
+            let state_params = block_on(replay_helper::replay(
                 self.subnet_id,
                 self.config.clone(),
+                self.canister_caller_id,
+                self.subcmd.as_ref().map(|c| c.cmd.clone()),
                 self.result.clone(),
             ))?;
+
+            let latest_height = state_params.height;
+            let state_hash = state_params.hash;
 
             info!(self.logger, "Checkpoint height: {}", height);
             info!(self.logger, "Height after replay: {}", latest_height);
@@ -269,6 +286,7 @@ pub struct ValidateReplayStep {
     pub logger: Logger,
     pub subnet_id: SubnetId,
     pub work_dir: PathBuf,
+    pub extra_batches: u64,
 }
 
 impl Step for ValidateReplayStep {
@@ -277,8 +295,8 @@ impl Step for ValidateReplayStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let (latest_height, _) =
-            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?;
+        let latest_height =
+            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?.height;
 
         let cert_height = Recovery::get_certification_height(self.subnet_id)?;
         let finalization_height =
@@ -291,13 +309,16 @@ impl Step for ValidateReplayStep {
         );
         info!(self.logger, "Height after replay: {}", latest_height);
 
-        if latest_height < cert_height {
+        if self.extra_batches > 0 {
+            info!(self.logger, "Extra batches: {}", self.extra_batches);
+        }
+        if latest_height.get() - self.extra_batches < cert_height.get() {
             return Err(RecoveryError::invalid_output_error(
                 "Replay height smaller than certification height.".to_string(),
             ));
         }
 
-        if latest_height < finalization_height {
+        if latest_height.get() - self.extra_batches < finalization_height.get() {
             return Err(RecoveryError::invalid_output_error(
                 "There exists a node with finalization height greater than the replay height."
                     .to_string(),
@@ -346,8 +367,8 @@ impl Step for UploadAndRestartStep {
         let max_checkpoint = checkpoints.into_iter().max().ok_or_else(|| {
             RecoveryError::invalid_output_error("No checkpoints found".to_string())
         })?;
-        let (replay_height, _) =
-            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?;
+        let replay_height =
+            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?.height;
 
         if parse_hex_str(&max_checkpoint)? != replay_height.get() {
             return Err(RecoveryError::invalid_output_error(format!(
@@ -382,16 +403,14 @@ impl Step for UploadAndRestartStep {
         let target = format!("{}@[{}]:{}/", account, self.node_ip, upload_dir);
         let src = format!("{}/", self.data_src.display());
         info!(self.logger, "Uploading state...");
-        if let Some(res) = rsync(
+        rsync(
             &self.logger,
             IC_STATE_EXCLUDES.to_vec(),
             &src,
             &target,
             self.require_confirmation,
             self.key_file.as_ref(),
-        )? {
-            info!(self.logger, "{}", res);
-        }
+        )?;
 
         let ic_state_path = format!("{}/{}", IC_DATA_PATH, IC_STATE);
         info!(self.logger, "Restarting replica...");
@@ -438,11 +457,16 @@ impl Step for WaitForCUPStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let (latest_height, state_hash) =
+        let state_params =
             replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?;
-        let recovery_height = Recovery::get_recovery_height(latest_height);
+        let recovery_height = Recovery::get_recovery_height(state_params.height);
 
-        Recovery::wait_for_recovery_cup(&self.logger, self.node_ip, recovery_height, state_hash)
+        Recovery::wait_for_recovery_cup(
+            &self.logger,
+            self.node_ip,
+            recovery_height,
+            state_params.hash,
+        )
     }
 }
 
@@ -457,5 +481,371 @@ impl Step for CleanupStep {
 
     fn exec(&self) -> RecoveryResult<()> {
         remove_dir(&self.recovery_dir)
+    }
+}
+
+pub struct StopReplicaStep {
+    pub logger: Logger,
+    pub node_ip: IpAddr,
+    pub require_confirmation: bool,
+    pub key_file: Option<PathBuf>,
+}
+
+impl Step for StopReplicaStep {
+    fn descr(&self) -> String {
+        format!("Stopping replica on {}.", self.node_ip)
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let ssh_helper = SshHelper::new(
+            self.logger.clone(),
+            ADMIN.to_string(),
+            self.node_ip,
+            self.require_confirmation,
+            self.key_file.clone(),
+        );
+        ssh_helper.ssh("sudo systemctl stop ic-replica".to_string())?;
+        Ok(())
+    }
+}
+
+pub struct UpdateLocalStoreStep {
+    pub subnet_id: SubnetId,
+    pub config: PathBuf,
+    pub result: PathBuf,
+}
+
+impl Step for UpdateLocalStoreStep {
+    fn descr(&self) -> String {
+        format!("Update registry local store by executing:\nic-replay {:?} --subnet-id {:?} update-registry-local-store", self.config, self.subnet_id)
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        block_on(replay_helper::replay(
+            self.subnet_id,
+            self.config.clone(),
+            None,
+            Some(SubCommand::UpdateRegistryLocalStore),
+            self.result.clone(),
+        ))?;
+        Ok(())
+    }
+}
+
+pub struct SetRecoveryCUPStep {
+    pub subnet_id: SubnetId,
+    pub config: PathBuf,
+    pub state_hash: String,
+    pub recovery_height: Height,
+    pub result: PathBuf,
+}
+
+impl Step for SetRecoveryCUPStep {
+    fn descr(&self) -> String {
+        format!("Set recovery CUP by executing:\nic-replay {:?} --subnet-id {:?} set-recovery-cup {:?} {:?}", self.config, self.subnet_id, self.state_hash, self.recovery_height)
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        block_on(replay_helper::replay(
+            self.subnet_id,
+            self.config.clone(),
+            None,
+            Some(SubCommand::SetRecoveryCup(SetRecoveryCupCmd {
+                state_hash: self.state_hash.clone(),
+                height: self.recovery_height.get(),
+                registry_store_uri: None,
+                registry_store_sha256: None,
+            })),
+            self.result.clone(),
+        ))?;
+        Ok(())
+    }
+}
+
+pub struct CreateTarsStep {
+    pub logger: Logger,
+    pub store_tar_cmd: Command,
+    pub state_tar_cmd: Option<Command>,
+}
+
+impl Step for CreateTarsStep {
+    fn descr(&self) -> String {
+        format!(
+            "Creating tar files by executing:\n{:?}{}",
+            self.store_tar_cmd,
+            if let Some(cmd) = &self.state_tar_cmd {
+                format!("\n{:?}", cmd)
+            } else {
+                "".to_string()
+            }
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let mut tar1 = Command::new("tar");
+        tar1.args(self.store_tar_cmd.get_args());
+        if let Some(res) = exec_cmd(&mut tar1)? {
+            info!(self.logger, "{}", res);
+        }
+
+        if let Some(cmd) = &self.state_tar_cmd {
+            let mut tar2 = Command::new("tar");
+            tar2.args(cmd.get_args());
+            if let Some(res) = exec_cmd(&mut tar2)? {
+                info!(self.logger, "{}", res);
+            }
+        }
+
+        Ok(())
+    }
+}
+
+pub struct UploadCUPAndTar {
+    pub logger: Logger,
+    pub admin_helper: AdminHelper,
+    pub subnet_id: SubnetId,
+    pub upload_node: Option<IpAddr>,
+    pub require_confirmation: bool,
+    pub key_file: Option<PathBuf>,
+    pub work_dir: PathBuf,
+}
+
+impl UploadCUPAndTar {
+    pub fn get_restart_commands(&self) -> String {
+        let with_state = self.upload_node.is_some();
+        format!(
+            r#"
+cd {};
+OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/ic_registry_local_store);
+GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/ic_registry_local_store);
+mkdir ic_registry_local_store;
+tar zxf ic_registry_local_store.tar.gz -C ic_registry_local_store;
+sudo chown -R "$OWNER_UID:$GROUP_UID"  ic_registry_local_store;
+OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/cups);
+GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/cups);
+sudo chown -R "$OWNER_UID:$GROUP_UID" cup.proto;{}
+sudo systemctl stop ic-replica;
+sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/;
+sudo cp cup.proto /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb;
+sudo cp cup.proto /var/lib/ic/data/cups/cup_${}.types.v1.CatchUpPackage.pb;{}
+sudo systemctl start ic-replica;
+sudo systemctl status ic-replica;
+"#,
+            UploadCUPAndTar::get_upload_dir_name(),
+            if with_state {
+                r#"
+OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/ic_state);
+GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/ic_state);
+tar zxf ic_state.tar.gz;
+sudo chown -R "$OWNER_UID:$GROUP_UID" ic_state;"#
+            } else {
+                ""
+            },
+            self.subnet_id,
+            if with_state {
+                r#"
+sudo rsync -a --delete ic_state/ /var/lib/ic/data/ic_state/;"#
+            } else {
+                ""
+            }
+        )
+    }
+
+    pub fn get_upload_dir_name() -> String {
+        "/tmp/subnet_recovery".to_string()
+    }
+}
+
+impl Step for UploadCUPAndTar {
+    fn descr(&self) -> String {
+        if let Some(ip) = self.upload_node {
+            format!(
+                "Uploading CUP, state and registry to {} on {} using admin. Then execute:\n{}",
+                UploadCUPAndTar::get_upload_dir_name(),
+                ip,
+                self.get_restart_commands()
+            )
+        } else {
+            format!("Uploading CUP and registry to {} on ALL nodes using admin (testnet only). Then execute on all nodes:\n{}", UploadCUPAndTar::get_upload_dir_name(), self.get_restart_commands())
+        }
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let ips = if let Some(ip) = self.upload_node {
+            vec![ip]
+        } else {
+            Recovery::get_member_ips(&self.logger, &self.admin_helper, self.subnet_id)?
+        };
+
+        ips.into_iter()
+            .map(|ip| {
+                let ssh_helper = SshHelper::new(
+                    self.logger.clone(),
+                    ADMIN.to_string(),
+                    ip,
+                    self.require_confirmation,
+                    self.key_file.clone(),
+                );
+                info!(self.logger, "Uploading to {}", ip);
+                let upload_dir = UploadCUPAndTar::get_upload_dir_name();
+                ssh_helper.ssh(format!(
+                    "sudo rm -rf {} && mkdir {}",
+                    upload_dir, upload_dir
+                ))?;
+
+                let target = format!("{}@[{}]:{}/", ADMIN, ip, upload_dir);
+
+                rsync(
+                    &self.logger,
+                    vec![],
+                    &format!("{}/cup.proto", self.work_dir.display()),
+                    &target,
+                    self.require_confirmation,
+                    self.key_file.as_ref(),
+                )?;
+
+                rsync(
+                    &self.logger,
+                    vec![],
+                    &format!("{}/ic_registry_local_store.tar.gz", self.work_dir.display()),
+                    &target,
+                    self.require_confirmation,
+                    self.key_file.as_ref(),
+                )?;
+
+                if self.upload_node.is_some() {
+                    rsync(
+                        &self.logger,
+                        vec![],
+                        &format!("{}/ic_state.tar.gz", self.work_dir.display()),
+                        &target,
+                        self.require_confirmation,
+                        self.key_file.as_ref(),
+                    )?;
+                }
+
+                ssh_helper.ssh(self.get_restart_commands())
+            })
+            .collect::<RecoveryResult<Vec<_>>>()?;
+
+        Ok(())
+    }
+}
+
+pub struct DownloadRegistryStoreStep {
+    pub logger: Logger,
+    pub admin_binary: PathBuf,
+    pub node_ip: IpAddr,
+    pub original_nns_id: SubnetId,
+    pub work_dir: PathBuf,
+    pub require_confirmation: bool,
+    pub key_file: Option<PathBuf>,
+}
+
+impl Step for DownloadRegistryStoreStep {
+    fn descr(&self) -> String {
+        let data_src = format!("[{}]:{}", self.node_ip, IC_DATA_PATH);
+        format!(
+            "Copy registry local store from {} to {}.",
+            data_src,
+            self.work_dir.display()
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let account = ADMIN.to_string();
+        let ssh_helper = SshHelper::new(
+            self.logger.clone(),
+            account,
+            self.node_ip,
+            self.require_confirmation,
+            self.key_file.clone(),
+        );
+
+        let nns_url = Recovery::get_nns_endpoint(self.node_ip)?;
+        let admin_helper = AdminHelper::new(self.admin_binary.clone(), nns_url, None);
+
+        info!(
+            self.logger,
+            "Waiting until subnet with original NNS id is up."
+        );
+        for i in 0..50 {
+            if let Err(e) = Recovery::exec_admin_cmd(
+                &self.logger,
+                &admin_helper.get_subnet_command(self.original_nns_id),
+            ) {
+                info!(self.logger, "Try {}: {}", i, e);
+            } else {
+                info!(self.logger, "Found subnet with original NNS id!");
+                break;
+            }
+            thread::sleep(time::Duration::from_secs(10));
+        }
+
+        let data_src = format!(
+            "{}@[{}]:{}/{}",
+            ssh_helper.account, self.node_ip, IC_DATA_PATH, IC_REGISTRY_LOCAL_STORE
+        );
+
+        rsync(
+            &self.logger,
+            vec![],
+            &data_src,
+            &format!("{}/", self.work_dir.display()),
+            self.require_confirmation,
+            self.key_file.as_ref(),
+        )?;
+
+        Ok(())
+    }
+}
+
+pub struct UploadAndHostTarStep {
+    pub logger: Logger,
+    pub aux_host: String,
+    pub aux_ip: IpAddr,
+    pub tar: PathBuf,
+    pub require_confirmation: bool,
+    pub key_file: Option<PathBuf>,
+}
+
+impl Step for UploadAndHostTarStep {
+    fn descr(&self) -> String {
+        format!(
+            "Installing daemonize & python3 on {}@[{}], uploading and hosting {}",
+            self.aux_host,
+            self.aux_ip,
+            self.tar.display()
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let ssh_helper = SshHelper::new(
+            self.logger.clone(),
+            self.aux_host.clone(),
+            self.aux_ip,
+            self.require_confirmation,
+            self.key_file.clone(),
+        );
+
+        let upload_dir = "/tmp/recovery_registry";
+
+        ssh_helper.ssh("sudo apt update && sudo apt -y install daemonize python3".to_string())?;
+        ssh_helper.ssh(format!("mkdir -p {}", upload_dir))?;
+
+        let target = format!("{}@[{}]:{}/", self.aux_host, self.aux_ip, upload_dir);
+        let src = format!("{}", self.tar.display());
+        rsync(
+            &self.logger,
+            vec![],
+            &src,
+            &target,
+            self.require_confirmation,
+            self.key_file.as_ref(),
+        )?;
+
+        ssh_helper.ssh("daemonize $(which python3) -m http.server --bind :: 8081".to_string())?;
+
+        Ok(())
     }
 }

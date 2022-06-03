@@ -148,14 +148,17 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                     Player::new(cfg, subnet_id).with_replay_target_height(target_height)
                 }
             };
-            if let Err(e) = player.replay(extra) {
-                *res_clone.borrow_mut() = Err(e);
-                return;
-            };
-            if let Some(SubCommand::UpdateRegistryLocalStore) = subcmd {
-                player.update_registry_local_store()
+            *res_clone.borrow_mut() = match player.replay(extra) {
+                Ok(state_params) => {
+                    if let Some(SubCommand::UpdateRegistryLocalStore) = subcmd {
+                        player.update_registry_local_store();
+                        Ok(player.get_latest_state_params(None))
+                    } else {
+                        Ok(state_params)
+                    }
+                }
+                err => err,
             }
-            *res_clone.borrow_mut() = Ok(player.get_latest_state_height_and_hash());
         }
     });
     let ret = result.borrow().clone();

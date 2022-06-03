@@ -84,6 +84,11 @@ pub fn rsync(
     match exec_cmd(&mut rsync) {
         Err(RecoveryError::CommandError(Some(24), msg)) => {
             warn!(logger, "Masking rsync warning (code 24)");
+            info!(logger, "{}", msg);
+            Ok(Some(msg))
+        }
+        Ok(Some(msg)) => {
+            info!(logger, "{}", msg);
             Ok(Some(msg))
         }
         res => res,
