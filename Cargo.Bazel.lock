@@ -1,5 +1,5 @@
 {
-  "checksum": "932b33ae7f6da3fccc71148d8393191a3ff80b5742edc5a6fb37448697b2ad51",
+  "checksum": "1d87ededcab45b06b6da5e63c12edc824906273189d5b53dc3542de7530fa5cf",
   "crates": {
     "addr2line 0.17.0": {
       "name": "addr2line",
@@ -5362,6 +5362,14 @@
               "target": "libc"
             },
             {
+              "id": "linked-hash-map 0.5.4",
+              "target": "linked_hash_map"
+            },
+            {
+              "id": "lru 0.7.6",
+              "target": "lru"
+            },
+            {
               "id": "maplit 1.0.2",
               "target": "maplit"
             },
@@ -5396,6 +5404,10 @@
             {
               "id": "pairing 0.20.0",
               "target": "pairing"
+            },
+            {
+              "id": "parking_lot 0.11.2",
+              "target": "parking_lot"
             },
             {
               "id": "pathdiff 0.2.1",
@@ -5520,6 +5532,10 @@
             {
               "id": "thiserror 1.0.30",
               "target": "thiserror"
+            },
+            {
+              "id": "threadpool 1.8.1",
+              "target": "threadpool"
             },
             {
               "id": "tokio 1.18.1",
@@ -9599,6 +9615,39 @@
       },
       "license": "ISC"
     },
+    "linked-hash-map 0.5.4": {
+      "name": "linked-hash-map",
+      "version": "0.5.4",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/linked-hash-map/0.5.4/download",
+          "sha256": "7fb9b38af92608140b86b693604b9ffcc5824240a484d1ecd4795bacb2fe88f3"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "linked_hash_map",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "linked_hash_map",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.5.4"
+      },
+      "license": "MIT/Apache-2.0"
+    },
     "lock_api 0.4.7": {
       "name": "lock_api",
       "version": "0.4.7",
@@ -9850,6 +9899,39 @@
         "version": "0.12.0"
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "lru 0.7.6": {
+      "name": "lru",
+      "version": "0.7.6",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/lru/0.7.6/download",
+          "sha256": "8015d95cb7b2ddd3c0d32ca38283ceb1eea09b4713ee380bceb942d85a244228"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "lru",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "lru",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.7.6"
+      },
+      "license": "MIT"
     },
     "maplit 1.0.2": {
       "name": "maplit",
@@ -19287,6 +19369,48 @@
       },
       "license": "Apache-2.0/MIT"
     },
+    "threadpool 1.8.1": {
+      "name": "threadpool",
+      "version": "1.8.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/threadpool/1.8.1/download",
+          "sha256": "d050e60b33d41c19108b32cea32164033a9013fe3b46cbd4457559bfbf77afaa"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "threadpool",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "threadpool",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "num_cpus 1.13.1",
+              "target": "num_cpus"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "1.8.1"
+      },
+      "license": "MIT/Apache-2.0"
+    },
     "time 0.1.44": {
       "name": "time",
       "version": "0.1.44",
@@ -21491,8 +21615,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -21503,8 +21627,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

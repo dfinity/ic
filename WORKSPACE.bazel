@@ -157,6 +157,11 @@ crates_repository(
         "lazy_static": crate.spec(version = "=1.4.0"),
         "leb128": crate.spec(version = "=0.2.4"),
         "libc": crate.spec(version = "=0.2.126"),
+        "linked-hash-map": crate.spec(version = "0.5.3"),
+        "lru": crate.spec(
+            default_features = False,
+            version = "0.7.1",
+        ),
         "maplit": crate.spec(version = "=1.0.2"),
         "miracl_core_bls12381": crate.spec(version = "=4.1.2"),
         "native-tls": crate.spec(
@@ -169,6 +174,7 @@ crates_repository(
         "openssl": crate.spec(version = "=0.10.38"),
         "openssl-sys": crate.spec(version = "=0.9.70"),
         "pairing": crate.spec(version = "=0.20.0"),
+        "parking_lot": crate.spec(version = "0.11.1"),
         "pathdiff": crate.spec(version = "=0.2.1"),
         "pkg-config": crate.spec(version = "=0.3.25"),
         "pprof": crate.spec(
@@ -241,6 +247,7 @@ crates_repository(
         ),
         "tempfile": crate.spec(version = "=3.1.0"),
         "thiserror": crate.spec(version = "=1.0.30"),
+        "threadpool": crate.spec(version = "1.8.1"),
         "toml": crate.spec(version = "=0.5.9"),
         "tokio": crate.spec(
             features = ["full"],

@@ -1,0 +1,52 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "p2p",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_p2p",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:async-trait",
+        "@crate_index//:strum_macros",
+    ],
+    deps = [
+        "//rs/artifact_manager",
+        "//rs/config",
+        "//rs/crypto/hash",
+        "//rs/interfaces",
+        "//rs/interfaces/p2p",
+        "//rs/interfaces/transport",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/phantom_newtype",
+        "//rs/protobuf",
+        "//rs/registry/helpers",
+        "//rs/registry/subnet_type",
+        "//rs/types/types",
+        "@crate_index//:bincode",
+        "@crate_index//:futures",
+        "@crate_index//:linked-hash-map",
+        "@crate_index//:lru",
+        "@crate_index//:parking_lot",
+        "@crate_index//:prometheus",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+        "@crate_index//:strum",
+        "@crate_index//:threadpool",
+        "@crate_index//:tokio",
+        "@crate_index//:tower",
+    ],
+)
+
+# TODO(IC-1207): migrate rust_test when unblocked dependencies.
