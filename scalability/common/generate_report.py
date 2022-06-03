@@ -38,7 +38,7 @@ gflags.MarkFlagAsRequired("timestamp")
 def add_plot(name: str, xlabel: str, ylabel: str, x: [str], plots: [([str], str)]):
     """Return a dictionary representing the given plot for templating.."""
     return {
-        f"plot-{name}": [{"y": y, "x": x, "name": name} for (y, name) in plots],
+        f"plot-{name}": [{"y": y, "x": x[: len(y)], "name": name} for (y, name) in plots],
         f"layout-{name}": {
             "yaxis": {
                 "title": ylabel,
@@ -81,6 +81,14 @@ def add_file(base, path, alt):
         content += alt
 
     return content
+
+
+def add_toml_files(base):
+    result = []
+    for f in [os.path.join(base, f) for f in os.listdir(base) if f.endswith(".toml")]:
+        with open(f) as f:
+            result.append(f.read())
+    return {"toml": result}
 
 
 def parse_experiment_json(base_path, data):
@@ -128,7 +136,11 @@ def generate_report(base, githash, timestamp):
             t_median_agg = -1
             failure_rate = -1
 
-            files = [os.path.join(path, f) for f in os.listdir(path) if f.startswith("summary_machine_")]
+            files = [
+                os.path.join(path, f)
+                for f in os.listdir(path)
+                if f.startswith("summary_machine_") or f.startswith("summary_workload_")
+            ]
             print("Workload generator summaray files: ", files)
             evaluated_summaries = None
             if len(files) > 0:
@@ -289,8 +301,9 @@ def generate_report(base, githash, timestamp):
         if "rps_max" in experiment_data["experiment_details"]
         else "n.a."
     )
+    experiment_data.update(add_toml_files(base))
 
-    print("Rendering experiment details with: ", experiment_data)
+    print("Rendering experiment details with: ", json.dumps(experiment_data, indent=2))
     experiment_details = experiment_template(experiment_data)
 
     data.update(
@@ -308,58 +321,70 @@ def generate_report(base, githash, timestamp):
     ]
 
     plots = []
-    if len(wg_failure_rates) > 0:
+    if "rps_base" in exp["experiment_details"]:
+        assert "failure_rate" in exp["experiment_details"]
+        assert "labels" in exp["experiment_details"]
+        for idx, failure_rate in enumerate(exp["experiment_details"]["failure_rate"]):
+            plots.append((failure_rate, exp["experiment_details"]["labels"][idx]))
+    else:
+        if len(wg_failure_rates) > 0:
 
-        num_workload_generators = len(wg_failure_rates[0])
-        for workload_generator_id in range(num_workload_generators):
-            workload_generators_idx_in_iterations = [host[workload_generator_id] for host in wg_summaries]
-            counts = Counter(workload_generators_idx_in_iterations)
-            # Each of those should have only one entry
-            assert len(counts) == 1
+            num_workload_generators = len(wg_failure_rates[0])
+            for workload_generator_id in range(num_workload_generators):
+                workload_generators_idx_in_iterations = [host[workload_generator_id] for host in wg_summaries]
+                counts = Counter(workload_generators_idx_in_iterations)
+                # Each of those should have only one entry
+                assert len(counts) == 1
 
-            # With that, we can then also determine the label:
-            workload_generator_label = list(counts.elements())[0]
+                # With that, we can then also determine the label:
+                workload_generator_label = list(counts.elements())[0]
 
-            plots.append(
-                (
-                    [x[workload_generator_id] * 100.0 for x in wg_failure_rates],
-                    f"{workload_generator_label}",
+                plots.append(
+                    (
+                        [x[workload_generator_id] * 100.0 for x in wg_failure_rates],
+                        f"{workload_generator_label}",
+                    )
                 )
-            )
+            plots.append((wg_failure_rate, "aggregated failure rate"))
 
-    plots.append((wg_failure_rate, "aggregated failure rate"))
     data.update(add_plot("wg-failure-rate", exp["xtitle"], "failure rate [%]", exp["xlabels"], plots))
 
     plots = []
+    if "rps_base" in exp["experiment_details"]:
+        assert "latency" in exp["experiment_details"]
+        assert "labels" in exp["experiment_details"]
+        for idx, latency in enumerate(exp["experiment_details"]["latency"]):
+            plots.append((list(filter(lambda x: x > 0, latency)), exp["experiment_details"]["labels"][idx]))
 
-    # We should absolutely make sure that the order of wg generator results is the SAME in each
-    # iteration, otherwise we will get really strange results in the plots
-    if len(wg_http_latency) > 0:
+    else:
+        # We should absolutely make sure that the order of wg generator results is the SAME in each
+        # iteration, otherwise we will get really strange results in the plots
+        if len(wg_http_latency) > 0:
 
-        num_workload_generators = len(wg_http_latency[0])
-        for workload_generator_id in range(num_workload_generators):
-            workload_generators_idx_in_iterations = [host[workload_generator_id] for host in wg_summaries]
-            counts = Counter(workload_generators_idx_in_iterations)
-            # Each of those should have only one entry
-            assert len(counts) == 1
+            num_workload_generators = len(wg_http_latency[0])
+            for workload_generator_id in range(num_workload_generators):
+                workload_generators_idx_in_iterations = [host[workload_generator_id] for host in wg_summaries]
+                counts = Counter(workload_generators_idx_in_iterations)
+                # Each of those should have only one entry
+                assert len(counts) == 1
 
-            # With that, we can then also determine the label:
-            workload_generator_label = list(counts.elements())[0]
+                # With that, we can then also determine the label:
+                workload_generator_label = list(counts.elements())[0]
 
-            # This seems to be used in the workload generator for invalid requests?
-            # Need to be careful with floating point arithmetic when comparing int to float
-            def filter_or_minus_one(x):
-                INVALID = 18446744073709552000000
-                return -1 if abs(x - INVALID) < 0.0000001 else x
+                # This seems to be used in the workload generator for invalid requests?
+                # Need to be careful with floating point arithmetic when comparing int to float
+                def filter_or_minus_one(x):
+                    INVALID = 18446744073709552000000
+                    return -1 if abs(x - INVALID) < 0.0000001 else x
 
-            plots.append(
-                (
-                    [filter_or_minus_one(x[workload_generator_id]) for x in wg_http_latency],
-                    f"median {workload_generator_label}",
+                plots.append(
+                    (
+                        [filter_or_minus_one(x[workload_generator_id]) for x in wg_http_latency],
+                        f"median {workload_generator_label}",
+                    )
                 )
-            )
 
-    plots.append((wg_http_latency_99, "mean 99th percentile of all"))
+        plots.append((wg_http_latency_99, "mean 99th percentile of all"))
     data.update(add_plot("wg-http-latency", exp["xtitle"], "latency [ms]", exp["xlabels"], plots))
 
     if len(finalization_rates) == len(exp["xlabels"]):
@@ -392,6 +417,7 @@ def generate_report(base, githash, timestamp):
     report_file = os.path.join(base, "report.html")
 
     with open(report_file, "w") as outfile:
+        print("Rendering report with: ", json.dumps(data, indent=2))
         output = template(data)
         outfile.write(output)
 

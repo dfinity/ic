@@ -422,11 +422,14 @@ class LockFileNamePool(object):
 
         uid = os.getuid()
         for name in os.listdir(base_dir):
-            st = os.stat(os.path.join(base_dir, name))
-            if st.st_uid == uid:
-                owned.add(name)
-            else:
-                other_owned.add(name)
+            try:
+                st = os.stat(os.path.join(base_dir, name))
+                if st.st_uid == uid:
+                    owned.add(name)
+                else:
+                    other_owned.add(name)
+            except FileNotFoundError:
+                print(f"File {name} disappeared during iteration, continuing .. ")
         for name in names:
             if name in owned:
                 self.name_tiers[0].append(name)

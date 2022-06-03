@@ -1,0 +1,17 @@
+title = "Tiny mixed query + update workload"
+description = "Workload is tiny and is meant for CI testing"
+
+[[workload]]
+canister = "counter#1"
+duration = 30
+# 90% queries
+rps_ratio = 0.9
+
+[[workload]]
+canister = "counter#2"
+# Start 30s later
+start_delay = 15
+duration = 15
+# 10% updates
+rps_ratio = 0.1
+arguments = [ "-u" ]

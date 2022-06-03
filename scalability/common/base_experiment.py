@@ -12,12 +12,14 @@ This class issues API:
 WorkloadExperiment inherits BaseExperiment to follow similar workflow of initiation -> start iteration
 -> inspect iteration -> ... -> finish
 """
+import itertools
 import json
 import os
 import re
 import subprocess
 import sys
 import time
+import traceback
 from typing import List
 
 import gflags
@@ -34,7 +36,11 @@ NNS_SUBNET_INDEX = 0  # Subnet index of the NNS subnetwork
 FLAGS = gflags.FLAGS
 gflags.DEFINE_string("testnet", None, 'Testnet to use. Use "mercury" to run against mainnet.')
 gflags.MarkFlagAsRequired("testnet")
-gflags.DEFINE_string("canister_id", "", "Use given canister ID instead of installing a new canister")
+gflags.DEFINE_string(
+    "canister_ids",
+    "",
+    "Use given canister IDs instead of installing new canisters. Given as JSON dict canister name -> canister.",
+)
 gflags.DEFINE_string("artifacts_path", "../artifacts/release", "Path to the artifacts directory")
 gflags.DEFINE_string("workload_generator_path", "", "Path to the workload generator to be used")
 gflags.DEFINE_boolean("no_instrument", False, "Do not instrument target machine")
@@ -55,11 +61,17 @@ class BaseExperiment:
 
     def __init__(self, request_type="query"):
         """Init."""
+        self.cached_topologies = {}
+        self.artifacts_path = FLAGS.artifacts_path
         self.__load_artifacts()
 
         self.testnet = FLAGS.testnet
-        self.canister_ids = []
-        self.canister = None
+
+        # Map canister name -> list of canister IDs
+        self.canister_ids = {}
+
+        # List of canisters that have been installed
+        self.canister = []
         self.metrics = []
 
         self.t_experiment_start = None
@@ -97,7 +109,6 @@ class BaseExperiment:
         If previously downloaded, reuse, otherwise download.
         When downloading, store the GIT commit hash that has been used in a text file.
         """
-        self.artifacts_path = FLAGS.artifacts_path
         f_artifacts_hash = os.path.join(self.artifacts_path, "githash")
         if subprocess.run(["stat", f_artifacts_hash]).returncode != 0:
             print("Could not find artifacts, downloading .. ")
@@ -234,10 +245,13 @@ class BaseExperiment:
         """
         if nns_url is None:
             nns_url = self._get_nns_url()
-        res = subprocess.check_output(
-            [self._get_ic_admin_path(), "--nns-url", nns_url, "get-topology"], encoding="utf-8"
-        )
-        return json.loads(res)
+        if nns_url not in self.cached_topologies:
+            print("Getting topology from ic-admin")
+            res = subprocess.check_output(
+                [self._get_ic_admin_path(), "--nns-url", nns_url, "get-topology"], encoding="utf-8"
+            )
+            self.cached_topologies[nns_url] = json.loads(res)
+        return self.cached_topologies[nns_url]
 
     def __get_node_info(self, nodeid, nns_url=None):
         """
@@ -392,19 +406,22 @@ class BaseExperiment:
 
         Returns the canister ID if installation was successful.
         """
-        if FLAGS.canister_id is not None and len(FLAGS.canister_id) > 0:
-            print(f"⚠️  Not installing canister, using {FLAGS.canister_id} ")
-            self.canister = f"pre-installed canister {FLAGS.canister_id}"
-            self.canister_ids = FLAGS.canister_id.split(",")
+        if FLAGS.canister_ids is not None and len(FLAGS.canister_ids) > 0:
+            canister_id_map_as_json = json.loads(FLAGS.canister_ids)
+            print(f"⚠️  Not installing canister, using {FLAGS.canister_ids} ")
+            self.canister = list(canister_id_map_as_json.keys())
+            self.canister_ids = canister_id_map_as_json
             return None
 
         this_canister_id = None
 
         print(f"Installing canister .. {canister} on {target}")
-        self.canister = canister if canister is not None else "counter"
+        this_canister = canister if canister is not None else "counter"
+        this_canister_name = "".join(this_canister.split("#")[0])
+
         cmd = [self.workload_generator_path, f"http://[{target}]:8080", "-n", "1", "-r", "1"]
-        if canister is not None:
-            cmd += ["--canister", canister]
+        if this_canister_name != "counter":
+            cmd += ["--canister", this_canister]
         try:
             p = subprocess.run(
                 cmd,
@@ -416,13 +433,15 @@ class BaseExperiment:
                 canister_id = re.findall(r"Successfully created canister at URL [^ ]*. ID: [^ ]*", line)
                 if len(canister_id):
                     cid = canister_id[0].split()[7]
-                    self.canister_ids.append(cid)
+                    if this_canister not in self.canister_ids:
+                        self.canister_ids[this_canister] = []
+                    self.canister_ids[this_canister].append(cid)
+                    self.canister = list(set(self.canister + [this_canister]))
                     this_canister_id = cid
                     print("Found canister ID: ", cid)
-                    all_canisters = ",".join(self.canister_ids)
                     print(
                         colored(
-                            f"Cannister installed successfully (to reuse across runs, specify --canister_id={all_canisters})",
+                            f"Cannister installed successfully (to reuse across runs, specify --canister_ids='{json.dumps(self.canister_ids)}')",
                             "yellow",
                         )
                     )
@@ -431,6 +450,7 @@ class BaseExperiment:
                 if "The response of a canister query call contained status 'rejected'" not in line:
                     print("Output (stderr):", line)
         except Exception as e:
+            traceback.print_stack()
             print(f"Failed to install canister, return code: {e.returncode}")
             print(f"Command was: {cmd}")
             print(e.output.decode("utf-8"))
@@ -448,6 +468,17 @@ class BaseExperiment:
             assert curr_subnet_idx != 0 or subnet_type == "system"
             if for_subnet_idx == curr_subnet_idx:
                 return sorted([self.get_node_ip_address(member, nns_url) for member in members])
+
+    def get_app_subnet_hostnames(self, nns_url=None):
+        """Return hostnames of all machines in given testnet that are part of an application subnet from the given registry."""
+        ips = []
+        topology = self.__get_topology(nns_url)
+        for curr_subnet_idx, (subnet, info) in enumerate(topology["topology"]["subnets"].items()):
+            subnet_type = info["records"][0]["value"]["subnet_type"]
+            members = info["records"][0]["value"]["membership"]
+            if subnet_type != "system":
+                ips += [self.get_node_ip_address(member, nns_url) for member in members]
+        return sorted(ips)
 
     def __build_summary_file(self):
         """Build dictionary to be used to build the summary file."""
@@ -474,7 +505,7 @@ class BaseExperiment:
                 "workload": self.canister,
                 "testnet": self.testnet,
                 "user": subprocess.check_output(["whoami"], encoding="utf-8"),
-                "canister_id": self.canister_ids,
+                "canister_id": json.dumps(self.canister_ids),
                 "artifacts_githash": self.artifacts_hash,
                 "t_experiment_start": self.t_experiment_start,
                 "t_experiment_end": int(time.time()),
@@ -492,3 +523,7 @@ class BaseExperiment:
             outdir + "/replica-log-{}-stdout.txt",
             outdir + "/replica-log-{}-stderr.txt",
         )
+
+    def get_canister_ids(self):
+        """Return canister IDs of all canisters installed by the suite."""
+        return list(itertools.chain.from_iterable([k for _, k in self.canister_ids.items()]))

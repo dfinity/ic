@@ -10,14 +10,13 @@ from typing import List
 import gflags
 from common import ansible
 from common import base_experiment
-from common import misc
 from common import prometheus
 from common import report
 from common import ssh
 from common import workload
 from termcolor import colored
 
-NUM_WORKLOAD_GEN = 2  # Number of machines to run the workload generator on
+NUM_WORKLOAD_GEN = -1  # Number of machines to run the workload generator on
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_bool("use_updates", False, "Issue update calls instead of query calls.")
@@ -101,9 +100,15 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
                 ansible.get_ansible_hostnames_for_subnet(FLAGS.wg_testnet, base_experiment.NNS_SUBNET_INDEX, sort=False)
             )
 
-            workload_generator_machines = self.get_hostnames(FLAGS.wg_subnet, f"http://[{wg_testnet_nns_host}]:8080")
+            if FLAGS.wg_testnet != FLAGS.testnet:
+                # In case wg_testnet and testnet are different, we can use all app-subnet hosts as workload generators
+                workload_generator_machines = self.get_app_subnet_hostnames(f"http://[{wg_testnet_nns_host}]:8080")
+            else:
+                workload_generator_machines = self.get_hostnames(
+                    FLAGS.wg_subnet, f"http://[{wg_testnet_nns_host}]:8080"
+                )
 
-        if self.num_workload_gen > len(workload_generator_machines):
+        if self.num_workload_gen > 0 and self.num_workload_gen > len(workload_generator_machines):
             raise Exception(
                 colored(
                     (
@@ -115,7 +120,10 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
                 "red",
             )
 
-        self.machines = workload_generator_machines[: self.num_workload_gen]
+        if self.num_workload_gen > 0:
+            self.machines = workload_generator_machines[: self.num_workload_gen]
+        else:
+            self.machines = workload_generator_machines
         self.subnet_id = (
             FLAGS.mainnet_target_subnet_id
             if FLAGS.mainnet_target_subnet_id is not None and len(FLAGS.mainnet_target_subnet_id) > 0
@@ -284,14 +292,12 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
     ):
         """Run the workload generator on all given machines."""
         if canister_ids is None:
-            canister_ids = self.canister_ids
-
-        rps_per_machine = misc.distribute_load_to_n(requests_per_second, len(machines))
+            canister_ids = self.get_canister_ids()
 
         print("Got targets: ", targets)
         print("Running against target_list")
 
-        curr_outdir = self.out_dir if outdir is None else outdir
+        curr_outdir = self.iter_outdir if outdir is None else outdir
         f_stdout = os.path.join(curr_outdir, "workload-generator-{}.stdout.txt")
         f_stderr = os.path.join(curr_outdir, "workload-generator-{}.stderr.txt")
 
@@ -303,22 +309,26 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         print(f"Setting workload generator timeout to: {timeout}")
 
         print(f"Running on {targets}")
+        workload_description = workload.WorkloadDescription(
+            canister_ids,
+            method,
+            call_method,
+            requests_per_second,
+            duration,
+            payload,
+            arguments,
+            0,
+            1.0,
+        )
         load = workload.Workload(
             machines,
             targets,
-            rps_per_machine,
-            canister_ids,
-            duration,
+            workload_description,
             f_stdout,
             f_stderr,
             timeout,
-            payload,
-            method,
-            call_method,
-            arguments,
         )
         commands, load_generators = load.get_commands()
-        assert load_generators == machines
 
         n = 0
         while True:
@@ -340,7 +350,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         print("Fetching workload generator results")
 
         destinations = ["{}/summary_machine_{}".format(curr_outdir, m.replace(":", "_")) for m in machines]
-        load.fetch_results(destinations, self.out_dir)
+        load.fetch_results(destinations, self.iter_outdir)
         print("Evaluating results from {} machines".format(len(destinations)))
         return report.evaluate_summaries(destinations)
 

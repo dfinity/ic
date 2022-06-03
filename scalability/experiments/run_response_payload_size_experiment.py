@@ -26,7 +26,7 @@ class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
     """Logic for experiment with changing response payload size."""
 
     def __init__(self):
-        """Install canister."""
+        """Init with single workload generator."""
         super().__init__(num_workload_gen=1)
         self.install_canister(
             self.target_nodes[0], canister=os.path.join(self.artifacts_path, f"../canisters/{CANISTER}")
