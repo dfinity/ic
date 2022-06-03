@@ -49,13 +49,7 @@ impl<Message: DeserializeOwned + Clone> FrameDecoder<Message> {
                     } else {
                         let frame = data.split_to(size);
                         self.state = FrameDecoderState::NoLength;
-                        let frame = frame.clone();
-                        let value: Result<Message, _> = bincode::deserialize(&frame);
-
-                        if value.is_err() {
-                            continue;
-                        }
-                        let value = value.unwrap();
+                        let value = bincode::deserialize(&frame).unwrap();
                         return Some(value);
                     }
                 }
