@@ -183,7 +183,7 @@ impl CanisterHttpPayloadBuilderImpl {
         context: &ValidationContext,
     ) -> Result<(), CanisterHttpPermananentValidationError> {
         // Check that response has not timed out
-        if response.content.timeout >= context.time {
+        if response.content.timeout < context.time {
             return Err(CanisterHttpPermananentValidationError::Timeout {
                 timed_out_at: response.content.timeout,
                 validation_time: context.time,
@@ -203,15 +203,14 @@ impl CanisterHttpPayloadBuilderImpl {
         Ok(())
     }
 
-    /// Returns true, if the [`CanisterHttpResponseShare`] is valid against the [`ValidationContext`]
+    /// Returns true if the [`CanisterHttpResponseShare`] is valid against the [`ValidationContext`]
     fn check_share_against_context(
         &self,
         registry_version: RegistryVersion,
         share: &CanisterHttpResponseShare,
         context: &ValidationContext,
     ) -> bool {
-        !(share.content.timeout >= context.time
-            || share.content.registry_version != registry_version)
+        share.content.timeout > context.time && share.content.registry_version == registry_version
     }
 
     /// Creates a [`HashSet`] of [`CallbackId`]s from `past_payloads`
@@ -315,7 +314,7 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                 .get_validated_shares()
                 // Filter out shares that are timed out or have the wrong registry versions
                 .filter(|&response| {
-                    !self.check_share_against_context(
+                    self.check_share_against_context(
                         consensus_registry_version,
                         response,
                         validation_context,
