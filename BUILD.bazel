@@ -49,6 +49,7 @@ cargo_build(
         "ic-consensus-pool-util",
         "ic-crypto-csp",
         "ic-regedit",
+        "ic-recovery",
         "orchestrator",
         "replica",
         "state-tool",
