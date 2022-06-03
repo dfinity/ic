@@ -1,15 +1,9 @@
 boundary-node-service-worker:
   extends:
     - .ubuntu-nix-docker
+    - .boundary-node-service-worker
   needs: [] # don't wait on other jobs
   stage: test
-  rules:
-    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH =~ /^rc--/'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline"'
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
   script:
     - |
       set -eExuo pipefail
