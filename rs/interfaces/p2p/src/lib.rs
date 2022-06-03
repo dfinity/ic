@@ -1,7 +1,6 @@
 //! The P2P public interface.
 use ic_types::messages::SignedIngress;
-use std::convert::Infallible;
-use tower::util::BoxService;
+use tower::{util::BoxCloneService, BoxError};
 
 // TODO(NET-825): make IngressIngestionService infallible and remove IngressError.
 #[derive(Debug, Clone)]
@@ -24,4 +23,5 @@ impl std::error::Error for IngressError {}
 /// for processing. It encapsulates the given ingress message in a *Gossip*
 /// artifact and sends it to the P2P `GossipArtifact` channel. It is mainly to
 /// be used by the HTTP handler to submit ingress messages.
-pub type IngressIngestionService = BoxService<SignedIngress, Result<(), IngressError>, Infallible>;
+pub type IngressIngestionService =
+    BoxCloneService<SignedIngress, Result<(), IngressError>, BoxError>;

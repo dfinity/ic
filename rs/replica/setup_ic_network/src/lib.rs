@@ -3,6 +3,8 @@
 //! Specifically, it constructs all the artifact pools and the Consensus/P2P
 //! time source.
 
+mod setup_ingress;
+
 use ic_artifact_manager::{manager, processors};
 use ic_artifact_pool::{
     canister_http_pool::CanisterHttpPoolImpl, certification_pool::CertificationPoolImpl,
@@ -157,10 +159,19 @@ pub fn create_networking_stack(
         )
     });
 
-    start_p2p(
+    let ingress_event_handler = {
+        let _enter = rt_handle.enter();
+        setup_ingress::IngressEventHandler::new_service(
+            log.clone(),
+            artifact_pools.ingress_pool.clone(),
+            artifact_manager.clone(),
+            node_id,
+        )
+    };
+
+    let p2p_thread = start_p2p(
         metrics_registry,
         log,
-        rt_handle,
         node_id,
         subnet_id,
         transport_config,
@@ -169,10 +180,10 @@ pub fn create_networking_stack(
         transport,
         artifact_pools.consensus_pool_cache.clone(),
         artifact_manager,
-        artifact_pools.ingress_pool.clone(),
         malicious_flags,
         &advert_subscriber,
-    )
+    );
+    (ingress_event_handler, p2p_thread)
 }
 
 /// The function sets up and returns the Artifact Manager and Consensus Pool.

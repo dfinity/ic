@@ -76,9 +76,6 @@ use crate::{
     metrics::FlowWorkerMetrics,
 };
 use async_trait::async_trait;
-use ic_artifact_manager::artifact::IngressArtifact;
-use ic_interfaces::{artifact_manager::ArtifactManager, ingress_pool::IngressPoolThrottler};
-use ic_interfaces_p2p::IngressError;
 use ic_interfaces_transport::{
     AsyncTransportEventHandler, FlowId, SendError, TransportError, TransportErrorCode,
     TransportPayload, TransportStateChange,
@@ -86,25 +83,17 @@ use ic_interfaces_transport::{
 use ic_logger::{debug, info, replica_logger::ReplicaLogger, trace};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::subnet::v1::GossipConfig};
-use ic_types::{
-    artifact::{AdvertClass, Artifact, ArtifactKind},
-    messages::SignedIngress,
-    p2p::GossipAdvert,
-    NodeId,
-};
+use ic_types::{artifact::AdvertClass, p2p::GossipAdvert, NodeId};
 use parking_lot::RwLock;
 use std::{
     cmp::max,
     collections::BTreeMap,
-    convert::{Infallible, TryInto},
+    convert::TryInto,
     fmt::Debug,
-    future::Future,
-    pin::Pin,
     sync::{
         atomic::{AtomicBool, Ordering::SeqCst},
         Arc, Condvar, Mutex,
     },
-    task::{Context, Poll},
     thread::JoinHandle,
     time::Duration,
 };
@@ -112,7 +101,6 @@ use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, IntoStaticStr};
 use threadpool::ThreadPool;
 use tokio::sync::{Semaphore, TryAcquireError};
-use tower::Service;
 
 // Each message for each flow is being executed on the same code path. Unless those codepaths are
 // lock free (which is not the case because Gossip has locks) there is no point in having more
@@ -418,84 +406,6 @@ impl AsyncTransportEventHandler for AsyncTransportEventHandlerImpl {
                 )
                 .await;
         }
-    }
-}
-
-/// The ingress throttler is protected by a read-write lock for concurrent
-/// access.
-pub type IngressThrottler = Arc<std::sync::RwLock<dyn IngressPoolThrottler + Send + Sync>>;
-
-pub(crate) struct IngressEventHandler {
-    log: ReplicaLogger,
-    threadpool: ThreadPool,
-    /// The ingress throttler.
-    ingress_throttler: IngressThrottler,
-    artifact_manager: Arc<dyn ArtifactManager>,
-    /// The node ID.
-    node_id: NodeId,
-}
-
-impl IngressEventHandler {
-    /// The function creates an `IngressEventHandler` instance.
-    pub(crate) fn new(
-        log: ReplicaLogger,
-        ingress_throttler: IngressThrottler,
-        artifact_manager: Arc<dyn ArtifactManager>,
-        node_id: NodeId,
-    ) -> Self {
-        let threadpool = threadpool::Builder::new()
-            .num_threads(P2P_PER_FLOW_THREADS)
-            .thread_name("P2P_Ingress_Thread".into())
-            .build();
-
-        Self {
-            log,
-            threadpool,
-            ingress_throttler,
-            artifact_manager,
-            node_id,
-        }
-    }
-}
-
-/// `IngressEventHandler` implements the `IngressEventHandler` trait.
-impl Service<SignedIngress> for IngressEventHandler {
-    type Response = Result<(), IngressError>;
-    type Error = Infallible;
-    #[allow(clippy::type_complexity)]
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    /// The method is called when an ingress message is received.
-    fn call(&mut self, signed_ingress: SignedIngress) -> Self::Future {
-        let artifact_manager = Arc::clone(&self.artifact_manager);
-        let log = self.log.clone();
-        let throttler = Arc::clone(&self.ingress_throttler);
-        let node_id = self.node_id;
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.threadpool.execute(move || {
-            // We ingnore the error in case the receiver was dropped. This can happen when the
-            // client drops the future executing this code.
-            let _ = tx.send(if throttler.read().unwrap().exceeds_threshold() {
-                Err(IngressError::Overloaded)
-            } else {
-                let advert = IngressArtifact::message_to_advert(&signed_ingress);
-                artifact_manager
-                    .on_artifact(
-                        Artifact::IngressMessage(signed_ingress.into()),
-                        advert.into(),
-                        &node_id,
-                    )
-                    .map_err(|e| {
-                        info!(log, "Artifact not inserted {:?}", e);
-                        IngressError::Overloaded
-                    })
-            });
-        });
-        Box::pin(async move { Ok(rx.await.expect("Ingress ingestion task MUST NOT panic.")) })
     }
 }
 

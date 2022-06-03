@@ -98,7 +98,7 @@ use ic_config::transport::TransportConfig;
 use ic_interfaces::{
     artifact_manager::ArtifactManager, consensus_pool::ConsensusPoolCache, registry::RegistryClient,
 };
-use ic_interfaces_p2p::IngressIngestionService;
+
 use ic_interfaces_transport::{FlowTag, Transport};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -110,9 +110,7 @@ use std::{
     error,
     fmt::{Display, Formatter, Result as FmtResult},
     sync::Arc,
-    time::Duration,
 };
-use tower::{util::BoxService, ServiceBuilder};
 
 mod artifact_download_list;
 mod download_management;
@@ -152,21 +150,11 @@ pub(crate) mod utils {
     }
 }
 
-/// Max number of inflight requests into P2P. Note each each requests requires a
-/// dedicated thread to execute on so this number should be relatively small.
-// Do not increase the number until we get to the root cause of NET-743.
-const MAX_INFLIGHT_INGRESS_MESSAGES: usize = 1;
-/// Max ingress messages per second that can go into P2P.
-// There is some internal contention inside P2P (NET-743). We achieve lower
-// throughput if we process messages one after the other.
-const MAX_INGRESS_MESSAGES_PER_SECOND: u64 = 100;
-
 /// Starts the P2P stack and returns the objects that interact with P2P.
 #[allow(clippy::too_many_arguments)]
 pub fn start_p2p(
     metrics_registry: MetricsRegistry,
     log: ReplicaLogger,
-    rt_handle: tokio::runtime::Handle,
     node_id: NodeId,
     subnet_id: SubnetId,
     transport_config: TransportConfig,
@@ -175,10 +163,9 @@ pub fn start_p2p(
     transport: Arc<dyn Transport>,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     artifact_manager: Arc<dyn ArtifactManager>,
-    ingress_throttler: event_handler::IngressThrottler,
     malicious_flags: MaliciousFlags,
     advert_subscriber: &AdvertSubscriber,
-) -> (IngressIngestionService, P2PThreadJoiner) {
+) -> P2PThreadJoiner {
     let event_handler = Arc::new(event_handler::AsyncTransportEventHandlerImpl::new(
         node_id,
         log.clone(),
@@ -209,25 +196,7 @@ pub fn start_p2p(
     event_handler.start(gossip.clone());
     advert_subscriber.start(gossip.clone());
 
-    let p2p_thread_joiner = P2PThreadJoiner::new(log.clone(), gossip);
-
-    // Creating the 'ingress_ingestion_service' requres that we are within a tokio runtime context.
-    let _rt_enter_guard = rt_handle.enter();
-
-    let ingress_event_handler = BoxService::new(event_handler::IngressEventHandler::new(
-        log,
-        ingress_throttler,
-        artifact_manager.clone(),
-        node_id,
-    ));
-
-    let ingress_ingestion_service = BoxService::new(
-        ServiceBuilder::new()
-            .concurrency_limit(MAX_INFLIGHT_INGRESS_MESSAGES)
-            .rate_limit(MAX_INGRESS_MESSAGES_PER_SECOND, Duration::from_secs(1))
-            .service(ingress_event_handler),
-    );
-    (ingress_ingestion_service, p2p_thread_joiner)
+    P2PThreadJoiner::new(log, gossip)
 }
 
 pub(crate) mod advert_utils {
