@@ -85,6 +85,7 @@ IC_OS_IMAGE_DEPS = {
         "//:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
         "//:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",
         "//:ic-regedit": "/opt/ic/bin/ic-regedit:0755",
+        "//:ic-recovery": "/opt/ic/bin/ic-recovery:0755",
         "//:orchestrator": "/opt/ic/bin/orchestrator:0755",
         "//:replica": "/opt/ic/bin/replica:0755",
         "//:state-tool": "/opt/ic/bin/state-tool:0755",
