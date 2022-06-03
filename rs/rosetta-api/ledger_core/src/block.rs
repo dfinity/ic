@@ -10,6 +10,10 @@ use serde_bytes::ByteBuf;
 use std::convert::TryInto;
 use std::{fmt, marker::PhantomData, str::FromStr};
 
+/// Position of a block in the chain. The first block has position 0.
+pub type BlockHeight = u64;
+
+/// The length of a block/transaction hash in bytes.
 pub const HASH_LENGTH: usize = 32;
 
 #[derive(Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]

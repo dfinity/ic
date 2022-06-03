@@ -782,7 +782,7 @@ fn iter_blocks_() {
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
     over(protobuf, |GetBlocksArgs { start, length }| {
-        let blockchain: &Blockchain = &LEDGER.read().unwrap().blockchain;
+        let blockchain = &LEDGER.read().unwrap().blockchain;
         let start_offset = blockchain.num_archived_blocks();
         ledger_canister::get_blocks(&blockchain.blocks, start_offset, start, length)
     });

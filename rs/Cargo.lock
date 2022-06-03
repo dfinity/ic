@@ -5571,6 +5571,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-sha",
  "ic-ic00-types",
+ "ic-utils 0.8.0",
  "on_wire",
  "serde",
  "serde_bytes",
