@@ -9,14 +9,16 @@ print_usage() {
     -h	this help message
     -n	dry run mode, do not build local dev image
     -c	git revision to use, defaults to the current commit
+    -p  proposal id to check
 USAGE
 }
 
 build_dev=1
-while getopts 'nhc:' flag; do
+while getopts 'nhc:p:' flag; do
     case "${flag}" in
         c) git_hash="${OPTARG}" ;;
         n) build_dev=0 ;;
+        p) proposal_id="${OPTARG}" ;;
         h)
             print_usage
             exit 1
@@ -27,6 +29,26 @@ while getopts 'nhc:' flag; do
             ;;
     esac
 done
+
+if [ -n "${proposal_id}" ]; then
+    PROPOSAL_URL="https://ic-api.internetcomputer.org/api/v3/proposals/${proposal_id}"
+    PROPOSAL_BODY=$(curl --silent --retry 5 --retry-delay 10 "${PROPOSAL_URL}")
+
+    release_package_url=$(echo "${PROPOSAL_BODY}" | jq --raw-output '.payload.release_package_url')
+    case "${release_package_url}" in
+        */guest-os/update-img/update-img.*)
+            UPDATE_IMG_FILE="${release_package_url##*/guest-os/update-img/}"
+            release_package_sha256_hex=$(echo "${PROPOSAL_BODY}" | jq --raw-output '.payload.release_package_sha256_hex')
+            ;;
+        *)
+            echo "The proposal ${PROPOSAL_URL} does not exist, does not contain payload.release_package_url or release package is not guest-os update-img package."
+            echo "Only guest-os update-img proposals are supported."
+            exit 1
+            ;;
+    esac
+
+    git_hash=$(echo "${PROPOSAL_BODY}" | jq --raw-output '.payload.replica_version_id')
+fi
 
 git_hash=${git_hash:-$(git rev-parse HEAD)}
 
@@ -61,6 +83,16 @@ if ! ./gitlab-ci/src/artifacts/rclone_download.py --git-rev=$git_hash --out="$CI
         [Nn]*) exit 1 ;;
         *) echo "Please answer yes or no." ;;
     esac
+fi
+
+if [ -n "${UPDATE_IMG_FILE:-}" ]; then
+    CI_PACKAGE_SHA256=$(awk "/${UPDATE_IMG_FILE}\$/ {print \$1}" "${CI_OUT}/SHA256SUMS")
+    if [ "${release_package_sha256_hex}" != "${CI_PACKAGE_SHA256}" ]; then
+        echo "The sha256 sum from the proposal does not match the one from the s3 storage for $UPDATE_IMG_FILE."
+        echo "The sha256 sum from the proposal:   ${release_package_sha256_hex}."
+        echo "The sha256 sum from the s3 storage: ${CI_PACKAGE_SHA256}."
+        exit 1
+    fi
 fi
 
 echo "images will be saved in $OUT"
