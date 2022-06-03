@@ -33,6 +33,7 @@ rust_library(
             "@crate_index//:libc",
             "@crate_index//:nix",
             "@crate_index//:thiserror",
+            "//rs/sys",
         ],
         "//conditions:default": [],
     }),
