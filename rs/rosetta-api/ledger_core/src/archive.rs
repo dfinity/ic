@@ -1,15 +1,13 @@
-use crate::{spawn, EncodedBlock};
+use crate::{block::EncodedBlock, spawn};
 use candid::CandidType;
 use dfn_core::api::print;
 use ic_base_types::CanisterId;
 use ic_ic00_types::{Method, IC_00};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::VecDeque;
+use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
-
-// Wasm bytecode of an Archive Node
-const ARCHIVE_NODE_BYTECODE: &[u8] =
-    std::include_bytes!(std::env!("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH"));
 
 fn default_cycles_for_archive_creation() -> u64 {
     0
@@ -33,7 +31,7 @@ pub struct ArchiveOptions {
 /// A scope guard for block archiving.
 /// It sets archivating flag to true on the archive when constructed and disables the flag
 /// when dropped.
-pub struct ArchivingGuard(Arc<RwLock<Option<Archive>>>);
+pub struct ArchivingGuard<W: ArchiveCanisterWasm>(Arc<RwLock<Option<Archive<W>>>>);
 
 pub enum ArchivingGuardError {
     /// There is no archive to lock, the archiving is disabled.
@@ -42,8 +40,8 @@ pub enum ArchivingGuardError {
     AlreadyArchiving,
 }
 
-impl ArchivingGuard {
-    pub fn new(archive: Arc<RwLock<Option<Archive>>>) -> Result<Self, ArchivingGuardError> {
+impl<W: ArchiveCanisterWasm> ArchivingGuard<W> {
+    pub fn new(archive: Arc<RwLock<Option<Archive<W>>>>) -> Result<Self, ArchivingGuardError> {
         let mut archive_guard = archive.write().expect("failed to obtain archive lock");
         match archive_guard.as_mut() {
             Some(archive) => {
@@ -61,7 +59,7 @@ impl ArchivingGuard {
     }
 }
 
-impl Drop for ArchivingGuard {
+impl<W: ArchiveCanisterWasm> Drop for ArchivingGuard<W> {
     fn drop(&mut self) {
         inspect_archive(&self.0, |archive| {
             archive.archiving_in_progress = false;
@@ -69,8 +67,14 @@ impl Drop for ArchivingGuard {
     }
 }
 
+/// This trait specifies how to obtain the Wasm for the archive canister.
+pub trait ArchiveCanisterWasm {
+    fn archive_wasm() -> Cow<'static, [u8]>;
+}
+
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Archive {
+#[serde(bound = "")]
+pub struct Archive<Wasm: ArchiveCanisterWasm> {
     // List of Archive Nodes
     nodes: Vec<CanisterId>,
 
@@ -113,9 +117,12 @@ pub struct Archive {
     // on upgrade.
     #[serde(skip)]
     archiving_in_progress: bool,
+
+    #[serde(skip)]
+    _marker: PhantomData<Wasm>,
 }
 
-impl Archive {
+impl<W: ArchiveCanisterWasm> Archive<W> {
     pub fn new(options: ArchiveOptions) -> Self {
         Self {
             nodes: vec![],
@@ -130,6 +137,7 @@ impl Archive {
             num_blocks_to_archive: options.num_blocks_to_archive,
             cycles_for_archive_creation: options.cycles_for_archive_creation.unwrap_or(0),
             archiving_in_progress: false,
+            _marker: PhantomData,
         }
     }
 
@@ -153,9 +161,9 @@ impl Archive {
 /// Grabs a write lock on the archive and executes a synchronous function under the lock.
 /// Use this function exclusively in this module to make sure that you do not keep the archive
 /// locked between async calls.
-fn inspect_archive<R>(
-    archive: &Arc<RwLock<Option<Archive>>>,
-    f: impl FnOnce(&mut Archive) -> R,
+fn inspect_archive<R, W: ArchiveCanisterWasm>(
+    archive: &Arc<RwLock<Option<Archive<W>>>>,
+    f: impl FnOnce(&mut Archive<W>) -> R,
 ) -> R {
     let mut archive_guard = archive
         .write()
@@ -171,8 +179,8 @@ fn inspect_archive<R>(
 /// Sends the blocks to an archive canister (creating new archive canister if necessary).
 /// On success, returns the number of blocks archived (equal to blocks.len()).
 /// On failure, returns the number of successfully archived blocks and a description of the error.
-pub async fn send_blocks_to_archive(
-    archive: Arc<RwLock<Option<Archive>>>,
+pub async fn send_blocks_to_archive<W: ArchiveCanisterWasm>(
+    archive: Arc<RwLock<Option<Archive<W>>>>,
     mut blocks: VecDeque<EncodedBlock>,
     max_ledger_msg_size_bytes: usize,
 ) -> Result<usize, (usize, FailedToArchiveBlocks)> {
@@ -274,8 +282,8 @@ pub async fn send_blocks_to_archive(
 }
 
 // Helper function to create a canister and install the node Wasm bytecode.
-async fn create_and_initialize_node_canister(
-    archive: &Arc<RwLock<Option<Archive>>>,
+async fn create_and_initialize_node_canister<W: ArchiveCanisterWasm>(
+    archive: &Arc<RwLock<Option<Archive<W>>>>,
 ) -> Result<(CanisterId, usize, usize), FailedToArchiveBlocks> {
     print("[archive] calling create_canister()");
 
@@ -310,7 +318,7 @@ async fn create_and_initialize_node_canister(
     // matter.
     let _ = spawn::install_code(
         node_canister_id,
-        ARCHIVE_NODE_BYTECODE.to_vec(),
+        W::archive_wasm().into_owned(),
         dfn_candid::Candid((
             dfn_core::api::id(),
             node_block_height_offset,
@@ -363,8 +371,8 @@ async fn create_and_initialize_node_canister(
 
 /// Helper function to find the CanisterId of the node that can accept
 /// blocks, or create one, and find how many blocks can be accepted.
-async fn node_and_capacity(
-    archive: &Arc<RwLock<Option<Archive>>>,
+async fn node_and_capacity<W: ArchiveCanisterWasm>(
+    archive: &Arc<RwLock<Option<Archive<W>>>>,
     needed: usize,
 ) -> Result<(CanisterId, usize, usize), FailedToArchiveBlocks> {
     let last_node_canister_id: Option<CanisterId> =

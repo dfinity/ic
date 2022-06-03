@@ -5565,8 +5565,13 @@ name = "ic-ledger-core"
 version = "0.8.0"
 dependencies = [
  "candid",
+ "dfn_candid",
+ "dfn_core",
  "hex",
+ "ic-base-types",
  "ic-crypto-sha",
+ "ic-ic00-types",
+ "on_wire",
  "serde",
  "serde_bytes",
 ]

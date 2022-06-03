@@ -7,14 +7,15 @@ use dfn_core::{
 use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
 use ic_ledger_core::{
+    archive::{Archive, ArchiveOptions},
     block::{BlockType, EncodedBlock},
     timestamp::TimeStamp,
 };
 use ledger_canister::*;
-use std::time::Duration;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
+    time::Duration,
 };
 
 /// Initialize the ledger canister
@@ -41,7 +42,7 @@ fn init(
     initial_values: HashMap<AccountIdentifier, Tokens>,
     max_message_size_bytes: Option<usize>,
     transaction_window: Option<Duration>,
-    archive_options: Option<archive::ArchiveOptions>,
+    archive_options: Option<ArchiveOptions>,
     send_whitelist: HashSet<CanisterId>,
     transfer_fee: Option<Tokens>,
     token_symbol: Option<String>,
@@ -88,7 +89,7 @@ fn init(
 
     if let Some(archive_options) = archive_options {
         LEDGER.write().unwrap().blockchain.archive =
-            Arc::new(RwLock::new(Some(archive::Archive::new(archive_options))))
+            Arc::new(RwLock::new(Some(Archive::new(archive_options))))
     }
 }
 
@@ -493,7 +494,7 @@ fn pre_upgrade() {
 /// split this method up into the parts that require async (this function) and
 /// the parts that require a lock (Ledger::get_blocks_for_archiving).
 async fn archive_blocks() {
-    use ledger_canister::archive::{
+    use ic_ledger_core::archive::{
         send_blocks_to_archive, ArchivingGuard, ArchivingGuardError, FailedToArchiveBlocks,
     };
 

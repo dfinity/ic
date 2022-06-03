@@ -5,13 +5,14 @@ use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client::Sender;
 use ic_ledger_core::{
+    archive::ArchiveOptions,
     block::{BlockType, EncodedBlock},
     timestamp::TimeStamp,
 };
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, ArchiveOptions, Archives, BinaryAccountBalanceArgs,
-    Block, BlockArg, BlockHeight, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError,
-    GetBlocksRes, GetBlocksResult, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, Memo,
+    AccountBalanceArgs, AccountIdentifier, Archives, BinaryAccountBalanceArgs, Block, BlockArg,
+    BlockHeight, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError, GetBlocksRes,
+    GetBlocksResult, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, Memo,
     NotifyCanisterArgs, Operation, QueryBlocksResponse, SendArgs, Subaccount, Tokens,
     TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
     DEFAULT_TRANSFER_FEE,
