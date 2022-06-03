@@ -480,8 +480,12 @@ def _generate_tests_may_raise_exception(
             disable_caching=disable_caching,
         )
     else:
-        force_pipeline = git_changes.get_changed_files(git_root, [guestos_workspace]) or git_changes.get_changed_files(
-            git_root, ["testnet", "ic-os", "scalability", "rs/workload_generator", "rs/registry/client"]
+        force_pipeline = git_changes.get_changed_files(
+            git_root, [guestos_workspace], ignored_files=["BUILD.bazel"]
+        ) or git_changes.get_changed_files(
+            git_root,
+            ["testnet", "ic-os", "scalability", "rs/workload_generator", "rs/registry/client"],
+            ignored_files=["BUILD.bazel"],
         )
 
         if not force_pipeline:
