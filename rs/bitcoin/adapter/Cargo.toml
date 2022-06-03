@@ -11,6 +11,7 @@ clap = { version = "3.1.6", features = ["derive"] }
 futures = "0.3.17"
 hashlink = "0.8.0"
 hex = "0.4.2"
+http = "0.2"
 ic-async-utils = { path = "../../async_utils" }
 ic-btc-service = { path = "../service" }
 ic-btc-validation = { path = "../validation" }

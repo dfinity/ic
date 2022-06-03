@@ -31,9 +31,11 @@ pub struct Config {
     /// Addresses of nodes to connect to (in case discovery from seeds is not possible/sufficient)
     #[serde(default)]
     pub nodes: Vec<SocketAddr>,
-    /// This field determines whether or not we will be using a SOCKS proxy to communicate with
-    /// the BTC network.
     #[serde(default)]
+    /// This field determines whether or not we will be using a SOCKS proxy to communicate with  the BTC network.
+    /// Socks proxy docs: https://gitlab.com/dfinity-lab/public/ic/-/blob/master/ic-os/boundary-guestos/doc/Components.adoc#user-content-socks-proxy
+    /// Testing environment shared socks proxy address: socks5://socks5.testnet.dfinity.network:1080
+    /// Proxy url is validated and needs to have scheme, host and port specified. I.e socks5://socksproxy.com:1080.
     pub socks_proxy: Option<String>,
     /// The number of seconds that need to pass for the adapter to enter the
     /// `Idle` state.

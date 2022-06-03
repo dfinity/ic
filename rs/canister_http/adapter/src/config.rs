@@ -1,7 +1,6 @@
 use ic_config::logger::Config as LoggerConfig;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use url::Url;
 
 const DEFAULT_HTTP_CONNECT_TIMEOUT_SECS: u64 = 5;
 const DEFAULT_HTTP_REQUEST_TIMEOUT_SECS: u64 = 10;
@@ -24,7 +23,7 @@ impl Default for IncomingSource {
 }
 
 /// This struct contains configuration options for the HTTP Adapter.
-#[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(default)]
 pub struct Config {
     pub http_connect_timeout_secs: u64,
@@ -32,9 +31,10 @@ pub struct Config {
     pub http_request_size_limit_bytes: usize,
     pub incoming_source: IncomingSource,
     pub logger: LoggerConfig,
-    // Boundary node socks proxy on mainnet: https://gitlab.com/dfinity-lab/public/ic/-/blob/master/ic-os/boundary-guestos/doc/Components.adoc#user-content-socks-proxy
-    // Testing environment shared socks proxy address: socks5.testnet.dfinity.network:1080
-    pub socks_proxy: Option<Url>,
+    /// Socks proxy docs: https://gitlab.com/dfinity-lab/public/ic/-/blob/master/ic-os/boundary-guestos/doc/Components.adoc#user-content-socks-proxy
+    /// Testing environment shared socks proxy address: socks5://socks5.testnet.dfinity.network:1080
+    /// Proxy url is validated and needs to have scheme, host and port specified. I.e socks5://socksproxy.com:1080.
+    pub socks_proxy: Option<String>,
 }
 
 impl Default for Config {
