@@ -1,4 +1,7 @@
-use crate::{CheckpointError, CheckpointMetrics, PersistenceError, NUMBER_OF_CHECKPOINT_THREADS};
+use crate::{
+    BitcoinPageMap, CheckpointError, CheckpointMetrics, PageMapType, PersistenceError,
+    NUMBER_OF_CHECKPOINT_THREADS,
+};
 use ic_base_types::CanisterId;
 use ic_logger::ReplicaLogger;
 use ic_registry_subnet_type::SubnetType;
@@ -15,13 +18,20 @@ use ic_state_layout::{
     ExecutionStateBits, ReadPolicy, RwPolicy, StateLayout,
 };
 use ic_types::Height;
+use ic_utils::fs::defrag_file_partially;
 use ic_utils::thread::parallel_map;
+use rand::prelude::SliceRandom;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaChaRng;
 use std::collections::BTreeMap;
+use std::os::unix::prelude::MetadataExt;
 use std::time::{Duration, Instant};
 use std::{
     convert::{From, TryFrom},
-    path::Path,
+    path::{Path, PathBuf},
 };
+
+const DEFRAG_SIZE: u64 = 1 << 29; // 500 MB
 
 /// Creates a checkpoint of the node state using specified directory
 /// layout. Returns a new state that is equivalent to the given one
@@ -41,7 +51,7 @@ pub fn make_checkpoint(
     metrics: &CheckpointMetrics,
     thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<ReplicatedState, CheckpointError> {
-    let tip = layout.tip(height).map_err(CheckpointError::from)?;
+    let tip = layout.tip(height)?;
 
     {
         let _timer = metrics
@@ -49,6 +59,14 @@ pub fn make_checkpoint(
             .with_label_values(&["serialize_to_tip"])
             .start_timer();
         serialize_to_tip(log, state, &tip, thread_pool)?;
+    }
+
+    {
+        let _timer = metrics
+            .make_checkpoint_step_duration
+            .with_label_values(&["defrag_tip"])
+            .start_timer();
+        defrag_tip(&tip, DEFRAG_SIZE, height.get())?;
     }
 
     let cp = {
@@ -237,6 +255,66 @@ fn serialize_bitcoin_state_to_tip(
                 .into(),
         )
         .map_err(CheckpointError::from)
+}
+
+/// Defragments part of the tip directory.
+///
+/// The way we use PageMap files in the tip, namely by having a
+/// long-living file, that we alternatively write to in small 4KB
+/// pages and reflink copy to the checkpoint folder, the files end up
+/// fragmented on disk. In particular, the metadata the file system
+/// keeps on which pages are shared between files and which pages are
+/// unique to a file grows quite complicated, which noticebly slows
+/// down reflink copying of those files. It can therefore be
+/// beneficial to defragment files, especially in situations where a
+/// file had a lot of writes in the past but is mostly being read now.
+///
+/// The current defragmentation strategy is to pseudorandomly choose a
+/// chunk of size max_size among the eligble files, read it to memory,
+/// and write it back to the file. The effect is that this chunk is
+/// definitely unique to the tip at the end of defragmentation. For
+/// now, only the bitcoin PageMap files are being considered.
+fn defrag_tip(
+    tip: &CheckpointLayout<RwPolicy>,
+    max_size: u64,
+    seed: u64,
+) -> Result<(), CheckpointError> {
+    let mut rng = ChaChaRng::seed_from_u64(seed);
+
+    // We only defrag bitcoin files for now
+    let bitcoin_files = vec![
+        PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall),
+        PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium),
+        PageMapType::Bitcoin(BitcoinPageMap::AddressOutpoints),
+    ];
+    let path_with_sizes: Vec<(PathBuf, u64)> = bitcoin_files
+        .iter()
+        .filter_map(|entry| {
+            let path = entry.path(tip).ok()?;
+            let size = path.metadata().ok()?.size();
+            Some((path, size))
+        })
+        .collect();
+
+    // We choose a file weighted by its size. This way, every bit in
+    // the state has (roughly) the same probability of being
+    // defragmented. If we chose the file uniformaly at random, we
+    // would end up defragmenting the smallest file too often. The choice
+    // failing is not an error, as it will happen if all files are
+    // empty
+    if let Ok((path, size)) = path_with_sizes.choose_weighted(&mut rng, |entry| entry.1) {
+        let write_size = size.min(&max_size);
+        let offset = rng.gen_range(0, size - write_size + 1);
+
+        defrag_file_partially(path, offset, write_size.to_owned() as usize).map_err(|err| {
+            CheckpointError::IoError {
+                path: path.to_path_buf(),
+                message: "failed to defrag file".into(),
+                io_err: err.to_string(),
+            }
+        })?;
+    }
+    Ok(())
 }
 
 /// Calls [load_checkpoint] with a newly created thread pool.
@@ -1190,6 +1268,61 @@ mod tests {
             .unwrap();
 
             assert_eq!(recovered_state.bitcoin(), original_state.bitcoin());
+        });
+    }
+
+    #[test]
+    fn defrag_is_safe() {
+        with_test_replica_logger(|log| {
+            let tmp = Builder::new().prefix("test").tempdir().unwrap();
+            let root = tmp.path().to_path_buf();
+            let tip = StateLayout::new(log, root).tip(Height::new(42)).unwrap();
+
+            let defrag_size = 1 << 20; // 1MB
+
+            let paths: Vec<PathBuf> = vec![
+                BitcoinPageMap::AddressOutpoints,
+                BitcoinPageMap::UtxosSmall,
+                BitcoinPageMap::UtxosMedium,
+            ]
+            .drain(..)
+            .map(|inner| PageMapType::Bitcoin(inner).path(&tip).unwrap())
+            .collect();
+
+            for path in &paths {
+                assert!(!path.exists());
+            }
+
+            defrag_tip(&tip, defrag_size, 0).unwrap();
+
+            for path in &paths {
+                assert!(!path.exists());
+            }
+
+            for factor in 1..3 {
+                let short_data: Vec<u8> = vec![42; (defrag_size / factor) as usize];
+                let long_data: Vec<u8> = vec![43; (defrag_size * factor) as usize];
+                let empty: &[u8] = &[];
+
+                std::fs::write(&paths[0], &short_data).unwrap();
+                std::fs::write(&paths[1], &long_data).unwrap();
+                // third file is an empty file
+                std::fs::write(&paths[2], empty).unwrap();
+
+                let check_files = || {
+                    assert_eq!(std::fs::read(&paths[0]).unwrap(), short_data);
+                    assert_eq!(std::fs::read(&paths[1]).unwrap(), long_data);
+                    assert!(paths[2].exists());
+                    assert_eq!(std::fs::read(&paths[2]).unwrap(), empty);
+                };
+
+                check_files();
+
+                for i in 0..100 {
+                    defrag_tip(&tip, defrag_size, i).unwrap();
+                    check_files();
+                }
+            }
         });
     }
 }
