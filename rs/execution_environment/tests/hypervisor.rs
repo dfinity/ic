@@ -2291,9 +2291,10 @@ fn canister_anonymous_query_method_not_exported() {
     let result = test.anonymous_query(canister_id, "http_transform", vec![]);
     assert_eq!(
         result,
-        Err(HypervisorError::MethodNotFound(WasmMethod::Query(
-            "http_transform".to_string()
-        )))
+        Err(
+            HypervisorError::MethodNotFound(WasmMethod::Query("http_transform".to_string()))
+                .into_user_error(&canister_id)
+        )
     );
 }
 
@@ -2337,7 +2338,7 @@ fn canister_anonymous_query_transform_http_response() {
     let payload = Encode!(&canister_http_response).unwrap();
     let result = test.anonymous_query(canister_id, "http_transform", payload);
     let transformed_canister_http_response = Decode!(
-        result.unwrap().unwrap().bytes().as_slice(),
+        result.unwrap().bytes().as_slice(),
         CanisterHttpResponsePayload
     )
     .unwrap();

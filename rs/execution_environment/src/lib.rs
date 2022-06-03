@@ -32,7 +32,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{NetworkTopology, ReplicatedState};
+use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
 use ic_types::{messages::CallContextId, SubnetId};
 use ingress_filter::IngressFilter;
 use query_handler::{HttpQueryHandler, InternalHttpQueryHandler};
@@ -69,7 +69,7 @@ pub enum QueryExecutionType {
 #[doc(hidden)]
 #[derive(Clone, PartialEq, Eq)]
 pub enum NonReplicatedQueryKind {
-    Stateful,
+    Stateful { call_origin: CallOrigin },
     Pure,
 }
 

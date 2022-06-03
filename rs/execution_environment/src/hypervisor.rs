@@ -7,7 +7,6 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{wasm_executor::WasmExecutor, WasmExecutionInput, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::CanisterStatusType;
-use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{
     ExecutionParameters, HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
@@ -298,9 +297,9 @@ impl Hypervisor {
                 network_topology,
                 query_kind,
             } => {
-                let non_replicated_query_kind = match query_kind {
+                let non_replicated_query_kind = match &query_kind {
                     QueryKind::Pure => NonReplicatedQueryKind::Pure,
-                    QueryKind::Stateful => NonReplicatedQueryKind::Stateful {
+                    QueryKind::Stateful { call_origin: _ } => NonReplicatedQueryKind::Stateful {
                         call_context_id,
                         outgoing_request: None,
                     },
@@ -328,7 +327,7 @@ impl Hypervisor {
 
                 let new_execution_state = match query_kind {
                     QueryKind::Pure => execution_state,
-                    QueryKind::Stateful => output_execution_state,
+                    QueryKind::Stateful { call_origin: _ } => output_execution_state,
                 };
 
                 let canister = CanisterState::from_parts(
@@ -339,85 +338,6 @@ impl Hypervisor {
                 (canister, output.num_instructions_left, output.wasm_result)
             }
         }
-    }
-
-    /// Execute a query call that has no caller provided.
-    /// This type of query is triggered by the IC only when
-    /// there is a need to execute a query call on the provided canister.
-    #[allow(clippy::type_complexity)]
-    pub fn execute_anonymous_query(
-        &self,
-        time: Time,
-        method: &str,
-        payload: &[u8],
-        canister: CanisterState,
-        data_certificate: Option<Vec<u8>>,
-        execution_parameters: ExecutionParameters,
-        network_topology: &NetworkTopology,
-    ) -> (
-        CanisterState,
-        NumInstructions,
-        HypervisorResult<Option<WasmResult>>,
-    ) {
-        // Validate that the canister is running.
-        if CanisterStatusType::Running != canister.status() {
-            return (
-                canister,
-                execution_parameters.total_instruction_limit,
-                Err(HypervisorError::CanisterStopped),
-            );
-        }
-
-        let method = WasmMethod::Query(method.to_string());
-        let memory_usage = canister.memory_usage(self.own_subnet_type);
-        let (execution_state, system_state, scheduler_state) = canister.into_parts();
-
-        // Validate that the Wasm module is present.
-        let execution_state = match execution_state {
-            None => {
-                return (
-                    CanisterState::from_parts(None, system_state, scheduler_state),
-                    execution_parameters.total_instruction_limit,
-                    Err(HypervisorError::WasmModuleNotFound),
-                );
-            }
-            Some(state) => state,
-        };
-
-        // Validate that the Wasm module exports the method.
-        if !execution_state.exports_method(&method) {
-            return (
-                CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
-                execution_parameters.total_instruction_limit,
-                Err(HypervisorError::MethodNotFound(method)),
-            );
-        }
-
-        let api_type = ApiType::non_replicated_query(
-            time,
-            IC_00.get(),
-            self.own_subnet_id,
-            payload.to_vec(),
-            data_certificate,
-            NonReplicatedQueryKind::Pure,
-        );
-        // We do not want to commit updates. Hence, execute on clones
-        // of system and execution states so that we have the original
-        // versions.
-        let (output, _, _) = self.execute(
-            api_type,
-            system_state.clone(),
-            memory_usage,
-            execution_parameters,
-            FuncRef::Method(method),
-            execution_state.clone(),
-            network_topology,
-        );
-
-        // We return the unmodified version of the canister.
-        let canister =
-            CanisterState::from_parts(Some(execution_state), system_state, scheduler_state);
-        (canister, output.num_instructions_left, output.wasm_result)
     }
 
     /// Execute a callback.

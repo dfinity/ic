@@ -173,7 +173,9 @@ impl<'a> QueryContext<'a> {
         let query_kind = if ENABLE_QUERY_OPTIMIZATION || !cross_canister_query_calls_enabled {
             NonReplicatedQueryKind::Pure
         } else {
-            NonReplicatedQueryKind::Stateful
+            NonReplicatedQueryKind::Stateful {
+                call_origin: call_origin.clone(),
+            }
         };
 
         // First try to run the query as `Pure` assuming that it is not going to
@@ -183,7 +185,6 @@ impl<'a> QueryContext<'a> {
                 MeasurementScope::nested(&metrics.query_initial_call, measurement_scope);
             self.execute_query(
                 old_canister,
-                call_origin.clone(),
                 query.method_name.as_str(),
                 query.method_payload.as_slice(),
                 query.source.get(),
@@ -202,11 +203,10 @@ impl<'a> QueryContext<'a> {
                     let old_canister = self.state.get_active_canister(&canister_id)?;
                     let (new_canister, new_result) = self.execute_query(
                         old_canister,
-                        call_origin,
                         query.method_name.as_str(),
                         query.method_payload.as_slice(),
                         query.source.get(),
-                        NonReplicatedQueryKind::Stateful,
+                        NonReplicatedQueryKind::Stateful { call_origin },
                         &measurement_scope,
                     );
                     canister = new_canister;
@@ -372,7 +372,6 @@ impl<'a> QueryContext<'a> {
     fn execute_query(
         &mut self,
         canister: CanisterState,
-        call_origin: CallOrigin,
         method_name: &str,
         method_payload: &[u8],
         source: PrincipalId,
@@ -390,7 +389,6 @@ impl<'a> QueryContext<'a> {
 
         let (canister, instructions_left, result) = execute_non_replicated_query(
             query_kind,
-            call_origin,
             method_name,
             method_payload,
             source,
@@ -509,11 +507,10 @@ impl<'a> QueryContext<'a> {
         let call_origin = CallOrigin::CanisterQuery(request.sender, request.sender_reply_callback);
         let (mut canister, result) = self.execute_query(
             canister,
-            call_origin,
             request.method_name.as_str(),
             request.method_payload.as_slice(),
             request.sender.get(),
-            NonReplicatedQueryKind::Stateful,
+            NonReplicatedQueryKind::Stateful { call_origin },
             measurement_scope,
         );
 
