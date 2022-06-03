@@ -66,8 +66,8 @@ options may be specified:
     the target). The presently recognized accounts are: backup, readonly,
     admin and root (the latter one for testing purposes only!)
 
-  --deployment-type [prod|dev]
-    Creates a file named ./deployment_type with contents 'dev|prod' on the
+  --deployment-type [prod|dev|staging]
+    Creates a file named ./deployment_type with contents 'dev|prod|staging' on the
     config image.  The boundary vm consults this file to perform any runtime
     change required for enabling a development mode. The default deployment type
     is 'prod'.
@@ -141,8 +141,8 @@ function build_ic_bootstrap_tar() {
                 ;;
             --deployment-type)
                 DEPLOYMENT_TYPE="$2"
-                if [ ${DEPLOYMENT_TYPE} != "prod" ] && [ ${DEPLOYMENT_TYPE} != "dev" ]; then
-                    echo "only prod or dev deployment types supported"
+                if [ ${DEPLOYMENT_TYPE} != "prod" ] && [ ${DEPLOYMENT_TYPE} != "dev" ] && [ ${DEPLOYMENT_TYPE} != "staging" ]; then
+                    echo "only prod, dev or staging deployment types supported"
                     usage
                     exit 1
                 fi
