@@ -63,8 +63,10 @@ struct Crate {
 
 #[derive(Deserialize, Debug)]
 struct LibSection {
-    #[serde(rename = "proc-macro")]
+    #[serde(rename = "proc-macro", default)]
     proc_macro: bool,
+    #[serde(rename = "name", default)]
+    name_override: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -114,12 +116,7 @@ struct BuildFile<'a> {
     edition: &'a str,
     crate_name: String,
     gen_tests: bool,
-    integration_tests: Vec<BuildTest>,
-}
-
-struct BuildTest {
-    name: String,
-    filepath: String,
+    has_testsuite: bool,
 }
 
 static MACRO_CRATES: &[&str] = &[
@@ -207,6 +204,8 @@ impl Bazelifier {
     }
 
     fn generate_tests(&self, bf: &mut BuildFile) -> eyre::Result<()> {
+        bf.has_testsuite = self.manifest_dir.join("tests").is_dir();
+
         self.process_deps(
             self.pkg.dev_dependencies.iter(),
             &mut bf.dev_deps,
@@ -221,21 +220,6 @@ impl Bazelifier {
             .cloned()
             .collect();
 
-        if let Ok(tests_dir) = std::fs::read_dir(self.manifest_dir.join("tests")) {
-            for file in tests_dir {
-                let file = file?;
-                if !file.path().extension().map_or(false, |x| x == "rs") {
-                    continue;
-                }
-                if let Some(stem) = file.path().file_stem() {
-                    let stem = stem.to_string_lossy();
-                    bf.integration_tests.push(BuildTest {
-                        name: stem.to_string(),
-                        filepath: format!("tests/{}.rs", stem),
-                    });
-                }
-            }
-        }
         Ok(())
     }
 
@@ -262,7 +246,12 @@ impl Bazelifier {
             edition: &self.pkg.package.edition,
             build_type: lib_build_type,
             target_name: self.manifest_dir.file_name().unwrap().to_string_lossy(),
-            crate_name: self.pkg.package.name.replace('-', "_"),
+            crate_name: self
+                .pkg
+                .lib
+                .as_ref()
+                .and_then(|x| x.name_override.as_ref())
+                .map_or_else(|| self.pkg.package.name.replace('-', "_"), |x| x.clone()),
             gen_tests: self.opts.gen_tests,
             ..Default::default()
         };

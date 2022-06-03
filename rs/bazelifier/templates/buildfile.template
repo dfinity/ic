@@ -1,10 +1,10 @@
-load("@rules_rust//rust:defs.bzl", "{{ build_type }}", "rust_test")
+load("@rules_rust//rust:defs.bzl", "{{ build_type }}", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "sources",
-    srcs = glob(["src/**"]),
+    srcs = glob(["**"]),
 )
 
 DEPENDENCIES = {{ deps|json }}
@@ -21,7 +21,7 @@ ALIASES = {{ aliases|json }}
 
 {{ build_type }}(
     name = "{{ target_name }}",
-    srcs = [":sources"],
+    srcs = glob(["src/**"]),
     crate_name = "{{ crate_name }}",
     edition = "{{ edition }}",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -39,14 +39,14 @@ rust_test(
     aliases = ALIASES
 )
 
-{% for test in integration_tests %}
-rust_test(
-    name = "{{ target_name }}_test_{{ test.name }}",
+{% if has_testsuite %}
+rust_test_suite(
+    name = "{{ target_name }}_integration_tests",
     edition = "{{ edition }}",
-    srcs = ["{{ test.filepath }}"],
+    srcs = glob(["tests/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":{{ target_name }}"] + DEPENDENCIES + DEV_DEPENDENCIES,
     aliases = ALIASES
 )
-{% endfor %}
+{% endif %}
 {% endif %}
