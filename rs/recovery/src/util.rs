@@ -1,5 +1,5 @@
 use crate::error::{RecoveryError, RecoveryResult};
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use std::future::Future;
 use std::str::FromStr;
 use tokio::runtime::Runtime;
@@ -22,4 +22,10 @@ pub fn subnet_id_from_str(s: &str) -> Result<SubnetId, String> {
     PrincipalId::from_str(s)
         .map_err(|e| format!("Unable to parse subnet_id {:?}", e))
         .map(SubnetId::from)
+}
+
+pub fn node_id_from_str(s: &str) -> Result<NodeId, String> {
+    PrincipalId::from_str(s)
+        .map_err(|e| format!("Unable to parse node_id {:?}", e))
+        .map(NodeId::from)
 }

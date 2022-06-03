@@ -58,6 +58,7 @@ use ic_types::{
     consensus::CatchUpContentProtobufBytes,
     crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
 };
+use serde::{Deserialize, Serialize};
 use slog_async::AsyncGuard;
 use std::{
     path::{Path, PathBuf},
@@ -69,8 +70,13 @@ use tempfile::TempDir;
 // Amount of time we are waiting for execution, after batches are delivered.
 const WAIT_DURATION: Duration = Duration::from_millis(500);
 
-/// Represents the height and the hash of the last execution state
-pub type StateParams = (Height, String);
+/// Represents the height, hash and registry version of the last execution state
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct StateParams {
+    pub height: Height,
+    pub hash: String,
+    pub registry_version: RegistryVersion,
+}
 
 #[derive(Clone, Debug)]
 pub enum ReplayError {
@@ -400,13 +406,9 @@ impl Player {
             }
         }
 
-        // If we are not replaying NNS subnet, this query will fail.
-        // If it fails, we'll query registry client for latest version instead.
-        let registry_version = self
-            .get_latest_registry_version(latest_context_time)
-            .unwrap_or_else(|_| self.registry.get_latest_version());
-        println!("Latest registry version: {}", registry_version);
-        Ok(self.get_latest_state_height_and_hash())
+        let state_params = self.get_latest_state_params(Some(latest_context_time));
+        println!("Latest registry version: {}", state_params.registry_version);
+        Ok(state_params)
     }
 
     // Blocks until the state at the given height is committed.
@@ -437,8 +439,20 @@ impl Player {
     }
 
     /// Return latest height and state hash according to state manager (latest checkpoint or CUP
-    /// state).
-    pub fn get_latest_state_height_and_hash(&self) -> StateParams {
+    /// state). Additionally returns the latest registry version:
+    /// * In case a `latest_context_time` is given (i.a. when adding extra ingress), get the latest
+    ///   version by querying the registry canister using the time as ingress expiry
+    /// * Otherwise, query the registry client
+    pub fn get_latest_state_params(&self, latest_context_time: Option<Time>) -> StateParams {
+        // If we are not replaying NNS subnet, this query will fail.
+        // If it fails, we'll query registry client for latest version instead.
+        let registry_version = if let Some(time) = latest_context_time {
+            self.get_latest_registry_version(time)
+        } else {
+            Ok(self.registry.get_latest_version())
+        }
+        .unwrap_or_else(|_| self.registry.get_latest_version());
+
         let (height, hash_raw) = {
             let height = self.state_manager.latest_state_height();
             self.wait_for_state(height);
@@ -452,7 +466,12 @@ impl Player {
             }
         };
         let hash = hex::encode(&hash_raw.get().0);
-        (height, hash)
+
+        StateParams {
+            height,
+            hash,
+            registry_version,
+        }
     }
 
     /// Fetch registry records from the given `nns_url`, and update the local
@@ -756,7 +775,7 @@ impl Player {
             if let Some(height) = target_height {
                 if last_batch_height >= height {
                     println!("Target height {} reached.", height);
-                    return Ok(self.get_latest_state_height_and_hash());
+                    return Ok(self.get_latest_state_params(None));
                 }
             }
 
@@ -797,7 +816,7 @@ impl Player {
                         "Restored the state at the height {:?}",
                         self.state_manager.latest_state_height()
                     );
-                    return Ok(self.get_latest_state_height_and_hash());
+                    return Ok(self.get_latest_state_params(None));
                 }
             }
         }
@@ -808,7 +827,7 @@ impl Player {
     // all states below the last CUP.
     fn assert_consistency_and_clean_up(&mut self) -> Result<StateParams, ReplayError> {
         self.verify_latest_cup()?;
-        let params = self.get_latest_state_height_and_hash();
+        let params = self.get_latest_state_params(None);
         let pool = self.consensus_pool.as_mut().expect("no consensus_pool");
         let cache = pool.get_cache();
         let purge_height = cache.catch_up_package().height();
@@ -888,7 +907,7 @@ impl Player {
                     replica_version, last_cup.height()
                 );
                 return Err(ReplayError::UpgradeDetected(
-                    self.get_latest_state_height_and_hash(),
+                    self.get_latest_state_params(None),
                 ));
             }
             _ => {}

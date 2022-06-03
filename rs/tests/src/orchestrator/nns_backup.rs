@@ -129,7 +129,7 @@ pub fn test(env: TestEnv) {
     backup.rsync_spool();
 
     let upgrade_height = match backup.replay(&replica_version) {
-        Err(ReplayError::UpgradeDetected((h, _))) => h,
+        Err(ReplayError::UpgradeDetected(state_params)) => state_params.height,
         Err(ReplayError::StateDivergence(height)) => panic!(
             "State computation diverged pre-upgrade at height {}",
             height
@@ -149,8 +149,8 @@ pub fn test(env: TestEnv) {
         );
         backup.rsync_spool();
         match backup.replay(&test_version) {
-            Ok((height, _)) => {
-                if height > upgrade_height {
+            Ok(state_params) => {
+                if state_params.height > upgrade_height {
                     return;
                 }
             }

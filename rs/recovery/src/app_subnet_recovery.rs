@@ -1,9 +1,10 @@
+use crate::recovery_iterator::RecoveryIterator;
 use crate::RecoveryResult;
 use crate::{error::RecoveryError, RecoveryArgs};
 use clap::Parser;
-use ic_base_types::SubnetId;
+use ic_base_types::{NodeId, SubnetId};
 use ic_types::ReplicaVersion;
-use slog::{warn, Logger};
+use slog::Logger;
 use std::net::IpAddr;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -37,9 +38,9 @@ pub struct AppSubnetRecoveryArgs {
     #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
     pub upgrade_version: Option<ReplicaVersion>,
 
-    #[clap(long, multiple_values(true))]
+    #[clap(long, multiple_values(true), parse(try_from_str=crate::util::node_id_from_str))]
     /// Replace the members of the given subnet with these nodes
-    pub replacement_nodes: Option<Vec<String>>, //PrincipalId
+    pub replacement_nodes: Option<Vec<NodeId>>,
 
     /// Public ssh key to be deployed to the subnet for read only access
     #[clap(long)]
@@ -56,7 +57,6 @@ pub struct AppSubnetRecoveryArgs {
 
 pub struct AppSubnetRecovery {
     step_iterator: Box<dyn Iterator<Item = StepType>>,
-    success: bool,
     pub params: AppSubnetRecoveryArgs,
     recovery: Recovery,
     logger: Logger,
@@ -69,11 +69,11 @@ impl AppSubnetRecovery {
         neuron_args: Option<NeuronArgs>,
         subnet_args: AppSubnetRecoveryArgs,
     ) -> Self {
+        let ssh_confirmation = neuron_args.is_some();
         Self {
             step_iterator: Box::new(StepType::iter()),
-            success: false,
             params: subnet_args,
-            recovery: Recovery::new(logger.clone(), recovery_args, neuron_args)
+            recovery: Recovery::new(logger.clone(), recovery_args, neuron_args, ssh_confirmation)
                 .expect("Failed to init recovery"),
             logger,
         }
@@ -82,12 +82,18 @@ impl AppSubnetRecovery {
     pub fn get_recovery_api(&self) -> &Recovery {
         &self.recovery
     }
+}
 
-    pub fn success(&self) -> bool {
-        self.success
+impl RecoveryIterator<StepType> for AppSubnetRecovery {
+    fn get_step_iterator(&mut self) -> &mut Box<dyn Iterator<Item = StepType>> {
+        &mut self.step_iterator
     }
 
-    pub fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>> {
+    fn get_logger(&self) -> &Logger {
+        &self.logger
+    }
+
+    fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>> {
         match step_type {
             StepType::Halt => {
                 let keys = if let Some(pub_key) = &self.params.pub_key {
@@ -115,13 +121,15 @@ impl AppSubnetRecovery {
 
             StepType::UpdateConfig => Ok(Box::new(self.recovery.get_update_config_step())),
 
-            StepType::ICReplay => Ok(Box::new(
-                self.recovery.get_replay_step(self.params.subnet_id),
-            )),
+            StepType::ICReplay => Ok(Box::new(self.recovery.get_replay_step(
+                self.params.subnet_id,
+                None,
+                None,
+            ))),
 
             StepType::ValidateReplayOutput => Ok(Box::new(
                 self.recovery
-                    .get_validate_replay_step(self.params.subnet_id),
+                    .get_validate_replay_step(self.params.subnet_id, 0),
             )),
 
             StepType::UploadState => {
@@ -153,14 +161,15 @@ impl AppSubnetRecovery {
             }
 
             StepType::ProposeCup => {
-                let (latest_height, state_hash) = self.recovery.get_replay_output()?;
-                let recovery_height = Recovery::get_recovery_height(latest_height);
+                let state_params = self.recovery.get_replay_output()?;
+                let recovery_height = Recovery::get_recovery_height(state_params.height);
                 let default = vec![];
                 Ok(Box::new(self.recovery.update_recovery_cup(
                     self.params.subnet_id,
                     recovery_height,
-                    state_hash,
+                    state_params.hash,
                     self.params.replacement_nodes.as_ref().unwrap_or(&default),
+                    None,
                 )))
             }
 
@@ -179,26 +188,6 @@ impl AppSubnetRecovery {
             ))),
 
             StepType::Cleanup => Ok(Box::new(self.recovery.get_cleanup_step())),
-        }
-    }
-}
-
-impl Iterator for AppSubnetRecovery {
-    type Item = (StepType, Box<dyn Step>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(current_step) = self.step_iterator.next() {
-            match self.get_step_impl(current_step) {
-                Ok(step) => Some((current_step, step)),
-                Err(RecoveryError::StepSkipped) => self.next(),
-                Err(e) => {
-                    warn!(self.logger, "Step generation failed: {}", e);
-                    None
-                }
-            }
-        } else {
-            self.success = true;
-            None
         }
     }
 }

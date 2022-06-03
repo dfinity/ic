@@ -3,18 +3,32 @@ use ic_types::ReplicaVersion;
 use std::path::PathBuf;
 use url::Url;
 
-use crate::app_subnet_recovery::AppSubnetRecoveryArgs;
+use crate::{
+    app_subnet_recovery::AppSubnetRecoveryArgs,
+    nns_recovery_failover_nodes::NNSRecoveryFailoverNodesArgs,
+    nns_recovery_same_nodes::NNSRecoverySameNodesArgs,
+};
 
 /// Subcommands for recovery procedures (application subnets, NNS with failover nodes, etc...)
 #[derive(Parser)]
 pub enum SubCommand {
+    /// Application subnet recovery on same or failover nodes.
     AppSubnetRecovery(AppSubnetRecoveryArgs),
+    /// NNS recovery on a failover IC.
+    NNSRecoveryFailoverNodes(NNSRecoveryFailoverNodesArgs),
+    /// NNS recovery on the same nodes.
+    NNSRecoverySameNodes(NNSRecoverySameNodesArgs),
 }
 
 #[derive(Parser)]
 #[clap(version = "1.0")]
 pub struct RecoveryToolArgs {
-    #[clap(short = 'r', long, alias = "registry-url")]
+    #[clap(
+        short = 'r',
+        long,
+        alias = "registry-url",
+        default_value = "https://ic0.app"
+    )]
     /// The URL of an NNS entry point. That is, the URL of any replica on the
     /// NNS subnet.
     pub nns_url: Url,

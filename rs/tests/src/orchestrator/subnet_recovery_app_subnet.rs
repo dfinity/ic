@@ -30,6 +30,7 @@ use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::node_reassignment_test::{can_read_msg, store_message};
 use crate::orchestrator::utils::upgrade::{assert_assigned_replica_version, can_install_canister};
 use crate::util::*;
+use ic_base_types::NodeId;
 use ic_cup_explorer::get_catchup_content;
 use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType};
 use ic_recovery::file_sync_helper;
@@ -176,8 +177,8 @@ pub fn test(env: TestEnv) {
     let unassigned_nodes_ids = env
         .topology_snapshot()
         .unassigned_nodes()
-        .map(|n| n.node_id.to_string())
-        .collect::<Vec<String>>();
+        .map(|n| n.node_id)
+        .collect::<Vec<NodeId>>();
 
     // Unlike during a production recovery using the CLI, here we already know all of parameters ahead of time.
     let subnet_args = AppSubnetRecoveryArgs {
@@ -240,7 +241,7 @@ pub fn test(env: TestEnv) {
         info!(logger, "Next step: {:?}", step_type);
         if matches!(step_type, StepType::ValidateReplayOutput) {
             // Replay output has to be validated differently since prometheus doesn't work here
-            let (latest_height, _state_hash) = subnet_recovery
+            let state_params = subnet_recovery
                 .get_recovery_api()
                 .get_replay_output()
                 .expect("Failed to get replay output");
@@ -256,7 +257,7 @@ pub fn test(env: TestEnv) {
             );
 
             assert!(
-                cup_height <= latest_height,
+                cup_height <= state_params.height,
                 "CUP height is above the replay height."
             );
 
@@ -267,8 +268,6 @@ pub fn test(env: TestEnv) {
         info!(logger, "{}", step.descr());
         step.exec().expect("Execution of step failed");
     }
-
-    assert!(subnet_recovery.success(), "Recovery unsuccessful");
 
     info!(logger, "Blocking for newer registry version");
     env.topology_snapshot()
