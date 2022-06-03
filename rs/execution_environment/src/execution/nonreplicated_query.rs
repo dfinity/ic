@@ -10,7 +10,7 @@ use crate::{Hypervisor, NonReplicatedQueryKind};
 use ic_base_types::PrincipalId;
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::ExecutionParameters;
-use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
+use ic_replicated_state::{CanisterState, NetworkTopology};
 use ic_system_api::ApiType;
 use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
@@ -20,7 +20,6 @@ use ic_types::{Cycles, NumInstructions, Time};
 #[allow(clippy::too_many_arguments)]
 pub fn execute_non_replicated_query(
     query_kind: NonReplicatedQueryKind,
-    call_origin: CallOrigin,
     method: &str,
     payload: &[u8],
     caller: PrincipalId,
@@ -57,9 +56,11 @@ pub fn execute_non_replicated_query(
         );
     }
 
+    let mut preserve_changes = false;
     let non_replicated_query_kind = match query_kind {
         NonReplicatedQueryKind::Pure => ic_system_api::NonReplicatedQueryKind::Pure,
-        NonReplicatedQueryKind::Stateful => {
+        NonReplicatedQueryKind::Stateful { call_origin } => {
+            preserve_changes = true;
             let call_context_id = canister
                 .system_state
                 .call_context_manager_mut()
@@ -93,7 +94,7 @@ pub fn execute_non_replicated_query(
         network_topology,
     );
     canister.system_state = output_system_state;
-    if query_kind == NonReplicatedQueryKind::Stateful {
+    if preserve_changes {
         canister.execution_state = Some(output_execution_state);
     }
 

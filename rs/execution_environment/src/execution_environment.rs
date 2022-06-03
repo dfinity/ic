@@ -1,4 +1,5 @@
 use crate::execution::heartbeat::execute_heartbeat;
+use crate::execution::nonreplicated_query::execute_non_replicated_query;
 use crate::{
     canister_manager::{
         CanisterManager, CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
@@ -9,6 +10,7 @@ use crate::{
     execution_environment_metrics::ExecutionEnvironmentMetrics,
     hypervisor::Hypervisor,
     util::candid_error_to_user_error,
+    NonReplicatedQueryKind,
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;
@@ -1395,7 +1397,10 @@ impl ExecutionEnvironmentImpl {
         }
     }
 
-    pub(crate) fn execute_anonymous_query(
+    /// Execute a query call that has no caller provided.
+    /// This type of query is triggered by the IC only when
+    /// there is a need to execute a query call on the provided canister.
+    pub fn execute_anonymous_query(
         &self,
         anonymous_query: AnonymousQuery,
         state: Arc<ReplicatedState>,
@@ -1410,19 +1415,19 @@ impl ExecutionEnvironmentImpl {
             subnet_available_memory,
             ExecutionMode::NonReplicated,
         );
-
-        let result = self
-            .hypervisor
-            .execute_anonymous_query(
-                state.time(),
-                &anonymous_query.method_name,
-                &anonymous_query.method_payload,
-                canister,
-                None,
-                execution_parameters,
-                &state.metadata.network_topology,
-            )
-            .2;
+        let result = execute_non_replicated_query(
+            NonReplicatedQueryKind::Pure,
+            &anonymous_query.method_name,
+            &anonymous_query.method_payload,
+            IC_00.get(),
+            canister,
+            None,
+            state.time(),
+            execution_parameters,
+            &state.metadata.network_topology,
+            &self.hypervisor,
+        )
+        .2;
 
         match result {
             Ok(maybe_wasm_result) => match maybe_wasm_result {
@@ -1432,7 +1437,7 @@ impl ExecutionEnvironmentImpl {
                     format!("Canister {} did not reply to the call", canister_id),
                 )),
             },
-            Err(err) => Err(err.into_user_error(&canister_id)),
+            Err(err) => Err(err),
         }
     }
 

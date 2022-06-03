@@ -20,10 +20,7 @@ use ic_ic00_types::{
 use ic_interfaces::execution_environment::{IngressHistoryWriter, RegistryExecutionSettings};
 use ic_interfaces::messages::RequestOrIngress;
 use ic_interfaces::{
-    execution_environment::{
-        AvailableMemory, ExecResult, ExecutionMode, ExecutionParameters, HypervisorError,
-        SubnetAvailableMemory,
-    },
+    execution_environment::{AvailableMemory, ExecResult, ExecutionMode, SubnetAvailableMemory},
     messages::CanisterInputMessage,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
@@ -39,7 +36,7 @@ use ic_replicated_state::{
 use ic_types::Time;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, MessageId, RequestOrResponse, Response},
+    messages::{AnonymousQuery, CallbackId, MessageId, RequestOrResponse, Response},
     CanisterId, Cycles, NumInstructions, UserId,
 };
 use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
@@ -526,32 +523,19 @@ impl ExecutionTest {
         canister_id: CanisterId,
         method_name: S,
         method_payload: Vec<u8>,
-    ) -> Result<Option<WasmResult>, HypervisorError> {
-        let mut state = self.state.take().unwrap();
-        let canister = state.take_canister_state(&canister_id).unwrap();
-        let execution_parameters = ExecutionParameters {
-            total_instruction_limit: self.instruction_limit,
-            slice_instruction_limit: self.instruction_limit,
-            canister_memory_limit: canister.memory_limit(NumBytes::new(u64::MAX / 2)),
-            subnet_available_memory: self.subnet_available_memory.clone(),
-            compute_allocation: canister.scheduler_state.compute_allocation,
-            subnet_type: state.metadata.own_subnet_type,
-            execution_mode: ExecutionMode::NonReplicated,
+    ) -> Result<WasmResult, UserError> {
+        let state = Arc::new(self.state.take().unwrap());
+
+        let query = AnonymousQuery {
+            receiver: canister_id,
+            method_name: method_name.to_string(),
+            method_payload,
         };
-        let (canister, _, result) = self
-            .exec_env
-            .hypervisor_for_testing()
-            .execute_anonymous_query(
-                self.time,
-                &method_name.to_string(),
-                method_payload.as_slice(),
-                canister,
-                None,
-                execution_parameters,
-                &Default::default(),
-            );
-        state.put_canister_state(canister);
-        self.state = Some(state);
+        let result =
+            self.exec_env
+                .execute_anonymous_query(query, state.clone(), self.instruction_limit);
+
+        self.state = Some(Arc::try_unwrap(state).unwrap());
         result
     }
 
