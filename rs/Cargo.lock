@@ -7677,6 +7677,7 @@ dependencies = [
  "cvt",
  "features",
  "hex",
+ "ic-sys",
  "libc",
  "nix 0.23.0",
  "prost",

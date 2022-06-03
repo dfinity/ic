@@ -170,6 +170,10 @@ where
 /// on certain file systems that support COW (btrfs/zfs), copy_file_range
 /// is a metadata operation and is extremely efficient   
 pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
+    if *ic_sys::IS_WSL {
+        return copy_file_sparse_portable(from, to);
+    }
+
     use cvt::*;
     use fs::OpenOptions;
     use io::{ErrorKind, Read};
@@ -350,6 +354,10 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
 
 #[cfg(not(target_os = "linux"))]
 pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
+    copy_file_sparse_portable(from, to)
+}
+
+fn copy_file_sparse_portable(from: &Path, to: &Path) -> io::Result<u64> {
     fs::copy(from, to)
 }
 
