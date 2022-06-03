@@ -19,6 +19,7 @@ rust_library(
         "//rs/rust_canisters/on_wire",
         "//rs/types/base_types",
         "//rs/types/ic00_types",
+        "//rs/utils",
         "@crate_index//:candid",
         "@crate_index//:hex",
         "@crate_index//:serde",
