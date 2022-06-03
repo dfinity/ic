@@ -1,11 +1,25 @@
 #!/usr/bin/env bash
 
-set -exuo pipefail
+set -euo pipefail
+
+not_supported_prompt() {
+    echo "$1"
+    read -t 7 -r -s -p $'Press ENTER to continue the build anyway...\n'
+}
 
 if [ "$(uname)" != "Linux" ]; then
-    echo "This script is only supported on Linux."
-    exit 1
+    not_supported_prompt "This script is only supported on Linux!"
 fi
+
+if docker info 2>&1 | grep -i -E '(storage driver|backing filesystem)' | grep -qi btrfs; then
+    not_supported_prompt "Build reproducibility is not supported on btrfs filesystem!"
+fi
+
+if ! grep -q 'Ubuntu' /etc/os-release; then
+    not_supported_prompt "Build reproducibility is only supported on Ubuntu!"
+fi
+
+set -x
 
 export CI_JOB_NAME="${CI_JOB_NAME:-docker-build-ic}"
 
