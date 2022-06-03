@@ -23,6 +23,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.extern_path(".ic_ledger.pb.v1", "::ledger-canister::protobuf");
 
     config.type_attribute(
+        "ic_sns_governance.pb.v1.SetMode",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
         "ic_sns_governance.pb.v1.NeuronPermissionType",
         "#[derive(candid::CandidType, candid::Deserialize, strum_macros::EnumIter)]",
     );

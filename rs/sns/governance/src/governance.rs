@@ -14,11 +14,12 @@ use crate::canister_control::{
 };
 use crate::pb::v1::{
     get_neuron_response, get_proposal_response,
-    governance::neuron_in_flight_command::Command as InFlightCommand,
-    governance::NeuronInFlightCommand,
+    governance::{
+        neuron_in_flight_command::Command as InFlightCommand, Mode, NeuronInFlightCommand,
+    },
     governance_error::ErrorType,
-    manage_neuron,
     manage_neuron::{
+        self,
         claim_or_refresh::{By, MemoAndController},
         ClaimOrRefresh,
     },
@@ -487,6 +488,26 @@ impl Governance {
         gov.initialize_indices();
 
         gov
+    }
+
+    pub fn set_mode(&mut self, mode: i32, caller: &PrincipalId) {
+        if !Mode::is_valid(mode) {
+            panic!("Unknown mode: {}", mode);
+        }
+
+        if !self.is_sale_canister(caller) {
+            panic!("Caller must be the sale canister.");
+        }
+
+        self.proto.mode = mode as i32;
+    }
+
+    fn is_sale_canister(&self, _id: &PrincipalId) -> bool {
+        // TODO: How do we know the sale canister's ID? Presumably, this would
+        // be stored is some field in self.proto, but where do we get the value
+        // to store in that field? For the time being, returning false is the
+        // safest thing to do.
+        false
     }
 
     /// Initializes the indices.
@@ -3868,7 +3889,7 @@ mod tests {
         governance.process_proposal(2);
 
         // Step 2.1: Wait for result.
-        let now = || std::time::Instant::now();
+        let now = std::time::Instant::now;
 
         let start = now();
         // In practice, the exit condition of the following loop occurs in much
