@@ -1,0 +1,17 @@
+title = "Mixed query + update workload"
+description = "A mixture of query and update workloads running against the counter canister"
+
+[[workload]]
+canister = "counter#1"
+duration = 300
+# 90% queries
+rps_ratio = 0.9
+
+[[workload]]
+canister = "counter#2"
+# Start 30s later
+start_delay = 30
+duration = 270
+# 10% updates
+rps_ratio = 0.1
+arguments = [ "-u" ]

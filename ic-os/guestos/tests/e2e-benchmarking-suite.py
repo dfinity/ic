@@ -257,6 +257,21 @@ def main(argv):
         + base_arguments_load_test
     )
 
+    print("📂 Mixed workload")
+    run(
+        [
+            "python3",
+            "experiments/run_mixed_workload_experiment.py",
+            "--workload",
+            "workloads/tiny.toml",
+            "--initial_rps",
+            "20",
+            "--max_rps",
+            "20",
+        ]
+        + base_arguments_load_test
+    )
+
     machines[0].stop()
     machines[1].stop()
 

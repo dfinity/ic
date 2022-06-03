@@ -57,7 +57,6 @@ class XnetExperiment(base_experiment.BaseExperiment):
         super().init()
         super().init_experiment()
 
-        self.canister = CANISTER
         self.host_each_subnet = []
         self.canisters_per_host = {}
 

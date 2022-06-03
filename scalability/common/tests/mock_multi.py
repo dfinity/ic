@@ -9,19 +9,16 @@ from unittest.mock import Mock
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "../"))
 import common.misc as misc  # noqa
 from common.base_experiment import BaseExperiment  # noqa
-from common.workload_experiment import WorkloadExperiment  # noqa
-from common import report  # noqa
-from common.workload import Workload  # noqa
+from experiments.run_mixed_workload_experiment import MixedWorkloadExperiment  # noqa
 from common import ssh  # noqa
 
 
-class ExperimentMock(WorkloadExperiment):
+class ExperimentMock(MixedWorkloadExperiment):
     """Logic for experiment 1."""
 
     def __init__(self):
         """Construct experiment 1."""
         super().__init__()
-        self.install_canister("some canister")
 
     def run_experiment_internal(self, config):
         """Mock similar to experiment 1."""
@@ -47,6 +44,8 @@ class Test_Experiment(TestCase):
             "def",
             "--workload_generator_machines",
             "3.3.3.3,4.4.4.4",
+            "--workload",
+            "workloads/mixed-query-update.toml",
         ]
 
         misc.parse_command_line_args()
@@ -67,26 +66,26 @@ class Test_Experiment(TestCase):
         ExperimentMock._WorkloadExperiment__kill_workload_generator = MagicMock()
         BaseExperiment._turn_off_replica = MagicMock()
         ExperimentMock._WorkloadExperiment__check_workload_generator_installed = Mock(return_value=True)
-        ExperimentMock.get_ic_version = MagicMock(return_value="deadbeef")
+        ExperimentMock.get_ic_version = MagicMock(return_value="42")
         ExperimentMock._WorkloadExperiment__wait_for_quiet = MagicMock(return_value=None)
-        Workload.fetch_results = MagicMock()
-        report.evaluate_summaries = MagicMock()
 
         exp = ExperimentMock()
-        exp.canister_ids = {"foorbar": ["abc"]}
+        exp.canister_ids = {"canistername": ["canisterid"]}
+
+        exp._BaseExperiment__init_metrics = MagicMock()
+        exp._WorkloadExperiment__kill_workload_generator = MagicMock()
+
+        exp.canister_ids = {"counter": ["abc"]}
         exp.init_experiment()
         exp.start_experiment()
         exp.run_experiment({})
-        exp._BaseExperiment__init_metrics = MagicMock()
-        exp._WorkloadExperiment__kill_workload_generator = MagicMock()
 
         exp.subnet_id = "abc"
         exp.write_summary_file("test", {}, [], "some x value")
         exp.end_experiment()
 
-        exp.install_canister.assert_called_once()
-        Workload.fetch_results.assert_called_once()
-        report.evaluate_summaries.assert_called_once()
+        # We have two canisters in the description file
+        exp.install_canister.assert_called()
 
 
 if __name__ == "__main__":

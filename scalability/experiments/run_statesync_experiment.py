@@ -87,10 +87,10 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
         info = json.loads(self._get_subnet_info(1))
         dkg_len = info["records"][0]["value"]["dkg_interval_length"] + 1
         print("Dkg length", dkg_len)
-        print("Make a change state call to canister", self.canister_ids, "at node", nodes[0])
-        StatesyncExperiment.change_state([nodes[0]], self.canister_ids, 0)
-        # print("Make a expand state call to canister", self.canister_ids, "at node", nodes[0])
-        # StatesyncExperiment.expand_state([nodes[0]], self.canister_ids)
+        print("Make a change state call to canister", self.get_canister_ids(), "at node", nodes[0])
+        StatesyncExperiment.change_state([nodes[0]], self.get_canister_ids(), 0)
+        # print("Make a expand state call to canister", self.get_canister_ids(), "at node", nodes[0])
+        # StatesyncExperiment.expand_state([nodes[0]], self.get_canister_ids())
 
         print("Stop node with ip...", nodes[-1])
         MachineFailure.kill_nodes([nodes[-1]])
@@ -103,13 +103,13 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
                     "yellow",
                 )
             )
-        print("Make 3*dkg_len change state calls to canister", self.canister_ids, "at node", nodes[0])
+        print("Make 3*dkg_len change state calls to canister", self.get_canister_ids(), "at node", nodes[0])
         for i in range(3 * dkg_len):
             # Each change_state update call has a latency of at least one block,
             # so calling it dkg_len times takes at least dkg_len blocks.
             # Doing those calls instead of sleeping ensure that the benchmark is decoupled from
             # the subnetwork configuration (specifically the finalization rate)
-            StatesyncExperiment.change_state([nodes[0]], self.canister_ids, i)
+            StatesyncExperiment.change_state([nodes[0]], self.get_canister_ids(), i)
             print("State change call number", i, "out of", 3 * dkg_len)
 
         restarted_ip_prefix = nodes[-1][:9]
@@ -150,7 +150,7 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
             time.sleep(5)
 
         print("Make another call, send it to the restarted node")
-        StatesyncExperiment.change_state([nodes[-1]], self.canister_ids, i)
+        StatesyncExperiment.change_state([nodes[-1]], self.get_canister_ids(), i)
 
         state_sync_duration = prometheus.get_state_sync_duration(self.testnet, [nodes[-1]], int(time.time()))
         parsed = list(prometheus.parse(state_sync_duration))
