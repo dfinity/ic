@@ -120,7 +120,7 @@ mod gossip_protocol;
 mod malicious_gossip;
 mod metrics;
 
-pub use event_handler::{AdvertSubscriber, P2PThreadJoiner};
+pub use event_handler::{AdvertBroadcaster, P2PThreadJoiner};
 
 /// Custom P2P result type returning a P2P error in case of error.
 pub(crate) type P2PResult<T> = std::result::Result<T, P2PError>;
@@ -164,7 +164,7 @@ pub fn start_p2p(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     artifact_manager: Arc<dyn ArtifactManager>,
     malicious_flags: MaliciousFlags,
-    advert_subscriber: &AdvertSubscriber,
+    advert_broadcaster: &AdvertBroadcaster,
 ) -> P2PThreadJoiner {
     let event_handler = Arc::new(event_handler::AsyncTransportEventHandlerImpl::new(
         node_id,
@@ -194,7 +194,7 @@ pub fn start_p2p(
         malicious_flags,
     ));
     event_handler.start(gossip.clone());
-    advert_subscriber.start(gossip.clone());
+    advert_broadcaster.start(gossip.clone());
 
     P2PThreadJoiner::new(log, gossip)
 }
