@@ -7,6 +7,8 @@ from typing import List
 from elasticsearch import Elasticsearch
 from elasticsearch import exceptions
 
+from .alert import AlertService
+
 
 class EsException(Exception):
     pass
@@ -33,9 +35,10 @@ class Es:
 
     stat: Dict[str, Dict[str, int]]
 
-    def __init__(self, es_url: str):
+    def __init__(self, es_url: str, alert_service: AlertService):
         self.es_url = es_url
         self.es = Elasticsearch(es_url)
+        self.alert_service = alert_service
         self.stat = {"raw_logs": dict()}
 
     @staticmethod
@@ -49,13 +52,16 @@ class Es:
             try:
                 response = self.es.count(index=index, body=body)
             except exceptions.TransportError as e:
-                sys.stderr.write(
-                    f"ERROR: ES did not respond to COUNT query "
+                msg = (
+                    f"WARNING: ES did not respond to COUNT query "
                     f"for index {index}\n"
                     f"request body: {pprint.pformat(body)}\n"
                     f"exception:\n{str(e)}\n"
                 )
-                raise e
+                self.alert_service.alert(
+                    text=msg,
+                    short_text=f"ES COUNT query failed for {index}",
+                )
 
             size = int(response["count"])
             if size > 0:
@@ -76,11 +82,14 @@ class Es:
         try:
             response = self.es.search(index=indices, size=page_size, sort=Es._SORTER, query=query)
         except exceptions.TransportError as error:
-            sys.stderr.write(
-                "\n"
+            msg = (
                 "ES query failed.\n"
                 "If your Farm tests have started recently, try repeating "
                 "this script in a few minutes.\n"
+            )
+            self.alert_service.alert(
+                text=msg,
+                short_text=f"ES COUNT query failed for {','.join(indices)}",
             )
             raise error
 
