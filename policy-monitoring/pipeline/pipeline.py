@@ -122,7 +122,7 @@ class Pipeline:
 
     def get_es_logs_for_group(self, group_id: str) -> Iterator[EsDoc]:
         if self._es is None:
-            self._es = Es(es_url="elasticsearch.testnet.dfinity.systems")
+            self._es = Es(es_url="elasticsearch.testnet.dfinity.systems", alert_service=self.slack)
 
         indices = self._es.find_indices(tag=group_id)
         if not indices:
@@ -138,7 +138,7 @@ class Pipeline:
             page_size = 10_000
 
         eprint("\nStarting to collect logs from ES ...")
-        eprint(". = {page_size} events", flush=True)
+        eprint(f". = {page_size} events", flush=True)
 
         for i, doc in enumerate(self._es.stream(indices, tag=group_id, page_size=page_size)):
             yield EsDoc(doc)
@@ -358,13 +358,13 @@ class Pipeline:
 
     def write_to_file(self, group: Group):
         output_file = str(self.raw_es_logs_file(group).absolute())
-        eprint(f"Pretty-printing log stream into '{output_file}' ...")
+        eprint(f"Pretty-printing raw ES logs into '{output_file}' ...")
 
         with open(output_file, "w") as fout:
             pp = pprint.PrettyPrinter(indent=2, stream=fout)
             pp.pprint(group.logs)
 
-        eprint(f"Pretty-printing completed; results written into '{output_file}'.")
+        eprint(f"Pretty-printing raw ES logs completed; results written into '{output_file}'.")
 
     def read_logs(self, log_file: str):
         """Read and load logs from file"""
