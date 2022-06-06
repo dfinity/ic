@@ -11,7 +11,7 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value, prepare_registry, prepare_registry_with_two_node_sets},
+    registry::{get_value_or_panic, prepare_registry, prepare_registry_with_two_node_sets},
 };
 use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
@@ -34,13 +34,15 @@ fn test_the_anonymous_user_cannot_remove_nodes_from_subnet() {
             )
             .await;
 
-            let node_ids_to_remove =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                    .await
-                    .membership
-                    .iter()
-                    .map(|node_id| NodeId::new(PrincipalId::try_from(node_id).unwrap()))
-                    .collect();
+            let node_ids_to_remove = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet_id).as_bytes(),
+            )
+            .await
+            .membership
+            .iter()
+            .map(|node_id| NodeId::new(PrincipalId::try_from(node_id).unwrap()))
+            .collect();
 
             let payload = RemoveNodesFromSubnetPayload {
                 node_ids: node_ids_to_remove,
@@ -55,14 +57,18 @@ fn test_the_anonymous_user_cannot_remove_nodes_from_subnet() {
                 Err(s) if s.contains("is not authorized to call this method: remove_nodes_from_subnet"));
 
             // .. And there should therefore be no updates to a subnet record
-            let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                    .await;
+            let subnet_list_record = get_value_or_panic::<SubnetListRecord>(
+                &registry,
+                make_subnet_list_record_key().as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
-            let subnet_record =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                    .await;
+            let subnet_record = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet_id).as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
 
             // Go through an upgrade cycle, and verify that it still works the same
@@ -73,14 +79,18 @@ fn test_the_anonymous_user_cannot_remove_nodes_from_subnet() {
             assert_matches!(response,
                 Err(s) if s.contains("is not authorized to call this method:"));
 
-            let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                    .await;
+            let subnet_list_record = get_value_or_panic::<SubnetListRecord>(
+                &registry,
+                make_subnet_list_record_key().as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
-            let subnet_record =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                    .await;
+            let subnet_record = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet_id).as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
 
             Ok(())
@@ -111,13 +121,15 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_remove_nodes_from_su
             )
             .await;
 
-            let node_ids_to_remove =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                    .await
-                    .membership
-                    .iter()
-                    .map(|node_id| NodeId::new(PrincipalId::try_from(node_id).unwrap()))
-                    .collect();
+            let node_ids_to_remove = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet_id).as_bytes(),
+            )
+            .await
+            .membership
+            .iter()
+            .map(|node_id| NodeId::new(PrincipalId::try_from(node_id).unwrap()))
+            .collect();
 
             let payload = RemoveNodesFromSubnetPayload {
                 node_ids: node_ids_to_remove,
@@ -135,14 +147,18 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_remove_nodes_from_su
                 .await
             );
 
-            let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                    .await;
+            let subnet_list_record = get_value_or_panic::<SubnetListRecord>(
+                &registry,
+                make_subnet_list_record_key().as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
-            let subnet_record =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                    .await;
+            let subnet_record = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet_id).as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
 
             Ok(())
@@ -186,14 +202,18 @@ fn test_remove_nodes_from_subnet_succeeds() {
             );
 
             // Ensure that the Subnet records are there
-            let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                    .await;
+            let subnet_list_record = get_value_or_panic::<SubnetListRecord>(
+                &registry,
+                make_subnet_list_record_key().as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_list_record.subnets.len(), 3);
 
-            let subnet_record =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet1_id).as_bytes())
-                    .await;
+            let subnet_record = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet1_id).as_bytes(),
+            )
+            .await;
 
             // Remove all but the first node in each subnet
             let node_ids_to_remove = subnet_record
@@ -219,11 +239,13 @@ fn test_remove_nodes_from_subnet_succeeds() {
             );
 
             // Check that both Subnets lost all of their nodes
-            let subnet1_record =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet1_id).as_bytes())
-                    .await;
+            let subnet1_record = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet1_id).as_bytes(),
+            )
+            .await;
             assert_eq!(subnet1_record.membership.len(), 1);
-            let subnet2_record = get_value::<SubnetRecord>(
+            let subnet2_record = get_value_or_panic::<SubnetRecord>(
                 &registry,
                 make_subnet_record_key(SubnetId::new(
                     PrincipalId::try_from(subnet_list_record.subnets[2].clone()).unwrap(),
@@ -271,14 +293,18 @@ fn test_removing_unassigned_nodes_from_subnet_does_nothing() {
             );
 
             // Ensure that the subnet record is there
-            let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                    .await;
+            let subnet_list_record = get_value_or_panic::<SubnetListRecord>(
+                &registry,
+                make_subnet_list_record_key().as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
-            let subnet_record =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                    .await;
+            let subnet_record = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet_id).as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet as usize);
 
             let payload = RemoveNodesFromSubnetPayload {
@@ -295,14 +321,18 @@ fn test_removing_unassigned_nodes_from_subnet_does_nothing() {
                 .await
             );
 
-            let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                    .await;
+            let subnet_list_record = get_value_or_panic::<SubnetListRecord>(
+                &registry,
+                make_subnet_list_record_key().as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
-            let subnet_record =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                    .await;
+            let subnet_record = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet_id).as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
             for node_id in unassigned_node_ids {
                 let node_id = node_id.get().to_vec();

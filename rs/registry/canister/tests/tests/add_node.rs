@@ -14,7 +14,7 @@ use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
     registry::{invariant_compliant_mutation_as_atomic_req, prepare_add_node_payload},
 };
-use ic_protobuf::registry::{node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord};
+use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::pb::v1::{
     registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
@@ -40,7 +40,7 @@ fn node_is_created_on_receiving_the_request() {
 
         // Then, ensure there is no value for the node
         let node_record = get_node_record(&registry, node_id).await;
-        assert_eq!(node_record, NodeRecord::default());
+        assert!(node_record.is_none());
 
         let response: Result<NodeId, String> = registry
             .update_from_sender(
@@ -55,30 +55,33 @@ fn node_is_created_on_receiving_the_request() {
         // Now let's check directly in the registry that the mutation actually happened
         let node_record = get_node_record(&registry, node_id).await;
         // Check if some fields are present
-        assert!(node_record.http.is_some());
-        assert_eq!(node_record.p2p_flow_endpoints.len(), 1);
+        assert!(node_record.is_some());
+        assert_eq!(node_record.unwrap().p2p_flow_endpoints.len(), 1);
 
         // Check that other fields are present
-        let node_signing_pubkey_record = get_node_signing_key(&registry, node_id).await;
+        let node_signing_pubkey_record = get_node_signing_key(&registry, node_id).await.unwrap();
         assert_eq!(
             node_signing_pubkey_record,
             node_pks.node_signing_pk.unwrap()
         );
 
-        let committee_signing_pubkey_record = get_committee_signing_key(&registry, node_id).await;
+        let committee_signing_pubkey_record =
+            get_committee_signing_key(&registry, node_id).await.unwrap();
         assert_eq!(
             committee_signing_pubkey_record,
             node_pks.committee_signing_pk.unwrap()
         );
 
-        let ni_dkg_dealing_encryption_pubkey_record = get_dkg_dealing_key(&registry, node_id).await;
+        let ni_dkg_dealing_encryption_pubkey_record =
+            get_dkg_dealing_key(&registry, node_id).await.unwrap();
         assert_eq!(
             ni_dkg_dealing_encryption_pubkey_record,
             node_pks.dkg_dealing_encryption_pk.unwrap()
         );
 
-        let transport_tls_certificate_record =
-            get_transport_tls_certificate(&registry, node_id).await;
+        let transport_tls_certificate_record = get_transport_tls_certificate(&registry, node_id)
+            .await
+            .unwrap();
         assert_eq!(
             transport_tls_certificate_record,
             node_pks.tls_certificate.unwrap()
@@ -86,7 +89,9 @@ fn node_is_created_on_receiving_the_request() {
 
         // Check that node allowance has decreased
         let node_operator_record =
-            get_node_operator_record(&registry, *TEST_NEURON_1_OWNER_PRINCIPAL).await;
+            get_node_operator_record(&registry, *TEST_NEURON_1_OWNER_PRINCIPAL)
+                .await
+                .unwrap();
         assert_eq!(node_operator_record.node_allowance, 99);
 
         Ok(())
@@ -111,7 +116,7 @@ fn node_is_not_created_on_wrong_principal() {
 
         // Then, ensure there is no value for the node
         let node_record = get_node_record(&registry, node_id).await;
-        assert_eq!(node_record, NodeRecord::default());
+        assert!(node_record.is_none());
 
         // Issue a request with an unauthorized sender, which should fail.
         let response: Result<NodeId, String> = registry
@@ -126,7 +131,7 @@ fn node_is_not_created_on_wrong_principal() {
 
         // The record should still not be there
         let node_record = get_node_record(&registry, node_id).await;
-        assert_eq!(node_record, NodeRecord::default());
+        assert!(node_record.is_none());
 
         Ok(())
     });
@@ -149,7 +154,7 @@ fn node_is_not_created_when_above_capacity() {
 
         // Then, ensure there is no value for the node
         let node_record = get_node_record(&registry, node_id).await;
-        assert_eq!(node_record, NodeRecord::default());
+        assert!(node_record.is_none());
 
         // This should succeed
         let response: Result<NodeId, String> = registry
@@ -167,7 +172,7 @@ fn node_is_not_created_when_above_capacity() {
 
         // Ensure there is no value for this new node
         let node_record = get_node_record(&registry, node_id).await;
-        assert_eq!(node_record, NodeRecord::default());
+        assert!(node_record.is_none());
 
         // This should now be rejected
         let response: Result<NodeId, String> = registry
@@ -182,7 +187,7 @@ fn node_is_not_created_when_above_capacity() {
 
         // The record should not be there
         let node_record = get_node_record(&registry, node_id).await;
-        assert_eq!(node_record, NodeRecord::default());
+        assert!(node_record.is_none());
 
         Ok(())
     });

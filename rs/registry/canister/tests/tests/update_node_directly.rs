@@ -7,9 +7,12 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR, TEST_USER2_PRINCIPAL,
 };
 use ic_nns_common::registry::encode_or_panic;
+use ic_nns_test_utils::registry::get_value;
 use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
-    registry::{get_value, invariant_compliant_mutation_as_atomic_req, prepare_add_node_payload},
+    registry::{
+        get_value_or_panic, invariant_compliant_mutation_as_atomic_req, prepare_add_node_payload,
+    },
 };
 use ic_protobuf::registry::{crypto::v1::PublicKey, node::v1::NodeRecord};
 use ic_registry_keys::{make_crypto_node_key, make_node_record_key};
@@ -117,7 +120,7 @@ fn node_is_updated_on_receiving_the_request() {
         assert!(response.is_ok());
 
         // The pk record has been updated
-        let pk_record = get_value::<PublicKey>(
+        let pk_record = get_value_or_panic::<PublicKey>(
             &registry,
             make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
         )
@@ -142,19 +145,13 @@ fn node_is_updated_on_receiving_the_request() {
 }
 
 async fn assert_no_idkg_mega_encryption_entry(registry: &Canister<'_>, node_id: NodeId) {
-    let empty_public_key = PublicKey {
-        version: 0,
-        algorithm: 0,
-        key_value: vec![],
-        proof_data: None,
-    };
     // The pk record has not been updated
     let pk_record = get_value::<PublicKey>(
         registry,
         make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
     )
     .await;
-    assert_eq!(pk_record, empty_public_key);
+    assert!(pk_record.is_none());
 }
 
 fn init_mutation_for_node_with_id(

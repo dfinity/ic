@@ -18,9 +18,9 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value, prepare_registry, TEST_ID},
+    registry::{get_value_or_panic, prepare_registry, TEST_ID},
 };
-use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
+use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::{
     node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord},
     node_operator::v1::NodeOperatorRecord,
@@ -107,7 +107,7 @@ fn remove_nodes_with_duplicate_endpoints_succeeds() {
         // Ensure there is a value for each of the nodes
         for node_id in nodes_to_remove.clone() {
             let node_record = get_node_record(&registry, node_id).await;
-            assert_ne!(node_record, NodeRecord::default());
+            assert!(node_record.is_some());
         }
 
         // Install the universal canister in place of the governance canister
@@ -132,13 +132,14 @@ fn remove_nodes_with_duplicate_endpoints_succeeds() {
         // Ensure there is no value for the each of the nodes
         for node_id in nodes_to_remove {
             let node_record = get_node_record(&registry, node_id).await;
-            assert_eq!(node_record, NodeRecord::default());
+            assert!(node_record.is_none());
         }
 
         // Ensure the node operator's allowance is incremented correctly (starts off as
         // 2, and should have 3 added)
-        let node_operator_record =
-            get_node_operator_record(&registry, user_test_id(NO_ID).get()).await;
+        let node_operator_record = get_node_operator_record(&registry, user_test_id(NO_ID).get())
+            .await
+            .unwrap();
         assert_eq!(
             node_operator_record,
             NodeOperatorRecord {
@@ -227,14 +228,13 @@ fn remove_nodes_succeeds_with_missing_encryption_keys_in_registry() {
             let transport_tls_cert = get_transport_tls_certificate(&registry, node_id).await;
             let idkg_dealing_encryption_key =
                 get_idkg_dealing_encryption_key(&registry, node_id).await;
-            assert_ne!(node_record, NodeRecord::default());
-            assert_ne!(dkg_dealing_key, PublicKey::default());
-
+            assert!(node_record.is_some());
+            assert!(dkg_dealing_key.is_some());
             // Ensure some keys are missing to make sure we can delete nodes that do not yet have idkg (or other) key set
-            assert_eq!(node_signing_key, PublicKey::default());
-            assert_eq!(committee_signing_key, PublicKey::default());
-            assert_eq!(transport_tls_cert, X509PublicKeyCert::default());
-            assert_eq!(idkg_dealing_encryption_key, PublicKey::default());
+            assert!(node_signing_key.is_none());
+            assert!(committee_signing_key.is_none());
+            assert!(transport_tls_cert.is_none());
+            assert!(idkg_dealing_encryption_key.is_none());
         }
 
         // Install the universal canister in place of the governance canister
@@ -259,13 +259,14 @@ fn remove_nodes_succeeds_with_missing_encryption_keys_in_registry() {
         // Ensure there is no value for the each of the nodes
         for node_id in nodes_to_remove {
             let node_record = get_node_record(&registry, node_id).await;
-            assert_eq!(node_record, NodeRecord::default());
+            assert!(node_record.is_none());
         }
 
         // Ensure the node operator's allowance is incremented correctly (starts off as
         // 5, and should have 4 added)
-        let node_operator_record =
-            get_node_operator_record(&registry, user_test_id(TEST_ID).get()).await;
+        let node_operator_record = get_node_operator_record(&registry, user_test_id(TEST_ID).get())
+            .await
+            .unwrap();
         assert_eq!(
             node_operator_record,
             NodeOperatorRecord {
@@ -276,8 +277,9 @@ fn remove_nodes_succeeds_with_missing_encryption_keys_in_registry() {
 
         // Ensure the node operator's allowance is incremented correctly (starts off as
         // 2, and should have 1 added)
-        let node_operator_record =
-            get_node_operator_record(&registry, user_test_id(NO_ID).get()).await;
+        let node_operator_record = get_node_operator_record(&registry, user_test_id(NO_ID).get())
+            .await
+            .unwrap();
         assert_eq!(
             node_operator_record,
             NodeOperatorRecord {
@@ -345,12 +347,12 @@ fn remove_nodes_removes_all_keys() {
             let transport_tls_cert = get_transport_tls_certificate(&registry, node_id).await;
             let idkg_dealing_encryption_key =
                 get_idkg_dealing_encryption_key(&registry, node_id).await;
-            assert_ne!(node_record, NodeRecord::default());
-            assert_ne!(node_signing_key, PublicKey::default());
-            assert_ne!(committee_signing_key, PublicKey::default());
-            assert_ne!(dkg_dealing_key, PublicKey::default());
-            assert_ne!(transport_tls_cert, X509PublicKeyCert::default());
-            assert_ne!(idkg_dealing_encryption_key, PublicKey::default());
+            assert!(node_record.is_some());
+            assert!(node_signing_key.is_some());
+            assert!(committee_signing_key.is_some());
+            assert!(dkg_dealing_key.is_some());
+            assert!(transport_tls_cert.is_some());
+            assert!(idkg_dealing_encryption_key.is_some());
         }
 
         // Install the universal canister in place of the governance canister
@@ -381,18 +383,19 @@ fn remove_nodes_removes_all_keys() {
             let transport_tls_cert = get_transport_tls_certificate(&registry, node_id).await;
             let idkg_dealing_encryption_key =
                 get_idkg_dealing_encryption_key(&registry, node_id).await;
-            assert_eq!(node_record, NodeRecord::default());
-            assert_eq!(node_signing_key, PublicKey::default());
-            assert_eq!(committee_signing_key, PublicKey::default());
-            assert_eq!(dkg_dealing_key, PublicKey::default());
-            assert_eq!(transport_tls_cert, X509PublicKeyCert::default());
-            assert_eq!(idkg_dealing_encryption_key, PublicKey::default());
+            assert!(node_record.is_none());
+            assert!(node_signing_key.is_none());
+            assert!(committee_signing_key.is_none());
+            assert!(dkg_dealing_key.is_none());
+            assert!(transport_tls_cert.is_none());
+            assert!(idkg_dealing_encryption_key.is_none());
         }
 
         // Ensure the node operator's allowance is incremented correctly (starts off as
         // 2, and should have 1 added)
-        let node_operator_record =
-            get_node_operator_record(&registry, user_test_id(NO_ID).get()).await;
+        let node_operator_record = get_node_operator_record(&registry, user_test_id(NO_ID).get())
+            .await
+            .unwrap();
         assert_eq!(
             node_operator_record,
             NodeOperatorRecord {
@@ -431,7 +434,7 @@ fn remove_nodes_fails_with_non_governance_caller() {
         // Ensure there is still a value for each of the nodes
         for node_id in nodes_to_remove.clone() {
             let node_record = get_node_record(&registry, node_id).await;
-            assert_ne!(node_record, NodeRecord::default());
+            assert!(node_record.is_some());
         }
 
         // Non-governance user call fails
@@ -448,7 +451,7 @@ fn remove_nodes_fails_with_non_governance_caller() {
         // Ensure there is still a value for each of the nodes
         for node_id in nodes_to_remove.clone() {
             let node_record = get_node_record(&registry, node_id).await;
-            assert_ne!(node_record, NodeRecord::default());
+            assert!(node_record.is_some());
         }
 
         Ok(())
@@ -490,9 +493,11 @@ fn nodes_cannot_be_removed_if_any_in_subnet() {
         );
 
         // Add the assigned nodes to the list of nodes to be removed
-        let subnet_record =
-            get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                .await;
+        let subnet_record = get_value_or_panic::<SubnetRecord>(
+            &registry,
+            make_subnet_record_key(subnet_id).as_bytes(),
+        )
+        .await;
         nodes_to_remove.append(
             &mut subnet_record
                 .membership
@@ -513,8 +518,9 @@ fn nodes_cannot_be_removed_if_any_in_subnet() {
         );
 
         // Ensure the node operator's allowance is not incremented
-        let node_operator_record =
-            get_node_operator_record(&registry, user_test_id(TEST_ID).get()).await;
+        let node_operator_record = get_node_operator_record(&registry, user_test_id(TEST_ID).get())
+            .await
+            .unwrap();
         assert_eq!(
             node_operator_record,
             NodeOperatorRecord {

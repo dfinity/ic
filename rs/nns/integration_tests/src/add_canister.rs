@@ -11,7 +11,7 @@ use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_nns_test_utils::{
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
     itest_helpers::{NnsCanisters, NnsInitPayloadsBuilder},
-    registry::get_value,
+    registry::get_value_or_panic,
 };
 use ic_protobuf::registry::nns::v1::NnsCanisterRecords;
 use ic_registry_keys::make_nns_canister_records_key;
@@ -70,7 +70,7 @@ fn add_nns_canister_via_governance_proposal() {
         assert!(pending_proposals.is_empty());
 
         // Now check whether the callback mutated the registry.
-        let nns_canister_records: NnsCanisterRecords = get_value(
+        let nns_canister_records: NnsCanisterRecords = get_value_or_panic(
             &nns_canisters.registry,
             make_nns_canister_records_key().as_bytes(),
         )

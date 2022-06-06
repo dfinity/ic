@@ -5,7 +5,7 @@ use ic_nns_common::{
     types::{NeuronId, ProposalId},
 };
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
-use ic_nns_test_utils::registry::get_value;
+use ic_nns_test_utils::registry::get_value_or_panic;
 use ic_nns_test_utils::{
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
     ids::TEST_NEURON_1_ID,
@@ -57,7 +57,7 @@ fn test_submit_update_unassigned_nodes_config_proposal() {
         let pending_proposals = get_pending_proposals(&nns_canisters.governance).await;
         assert_eq!(pending_proposals, vec![]);
 
-        let unassigned_nodes_config = get_value::<UnassignedNodesConfigRecord>(
+        let unassigned_nodes_config = get_value_or_panic::<UnassignedNodesConfigRecord>(
             &nns_canisters.registry,
             make_unassigned_nodes_config_record_key().as_bytes(),
         )
@@ -124,7 +124,7 @@ fn test_submit_update_unassigned_nodes_config_proposal() {
         let pending_proposals = get_pending_proposals(&nns_canisters.governance).await;
         assert_eq!(pending_proposals, vec![]);
 
-        let unassigned_nodes_config = get_value::<UnassignedNodesConfigRecord>(
+        let unassigned_nodes_config = get_value_or_panic::<UnassignedNodesConfigRecord>(
             &nns_canisters.registry,
             make_unassigned_nodes_config_record_key().as_bytes(),
         )

@@ -11,7 +11,7 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister, try_call_via_universal_canister,
     },
-    registry::{get_value, invariant_compliant_mutation_as_atomic_req},
+    registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::{
     crypto::v1::EcdsaSigningSubnetList,
@@ -103,9 +103,11 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
                 Err(s) if s.contains("is not authorized to call this method: update_subnet"));
 
         // .. And no change should have happened to the subnet record
-        let subnet_record =
-            get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                .await;
+        let subnet_record = get_value_or_panic::<SubnetRecord>(
+            &registry,
+            make_subnet_record_key(subnet_id).as_bytes(),
+        )
+        .await;
         assert_eq!(subnet_record, initial_subnet_record);
 
         // Go through an upgrade cycle, and verify that it still works the same
@@ -116,9 +118,11 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
         assert_matches!(response,
                 Err(s) if s.contains("is not authorized to call this method: update_subnet"));
 
-        let subnet_record =
-            get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                .await;
+        let subnet_record = get_value_or_panic::<SubnetRecord>(
+            &registry,
+            make_subnet_record_key(subnet_id).as_bytes(),
+        )
+        .await;
 
         assert_eq!(subnet_record, initial_subnet_record);
 
@@ -230,9 +234,11 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             .await
         );
 
-        let subnet_record =
-            get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                .await;
+        let subnet_record = get_value_or_panic::<SubnetRecord>(
+            &registry,
+            make_subnet_record_key(subnet_id).as_bytes(),
+        )
+        .await;
 
         assert_eq!(subnet_record, initial_subnet_record);
 
@@ -346,9 +352,11 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             .await
         );
 
-        let subnet_record =
-            get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                .await;
+        let subnet_record = get_value_or_panic::<SubnetRecord>(
+            &registry,
+            make_subnet_record_key(subnet_id).as_bytes(),
+        )
+        .await;
 
         assert_eq!(
             subnet_record,
@@ -489,9 +497,11 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
         .unwrap_err()
         .starts_with(ENABLE_BEFORE_ADDING_REJECT_MSG));
 
-        let new_subnet_record =
-            get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                .await;
+        let new_subnet_record = get_value_or_panic::<SubnetRecord>(
+            &registry,
+            make_subnet_record_key(subnet_id).as_bytes(),
+        )
+        .await;
 
         // There should be no change
         assert_eq!(new_subnet_record, subnet_record);
@@ -513,9 +523,11 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
         .unwrap_err()
         .starts_with(NO_ECDSA_CONFIG_REJECT_MSG));
 
-        let new_subnet_record =
-            get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                .await;
+        let new_subnet_record = get_value_or_panic::<SubnetRecord>(
+            &registry,
+            make_subnet_record_key(subnet_id).as_bytes(),
+        )
+        .await;
 
         // There should be no change
         assert_eq!(new_subnet_record, subnet_record);
@@ -540,9 +552,11 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
         .await
         .is_ok());
 
-        let new_subnet_record =
-            get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                .await;
+        let new_subnet_record = get_value_or_panic::<SubnetRecord>(
+            &registry,
+            make_subnet_record_key(subnet_id).as_bytes(),
+        )
+        .await;
 
         // Should see the new value for the config reflected
         assert_eq!(
@@ -584,7 +598,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
         let ecdsa_config = subnet_record.ecdsa_config.unwrap();
         assert_eq!(ecdsa_config.max_queue_size, DEFAULT_ECDSA_MAX_QUEUE_SIZE);
 
-        let new_signing_subnet_list: Vec<_> = get_value::<EcdsaSigningSubnetList>(
+        let new_signing_subnet_list: Vec<_> = get_value_or_panic::<EcdsaSigningSubnetList>(
             &registry,
             make_ecdsa_signing_subnet_list_key(&make_ecdsa_key("key_id_1")).as_bytes(),
         )

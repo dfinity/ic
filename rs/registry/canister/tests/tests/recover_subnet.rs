@@ -16,7 +16,7 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet_with_mutations,
         set_up_registry_canister, set_up_universal_canister,
     },
-    registry::{get_value, prepare_registry},
+    registry::{get_value_or_panic, prepare_registry},
 };
 use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
 use ic_protobuf::registry::crypto::v1::{EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as pbEcdsaKeyId};
@@ -108,17 +108,21 @@ fn test_recover_subnet_with_replacement_nodes() {
 
             let cup_contents_key = make_catch_up_package_contents_key(subnet_id).into_bytes();
             let initial_cup_contents: CatchUpPackageContents =
-                get_value(&registry, &cup_contents_key).await;
+                get_value_or_panic(&registry, &cup_contents_key).await;
 
             // Ensure that the subnet record is there
-            let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                    .await;
+            let subnet_list_record = get_value_or_panic::<SubnetListRecord>(
+                &registry,
+                make_subnet_list_record_key().as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
-            let subnet_record =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                    .await;
+            let subnet_record = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet_id).as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet as usize);
 
             let payload = RecoverSubnetPayload {
@@ -141,9 +145,11 @@ fn test_recover_subnet_with_replacement_nodes() {
                 .await
             );
 
-            let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                    .await;
+            let subnet_list_record = get_value_or_panic::<SubnetListRecord>(
+                &registry,
+                make_subnet_list_record_key().as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
             let subnet_record = get_subnet_record(&registry, subnet_id).await;
@@ -156,7 +162,7 @@ fn test_recover_subnet_with_replacement_nodes() {
             }
 
             let updated_cup_contents: CatchUpPackageContents =
-                get_value(&registry, &cup_contents_key).await;
+                get_value_or_panic(&registry, &cup_contents_key).await;
 
             // Assert that the CatchUpPackageContents was updated as expected
             assert_eq!(payload.height, updated_cup_contents.height);
@@ -408,7 +414,7 @@ pub async fn ecdsa_signing_subnet_list(
     registry: &Canister<'_>,
     key_id: &EcdsaKeyId,
 ) -> EcdsaSigningSubnetList {
-    get_value::<EcdsaSigningSubnetList>(
+    get_value_or_panic::<EcdsaSigningSubnetList>(
         registry,
         make_ecdsa_signing_subnet_list_key(key_id).as_bytes(),
     )

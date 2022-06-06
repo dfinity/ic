@@ -12,7 +12,7 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_root_canister, set_up_universal_canister,
     },
-    registry::get_value,
+    registry::get_value_or_panic,
     registry::invariant_compliant_mutation_as_atomic_req,
 };
 use ic_protobuf::registry::nns::v1::NnsCanisterRecords;
@@ -81,7 +81,7 @@ fn test_add_nns_canister() {
         // poll here: can directly assert that the execution is successful.
 
         let nns_canister_records: NnsCanisterRecords =
-            get_value(&registry, make_nns_canister_records_key().as_bytes()).await;
+            get_value_or_panic(&registry, make_nns_canister_records_key().as_bytes()).await;
         let new_canister_record = nns_canister_records.canisters.get(&name).unwrap();
         let new_canister_id =
             CanisterId::try_from(new_canister_record.id.clone().unwrap()).unwrap();

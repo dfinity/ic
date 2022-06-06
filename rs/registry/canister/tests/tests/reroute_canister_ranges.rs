@@ -4,7 +4,7 @@ use ic_nns_test_utils::{
         local_test_on_nns_subnet, set_up_registry_canister, set_up_universal_canister,
         try_call_via_universal_canister,
     },
-    registry::{get_value, prepare_registry, routing_table_mutation},
+    registry::{get_value_or_panic, prepare_registry, routing_table_mutation},
 };
 use ic_protobuf::registry::routing_table::v1 as pb;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -21,7 +21,7 @@ use registry_canister::{
 
 pub(crate) async fn get_routing_table(canister: &canister_test::Canister<'_>) -> RoutingTable {
     use std::convert::TryFrom;
-    let pb_routing_table: pb::RoutingTable = get_value(canister, b"routing_table").await;
+    let pb_routing_table: pb::RoutingTable = get_value_or_panic(canister, b"routing_table").await;
     RoutingTable::try_from(pb_routing_table).expect("failed to decode routing table")
 }
 

@@ -13,9 +13,8 @@ use ic_nns_test_utils::registry::{
 };
 use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
-    registry::{get_value, invariant_compliant_mutation_as_atomic_req},
+    registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
-use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
     node_operator::v1::NodeOperatorRecord,
@@ -70,12 +69,12 @@ fn node_is_removed_on_receiving_the_request() {
         let dkg_dealing_key = get_dkg_dealing_key(&registry, node_id).await;
         let transport_tls_cert = get_transport_tls_certificate(&registry, node_id).await;
         let idkg_dealing_encryption_key = get_idkg_dealing_encryption_key(&registry, node_id).await;
-        assert_ne!(node_record, NodeRecord::default());
-        assert_ne!(node_signing_key, PublicKey::default());
-        assert_ne!(committee_signing_key, PublicKey::default());
-        assert_ne!(dkg_dealing_key, PublicKey::default());
-        assert_ne!(transport_tls_cert, X509PublicKeyCert::default());
-        assert_ne!(idkg_dealing_encryption_key, PublicKey::default());
+        assert!(node_record.is_some());
+        assert!(node_signing_key.is_some());
+        assert!(committee_signing_key.is_some());
+        assert!(dkg_dealing_key.is_some());
+        assert!(transport_tls_cert.is_some());
+        assert!(idkg_dealing_encryption_key.is_some());
 
         let response: Result<(), String> = registry
             .update_from_sender(
@@ -94,15 +93,15 @@ fn node_is_removed_on_receiving_the_request() {
         let dkg_dealing_key = get_dkg_dealing_key(&registry, node_id).await;
         let transport_tls_cert = get_transport_tls_certificate(&registry, node_id).await;
         let idkg_dealing_encryption_key = get_idkg_dealing_encryption_key(&registry, node_id).await;
-        assert_eq!(node_record, NodeRecord::default());
-        assert_eq!(node_signing_key, PublicKey::default());
-        assert_eq!(committee_signing_key, PublicKey::default());
-        assert_eq!(dkg_dealing_key, PublicKey::default());
-        assert_eq!(transport_tls_cert, X509PublicKeyCert::default());
-        assert_eq!(idkg_dealing_encryption_key, PublicKey::default());
+        assert!(node_record.is_none());
+        assert!(node_signing_key.is_none());
+        assert!(committee_signing_key.is_none());
+        assert!(dkg_dealing_key.is_none());
+        assert!(transport_tls_cert.is_none());
+        assert!(idkg_dealing_encryption_key.is_none());
 
         // Ensure the node operator's allowance is incremented correctly
-        let node_operator_record = get_value::<NodeOperatorRecord>(
+        let node_operator_record = get_value_or_panic::<NodeOperatorRecord>(
             &registry,
             make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL).as_bytes(),
         )
@@ -223,7 +222,7 @@ fn node_cannot_be_removed_if_in_subnet() {
         assert!(response.is_err());
 
         // Ensure the node operator's allowance is not incremented
-        let node_operator_record = get_value::<NodeOperatorRecord>(
+        let node_operator_record = get_value_or_panic::<NodeOperatorRecord>(
             &registry,
             make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL).as_bytes(),
         )

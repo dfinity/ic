@@ -39,7 +39,7 @@ use ic_registry_transport::{
         registry_mutation::Type, RegistryAtomicMutateRequest, RegistryAtomicMutateResponse,
         RegistryMutation,
     },
-    serialize_get_value_request,
+    serialize_get_value_request, Error,
 };
 use ic_test_utilities::{
     crypto::temp_dir::temp_dir,
@@ -64,13 +64,12 @@ pub fn invariant_compliant_mutation_as_atomic_req() -> RegistryAtomicMutateReque
         preconditions: vec![],
     }
 }
-
-/// Gets the latest value for the given key and decode it, assuming it
-/// represents a serialized T.
-///
-/// Returns the default T if there is no value.
-pub async fn get_value<T: Message + Default>(registry: &Canister<'_>, key: &[u8]) -> T {
-    deserialize_get_value_response(
+/// Returns a Result with either an Option(T) or a ic_registry_transport::Error
+pub async fn get_value_result<T: Message + Default>(
+    registry: &Canister<'_>,
+    key: &[u8],
+) -> Result<Option<T>, Error> {
+    match deserialize_get_value_response(
         registry
             .query_(
                 "get_value",
@@ -79,16 +78,41 @@ pub async fn get_value<T: Message + Default>(registry: &Canister<'_>, key: &[u8]
             )
             .await
             .unwrap(),
-    )
-    .map(|(encoded_value, _version)| T::decode(encoded_value.as_slice()).unwrap())
-    .unwrap_or_else(|_| T::default())
+    ) {
+        Ok((encoded_value, _version)) => Ok(Some(T::decode(encoded_value.as_slice()).unwrap())),
+        Err(error) => match error {
+            Error::KeyNotPresent(_) => Ok(None),
+            _ => Err(error),
+        },
+    }
 }
 
-pub async fn get_node_record(registry: &Canister<'_>, node_id: NodeId) -> NodeRecord {
+/// Gets the latest value for the given key and decode it, assuming it
+/// represents a serialized T.
+///
+/// Returns None if there is no value.
+///
+/// Panics on other registry_transport errors.
+pub async fn get_value<T: Message + Default>(registry: &Canister<'_>, key: &[u8]) -> Option<T> {
+    get_value_result::<T>(registry, key).await.unwrap()
+}
+
+/// Gets the latest value for the given key and decode it, assuming it
+/// represents a serialized T.  
+///
+/// Panics if there is no T
+pub async fn get_value_or_panic<T: Message + Default>(registry: &Canister<'_>, key: &[u8]) -> T {
+    get_value::<T>(registry, key).await.unwrap()
+}
+
+pub async fn get_node_record(registry: &Canister<'_>, node_id: NodeId) -> Option<NodeRecord> {
     get_value::<NodeRecord>(registry, make_node_record_key(node_id).as_bytes()).await
 }
 
-pub async fn get_committee_signing_key(registry: &Canister<'_>, node_id: NodeId) -> PublicKey {
+pub async fn get_committee_signing_key(
+    registry: &Canister<'_>,
+    node_id: NodeId,
+) -> Option<PublicKey> {
     get_value::<PublicKey>(
         registry,
         make_crypto_node_key(node_id, KeyPurpose::CommitteeSigning).as_bytes(),
@@ -96,7 +120,7 @@ pub async fn get_committee_signing_key(registry: &Canister<'_>, node_id: NodeId)
     .await
 }
 
-pub async fn get_node_signing_key(registry: &Canister<'_>, node_id: NodeId) -> PublicKey {
+pub async fn get_node_signing_key(registry: &Canister<'_>, node_id: NodeId) -> Option<PublicKey> {
     get_value::<PublicKey>(
         registry,
         make_crypto_node_key(node_id, KeyPurpose::NodeSigning).as_bytes(),
@@ -104,7 +128,7 @@ pub async fn get_node_signing_key(registry: &Canister<'_>, node_id: NodeId) -> P
     .await
 }
 
-pub async fn get_dkg_dealing_key(registry: &Canister<'_>, node_id: NodeId) -> PublicKey {
+pub async fn get_dkg_dealing_key(registry: &Canister<'_>, node_id: NodeId) -> Option<PublicKey> {
     get_value::<PublicKey>(
         registry,
         make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
@@ -115,14 +139,14 @@ pub async fn get_dkg_dealing_key(registry: &Canister<'_>, node_id: NodeId) -> Pu
 pub async fn get_transport_tls_certificate(
     registry: &Canister<'_>,
     node_id: NodeId,
-) -> X509PublicKeyCert {
+) -> Option<X509PublicKeyCert> {
     get_value::<X509PublicKeyCert>(registry, make_crypto_tls_cert_key(node_id).as_bytes()).await
 }
 
 pub async fn get_idkg_dealing_encryption_key(
     registry: &Canister<'_>,
     node_id: NodeId,
-) -> PublicKey {
+) -> Option<PublicKey> {
     get_value::<PublicKey>(
         registry,
         make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
@@ -133,7 +157,7 @@ pub async fn get_idkg_dealing_encryption_key(
 pub async fn get_node_operator_record(
     registry: &Canister<'_>,
     principal_id: PrincipalId,
-) -> NodeOperatorRecord {
+) -> Option<NodeOperatorRecord> {
     get_value::<NodeOperatorRecord>(
         registry,
         make_node_operator_record_key(principal_id).as_bytes(),

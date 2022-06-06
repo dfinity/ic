@@ -3,13 +3,13 @@ use dfn_candid::candid;
 use dfn_core::api::PrincipalId;
 
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
-use ic_nns_test_utils::registry::invariant_compliant_mutation_as_atomic_req;
+use ic_nns_test_utils::registry::{get_value, invariant_compliant_mutation_as_atomic_req};
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::get_value,
+    registry::get_value_or_panic,
 };
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
@@ -47,10 +47,9 @@ fn test_the_anonymous_user_cannot_add_a_node_operator() {
 
         let key = make_node_operator_record_key(PrincipalId::new_anonymous()).into_bytes();
         // .. And there should therefore be no node operator record
-        assert_eq!(
-            get_value::<NodeOperatorRecord>(&registry, &key).await,
-            NodeOperatorRecord::default()
-        );
+        assert!(get_value::<NodeOperatorRecord>(&registry, &key)
+            .await
+            .is_none());
 
         Ok(())
     });
@@ -95,10 +94,9 @@ fn test_a_canister_other_than_the_governance_canister_cannot_add_a_node_operator
         let key = make_node_operator_record_key(PrincipalId::new_anonymous()).into_bytes();
 
         // But there should be no node operator record
-        assert_eq!(
-            get_value::<NodeOperatorRecord>(&registry, &key).await,
-            NodeOperatorRecord::default()
-        );
+        assert!(get_value::<NodeOperatorRecord>(&registry, &key)
+            .await
+            .is_none());
 
         Ok(())
     });
@@ -146,7 +144,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         // Now let's check directly in the registry that the mutation actually happened
         // The node operator record should be associated with that ID.
         assert_eq!(
-            get_value::<NodeOperatorRecord>(
+            get_value_or_panic::<NodeOperatorRecord>(
                 &registry,
                 make_node_operator_record_key(PrincipalId::new_anonymous()).as_bytes()
             )
@@ -182,7 +180,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         );
 
         assert_eq!(
-            get_value::<NodeOperatorRecord>(
+            get_value_or_panic::<NodeOperatorRecord>(
                 &registry,
                 make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL).as_bytes()
             )

@@ -6,7 +6,7 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value, invariant_compliant_mutation_as_atomic_req},
+    registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::{
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -55,7 +55,7 @@ fn test_the_anonymous_user_cannot_bless_a_version() {
                 Err(s) if s.contains("is not authorized to call this method: bless_replica_version"));
         // .. And there should therefore be no blessed version
         assert_eq!(
-            get_value::<BlessedReplicaVersions>(
+            get_value_or_panic::<BlessedReplicaVersions>(
                 &registry,
                 make_blessed_replica_version_key().as_bytes()
             )
@@ -73,7 +73,7 @@ fn test_the_anonymous_user_cannot_bless_a_version() {
         assert_matches!(response,
                 Err(s) if s.contains("is not authorized to call this method: bless_replica_version"));
         assert_eq!(
-            get_value::<BlessedReplicaVersions>(
+            get_value_or_panic::<BlessedReplicaVersions>(
                 &registry,
                 make_blessed_replica_version_key().as_bytes()
             )
@@ -128,7 +128,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_bless_a_version() {
         );
         // But there should be no blessed version
         assert_eq!(
-            get_value::<BlessedReplicaVersions>(
+            get_value_or_panic::<BlessedReplicaVersions>(
                 &registry,
                 make_blessed_replica_version_key().as_bytes()
             )
@@ -181,7 +181,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             .await
         );
         assert_eq!(
-            get_value::<BlessedReplicaVersions>(
+            get_value_or_panic::<BlessedReplicaVersions>(
                 &registry,
                 make_blessed_replica_version_key().as_bytes()
             )
@@ -212,7 +212,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         );
         // The URL in the registry should still the old one.
         assert_eq!(
-            get_value::<ReplicaVersionRecord>(
+            get_value_or_panic::<ReplicaVersionRecord>(
                 &registry,
                 make_replica_version_key("version_42").as_bytes()
             )
@@ -241,7 +241,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             .await
         );
         assert_eq!(
-            get_value::<SubnetRecord>(
+            get_value_or_panic::<SubnetRecord>(
                 &registry,
                 make_subnet_record_key(subnet_test_id(999)).as_bytes()
             )
@@ -265,7 +265,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             .await
         );
         assert_eq!(
-            get_value::<SubnetRecord>(
+            get_value_or_panic::<SubnetRecord>(
                 &registry,
                 make_subnet_record_key(subnet_test_id(999)).as_bytes()
             )

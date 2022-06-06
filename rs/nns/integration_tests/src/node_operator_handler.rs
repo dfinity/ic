@@ -20,7 +20,7 @@ use ic_nns_test_utils::{
     governance::{submit_external_update_proposal, wait_for_final_state},
     ids::TEST_NEURON_1_ID,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder},
-    registry::get_value,
+    registry::get_value_or_panic,
 };
 use ic_protobuf::registry::node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload};
 use ic_registry_keys::make_node_operator_record_key;
@@ -136,7 +136,7 @@ fn test_node_operator_records_can_be_added_and_removed() {
         );
 
         // Node Operator 1 is not removed because it has associated node records
-        let node_operator_record = get_value::<NodeOperatorRecord>(
+        let node_operator_record = get_value_or_panic::<NodeOperatorRecord>(
             &nns_canisters.registry,
             node_operator_record_key_1.as_slice(),
         )
@@ -200,7 +200,7 @@ async fn add_node_operator(nns_canisters: &NnsCanisters<'_>, node_operator_id: &
 
     // Assert that the executed proposal had the expected result
     let fetched_node_operator_record: NodeOperatorRecord =
-        get_value(&nns_canisters.registry, &node_operator_record_key).await;
+        get_value_or_panic(&nns_canisters.registry, &node_operator_record_key).await;
 
     let expected_node_operator_record: NodeOperatorRecord = proposal_payload.into();
 
