@@ -285,6 +285,44 @@ impl EcdsaKeyTranscript {
     }
 }
 
+impl Display for EcdsaKeyTranscript {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let current = if self.current.is_some() {
+            "Current = created".to_string()
+        } else {
+            "Current = None".to_string()
+        };
+        match &self.next_in_creation {
+            KeyTranscriptCreation::Begin => write!(f, "{}, Next = Begin", current),
+            KeyTranscriptCreation::RandomTranscriptParams(x) => write!(
+                f,
+                "{}, Next = RandomTranscriptParams({:?}",
+                current,
+                x.as_ref().transcript_id
+            ),
+            KeyTranscriptCreation::ReshareOfMaskedParams(x) => write!(
+                f,
+                "{}, Next = ReshareOfMaskedParams({:?})",
+                current,
+                x.as_ref().transcript_id
+            ),
+            KeyTranscriptCreation::ReshareOfUnmaskedParams(x) => write!(
+                f,
+                "{}, Next = ReshareOfUnmaskedParams({:?})",
+                current,
+                x.as_ref().transcript_id
+            ),
+            KeyTranscriptCreation::XnetReshareOfUnmaskedParams((_, x)) => write!(
+                f,
+                "{}, Next = XnetReshareOfUnmaskedParams({:?})",
+                current,
+                x.as_ref().transcript_id
+            ),
+            KeyTranscriptCreation::Created(_) => write!(f, "{}, Next = Created", current),
+        }
+    }
+}
+
 /// The creation of an ecdsa key transcript goes through one of the three paths below:
 /// 1. RandomTranscript -> ReshareOfMasked -> Created
 /// 2. ReshareOfUnmasked -> Created
