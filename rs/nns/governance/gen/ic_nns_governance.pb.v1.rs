@@ -1342,6 +1342,8 @@ pub struct Governance {
     pub short_voting_period_seconds: u64,
     #[prost(message, optional, tag="15")]
     pub metrics: ::core::option::Option<governance::GovernanceCachedMetrics>,
+    #[prost(message, optional, tag="16")]
+    pub most_recent_monthly_node_provider_rewards: ::core::option::Option<MostRecentMonthlyNodeProviderRewards>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -1547,6 +1549,16 @@ pub mod claim_or_refresh_neuron_from_account_response {
         #[prost(message, tag="2")]
         NeuronId(::ic_nns_common::pb::v1::NeuronId),
     }
+}
+/// The most recent monthly Node Provider rewards
+#[derive(candid::CandidType, candid::Deserialize)]
+#[cfg_attr(feature = "test", derive(comparable::Comparable))]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MostRecentMonthlyNodeProviderRewards {
+    #[prost(uint64, tag="1")]
+    pub timestamp: u64,
+    #[prost(message, repeated, tag="2")]
+    pub rewards: ::prost::alloc::vec::Vec<RewardNodeProvider>,
 }
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow

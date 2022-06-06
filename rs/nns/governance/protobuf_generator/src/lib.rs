@@ -671,6 +671,14 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(
+        "ic_nns_governance.pb.v1.MostRecentMonthlyNodeProviderRewards",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join("\n"),
+    );
+    config.type_attribute(
         "ic_nns_governance.pb.v1.KnownNeuronData",
         [
             "#[derive(candid::CandidType, candid::Deserialize, Eq)]",
