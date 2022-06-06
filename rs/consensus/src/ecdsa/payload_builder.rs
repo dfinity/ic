@@ -285,6 +285,10 @@ pub(crate) fn create_summary_payload(
 
     let ecdsa_payload = parent_block.payload.as_ref().as_data().ecdsa.as_ref();
     if ecdsa_payload.is_none() {
+        info!(
+            log,
+            "create_summary_payload(): boot strapping ECDSA summary at height {:?}", height,
+        );
         // Parent block doesn't have ECDSA payload and feature is enabled.
         // Create the bootstrap summary block.
         // TODO: should use parent_block.context.registry_version here?
@@ -315,7 +319,12 @@ pub(crate) fn create_summary_payload(
         ecdsa::KeyTranscriptCreation::Created(transcript) => *transcript,
         _ => {
             // TODO: A better approach is to try again
-            panic!("ECDSA key transcript has not been created in the previous interval")
+            panic!(
+                "ECDSA key transcript has not been created in the previous interval: \
+                 prev_summary_height = {:?}, height = {:?}",
+                prev_summary_block.height(),
+                height,
+            );
         }
     };
 

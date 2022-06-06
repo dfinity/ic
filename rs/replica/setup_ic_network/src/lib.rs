@@ -46,6 +46,7 @@ use ic_transport::transport::create_transport;
 use ic_types::{
     artifact::{Advert, ArtifactKind, ArtifactTag, FileTreeSyncAttribute},
     consensus::catchup::CUPWithOriginalProtobuf,
+    consensus::HasHeight,
     crypto::CryptoHash,
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     malicious_flags::MaliciousFlags,
@@ -400,40 +401,45 @@ fn setup_artifact_manager(
     }
 
     {
-        // Create the ECDSA client if enabled by the config
-        if registry_client
+        let finalized = artifact_pools.consensus_pool_cache.finalized_block();
+        let ecdsa_enabled = registry_client
             .get_features(subnet_id, registry_client.get_latest_version())
             .ok()
             .flatten()
-            .map(|features| features.ecdsa_signatures)
-            == Some(true)
-        {
-            info!(replica_logger, "ECDSA feature enabled");
-            let (ecdsa_client, actor) = processors::EcdsaProcessor::build(
-                move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
-                || {
-                    (
-                        ecdsa::EcdsaImpl::new(
-                            consensus_replica_config.node_id,
-                            subnet_id,
-                            Arc::clone(&consensus_block_cache),
-                            Arc::clone(&consensus_crypto),
-                            metrics_registry.clone(),
-                            replica_logger.clone(),
-                            malicious_flags,
-                        ),
-                        ecdsa::EcdsaGossipImpl::new(Arc::clone(&consensus_block_cache)),
-                    )
-                },
-                Arc::clone(&time_source) as Arc<_>,
-                Arc::clone(&artifact_pools.ecdsa_pool),
-                metrics_registry.clone(),
-                replica_logger.clone(),
-            );
-            artifact_manager_maker.add_client(ecdsa_client, actor);
-        } else {
-            info!(replica_logger, "ECDSA feature disabled");
-        }
+            .map(|features| features.ecdsa_signatures);
+        info!(
+            replica_logger,
+            "ECDSA: finalized_height = {:?}, ecdsa_enabled = {:?}, \
+                 DKG interval start = {:?}, is_summary = {}, has_ecdsa = {}",
+            finalized.height(),
+            ecdsa_enabled,
+            finalized.payload.as_ref().dkg_interval_start_height(),
+            finalized.payload.as_ref().is_summary(),
+            finalized.payload.as_ref().as_ecdsa().is_some(),
+        );
+        let (ecdsa_client, actor) = processors::EcdsaProcessor::build(
+            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
+            || {
+                (
+                    ecdsa::EcdsaImpl::new(
+                        consensus_replica_config.node_id,
+                        subnet_id,
+                        Arc::clone(&consensus_block_cache),
+                        Arc::clone(&consensus_crypto),
+                        Arc::clone(&registry_client),
+                        metrics_registry.clone(),
+                        replica_logger.clone(),
+                        malicious_flags,
+                    ),
+                    ecdsa::EcdsaGossipImpl::new(Arc::clone(&consensus_block_cache)),
+                )
+            },
+            Arc::clone(&time_source) as Arc<_>,
+            Arc::clone(&artifact_pools.ecdsa_pool),
+            metrics_registry.clone(),
+            replica_logger.clone(),
+        );
+        artifact_manager_maker.add_client(ecdsa_client, actor);
     }
 
     Ok(artifact_manager_maker.finish())
