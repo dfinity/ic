@@ -25,6 +25,10 @@ data_centers:
     vars:
       ipv6_prefix: "2001:4d78:40d"
       ipv6_subnet: "/64"
+  se1:
+    vars:
+      ipv6_prefix: "2600:c00:2:100"
+      ipv6_subnet: "/64"
   sf1:
     vars:
       ipv6_prefix: "2607:fb58:9005:42"
