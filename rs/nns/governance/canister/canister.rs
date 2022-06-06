@@ -41,7 +41,8 @@ use ic_nervous_system_common::stable_mem_utils::{
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::pb::v1::{
-    ListNodeProvidersResponse, NodeProvider, RewardEvent, UpdateNodeProvider,
+    ListNodeProvidersResponse, MostRecentMonthlyNodeProviderRewards, NodeProvider, RewardEvent,
+    UpdateNodeProvider,
 };
 use ic_nns_governance::{
     governance::{Environment, Governance},
@@ -747,6 +748,25 @@ fn list_node_providers() {
 fn list_node_providers_() -> ListNodeProvidersResponse {
     let node_providers = governance().get_node_providers().to_vec();
     ListNodeProvidersResponse { node_providers }
+}
+
+#[export_name = "canister_query get_most_recent_monthly_node_provider_rewards"]
+fn get_most_recent_monthly_node_provider_rewards() {
+    over(
+        candid,
+        |()| -> Option<MostRecentMonthlyNodeProviderRewards> {
+            get_most_recent_monthly_node_provider_rewards_()
+        },
+    )
+}
+
+#[candid_method(query, rename = "get_most_recent_monthly_node_provider_rewards")]
+fn get_most_recent_monthly_node_provider_rewards_() -> Option<MostRecentMonthlyNodeProviderRewards>
+{
+    governance()
+        .proto
+        .most_recent_monthly_node_provider_rewards
+        .clone()
 }
 
 /// Encodes

@@ -23,9 +23,10 @@ use crate::pb::v1::{
     Ballot, BallotInfo, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
     KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
     ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-    NetworkEconomics, Neuron, NeuronInfo, NeuronState, NnsFunction, NodeProvider, Proposal,
-    ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RewardEvent,
-    RewardNodeProvider, RewardNodeProviders, Tally, Topic, UpdateNodeProvider, Vote,
+    MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo, NeuronState,
+    NnsFunction, NodeProvider, Proposal, ProposalData, ProposalInfo, ProposalRewardStatus,
+    ProposalStatus, RewardEvent, RewardNodeProvider, RewardNodeProviders, Tally, Topic,
+    UpdateNodeProvider, Vote,
 };
 use candid::Decode;
 use dfn_protobuf::ToProto;
@@ -155,6 +156,10 @@ pub const KNOWN_NEURON_NAME_MAX_LEN: usize = 200;
 
 /// Max character length for the field "description" in KnownNeuronData.
 pub const KNOWN_NEURON_DESCRIPTION_MAX_LEN: usize = 3000;
+
+// The number of seconds between automated Node Provider reward events
+// Currently 1/12 of a year: 2629800 = 86400 * 365.25 / 12
+const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 // The default values for network economics (until we initialize it).
 // Can't implement Default since it conflicts with Prost's.
@@ -4313,25 +4318,12 @@ impl Governance {
         self.set_proposal_execution_status(pid, result);
     }
 
-    /// Rewards multiple node providers.
-    async fn reward_node_providers(&mut self, pid: u64, reward_nps: RewardNodeProviders) {
-        let mut rewards = reward_nps.rewards;
+    /// Mint and transfer the specified Node Provider rewards
+    async fn reward_node_providers(
+        &mut self,
+        rewards: Vec<RewardNodeProvider>,
+    ) -> Result<(), GovernanceError> {
         let mut result = Ok(());
-
-        if reward_nps.use_registry_derived_rewards == Some(true) {
-            match self.get_monthly_node_provider_rewards().await {
-                Ok(mut registry_derived_rewards) => {
-                    rewards.append(&mut registry_derived_rewards.rewards)
-                }
-                Err(e) => {
-                    println!(
-                        "Failed to get monthly node provider rewards from the Registry: {:?}",
-                        e
-                    );
-                    result = Err(e);
-                }
-            }
-        }
 
         for reward in rewards {
             let reward_result = self.reward_node_provider_helper(&reward).await;
@@ -4344,7 +4336,56 @@ impl Governance {
             }
             result = result.or(reward_result);
         }
+
+        result
+    }
+
+    /// Execute a RewardNodeProviders proposal
+    async fn reward_node_providers_from_proposal(
+        &mut self,
+        pid: u64,
+        reward_nps: RewardNodeProviders,
+    ) {
+        let result = if reward_nps.use_registry_derived_rewards == Some(true) {
+            self.mint_monthly_node_provider_rewards().await
+        } else {
+            self.reward_node_providers(reward_nps.rewards).await
+        };
+
         self.set_proposal_execution_status(pid, result);
+    }
+
+    /// Return `true` if `NODE_PROVIDER_REWARD_PERIOD_SECONDS` has passed since the last monthly
+    /// node provider reward event
+    fn is_time_to_mint_monthly_node_provider_rewards(&self) -> bool {
+        match &self.proto.most_recent_monthly_node_provider_rewards {
+            None => false,
+            Some(recent_rewards) => {
+                self.env.now().saturating_sub(recent_rewards.timestamp)
+                    >= NODE_PROVIDER_REWARD_PERIOD_SECONDS
+            }
+        }
+    }
+
+    /// Mint and transfer monthly node provider rewards
+    async fn mint_monthly_node_provider_rewards(&mut self) -> Result<(), GovernanceError> {
+        let rewards = self.get_monthly_node_provider_rewards().await?.rewards;
+        let _ = self.reward_node_providers(rewards.clone()).await;
+        self.update_most_recent_monthly_node_provider_rewards(rewards);
+
+        Ok(())
+    }
+
+    fn update_most_recent_monthly_node_provider_rewards(
+        &mut self,
+        rewards: Vec<RewardNodeProvider>,
+    ) {
+        let most_recent_rewards = MostRecentMonthlyNodeProviderRewards {
+            timestamp: self.env.now(),
+            rewards,
+        };
+
+        self.proto.most_recent_monthly_node_provider_rewards = Some(most_recent_rewards);
     }
 
     async fn perform_action(&mut self, pid: u64, action: proposal::Action) {
@@ -4548,7 +4589,8 @@ impl Governance {
                 self.set_proposal_execution_status(pid, Ok(()));
             }
             proposal::Action::RewardNodeProviders(proposal) => {
-                self.reward_node_providers(pid, proposal).await;
+                self.reward_node_providers_from_proposal(pid, proposal)
+                    .await;
             }
             proposal::Action::RegisterKnownNeuron(known_neuron) => {
                 let result = self.register_known_neuron(known_neuron);
@@ -5974,6 +6016,16 @@ impl Governance {
                     "{}Error when getting total ICP supply: {}",
                     LOG_PREFIX,
                     GovernanceError::from(e),
+                ),
+            }
+        }
+
+        if self.is_time_to_mint_monthly_node_provider_rewards() {
+            match self.mint_monthly_node_provider_rewards().await {
+                Ok(()) => (),
+                Err(e) => println!(
+                    "{}Error when minting monthly node provider rewards in run_periodic_tasks: {}",
+                    LOG_PREFIX, e,
                 ),
             }
         }

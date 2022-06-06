@@ -89,6 +89,7 @@ type Follow = record { topic : int32; followees : vec NeuronId };
 type Followees = record { followees : vec NeuronId };
 type Governance = record {
   default_followees : vec record { int32; Followees };
+  most_recent_monthly_node_provider_rewards : opt MostRecentMonthlyNodeProviderRewards;
   wait_for_quiet_threshold_seconds : nat64;
   metrics : opt GovernanceCachedMetrics;
   node_providers : vec NodeProvider;
@@ -158,6 +159,10 @@ type MergeMaturity = record { percentage_to_merge : nat32 };
 type MergeMaturityResponse = record {
   merged_maturity_e8s : nat64;
   new_stake_e8s : nat64;
+};
+type MostRecentMonthlyNodeProviderRewards = record {
+  timestamp : nat64;
+  rewards : vec RewardNodeProvider;
 };
 type Motion = record { motion_text : text };
 type NetworkEconomics = record {
@@ -330,6 +335,9 @@ service : (Governance) -> {
       Result_2,
     ) query;
   get_monthly_node_provider_rewards : () -> (Result_3);
+  get_most_recent_monthly_node_provider_rewards : () -> (
+      opt MostRecentMonthlyNodeProviderRewards,
+    ) query;
   get_network_economics_parameters : () -> (NetworkEconomics) query;
   get_neuron_ids : () -> (vec nat64) query;
   get_neuron_info : (nat64) -> (Result_4) query;

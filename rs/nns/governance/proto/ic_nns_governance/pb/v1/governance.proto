@@ -1386,6 +1386,8 @@ message Governance {
 
   GovernanceCachedMetrics metrics = 15;
 
+  MostRecentMonthlyNodeProviderRewards most_recent_monthly_node_provider_rewards = 16;
+
   reserved 6;
   reserved "authz";
 }
@@ -1489,3 +1491,10 @@ message ClaimOrRefreshNeuronFromAccountResponse {
     ic_nns_common.pb.v1.NeuronId neuron_id = 2;
   }
 }
+
+// The most recent monthly Node Provider rewards
+message MostRecentMonthlyNodeProviderRewards {
+  uint64 timestamp = 1;
+  repeated RewardNodeProvider rewards = 2;
+}
+
