@@ -11,7 +11,7 @@ ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 num-traits = { version= "0.2.9", default-features = false, features = ["libm"] }
 serde = { version = "1.0.99", features = [ "derive" ] }
 simple_asn1 = "0.5.4"
-num-bigint = "0.4.0"
+num-bigint = "0.4.3"
 
 [dev-dependencies]
 hex = "0.4.2"
