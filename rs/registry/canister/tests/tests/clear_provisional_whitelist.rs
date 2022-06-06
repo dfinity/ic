@@ -9,7 +9,7 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::get_value,
+    registry::get_value_or_panic,
 };
 use ic_protobuf::registry::provisional_whitelist::v1::ProvisionalWhitelist;
 use ic_registry_keys::make_provisional_whitelist_record_key;
@@ -57,7 +57,7 @@ fn anonymous_user_cannot_clear_the_provisional_whitelist() {
                 Err(s) if s.contains("is not authorized to call this method: clear_provisional_whitelist"));
 
         // Confirm the provisional whitelist is unchanged.
-        let provisional_whitelist = get_value::<ProvisionalWhitelist>(
+        let provisional_whitelist = get_value_or_panic::<ProvisionalWhitelist>(
             &registry,
             make_provisional_whitelist_record_key().as_bytes(),
         )
@@ -117,7 +117,7 @@ fn a_canister_other_than_the_governance_canister_cannot_change_the_provisional_w
         );
 
         // Confirm that the provisional whitelist is unchanged.
-        let provisional_whitelist = get_value::<ProvisionalWhitelist>(
+        let provisional_whitelist = get_value_or_panic::<ProvisionalWhitelist>(
             &registry,
             make_provisional_whitelist_record_key().as_bytes(),
         )
@@ -175,7 +175,7 @@ fn clear_provisional_whitelist_succeeds() {
         );
 
         // Check that the provisional whitelist is empty after the update.
-        let provisional_whitelist = get_value::<ProvisionalWhitelist>(
+        let provisional_whitelist = get_value_or_panic::<ProvisionalWhitelist>(
             &registry,
             make_provisional_whitelist_record_key().as_bytes(),
         )

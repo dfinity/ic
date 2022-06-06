@@ -13,7 +13,7 @@ use ic_nns_test_utils::{
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
     ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder},
-    registry::get_value,
+    registry::get_value_or_panic,
 };
 use ic_protobuf::registry::provisional_whitelist::v1::ProvisionalWhitelist;
 use ic_registry_keys::make_provisional_whitelist_record_key;
@@ -47,7 +47,7 @@ fn test_submit_and_accept_clear_provisional_whitelist_proposal() {
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
 
         let provisional_whitelist_after_setup: ProvisionalWhitelist =
-            get_value(&nns_canisters.registry, key.as_bytes()).await;
+            get_value_or_panic(&nns_canisters.registry, key.as_bytes()).await;
 
         assert_eq!(
             provisional_whitelist_after_setup,
@@ -96,7 +96,7 @@ fn test_submit_and_accept_clear_provisional_whitelist_proposal() {
         assert_eq!(pending_proposals, vec![]);
 
         let provisional_whitelist_after_update: ProvisionalWhitelist =
-            get_value(&nns_canisters.registry, key.as_bytes()).await;
+            get_value_or_panic(&nns_canisters.registry, key.as_bytes()).await;
 
         assert_eq!(
             provisional_whitelist_after_update,

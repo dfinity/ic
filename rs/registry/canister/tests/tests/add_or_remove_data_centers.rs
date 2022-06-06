@@ -7,7 +7,7 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value, invariant_compliant_mutation_as_atomic_req},
+    registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::dc::v1::{
     AddOrRemoveDataCentersProposalPayload, DataCenterRecord, Gps, MAX_DC_ID_LENGTH,
@@ -216,9 +216,11 @@ fn test_the_governance_canister_can_add_or_remove_data_centers() {
         );
 
         // A data center should have been added
-        let dc =
-            get_value::<DataCenterRecord>(&registry, make_data_center_record_key("AN1").as_bytes())
-                .await;
+        let dc = get_value_or_panic::<DataCenterRecord>(
+            &registry,
+            make_data_center_record_key("AN1").as_bytes(),
+        )
+        .await;
 
         assert_eq!(&dc.id, "AN1");
         assert_eq!(&dc.region, "BEL");
@@ -268,9 +270,11 @@ fn test_the_governance_canister_can_add_or_remove_data_centers() {
             .await
         );
 
-        let dc =
-            get_value::<DataCenterRecord>(&registry, make_data_center_record_key("AN1").as_bytes())
-                .await;
+        let dc = get_value_or_panic::<DataCenterRecord>(
+            &registry,
+            make_data_center_record_key("AN1").as_bytes(),
+        )
+        .await;
 
         // original values are still there
         assert_eq!(&dc.id, "AN1");
@@ -330,9 +334,11 @@ fn test_the_governance_canister_can_add_or_remove_data_centers() {
             .await
         );
 
-        let dc =
-            get_value::<DataCenterRecord>(&registry, make_data_center_record_key("AN1").as_bytes())
-                .await;
+        let dc = get_value_or_panic::<DataCenterRecord>(
+            &registry,
+            make_data_center_record_key("AN1").as_bytes(),
+        )
+        .await;
         // new values are there
         assert_eq!(&dc.id, "AN1");
         assert_eq!(&dc.region, "Not BEL");

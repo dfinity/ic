@@ -1,12 +1,13 @@
 use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid_one;
+use ic_nns_test_utils::registry::get_value;
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value, invariant_compliant_mutation_as_atomic_req},
+    registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::node_rewards::v2::{
     NodeRewardRate, NodeRewardRates, NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
@@ -14,15 +15,10 @@ use ic_protobuf::registry::node_rewards::v2::{
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
 use maplit::btreemap;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
-use std::collections::BTreeMap;
 
 #[test]
 fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
     local_test_on_nns_subnet(|runtime| async move {
-        let initial_node_table = NodeRewardsTable {
-            table: BTreeMap::new(),
-        };
-
         let mut registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
@@ -60,7 +56,7 @@ fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
         // .. And no change should have happened to the node rewards table
         let table =
             get_value::<NodeRewardsTable>(&registry, NODE_REWARDS_TABLE_KEY.as_bytes()).await;
-        assert_eq!(table, initial_node_table);
+        assert!(table.is_none());
 
         // Go through an upgrade cycle, and verify that it still works the same
         registry.upgrade_to_self_binary(vec![]).await.unwrap();
@@ -75,7 +71,7 @@ fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
 
         let table =
             get_value::<NodeRewardsTable>(&registry, NODE_REWARDS_TABLE_KEY.as_bytes()).await;
-        assert_eq!(table, initial_node_table);
+        assert!(table.is_none());
 
         Ok(())
     });
@@ -84,10 +80,6 @@ fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
 #[test]
 fn test_a_canister_other_than_the_governance_canister_cannot_update_the_node_rewards_table() {
     local_test_on_nns_subnet(|runtime| async move {
-        let initial_node_table = NodeRewardsTable {
-            table: BTreeMap::new(),
-        };
-
         // An attacker got a canister that is trying to pass for the Governance
         // canister...
         let attacker_canister = set_up_universal_canister(&runtime).await;
@@ -134,7 +126,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_the_node_rew
 
         let table =
             get_value::<NodeRewardsTable>(&registry, NODE_REWARDS_TABLE_KEY.as_bytes()).await;
-        assert_eq!(table, initial_node_table);
+        assert!(table.is_none());
 
         Ok(())
     });
@@ -186,7 +178,8 @@ fn test_the_governance_canister_can_update_the_node_rewards_table() {
         );
 
         let table =
-            get_value::<NodeRewardsTable>(&registry, NODE_REWARDS_TABLE_KEY.as_bytes()).await;
+            get_value_or_panic::<NodeRewardsTable>(&registry, NODE_REWARDS_TABLE_KEY.as_bytes())
+                .await;
 
         assert_eq!(table.table.len(), 1);
 

@@ -7,7 +7,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
-    registry::{get_value, invariant_compliant_mutation_as_atomic_req},
+    registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
@@ -83,7 +83,7 @@ fn node_provider_is_updated_on_receiving_the_request() {
         assert!(response.is_ok());
 
         // Ensure the node operator's NP is set correctly
-        let node_operator_record = get_value::<NodeOperatorRecord>(
+        let node_operator_record = get_value_or_panic::<NodeOperatorRecord>(
             &registry,
             make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL).as_bytes(),
         )

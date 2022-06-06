@@ -13,11 +13,12 @@ use ic_nns_governance::pb::v1::{
     AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, NnsFunction, NodeProvider,
     Proposal, ProposalStatus,
 };
+use ic_nns_test_utils::registry::get_value;
 use ic_nns_test_utils::{
     governance::{submit_external_update_proposal, wait_for_final_state},
     ids::TEST_NEURON_1_ID,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder},
-    registry::{get_value, prepare_add_node_payload},
+    registry::{get_value_or_panic, prepare_add_node_payload},
 };
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_registry_keys::make_node_record_key;
@@ -119,7 +120,7 @@ fn test_add_and_remove_nodes_from_registry() {
             .await
             .unwrap();
 
-        let node_record = get_value::<NodeRecord>(
+        let node_record = get_value_or_panic::<NodeRecord>(
             &nns_canisters.registry,
             make_node_record_key(node_id).as_bytes(),
         )
@@ -164,11 +165,7 @@ fn test_add_and_remove_nodes_from_registry() {
         )
         .await;
         // Check if record is removed
-        assert!(
-            node_record.http.is_none(),
-            "node_record : {:?}",
-            node_record
-        );
+        assert!(node_record.is_none(), "node_record : {:?}", node_record);
 
         Ok(())
     });

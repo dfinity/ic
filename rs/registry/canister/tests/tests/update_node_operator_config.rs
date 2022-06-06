@@ -11,7 +11,7 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value, invariant_compliant_mutation_as_atomic_req},
+    registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
@@ -94,7 +94,7 @@ fn test_non_governance_users_cannot_update_node_operator_config() {
 
         // .. And there should therefore be no change to the node operator record
         assert_eq!(
-            get_value::<NodeOperatorRecord>(&registry, node_operator_key.as_bytes()).await,
+            get_value_or_panic::<NodeOperatorRecord>(&registry, node_operator_key.as_bytes()).await,
             node_operator_record
         );
 
@@ -184,7 +184,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         // Now let's check directly in the registry that the mutation actually happened
         // The node operator record should be associated with that ID.
         assert_eq!(
-            get_value::<NodeOperatorRecord>(&registry, node_operator_key.as_bytes()).await,
+            get_value_or_panic::<NodeOperatorRecord>(&registry, node_operator_key.as_bytes()).await,
             NodeOperatorRecord {
                 node_operator_principal_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
                 node_allowance: 10,
@@ -252,7 +252,7 @@ fn test_set_ipv6_none() {
 
         // Assert that the ipv6 field remains the same.
         assert_eq!(
-            get_value::<NodeOperatorRecord>(&registry, node_operator_key.as_bytes())
+            get_value_or_panic::<NodeOperatorRecord>(&registry, node_operator_key.as_bytes())
                 .await
                 .ipv6,
             Some("0:0:0:0:0:0:0:0".into())
@@ -279,7 +279,7 @@ fn test_set_ipv6_none() {
         );
         // Assert ipv6 field is None.
         assert_eq!(
-            get_value::<NodeOperatorRecord>(&registry, node_operator_key.as_bytes())
+            get_value_or_panic::<NodeOperatorRecord>(&registry, node_operator_key.as_bytes())
                 .await
                 .ipv6,
             None

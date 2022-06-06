@@ -6,7 +6,7 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value, prepare_registry, prepare_registry_with_two_node_sets},
+    registry::{get_value_or_panic, prepare_registry, prepare_registry_with_two_node_sets},
 };
 use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
@@ -46,14 +46,18 @@ fn test_the_anonymous_user_cannot_add_nodes_to_subnet() {
                 Err(s) if s.contains("is not authorized to call this method: add_nodes_to_subnet"));
 
             // .. And there should therefore be no updates to a subnet record
-            let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                    .await;
+            let subnet_list_record = get_value_or_panic::<SubnetListRecord>(
+                &registry,
+                make_subnet_list_record_key().as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
-            let subnet_record =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                    .await;
+            let subnet_record = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet_id).as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
             for node_id in &unassigned_node_ids {
                 let node_id = node_id.get().to_vec();
@@ -68,14 +72,18 @@ fn test_the_anonymous_user_cannot_add_nodes_to_subnet() {
             assert_matches!(response,
                 Err(s) if s.contains("is not authorized to call this method:"));
 
-            let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                    .await;
+            let subnet_list_record = get_value_or_panic::<SubnetListRecord>(
+                &registry,
+                make_subnet_list_record_key().as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
-            let subnet_record =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                    .await;
+            let subnet_record = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet_id).as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
             for node_id in &unassigned_node_ids {
                 let node_id = node_id.get().to_vec();
@@ -128,14 +136,18 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_add_nodes_to_subnet(
                 .await
             );
 
-            let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                    .await;
+            let subnet_list_record = get_value_or_panic::<SubnetListRecord>(
+                &registry,
+                make_subnet_list_record_key().as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
-            let subnet_record =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                    .await;
+            let subnet_record = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet_id).as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
             for node_id in unassigned_node_ids {
                 let node_id = node_id.get().to_vec();
@@ -178,17 +190,21 @@ fn test_add_nodes_to_subnet_succeeds() {
             );
 
             // Ensure that the subnet record is there
-            let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                    .await;
+            let subnet_list_record = get_value_or_panic::<SubnetListRecord>(
+                &registry,
+                make_subnet_list_record_key().as_bytes(),
+            )
+            .await;
 
             // The initial registry state already has a subnet in it, so ours is the second
             // one
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
-            let subnet_record =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                    .await;
+            let subnet_record = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet_id).as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet as usize);
 
             let payload = AddNodesToSubnetPayload {
@@ -206,16 +222,20 @@ fn test_add_nodes_to_subnet_succeeds() {
                 .await
             );
 
-            let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                    .await;
+            let subnet_list_record = get_value_or_panic::<SubnetListRecord>(
+                &registry,
+                make_subnet_list_record_key().as_bytes(),
+            )
+            .await;
             // The initial registry state already has a subnet in it, so ours is the second
             // one
             assert_eq!(subnet_list_record.subnets.len(), 2);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
-            let subnet_record =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                    .await;
+            let subnet_record = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet_id).as_bytes(),
+            )
+            .await;
             // the number of nodes doubled
             assert_eq!(
                 subnet_record.membership.len(),
@@ -268,16 +288,20 @@ fn test_adding_nodes_to_another_subnet_fails() {
             );
 
             // Ensure that the subnet record is there
-            let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                    .await;
+            let subnet_list_record = get_value_or_panic::<SubnetListRecord>(
+                &registry,
+                make_subnet_list_record_key().as_bytes(),
+            )
+            .await;
             // The initial registry state already has a subnet in it, so ours is the third
             // one
             assert_eq!(subnet_list_record.subnets.len(), 3);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
-            let subnet_record =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                    .await;
+            let subnet_record = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet_id).as_bytes(),
+            )
+            .await;
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet as usize);
 
             let payload = AddNodesToSubnetPayload {
@@ -295,16 +319,20 @@ fn test_adding_nodes_to_another_subnet_fails() {
                 .await
             );
 
-            let subnet_list_record =
-                get_value::<SubnetListRecord>(&registry, make_subnet_list_record_key().as_bytes())
-                    .await;
+            let subnet_list_record = get_value_or_panic::<SubnetListRecord>(
+                &registry,
+                make_subnet_list_record_key().as_bytes(),
+            )
+            .await;
             // The initial registry state already has a subnet in it, so ours is the third
             // one
             assert_eq!(subnet_list_record.subnets.len(), 3);
             assert_eq!(subnet_list_record.subnets[1], subnet_id.get().to_vec());
-            let subnet_record =
-                get_value::<SubnetRecord>(&registry, make_subnet_record_key(subnet_id).as_bytes())
-                    .await;
+            let subnet_record = get_value_or_panic::<SubnetRecord>(
+                &registry,
+                make_subnet_record_key(subnet_id).as_bytes(),
+            )
+            .await;
             // the number of nodes remains the same
             assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
             for node_id in subnet2_node_ids {

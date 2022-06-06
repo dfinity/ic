@@ -9,7 +9,7 @@ use ic_nns_test_utils::governance::{
     submit_external_update_proposal, submit_external_update_proposal_allowing_error,
 };
 use ic_nns_test_utils::ids::TEST_NEURON_2_ID;
-use ic_nns_test_utils::registry::get_value;
+use ic_nns_test_utils::registry::get_value_or_panic;
 use ic_nns_test_utils::{
     governance::{get_pending_proposals, wait_for_final_state},
     ids::TEST_NEURON_1_ID,
@@ -85,7 +85,7 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         let pending_proposals = get_pending_proposals(&nns_canisters.governance).await;
         assert_eq!(pending_proposals, vec![]);
 
-        let an1_dc = get_value::<DataCenterRecord>(
+        let an1_dc = get_value_or_panic::<DataCenterRecord>(
             &nns_canisters.registry,
             make_data_center_record_key("AN1").as_bytes(),
         )
@@ -102,7 +102,7 @@ fn test_submit_add_or_remove_data_centers_proposal() {
             }
         );
 
-        let bc1_dc = get_value::<DataCenterRecord>(
+        let bc1_dc = get_value_or_panic::<DataCenterRecord>(
             &nns_canisters.registry,
             make_data_center_record_key("BC1").as_bytes(),
         )
@@ -113,7 +113,7 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         assert_eq!(&bc1_dc.owner, "Bob");
         assert!(&bc1_dc.gps.is_none());
 
-        let fm1_dc = get_value::<DataCenterRecord>(
+        let fm1_dc = get_value_or_panic::<DataCenterRecord>(
             &nns_canisters.registry,
             make_data_center_record_key("FM1").as_bytes(),
         )

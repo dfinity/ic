@@ -6,7 +6,7 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value, invariant_compliant_mutation_as_atomic_req},
+    registry::{get_value, get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
 use ic_registry_keys::make_unassigned_nodes_config_record_key;
@@ -41,17 +41,12 @@ fn test_the_anonymous_user_cannot_update_unassigned_nodes_config() {
         assert_matches!(response,
                 Err(s) if s.contains("is not authorized to call this method: \
                 update_unassigned_nodes_config"));
-        assert_eq!(
-            get_value::<UnassignedNodesConfigRecord>(
-                &registry,
-                make_unassigned_nodes_config_record_key().as_bytes()
-            )
-            .await,
-            UnassignedNodesConfigRecord {
-                ssh_readonly_access: vec![],
-                replica_version: "".to_string(),
-            }
-        );
+        assert!(get_value::<UnassignedNodesConfigRecord>(
+            &registry,
+            make_unassigned_nodes_config_record_key().as_bytes()
+        )
+        .await
+        .is_none(),);
 
         Ok(())
     });
@@ -109,7 +104,7 @@ fn test_updating_unassigned_nodes_config_does_not_break_invariants() {
         );
 
         assert_eq!(
-            get_value::<UnassignedNodesConfigRecord>(
+            get_value_or_panic::<UnassignedNodesConfigRecord>(
                 &registry,
                 make_unassigned_nodes_config_record_key().as_bytes()
             )

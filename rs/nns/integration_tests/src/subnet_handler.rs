@@ -16,7 +16,7 @@ use ic_nns_test_utils::{
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
     ids::TEST_NEURON_1_ID,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder},
-    registry::get_value,
+    registry::get_value_or_panic,
 };
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_keys::make_subnet_record_key;
@@ -80,7 +80,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
             let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
 
             let subnet_record_after_setup: SubnetRecord =
-                get_value(&nns_canisters.registry, key.as_bytes()).await;
+                get_value_or_panic(&nns_canisters.registry, key.as_bytes()).await;
 
             assert_eq!(subnet_record_after_setup, initial_subnet_record);
 
@@ -159,7 +159,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
             assert_eq!(pending_proposals, vec![]);
 
             let subnet_record_after_update: SubnetRecord =
-                get_value(&nns_canisters.registry, key.as_bytes()).await;
+                get_value_or_panic(&nns_canisters.registry, key.as_bytes()).await;
 
             assert_eq!(
                 subnet_record_after_update,

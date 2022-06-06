@@ -4,7 +4,7 @@ use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_ic00_types::EcdsaKeyId;
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::itest_helpers::{set_up_registry_canister, set_up_universal_canister};
-use ic_nns_test_utils::registry::get_value;
+use ic_nns_test_utils::registry::get_value_or_panic;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord};
@@ -30,11 +30,11 @@ use std::sync::Arc;
 
 // Test helpers
 pub async fn get_subnet_list_record(registry: &Canister<'_>) -> SubnetListRecord {
-    get_value::<SubnetListRecord>(registry, make_subnet_list_record_key().as_bytes()).await
+    get_value_or_panic::<SubnetListRecord>(registry, make_subnet_list_record_key().as_bytes()).await
 }
 
 pub async fn get_subnet_record(registry: &Canister<'_>, subnet_id: SubnetId) -> SubnetRecord {
-    get_value::<SubnetRecord>(registry, make_subnet_record_key(subnet_id).as_bytes()).await
+    get_value_or_panic::<SubnetRecord>(registry, make_subnet_record_key(subnet_id).as_bytes()).await
 }
 
 pub fn get_subnet_holding_ecdsa_keys(
@@ -221,7 +221,7 @@ pub async fn get_cup_contents(
     registry: &Canister<'_>,
     subnet_id: SubnetId,
 ) -> CatchUpPackageContents {
-    get_value::<CatchUpPackageContents>(
+    get_value_or_panic::<CatchUpPackageContents>(
         registry,
         make_catch_up_package_contents_key(subnet_id).as_bytes(),
     )
