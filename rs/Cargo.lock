@@ -1056,6 +1056,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55390dbbf21ce70683f3e926dace00a21da373e35e44a60cafd232e3e9bf2041"
 
 [[package]]
+name = "bytemuck"
+version = "1.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdead85bdec19c194affaeeb670c0e41fe23de31459efd1c174d049269cf02cc"
+
+[[package]]
 name = "byteorder"
 version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10968,9 +10974,12 @@ dependencies = [
 
 [[package]]
 name = "rgb"
-version = "0.8.18"
+version = "0.8.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6714061b32e0b0527005d5874c28a57d905559fecfacd361462ad0b01e701996"
+checksum = "e74fdc210d8f24a7dbfedc13b04ba5764f5232754ccebfdf5fff1bad791ccbc6"
+dependencies = [
+ "bytemuck",
+]
 
 [[package]]
 name = "ring"
