@@ -1,8 +1,15 @@
 use candid::candid_method;
-use dfn_candid::{candid, CandidOne};
+use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::{over, over_init};
+use ic_sns_wasm::pb::v1::{AddWasm, AddWasmResponse, GetWasm, GetWasmResponse};
+use ic_sns_wasm::sns_wasm::SnsWasmCanister;
+use std::cell::RefCell;
 
 pub const LOG_PREFIX: &str = "[SNS-WASM] ";
+
+thread_local! {
+  static SNS_WASM: RefCell<SnsWasmCanister> = RefCell::new(SnsWasmCanister::new());
+}
 
 #[export_name = "canister_init"]
 fn canister_init() {
@@ -33,6 +40,26 @@ fn canister_post_upgrade() {
     dfn_core::printer::hook();
     println!("{}Executing post upgrade", LOG_PREFIX);
     println!("{}Completed post upgrade", LOG_PREFIX);
+}
+
+#[export_name = "canister_update add_wasm"]
+fn add_wasm() {
+    over(candid_one, add_wasm_)
+}
+
+#[candid_method(update, rename = "add_wasm")]
+fn add_wasm_(add_wasm_payload: AddWasm) -> AddWasmResponse {
+    SNS_WASM.with(|sns_wasm| sns_wasm.borrow_mut().add_wasm(add_wasm_payload))
+}
+
+#[export_name = "canister_query get_wasm"]
+fn get_wasm() {
+    over(candid_one, get_wasm_)
+}
+
+#[candid_method(query, rename = "get_wasm")]
+fn get_wasm_(get_wasm_payload: GetWasm) -> GetWasmResponse {
+    SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_wasm(get_wasm_payload))
 }
 
 /// This makes this Candid service self-describing, so that for example Candid

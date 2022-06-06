@@ -7196,8 +7196,24 @@ version = "0.1.0"
 dependencies = [
  "build-info",
  "candid",
+ "canister-test",
  "dfn_candid",
  "dfn_core",
+ "ic-crypto-sha",
+ "ic-sns-wasm-proto-generator",
+ "ic-state-machine-tests",
+ "ic-test-utilities-compare-dirs",
+ "prost",
+ "serde",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "ic-sns-wasm-proto-generator"
+version = "0.8.0"
+dependencies = [
+ "prost-build",
 ]
 
 [[package]]

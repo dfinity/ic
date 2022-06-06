@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package ic_sns_wasm.pb.v1;
+
+// The type of canister a particular WASM is intended to be installed on
+enum SnsCanisterType {
+  SNS_CANISTER_TYPE_UNSPECIFIED = 0;
+  // The type for the root canister
+  SNS_CANISTER_TYPE_ROOT = 1;
+  // The type for the governance canister
+  SNS_CANISTER_TYPE_GOVERNANCE = 2;
+  // The type for the ledger canister
+  SNS_CANISTER_TYPE_LEDGER = 3;
+}
+
+// The representation of a WASM along with its target canister type
+message SnsWasm {
+  bytes wasm = 1;
+  SnsCanisterType canister_type = 2;
+}
+
+// The payload for the add_wasm endpoint, which takes an SnsWasm along with the hash of the wasm bytes
+message AddWasm {
+  SnsWasm wasm = 1;
+  bytes hash = 2;
+}
+
+// The response from add_wasm, which is either Ok or Error.
+message AddWasmResponse {
+  // The error provides a reason the wasm could not be added.
+  message AddWasmError {
+    string error = 1;
+  }
+  // The Ok response provides the hash of the added WASM.
+  message AddWasmOk {
+    bytes hash = 1;
+  }
+  oneof result {
+    AddWasmError error = 1;
+    AddWasmOk ok = 2;
+  }
+}
+
+// The argument for get_wasm, which consists of the WASM hash to be retrieved.
+message GetWasm {
+  bytes hash = 1;
+}
+
+// The response for get_wasm, which returns a WASM if it is found, or None.
+message GetWasmResponse {
+  SnsWasm wasm = 1;
+}

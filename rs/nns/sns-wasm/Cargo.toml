@@ -17,4 +17,14 @@ build-info = { version = "0.0.26", default-features = false, features = [] }
 candid = "0.7.4"
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
+ic-crypto-sha = {path = "../../crypto/sha/"}
+serde = { version = "1.0", features = ["derive"] }
+prost = "0.10.4"
 
+[dev-dependencies]
+ic-sns-wasm-proto-generator = { path = "./proto_generator" }
+ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+tempfile = "3.1.0"
+tokio = { version = "1.15.0", features = ["full"] }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
+canister-test = { path = "../../rust_canisters/canister_test" }

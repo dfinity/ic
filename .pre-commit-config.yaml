@@ -84,6 +84,7 @@ repos:
             rs/nns/handlers/root/gen/|
             rs/nns/gtc/gen/|
             rs/nns/governance/gen/|
+            rs/nns/sns-wasm/gen/|
             experimental/|
             rust_canisters/|
             nix/overlays/|
