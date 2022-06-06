@@ -1,1 +1,12 @@
-service : (null) -> {}
+type AddWasm = record { hash : vec nat8; wasm : opt SnsWasm };
+type AddWasmError = record { error : text };
+type AddWasmOk = record { hash : vec nat8 };
+type AddWasmResponse = record { result : opt Result };
+type GetWasm = record { hash : vec nat8 };
+type GetWasmResponse = record { wasm : opt SnsWasm };
+type Result = variant { Ok : AddWasmOk; Error : AddWasmError };
+type SnsWasm = record { wasm : vec nat8; canister_type : int32 };
+service : (null) -> {
+  add_wasm : (AddWasm) -> (AddWasmResponse);
+  get_wasm : (GetWasm) -> (GetWasmResponse) query;
+}
