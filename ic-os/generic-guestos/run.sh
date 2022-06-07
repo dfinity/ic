@@ -45,6 +45,7 @@ sudo qemu-system-x86_64 \
     -nographic \
     -display none -serial mon:stdio \
     -machine type=q35,accel=kvm -enable-kvm \
+    -cpu host \
     -m 4G \
     -bios /usr/share/OVMF/OVMF_CODE.fd \
     \
