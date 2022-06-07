@@ -1,0 +1,14 @@
+[Unit]
+Description=nginx_exporter
+After=syslog.target network.target
+
+[Service]
+User=nginx_exporter
+Group=nginx_exporter
+Restart=always
+ExecStart=/usr/local/bin/nginx_exporter \
+    -nginx.retries 32768 \
+    -nginx.scrape-uri http://localhost:80/nginx_status
+
+[Install]
+WantedBy=multi-user.target

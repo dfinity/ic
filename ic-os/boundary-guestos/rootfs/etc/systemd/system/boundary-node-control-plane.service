@@ -9,9 +9,13 @@ User=root
 Group=root
 WorkingDirectory=/etc/nginx/ic
 ExecStartPre=/usr/bin/bash -c "/usr/bin/systemctl set-environment NNS_URLS=`grep nns_url /boot/config/nns.conf | cut -f 2 -d=`"
+
 # TODO: NODE-361 once the rootfs becomes read-only we cannot write to /etc/nginx/ic_routes
-# TODD: BOUN-172 metrics port and nns key for prod vms
-ExecStart=/opt/ic/bin/boundary-node-control-plane --nns_urls ${NNS_URLS}  --routes_dir /etc/nginx/ic_routes
+# TODD: BOUN-172 nns key for prod vms
+ExecStart=/opt/ic/bin/boundary-node-control-plane \
+    --nns_urls ${NNS_URLS} \
+    --routes_dir /etc/nginx/ic_routes \
+    --metrics_port 9312
 
 Restart=always
 RestartSec=10
