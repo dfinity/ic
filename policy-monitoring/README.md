@@ -13,7 +13,7 @@ The script `main.py` performs subsets of the following actions:
     * _if `universal_policy` or `save_event_stream` are specified among the
       values of `-m`_
 * 📁 save event stream into a file
-    * _if `save_logs` is specified among the values of `-m`_
+    * _if `save_event_stream` is specified among the values of `-m`_
 * 🔎 checking the event stream against supported formal policies
     * _either all available policies or the subset specified via `-p`_
 * 📨 notifying the end user about policy violations and pipeline crashes

@@ -129,14 +129,14 @@ def main():
             [
                 f'TEMP_DIR=$(mktemp -p "$HOME" -d)'
                 f' && echo "Downloading artifacts into $TEMP_DIR ..."'
-                f" && rsync -r"
+                f' && rsync -r --rsync-path "sudo -u arshavir rsync"'
                 f" -v {host_artifacts_dir}/{slack.signature}"
                 f' "$TEMP_DIR"'
-                f" && docker image pull aterga/monpoly_pipeline:latest"
+                f" && docker image pull dfinity/monpoly_pipeline:latest"
                 f" && docker run -it"
                 f" --workdir /work/mfotl-policies --rm --entrypoint sh"
                 f' -v "$TEMP_DIR/{slack.signature}":/repro'
-                f" aterga/monpoly_pipeline:latest"
+                f" dfinity/monpoly_pipeline:latest"
             ]
         )
     else:

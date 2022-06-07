@@ -58,7 +58,7 @@
     Warn "ControlPlane::tls_server_handshake() no allowed clients: failed node = {:?}/{:?}, flow_tag = {:?}, peer_addr = {:?}, error = {:?}"
 
   // The following events should be used to detect nodes that are being reassigned
-  - local__originally_in_subnet(node_id:string, node_addr:string, subnet_id:string)
+  - p2p__originally_in_subnet(node_id:string, node_addr:string, subnet_id:string)
   - registry__node_removed_from_subnet(node_id:string, node_addr:string)
   - registry__node_added_to_subnet(node_id:string, node_addr:string, subnet_id:string)
 *)
@@ -95,7 +95,7 @@ LET in_subnet(node_id, node_addr, subnet) =
   ((*
       The node was originally in this subnet, and it has not been unassigned from it.
     *)
-    (ONCE local__originally_in_subnet(node_id, node_addr, subnet)) AND NOT (
+    (ONCE p2p__originally_in_subnet(node_id, node_addr, subnet)) AND NOT (
       ONCE node_removed_from_subnet(node_id, node_addr)
     )
   )

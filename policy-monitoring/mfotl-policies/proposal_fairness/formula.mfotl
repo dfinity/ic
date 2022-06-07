@@ -12,20 +12,16 @@
     the creator itself?
 
   Relevant events:
-  - p2p__node_added(node_id:string, subnet_id:string)
-    Example log message:
-    Jan 20 09:01:08 medium05-1-2 orchestrator[816]: {"log_entry":{"level":"INFO","utc_time":"2022-01-20T09:01:08.355Z","message":"Nodes zxdg4-ha7p6-dfvi3-eo5rs-rcvbi-pkuwu-scoy3-5lk6t-2bcvs-c3txn-xqe added","crate_":"ic_p2p","module":"download_management","line":1504,"node_id":"z3dw6-ej6yf-amnk2-4zclr-jmqtz-yhcew-273kp-tao44-7nf2y-rj5vx-yqe","subnet_id":"62e3r-apw4o-mhxv3-xidd3-ngrxx-mnunc-xhlku-wkybu-yhq5o-mg2ou-3ae"}}
-
+  - p2p__originally_in_subnet(node_addr:string, node_addr:string, subnet_id:string)
+  - registry__node_added_to_subnet(node_id:string, node_addr:string, subnet_id:string)
+  - registry__node_removed_from_subnet(node_id:string, node_addr:string)
+  - p2p__node_added(node_id:string, subnet_id:string, added_node_id:string)
+  - p2p__node_removed(node_id:string, subnet_id:string, removed_node_id:string)
   - move_block_proposal(node_id:string,
                         subnet_id:string,
                         block_hash:string,
                         signer:string)
-    Example log message:
-    Jan 20 09:03:22 medium05-1-2 orchestrator[817]: {"log_entry":{"level":"INFO","utc_time":"2022-01-20T09:03:22.721Z","message":"Moved proposal Signed { content: CryptoHash(0xa9643feda6a22d10b9e8453a72aaa7dd737ca35568aa197511173397979b4466), signature: BasicSignature { signature: BasicSig([166, 34, 28, 142, 115, 226, 234, 106, 174, 192, 206, 125, 78, 170, 234, 140, 61, 152, 1, 112, 100, 14, 231, 113, 209, 128, 109, 228, 154, 110, 105, 11, 62, 21, 198, 47, 2, 175, 193, 3, 241, 14, 10, 132, 48, 53, 56, 89, 233, 99, 217, 11, 255, 246, 135, 78, 80, 176, 176, 162, 16, 205, 250, 10]), signer: gvtfg-7gy73-jjgfh-6g6lv-sywtx-vk6xk-qfmrk-cabe4-uggxn-t7joz-zqe } } of rank Rank(0) to artifact pool","crate_":"ic_artifact_manager","module":"processors","line":381,"node_id":"zxdg4-ha7p6-dfvi3-eo5rs-rcvbi-pkuwu-scoy3-5lk6t-2bcvs-c3txn-xqe","subnet_id":"62e3r-apw4o-mhxv3-xidd3-ngrxx-mnunc-xhlku-wkybu-yhq5o-mg2ou-3ae"}}
-
   - deliver_batch(node_id:string, subnet_id:string, block_hash:string)
-    Example log message:
-    Jan 20 09:03:22 medium05-1-2 orchestrator[817]: {"log_entry":{"level":"INFO","utc_time":"2022-01-20T09:03:22.743Z","message":"deliver batch 106 for block_hash \"3b6f4fd74bae8155d7f6cf8213da4f65ae9d6a28a814dccf712c8e937123d557\"","crate_":"ic_consensus","module":"batch_delivery","line":150,"node_id":"zxdg4-ha7p6-dfvi3-eo5rs-rcvbi-pkuwu-scoy3-5lk6t-2bcvs-c3txn-xqe","subnet_id":"62e3r-apw4o-mhxv3-xidd3-ngrxx-mnunc-xhlku-wkybu-yhq5o-mg2ou-3ae"}}
 
   Assumptions:
   - A node moves a signed proposal at most once to its artifact pool.
@@ -36,10 +32,9 @@
     into a bound of ~500 seconds between creation and delivery.
 *)
 
-(* TODO(JS/YAP): Are node removals logged? *)
-LET relevant_node(node, subnet) = ONCE p2p__node_added(node, subnet) IN
-LET num_relevant_nodes(subnet, n) = n <- CNT node; subnet
-  ONCE p2p__node_added(node, subnet) IN
+LET registry_subnet_map(node, subnet) = ((NOT registry__node_removed_from_subnet(node, _)) SINCE (p2p__originally_in_subnet(node, _, subnet) OR (registry__node_added_to_subnet(node, _, subnet) AND NOT PREVIOUS ((NOT registry__node_removed_from_subnet(node, _)) SINCE registry__node_added_to_subnet(node, _, subnet))))) IN
+LET subnet_map(node, subnet) = registry_subnet_map(node, subnet) IN
+LET num_subnet_nodes(subnet, n) = n <- CNT node; subnet subnet_map(node, subnet) IN
 
 LET deliver_block_proposal(reporting_node, subnet, block_hash, signer) =
   move_block_proposal(reporting_node, subnet, block_hash, signer)
@@ -53,8 +48,8 @@ LET num_created_one_day_raw(reporting_node, subnet, signer, n) =
 IN
 LET num_created_one_day(reporting_node, subnet, signer, n) =
   num_created_one_day_raw(reporting_node, subnet, signer, n)
-  OR (relevant_node(reporting_node, subnet)
-      AND relevant_node(signer, subnet)
+  OR (subnet_map(reporting_node, subnet)
+      AND subnet_map(signer, subnet)
       AND NOT num_created_one_day_raw(reporting_node, subnet, signer, _)
       AND n = 0)
 IN
@@ -73,7 +68,7 @@ LET varp_created_one_day(reporting_node, subnet, v) =
   EXISTS a, b, n.
     avg_created_one_day(reporting_node, subnet, a)
     AND sqsum_created_one_day(reporting_node, subnet, b)
-    AND num_relevant_nodes(subnet, n)
+    AND num_subnet_nodes(subnet, n)
     AND v = (i2f(b) / i2f(n)) - (a * a)
 IN
 

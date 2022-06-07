@@ -1,21 +1,22 @@
 (* How long does it take until a block proposal created at one node_id has been
    added to validated pool of more than ⅔ of the nodes in the same subnet_id?
 
-  Signature:
-    p2p__node_added(node_id:string, subnet_id:string)
-    p2p__node_removed(node_id:string, subnet_id:string)
-    validated_BlockProposal_Added(node_id:string, subnet_id:string, hash:string)
-    validated_BlockProposal_Moved(node_id:string, subnet_id:string, hash:string)
-
+  Relevant events:
+  - p2p__originally_in_subnet(node_addr:string, node_addr:string, subnet_id:string)
+  - registry__node_added_to_subnet(node_id:string, node_addr:string, subnet_id:string)
+  - registry__node_removed_from_subnet(node_id:string, node_addr:string)
+  - p2p__node_added(node_id:string, subnet_id:string, added_node_id:string)
+  - p2p__node_removed(node_id:string, subnet_id:string, removed_node_id:string)
+  - validated_BlockProposal_Added(node_id:string, subnet_id:string, hash:string)
+  - validated_BlockProposal_Moved(node_id:string, subnet_id:string, hash:string)
 
   Output: (block, subnet_id, time, avg_time, max_time)
     - avg_time and max_time are specific to the subnet_id
 *)
 
 (* State predicate mapping each node_id to its current subnet_id *)
-LET subnet_map(node_id, subnet_id) =
-  NOT p2p__node_removed(node_id, subnet_id) SINCE p2p__node_added(node_id, subnet_id)
-IN
+LET registry_subnet_map(node, subnet) = ((NOT registry__node_removed_from_subnet(node, _)) SINCE (p2p__originally_in_subnet(node, _, subnet) OR (registry__node_added_to_subnet(node, _, subnet) AND NOT PREVIOUS ((NOT registry__node_removed_from_subnet(node, _)) SINCE registry__node_added_to_subnet(node, _, subnet))))) IN
+LET subnet_map(node, subnet) = registry_subnet_map(node, subnet) IN
 
 (* Number of nodes per subnet_id *)
 LET subnet_size(subnet_id, n) =
@@ -55,7 +56,7 @@ LET time_per_block(block, subnet_id, time) =
 IN
 
 LET subnet_type_assoc(subnet_id, subnet_type) =
-  (local__original_subnet_type(subnet_id, subnet_type) OR registry__subnet_created(subnet_id, subnet_type) OR registry__subnet_updated(subnet_id, subnet_type))
+  (p2p__original_subnet_type(subnet_id, subnet_type) OR registry__subnet_created(subnet_id, subnet_type) OR registry__subnet_updated(subnet_id, subnet_type))
 IN
 
 LET subnet_type_map(subnet_id, subnet_type) =

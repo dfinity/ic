@@ -66,11 +66,11 @@ class InfraEvent(Event):
         self.infra = infra
 
 
-class OriginalSubnetTypeEvent(InfraEvent):
+class OriginalSubnetTypePreambleEvent(InfraEvent):
     """Synthetic event"""
 
     def __init__(self, infra: GlobalInfra):
-        super().__init__(name="local__original_subnet_type", doc=None, infra=infra)
+        super().__init__(name="p2p__original_subnet_type", doc=None, infra=infra)
 
     def unix_ts(self) -> int:
         return 0
@@ -84,7 +84,7 @@ class OriginallyInSubnetPreambleEvent(InfraEvent):
     """Synthetic event"""
 
     def __init__(self, infra: GlobalInfra):
-        super().__init__(name="local__originally_in_subnet", doc=None, infra=infra)
+        super().__init__(name="p2p__originally_in_subnet", doc=None, infra=infra)
 
     def unix_ts(self) -> int:
         return 0
@@ -249,8 +249,9 @@ class NodeMembershipEvent(ReplicaEvent):
         else:
             return [
                 (
-                    str(params.node_id),  # NOT the ID of the event reported node
+                    self.doc.get_node_id(),
                     self.doc.get_subnet_id(),
+                    str(params.node_id),  # NOT the ID of the event reported node
                 )
             ]
 
