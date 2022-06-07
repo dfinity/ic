@@ -74,18 +74,20 @@ pub fn get_main_chain(blocks: &UnstableBlocks) -> BlockChain {
     }
 
     // Get all the longest blockchains.
-    let longest_blockchains: Vec<BlockChain> = blockchains
+    let longest_blockchains: Vec<Vec<&'_ Block>> = blockchains
         .into_iter()
         .filter(|bc| bc.len() == longest_blockchain_len)
+        .map(|bc| bc.into_chain())
         .collect();
 
-    let mut main_chain = vec![];
-    for height_idx in 0..longest_blockchain_len {
+    // A `BlockChain` contains at least one block which means we can safely index at
+    // height 0 of the chain.
+    let mut main_chain = BlockChain::new(longest_blockchains[0][0]);
+    for height_idx in 1..longest_blockchain_len {
         // If all the blocks on the same height are identical, then this block is part of the
         // "main" chain.
         let block = longest_blockchains[0][height_idx];
         let block_hash = block.block_hash();
-
         for chain in longest_blockchains.iter().skip(1) {
             if chain[height_idx].block_hash() != block_hash {
                 return main_chain;
@@ -101,7 +103,7 @@ pub fn get_main_chain(blocks: &UnstableBlocks) -> BlockChain {
 pub fn get_blocks(blocks: &UnstableBlocks) -> Vec<&Block> {
     blocktree::blockchains(&blocks.tree)
         .into_iter()
-        .flatten()
+        .flat_map(|bc| bc.into_chain())
         .collect()
 }
 
@@ -200,7 +202,10 @@ mod test {
 
         push(&mut forest, block_1.clone()).unwrap();
         push(&mut forest, block_2.clone()).unwrap();
-        assert_eq!(get_main_chain(&forest), vec![&block_0, &block_1, &block_2]);
+        assert_eq!(
+            get_main_chain(&forest),
+            BlockChain::new_with_successors(&block_0, vec![&block_1, &block_2])
+        );
     }
 
     // Creating a forest that looks like this:
@@ -219,7 +224,7 @@ mod test {
 
         push(&mut forest, block_1).unwrap();
         push(&mut forest, block_2).unwrap();
-        assert_eq!(get_main_chain(&forest), vec![&block_0]);
+        assert_eq!(get_main_chain(&forest), BlockChain::new(&block_0));
     }
 
     // Creating the following forest:
@@ -240,7 +245,10 @@ mod test {
         push(&mut forest, block_1).unwrap();
         push(&mut forest, block_2.clone()).unwrap();
         push(&mut forest, block_3.clone()).unwrap();
-        assert_eq!(get_main_chain(&forest), vec![&block_0, &block_2, &block_3]);
+        assert_eq!(
+            get_main_chain(&forest),
+            BlockChain::new_with_successors(&block_0, vec![&block_2, &block_3])
+        );
     }
 
     // Creating the following forest:
@@ -266,7 +274,10 @@ mod test {
         push(&mut forest, block_3).unwrap();
         push(&mut forest, block_a).unwrap();
         push(&mut forest, block_b).unwrap();
-        assert_eq!(get_main_chain(&forest), vec![&block_0, &block_1]);
+        assert_eq!(
+            get_main_chain(&forest),
+            BlockChain::new_with_successors(&block_0, vec![&block_1])
+        );
     }
 
     // Creating the following forest:
@@ -302,7 +313,7 @@ mod test {
         push(&mut forest, block_3).unwrap();
         push(&mut forest, block_a.clone()).unwrap();
         push(&mut forest, block_b.clone()).unwrap();
-        assert_eq!(get_main_chain(&forest), vec![&block_0]);
+        assert_eq!(get_main_chain(&forest), BlockChain::new(&block_0));
 
         // Now add block c to b.
         let block_c = BlockBuilder::with_prev_header(block_b.header).build();
@@ -311,7 +322,7 @@ mod test {
         // Now the main chain should be "1 -> a -> b -> c"
         assert_eq!(
             get_main_chain(&forest),
-            vec![&block_0, &block_1, &block_a, &block_b, &block_c]
+            BlockChain::new_with_successors(&block_0, vec![&block_1, &block_a, &block_b, &block_c])
         );
     }
 
@@ -338,7 +349,7 @@ mod test {
         push(&mut forest, block_x).unwrap();
         push(&mut forest, block_y).unwrap();
         push(&mut forest, block_z).unwrap();
-        assert_eq!(get_main_chain(&forest), vec![&block_0]);
+        assert_eq!(get_main_chain(&forest), BlockChain::new(&block_0));
     }
 
     #[test]
@@ -346,6 +357,6 @@ mod test {
         let block_0 = BlockBuilder::genesis().build();
         let forest = UnstableBlocks::new(1, block_0.clone());
 
-        assert_eq!(get_main_chain(&forest), vec![&block_0]);
+        assert_eq!(get_main_chain(&forest), BlockChain::new(&block_0));
     }
 }

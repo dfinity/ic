@@ -49,11 +49,12 @@ pub fn get_utxos(
 
     let mut address_utxos = utxoset::get_utxos(&state.utxos, address);
     let main_chain_height = state.height + (main_chain.len() as u32) - 1;
-    let mut tip_block_hash = None;
-    let mut tip_block_height = None;
+
+    let mut tip_block_hash = main_chain.first().block_hash();
+    let mut tip_block_height = state.height;
 
     // Apply unstable blocks to the UTXO set.
-    for (i, block) in main_chain.iter().enumerate() {
+    for (i, block) in main_chain.into_chain().iter().enumerate() {
         let block_height = state.height + (i as u32);
         let confirmations = main_chain_height - block_height + 1;
 
@@ -67,18 +68,16 @@ pub fn get_utxos(
             address_utxos.insert_tx(tx, block_height);
         }
 
-        tip_block_hash = Some(block.block_hash());
-        tip_block_height = Some(block_height);
+        tip_block_hash = block.block_hash();
+        tip_block_height = block_height;
     }
 
     let utxos: Vec<Utxo> = address_utxos.into_vec();
 
     Ok(GetUtxosResponse {
         utxos,
-        // TODO(EXC-1010): We are guaranteed that the tip block hash and height
-        // are always available. Refactor the code to avoid this panic.
-        tip_block_hash: tip_block_hash.expect("Tip block must exist").to_vec(),
-        tip_height: tip_block_height.expect("Tip height must exist"),
+        tip_block_hash: tip_block_hash.to_vec(),
+        tip_height: tip_block_height,
         next_page: None,
     })
 }
