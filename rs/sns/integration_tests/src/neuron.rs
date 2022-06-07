@@ -29,7 +29,7 @@ use ic_sns_governance::{
     types::{test_helpers::NativeEnvironment, Environment, ONE_YEAR_SECONDS},
 };
 use ic_sns_test_utils::itest_helpers::{
-    local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder, UserInfo, NONCE,
+    local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo, NONCE,
 };
 use ic_sns_test_utils::now_seconds;
 use ic_types::PrincipalId;
@@ -56,7 +56,7 @@ fn test_list_neurons_determinism() {
             .collect();
 
         let alloc = Tokens::from_tokens(1000).unwrap();
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_accounts(account_identifiers, alloc)
             .build();
 
@@ -109,7 +109,7 @@ fn test_list_neurons_of_principal() {
 
         let alloc = Tokens::from_tokens(1000).unwrap();
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(account_identifier1, alloc)
             .with_ledger_account(account_identifier2, alloc)
             .with_nervous_system_parameters(sys_params)
@@ -145,7 +145,7 @@ fn test_claim_neuron_with_default_permissions() {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let alloc = Tokens::from_tokens(1000).unwrap();
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(user.get_principal_id().into(), alloc)
             .build();
 
@@ -181,7 +181,7 @@ fn test_claim_neuron() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(user.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(sys_params.clone())
             .build();
@@ -282,7 +282,7 @@ fn test_claim_neuron_fails_when_max_number_of_neurons_is_reached() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(user1.sender.get_principal_id().into(), alloc)
             .with_ledger_account(user2.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(sys_params.clone())
@@ -389,7 +389,7 @@ fn test_refresh_neuron() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(user.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
@@ -503,7 +503,7 @@ fn test_neuron_action_is_not_authorized() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(neuron_owner_account_identifier, alloc)
             .with_nervous_system_parameters(system_params)
             .build();
@@ -566,7 +566,7 @@ fn test_disburse_maturity() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(account_identifier, alloc)
             .with_nervous_system_parameters(sys_params.clone())
             .build();
@@ -649,7 +649,7 @@ fn test_disburse_maturity_to_different_account() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(maturity_owner_account_identifier, alloc)
             .with_nervous_system_parameters(sys_params.clone())
             .build();
@@ -736,7 +736,7 @@ fn test_disbursing_maturity_with_no_maturity_fails() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(account_identifier, alloc)
             .with_nervous_system_parameters(sys_params.clone())
             .build();
@@ -999,7 +999,7 @@ fn test_one_user_cannot_claim_other_users_neuron() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(account_identifier1, alloc)
             .with_nervous_system_parameters(params)
             .build();
@@ -1137,7 +1137,7 @@ fn test_neuron_add_all_permissions_to_self() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(account_identifier, alloc)
             .with_nervous_system_parameters(system_params)
             .build();
@@ -1206,7 +1206,7 @@ fn test_neuron_add_multiple_permissions_and_principals() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(account_identifier, alloc)
             .with_nervous_system_parameters(system_params)
             .build();
@@ -1290,7 +1290,7 @@ fn test_neuron_add_non_grantable_permission_fails() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(account_identifier, alloc)
             .with_nervous_system_parameters(system_params)
             .build();
@@ -1357,7 +1357,7 @@ fn test_exceeding_max_principals_for_neuron_fails() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(account_identifier, alloc)
             .with_nervous_system_parameters(system_params)
             .build();
@@ -1421,7 +1421,7 @@ fn test_add_neuron_permission_missing_principal_id_fails() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(account_identifier, alloc)
             .with_nervous_system_parameters(system_params)
             .build();
@@ -1484,7 +1484,7 @@ fn test_neuron_remove_all_permissions_of_self() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(account_identifier, alloc)
             .with_nervous_system_parameters(system_params)
             .build();
@@ -1537,7 +1537,7 @@ fn test_neuron_remove_some_permissions() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(account_identifier, alloc)
             .with_nervous_system_parameters(system_params)
             .build();
@@ -1603,7 +1603,7 @@ fn test_neuron_remove_permissions_of_wrong_principal() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(account_identifier, alloc)
             .with_nervous_system_parameters(system_params)
             .build();
@@ -1676,7 +1676,7 @@ fn test_neuron_remove_permissions_of_different_principal() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(account_identifier, alloc)
             .with_nervous_system_parameters(system_params)
             .build();
@@ -1762,7 +1762,7 @@ fn test_remove_neuron_permission_missing_principal_id_fails() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(account_identifier, alloc)
             .with_nervous_system_parameters(system_params)
             .build();
@@ -1829,7 +1829,7 @@ fn test_remove_neuron_permission_when_neuron_missing_permission_type_fails() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(account_identifier, alloc)
             .with_nervous_system_parameters(system_params)
             .build();
@@ -1908,7 +1908,7 @@ fn test_disburse_neuron_to_self_succeeds() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(user.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
@@ -2022,7 +2022,7 @@ fn test_disburse_neuron_to_different_account_succeeds() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(neuron_owner.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
@@ -2122,7 +2122,7 @@ fn test_disburse_neuron_burns_neuron_fees() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(user.sender.get_principal_id().into(), alloc)
             .with_ledger_account(voter.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params.clone())
@@ -2246,7 +2246,7 @@ fn test_split_neuron_succeeds() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(parent.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
@@ -2333,7 +2333,7 @@ fn test_split_neuron_inheritance() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(parent.sender.get_principal_id().into(), alloc)
             .with_ledger_account(voter.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params.clone())
@@ -2428,7 +2428,7 @@ fn test_split_neuron_child_amount_is_above_min_stake() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(parent.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
@@ -2516,7 +2516,7 @@ fn test_split_neuron_parent_amount_is_above_min_stake() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(parent.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();

@@ -19,6 +19,7 @@ ic-nervous-system-common = {path = "../../nervous_system/common"}
 ic-protobuf = { path = "../../protobuf" }
 ic-sns-test-utils = { path = "../test_utils" }
 ic-sns-governance = { path = "../governance" }
+ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 maplit = "1.0.2"

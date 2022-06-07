@@ -41,6 +41,7 @@ use ic_sns_governance::governance::TimeWarp;
 use ic_sns_governance::pb::v1::manage_neuron::disburse::Amount;
 use ic_sns_governance::pb::v1::manage_neuron::{Disburse, Split, StartDissolving};
 use ic_sns_governance::pb::v1::proposal::Action;
+use ic_sns_init::SnsCanisterInitPayloads;
 use ic_types::{CanisterId, PrincipalId};
 use maplit::hashset;
 
@@ -57,16 +58,8 @@ pub struct SnsCanisters<'a> {
     pub ledger: Canister<'a>,
 }
 
-/// Payloads for all the canisters
-#[derive(Clone)]
-pub struct SnsInitPayloads {
-    pub governance: Governance,
-    pub ledger: LedgerCanisterInitPayload,
-    pub root: SnsRootCanister,
-}
-
-/// Builder to help create the initial payloads for the SNS canisters.
-pub struct SnsInitPayloadsBuilder {
+/// Builder to help create the initial payloads for the SNS canisters in tests.
+pub struct SnsTestsInitPayloadBuilder {
     pub governance: GovernanceCanisterInitPayloadBuilder,
     pub ledger: LedgerCanisterInitPayload,
     pub root: SnsRootCanister,
@@ -107,9 +100,9 @@ impl UserInfo {
 }
 
 #[allow(clippy::new_without_default)]
-impl SnsInitPayloadsBuilder {
-    pub fn new() -> SnsInitPayloadsBuilder {
-        SnsInitPayloadsBuilder {
+impl SnsTestsInitPayloadBuilder {
+    pub fn new() -> SnsTestsInitPayloadBuilder {
+        SnsTestsInitPayloadBuilder {
             governance: GovernanceCanisterInitPayloadBuilder::new(),
             ledger: LedgerCanisterInitPayload {
                 // minting_account will be set when the Governance canister ID is allocated
@@ -178,8 +171,8 @@ impl SnsInitPayloadsBuilder {
         self
     }
 
-    pub fn build(&mut self) -> SnsInitPayloads {
-        SnsInitPayloads {
+    pub fn build(&mut self) -> SnsCanisterInitPayloads {
+        SnsCanisterInitPayloads {
             governance: self.governance.build(),
             ledger: self.ledger.clone(),
             root: self.root.clone(),
@@ -191,7 +184,7 @@ impl SnsCanisters<'_> {
     /// Creates and installs all of the SNS canisters
     pub async fn set_up(
         runtime: &'_ Runtime,
-        mut init_payloads: SnsInitPayloads,
+        mut init_payloads: SnsCanisterInitPayloads,
     ) -> SnsCanisters<'_> {
         let since_start_secs = {
             let s = SystemTime::now();
@@ -241,6 +234,9 @@ impl SnsCanisters<'_> {
         // Root canister_init args.
         if init_payloads.root.governance_canister_id.is_none() {
             init_payloads.root.governance_canister_id = Some(governance_canister_id.into());
+        }
+
+        if init_payloads.root.ledger_canister_id.is_none() {
             init_payloads.root.ledger_canister_id = Some(ledger_canister_id.into());
         }
 

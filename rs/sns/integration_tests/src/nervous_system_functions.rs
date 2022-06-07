@@ -12,7 +12,7 @@ use ic_sns_governance::pb::v1::{
 use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
     install_rust_canister_with_memory_allocation, local_test_on_sns_subnet, SnsCanisters,
-    SnsInitPayloadsBuilder,
+    SnsTestsInitPayloadBuilder,
 };
 use ledger_canister::Tokens;
 
@@ -47,7 +47,7 @@ fn test_add_remove_and_execute_nervous_system_functions() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(user.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(system_params.clone())
             .build();

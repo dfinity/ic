@@ -190,6 +190,7 @@ members = [
   "sns/cli",
   "sns/governance",
   "sns/governance/protobuf_generator",
+  "sns/init",
   "sns/integration_tests",
   "sns/root",
   "sns/root/protobuf_generator",

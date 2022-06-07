@@ -130,6 +130,7 @@ fn change_canister() {
 
 fn assert_state_is_valid(state: &SnsRootCanister) {
     assert!(state.governance_canister_id.is_some());
+    assert!(state.ledger_canister_id.is_some());
 }
 
 fn assert_change_canister_proposal_is_valid(proposal: &ChangeCanisterProposal) {
