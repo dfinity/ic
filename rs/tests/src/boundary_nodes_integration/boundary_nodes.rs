@@ -22,6 +22,7 @@ use slog::info;
 use std::{
     io::Read,
     net::{Ipv4Addr, SocketAddrV6},
+    time::Duration,
 };
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
@@ -191,6 +192,31 @@ pub fn test(env: TestEnv) {
             .await
             .unwrap();
         assert_eq!(res.text().await.unwrap(), "Counter is 0 streaming\n");
+
+        // Update the denylist and reload nginx
+        let denylist_command = format!(r#"printf "ryjl3-tyaaa-aaaaa-aaaba-cai 1;\n{} 1;\n" | sudo tee /etc/nginx/denylist.map && sudo service nginx reload"#, http_counter_canister_id);
+        let sess = deployed_boundary_node.block_on_ssh_session(ADMIN).unwrap();
+        let mut channel = sess.channel_session().unwrap();
+        channel.exec(denylist_command.as_str()).unwrap();
+        let mut output = String::new();
+        channel.read_to_string(&mut output).unwrap();
+        channel.wait_close().unwrap();
+        info!(
+            logger,
+            "update denylist {BOUNDARY_NODE_NAME} with {denylist_command} to '{}'. Exit status = {}",
+            output.trim(),
+            channel.exit_status().unwrap()
+        );
+        // Wait a bit for the reload to complete
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        // Probe the (now-blocked) canister again, we should get a 451
+        let res = client
+            .get(format!("https://{}/", host))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS);
     });
 }
 
