@@ -1,5 +1,5 @@
 {
-  "checksum": "cdf5bee25cf56e3b31bdf60314dab467e76f81d05bb8981496284881892cd8ac",
+  "checksum": "7827ea84cc06f45d2ff1a93bbccba6fdc493fedf575e9f08b0bb1b130c5fbf98",
   "crates": {
     "addr2line 0.17.0": {
       "name": "addr2line",
@@ -1177,7 +1177,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-http 0.3.3",
+              "id": "tower-http 0.3.4",
               "target": "tower_http"
             },
             {
@@ -10308,13 +10308,13 @@
       },
       "license": "Unlicense/MIT"
     },
-    "memmap2 0.5.3": {
+    "memmap2 0.5.4": {
       "name": "memmap2",
-      "version": "0.5.3",
+      "version": "0.5.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/memmap2/0.5.3/download",
-          "sha256": "057a3db23999c867821a7a59feb06a578fcb03685e983dff90daf9e7d24ac08f"
+          "url": "https://crates.io/api/v1/crates/memmap2/0.5.4/download",
+          "sha256": "d5172b50c23043ff43dd53e51392f36519d9b35a8f3a410d30ece5d1aedd58ae"
         }
       },
       "targets": [
@@ -10348,7 +10348,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.5.3"
+        "version": "0.5.4"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -18790,7 +18790,7 @@
               "target": "debugid"
             },
             {
-              "id": "memmap2 0.5.3",
+              "id": "memmap2 0.5.4",
               "target": "memmap2"
             },
             {
@@ -20169,7 +20169,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "tokio-macros 1.7.0",
+              "id": "tokio-macros 1.8.0",
               "target": "tokio_macros"
             }
           ],
@@ -20225,13 +20225,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "tokio-macros 1.7.0": {
+    "tokio-macros 1.8.0": {
       "name": "tokio-macros",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio-macros/1.7.0/download",
-          "sha256": "b557f72f448c511a979e2564e55d74e6c4432fc96ff4f6241bc6bded342643b7"
+          "url": "https://crates.io/api/v1/crates/tokio-macros/1.8.0/download",
+          "sha256": "9724f9a975fb987ef7a3cd9be0350edcbe130698af5b8f7a631e23d42d052484"
         }
       },
       "targets": [
@@ -20271,7 +20271,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.7.0"
+        "version": "1.8.0"
       },
       "license": "MIT"
     },
@@ -20321,13 +20321,13 @@
       },
       "license": "MIT"
     },
-    "tokio-stream 0.1.8": {
+    "tokio-stream 0.1.9": {
       "name": "tokio-stream",
-      "version": "0.1.8",
+      "version": "0.1.9",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio-stream/0.1.8/download",
-          "sha256": "50145484efff8818b5ccd256697f36863f587da82cf8b409c53adf1e840798e3"
+          "url": "https://crates.io/api/v1/crates/tokio-stream/0.1.9/download",
+          "sha256": "df54d54117d6fdc4e4fea40fe1e4e566b3505700e148a6827e59b34b0d2600d9"
         }
       },
       "targets": [
@@ -20371,7 +20371,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.8"
+        "version": "0.1.9"
       },
       "license": "MIT"
     },
@@ -20658,7 +20658,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.8",
+              "id": "tokio-stream 0.1.9",
               "target": "tokio_stream"
             },
             {
@@ -20854,7 +20854,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.8",
+              "id": "tokio-stream 0.1.9",
               "target": "tokio_stream"
             },
             {
@@ -20881,13 +20881,13 @@
       },
       "license": "MIT"
     },
-    "tower-http 0.3.3": {
+    "tower-http 0.3.4": {
       "name": "tower-http",
-      "version": "0.3.3",
+      "version": "0.3.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tower-http/0.3.3/download",
-          "sha256": "7d342c6d58709c0a6d48d48dabbb62d4ef955cf5f0f3bbfd845838e7ae88dbae"
+          "url": "https://crates.io/api/v1/crates/tower-http/0.3.4/download",
+          "sha256": "3c530c8675c1dbf98facee631536fa116b5fb6382d7dd6dc1b118d970eafe3ba"
         }
       },
       "targets": [
@@ -20965,7 +20965,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.3"
+        "version": "0.3.4"
       },
       "license": "MIT"
     },

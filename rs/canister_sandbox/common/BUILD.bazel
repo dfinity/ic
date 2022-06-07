@@ -1,0 +1,52 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "common",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_canister_sandbox_common",
+    edition = "2018",
+    deps = [
+        "//rs/interfaces",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/sys",
+        "//rs/system_api",
+        "//rs/types/types",
+        "@crate_index//:bincode",
+        "@crate_index//:bytes",
+        "@crate_index//:libc",
+        "@crate_index//:nix",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+    ],
+)
+
+rust_binary(
+    name = "test_controller",
+    srcs = ["src/test_controller.rs"],
+    crate_name = "ic_canister_sandbox_common",
+    edition = "2018",
+    deps = [
+        ":common",
+    ],
+)
+
+rust_binary(
+    name = "test_sandbox",
+    srcs = ["src/test_sandbox.rs"],
+    crate_name = "ic_canister_sandbox_common",
+    edition = "2018",
+    deps = [
+        ":common",
+    ],
+)
