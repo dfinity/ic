@@ -1,0 +1,18 @@
+[package]
+name = "ic-sns-init"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ic-base-types = { path = "../../types/base_types" }
+ic-crypto-sha = { path = "../../crypto/sha" }
+ic-nervous-system-common = {path = "../../nervous_system/common"}
+ic-sns-governance = { path = "../governance" }
+ic-sns-root = { path = "../root" }
+ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+maplit = "1.0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.79"

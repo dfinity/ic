@@ -1,70 +1,56 @@
 //! Contains the logic for deploying SNS canisters
 
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
-use ic_sns_governance::pb::v1::{Governance, NeuronPermissionList, NeuronPermissionType};
-use ic_sns_root::pb::v1::SnsRootCanister;
-use ledger_canister::{ArchiveOptions, LedgerCanisterInitPayload, Tokens};
-use maplit::hashset;
+use ic_base_types::PrincipalId;
+use ic_sns_init::{SnsCanisterIds, SnsCanisterInitPayloads, SnsInitPayload};
 use std::str::FromStr;
 
 use crate::{call_dfx, get_identity, hex_encode_candid, DeployArgs};
 
-/// The canister IDs of all SNS canisters
-#[derive(Debug)]
-pub struct SnsCanisterIds {
-    pub governance: PrincipalId,
-    pub ledger: PrincipalId,
-    pub root: PrincipalId,
+/// If SNS canisters have already been created, return their canister IDs, else create the
+/// SNS canisters and return their canister IDs.
+pub fn lookup_or_else_create_canisters(args: &DeployArgs) -> SnsCanisterIds {
+    let sns_canister_ids = match lookup(args) {
+        Some(sns_canister_ids) => {
+            println!("SNS canisters already allocated");
+            sns_canister_ids
+        }
+        None => {
+            println!(
+                "SNS canisters not found, creating SNS canisters with {:?} cycles each",
+                args.initial_cycles_per_canister
+            );
+            create_canisters(args)
+        }
+    };
+
+    println!("SNS canister IDs:\n{:?}", &sns_canister_ids);
+    sns_canister_ids
 }
 
-impl SnsCanisterIds {
-    /// If SNS canisters have already been created, return their canister IDs, else create the
-    /// SNS canisters and return their canister IDs.
-    pub fn lookup_or_else_create_canisters(args: &DeployArgs) -> Self {
-        let sns_canister_ids = match Self::lookup(args) {
-            Some(sns_canister_ids) => {
-                println!("SNS canisters already allocated");
-                sns_canister_ids
-            }
-            None => {
-                println!(
-                    "SNS canisters not found, creating SNS canisters with {:?} cycles each",
-                    args.initial_cycles_per_canister
-                );
-                Self::create_canisters(args)
-            }
-        };
+/// If all the SNS canisters have already been created, return them.
+fn lookup(args: &DeployArgs) -> Option<SnsCanisterIds> {
+    Some(SnsCanisterIds {
+        governance: get_canister_id("sns_governance", args)?,
+        ledger: get_canister_id("sns_ledger", args)?,
+        root: get_canister_id("sns_root", args)?,
+    })
+}
 
-        println!("SNS canister IDs:\n{:?}", &sns_canister_ids);
-        sns_canister_ids
-    }
+/// Call `dfx canister create` to allocate canister IDs for all SNS canisters.
+fn create_canisters(args: &DeployArgs) -> SnsCanisterIds {
+    println!("Creating SNS canisters...");
+    let cycles = format!("{}", args.initial_cycles_per_canister.unwrap_or_default());
 
-    /// If all the SNS canisters have already been created, return them.
-    fn lookup(args: &DeployArgs) -> Option<Self> {
-        Some(SnsCanisterIds {
-            governance: get_canister_id("sns_governance", args)?,
-            ledger: get_canister_id("sns_ledger", args)?,
-            root: get_canister_id("sns_root", args)?,
-        })
-    }
-
-    /// Call `dfx canister create` to allocate canister IDs for all SNS canisters.
-    fn create_canisters(args: &DeployArgs) -> Self {
-        println!("Creating SNS canisters...");
-        let cycles = format!("{}", args.initial_cycles_per_canister.unwrap_or_default());
-
-        call_dfx(&[
-            "canister",
-            "--network",
-            &args.network,
-            "create",
-            "--all",
-            "--with-cycles",
-            &cycles,
-        ]);
-        Self::lookup(args).expect("SNS canisters failed to be created")
-    }
+    call_dfx(&[
+        "canister",
+        "--network",
+        &args.network,
+        "create",
+        "--all",
+        "--with-cycles",
+        &cycles,
+    ]);
+    lookup(args).expect("SNS canisters failed to be created")
 }
 
 /// Return the canister ID of the canister given by `canister_name`
@@ -101,19 +87,26 @@ pub fn get_canister_id(canister_name: &str, args: &DeployArgs) -> Option<Princip
 /// Responsible for deploying SNS canisters
 pub struct SnsDeployer {
     pub args: DeployArgs,
+    pub sns_canister_payloads: SnsCanisterInitPayloads,
     pub sns_canisters: SnsCanisterIds,
     pub wallet_canister: PrincipalId,
     pub dfx_identity: PrincipalId,
 }
 
 impl SnsDeployer {
-    pub fn new(args: DeployArgs) -> Self {
-        let sns_canisters = SnsCanisterIds::lookup_or_else_create_canisters(&args);
+    pub fn new(args: DeployArgs, sns_init_payload: SnsInitPayload) -> Self {
+        let sns_canisters = lookup_or_else_create_canisters(&args);
+        let sns_canister_payloads = match sns_init_payload.build_canister_payloads(&sns_canisters) {
+            Ok(payload) => payload,
+            Err(e) => panic!("Could not build canister init payloads: {}", e),
+        };
+
         let wallet_canister = get_identity("get-wallet", &args.network);
         let dfx_identity = get_identity("get-principal", &args.network);
 
         Self {
             args,
+            sns_canister_payloads,
             sns_canisters,
             wallet_canister,
             dfx_identity,
@@ -122,7 +115,6 @@ impl SnsDeployer {
 
     /// Deploy an SNS
     pub fn deploy(&self) {
-        self.args.validate();
         self.install_sns_canisters();
         self.set_sns_canister_controllers();
         self.validate_deployment();
@@ -259,92 +251,20 @@ impl SnsDeployer {
 
     /// Install and initialize Governance
     fn install_governance(&self) {
-        let init_args = hex_encode_candid(self.governance_init_args());
+        let init_args = hex_encode_candid(&self.sns_canister_payloads.governance);
         self.install_canister("sns_governance", &init_args);
     }
 
     /// Install and initialize Ledger
     fn install_ledger(&self) {
-        let init_args = hex_encode_candid(self.ledger_init_args());
+        let init_args = hex_encode_candid(&self.sns_canister_payloads.ledger);
         self.install_canister("sns_ledger", &init_args);
     }
 
     /// Install and initialize Root
     fn install_root(&self) {
-        let init_args = hex_encode_candid(self.root_init_args());
+        let init_args = hex_encode_candid(&self.sns_canister_payloads.root);
         self.install_canister("sns_root", &init_args);
-    }
-
-    /// Constuct the params used to initialize a SNS Governance canister.
-    fn governance_init_args(&self) -> Governance {
-        let mut governance = GovernanceCanisterInitPayloadBuilder::new().build();
-        governance.ledger_canister_id = Some(self.sns_canisters.ledger);
-        governance.root_canister_id = Some(self.sns_canisters.root);
-
-        let parameters = governance
-            .parameters
-            .as_mut()
-            .expect("NervousSystemParameters not set");
-
-        let all_permissions = NeuronPermissionList {
-            permissions: NeuronPermissionType::all(),
-        };
-        parameters.neuron_claimer_permissions = Some(all_permissions.clone());
-        parameters.neuron_grantable_permissions = Some(all_permissions);
-
-        if let Some(neuron_minimum_stake_e8s) = self.args.neuron_minimum_stake_e8s {
-            parameters.neuron_minimum_stake_e8s = Some(neuron_minimum_stake_e8s);
-        }
-
-        if let Some(proposal_reject_cost_e8s) = self.args.proposal_reject_cost_e8s {
-            parameters.reject_cost_e8s = Some(proposal_reject_cost_e8s);
-        }
-
-        governance.neurons = self.args.get_initial_neurons(parameters);
-
-        governance
-    }
-
-    /// Construct the params used to initialize a SNS Ledger canister.
-    fn ledger_init_args(&self) -> LedgerCanisterInitPayload {
-        let root_canister_id = CanisterId::new(self.sns_canisters.root).unwrap();
-
-        let mut payload = LedgerCanisterInitPayload::builder()
-            .minting_account(self.sns_canisters.governance.into())
-            .token_symbol_and_name(&self.args.token_symbol, &self.args.token_name)
-            .archive_options(ArchiveOptions {
-                trigger_threshold: 2000,
-                num_blocks_to_archive: 1000,
-                // 1 GB, which gives us 3 GB space when upgrading
-                node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
-                // 128kb
-                max_message_size_bytes: Some(128 * 1024),
-                controller_id: root_canister_id,
-                // TODO: allow users to set this value
-                // 10 Trillion cycles
-                cycles_for_archive_creation: Some(10_000_000_000_000),
-            })
-            .build()
-            .unwrap();
-
-        payload.transfer_fee = self.args.transaction_fee_e8s.map(Tokens::from_e8s);
-        payload.initial_values = self
-            .args
-            .get_initial_accounts(self.sns_canisters.governance);
-
-        let governance_canister_id = CanisterId::new(self.sns_canisters.governance).unwrap();
-        let ledger_canister_id = CanisterId::new(self.sns_canisters.ledger).unwrap();
-        payload.send_whitelist = hashset! { governance_canister_id, ledger_canister_id };
-
-        payload
-    }
-
-    /// Constuct the params used to initialize a SNS Root canister.
-    fn root_init_args(&self) -> SnsRootCanister {
-        SnsRootCanister {
-            governance_canister_id: Some(self.sns_canisters.governance),
-            ledger_canister_id: Some(self.sns_canisters.ledger),
-        }
     }
 
     /// Install the given canister

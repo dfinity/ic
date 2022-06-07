@@ -13,7 +13,7 @@ use ic_sns_governance::pb::v1::{
     NeuronPermissionType,
 };
 use ic_sns_test_utils::itest_helpers::{
-    local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder,
+    local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,
 };
 use ledger_canister::{
     AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
@@ -37,7 +37,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 ..NervousSystemParameters::with_default_values()
             };
 
-            let sns_init_payload = SnsInitPayloadsBuilder::new()
+            let sns_init_payload = SnsTestsInitPayloadBuilder::new()
                 .with_ledger_account(user.get_principal_id().into(), alloc)
                 .with_nervous_system_parameters(system_params)
                 .build();

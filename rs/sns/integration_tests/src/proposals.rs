@@ -25,7 +25,7 @@ use ic_sns_governance::proposal::{
 };
 use ic_sns_governance::types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
 use ic_sns_test_utils::itest_helpers::{
-    local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder, UserInfo,
+    local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
 };
 use ic_sns_test_utils::now_seconds;
 use ledger_canister::{AccountIdentifier, Tokens};
@@ -49,7 +49,7 @@ fn test_motion_proposal_execution() {
                 ..NervousSystemParameters::with_default_values()
             };
 
-            let sns_init_payload = SnsInitPayloadsBuilder::new()
+            let sns_init_payload = SnsTestsInitPayloadBuilder::new()
                 .with_ledger_account(user.get_principal_id().into(), alloc)
                 .with_nervous_system_parameters(system_params.clone())
                 .build();
@@ -137,7 +137,7 @@ fn test_manage_nervous_system_parameters_proposal_execution() {
                 ..NervousSystemParameters::with_default_values()
             };
 
-            let sns_init_payload = SnsInitPayloadsBuilder::new()
+            let sns_init_payload = SnsTestsInitPayloadBuilder::new()
                 .with_ledger_account(user.get_principal_id().into(), alloc)
                 .with_nervous_system_parameters(sys_params)
                 .build();
@@ -237,7 +237,7 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                 ..NervousSystemParameters::with_default_values()
             };
 
-            let sns_init_payload = SnsInitPayloadsBuilder::new()
+            let sns_init_payload = SnsTestsInitPayloadBuilder::new()
                 .with_ledger_account(user_1.get_principal_id().into(), tokens)
                 .with_ledger_account(user_2.get_principal_id().into(), tokens)
                 .with_ledger_account(user_3.get_principal_id().into(), tokens)
@@ -387,7 +387,7 @@ fn test_bad_proposal_id_candid_type() {
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
             let alloc = Tokens::from_tokens(1000).unwrap();
 
-            let sns_init_payload = SnsInitPayloadsBuilder::new()
+            let sns_init_payload = SnsTestsInitPayloadBuilder::new()
                 .with_ledger_account(user.get_principal_id().into(), alloc)
                 .build();
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
@@ -417,7 +417,7 @@ fn test_bad_proposal_id_candid_encoding() {
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
             let alloc = Tokens::from_tokens(1000).unwrap();
 
-            let sns_init_payload = SnsInitPayloadsBuilder::new()
+            let sns_init_payload = SnsTestsInitPayloadBuilder::new()
                 .with_ledger_account(user.get_principal_id().into(), alloc)
                 .build();
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
@@ -444,7 +444,7 @@ fn test_non_existent_proposal_id_is_not_a_bad_input() {
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
             let alloc = Tokens::from_tokens(1000).unwrap();
 
-            let sns_init_payload = SnsInitPayloadsBuilder::new()
+            let sns_init_payload = SnsTestsInitPayloadBuilder::new()
                 .with_ledger_account(user.get_principal_id().into(), alloc)
                 .build();
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
@@ -484,7 +484,7 @@ fn test_list_proposals_determinism() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(user.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params)
             .build();
@@ -598,7 +598,7 @@ fn test_proposal_format_validation() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(user.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params)
             .build();
@@ -705,7 +705,7 @@ fn test_neuron_configuration_needed_for_proposals() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(user.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params)
             .build();
@@ -829,7 +829,7 @@ fn test_ballots_set_for_multiple_neurons() {
             .map(|user| AccountIdentifier::from(user.sender.get_principal_id()))
             .collect();
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_accounts(account_identifiers, alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
@@ -905,7 +905,7 @@ fn test_vote_on_non_existent_proposal() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(user.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params)
             .build();
@@ -953,7 +953,7 @@ fn test_ineligible_neuron_voting_fails() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(proposer.sender.get_principal_id().into(), alloc)
             .with_ledger_account(voter.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params)
@@ -1009,7 +1009,7 @@ fn test_repeated_voting_fails() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(yes_voter.sender.get_principal_id().into(), alloc)
             .with_ledger_account(no_voter.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params)
@@ -1111,7 +1111,7 @@ fn test_following_and_voting() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(a.sender.get_principal_id().into(), alloc)
             .with_ledger_account(b.sender.get_principal_id().into(), alloc)
             .with_ledger_account(c.sender.get_principal_id().into(), alloc)
@@ -1238,7 +1238,7 @@ fn test_following_and_voting_from_non_proposer() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(a.sender.get_principal_id().into(), alloc)
             .with_ledger_account(b.sender.get_principal_id().into(), alloc)
             .with_ledger_account(c.sender.get_principal_id().into(), alloc)
@@ -1330,7 +1330,7 @@ fn test_following_multiple_neurons_reach_majority() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(a.sender.get_principal_id().into(), alloc)
             .with_ledger_account(b.sender.get_principal_id().into(), alloc)
             .with_ledger_account(c.sender.get_principal_id().into(), alloc)
@@ -1439,7 +1439,7 @@ fn test_proposal_rejection() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(proposer.sender.get_principal_id().into(), alloc)
             .with_ledger_account(voter.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params.clone())
@@ -1564,7 +1564,7 @@ fn test_proposal_garbage_collection() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(user.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
@@ -1672,7 +1672,7 @@ fn test_intermittent_proposal_submission() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(proposer.sender.get_principal_id().into(), alloc)
             .with_ledger_account(voter.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(params.clone())

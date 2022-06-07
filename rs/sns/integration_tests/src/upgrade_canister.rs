@@ -12,7 +12,7 @@ use ic_sns_governance::pb::v1::{
 use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
     install_governance_canister, install_ledger_canister, install_root_canister,
-    local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder, UserInfo,
+    local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
 };
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -44,7 +44,7 @@ fn test_upgrade_canister_proposal_is_successful() {
                 ..NervousSystemParameters::with_default_values()
             };
 
-            let sns_init_payload = SnsInitPayloadsBuilder::new()
+            let sns_init_payload = SnsTestsInitPayloadBuilder::new()
                 .with_ledger_account(user.get_principal_id().into(), alloc)
                 .with_nervous_system_parameters(system_params)
                 .build();
@@ -178,7 +178,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
                 ..NervousSystemParameters::with_default_values()
             };
 
-            let mut sns_init_payload = SnsInitPayloadsBuilder::new()
+            let mut sns_init_payload = SnsTestsInitPayloadBuilder::new()
                 .with_ledger_account(user.get_principal_id().into(), alloc)
                 .with_nervous_system_parameters(system_params)
                 .build();
@@ -339,7 +339,7 @@ fn test_self_upgrade_canister_proposal() {
                 ..NervousSystemParameters::with_default_values()
             };
 
-            let sns_init_payload = SnsInitPayloadsBuilder::new()
+            let sns_init_payload = SnsTestsInitPayloadBuilder::new()
                 .with_ledger_account(user.get_principal_id().into(), alloc)
                 .with_nervous_system_parameters(system_params)
                 .build();
@@ -483,7 +483,7 @@ fn test_upgrade_root_success() {
                 ..NervousSystemParameters::with_default_values()
             };
 
-            let sns_init_payload = SnsInitPayloadsBuilder::new()
+            let sns_init_payload = SnsTestsInitPayloadBuilder::new()
                 .with_ledger_account(user.get_principal_id().into(), alloc)
                 .with_nervous_system_parameters(system_params)
                 .build();
@@ -693,7 +693,7 @@ fn test_upgrade_after_state_shrink() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_ledger_account(neuron_claimer.sender.get_principal_id().into(), alloc)
             .with_nervous_system_parameters(system_params)
             .build();
@@ -782,7 +782,7 @@ fn test_upgrade_after_state_shrink() {
 #[test]
 fn test_install_canisters_in_any_order() {
     local_test_on_sns_subnet(|runtime| async move {
-        let mut sns_init_payload = SnsInitPayloadsBuilder::new()
+        let mut sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_nervous_system_parameters(NervousSystemParameters::with_default_values())
             .build();
 

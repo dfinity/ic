@@ -1,7 +1,7 @@
 use dfn_candid::candid_one;
 use ic_sns_governance::pb::v1::NervousSystemParameters;
 use ic_sns_test_utils::itest_helpers::{
-    local_test_on_sns_subnet, SnsCanisters, SnsInitPayloadsBuilder,
+    local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,
 };
 
 /// Tests that Governance can be initialized with `NervousSystemParameters` and that any
@@ -15,7 +15,7 @@ fn test_init_with_sys_params() {
             ..NervousSystemParameters::with_default_values()
         };
 
-        let sns_init_payload = SnsInitPayloadsBuilder::new()
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             .with_nervous_system_parameters(system_params.clone())
             .build();
 

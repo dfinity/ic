@@ -7020,6 +7020,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-protobuf",
  "ic-sns-governance",
+ "ic-sns-init",
  "ic-sns-root",
  "ic-sns-test-utils",
  "ledger-canister",
@@ -7092,6 +7093,21 @@ name = "ic-sns-governance-protobuf-generator"
 version = "0.8.0"
 dependencies = [
  "prost-build",
+]
+
+[[package]]
+name = "ic-sns-init"
+version = "0.1.0"
+dependencies = [
+ "ic-base-types",
+ "ic-crypto-sha",
+ "ic-nervous-system-common",
+ "ic-sns-governance",
+ "ic-sns-root",
+ "ledger-canister",
+ "maplit",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -7177,6 +7193,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-root",
  "ic-sns-governance",
+ "ic-sns-init",
  "ic-sns-root",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",

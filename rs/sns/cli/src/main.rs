@@ -6,18 +6,13 @@ use crate::deploy::SnsDeployer;
 use candid::{CandidType, Encode, IDLArgs};
 use clap::Parser;
 use ic_base_types::PrincipalId;
-use ic_crypto_sha::Sha256;
-use ic_sns_governance::pb::v1::neuron::DissolveState;
-use ic_sns_governance::pb::v1::{NervousSystemParameters, Neuron, NeuronPermission};
-use ledger_canister::{AccountIdentifier, BinaryAccountBalanceArgs, Subaccount, Tokens};
-use maplit::btreemap;
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use ic_sns_init::{NeuronBlueprint, SnsInitPayload, SnsInitPayloadBuilder};
+use ledger_canister::{AccountIdentifier, BinaryAccountBalanceArgs, Tokens};
+use std::collections::HashMap;
 use std::fs::File;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::str::FromStr;
-use std::time::SystemTime;
 
 #[derive(Debug, Parser)]
 #[clap(
@@ -134,27 +129,8 @@ struct AccountBalanceArgs {
 }
 
 impl DeployArgs {
-    const MAX_TOKEN_SYMBOL_LENGTH: usize = 10;
-    const MAX_TOKEN_NAME_LENGTH: usize = 255;
-
     /// panic! if any args are invalid
     pub fn validate(&self) {
-        if self.token_symbol.len() > Self::MAX_TOKEN_SYMBOL_LENGTH {
-            panic!(
-                "Error: token-symbol must be fewer than {} characters, given character count: {}",
-                Self::MAX_TOKEN_SYMBOL_LENGTH,
-                self.token_symbol.len()
-            );
-        }
-
-        if self.token_name.len() > Self::MAX_TOKEN_NAME_LENGTH {
-            panic!(
-                "Error: token-name must be fewer than {} characters, given character count: {}",
-                Self::MAX_TOKEN_NAME_LENGTH,
-                self.token_name.len()
-            );
-        }
-
         if self.network == "ic" {
             assert!(
                 self.initial_cycles_per_canister.is_some(),
@@ -164,14 +140,10 @@ impl DeployArgs {
     }
 
     /// Parse the supplied `initial_ledger_accounts` JSON file into a map of account identifiers
-    /// to `Tokens`. Also add the ledger accounts of the specified initial neurons.
-    pub fn get_initial_accounts(
-        &self,
-        governance_id: PrincipalId,
-    ) -> HashMap<AccountIdentifier, Tokens> {
+    /// to `Tokens`.
+    pub fn get_initial_accounts(&self) -> HashMap<AccountIdentifier, Tokens> {
         // Read and parse the accounts JSON file.
-        let accounts: HashMap<String, u64> = self
-            .initial_ledger_accounts
+        self.initial_ledger_accounts
             .clone()
             .map(|file_name| {
                 let file =
@@ -180,17 +152,7 @@ impl DeployArgs {
                     .expect("Could not parse the initial ledger accounts file");
                 accounts
             })
-            .unwrap_or_default();
-
-        // The ledger accounts of the initial neurons
-        let neuron_accounts = self
-            .get_initial_neuron_blueprints()
-            .into_iter()
-            .map(|neuron_blueprint| neuron_blueprint.as_ledger_account(governance_id));
-
-        // Validate principal IDs and convert from raw (String, u64) pairs
-        // to (AccountIdentifier, Tokens) pairs.
-        accounts
+            .unwrap_or_default()
             .iter()
             .map(|(principal_str, e8s)| {
                 let principal_id = PrincipalId::from_str(principal_str).unwrap_or_else(|_| {
@@ -198,7 +160,6 @@ impl DeployArgs {
                 });
                 (principal_id.into(), Tokens::from_e8s(*e8s))
             })
-            .chain(neuron_accounts)
             .collect()
     }
 
@@ -219,112 +180,17 @@ impl DeployArgs {
         neurons
     }
 
-    /// Return the initial neurons that the user specified. These neurons will exist in
-    /// Governance at genesis, with the correct balance in their corresponding ledger
-    /// accounts in the Ledger. A map from neuron ID to Neuron is returned.
-    pub fn get_initial_neurons(
-        &self,
-        parameters: &NervousSystemParameters,
-    ) -> BTreeMap<String, Neuron> {
-        self.get_initial_neuron_blueprints()
-            .iter()
-            .map(|neuron_blueprint| {
-                let neuron = neuron_blueprint.as_neuron(parameters);
-                (neuron.id.as_ref().unwrap().to_string(), neuron)
-            })
-            .collect()
-    }
-}
-
-/// Specifies the necessary info from which to create a Neuron
-#[derive(Serialize, Deserialize, Debug)]
-pub struct NeuronBlueprint {
-    controller: String,
-    nonce: Option<u64>,
-    stake_e8s: u64,
-    age_seconds: Option<u64>,
-    dissolve_delay_seconds: u64,
-}
-
-impl NeuronBlueprint {
-    /// Build a `Neuron` from the blueprint
-    pub fn as_neuron(&self, parameters: &NervousSystemParameters) -> Neuron {
-        if let Some(neuron_minimum_stake_e8s) = parameters.neuron_minimum_stake_e8s {
-            if self.stake_e8s < neuron_minimum_stake_e8s {
-                panic!(
-                    "An initial neuron has stake {}, which is less than the configured \
-                    neuron_minimum_stake_e8s of {}",
-                    self.stake_e8s, neuron_minimum_stake_e8s
-                );
-            }
-        }
-
-        if let Some(max_dissolve_delay_seconds) = parameters.max_dissolve_delay_seconds {
-            if self.dissolve_delay_seconds > max_dissolve_delay_seconds {
-                panic!(
-                    "An initial neuron has dissolve_delay_seconds {}, which is more than the \
-                    configured max_dissolve_delay_seconds of {}",
-                    self.dissolve_delay_seconds, max_dissolve_delay_seconds
-                );
-            }
-        }
-
-        let permission = NeuronPermission {
-            principal: Some(self.controller()),
-            permission_type: parameters
-                .neuron_claimer_permissions
-                .as_ref()
-                .unwrap()
-                .permissions
-                .clone(),
-        };
-
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        Neuron {
-            id: Some(self.subaccount().into()),
-            permissions: vec![permission],
-            cached_neuron_stake_e8s: self.stake_e8s,
-            neuron_fees_e8s: 0,
-            created_timestamp_seconds: now,
-            aging_since_timestamp_seconds: now.saturating_sub(self.age_seconds.unwrap_or_default()),
-            followees: btreemap! {},
-            maturity_e8s_equivalent: 0,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                self.dissolve_delay_seconds,
-            )),
-        }
-    }
-
-    /// Get the ledger account that corresponds with this neuron
-    pub fn as_ledger_account(&self, governance_id: PrincipalId) -> (AccountIdentifier, Tokens) {
-        let account = AccountIdentifier::new(governance_id, Some(self.subaccount()));
-        let tokens = Tokens::from_e8s(self.stake_e8s);
-
-        (account, tokens)
-    }
-
-    fn subaccount(&self) -> Subaccount {
-        Subaccount({
-            let mut state = Sha256::new();
-            state.write(&[0x0c]);
-            state.write(b"neuron-stake");
-            state.write(self.controller().as_slice());
-            state.write(&self.nonce.unwrap_or_default().to_be_bytes());
-            state.finish()
-        })
-    }
-
-    fn controller(&self) -> PrincipalId {
-        PrincipalId::from_str(&self.controller).unwrap_or_else(|_| {
-            panic!(
-                "Could not parse neuron controller {} as a PrincipalId",
-                &self.controller
-            )
-        })
+    pub fn generate_sns_init_payload(&self) -> SnsInitPayload {
+        SnsInitPayloadBuilder::new()
+            .with_transaction_fee_e8s(self.transaction_fee_e8s)
+            .with_token_name(self.token_name.clone())
+            .with_token_symbol(self.token_symbol.clone())
+            .with_initial_ledger_accounts(self.get_initial_accounts())
+            .with_proposal_reject_cost_e8s(self.proposal_reject_cost_e8s)
+            .with_neuron_minimum_stake_e8s(self.neuron_minimum_stake_e8s)
+            .with_initial_neurons(self.get_initial_neuron_blueprints())
+            .build()
+            .unwrap_or_else(|e| panic!("Error creating the SnsInitPayload: {}", e))
     }
 }
 
@@ -333,9 +199,16 @@ fn main() {
         .unwrap_or_else(|e| panic!("Illegal arguments: {}", e));
 
     match args.sub_command {
-        SubCommand::Deploy(args) => SnsDeployer::new(args).deploy(),
+        SubCommand::Deploy(args) => deploy(args),
         SubCommand::AccountBalance(args) => print_account_balance(args),
     }
+}
+
+/// Deploy an SNS with the given DeployArgs.
+fn deploy(args: DeployArgs) {
+    args.validate();
+    let sns_init_payload = args.generate_sns_init_payload();
+    SnsDeployer::new(args, sns_init_payload).deploy()
 }
 
 /// Print the Ledger account balance of the principal in `AccountBalanceArgs` if given, else

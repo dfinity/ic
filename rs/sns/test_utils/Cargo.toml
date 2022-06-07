@@ -16,6 +16,7 @@ ic-crypto-sha = { path = "../../crypto/sha" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-sns-governance = { path = "../governance" }
+ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
