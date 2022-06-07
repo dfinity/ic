@@ -1,0 +1,197 @@
+// This file contains the Protobuf definitions for the 'sale' canister
+// which can be used for an initial token sale (swap/auction) to
+// decentralise an application running on the IC, turning it into a
+// dapp.
+
+syntax = "proto3";
+
+package ic_sns_sale.pb.v1;
+
+// The initialisation data of the canister. Always specified on
+// canister creation, and cannot be modified afterwards.
+//
+// If the initialization parameters are incorrect, the sale will
+// immediately become aborted.
+message Init {
+  // The canister ID of the NNS governance canister. This is the only
+  // principal that can open the sale.
+  string nns_governance_canister_id = 1;
+
+  // The canister ID of the governance canister of the SNS that this
+  // token sale pertains to.
+  string sns_governance_canister_id = 2;
+
+  // The ledger canister of the SNS.
+  string sns_ledger_canister_id = 3;
+
+  // The ledger canister for the base token, typically ICP. The base
+  // token is typically ICP, but this assumption is not used anywhere,
+  // so, in principle, any token type can be used as base token.
+  string icp_ledger_canister_id = 4;
+  
+  // The number of ICP that is "targetted" by this token sale. If this
+  // amount is achieved, the sale can be triggered immediately,
+  // without waiting for the due date (token_sale_timestamp). Must be
+  // at least `min_participants * min_participant_icp_e8s`.
+  uint64 target_icp_e8s = 5;
+  
+  // The date/time (seconds since Unix epoch) that this sale will end,
+  // i.e., when the swap will take place (unless `target_icp` is
+  // achieved earlier). Must be in the future at the time of canister
+  // creation.
+  uint64 token_sale_timestamp_seconds = 6;
+  
+  // The minimum number of buyers that must participate for the sale
+  // to take place. Must be greater than zero.
+  uint32 min_participants = 7;
+  
+  // The minimum amount of ICP that each buyer must contribute to
+  // participate. Must be greater than zero.
+  uint64 min_participant_icp_e8s = 8;
+}
+
+message BuyerState {
+  // Can only be set when a buyer state record for a new buyer is
+  // created, which can only happen when the lifecycle state is
+  // `Open`. Must be at least `init.min_participant_icp_e8s` on
+  // initialization but will be set to zero once the tokens have been
+  // transferred out - either to the governance canister when the sale
+  // is committed or (back) to the buyer when the sale is aborted.
+  //
+  // Invariant between canisters:
+  //
+  //  ```text
+  //  amount_icp_e8 <= icp_ledger.balance_of(subaccount(sale_canister, P)),
+  //  ```
+  //
+  // where `P` is the principal ID associated with this buyer's state.
+  //
+  // ownership
+  // * pending - must be zero
+  // * open - owned by the buyer, cannot be transferred out
+  // * committed - owned by the governance canister, can be transferred out
+  // * aborted - owned by the buyer, can be transferred out
+  uint64 amount_icp_e8s = 1;
+
+  // Computed when world lifecycle changes to Committed.
+  //
+  // ownership:
+  // * pending - must be zero
+  // * open - must be zero
+  // * committed - owned by the buyer, can be transferred out
+  // * aborted - must be zero
+  uint64 amount_sns_e8s = 2;
+
+  // Only used in state Committed or Aborted: ICP tokens are being
+  // transferred either to the governance canister when the sale is
+  // committed or to the buyer when the sale is aborted.
+  bool icp_disbursing = 3;
+
+  // Only used in state Committed, when a transfer of
+  // `amount_sns_e8s` is in progress.
+  bool sns_disbursing = 4;
+}
+
+// Lifecycle states of the sale cansiter's world state. The details of
+// their meanings is provided in the documentation of the `Sale`.
+enum Lifecycle {
+  // Canister is incorrectly configured. Not a real lifecycle state.
+  LIFECYCLE_UNSPECIFIED = 0;
+  // The canister is correctly initialized and waiting to receive the
+  // amount of SNS tokens for sale.
+  LIFECYCLE_PENDING     = 1;
+  // Users can register for the token sale.
+  LIFECYCLE_OPEN        = 2;
+  // The token sale price has been determined and buyers can collect
+  // their tokens.
+  LIFECYCLE_COMMITTED   = 3;
+  // The token sale has been aborted.
+  LIFECYCLE_ABORTED     = 4;
+}
+
+// Mutable state of the sale canister.
+message State {
+  // The number of tokens (of `init.sns_ledger_canister_id`) that are
+  // for sale. The tokens are held in escrow for the the Governance
+  // canister.
+  //
+  // Invariant:
+  // ```text
+  // state.sns_token_e8s <= token_ledger.balance_of(<sale-canister>)
+  // ```
+  //
+  // When the sale is committed or aborted, this value is set to
+  // zero. Any remaining balance, either due to fractions or due to an
+  // aborted sale can be reclaimed by the Governance canister.
+  uint64 sns_token_e8s = 1;
+  // Invariant:
+  // ```text
+  // state.buyer_total_icp_e8s <= init.target_icp_e8s
+  // ```
+  map<string, BuyerState> buyers = 2;
+  // The current lifecycle state of the sale.
+  Lifecycle lifecycle = 3;
+}
+
+// The complete state of the sale canister.
+message Sale {
+  Init init = 1;
+  State state = 2;
+}
+
+
+//
+// === Request/Response Messages
+//
+
+
+// TODO: introduce a limits on the number of buyers to include?
+message GetStateRequest {}
+message GetStateResponse {
+  Sale sale = 1;
+  DerivedState derived = 2;
+}
+
+message DerivedState {
+  uint64 buyer_total_icp_e8s = 1;
+  // Current approximate rate SNS tokens per ICP.
+  float sns_tokens_per_icp = 2;
+}
+
+// See `open_sale` for details.
+message OpenSaleRequest {}
+// Response if the sale was successfully opened.
+message OpenSaleResponse {}
+
+
+// The can notify the sale canister about tokens 'for sale' having
+// been transferred in.
+//
+// Only in lifecycle state 'pending'.
+message RefreshSnsTokensRequest {}
+message RefreshSnsTokensResponse {}
+
+// The buyer notifies the sale cansiter about an ICP transfer.
+//
+// Only in lifecycle state 'open'.
+message RefreshBuyerTokensRequest {
+  // If not specified, the caller is used.
+  string buyer = 1;
+}
+message RefreshBuyerTokensResponse {}
+
+// Once a sale is committed or aborted, the tokens need to be
+// distributed, and, if the sale was committed, neurons created.
+message FinalizeSaleRequest {}
+
+message FinalizeSaleResponse {
+  SweepResult sweep_icp = 1;
+  SweepResult sweep_sns = 2;
+  SweepResult create_neuron = 3;
+}
+
+message SweepResult {
+  uint32 success = 1;
+  uint32 failure = 2;
+  uint32 skipped = 3;
+}
