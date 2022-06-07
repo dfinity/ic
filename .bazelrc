@@ -6,6 +6,7 @@ build --strategy_regexp=ic-os/guestos/.*=local
 build --remote_cache=bes.buildfarm.dfinity.systems
 build --experimental_remote_cache_async
 build --incompatible_remote_build_event_upload_respect_no_cache
+build --noremote_upload_local_results # Whether to upload locally executed action results to the remote cache.
 
 build --execution_log_json_file=bazel-build-log.json
 
@@ -16,6 +17,7 @@ build --remote_local_fallback
 build --workspace_status_command=$(pwd)/bazel/workspace_status.sh
 
 build:ci --noremote_local_fallback
+build:ci --remote_upload_local_results # Whether to upload locally executed action results to the remote cache.
 build:ci --repository_cache=/cache/bazel
 
 # no-op config for now as everything is set as default.
