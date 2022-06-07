@@ -23,7 +23,9 @@ use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationExt,
     SshSession, ADMIN, DEVICE_NAME,
 };
-use crate::util::{self, block_on};
+use crate::util::{
+    self, assert_agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
+};
 use crate::workload::{CallSpec, Metrics, Request, RoundRobinPlan, Workload};
 use ic_agent::{export::Principal, Agent};
 use ic_base_types::NodeId;
@@ -33,7 +35,6 @@ use rand_chacha::ChaCha8Rng;
 use slog::{debug, info, Logger};
 use ssh2::Session;
 use std::cmp::{max, min};
-use std::convert::TryInto;
 use std::io::{self, Read, Write};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -195,6 +196,19 @@ pub fn test(env: TestEnv, config: Config) {
             && agents_app.len() == workload_app_nodes_count,
         "Number of nodes and agents do not match."
     );
+    info!(
+        &log,
+        "Asserting all agents observe the installed canister ..."
+    );
+    block_on(async {
+        for agent in agents_nns.iter() {
+            assert_agent_observes_canister_module(agent, &canister_nns).await;
+        }
+        for agent in agents_app.iter() {
+            assert_agent_observes_canister_module(agent, &canister_app).await;
+        }
+    });
+    info!(&log, "All agents observe the installed canister module.");
     // Spawn two workloads in separate threads, as we will need to have execution context to stress nodes.
     let payload: Vec<u8> = vec![0; PAYLOAD_SIZE_BYTES];
     let start_time = Instant::now();
@@ -262,7 +276,7 @@ pub fn test(env: TestEnv, config: Config) {
     }
     info!(
         &log,
-        "Collect metrics from both workloads and perform assertions ..."
+        "Step 5: Collect metrics from both workloads and perform assertions ..."
     );
     let metrics_nns = handle_workload_nns
         .join()
@@ -483,57 +497,6 @@ fn spawn_workload(
                 .expect("Execution of the workload failed.")
         })
     })
-}
-
-async fn assert_canister_counter_with_retries(
-    log: &slog::Logger,
-    agent: &Agent,
-    canister_id: &Principal,
-    payload: Vec<u8>,
-    min_expected_count: usize,
-    max_retries: u32,
-    retry_wait: Duration,
-) {
-    for i in 1..=1 + max_retries {
-        debug!(
-            log,
-            "Reading counter value from canister with id={}, attempt {}.", canister_id, i
-        );
-        let res = agent
-            .query(canister_id, "read")
-            .with_arg(&payload)
-            .call()
-            .await
-            .unwrap();
-        let counter = u32::from_le_bytes(
-            res.as_slice()
-                .try_into()
-                .expect("slice with incorrect length"),
-        ) as usize;
-        debug!(log, "Counter value is {}.", counter);
-        if counter >= min_expected_count {
-            debug!(
-                log,
-                "Counter value on canister is {}, above the minimum expectation {}.",
-                counter,
-                min_expected_count
-            );
-            return;
-        } else {
-            debug!(
-                log,
-                "Counter value on canister is {}, below the minimum expectation {}.",
-                counter,
-                min_expected_count
-            );
-            debug!(log, "Retrying in {} secs ...", retry_wait.as_secs());
-            tokio::time::sleep(retry_wait).await;
-        }
-    }
-    panic!(
-        "Minimum expected counter value {} on counter canister was not observed after {} retries.",
-        min_expected_count, max_retries
-    );
 }
 
 fn reset_tc_ssh_command() -> String {

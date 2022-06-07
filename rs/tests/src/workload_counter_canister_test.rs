@@ -25,8 +25,8 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::nns::NnsExt;
 use crate::util::{
-    assert_create_agent, assert_endpoints_reachability, block_on, delay,
-    get_random_application_node_endpoint, EndpointsStatus,
+    assert_canister_counter_with_retries, assert_create_agent, assert_endpoints_reachability,
+    block_on, delay, get_random_application_node_endpoint, EndpointsStatus,
 };
 use crate::workload::{CallSpec, Request, RoundRobinPlan, Workload};
 use ic_agent::{export::Principal, Agent};
@@ -34,8 +34,7 @@ use ic_fondue::ic_manager::IcHandle;
 use ic_prep_lib::subnet_configuration::constants;
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
-use slog::{debug, info};
-use std::convert::TryInto;
+use slog::info;
 use std::time::Duration;
 
 const NODES_COUNT: usize = 3;
@@ -232,51 +231,4 @@ pub async fn install_counter_canister(agent: &Agent) -> Principal {
     .expect("Failed to install counter canister.");
 
     canister_id
-}
-
-async fn assert_canister_counter_with_retries(
-    log: &slog::Logger,
-    agent: &Agent,
-    canister_id: &Principal,
-    payload: Vec<u8>,
-    expected_count: usize,
-    max_retries: u32,
-    retry_wait: Duration,
-) {
-    for i in 1..=1 + max_retries {
-        debug!(
-            log,
-            "Reading counter value from canister with id={}, attempt {}.", canister_id, i
-        );
-        let res = agent
-            .query(canister_id, "read")
-            .with_arg(&payload)
-            .call()
-            .await
-            .unwrap();
-        let counter = u32::from_le_bytes(
-            res.as_slice()
-                .try_into()
-                .expect("slice with incorrect length"),
-        ) as usize;
-        debug!(log, "Counter value is {}", counter);
-        if counter >= expected_count {
-            debug!(
-                log,
-                "Counter value on canister is {}, matches the expectation.", counter
-            );
-            return;
-        } else {
-            debug!(
-                log,
-                "Counter value < expected_count, {} < {}", counter, expected_count
-            );
-            debug!(log, "Retrying in {} secs...", retry_wait.as_secs());
-            tokio::time::sleep(retry_wait).await;
-        }
-    }
-    panic!(
-        "Expected counter value {} on counter_canister was not observed after {} retries.",
-        expected_count, max_retries
-    );
 }

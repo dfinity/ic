@@ -156,6 +156,14 @@ impl Metrics {
         &self.errors_map
     }
 
+    pub fn success_ratio(&self) -> f64 {
+        self.success_calls as f64 / self.total_calls() as f64
+    }
+
+    pub fn failure_ratio(&self) -> f64 {
+        1.0 - self.success_ratio()
+    }
+
     pub fn process_request(&mut self, request: RequestResult) {
         self.min_request_duration = min(self.min_request_duration, request.duration);
         self.max_request_duration = max(self.max_request_duration, request.duration);

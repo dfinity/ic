@@ -27,7 +27,7 @@ use ledger_canister::{
 use on_wire::FromWire;
 use rand_chacha::ChaCha8Rng;
 use std::{
-    convert::TryFrom,
+    convert::{TryFrom, TryInto},
     future::Future,
     net::IpAddr,
     sync::Arc,
@@ -908,6 +908,71 @@ pub(crate) async fn assert_all_ready(endpoints: &[&IcEndpoint], ctx: &ic_fondue:
     for &e in endpoints {
         e.assert_ready(ctx).await;
     }
+}
+
+pub async fn assert_agent_observes_canister_module(agent: &Agent, canister_id: &Principal) {
+    let has_module_hash = || async {
+        ManagementCanister::create(agent)
+            .canister_status(canister_id)
+            .call_and_wait(delay())
+            .await
+            .unwrap()
+            .0
+            .module_hash
+            .is_some()
+    };
+    assert!(has_module_hash().await);
+}
+
+pub(crate) async fn assert_canister_counter_with_retries(
+    log: &slog::Logger,
+    agent: &Agent,
+    canister_id: &Principal,
+    payload: Vec<u8>,
+    min_expected_count: usize,
+    max_retries: u32,
+    retry_wait: Duration,
+) {
+    for i in 1..=1 + max_retries {
+        debug!(
+            log,
+            "Reading counter value from canister with id={}, attempt {}.", canister_id, i
+        );
+        let res = agent
+            .query(canister_id, "read")
+            .with_arg(&payload)
+            .call()
+            .await
+            .unwrap();
+        let counter = u32::from_le_bytes(
+            res.as_slice()
+                .try_into()
+                .expect("slice with incorrect length"),
+        ) as usize;
+        debug!(log, "Counter value is {}.", counter);
+        if counter >= min_expected_count {
+            debug!(
+                log,
+                "Counter value on canister is {}, above the minimum expectation {}.",
+                counter,
+                min_expected_count
+            );
+            return;
+        } else {
+            debug!(
+                log,
+                "Counter value on canister is {}, below the minimum expectation {}.",
+                counter,
+                min_expected_count
+            );
+            debug!(log, "Retrying in {} secs ...", retry_wait.as_secs());
+            tokio::time::sleep(retry_wait).await;
+        }
+    }
+    panic!(
+        "Minimum expected counter value {} on counter canister was not observed after {} retries.",
+        min_expected_count, max_retries
+    );
 }
 
 /// Converts Canister id into an escaped byte string
