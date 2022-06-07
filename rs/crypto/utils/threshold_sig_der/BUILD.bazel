@@ -1,0 +1,18 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "threshold_sig_der",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_utils_threshold_sig_der",
+    edition = "2018",
+    deps = [
+        "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils",
+    ],
+)

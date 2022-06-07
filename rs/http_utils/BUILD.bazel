@@ -1,0 +1,27 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "http_utils",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_http_utils",
+    edition = "2018",
+    deps = [
+        "//rs/crypto/sha",
+        "//rs/monitoring/logger",
+        "@crate_index//:flate2",
+        "@crate_index//:hex",
+        "@crate_index//:http",
+        "@crate_index//:hyper",
+        "@crate_index//:hyper-tls",
+        "@crate_index//:slog",
+        "@crate_index//:tar",
+        "@crate_index//:tokio",
+    ],
+)

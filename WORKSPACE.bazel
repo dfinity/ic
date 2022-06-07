@@ -94,6 +94,7 @@ crates_repository(
             version = "=0.28.1",
         ),
         "bitflags": crate.spec(version = "=1.3.2"),
+        "bit-vec": crate.spec(version = "=0.5"),
         "byte-unit": crate.spec(version = "=1.0.1"),
         "byteorder": crate.spec(version = "=1.4.3"),
         "bytes": crate.spec(version = "=1.0.1"),
@@ -134,10 +135,12 @@ crates_repository(
         "erased-serde": crate.spec(version = "=0.3.11"),
         "eyre": crate.spec(version = "=0.6.8"),
         "features": crate.spec(version = "=0.10.0"),
+        "flate2": crate.spec(version = "=1.0.20"),
         "float-cmp": crate.spec(version = "=0.9.0"),
         "futures-util": crate.spec(version = "=0.3.21"),
         "futures": crate.spec(version = "=0.3.21"),
         "hex": crate.spec(version = "=0.4.3"),
+        "hex-literal": crate.spec(version = "=0.2.1"),
         "http": crate.spec(version = "=0.2.5"),
         "hyper": crate.spec(
             features = [
@@ -245,6 +248,7 @@ crates_repository(
             ],
             version = "=1.0.93",
         ),
+        "tar": crate.spec(version = "=0.4.38"),
         "tempfile": crate.spec(version = "=3.1.0"),
         "thiserror": crate.spec(version = "=1.0.30"),
         "threadpool": crate.spec(version = "1.8.1"),

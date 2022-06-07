@@ -1,0 +1,48 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/config",
+    "//rs/monitoring/logger",
+    "//rs/replicated_state",
+    "//rs/sys",
+    "//rs/utils",
+    "@crate_index//:bit-vec",
+    "@crate_index//:lazy_static",
+    "@crate_index//:libc",
+    "@crate_index//:nix",
+    "@crate_index//:slog",
+]
+
+rust_library(
+    name = "memory_tracker",
+    srcs = glob(["src/**"]),
+    crate_name = "memory_tracker",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "memory_tracker_test",
+    crate = ":memory_tracker",
+    edition = "2018",
+    deps = [
+        "@crate_index//:tempfile",
+    ],
+)
+
+rust_binary(
+    name = "memory_tracker_bench",
+    srcs = ["benches/traps.rs"],
+    edition = "2018",
+    deps = [
+        ":memory_tracker",
+        "@crate_index//:criterion",
+    ] + DEPENDENCIES,
+)
