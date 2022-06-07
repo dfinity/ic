@@ -4,10 +4,15 @@
     after the earliest finalization of the block at height h.
 
   Relevant events:
+  - p2p__originally_in_subnet(node_addr:string, node_addr:string, subnet_id:string)
+  - registry__node_added_to_subnet(node_id:string, node_addr:string, subnet_id:string)
+  - registry__node_removed_from_subnet(node_id:string, node_addr:string)
+  - p2p__node_added(node_id:string, subnet_id:string, added_node_id:string)
+  - p2p__node_removed(node_id:string, subnet_id:string, removed_node_id:string)
   - finalized(node_id:string, subnet_id:string, height:int, hash:string, replica_version:string)
 
   Remarks:
-  - Time-stamps are assumed to be in seconds.
+  - Time-stamps are assumed to be in milliseconds.
   - The original analyzer rule ignored the node_id. This formalization ignores
     it too.
   - The "finalized" event is triggered whenever the consensus layer tries to
@@ -18,12 +23,23 @@
     approximation of the time at which the block became finalized.
 *)
 
+LET registry_subnet_map(node, subnet) = ((NOT registry__node_removed_from_subnet(node, _)) SINCE (p2p__originally_in_subnet(node, _, subnet) OR (registry__node_added_to_subnet(node, _, subnet) AND NOT PREVIOUS ((NOT registry__node_removed_from_subnet(node, _)) SINCE registry__node_added_to_subnet(node, _, subnet))))) IN
+LET subnet_changing(subnet) =
+  ( EXISTS node1, node2.
+    (
+      registry_subnet_map(node1, subnet)
+      AND registry_subnet_map(node2, subnet)
+      AND NOT node1 = node2
+      AND NOT ((NOT p2p__node_removed(node1, subnet, node2)) SINCE p2p__node_added(node1, subnet, node2))
+    )
+  )
+IN
 LET fin(node, subnet, height, hash, replica_version) =
   finalized(node, subnet, height, hash, replica_version)
   AND NOT (
     PREVIOUS ONCE EXISTS nodea. finalized(nodea, subnet, height, hash, replica_version)
   )
 IN
-(ONCE[80001,*] fin(n1, subnet, height1, hash1, replica_version))
+((NOT subnet_changing(subnet)) SINCE[80001,*] fin(n1, subnet, height1, hash1, replica_version))
 AND fin(n2, subnet, height2, hash2, replica_version)
 AND height2 = height1 + 1

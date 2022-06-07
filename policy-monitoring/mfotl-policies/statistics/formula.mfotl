@@ -7,9 +7,8 @@
 *)
 
 (* State predicate mapping each node_id to its current subnet_id *)
-LET subnet_map(node_id, subnet_id) =
-  NOT p2p__node_removed(node_id, subnet_id) SINCE p2p__node_added(node_id, subnet_id)
-IN
+LET registry_subnet_map(node, subnet) = ((NOT registry__node_removed_from_subnet(node, _)) SINCE (p2p__originally_in_subnet(node, _, subnet) OR (registry__node_added_to_subnet(node, _, subnet) AND NOT PREVIOUS ((NOT registry__node_removed_from_subnet(node, _)) SINCE registry__node_added_to_subnet(node, _, subnet))))) IN
+LET subnet_map(node, subnet) = registry_subnet_map(node, subnet) IN
 
 (* Number of nodes per subnet_id *)
 LET subnet_size(subnet_id, n) =

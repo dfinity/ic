@@ -23,7 +23,7 @@ from .event import FinalizedEvent
 from .event import MoveBlockProposalEvent
 from .event import NodeMembershipEvent
 from .event import OriginallyInSubnetPreambleEvent
-from .event import OriginalSubnetTypeEvent
+from .event import OriginalSubnetTypePreambleEvent
 from .event import RebootEvent
 from .event import RegistryNodeAddedEvent
 from .event import RegistryNodeRemovedEvent
@@ -83,7 +83,7 @@ class PreProcessor:
     def __init__(self, name: str):
         self.name = name
         self.stat = {
-            "test_runtime_seconds": 0.0,
+            "test_runtime_milliseconds": 0.0,
             "pre_processing": Timed.default(),
         }
         self._elapsed_time = 0.0
@@ -146,9 +146,9 @@ class PreProcessor:
 
         # report test runtime statistics
         if first_timestamp:
-            self.stat["test_runtime_seconds"] = timestamp - first_timestamp
+            self.stat["test_runtime_milliseconds"] = timestamp - first_timestamp
         else:
-            self.stat["test_runtime_seconds"] = 0.0
+            self.stat["test_runtime_milliseconds"] = 0.0
 
         sys.stderr.write("Pre-processor %s completed.\n" % self.name)
 
@@ -216,13 +216,13 @@ class DeclarativePreProcessor(PreProcessor):
         raise DeclarativePreProcessor.UnknownPredicateError(pred)
 
     def preamble_builder(self, pred: str) -> Event:
-        if pred == "local__original_subnet_type":
+        if pred == "p2p__original_subnet_type":
             assert self._infra is not None, f"{pred} preamble event requires global infra"
-            return OriginalSubnetTypeEvent(self._infra)
-        if pred == "local__originally_in_subnet":
+            return OriginalSubnetTypePreambleEvent(self._infra)
+        if pred == "p2p__originally_in_subnet":
             assert self._infra is not None, f"{pred} preamble event requires global infra"
             return OriginallyInSubnetPreambleEvent(self._infra)
-        if pred == "local__originally_unassigned":
+        if pred == "p2p__originally_unassigned":
             assert self._infra is not None, f"{pred} preamble event requires global infra"
             # TODO -- support class OriginallyUnassignedPreambleEvent(InfraEvent)
             raise DeclarativePreProcessor.UnknownPreambleEventNameError(pred)
@@ -232,9 +232,9 @@ class DeclarativePreProcessor(PreProcessor):
     GLOBAL_INFRA_BASED_EVENTS = frozenset(
         [
             "reboot",
-            "local__original_subnet_type",
-            "local__originally_unassigned",
-            "local__originally_in_subnet",
+            "p2p__original_subnet_type",
+            "p2p__originally_unassigned",
+            "p2p__originally_in_subnet",
             "registry__node_added_to_subnet",
             "registry__node_removed_from_subnet",
         ]
@@ -306,12 +306,12 @@ class UniversalPreProcessor(DeclarativePreProcessor):
     _PREAMBLES = {
         "artifact_pool_latency": frozenset(
             [
-                "local__original_subnet_type",
+                "p2p__original_subnet_type",
             ]
         ),
         "unauthorized_connections": frozenset(
             [
-                "local__originally_in_subnet",
+                "p2p__originally_in_subnet",
             ]
         ),
         "reboot_count": frozenset(),

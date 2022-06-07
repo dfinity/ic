@@ -1,10 +1,22 @@
 @0  p2p__node_added
-    (node0.0, net0)
-    (node0.1, net0)
-    (node0.2, net0)
-    (node0.3, net0)
-    (node1.4, net1)
-    local__original_subnet_type
+    (node0.0, net0, node0.1)
+    (node0.0, net0, node0.2)
+    (node0.0, net0, node0.3)
+    (node0.1, net0, node0.0)
+    (node0.1, net0, node0.2)
+    (node0.1, net0, node0.3)
+    (node0.2, net0, node0.0)
+    (node0.2, net0, node0.1)
+    (node0.2, net0, node0.3)
+    (node0.3, net0, node0.0)
+    (node0.3, net0, node0.1)
+    (node0.3, net0, node0.2)
+    p2p__originally_in_subnet
+    (node0.0, addr0.0, net0)
+    (node0.1, addr0.1, net0)
+    (node0.2, addr0.2, net0)
+    (node0.3, addr0.3, net0)
+    p2p__original_subnet_type
     (net0, "Application")
 @1  validated_BlockProposal_Added(node0.0, net0, hash1)
 @3  validated_BlockProposal_Moved(node0.3, net0, hash1)

@@ -6,16 +6,15 @@
   unavailable when the consensus module declares consensus finalized.
 
   Relevant events:
-  - p2p__node_added(node_id:string, subnet_id:string)
-    Example log message:
-    Jan 20 09:01:08 medium05-1-2 orchestrator[816]: {"log_entry":{"level":"INFO","utc_time":"2022-01-20T09:01:08.355Z","message":"Nodes zxdg4-ha7p6-dfvi3-eo5rs-rcvbi-pkuwu-scoy3-5lk6t-2bcvs-c3txn-xqe added","crate_":"ic_p2p","module":"download_management","line":1504,"node_id":"z3dw6-ej6yf-amnk2-4zclr-jmqtz-yhcew-273kp-tao44-7nf2y-rj5vx-yqe","subnet_id":"62e3r-apw4o-mhxv3-xidd3-ngrxx-mnunc-xhlku-wkybu-yhq5o-mg2ou-3ae"}}
-
+  - p2p__originally_in_subnet(node_addr:string, node_addr:string, subnet_id:string)
+  - registry__node_added_to_subnet(node_id:string, node_addr:string, subnet_id:string)
+  - registry__node_removed_from_subnet(node_id:string, node_addr:string)
+  - p2p__node_added(node_id:string, subnet_id:string, added_node_id:string)
+  - p2p__node_removed(node_id:string, subnet_id:string, removed_node_id:string)
   - consensus_finalized(node_id:string,
                         subnet_id:string,
                         state_avail:int,   -- boolean
                         key_avail:int)     -- boolean
-    Example log message:
-    Jan 20 09:04:28 medium05-1-2 orchestrator[1128]: {"log_entry":{"level":"INFO","utc_time":"2022-01-20T09:04:28.911Z","message":"Consensus finalized height: 149, state available: false, DKG key material available: true","crate_":"ic_consensus","module":"consensus","line":434,"node_id":"ycnxt-nn7hh-sow5h-fmdzh-gyy54-ilhxf-xubix-pwv2c-aie7o-whivf-lae","subnet_id":"62e3r-apw4o-mhxv3-xidd3-ngrxx-mnunc-xhlku-wkybu-yhq5o-mg2ou-3ae"}}            
 
   - Note: There should be regular events (e.g., every hour) to drive the
     computation forward.
@@ -23,9 +22,10 @@
   Encoding of boolean parameters: 0 = false, 1 = true
 *)
 
-(* TODO(JS/YAP): Are node removals logged? *)
-LET relevant_node(node, subnet) = ONCE p2p__node_added(node, subnet) IN
+LET registry_subnet_map(node, subnet) = ((NOT registry__node_removed_from_subnet(node, _)) SINCE (p2p__originally_in_subnet(node, _, subnet) OR (registry__node_added_to_subnet(node, _, subnet) AND NOT PREVIOUS ((NOT registry__node_removed_from_subnet(node, _)) SINCE registry__node_added_to_subnet(node, _, subnet))))) IN
+LET subnet_map(node, subnet) = registry_subnet_map(node, subnet) IN
 LET up_to_date(node, subnet) = consensus_finalized(node, subnet, 1, 1) IN
+LET node_already_up_to_date(node, subnet) = PREVIOUS (subnet_map(node, subnet) SINCE up_to_date(node, subnet)) IN
 LET catching_up(node, subnet) =
   EXISTS state, key. consensus_finalized(node, subnet, state, key)
                      AND state + key < 2
@@ -76,10 +76,11 @@ IN
 
 LET time_spent_in_sync_one_day(node, subnet, time) =
   time <- SUM t; node, subnet
-    (sync_before_ongoing(node, subnet, t)
+    ((sync_before_ongoing(node, subnet, t)
      OR sync_within_ongoing(node, subnet, t)
      OR sync_complete(node, subnet, t)
-     OR relevant_node(node, subnet) AND t = 0)
+     OR subnet_map(node, subnet) AND t = 0)
+    AND node_already_up_to_date(node, subnet))
 IN
 LET sync_stats(subnet, avg, node, node_time) =
   (avg <- AVG time; subnet time_spent_in_sync_one_day(node, subnet, time))

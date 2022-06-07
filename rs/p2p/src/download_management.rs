@@ -1501,6 +1501,7 @@ impl PeerManager for PeerManagerImpl {
         }
         // Remove the peer irrespective of the result of the stop_connections() call.
         current_peers.remove(&node_id);
+        info!(self.log, "Nodes {:0} removed", node_id);
     }
 }
 

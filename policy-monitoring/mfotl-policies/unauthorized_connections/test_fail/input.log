@@ -1,5 +1,5 @@
-@00000 local__originally_in_subnet(node7, "127.0.0.1", subnet1)
-@00000 local__originally_in_subnet(node8, "10.0.0.1", subnet1)
+@00000 p2p__originally_in_subnet(node7, "127.0.0.1", subnet1)
+@00000 p2p__originally_in_subnet(node8, "10.0.0.1", subnet1)
 @10000 consensus_finalized(node1, subnet1, 1, 1)
 @20000 ControlPlane_accept_error("127.0.0.1", "flow42", "no good")
 @30000 ControlPlane_accept_aborted("flow42")
