@@ -9,6 +9,10 @@
     "EDITOR": "code --wait"
   },
 
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ],
+
   // Set *default* container specific settings.json values on container create.
   "settings": {
     "lldb.executable": "/usr/bin/lldb",
@@ -55,6 +59,7 @@
   ],
 
   "postCreateCommand": "pip3 install -r gitlab-ci/src/requirements.txt",
+  "overrideCommand": false,
 
   "remoteUser": "ubuntu"
 }
