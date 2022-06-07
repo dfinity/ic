@@ -1,0 +1,36 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/dfn_core",
+    "@crate_index//:candid",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+]
+
+rust_library(
+    name = "dfn_http",
+    srcs = glob(["src/**"]),
+    crate_name = "dfn_http",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "http_wasm_bin",
+    srcs = ["test/wasm.rs"],
+    edition = "2018",
+    deps = [":dfn_http"],
+)
+
+rust_doc_test(
+    name = "dfn_http_doc_test",
+    crate = ":dfn_http",
+)

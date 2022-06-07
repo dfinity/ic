@@ -1,5 +1,5 @@
 {
-  "checksum": "1d87ededcab45b06b6da5e63c12edc824906273189d5b53dc3542de7530fa5cf",
+  "checksum": "cdf5bee25cf56e3b31bdf60314dab467e76f81d05bb8981496284881892cd8ac",
   "crates": {
     "addr2line 0.17.0": {
       "name": "addr2line",
@@ -1948,6 +1948,43 @@
         },
         "edition": "2015",
         "version": "0.5.2"
+      },
+      "license": "MIT/Apache-2.0"
+    },
+    "bit-vec 0.5.1": {
+      "name": "bit-vec",
+      "version": "0.5.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/bit-vec/0.5.1/download",
+          "sha256": "f59bbe95d4e52a6398ec21238d31577f2b28a9d86807f06ca59d191d8440d0bb"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bit_vec",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "bit_vec",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default",
+          "std"
+        ],
+        "edition": "2015",
+        "version": "0.5.1"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -5230,6 +5267,10 @@
               "target": "bindgen"
             },
             {
+              "id": "bit-vec 0.5.1",
+              "target": "bit_vec"
+            },
+            {
               "id": "bitcoin 0.28.1",
               "target": "bitcoin"
             },
@@ -5314,6 +5355,10 @@
               "target": "features"
             },
             {
+              "id": "flate2 1.0.20",
+              "target": "flate2"
+            },
+            {
               "id": "float-cmp 0.9.0",
               "target": "float_cmp"
             },
@@ -5332,6 +5377,10 @@
             {
               "id": "hex 0.4.3",
               "target": "hex"
+            },
+            {
+              "id": "hex-literal 0.2.1",
+              "target": "hex_literal"
             },
             {
               "id": "http 0.2.5",
@@ -5524,6 +5573,10 @@
             {
               "id": "syn 1.0.93",
               "target": "syn"
+            },
+            {
+              "id": "tar 0.4.38",
+              "target": "tar"
             },
             {
               "id": "tempfile 3.1.0",
@@ -6328,6 +6381,67 @@
       },
       "license": "MIT/Apache-2.0"
     },
+    "filetime 0.2.16": {
+      "name": "filetime",
+      "version": "0.2.16",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/filetime/0.2.16/download",
+          "sha256": "c0408e2626025178a6a7f7ffc05a25bc47103229f19c113755de7bf63816290c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "filetime",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "filetime",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            }
+          ],
+          "selects": {
+            "cfg(target_os = \"redox\")": [
+              {
+                "id": "redox_syscall 0.2.13",
+                "target": "syscall"
+              }
+            ],
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.126",
+                "target": "libc"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "winapi 0.3.9",
+                "target": "winapi"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.2.16"
+      },
+      "license": "MIT/Apache-2.0"
+    },
     "findshlibs 0.10.2": {
       "name": "findshlibs",
       "version": "0.10.2",
@@ -6446,13 +6560,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "flate2 1.0.24": {
+    "flate2 1.0.20": {
       "name": "flate2",
-      "version": "1.0.24",
+      "version": "1.0.20",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/flate2/1.0.24/download",
-          "sha256": "f82b0f4c27ad9f8bfd1f3208d882da2b09c301bc1c828fd3a00d0216d2fbbff6"
+          "url": "https://crates.io/api/v1/crates/flate2/1.0.20/download",
+          "sha256": "cd3aec53de10fe96d7d8c565eb17f2c687bb5518a2ec453b5b1252964526abe0"
         }
       },
       "targets": [
@@ -6482,27 +6596,35 @@
         "deps": {
           "common": [
             {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
               "id": "crc32fast 1.3.2",
               "target": "crc32fast"
             },
             {
-              "id": "miniz_oxide 0.5.3",
+              "id": "libc 0.2.126",
+              "target": "libc"
+            },
+            {
+              "id": "miniz_oxide 0.4.4",
               "target": "miniz_oxide"
             }
           ],
           "selects": {
             "cfg(all(target_arch = \"wasm32\", not(target_os = \"emscripten\")))": [
               {
-                "id": "miniz_oxide 0.5.3",
+                "id": "miniz_oxide 0.4.4",
                 "target": "miniz_oxide"
               }
             ]
           }
         },
         "edition": "2018",
-        "version": "1.0.24"
+        "version": "1.0.20"
       },
-      "license": "MIT OR Apache-2.0"
+      "license": "MIT/Apache-2.0"
     },
     "float-cmp 0.9.0": {
       "name": "float-cmp",
@@ -8002,6 +8124,94 @@
         ],
         "edition": "2018",
         "version": "0.4.3"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "hex-literal 0.2.1": {
+      "name": "hex-literal",
+      "version": "0.2.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/hex-literal/0.2.1/download",
+          "sha256": "961de220ec9a91af2e1e5bd80d02109155695e516771762381ef8581317066e0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hex_literal",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "hex_literal",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "hex-literal-impl 0.2.3",
+              "target": "hex_literal_impl"
+            },
+            {
+              "id": "proc-macro-hack 0.5.19",
+              "target": "proc_macro_hack"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.2.1"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "hex-literal-impl 0.2.3": {
+      "name": "hex-literal-impl",
+      "version": "0.2.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/hex-literal-impl/0.2.3/download",
+          "sha256": "59448fc2f82a5fb6907f78c3d69d843e82ff5b051923313cc4438cb0c7b745a8"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "hex_literal_impl",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "hex_literal_impl",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "proc-macro-hack 0.5.19",
+              "target": "proc_macro_hack"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.2.3"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -10361,6 +10571,78 @@
         "version": "0.2.1"
       },
       "license": "MIT/Apache-2.0"
+    },
+    "miniz_oxide 0.4.4": {
+      "name": "miniz_oxide",
+      "version": "0.4.4",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/miniz_oxide/0.4.4/download",
+          "sha256": "a92518e98c078586bc6c934028adcca4c92a53d6a958196de835170a01d84e4b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "miniz_oxide",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "miniz_oxide",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "adler 1.0.2",
+              "target": "adler"
+            },
+            {
+              "id": "miniz_oxide 0.4.4",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.4.4"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "autocfg 1.1.0",
+              "target": "autocfg"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT OR Zlib OR Apache-2.0"
     },
     "miniz_oxide 0.5.3": {
       "name": "miniz_oxide",
@@ -13528,6 +13810,65 @@
       },
       "license": "MIT OR Apache-2.0"
     },
+    "proc-macro-hack 0.5.19": {
+      "name": "proc-macro-hack",
+      "version": "0.5.19",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/proc-macro-hack/0.5.19/download",
+          "sha256": "dbf0c48bc1d91375ae5c3cd81e3722dff1abcf81a30960240640d223f59fe0e5"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "proc_macro_hack",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "proc_macro_hack",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro-hack 0.5.19",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.5.19"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT OR Apache-2.0"
+    },
     "proc-macro2 0.4.30": {
       "name": "proc-macro2",
       "version": "0.4.30",
@@ -13701,7 +14042,7 @@
               "target": "byteorder"
             },
             {
-              "id": "flate2 1.0.24",
+              "id": "flate2 1.0.20",
               "target": "flate2"
             },
             {
@@ -13763,7 +14104,7 @@
               "target": "byteorder"
             },
             {
-              "id": "flate2 1.0.24",
+              "id": "flate2 1.0.20",
               "target": "flate2"
             },
             {
@@ -18932,6 +19273,63 @@
       },
       "license": "MIT"
     },
+    "tar 0.4.38": {
+      "name": "tar",
+      "version": "0.4.38",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/tar/0.4.38/download",
+          "sha256": "4b55807c0344e1e6c04d7c965f5289c39a8d94ae23ed5c0b57aabac549f871c6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tar",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "tar",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default",
+          "xattr"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "filetime 0.2.16",
+              "target": "filetime"
+            }
+          ],
+          "selects": {
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.126",
+                "target": "libc"
+              },
+              {
+                "id": "xattr 0.2.3",
+                "target": "xattr"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.4.38"
+      },
+      "license": "MIT/Apache-2.0"
+    },
     "tempfile 3.1.0": {
       "name": "tempfile",
       "version": "3.1.0",
@@ -23074,6 +23472,52 @@
         "version": "0.4.0"
       },
       "license": "Apache-2.0"
+    },
+    "xattr 0.2.3": {
+      "name": "xattr",
+      "version": "0.2.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/xattr/0.2.3/download",
+          "sha256": "6d1526bbe5aaeb5eb06885f4d987bcdfa5e23187055de9b83fe00156a821fabc"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "xattr",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "xattr",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default",
+          "unsupported"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.126",
+              "target": "libc"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.2.3"
+      },
+      "license": "MIT/Apache-2.0"
     },
     "zeroize 1.4.3": {
       "name": "zeroize",
