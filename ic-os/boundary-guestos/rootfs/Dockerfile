@@ -46,6 +46,11 @@ RUN \
     curl -L -O https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-amd64.tar.gz && \
     echo "68f3802c2dd3980667e4ba65ea2e1fb03f4a4ba026cca375f15a0390ff850949  node_exporter-1.3.1.linux-amd64.tar.gz" | shasum -c
 
+# Download and verify nginx_exporter
+RUN \
+    curl -L -O https://github.com/nginxinc/nginx-prometheus-exporter/releases/download/v0.10.0/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz && \
+    echo "30e664006dbc2d1185d3a5445942cd8158d1bb58  nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz" | shasum -c
+
 # Download libnginx-mod-http-ndk.deb
 RUN \
    curl -L -O https://github.com/dfinity/nginx-module-cbor-input/releases/download/v0.0.9/libnginx-mod-http-ndk_0.3.1_amd64.deb && \
@@ -207,6 +212,11 @@ RUN \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "Prober" prober && \
     adduser prober prober
 
+RUN \
+    mkdir -p /var/log/prober && \
+    chown prober:prober /var/log/prober && \
+    chmod 755 /var/log/prober
+
 # Install journalbeat
 COPY --from=download /tmp/journalbeat-oss-7.5.1-linux-x86_64.tar.gz /tmp/journalbeat-oss-7.5.1-linux-x86_64.tar.gz
 RUN cd /tmp/ && \
@@ -243,6 +253,26 @@ RUN cd /tmp/ && \
     chmod 0644 /etc/default/node_exporter \
                /etc/node_exporter/web.yml && \
     rm /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
+
+# install nginx_exporter
+RUN \
+    addgroup nginx_exporter && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin -c "nginx_exporter" nginx_exporter && \
+    adduser nginx_exporter nginx_exporter
+
+COPY --from=download /tmp/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz /tmp/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz
+RUN \
+    tar \
+        -C /usr/local/bin \
+        -zvxf /tmp/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz \
+        nginx-prometheus-exporter && \
+    mv \
+        /usr/local/bin/nginx-prometheus-exporter \
+        /usr/local/bin/nginx_exporter && \
+    chown \
+        nginx_exporter:nginx_exporter \
+        /usr/local/bin/nginx_exporter && \
+    rm /tmp/nginx-prometheus-exporter_0.10.0_linux_amd64.tar.gz
 
 # Install IC binaries and other data late -- this means everything above
 # will be cached when only the binaries change.

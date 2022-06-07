@@ -41,7 +41,7 @@ function main() {
         "${RUN_NODE_DIR}/${PROBER_CONFIG_DST_DIR}/identity.pem"
 
     # Setup network key
-    cat "${NODE_CONFIG_SRC_DIR}/nns_public_key.pem" \
+    cat "${RUN_NODE_DIR}/${PROBER_CONFIG_DST_DIR}/ic_public_key.pem" \
         | sed '1d;$d' \
         | tr -d '\n' \
         | base64 -d \
