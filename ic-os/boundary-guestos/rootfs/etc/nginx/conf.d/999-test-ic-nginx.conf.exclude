@@ -27,6 +27,10 @@ server {
 
     client_max_body_size 60M;
 
+    if ($denylisted) {
+      return 451;
+    }
+
     location /_/raw/ {
         # Forwards to icx-proxy so that we bypass the service worker and 404 below.
         proxy_pass http://$icx_proxy;
