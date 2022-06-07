@@ -202,6 +202,8 @@ class QEMUConfig(object):
             "-machine",
             "type=q35,accel=kvm",
             "-enable-kvm",
+            "-cpu",
+            "host",
             "-nographic",
             "-display",
             "none",

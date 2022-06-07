@@ -93,6 +93,7 @@ echo "  Log output: sshpass -p 'root' ssh root@::1 -p 22222 -o StrictHostKeyChec
         -serial mon:stdio \
         -machine type=q35,accel=kvm \
         -enable-kvm \
+        -cpu host \
         -m 2G \
         -bios /usr/share/OVMF/OVMF_CODE.fd \
         -device virtio-blk-pci,drive=drive0,addr=2.0 \
