@@ -12,6 +12,6 @@ control_plane_metrics_port: 0
 prober_metrics_port: 0
 service_worker_domain: ""
 redirect_to_dashboard_regex: ""
-journalbeat_version: "7.5.1"
+journalbeat_version: "7.14.0"
 journalbeat_hosts: "elasticsearch.testnet.dfinity.systems:443"
 mainnet_service_worker: False
