@@ -69,7 +69,6 @@ function make_var_cryptsetup() {
     echo "Description=Cryptography Setup for var_crypt"
     echo "DefaultDependencies=no"
     echo "IgnoreOnIsolate=true"
-    echo "After=setup-encryption.service"
     echo "After=cryptsetup-pre.target"
     echo "Before=blockdev@dev-mapper-var_crypt.target"
     echo "Wants=blockdev@dev-mapper-var_crypt.target"
