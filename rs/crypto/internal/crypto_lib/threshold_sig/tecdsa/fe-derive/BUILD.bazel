@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_proc_macro")
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+    visibility = ["//visibility:public"],
+)
+
+rust_proc_macro(
+    name = "fe-derive",
+    srcs = glob(["src/**"]),
+    crate_name = "fe_derive",
+    edition = "2018",
+    visibility = ["//rs/crypto:__subpackages__"],
+    deps = [
+        "@crate_index//:hex",
+        "@crate_index//:num-bigint-dig",
+        "@crate_index//:num-traits",
+        "@crate_index//:proc-macro2",
+        "@crate_index//:quote",
+        "@crate_index//:syn",
+    ],
+)
