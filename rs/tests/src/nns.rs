@@ -137,10 +137,14 @@ pub trait NnsExt {
 impl NnsExt for ic_fondue::pot::Context {
     fn install_nns_canisters(&self, handle: &IcHandle, nns_test_neurons_present: bool) {
         let mut is_installed = self.is_nns_installed.lock().unwrap();
+        let endpoint = first_root_endpoint(handle);
+        block_on(async move {
+            endpoint.assert_ready(self).await;
+        });
         if is_installed.eq(&false) {
             install_nns_canisters(
                 &self.logger,
-                first_root_url(handle),
+                endpoint.url.clone(),
                 handle.ic_prep_working_dir.as_ref().unwrap(),
                 nns_test_neurons_present,
             );
@@ -240,13 +244,15 @@ pub enum UpgradeContent {
 }
 
 pub fn first_root_url(ic_handle: &IcHandle) -> Url {
+    first_root_endpoint(ic_handle).url.clone()
+}
+
+pub fn first_root_endpoint(ic_handle: &IcHandle) -> &IcEndpoint {
     ic_handle
         .public_api_endpoints
         .iter()
         .find(|i| i.is_root_subnet)
         .expect("empty iterator")
-        .url
-        .clone()
 }
 
 /// Send an update-call to the governance-canister on the NNS asking for Subnet
