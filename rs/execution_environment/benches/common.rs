@@ -87,7 +87,7 @@ where
 {
     // Create Canister state
     let canister_id = canister_test_id(LOCAL_CANISTER_ID);
-    let execution_state = hypervisor
+    let (_, execution_state) = hypervisor
         .create_execution_state(
             wabt::wat2wasm_with_features(wat.as_ref(), wabt::Features::new()).unwrap(),
             canister_root.into(),

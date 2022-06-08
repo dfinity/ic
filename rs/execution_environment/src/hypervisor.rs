@@ -922,7 +922,7 @@ impl Hypervisor {
         wasm_binary: Vec<u8>,
         canister_root: PathBuf,
         canister_id: CanisterId,
-    ) -> HypervisorResult<ExecutionState> {
+    ) -> HypervisorResult<(NumInstructions, ExecutionState)> {
         if let Some(sandbox_executor) = self.sandbox_executor.as_ref() {
             sandbox_executor.create_execution_state(wasm_binary, canister_root, canister_id)
         } else {

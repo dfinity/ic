@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use super::{system_api, StoreData, NUM_INSTRUCTION_GLOBAL_NAME};
 use crate::wasm_utils::instrumentation::{instrument, InstructionCostTable};
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
     AvailableMemory, ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
@@ -78,7 +79,12 @@ fn test_wasmtime_system_api() {
     let wasm_binary =
         BinaryEncodedWasm::new(wabt::wat2wasm(&wat).expect("failed to compile Wasm source"));
     // Exports the global `counter_instructions`.
-    let output_instrumentation = instrument(&wasm_binary, &InstructionCostTable::new()).unwrap();
+    let output_instrumentation = instrument(
+        &wasm_binary,
+        &InstructionCostTable::new(),
+        EmbeddersConfig::default().cost_to_compile_wasm_instruction,
+    )
+    .unwrap();
     let module = Module::new(&engine, output_instrumentation.binary.as_slice())
         .expect("failed to instantiate module");
 

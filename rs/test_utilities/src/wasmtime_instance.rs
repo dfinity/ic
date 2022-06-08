@@ -82,9 +82,15 @@ impl WasmtimeInstanceBuilder {
         let log = no_op_logger();
         let wasm = wabt::wat2wasm(self.wat).expect("Failed to convert wat to wasm");
 
-        let embedder = WasmtimeEmbedder::new(ic_config::embedders::Config::default(), log.clone());
-        let output =
-            instrument(&BinaryEncodedWasm::new(wasm), &InstructionCostTable::new()).unwrap();
+        let config = ic_config::embedders::Config::default();
+        let cost_to_compile_wasm_instruction = config.cost_to_compile_wasm_instruction;
+        let embedder = WasmtimeEmbedder::new(config, log.clone());
+        let output = instrument(
+            &BinaryEncodedWasm::new(wasm),
+            &InstructionCostTable::new(),
+            cost_to_compile_wasm_instruction,
+        )
+        .unwrap();
 
         let compiled = embedder
             .compile(&output.binary)

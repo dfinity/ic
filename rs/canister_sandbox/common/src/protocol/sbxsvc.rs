@@ -13,7 +13,7 @@ use ic_replicated_state::{
     },
     Global, NumWasmPages,
 };
-use ic_types::{methods::WasmMethod, CanisterId};
+use ic_types::{methods::WasmMethod, CanisterId, NumInstructions};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -237,6 +237,7 @@ pub struct CreateExecutionStateSuccessReply {
     pub exported_globals: Vec<Global>,
     pub exported_functions: BTreeSet<WasmMethod>,
     pub wasm_metadata: WasmMetadata,
+    pub compilation_cost: NumInstructions,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

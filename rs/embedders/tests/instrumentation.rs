@@ -1,3 +1,4 @@
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::wasm_utils::{
     instrumentation::{
         export_additional_symbols, instrument, ExportModuleData, InstructionCostTable, Segments,
@@ -32,8 +33,12 @@ fn inject_and_cmp(testname: &str, conf: &InstructionCostTable) {
     features.enable_bulk_memory();
     let buff = wabt::wat2wasm_with_features(content, features.clone())
         .expect("couldn't convert the input wat to Wasm");
-    let output =
-        instrument(&BinaryEncodedWasm::new(buff), conf).expect("couldn't instrument Wasm code");
+    let output = instrument(
+        &BinaryEncodedWasm::new(buff),
+        conf,
+        ic_config::embedders::Config::default().cost_to_compile_wasm_instruction,
+    )
+    .expect("couldn't instrument Wasm code");
     let module: Module = parity_wasm::elements::deserialize_buffer(output.binary.as_slice())
         .expect("couldn't deserialize module");
     let out = wabt::wasm2wat_with_features(
@@ -158,13 +163,19 @@ fn test_get_data() {
             .unwrap(),
         ),
         &InstructionCostTable::new(),
+        EmbeddersConfig::default().cost_to_compile_wasm_instruction,
     )
     .unwrap();
     let data = output.data.as_slice();
     assert_eq!((2, b"a tree".to_vec()), data[0]);
     assert_eq!((11, b"is known".to_vec()), data[1]);
     assert_eq!((23, b"by its fruit".to_vec()), data[2]);
-    let output = instrument(&output.binary, &InstructionCostTable::new()).unwrap();
+    let output = instrument(
+        &output.binary,
+        &InstructionCostTable::new(),
+        EmbeddersConfig::default().cost_to_compile_wasm_instruction,
+    )
+    .unwrap();
     // the data should have been removed from the instrumented module
     assert_eq!(0, output.data.as_slice().len())
 }

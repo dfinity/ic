@@ -1,3 +1,4 @@
+use ic_types::NumInstructions;
 use serde::{Deserialize, Serialize};
 
 use crate::flag_status::FlagStatus;
@@ -18,6 +19,12 @@ pub(crate) const MAX_CUSTOM_SECTIONS: usize = 16;
 pub(crate) const MAX_CUSTOM_SECTIONS_SIZE: NumBytes = NumBytes::new(1048576);
 /// The number of threads to use for query execution.
 pub(crate) const QUERY_EXECUTION_THREADS: usize = 2;
+
+/// In terms of execution time, compiling 1 WASM instructions takes as much time
+/// as actually executing 3_000 instructions. Only public for use in tests.
+#[doc(hidden)]
+const DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION: NumInstructions = NumInstructions::new(3_000);
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
     pub api_cycles_u128_flag: FlagStatus,
@@ -50,6 +57,10 @@ pub struct Config {
     /// Maximum size of the custom sections in bytes.
     pub max_custom_sections_size: NumBytes,
 
+    /// Compiling a single WASM instruction should cost as much as executing
+    /// this many instructions.
+    pub cost_to_compile_wasm_instruction: NumInstructions,
+
     /// Flags to enable or disable features that are still experimental.
     pub feature_flags: FeatureFlags,
 }
@@ -63,6 +74,7 @@ impl Config {
             max_functions: MAX_FUNCTIONS,
             max_custom_sections: MAX_CUSTOM_SECTIONS,
             max_custom_sections_size: MAX_CUSTOM_SECTIONS_SIZE,
+            cost_to_compile_wasm_instruction: DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
             feature_flags: FeatureFlags::default(),
         }
     }

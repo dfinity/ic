@@ -1,5 +1,6 @@
 mod wasmtime_simple;
 
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_embedders::wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use ic_wasm_types::BinaryEncodedWasm;
@@ -43,6 +44,7 @@ fn test_instrument_module_rename_memory_table() {
             .unwrap(),
         ),
         &InstructionCostTable::new(),
+        EmbeddersConfig::default().cost_to_compile_wasm_instruction,
     )
     .unwrap();
 
@@ -73,6 +75,7 @@ fn test_instrument_module_export_memory_table() {
             .unwrap(),
         ),
         &InstructionCostTable::new(),
+        EmbeddersConfig::default().cost_to_compile_wasm_instruction,
     )
     .unwrap();
 
@@ -102,6 +105,7 @@ fn test_instrument_module_with_exported_global() {
             .unwrap(),
         ),
         &InstructionCostTable::new(),
+        EmbeddersConfig::default().cost_to_compile_wasm_instruction,
     )
     .unwrap();
 

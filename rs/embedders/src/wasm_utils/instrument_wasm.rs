@@ -25,12 +25,17 @@ fn instrument_wasm(filename: &str) -> std::io::Result<()> {
     use std::io::Write;
 
     let contents = std::fs::read(filename)?;
+    let config = EmbeddersConfig::default();
     let decoded = decode_wasm(Arc::new(contents)).expect("failed to decode canister module");
-    if let Err(err) = validate_wasm_binary(&decoded, &EmbeddersConfig::default()) {
+    if let Err(err) = validate_wasm_binary(&decoded, &config) {
         eprintln!("Failed to validate wasm file {}: {}", filename, err);
         std::process::exit(1);
     }
-    match instrument(&decoded, &InstructionCostTable::default()) {
+    match instrument(
+        &decoded,
+        &InstructionCostTable::default(),
+        config.cost_to_compile_wasm_instruction,
+    ) {
         Ok(InstrumentationOutput { binary, .. }) => std::io::stdout().write_all(binary.as_slice()),
         Err(err) => {
             eprintln!("Failed to instrument wasm file {}: {}", filename, err);
