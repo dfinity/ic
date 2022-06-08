@@ -1,4 +1,5 @@
 pub mod archive;
+pub mod balances;
 pub mod block;
 pub mod blockchain;
 mod spawn;

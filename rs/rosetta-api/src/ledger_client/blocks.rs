@@ -2,7 +2,9 @@ use crate::balance_book::BalanceBook;
 use crate::errors::ApiError;
 use crate::store::{BlockStoreError, HashedBlock, SQLiteStore};
 use ic_ledger_core::block::{BlockType, EncodedBlock, HashOf};
-use ledger_canister::{AccountIdentifier, Block, BlockHeight, Tokens, Transaction};
+use ledger_canister::{
+    apply_operation, AccountIdentifier, Block, BlockHeight, Tokens, Transaction,
+};
 use log::{error, info};
 use std::collections::HashMap;
 
@@ -192,7 +194,7 @@ impl Blocks {
 
         let mut bb = &mut self.balance_book;
         bb.store.transaction_context = Some(index);
-        bb.add_payment(&block.transaction.operation).unwrap();
+        apply_operation(bb, &block.transaction.operation).unwrap();
         bb.store.transaction_context = None;
 
         self.hash_location.insert(hash, index);
