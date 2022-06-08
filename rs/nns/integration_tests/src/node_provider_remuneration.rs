@@ -226,7 +226,7 @@ fn test_automated_node_provider_remuneration() {
         .await;
 
         // Assert the most recent monthly Node Provider reward was set as expected
-        let most_recent_rewards = get_most_recent_rewards(&nns_canisters).await.unwrap();
+        let mut most_recent_rewards = get_most_recent_rewards(&nns_canisters).await.unwrap();
         let np_rewards_from_proposal_timestamp = most_recent_rewards.timestamp;
 
         assert!(most_recent_rewards
@@ -246,10 +246,18 @@ fn test_automated_node_provider_remuneration() {
             .await
             .expect("Error calling set_time_warp");
 
-        let most_recent_rewards = get_most_recent_rewards(&nns_canisters).await.unwrap();
-        assert_eq!(
-            most_recent_rewards.timestamp,
-            np_rewards_from_proposal_timestamp
+        let mut rewards_were_triggered = false;
+        for _i in 0..5 {
+            let most_recent_rewards = get_most_recent_rewards(&nns_canisters).await.unwrap();
+            if most_recent_rewards.timestamp != np_rewards_from_proposal_timestamp {
+                rewards_were_triggered = true;
+                break;
+            }
+        }
+
+        assert!(
+            !rewards_were_triggered,
+            "Automated rewards were trigerred even though less than 1 month has passed."
         );
 
         // Assert account balances haven't changed
@@ -290,8 +298,22 @@ fn test_automated_node_provider_remuneration() {
             .await
             .expect("Error calling set_time_warp");
 
-        let most_recent_rewards = get_most_recent_rewards(&nns_canisters).await.unwrap();
-        let np_rewards_from_automation_timestamp = most_recent_rewards.timestamp;
+        let mut rewards_were_triggered = false;
+        let mut np_rewards_from_automation_timestamp = most_recent_rewards.timestamp;
+        for _i in 0..10 {
+            most_recent_rewards = get_most_recent_rewards(&nns_canisters).await.unwrap();
+            np_rewards_from_automation_timestamp = most_recent_rewards.timestamp;
+            if np_rewards_from_automation_timestamp == np_rewards_from_proposal_timestamp {
+                continue;
+            }
+            rewards_were_triggered = true;
+        }
+
+        assert!(
+            rewards_were_triggered,
+            "Automated rewards were not trigerred even though more than 1 month has passed."
+        );
+
         assert_ne!(
             np_rewards_from_automation_timestamp,
             np_rewards_from_proposal_timestamp
@@ -412,7 +434,7 @@ async fn get_most_recent_rewards(
 ) -> Option<MostRecentMonthlyNodeProviderRewards> {
     nns_canisters
         .governance
-        .query_(
+        .update_(
             "get_most_recent_monthly_node_provider_rewards",
             candid_one,
             (),
