@@ -821,6 +821,8 @@ where
             Some(v) => v,
             None => bail!("Prep Dir for IC {:?} does not exist.", ic_name),
         };
+        info!(log, "Wait for node reporting healthy status");
+        self.await_status_is_healthy().unwrap();
         install_nns_canisters(&log, url, &prep_dir, true);
         Ok(())
     }
