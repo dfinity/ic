@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -11,8 +11,9 @@ filegroup(
 )
 
 rust_library(
-    name = "ic_async_utils",
+    name = "async_utils",
     srcs = glob(["src/**"]),
+    crate_name = "ic_async_utils",
     edition = "2018",
     deps = [
         "@crate_index//:async-stream",
@@ -24,4 +25,18 @@ rust_library(
         "@crate_index//:tokio",
         "@crate_index//:tonic",
     ],
+)
+
+rust_test(
+    name = "async_utils_test",
+    crate = ":async_utils",
+    deps = [
+        "@crate_index//:bytes",
+        "@crate_index//:rand",
+    ],
+)
+
+rust_doc_test(
+    name = "async_utils_doc_test",
+    crate = ":async_utils",
 )

@@ -11,8 +11,9 @@ filegroup(
 )
 
 rust_library(
-    name = "ic_btc_validation",
+    name = "validation",
     srcs = glob(["src/**"]),
+    crate_name = "ic_btc_validation",
     edition = "2018",
     deps = [
         "@crate_index//:bitcoin",
@@ -20,9 +21,9 @@ rust_library(
 )
 
 rust_test(
-    name = "ic_btc_validation_tests",
+    name = "validation_tests",
     srcs = glob(["**/*.rs"]),
-    crate = ":ic_btc_validation",
+    crate = ":validation",
     data = ["tests/data/headers.csv"],
     edition = "2018",
     env = {
