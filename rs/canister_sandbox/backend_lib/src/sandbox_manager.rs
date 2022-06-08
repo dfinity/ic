@@ -251,7 +251,11 @@ impl CanisterWasm {
     ) -> HypervisorResult<(Self, InstrumentationOutput, WasmValidationDetails)> {
         let wasm = decode_wasm(Arc::new(wasm_src))?;
         let wasm_validation_details = validate_wasm_binary(&wasm, config)?;
-        let instrumentation_output = instrument(&wasm, &InstructionCostTable::new())?;
+        let instrumentation_output = instrument(
+            &wasm,
+            &InstructionCostTable::new(),
+            config.cost_to_compile_wasm_instruction,
+        )?;
         let compilate = embedder.compile(&instrumentation_output.binary)?;
         let compilate = Arc::new(compilate);
 
@@ -481,6 +485,7 @@ impl SandboxManager {
         // Validate, instrument, and compile the binary.
         let (canister_wasm, instrumentation_output, wasm_validation_details) =
             self.open_wasm_internal(wasm_id, wasm_source)?;
+        let compilation_cost = instrumentation_output.compilation_cost;
         let embedder_cache = Arc::clone(&canister_wasm.compilate);
         let embedder = Arc::clone(&self.embedder);
 
@@ -511,6 +516,7 @@ impl SandboxManager {
             exported_globals,
             exported_functions,
             wasm_metadata: wasm_validation_details.wasm_metadata,
+            compilation_cost,
         })
     }
 }

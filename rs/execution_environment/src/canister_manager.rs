@@ -1029,12 +1029,12 @@ impl CanisterManager {
         let layout = canister_layout(&canister_layout_path, &canister_id);
 
         let system_state = old_canister.system_state.clone();
-        let execution_state = match self.hypervisor.create_execution_state(
-            context.wasm_module,
-            layout.raw_path(),
-            canister_id,
-        ) {
-            Ok(execution_state) => Some(execution_state),
+
+        let (instructions_from_compilation, execution_state) = match self
+            .hypervisor
+            .create_execution_state(context.wasm_module, layout.raw_path(), canister_id)
+        {
+            Ok(result) => result,
             Err(err) => {
                 return (
                     execution_parameters.total_instruction_limit,
@@ -1043,8 +1043,16 @@ impl CanisterManager {
             }
         };
 
+        let instructions_left = deduct_compilation_instructions(
+            execution_parameters.total_instruction_limit,
+            instructions_from_compilation,
+        );
+        execution_parameters.total_instruction_limit = instructions_left;
+        execution_parameters.slice_instruction_limit = instructions_left;
+
         let scheduler_state = old_canister.scheduler_state.clone();
-        let mut new_canister = CanisterState::new(system_state, execution_state, scheduler_state);
+        let mut new_canister =
+            CanisterState::new(system_state, Some(execution_state), scheduler_state);
 
         // Update allocations.  This must happen after we have created the new
         // execution state so that we fairly account for the memory requirements
@@ -1157,8 +1165,6 @@ impl CanisterManager {
             execution_parameters.total_instruction_limit - instructions_left,
             instructions_left
         );
-        execution_parameters.total_instruction_limit = instructions_left;
-        execution_parameters.slice_instruction_limit = instructions_left;
         match res {
             Ok(heap_delta) => {
                 total_heap_delta += heap_delta;
@@ -1169,21 +1175,26 @@ impl CanisterManager {
         // Replace the execution state of the canister with a new execution state, but
         // persist the stable memory (if it exists).
         let layout = canister_layout(&canister_layout_path, &canister_id);
-        new_canister.execution_state = match self.hypervisor.create_execution_state(
-            context.wasm_module,
-            layout.raw_path(),
-            canister_id,
-        ) {
+        let (instructions_from_compilation, execution_state) = match self
+            .hypervisor
+            .create_execution_state(context.wasm_module, layout.raw_path(), canister_id)
+        {
             Err(err) => return (instructions_left, Err((canister_id, err).into())),
-            Ok(mut execution_state) => {
+            Ok((instructions_from_compilation, mut execution_state)) => {
                 let stable_memory = match new_canister.execution_state {
                     Some(es) => es.stable_memory,
                     None => Memory::default(),
                 };
                 execution_state.stable_memory = stable_memory;
-                Some(execution_state)
+                (instructions_from_compilation, execution_state)
             }
         };
+        new_canister.execution_state = Some(execution_state);
+
+        let instructions_left =
+            deduct_compilation_instructions(instructions_left, instructions_from_compilation);
+        execution_parameters.total_instruction_limit = instructions_left;
+        execution_parameters.slice_instruction_limit = instructions_left;
 
         // Update allocations.  This must happen after we have created the new
         // execution state so that we fairly account for the memory requirements
@@ -1932,6 +1943,17 @@ impl TryFrom<(CanisterSettings, usize)> for ValidatedCanisterSettings {
             freezing_threshold: settings.freezing_threshold(),
         })
     }
+}
+
+fn deduct_compilation_instructions(
+    instructions_left: NumInstructions,
+    instructions_from_compilation: NumInstructions,
+) -> NumInstructions {
+    NumInstructions::from(
+        instructions_left
+            .get()
+            .saturating_sub(instructions_from_compilation.get()),
+    )
 }
 
 #[cfg(test)]

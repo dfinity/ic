@@ -28,7 +28,9 @@ use ic_replicated_state::{
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
-    execution_environment::{get_reply, ExecutionTest, ExecutionTestBuilder},
+    execution_environment::{
+        get_reply, wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
+    },
     mock_time,
     state::{
         get_running_canister, get_running_canister_with_args, get_stopped_canister,
@@ -2274,7 +2276,13 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
             &mut state,
             EXECUTION_PARAMETERS.clone(),
         );
-        assert_eq!(res.0, MAX_NUM_INSTRUCTIONS);
+        assert_eq!(
+            res.0,
+            MAX_NUM_INSTRUCTIONS
+                - wasm_compilation_cost(
+                    ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM
+                )
+        );
         assert_matches!(
             res.1,
             Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
@@ -2464,7 +2472,11 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
 
 #[test]
 fn failed_upgrade_hooks_consume_instructions() {
-    fn run(initial_wasm: Vec<u8>, upgrade_wasm: Vec<u8>) {
+    fn run(
+        initial_wasm: Vec<u8>,
+        upgrade_wasm: Vec<u8>,
+        fails_before_compiling_upgrade_wasm: bool,
+    ) {
         let subnet_id = subnet_test_id(1);
         let subnet_type = SubnetType::Application;
         let cycles_account_manager = CyclesAccountManagerBuilder::new()
@@ -2509,6 +2521,7 @@ fn failed_upgrade_hooks_consume_instructions() {
             .1
             .unwrap();
 
+        let compilation_cost = wasm_compilation_cost(&upgrade_wasm);
         let (instructions_left, result) = canister_manager.install_code(
             InstallCodeContext {
                 sender,
@@ -2523,16 +2536,24 @@ fn failed_upgrade_hooks_consume_instructions() {
             &mut state,
             EXECUTION_PARAMETERS.clone(),
         );
+        let expected = NumInstructions::from(1)
+            + if fails_before_compiling_upgrade_wasm {
+                NumInstructions::new(0)
+            } else {
+                compilation_cost
+            };
         assert_eq!(
             MAX_NUM_INSTRUCTIONS - instructions_left,
-            NumInstructions::from(1),
-            "initial instructions {} left {} diff {}",
+            expected,
+            "initial instructions {} left {} diff {} expected {}",
             MAX_NUM_INSTRUCTIONS,
             instructions_left,
-            MAX_NUM_INSTRUCTIONS - instructions_left
+            MAX_NUM_INSTRUCTIONS - instructions_left,
+            expected
         );
         assert_matches!(result, Err(CanisterManagerError::Hypervisor(_, _)));
     }
+
     let initial_wasm = r#"
     (module
         (func $canister_pre_upgrade
@@ -2547,7 +2568,7 @@ fn failed_upgrade_hooks_consume_instructions() {
         (memory $memory 1)
     )"#;
     let upgrade_wasm = wabt::wat2wasm(upgrade_wasm).unwrap();
-    run(initial_wasm, upgrade_wasm);
+    run(initial_wasm, upgrade_wasm, true);
 
     let initial_wasm = r#"
     (module
@@ -2563,7 +2584,7 @@ fn failed_upgrade_hooks_consume_instructions() {
         (export "canister_post_upgrade" (func $canister_post_upgrade))
     )"#;
     let upgrade_wasm = wabt::wat2wasm(upgrade_wasm).unwrap();
-    run(initial_wasm, upgrade_wasm);
+    run(initial_wasm, upgrade_wasm, false);
 
     let initial_wasm = r#"
     (module
@@ -2579,7 +2600,7 @@ fn failed_upgrade_hooks_consume_instructions() {
         (start $start)
     )"#;
     let upgrade_wasm = wabt::wat2wasm(upgrade_wasm).unwrap();
-    run(initial_wasm, upgrade_wasm);
+    run(initial_wasm, upgrade_wasm, false);
 }
 
 #[test]
@@ -2611,6 +2632,7 @@ fn failed_install_hooks_consume_instructions() {
             .0
             .unwrap();
 
+        let compilation_cost = wasm_compilation_cost(&wasm);
         let (instructions_left, result) = canister_manager.install_code(
             InstallCodeContext {
                 sender,
@@ -2626,12 +2648,14 @@ fn failed_install_hooks_consume_instructions() {
             EXECUTION_PARAMETERS.clone(),
         );
         assert_matches!(result, Err(CanisterManagerError::Hypervisor(_, _)));
-        assert!(
-            MAX_NUM_INSTRUCTIONS - instructions_left == NumInstructions::from(1),
-            "initial instructions {} left {} diff {}",
+        assert_eq!(
+            MAX_NUM_INSTRUCTIONS - instructions_left,
+            NumInstructions::from(1) + compilation_cost,
+            "initial instructions {} left {} diff {} expected {}",
             MAX_NUM_INSTRUCTIONS,
             instructions_left,
-            MAX_NUM_INSTRUCTIONS - instructions_left
+            MAX_NUM_INSTRUCTIONS - instructions_left,
+            NumInstructions::from(1) + compilation_cost,
         );
     }
 
@@ -2709,6 +2733,7 @@ fn install_code_respects_instruction_limit() {
         (export "canister_pre_upgrade" (func $canister_pre_upgrade))
         (export "canister_post_upgrade" (func $canister_post_upgrade))
     )"#;
+    let compilation_cost = wat_compilation_cost(wasm);
     let wasm = wabt::wat2wasm(wasm).unwrap();
 
     // Too few instructions result in failed installation.
@@ -2753,8 +2778,8 @@ fn install_code_respects_instruction_limit() {
         },
         &mut state,
         ExecutionParameters {
-            total_instruction_limit: NumInstructions::from(5),
-            slice_instruction_limit: NumInstructions::from(5),
+            total_instruction_limit: NumInstructions::from(5) + compilation_cost,
+            slice_instruction_limit: NumInstructions::from(5) + compilation_cost,
             ..EXECUTION_PARAMETERS.clone()
         },
     );
@@ -2803,8 +2828,8 @@ fn install_code_respects_instruction_limit() {
         },
         &mut state,
         ExecutionParameters {
-            total_instruction_limit: NumInstructions::from(10),
-            slice_instruction_limit: NumInstructions::from(10),
+            total_instruction_limit: NumInstructions::from(10) + compilation_cost,
+            slice_instruction_limit: NumInstructions::from(10) + compilation_cost,
             ..EXECUTION_PARAMETERS.clone()
         },
     );
@@ -2844,6 +2869,12 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .build();
 
     // 1. INSTALL
+    let install_code_context = InstallCodeContextBuilder::default()
+        .mode(CanisterInstallMode::Install)
+        .sender(controller.into())
+        .canister_id(canister_id)
+        .build();
+    let compilation_cost = wasm_compilation_cost(&install_code_context.wasm_module);
 
     let (instructions_left, res) = canister_manager.install_code(
         InstallCodeContextBuilder::default()
@@ -2856,7 +2887,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     );
 
     // Installation is free, since there is no `(start)` or `canister_init` to run.
-    assert_eq!(instructions_left, MAX_NUM_INSTRUCTIONS);
+    assert_eq!(instructions_left, MAX_NUM_INSTRUCTIONS - compilation_cost);
 
     // No heap delta.
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
@@ -2886,7 +2917,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     );
 
     // Installation is free, since there is no `(start)` or `canister_init` to run.
-    assert!(instructions_left == MAX_NUM_INSTRUCTIONS);
+    assert_eq!(instructions_left, MAX_NUM_INSTRUCTIONS - compilation_cost);
 
     // No heap delta.
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
@@ -2916,7 +2947,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     );
 
     // Installation is free, since there is no `canister_pre/post_upgrade`
-    assert!(instructions_left == MAX_NUM_INSTRUCTIONS);
+    assert_eq!(instructions_left, MAX_NUM_INSTRUCTIONS - compilation_cost);
 
     // No heap delta.
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));

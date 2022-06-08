@@ -3,8 +3,8 @@ use ic_execution_environment::CanisterHeartbeatError;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{HypervisorError, TrapCode};
 use ic_replicated_state::{page_map::PAGE_SIZE, CanisterStatus};
-use ic_test_utilities::execution_environment::ExecutionTestBuilder;
-use ic_types::{NumBytes, NumInstructions};
+use ic_test_utilities::execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
+use ic_types::NumBytes;
 
 #[test]
 fn heartbeat_is_executed() {
@@ -50,7 +50,7 @@ fn heartbeat_fails_gracefully_if_not_exported() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     test.heartbeat(canister_id).unwrap();
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
-    assert_eq!(NumInstructions::from(0), test.executed_instructions());
+    assert_eq!(wat_compilation_cost(wat), test.executed_instructions());
 }
 
 #[test]

@@ -159,7 +159,12 @@ impl WasmExecutor {
                         .inc_by(details.reserved_exports as u64);
                 }
                 self.observe_metrics(&details.imports_details);
-                instrument(wasm_binary, &InstructionCostTable::new()).map_err(HypervisorError::from)
+                instrument(
+                    wasm_binary,
+                    &InstructionCostTable::new(),
+                    self.config.cost_to_compile_wasm_instruction,
+                )
+                .map_err(HypervisorError::from)
             })
             .and_then(|output| self.wasm_embedder.compile(&output.binary))
     }
@@ -271,7 +276,7 @@ impl WasmExecutor {
         wasm_source: Vec<u8>,
         canister_root: PathBuf,
         canister_id: CanisterId,
-    ) -> HypervisorResult<ExecutionState> {
+    ) -> HypervisorResult<(NumInstructions, ExecutionState)> {
         // Compile Wasm binary and cache it.
         let wasm_binary = WasmBinary::new(CanisterModule::new(wasm_source));
         let binary_encoded_wasm = decode_wasm(wasm_binary.binary.to_shared_vec())?;
@@ -280,8 +285,12 @@ impl WasmExecutor {
 
         // Get data from instrumentation output.
         let wasm_validation_details = validate_wasm_binary(&binary_encoded_wasm, &self.config)?;
-        let instrumentation_output =
-            instrument(&binary_encoded_wasm, &InstructionCostTable::new())?;
+        let instrumentation_output = instrument(
+            &binary_encoded_wasm,
+            &InstructionCostTable::new(),
+            self.config.cost_to_compile_wasm_instruction,
+        )?;
+        let compilation_cost = instrumentation_output.compilation_cost;
 
         let (exported_functions, globals, _wasm_page_delta, wasm_memory_size) =
             get_initial_globals_and_memory(
@@ -303,7 +312,7 @@ impl WasmExecutor {
             globals,
             wasm_validation_details.wasm_metadata,
         );
-        Ok(execution_state)
+        Ok((compilation_cost, execution_state))
     }
 
     pub fn compile_count_for_testing(&self) -> u64 {

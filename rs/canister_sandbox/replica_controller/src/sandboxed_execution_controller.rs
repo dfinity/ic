@@ -715,7 +715,7 @@ impl SandboxedExecutionController {
         wasm_source: Vec<u8>,
         canister_root: PathBuf,
         canister_id: CanisterId,
-    ) -> HypervisorResult<ExecutionState> {
+    ) -> HypervisorResult<(NumInstructions, ExecutionState)> {
         let sandbox_process = self.get_sandbox_process(canister_id);
         self.compile_count_for_testing
             .fetch_add(1, Ordering::Relaxed);
@@ -766,7 +766,7 @@ impl SandboxedExecutionController {
             reply.exported_globals,
             reply.wasm_metadata,
         );
-        Ok(execution_state)
+        Ok((reply.compilation_cost, execution_state))
     }
 
     pub fn compile_count_for_testing(&self) -> u64 {

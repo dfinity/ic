@@ -12,7 +12,8 @@ use ic_replicated_state::{
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::execution_environment::{
-    assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
+    assert_empty_reply, check_ingress_status, get_reply, wasm_compilation_cost,
+    wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_test_utilities::{
@@ -1776,7 +1777,7 @@ fn executing_non_existing_method_does_not_consume_cycles() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test.ingress(canister_id, "foo", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterMethodNotFound, err.code());
-    assert_eq!(NumInstructions::from(0), test.executed_instructions());
+    assert_eq!(wat_compilation_cost(wat), test.executed_instructions());
 }
 
 #[test]
@@ -1878,7 +1879,8 @@ fn upgrade_without_pre_and_post_upgrade_succeeds() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap());
     assert_eq!(Ok(()), result);
-    assert_eq!(NumInstructions::from(0), test.executed_instructions());
+    // Compilation occurs once for original installation and again for upgrade.
+    assert_eq!(wat_compilation_cost(wat) * 2, test.executed_instructions());
 }
 
 #[test]
@@ -1904,7 +1906,10 @@ fn install_code_calls_canister_init_and_start() {
             (start $start)
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
-    assert_eq!(NumInstructions::from(6), test.executed_instructions());
+    assert_eq!(
+        NumInstructions::from(6) + wat_compilation_cost(wat),
+        test.executed_instructions()
+    );
     let result = test.ingress(canister_id, "read", vec![]);
     assert_eq!(result, Ok(WasmResult::Reply(vec![1, 0, 0, 0, 2, 0, 0, 0])));
 }
@@ -1914,7 +1919,7 @@ fn install_code_without_canister_init_and_start_succeeds() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = "(module)";
     test.canister_from_wat(wat).unwrap();
-    assert_eq!(NumInstructions::from(0), test.executed_instructions());
+    assert_eq!(wat_compilation_cost(wat), test.executed_instructions());
 }
 
 #[test]
@@ -2267,7 +2272,10 @@ fn ic0_trap_preserves_some_cycles() {
     // - trap data -- 12 instructions.
     let expected_executed_instructions = NumInstructions::from(21 + 2 + 12);
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-    assert_eq!(test.executed_instructions(), expected_executed_instructions);
+    assert_eq!(
+        test.executed_instructions(),
+        expected_executed_instructions + wat_compilation_cost(wat)
+    );
 
     let executed_instructions_before = test.executed_instructions();
     let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
@@ -3719,7 +3727,9 @@ fn cannot_stop_canister_with_open_call_context() {
 fn can_use_more_instructions_during_install_code() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(10_000)
-        .with_install_code_instruction_limit(1_000_000)
+        .with_install_code_instruction_limit(
+            1_000_000 + wasm_compilation_cost(UNIVERSAL_CANISTER_WASM).get(),
+        )
         .build();
     let canister_id = test.universal_canister().unwrap();
     let work = wasm().stable_grow(1).stable_fill(0, 42, 65_536).build();

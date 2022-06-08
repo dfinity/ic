@@ -99,6 +99,7 @@ use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::NumWasmPages;
 use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
 use ic_types::methods::WasmMethod;
+use ic_types::NumInstructions;
 use ic_wasm_types::{BinaryEncodedWasm, WasmInstrumentationError};
 
 use parity_wasm::builder;
@@ -369,6 +370,10 @@ pub struct InstrumentationOutput {
 
     /// Instrumented Wasm binary.
     pub binary: BinaryEncodedWasm,
+
+    /// The time it takes to compile this module is comparable to executing this
+    /// many instructions.
+    pub compilation_cost: NumInstructions,
 }
 
 #[derive(Default)]
@@ -387,6 +392,7 @@ pub struct ExportModuleData {
 pub fn instrument(
     wasm: &BinaryEncodedWasm,
     instruction_cost_table: &InstructionCostTable,
+    cost_to_compile_wasm_instruction: NumInstructions,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
     let module = parity_wasm::deserialize_buffer::<Module>(wasm.as_slice()).map_err(|err| {
         WasmInstrumentationError::ParityDeserializeError(into_parity_wasm_error(err))
@@ -474,6 +480,26 @@ pub fn instrument(
     let data = Segments::from(get_data(module.sections_mut()));
     data.validate(NumWasmPages::from(limits.0 as usize))?;
 
+    let wasm_instruction_count = (module
+        .code_section()
+        .map(|code| {
+            code.bodies()
+                .iter()
+                .map(|body| body.code().elements().len())
+                .sum()
+        })
+        .unwrap_or(0)
+        + module
+            .global_section()
+            .map(|globals| {
+                globals
+                    .entries()
+                    .iter()
+                    .map(|global| global.init_expr().code().len())
+                    .sum()
+            })
+            .unwrap_or(0)) as u64;
+
     let result = parity_wasm::serialize(module).map_err(|err| {
         WasmInstrumentationError::ParitySerializeError(into_parity_wasm_error(err))
     })?;
@@ -482,6 +508,7 @@ pub fn instrument(
         limits,
         data,
         binary: BinaryEncodedWasm::new(result),
+        compilation_cost: cost_to_compile_wasm_instruction * wasm_instruction_count,
     })
 }
 

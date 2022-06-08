@@ -3,10 +3,12 @@ use std::sync::Arc;
 use std::{collections::BTreeSet, convert::TryFrom};
 
 use ic_base_types::{NumBytes, PrincipalId, SubnetId};
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfigs;
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_embedders::wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::{
     util::{process_response, process_stopping_canisters},
@@ -41,6 +43,7 @@ use ic_types::{
 };
 use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
+use ic_wasm_types::BinaryEncodedWasm;
 use maplit::btreemap;
 
 use crate::types::messages::{RequestBuilder, SignedIngressBuilder};
@@ -1210,4 +1213,26 @@ fn get_canister_id_if_install_code(message: CanisterInputMessage) -> Option<Cani
         Err(_) => None,
         Ok(args) => Some(CanisterId::try_from(args.canister_id).unwrap()),
     }
+}
+
+pub fn wat_compilation_cost(wat: &str) -> NumInstructions {
+    let wasm = BinaryEncodedWasm::new(wabt::wat2wasm(wat).unwrap());
+    let instrumented = instrument(
+        &wasm,
+        &InstructionCostTable::new(),
+        EmbeddersConfig::default().cost_to_compile_wasm_instruction,
+    )
+    .unwrap();
+    instrumented.compilation_cost
+}
+
+pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
+    let wasm = BinaryEncodedWasm::new(wasm.to_vec());
+    let instrumented = instrument(
+        &wasm,
+        &InstructionCostTable::new(),
+        EmbeddersConfig::default().cost_to_compile_wasm_instruction,
+    )
+    .unwrap();
+    instrumented.compilation_cost
 }
