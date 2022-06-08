@@ -10,9 +10,9 @@ use ic_ledger_core::{
     timestamp::TimeStamp,
 };
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, Archives, BinaryAccountBalanceArgs, Block, BlockArg,
-    BlockHeight, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError, GetBlocksRes,
-    GetBlocksResult, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, Memo,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Archives, BinaryAccountBalanceArgs,
+    Block, BlockArg, BlockHeight, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError,
+    GetBlocksRes, GetBlocksResult, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, Memo,
     NotifyCanisterArgs, Operation, QueryBlocksResponse, SendArgs, Subaccount, Tokens,
     TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
     DEFAULT_TRANSFER_FEE,
@@ -87,6 +87,7 @@ async fn query_balance(ledger: &Canister<'_>, acc: &Sender) -> Result<Tokens, St
             },
         )
         .await
+        .map(tokens_from_proto)
 }
 
 async fn account_balance_candid(ledger: &Canister<'_>, acc: &AccountIdentifier) -> Tokens {
@@ -995,7 +996,8 @@ fn sub_account_test() {
                 },
                 &sender,
             )
-            .await?;
+            .await
+            .map(tokens_from_proto)?;
 
         let balance_2 = ledger_canister
             .query_from_sender(
@@ -1006,7 +1008,8 @@ fn sub_account_test() {
                 },
                 &sender,
             )
-            .await?;
+            .await
+            .map(tokens_from_proto)?;
 
         // Transaction fees are a pain so we're easy going with equality
         fn is_roughly(a: Tokens, b: Tokens) {
@@ -1148,7 +1151,8 @@ fn transaction_test() {
 
         let supply: Tokens = ledger
             .query_("total_supply_pb", protobuf, TotalSupplyArgs {})
-            .await?;
+            .await
+            .map(tokens_from_proto)?;
         assert_eq!(supply.get_e8s(), acc1_start_amount + acc2_start_amount);
 
         // perform a mint
@@ -1160,7 +1164,8 @@ fn transaction_test() {
 
         let supply: Tokens = ledger
             .query_("total_supply_pb", protobuf, TotalSupplyArgs {})
-            .await?;
+            .await
+            .map(tokens_from_proto)?;
         assert_eq!(
             supply.get_e8s(),
             acc1_start_amount + acc2_start_amount + mint_amount

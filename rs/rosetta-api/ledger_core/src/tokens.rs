@@ -27,11 +27,6 @@ pub const DECIMAL_PLACES: u32 = 8;
 /// How many times can Tokens be divided
 pub const TOKEN_SUBDIVIDABLE_BY: u64 = 100_000_000;
 
-/// Note that the Ledger can be deployed with a
-/// different transaction fee. Clients that want to use the Ledger should query
-/// for the fee before doing transactions.
-pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens { e8s: 10_000 };
-
 impl Tokens {
     /// The maximum value of this construct is 2^64-1 E8s or Roughly 184
     /// Billion Tokens
@@ -61,7 +56,7 @@ impl Tokens {
     pub const ZERO: Self = Tokens { e8s: 0 };
 
     /// ```
-    /// # use ledger_canister::Tokens;
+    /// # use ic_ledger_core::Tokens;
     /// let token = Tokens::from_tokens(12).unwrap();
     /// assert_eq!(token.unpack(), (12, 0))
     /// ```
@@ -71,7 +66,7 @@ impl Tokens {
 
     /// Construct Tokens from E8s, 10E8 E8s == 1 Token
     /// ```
-    /// # use ledger_canister::Tokens;
+    /// # use ic_ledger_core::Tokens;
     /// let tokens = Tokens::from_e8s(1200000200);
     /// assert_eq!(tokens.unpack(), (12, 200))
     /// ```
@@ -81,7 +76,7 @@ impl Tokens {
 
     /// Gets the total number of whole Tokens
     /// ```
-    /// # use ledger_canister::Tokens;
+    /// # use ic_ledger_core::Tokens;
     /// let tokens = Tokens::new(12, 200).unwrap();
     /// assert_eq!(tokens.get_tokens(), 12)
     /// ```
@@ -91,7 +86,7 @@ impl Tokens {
 
     /// Gets the total number of E8s
     /// ```
-    /// # use ledger_canister::Tokens;
+    /// # use ic_ledger_core::Tokens;
     /// let tokens = Tokens::new(12, 200).unwrap();
     /// assert_eq!(tokens.get_e8s(), 1200000200)
     /// ```
@@ -102,7 +97,7 @@ impl Tokens {
     /// Gets the total number of E8s not part of a whole Token
     /// The returned amount is always in the half-open interval [0, 1 Token).
     /// ```
-    /// # use ledger_canister::Tokens;
+    /// # use ic_ledger_core::Tokens;
     /// let token = Tokens::new(12, 200).unwrap();
     /// assert_eq!(token.get_remainder_e8s(), 200)
     /// ```
@@ -112,7 +107,7 @@ impl Tokens {
 
     /// This returns the number of Tokens and E8s
     /// ```
-    /// # use ledger_canister::Tokens;
+    /// # use ic_ledger_core::Tokens;
     /// let token = Tokens::new(12, 200).unwrap();
     /// assert_eq!(token.unpack(), (12, 200))
     /// ```
@@ -165,7 +160,7 @@ impl SubAssign for Tokens {
 }
 
 /// ```
-/// # use ledger_canister::Tokens;
+/// # use ic_ledger_core::Tokens;
 /// let token = Tokens::new(12, 200).unwrap();
 /// let s = format!("{}", token);
 /// assert_eq!(&s[..], "12.00000200 Token")

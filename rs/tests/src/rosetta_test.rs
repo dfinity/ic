@@ -19,9 +19,9 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_rosetta_api::models::{ConstructionPayloadsResponse, NeuronState, Object, PublicKey};
 use ledger_canister::{
-    protobuf::TipOfChainRequest, AccountBalanceArgs, AccountIdentifier, ArchiveOptions,
-    BlockHeight, Certification, LedgerCanisterInitPayload, Operation, Subaccount, TipOfChainRes,
-    Tokens, DEFAULT_TRANSFER_FEE,
+    protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier,
+    ArchiveOptions, BlockHeight, Certification, LedgerCanisterInitPayload, Operation, Subaccount,
+    TipOfChainRes, Tokens, DEFAULT_TRANSFER_FEE,
 };
 
 use crate::driver::ic::InternetComputer;
@@ -682,7 +682,8 @@ fn hex2addr(a: &str) -> AccountIdentifier {
 async fn get_balance(ledger: &Canister<'_>, acc: AccountIdentifier) -> Tokens {
     let reply: Result<Tokens, String> = ledger
         .query_("account_balance_pb", protobuf, AccountBalanceArgs::new(acc))
-        .await;
+        .await
+        .map(tokens_from_proto);
     reply.unwrap()
 }
 

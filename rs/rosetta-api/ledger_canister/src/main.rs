@@ -705,7 +705,7 @@ fn get_archive_index_() {
 #[export_name = "canister_query account_balance_pb"]
 fn account_balance_() {
     over(protobuf, |AccountBalanceArgs { account }| {
-        account_balance(account)
+        tokens_into_proto(account_balance(account))
     })
 }
 
@@ -761,7 +761,9 @@ fn token_decimals_candid() {
 
 #[export_name = "canister_query total_supply_pb"]
 fn total_supply_() {
-    over(protobuf, |_: TotalSupplyArgs| total_supply())
+    over(protobuf, |_: TotalSupplyArgs| {
+        tokens_into_proto(total_supply())
+    })
 }
 
 /// Get multiple blocks by *offset into the container* (not BlockHeight) and

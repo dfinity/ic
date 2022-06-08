@@ -21,8 +21,9 @@ use ic_sns_governance::pb::v1::{ListNervousSystemFunctionsResponse, RewardEvent}
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ledger_canister as ledger;
 use ledger_canister::{
-    protobuf::AccountIdentifier as AccountIdentifierProto, AccountBalanceArgs, AccountIdentifier,
-    LedgerCanisterInitPayload, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
+    protobuf::AccountIdentifier as AccountIdentifierProto, tokens_from_proto, AccountBalanceArgs,
+    AccountIdentifier, LedgerCanisterInitPayload, Memo, SendArgs, Subaccount, Tokens,
+    DEFAULT_TRANSFER_FEE,
 };
 use on_wire::IntoWire;
 use std::collections::HashMap;
@@ -658,6 +659,7 @@ impl SnsCanisters<'_> {
                 },
             )
             .await
+            .map(tokens_from_proto)
             .expect("Error calling the Ledger's get_account_balancer")
     }
 

@@ -16,8 +16,8 @@ use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder},
 };
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, BlockHeight, CyclesResponse, Memo, NotifyCanisterArgs,
-    SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockHeight, CyclesResponse, Memo,
+    NotifyCanisterArgs, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 
 /// Test that the CMC's `icp_xdr_conversion_rate` can be updated via Governance
@@ -140,6 +140,7 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
                 &Sender::from_keypair(&TEST_USER1_KEYPAIR),
             )
             .await
+            .map(tokens_from_proto)
             .unwrap();
 
         let mut expected_final_balance = icpts;
@@ -185,6 +186,7 @@ async fn send_cycles(
             &Sender::from_keypair(&TEST_USER1_KEYPAIR),
         )
         .await
+        .map(tokens_from_proto)
         .unwrap();
 
     assert_eq!(initial_balance, initial_icpts);
@@ -216,6 +218,7 @@ async fn send_cycles(
             &Sender::from_keypair(&TEST_USER1_KEYPAIR),
         )
         .await
+        .map(tokens_from_proto)
         .unwrap();
 
     let mut expected_balance = initial_icpts;

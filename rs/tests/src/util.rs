@@ -22,7 +22,8 @@ use ic_universal_canister::{
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
+    DEFAULT_TRANSFER_FEE,
 };
 use on_wire::FromWire;
 use rand_chacha::ChaCha8Rng;
@@ -849,6 +850,7 @@ pub(crate) async fn get_icp_balance(
             AccountBalanceArgs::new(AccountIdentifier::new(can.get(), subaccount)),
         )
         .await
+        .map(tokens_from_proto)
 }
 
 pub(crate) async fn transact_icp_subaccount(

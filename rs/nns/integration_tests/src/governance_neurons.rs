@@ -18,7 +18,7 @@ use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_nns_test_utils::itest_helpers::{
     local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder,
 };
-use ledger_canister::{AccountBalanceArgs, AccountIdentifier, Tokens};
+use ledger_canister::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
 
 #[test]
 fn test_merge_neurons() {
@@ -76,7 +76,8 @@ fn test_merge_neurons() {
                     account: AccountIdentifier::from(*TEST_NEURON_1_OWNER_PRINCIPAL),
                 },
             )
-            .await?;
+            .await
+            .map(tokens_from_proto)?;
         assert_eq!(Tokens::from_e8s(0), user_balance);
 
         // Let us transfer ICP into the main account, and stake two neurons

@@ -5,6 +5,7 @@ use ic_crypto_sha::Sha256;
 pub use ic_ledger_core::{
     archive::{ArchiveCanisterWasm, ArchiveOptions},
     block::BlockHeight,
+    tokens::{Tokens, DECIMAL_PLACES, TOKEN_SUBDIVIDABLE_BY},
 };
 use ic_ledger_core::{
     block::{BlockType, EncodedBlock, HashOf, HASH_LENGTH},
@@ -29,18 +30,22 @@ use std::sync::RwLock;
 use std::time::Duration;
 
 pub mod account_identifier;
-pub mod tokens;
 #[rustfmt::skip]
 #[allow(clippy::all)]
 #[path = "../gen/ic_ledger.pb.v1.rs"]
 pub mod protobuf;
 pub mod range_utils;
-pub mod validate_endpoints;
+mod validate_endpoints;
 pub use account_identifier::{AccountIdentifier, Subaccount};
-pub use tokens::{Tokens, DECIMAL_PLACES, DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
+pub use validate_endpoints::{tokens_from_proto, tokens_into_proto};
 
 use dfn_core::api::now;
 use ic_ledger_core::blockchain::Blockchain;
+
+/// Note that the Ledger can be deployed with a
+/// different transaction fee. Clients that want to use the Ledger should query
+/// for the fee before doing transactions.
+pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
 
 // Wasm bytecode of an Archive Node
 pub const ARCHIVE_NODE_BYTECODE: &[u8] =

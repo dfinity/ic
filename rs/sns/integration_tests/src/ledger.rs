@@ -16,7 +16,8 @@ use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,
 };
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
+    DEFAULT_TRANSFER_FEE,
 };
 
 // This tests the whole neuron lifecycle in integration with the ledger. Namely
@@ -53,7 +54,8 @@ fn test_stake_and_disburse_neuron_with_notification() {
                         account: user.get_principal_id().into(),
                     },
                 )
-                .await?;
+                .await
+                .map(tokens_from_proto)?;
             assert_eq!(alloc, user_balance);
 
             // Stake a neuron by transferring to a subaccount of the neurons
@@ -129,7 +131,8 @@ fn test_stake_and_disburse_neuron_with_notification() {
                         account: user.get_principal_id().into(),
                     },
                 )
-                .await?;
+                .await
+                .map(tokens_from_proto)?;
             // The balance should now be: initial allocation - stake - fee
             assert_eq!(
                 Tokens::from_e8s(
@@ -177,7 +180,8 @@ fn test_stake_and_disburse_neuron_with_notification() {
                     },
                     &user,
                 )
-                .await?;
+                .await
+                .map(tokens_from_proto)?;
 
             // The balance should now be: initial allocation - fee * 2 (one fee for the
             // stake and one for the disburse).

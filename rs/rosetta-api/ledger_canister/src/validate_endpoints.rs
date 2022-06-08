@@ -26,17 +26,13 @@ impl ToProto for TotalSupplyArgs {
     }
 }
 
-/// Res
-impl ToProto for Tokens {
-    type Proto = protobuf::Tokens;
-    fn from_proto(sel: Self::Proto) -> Result<Self, String> {
-        Ok(Tokens::from_e8s(sel.e8s))
-    }
+pub fn tokens_from_proto(pb: protobuf::Tokens) -> Tokens {
+    Tokens::from_e8s(pb.e8s)
+}
 
-    fn into_proto(self) -> Self::Proto {
-        protobuf::Tokens {
-            e8s: self.get_e8s(),
-        }
+pub fn tokens_into_proto(tokens: Tokens) -> protobuf::Tokens {
+    protobuf::Tokens {
+        e8s: tokens.get_e8s(),
     }
 }
 
@@ -75,13 +71,13 @@ impl ToProto for TransferFee {
         let transfer_fee = pb
             .transfer_fee
             .ok_or_else(|| "transaction_fee should be set".to_string())
-            .and_then(Tokens::from_proto)?;
+            .map(tokens_from_proto)?;
         Ok(Self { transfer_fee })
     }
 
     fn into_proto(self) -> Self::Proto {
         protobuf::TransferFeeResponse {
-            transfer_fee: Some(self.transfer_fee.into_proto()),
+            transfer_fee: Some(tokens_into_proto(self.transfer_fee)),
         }
     }
 }
@@ -337,7 +333,7 @@ impl ToProto for SendArgs {
             .and_then(|p| p.receiver_gets)
             .ok_or("Payment is missing or incomplete")?;
         let fee = match max_fee {
-            Some(f) => Tokens::from_proto(f)?,
+            Some(f) => tokens_from_proto(f),
             None => DEFAULT_TRANSFER_FEE,
         };
         let from_subaccount = match from_subaccount {
@@ -349,7 +345,7 @@ impl ToProto for SendArgs {
         )?;
         Ok(SendArgs {
             memo,
-            amount: Tokens::from_proto(amount)?,
+            amount: tokens_from_proto(amount),
             fee,
             from_subaccount,
             to,
@@ -365,14 +361,14 @@ impl ToProto for SendArgs {
             to,
             created_at_time,
         } = self;
-        let amount = amount.into_proto();
+        let amount = tokens_into_proto(amount);
         let payment = Some(protobuf::Payment {
             receiver_gets: Some(amount),
         });
         protobuf::SendRequest {
             memo: Some(protobuf::Memo { memo: memo.0 }),
             payment,
-            max_fee: Some(fee.into_proto()),
+            max_fee: Some(tokens_into_proto(fee)),
             from_subaccount: from_subaccount.map(|sa| sa.into_proto()),
             to: Some(to.into_proto()),
             created_at: None,
@@ -408,7 +404,7 @@ impl ToProto for NotifyCanisterArgs {
             .map_err(|e: CanisterIdError| e.to_string())?;
 
         let max_fee = match max_fee {
-            Some(f) => Tokens::from_proto(f)?,
+            Some(f) => tokens_from_proto(f),
             None => DEFAULT_TRANSFER_FEE,
         };
 
@@ -434,7 +430,7 @@ impl ToProto for NotifyCanisterArgs {
             block_height: Some(protobuf::BlockHeight {
                 height: block_height,
             }),
-            max_fee: Some(max_fee.into_proto()),
+            max_fee: Some(tokens_into_proto(max_fee)),
             to_subaccount: to_subaccount.map(|sa| sa.into_proto()),
             to_canister: Some(to_canister.get()),
             from_subaccount: from_subaccount.map(|sa| sa.into_proto()),
@@ -477,7 +473,7 @@ impl ToProto for TransactionNotification {
             to,
             to_subaccount,
             block_height: block_height.ok_or("Block height missing")?.height,
-            amount: Tokens::from_proto(amount.ok_or("Tokens missing")?)?,
+            amount: tokens_from_proto(amount.ok_or("Tokens missing")?),
             memo: Memo(memo.ok_or("Memo missing")?.memo),
         })
     }
@@ -500,7 +496,7 @@ impl ToProto for TransactionNotification {
             block_height: Some(protobuf::BlockHeight {
                 height: block_height,
             }),
-            amount: Some(amount.into_proto()),
+            amount: Some(tokens_into_proto(amount)),
             memo: Some(protobuf::Memo { memo: memo.0 }),
         }
     }
@@ -582,14 +578,14 @@ impl ToProto for Transaction {
                 amount: Some(amount),
             }) => Operation::Burn {
                 from: AccountIdentifier::from_proto(from)?,
-                amount: Tokens::from_proto(amount)?,
+                amount: tokens_from_proto(amount),
             },
             PTransfer::Mint(protobuf::Mint {
                 to: Some(to),
                 amount: Some(amount),
             }) => Operation::Mint {
                 to: AccountIdentifier::from_proto(to)?,
-                amount: Tokens::from_proto(amount)?,
+                amount: tokens_from_proto(amount),
             },
             PTransfer::Send(protobuf::Send {
                 to: Some(to),
@@ -599,9 +595,9 @@ impl ToProto for Transaction {
             }) => Operation::Transfer {
                 to: AccountIdentifier::from_proto(to)?,
                 from: AccountIdentifier::from_proto(from)?,
-                amount: Tokens::from_proto(amount)?,
+                amount: tokens_from_proto(amount),
                 fee: match max_fee {
-                    Some(fee) => Tokens::from_proto(fee)?,
+                    Some(fee) => tokens_from_proto(fee),
                     None => DEFAULT_TRANSFER_FEE,
                 },
             },
@@ -623,12 +619,12 @@ impl ToProto for Transaction {
         let transfer = match operation {
             Operation::Burn { from, amount } => PTransfer::Burn(protobuf::Burn {
                 from: Some(from.into_proto()),
-                amount: Some(amount.into_proto()),
+                amount: Some(tokens_into_proto(amount)),
             }),
 
             Operation::Mint { to, amount } => PTransfer::Mint(protobuf::Mint {
                 to: Some(to.into_proto()),
-                amount: Some(amount.into_proto()),
+                amount: Some(tokens_into_proto(amount)),
             }),
 
             Operation::Transfer {
@@ -638,9 +634,9 @@ impl ToProto for Transaction {
                 fee,
             } => PTransfer::Send(protobuf::Send {
                 to: Some(to.into_proto()),
-                amount: Some(amount.into_proto()),
+                amount: Some(tokens_into_proto(amount)),
                 from: Some(from.into_proto()),
-                max_fee: Some(fee.into_proto()),
+                max_fee: Some(tokens_into_proto(fee)),
             }),
         };
         protobuf::Transaction {
