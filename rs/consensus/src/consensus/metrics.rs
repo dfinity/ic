@@ -5,7 +5,9 @@ use ic_metrics::{
     MetricsRegistry,
 };
 use ic_types::consensus::{Block, BlockProposal, HasHeight, HasRank};
-use prometheus::{GaugeVec, Histogram, HistogramVec, IntCounterVec, IntGauge, IntGaugeVec};
+use prometheus::{
+    GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
+};
 use std::sync::RwLock;
 
 // For certain metrics, we record metrics based on block's rank.
@@ -117,6 +119,14 @@ pub struct FinalizerMetrics {
     pub ingress_message_bytes_delivered: Histogram,
     pub xnet_bytes_delivered: Histogram,
     pub finalization_certified_state_difference: IntGauge,
+    // ecdsa payload related metrics
+    pub ecdsa_key_transcript_creation: IntCounterVec,
+    pub ecdsa_signature_agreements: IntCounter,
+    pub ecdsa_ongoing_signatures: IntGauge,
+    pub ecdsa_available_quadruples: IntGauge,
+    pub ecdsa_quadruples_in_creation: IntGauge,
+    pub ecdsa_ongoing_xnet_reshares: IntGauge,
+    pub ecdsa_xnet_reshare_agreements: IntCounter,
 }
 
 impl FinalizerMetrics {
@@ -152,6 +162,35 @@ impl FinalizerMetrics {
                 "The number of bytes in xnet messages delivered to Message Routing",
                 // 0, 1, 2, 5, 10, 20, 50, 100, ..., 10MB, 20MB, 50MB
                 decimal_buckets_with_zero(0, 7),
+            ),
+            ecdsa_key_transcript_creation: metrics_registry.int_counter_vec(
+                "consensus_ecdsa_key_transcript_creation",
+                "The number of times ECDSA key transcript is created",
+                &["type"], // type == "begin" or "created"
+            ),
+            ecdsa_signature_agreements: metrics_registry.int_counter(
+                "consensus_ecdsa_signature_agreements",
+                "Total number of ECDSA signature agreements created",
+            ),
+            ecdsa_ongoing_signatures: metrics_registry.int_gauge(
+                "consensus_ecdsa_ongoing_signatures",
+                "The number of ongoing ECDSA signatures",
+            ),
+            ecdsa_available_quadruples: metrics_registry.int_gauge(
+                "consensus_ecdsa_available_quadruples",
+                "The number of avaiable ECDSA quadruples",
+            ),
+            ecdsa_quadruples_in_creation: metrics_registry.int_gauge(
+                "consensus_ecdsa_quadruples_in_creation",
+                "The number of ECDSA quadruples in creation",
+            ),
+            ecdsa_ongoing_xnet_reshares: metrics_registry.int_gauge(
+                "consensus_ecdsa_ongoing_xnet_reshares",
+                "The number of ongoing ECDSA xnet reshares",
+            ),
+            ecdsa_xnet_reshare_agreements: metrics_registry.int_counter(
+                "consensus_ecdsa_reshare_agreements",
+                "Total number of ECDSA reshare agreements created",
             ),
         }
     }

@@ -255,8 +255,8 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                     .unwrap(),
             );
             subnet_record.ecdsa_config = Some(EcdsaConfig {
-                quadruples_to_create_in_advance: 100,
-                key_ids: vec![(&key_1).into(), (&key_2).into()],
+                quadruples_to_create_in_advance: 1,
+                key_ids: vec![(&key_2).into(), (&key_1).into()],
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             });
 
@@ -353,7 +353,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                 replacement_nodes: None,
                 registry_store_uri: None,
                 ecdsa_config: Some(EcdsaInitialConfig {
-                    quadruples_to_create_in_advance: 0,
+                    quadruples_to_create_in_advance: 1,
                     keys: vec![EcdsaKeyRequest {
                         key_id: key_2.clone(),
                         subnet_id: None,
