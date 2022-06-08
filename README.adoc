@@ -113,6 +113,27 @@ Find more information by using `-h` or `--help`.
 
 All the built artifacts can be found in the top-level `artifacts/` directory.
 
+== Verifying releases
+
+https://dashboard.internetcomputer.org/releases[Each release proposal] contains the information in the payload that allows to verify the disk image: the download url of the disk image, git revision that the image was built from, the SHA256 checksum of the image.
+This information allows anyone to verify this release:
+
+* checkout the source tree at specific git revision
+* build the ICOS disk image using instructions above
+* compare the SHA256 checksum of resulting image with the one published in the release proposal payload.
+
+The https://github.com/dfinity/ic/blob/master/gitlab-ci/tools/repro-check.sh[repro-check.sh] script can be used to do it conveniently.
+
+To verify specific git revision:
+----
+$ ./gitlab-ci/tool/repro-check.sh -c <git revision>
+----
+
+To verify specific proposal:
+----
+$ ./gitlab-ci/tool/repro-check.sh -p <proposal id>
+----
+
 == Contributing
 
 === The Network Nervous System
