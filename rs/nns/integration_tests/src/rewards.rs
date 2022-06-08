@@ -20,7 +20,9 @@ use ic_nns_test_utils::{
     governance::wait_for_final_state,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder},
 };
-use ledger_canister::{AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens};
+use ledger_canister::{
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens,
+};
 
 /// Tests that we can add and reward a node provider.
 #[test]
@@ -42,7 +44,8 @@ fn test_node_provider_rewards() {
                     account: AccountIdentifier::from(*TEST_NEURON_1_OWNER_PRINCIPAL),
                 },
             )
-            .await?;
+            .await
+            .map(tokens_from_proto)?;
         assert_eq!(Tokens::from_e8s(0), user_balance);
 
         // Add a node provider
@@ -153,7 +156,8 @@ fn test_node_provider_rewards() {
                     account: to_account,
                 },
             )
-            .await?;
+            .await
+            .map(tokens_from_proto)?;
         assert_eq!(Tokens::from_e8s(23_400_000_000), user_balance);
 
         Ok(())

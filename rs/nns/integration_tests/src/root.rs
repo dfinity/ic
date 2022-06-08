@@ -29,8 +29,8 @@ use ic_nns_test_utils::{
 use ic_nns_test_utils_macros::parameterized_upgrades;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, BlockHeight, LedgerCanisterInitPayload, Memo, SendArgs,
-    Tokens, DEFAULT_TRANSFER_FEE,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockHeight,
+    LedgerCanisterInitPayload, Memo, SendArgs, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use std::collections::HashMap;
 
@@ -289,7 +289,8 @@ fn test_stop_start_nns_canister() {
                     },
                     &user1,
                 )
-                .await?;
+                .await
+                .map(tokens_from_proto)?;
 
             // The balance of the first user should have been deducted 200 ICPs from both
             // transfers, minus 2 * the transaction fees.
@@ -311,7 +312,8 @@ fn test_stop_start_nns_canister() {
                     },
                     &user2,
                 )
-                .await?;
+                .await
+                .map(tokens_from_proto)?;
 
             // The balance of the first user should have been deducted 200 ICPs from both
             // transfers.

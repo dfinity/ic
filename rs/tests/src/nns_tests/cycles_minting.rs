@@ -43,8 +43,9 @@ use ic_rosetta_test_utils::make_user;
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use ledger_canister::protobuf::TipOfChainRequest;
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockHeight, BlockRes, CyclesResponse,
-    NotifyCanisterArgs, Operation, Subaccount, TipOfChainRes, Tokens, DEFAULT_TRANSFER_FEE,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockHeight,
+    BlockRes, CyclesResponse, NotifyCanisterArgs, Operation, Subaccount, TipOfChainRes, Tokens,
+    DEFAULT_TRANSFER_FEE,
 };
 use on_wire::{FromWire, IntoWire};
 use slog::info;
@@ -824,7 +825,8 @@ impl TestAgent {
         let arg = AccountBalanceArgs::new(acc);
         let res: Result<Tokens, String> = self
             .query_pb(&LEDGER_CANISTER_ID, "account_balance_pb", arg)
-            .await;
+            .await
+            .map(tokens_from_proto);
         res.unwrap()
     }
 

@@ -18,7 +18,8 @@ use ic_nns_test_utils::itest_helpers::{
     local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder,
 };
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens,
+    DEFAULT_TRANSFER_FEE,
 };
 use std::collections::HashSet;
 use std::convert::TryFrom;
@@ -312,7 +313,8 @@ async fn assert_unclaimed_neurons_can_be_forwarded(
             },
             &Sender::from_keypair(custodian_key_pair),
         )
-        .await;
+        .await
+        .map(tokens_from_proto);
 
     let custodian_account_balance = account_balance_response.unwrap();
 
@@ -365,7 +367,8 @@ async fn assert_unclaimed_neurons_can_be_forwarded(
             },
             &Sender::from_keypair(custodian_key_pair),
         )
-        .await;
+        .await
+        .map(tokens_from_proto);
 
     let actual_custodian_account_balance_after_forward = account_balance_response.unwrap();
 
@@ -461,7 +464,8 @@ async fn assert_neurons_can_be_donated(
             },
             &Sender::from_keypair(custodian_key_pair),
         )
-        .await;
+        .await
+        .map(tokens_from_proto);
 
     let custodian_account_balance = account_balance_response.unwrap();
 
@@ -534,7 +538,8 @@ async fn assert_neurons_can_be_donated(
             },
             &Sender::from_keypair(custodian_key_pair),
         )
-        .await;
+        .await
+        .map(tokens_from_proto);
 
     let actual_custodian_account_balance_after_donation = account_balance_response.unwrap();
 

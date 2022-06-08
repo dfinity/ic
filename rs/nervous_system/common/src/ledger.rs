@@ -5,7 +5,8 @@ use dfn_core::{call, CanisterId};
 use dfn_protobuf::protobuf;
 use ic_crypto_sha::Sha256;
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens, TotalSupplyArgs,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
+    TotalSupplyArgs,
 };
 
 pub struct LedgerCanister {
@@ -87,7 +88,9 @@ impl Ledger for LedgerCanister {
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         let result: Result<Tokens, (Option<i32>, String)> =
-            call(self.id, "total_supply_pb", protobuf, TotalSupplyArgs {}).await;
+            call(self.id, "total_supply_pb", protobuf, TotalSupplyArgs {})
+                .await
+                .map(tokens_from_proto);
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
@@ -109,7 +112,8 @@ impl Ledger for LedgerCanister {
             protobuf,
             AccountBalanceArgs { account },
         )
-        .await;
+        .await
+        .map(tokens_from_proto);
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(

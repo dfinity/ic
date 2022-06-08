@@ -31,7 +31,9 @@ use ic_nns_common::pb::v1::NeuronId as ProtoNeuronId;
 use ic_nns_governance::governance::TimeWarp;
 use ic_nns_governance::pb::v1::reward_node_provider::{RewardMode, RewardToAccount};
 use ic_types::PrincipalId;
-use ledger_canister::{AccountBalanceArgs, AccountIdentifier, Tokens, TOKEN_SUBDIVIDABLE_BY};
+use ledger_canister::{
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens, TOKEN_SUBDIVIDABLE_BY,
+};
 use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -502,6 +504,7 @@ async fn assert_account_balance(
             AccountBalanceArgs { account },
         )
         .await
+        .map(tokens_from_proto)
         .unwrap();
     assert_eq!(Tokens::from_e8s(e8s), user_balance);
 }

@@ -31,9 +31,9 @@ use ic_nns_test_utils::itest_helpers::{
     NnsInitPayloadsBuilder, UpgradeTestingScenario,
 };
 use ledger_canister::{
-    protobuf::TipOfChainRequest, AccountBalanceArgs, AccountIdentifier, ArchiveOptions, Block,
-    BlockHeight, LedgerCanisterInitPayload, Memo, SendArgs, TipOfChainRes, Tokens, Transaction,
-    DEFAULT_TRANSFER_FEE,
+    protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier,
+    ArchiveOptions, Block, BlockHeight, LedgerCanisterInitPayload, Memo, SendArgs, TipOfChainRes,
+    Tokens, Transaction, DEFAULT_TRANSFER_FEE,
 };
 use tokio::time::{timeout_at, Instant};
 
@@ -253,7 +253,8 @@ fn test_stake_and_disburse_neuron_with_notification() {
                         account: user.get_principal_id().into(),
                     },
                 )
-                .await?;
+                .await
+                .map(tokens_from_proto)?;
             assert_eq!(alloc, user_balance);
 
             // Stake a neuron by transferring to a subaccount of the neurons
@@ -324,7 +325,8 @@ fn test_stake_and_disburse_neuron_with_notification() {
                         account: user.get_principal_id().into(),
                     },
                 )
-                .await?;
+                .await
+                .map(tokens_from_proto)?;
             // The balance should now be: initial allocation - stake - fee
             assert_eq!(
                 Tokens::from_e8s(
@@ -369,7 +371,8 @@ fn test_stake_and_disburse_neuron_with_notification() {
                     },
                     &user,
                 )
-                .await?;
+                .await
+                .map(tokens_from_proto)?;
 
             // The balance should now be: initial allocation - fee * 2 (one fee for the
             // stake and one for the disburse).
@@ -417,7 +420,8 @@ fn test_stake_and_disburse_neuron_with_account() {
                         account: user.get_principal_id().into(),
                     },
                 )
-                .await?;
+                .await
+                .map(tokens_from_proto)?;
             assert_eq!(alloc, user_balance);
 
             // Stake a neuron by transferring to a subaccount of the neurons
@@ -458,7 +462,8 @@ fn test_stake_and_disburse_neuron_with_account() {
                         account: user.get_principal_id().into(),
                     },
                 )
-                .await?;
+                .await
+                .map(tokens_from_proto)?;
             // The balance should now be: initial allocation - stake - fee
             assert_eq!(
                 Tokens::from_e8s(
@@ -558,7 +563,8 @@ fn test_stake_and_disburse_neuron_with_account() {
                     },
                     &user,
                 )
-                .await?;
+                .await
+                .map(tokens_from_proto)?;
 
             // The balance should now be: initial allocation - fee * 2;
             assert_eq!(
@@ -601,6 +607,7 @@ fn test_ledger_gtc_sync() {
                 AccountBalanceArgs::new(gtc_user_id.into()),
             )
             .await
+            .map(tokens_from_proto)
             .unwrap();
 
         assert_eq!(gtc_icpt_amt, alloc);

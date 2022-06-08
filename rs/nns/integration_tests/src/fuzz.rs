@@ -40,8 +40,9 @@ use ic_nns_test_utils::itest_helpers::{
     local_test_on_nns_subnet, NnsCanisters, NnsInitPayloadsBuilder,
 };
 use ledger_canister::{
-    AccountBalanceArgs, AccountIdentifier, BlockHeight, LedgerCanisterInitPayload, Memo,
-    NotifyCanisterArgs, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockHeight,
+    LedgerCanisterInitPayload, Memo, NotifyCanisterArgs, SendArgs, Subaccount, Tokens,
+    DEFAULT_TRANSFER_FEE,
 };
 
 /// A user that owns/controls Accounts and/or Neurons.
@@ -1163,7 +1164,8 @@ impl LocalNnsFuzzDriver {
                 ),
             )
             .await
-            .unwrap_or_else(|_| Err(format!("Operation {} (get balance) timed out.", id)));
+            .unwrap_or_else(|_| Err(format!("Operation {} (get balance) timed out.", id)))
+            .map(tokens_from_proto);
             if let Ok(balance) = result {
                 if balance == account.balance {
                     OperationResult::VerifyOne { id, result: Ok(()) }
@@ -1240,7 +1242,8 @@ impl LocalNnsFuzzDriver {
                 },
                 &account.owner.sender,
             )
-            .await;
+            .await
+            .map(tokens_from_proto);
         OperationResult::GetAccountBalance { id, result }
     }
 
