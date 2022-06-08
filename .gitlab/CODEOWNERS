@@ -153,6 +153,7 @@
 /rs/rust_canisters/response_payload_test/       @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/networking-team
 /rs/scenario_tests/                     @dfinity-lab/teams/ic-testing-verification
 /rs/sns/                                @dfinity-lab/teams/nns-team
+/rs/starter                             @dfinity-lab/teams/networking-team
 /rs/state_layout/                       @dfinity-lab/teams/message-routing-owners
 /rs/state_machine_tests/                @dfinity-lab/teams/message-routing-owners
 /rs/state_manager/                      @dfinity-lab/teams/message-routing-owners
