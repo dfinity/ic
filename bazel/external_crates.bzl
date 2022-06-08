@@ -132,6 +132,10 @@ def external_crates_repository(name):
                 version = "=0.2.7",
             ),
             "nix": crate.spec(version = "=0.23.0"),
+            "num-bigint-dig": crate.spec(
+                features = ["prime"],
+                version = "=0.8",
+            ),
             "num-traits": crate.spec(version = "=0.2.12"),
             "once_cell": crate.spec(version = "=1.10.0"),
             "openssl": crate.spec(version = "=0.10.38"),
