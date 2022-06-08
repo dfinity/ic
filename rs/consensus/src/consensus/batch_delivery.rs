@@ -269,22 +269,22 @@ pub fn generate_responses_to_subnet_calls(
                     ecdsa_dealings_contexts,
                     payload,
                 ));
-                consensus_responses.append(
-                    &mut generate_execution_responses_for_canister_http_responses(
-                        &block_payload.batch.canister_http,
-                    ),
-                );
-                consensus_responses.append(
-                    &mut generate_execution_responses_for_expired_canister_http_responses(
-                        block.context.time,
-                        &state
-                            .get_ref()
-                            .metadata
-                            .subnet_call_context_manager
-                            .canister_http_request_contexts,
-                    ),
-                );
             }
+            consensus_responses.append(
+                &mut generate_execution_responses_for_canister_http_responses(
+                    &block_payload.batch.canister_http,
+                ),
+            );
+            consensus_responses.append(
+                &mut generate_execution_responses_for_expired_canister_http_responses(
+                    block.context.time,
+                    &state
+                        .get_ref()
+                        .metadata
+                        .subnet_call_context_manager
+                        .canister_http_request_contexts,
+                ),
+            );
         }
     }
     consensus_responses
