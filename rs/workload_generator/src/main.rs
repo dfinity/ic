@@ -216,7 +216,13 @@ async fn main() {
             Arg::new("principal-id")
                 .long("principal-id")
                 .takes_value(true)
-                .help("If specified, this, base32 encoding of the principal id, is used for sending request to the IC."),
+                .help("If specified, this base32 encoding of the principal id, is used for sending request to the IC."),
+        )
+        .arg(
+            Arg::new("host")
+                .long("host")
+                .takes_value(true)
+                .help("If specified, this, host is used as a header on requests sent to the IC."),
         )
         .arg(
             Arg::new("pem-file")
@@ -362,6 +368,7 @@ async fn main() {
         http_client_config.pool_idle_timeout =
             Some(Duration::from_secs(val.parse::<u64>().unwrap()));
     }
+    let host = matches.value_of("host").map(ToString::to_string);
 
     let http_client = HttpClient::new();
     let (sender, pubkey_bytes) = match principal_id {
@@ -417,7 +424,8 @@ async fn main() {
                 }
                 _ => {}
             }
-            let eng = engine::Engine::new(sender.clone(), sender_field, &url, http_client_config);
+            let eng =
+                engine::Engine::new(sender.clone(), sender_field, &url, http_client_config, host);
 
             if !matches.is_present("no-status-check") {
                 eng.wait_for_all_agents_to_be_healthy().await;

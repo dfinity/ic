@@ -16,12 +16,14 @@ use ic_types::{
 };
 
 use byte_unit::Byte;
+use itertools::Either;
 use leaky_bucket::RateLimiter;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     convert::TryFrom,
     env, fs,
+    str::FromStr,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -35,7 +37,7 @@ use tokio::{
     },
     time::{sleep, sleep_until},
 };
-use url::Url;
+use url::{Host, Url};
 
 use crate::metrics::{
     LATENCY_HISTOGRAM, QUERY_REPLY, UPDATE_SENT, UPDATE_SENT_REPLY, UPDATE_WAIT_REPLY,
@@ -86,13 +88,35 @@ impl Engine {
         sender_field: Blob,
         urls: &[String],
         http_client_config: HttpClientConfig,
+        host: Option<String>,
     ) -> Engine {
         let mut agents = Vec::with_capacity(urls.len());
         let current_batch = urls.iter().map(|url| {
+            let mut url = Url::parse(url.as_str()).unwrap();
+            let mut http_client_config = http_client_config.clone();
+            if let Some(new_host) = host.as_ref() {
+                http_client_config.overrides.insert(
+                    new_host.clone(),
+                    match url.host() {
+                        None => panic!("no host found in {}", url),
+                        Some(Host::Domain(host)) => Either::Right(
+                            FromStr::from_str(host).expect("failed to convert host to dns name"),
+                        ),
+                        Some(Host::Ipv4(host)) => {
+                            Either::Left((host, url.port_or_known_default().unwrap()).into())
+                        }
+                        Some(Host::Ipv6(host)) => {
+                            Either::Left((host, url.port_or_known_default().unwrap()).into())
+                        }
+                    },
+                );
+                url.set_host(Some(new_host.as_str()))
+                    .expect("failed to set host");
+            }
             let mut agent = Agent::new_with_http_client_config(
-                Url::parse(url.as_str()).unwrap(),
+                url,
                 agent_sender.clone(),
-                http_client_config,
+                http_client_config.clone(),
             )
             .with_query_timeout(QUERY_TIMEOUT);
             agent.sender_field = sender_field.clone();
