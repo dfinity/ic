@@ -12,8 +12,9 @@ filegroup(
 )
 
 rust_library(
-    name = "ic_bitcoin_service",
+    name = "service",
     srcs = glob(["src/**"]),
+    crate_name = "ic_btc_service",
     edition = "2021",
     deps = [
         ":build_script",

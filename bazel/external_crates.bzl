@@ -97,6 +97,7 @@ def external_crates_repository(name):
             "float-cmp": crate.spec(version = "=0.9.0"),
             "futures-util": crate.spec(version = "=0.3.21"),
             "futures": crate.spec(version = "=0.3.21"),
+            "hashlink": crate.spec(version = "=0.8.0"),
             "hex": crate.spec(version = "=0.4.3"),
             "hex-literal": crate.spec(version = "=0.2.1"),
             "http": crate.spec(version = "=0.2.5"),
