@@ -55,6 +55,7 @@ git_hash=${git_hash:-$(git rev-parse HEAD)}
 OUT="$HOME/disk-images/$git_hash"
 CI_OUT="$OUT/ci-img"
 DEV_OUT="$OUT/dev-img"
+PROPOSAL_OUT="$OUT/proposal-img"
 
 mkdir -p "$CI_OUT"
 mkdir -p "$DEV_OUT"
@@ -86,6 +87,12 @@ if ! ./gitlab-ci/src/artifacts/rclone_download.py --git-rev=$git_hash --out="$CI
 fi
 
 if [ -n "${UPDATE_IMG_FILE:-}" ]; then
+    case "${UPDATE_IMG_FILE}" in
+        */* | *..*)
+            echo "The proposal ${PROPOSAL_URL} contains payload.release_package_url with illegal characters"
+            exit 1
+            ;;
+    esac
     CI_PACKAGE_SHA256=$(awk "/${UPDATE_IMG_FILE}\$/ {print \$1}" "${CI_OUT}/SHA256SUMS")
     if [ "${release_package_sha256_hex}" != "${CI_PACKAGE_SHA256}" ]; then
         echo "The sha256 sum from the proposal does not match the one from the s3 storage for $UPDATE_IMG_FILE."
@@ -93,6 +100,12 @@ if [ -n "${UPDATE_IMG_FILE:-}" ]; then
         echo "The sha256 sum from the s3 storage: ${CI_PACKAGE_SHA256}."
         exit 1
     fi
+    mkdir -p "$PROPOSAL_OUT"
+    pushd "${PROPOSAL_OUT}"
+    curl --retry 5 --retry-delay 10 --output "${UPDATE_IMG_FILE}" "${release_package_url}"
+    echo "${release_package_sha256_hex} *${UPDATE_IMG_FILE}" >SHA256SUMS
+    sha256sum --check SHA256SUMS
+    popd
 fi
 
 echo "images will be saved in $OUT"
