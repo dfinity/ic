@@ -17,6 +17,7 @@ message EcdsaSummaryPayload {
   UnmaskedTranscript current_key_transcript = 9;
   uint64 next_unused_quadruple_id = 10;
   KeyTranscriptCreation next_key_in_creation = 11;
+  registry.crypto.v1.EcdsaKeyId key_id = 12;
 }
 
 message OngoingSignature {

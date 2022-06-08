@@ -27,7 +27,8 @@ use super::signer::EcdsaSignatureBuilder;
 use super::utils::EcdsaBlockReaderImpl;
 use crate::consensus::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use crate::ecdsa::payload_builder::{
-    block_chain_cache, create_data_payload_helper, create_summary_payload, ecdsa_feature_is_enabled,
+    block_chain_cache, create_data_payload_helper, create_summary_payload,
+    get_ecdsa_config_if_enabled,
 };
 use ic_interfaces::{
     registry::RegistryClient,
@@ -47,7 +48,7 @@ use ic_types::{
         ThresholdEcdsaCombinedSignature,
     },
     registry::RegistryClientError,
-    NodeId, RegistryVersion, SubnetId,
+    Height, NodeId, RegistryVersion, SubnetId,
 };
 use std::collections::BTreeMap;
 
@@ -71,8 +72,9 @@ pub enum PermanentError {
     IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
     IDkgVerifyDealingPublicError(IDkgVerifyDealingPublicError),
     // local errors
+    ConsensusRegistryVersionNotFound(Height),
     SubnetWithNoNodes(SubnetId, RegistryVersion),
-    EcdsaFeatureDisabled,
+    EcdsaConfigNotFound,
     SummaryPayloadMismatch,
     DataPayloadMismatch,
     MissingEcdsaDataPayload,
@@ -202,11 +204,19 @@ pub fn validate_summary_payload(
     summary_payload: Option<&ecdsa::EcdsaPayload>,
 ) -> ValidationResult<EcdsaValidationError> {
     let height = parent_block.height().increment();
-    if !ecdsa_feature_is_enabled(subnet_id, registry_client, pool_reader, height)
-        .map_err(TransientError::from)?
-    {
+    let registry_version = pool_reader
+        .registry_version(height)
+        .ok_or(PermanentError::ConsensusRegistryVersionNotFound(height))?;
+    let ecdsa_config = get_ecdsa_config_if_enabled(
+        subnet_id,
+        registry_version,
+        registry_client,
+        &ic_logger::replica_logger::no_op_logger(),
+    )
+    .map_err(TransientError::from)?;
+    if ecdsa_config.is_none() {
         if summary_payload.is_some() {
-            return Err(PermanentError::EcdsaFeatureDisabled.into());
+            return Err(PermanentError::EcdsaConfigNotFound.into());
         } else {
             return Ok(());
         }
@@ -249,12 +259,9 @@ pub fn validate_data_payload(
     parent_block: &Block,
     data_payload: Option<&ecdsa::EcdsaPayload>,
 ) -> ValidationResult<EcdsaValidationError> {
-    let height = parent_block.height().increment();
-    let ecdsa_enabled = ecdsa_feature_is_enabled(subnet_id, registry_client, pool_reader, height)
-        .map_err(TransientError::from)?;
-    if !ecdsa_enabled {
+    if parent_block.payload.as_ref().as_ecdsa().is_none() {
         if data_payload.is_some() {
-            return Err(PermanentError::EcdsaFeatureDisabled.into());
+            return Err(PermanentError::UnexpectedDataPayload(None).into());
         } else {
             return Ok(());
         }

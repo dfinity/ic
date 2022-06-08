@@ -5,7 +5,7 @@
 use crate::consensus::{
     crypto::ConsensusCrypto, dkg_key_manager::DkgKeyManager, pool_reader::PoolReader,
 };
-use crate::ecdsa::make_ecdsa_genesis_summary;
+use crate::ecdsa::{make_bootstrap_summary, utils::inspect_ecdsa_initializations};
 use ic_crypto::crypto_hash;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
@@ -1362,8 +1362,32 @@ pub fn make_registry_cup(
     };
     let dkg_summary = make_genesis_summary(registry, subnet_id, Some(registry_version));
     let cup_height = Height::new(cup_contents.height);
-    let ecdsa_summary =
-        make_ecdsa_genesis_summary(registry, registry_version, subnet_id, cup_height, logger);
+    let ecdsa_summary = match inspect_ecdsa_initializations(&cup_contents.ecdsa_initializations) {
+        Ok(Some((key_id, dealings))) => {
+            match make_bootstrap_summary(subnet_id, key_id, cup_height, Some(dealings), logger) {
+                Ok(summary) => {
+                    println!(
+                        "Making CUP with ecdsa_summary with key_id {:?}",
+                        summary.as_ref().map(|x| &x.key_transcript.key_id)
+                    );
+                    summary
+                }
+                Err(err) => {
+                    if let Some(logger) = logger {
+                        warn!(logger, "{:?}", err);
+                    }
+                    None
+                }
+            }
+        }
+        Ok(None) => None,
+        Err(err) => {
+            if let Some(logger) = logger {
+                warn!(logger, "{}", err);
+            }
+            None
+        }
+    };
 
     let low_dkg_id = dkg_summary
         .current_transcript(&NiDkgTag::LowThreshold)

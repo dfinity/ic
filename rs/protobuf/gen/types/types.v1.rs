@@ -224,6 +224,8 @@ pub struct EcdsaSummaryPayload {
     pub next_unused_quadruple_id: u64,
     #[prost(message, optional, tag="11")]
     pub next_key_in_creation: ::core::option::Option<KeyTranscriptCreation>,
+    #[prost(message, optional, tag="12")]
+    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]

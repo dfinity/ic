@@ -9,6 +9,7 @@ use crate::consensus::{
     crypto::ConsensusCrypto, metrics::EcdsaPayloadMetrics, pool_reader::PoolReader,
 };
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
+use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockChain, ecdsa::EcdsaPool, registry::RegistryClient,
 };
@@ -17,15 +18,15 @@ use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
-use ic_types::crypto::canister_threshold_sig::error::IDkgTranscriptIdError;
 use ic_types::{
     batch::ValidationContext,
     consensus::{ecdsa, ecdsa::EcdsaBlockReader, Block, HasHeight},
     crypto::{
         canister_threshold_sig::{
             error::{
-                IDkgParamsValidationError, InitialIDkgDealingsValidationError,
-                PresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
+                IDkgParamsValidationError, IDkgTranscriptIdError,
+                InitialIDkgDealingsValidationError, PresignatureQuadrupleCreationError,
+                ThresholdEcdsaSigInputsCreationError,
             },
             idkg::{IDkgTranscript, InitialIDkgDealings},
             ExtendedDerivationPath,
@@ -45,13 +46,13 @@ use std::sync::{Arc, RwLock};
 #[derive(Clone, Debug)]
 pub enum EcdsaPayloadError {
     RegistryClientError(RegistryClientError),
+    ConsensusRegistryVersionNotFound(Height),
     StateManagerError(StateManagerError),
     SubnetWithNoNodes(SubnetId, RegistryVersion),
     PreSignatureError(PresignatureQuadrupleCreationError),
     IDkgParamsValidationError(IDkgParamsValidationError),
     IDkgTranscriptIdError(IDkgTranscriptIdError),
     DkgSummaryBlockNotFound(Height),
-    EcdsaConfigNotFound(RegistryVersion),
     ThresholdEcdsaSigInputsCreationError(ThresholdEcdsaSigInputsCreationError),
     TranscriptCastError(ecdsa::TranscriptCastError),
     InvalidChainCacheError(InvalidChainCacheError),
@@ -128,13 +129,13 @@ impl From<InvalidChainCacheError> for EcdsaPayloadError {
     }
 }
 
-/// Builds the the very first summary block after the feature is enabled. This would
-/// trigger the subsequent data blocks to create the initial key transcript.
-fn make_boot_strap_summary(
-    registry: &dyn RegistryClient,
-    registry_version: RegistryVersion,
+/// Builds the the very first ecdsa summary block. This would trigger the subsequent
+/// data blocks to create the initial key transcript.
+pub fn make_bootstrap_summary(
     subnet_id: SubnetId,
+    key_id: EcdsaKeyId,
     height: Height,
+    initial_dealings: Option<InitialIDkgDealings>,
     log: Option<&ReplicaLogger>,
 ) -> Result<ecdsa::Summary, EcdsaPayloadError> {
     let mut summary_payload = ecdsa::EcdsaPayload {
@@ -149,11 +150,11 @@ fn make_boot_strap_summary(
         key_transcript: ecdsa::EcdsaKeyTranscript {
             current: None,
             next_in_creation: ecdsa::KeyTranscriptCreation::Begin,
+            key_id,
         },
     };
 
     // Update the next_in_creation if boot strapping from initial dealings
-    let initial_dealings = get_initial_dealings(subnet_id, registry, registry_version, log);
     if let Some(dealings) = initial_dealings {
         match ecdsa::unpack_reshare_of_unmasked_params(height, &dealings.params()) {
             Some((params, transcript)) => {
@@ -183,89 +184,33 @@ fn make_boot_strap_summary(
     Ok(Some(summary_payload))
 }
 
-/// Builds the ECDSA summary to be included in the genesis CUP.
-pub fn make_ecdsa_genesis_summary(
-    registry: &dyn RegistryClient,
+/// Return EcdsaConfig if it is enabled for the given subnet.
+pub(crate) fn get_ecdsa_config_if_enabled(
+    subnet_id: SubnetId,
     registry_version: RegistryVersion,
-    subnet_id: SubnetId,
-    height: Height,
-    log: Option<&ReplicaLogger>,
-) -> ecdsa::Summary {
-    let ecdsa_enabled = match registry.get_features(subnet_id, registry_version) {
-        Ok(Some(features)) => features.ecdsa_signatures,
-        Ok(None) => false,
-        Err(err) => {
-            if let Some(log) = log {
-                warn!(
-                    log,
-                    "make_ecdsa_genesis_summary(): failed to read registry: {:?}", err
-                );
-            }
-            false
-        }
-    };
-    if !ecdsa_enabled {
-        return None;
-    }
-
-    make_boot_strap_summary(registry, registry_version, subnet_id, height, log).unwrap_or(None)
-}
-
-/// Return true if ecdsa is enabled in subnet features in the subnet record.
-pub(crate) fn ecdsa_feature_is_enabled(
-    subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
-    pool_reader: &PoolReader<'_>,
-    height: Height,
-) -> Result<bool, RegistryClientError> {
-    if let Some(registry_version) = pool_reader.registry_version(height) {
-        Ok(registry_client
-            .get_features(subnet_id, registry_version)?
-            .map(|features| features.ecdsa_signatures)
-            == Some(true))
-    } else {
-        Ok(false)
-    }
-}
-
-/// Returns the initial dealings from the registry CUP record.
-fn get_initial_dealings(
-    subnet_id: SubnetId,
-    registry_client: &dyn RegistryClient,
-    registry_version: RegistryVersion,
-    log: Option<&ReplicaLogger>,
-) -> Option<InitialIDkgDealings> {
-    let record = registry_client
-        .get_cup_contents(subnet_id, registry_version)
-        .ok()
-        .and_then(|record| record.value)?;
-    let ret = record
-        .ecdsa_initializations
-        .iter()
-        .filter_map(|initialization| {
-            initialization
-                .dealings
-                .as_ref()
-                .map(InitialIDkgDealings::try_from)
-                .transpose()
-                .map_err(|err| {
-                    if let Some(log) = log {
-                        warn!(log, "Failed to convert initial dealings proto: {:?}", err)
-                    }
-                })
-                .ok()
-                .flatten()
-        })
-        .collect::<Vec<_>>();
-    if ret.len() > 1 {
-        if let Some(log) = log {
+    log: &ReplicaLogger,
+) -> Result<Option<EcdsaConfig>, RegistryClientError> {
+    if let Some(mut ecdsa_config) = registry_client.get_ecdsa_config(subnet_id, registry_version)? {
+        if ecdsa_config.quadruples_to_create_in_advance == 0 {
             warn!(
                 log,
-                "Resharing of multiple initial ECDSA keys not supported"
+                "Wrong ecdsa_config: quadruples_to_create_in_advance is zero"
             );
+        } else if ecdsa_config.key_ids.is_empty() {
+            // This means it is not enabled
+        } else if ecdsa_config.key_ids.len() > 1 {
+            warn!(
+                log,
+                "Wrong ecdsa_config: multiple key_ids is not yet supported. Pick the first one."
+            );
+            ecdsa_config.key_ids = vec![ecdsa_config.key_ids[0].clone()];
+            return Ok(Some(ecdsa_config));
+        } else {
+            return Ok(Some(ecdsa_config));
         }
     }
-    ret.into_iter().next()
+    Ok(None)
 }
 
 /// Creates a threshold ECDSA summary payload.
@@ -279,58 +224,54 @@ pub(crate) fn create_summary_payload(
     log: ReplicaLogger,
 ) -> Result<ecdsa::Summary, EcdsaPayloadError> {
     let height = parent_block.height().increment();
-    if !ecdsa_feature_is_enabled(subnet_id, registry_client, pool_reader, height)? {
+    let registry_version = pool_reader
+        .registry_version(height)
+        .ok_or(EcdsaPayloadError::ConsensusRegistryVersionNotFound(height))?;
+    let ecdsa_config =
+        get_ecdsa_config_if_enabled(subnet_id, registry_version, registry_client, &log)?;
+    if ecdsa_config.is_none() {
         return Ok(None);
-    }
+    };
+    let ecdsa_config = ecdsa_config.unwrap();
 
     let ecdsa_payload = parent_block.payload.as_ref().as_data().ecdsa.as_ref();
     if ecdsa_payload.is_none() {
+        // Parent block doesn't have ECDSA payload and feature is enabled.
+        // Create the bootstrap summary block, and create a new key for the given key_id.
+        //
+        // This is safe because registry's do_update_subnet already ensures that only
+        // fresh key_id can be assigned to an existing subnet.
+        //
+        // Keys already held by existing subnets can only be re-shared when creating
+        // a new subnet, which means the genesis summary ECDSA payload is not empty
+        // and we won't reach here.
+        let key_id = ecdsa_config.key_ids[0].clone();
         info!(
             log,
-            "create_summary_payload(): boot strapping ECDSA summary at height {:?}", height,
+            "Creating ECDSA key {} on subnet {} at height {}", key_id, subnet_id, height
         );
-        // Parent block doesn't have ECDSA payload and feature is enabled.
-        // Create the bootstrap summary block.
-        // TODO: should use parent_block.context.registry_version here?
-        if let Some(registry_version) = pool_reader.registry_version(height) {
-            return make_boot_strap_summary(
-                registry_client,
-                registry_version,
-                subnet_id,
-                height,
-                Some(&log),
-            );
-        } else {
-            return Ok(None);
-        }
-    }
 
+        return make_bootstrap_summary(subnet_id, key_id, height, None, Some(&log));
+    }
     let ecdsa_payload = ecdsa_payload.unwrap();
-    let prev_summary_block = pool_reader
-        .dkg_summary_block(parent_block)
-        .unwrap_or_else(|| {
-            panic!(
-                "Impossible: fail to the summary block that governs height {}",
-                parent_block.height()
-            )
-        });
 
     let created = match &ecdsa_payload.key_transcript.next_in_creation {
-        ecdsa::KeyTranscriptCreation::Created(transcript) => *transcript,
+        ecdsa::KeyTranscriptCreation::Created(transcript) => Some(*transcript),
         _ => {
-            // TODO: A better approach is to try again
-            panic!(
-                "ECDSA key transcript has not been created in the previous interval: \
-                 prev_summary_height = {:?}, height = {:?}",
-                prev_summary_block.height(),
-                height,
+            warn!(
+                log,
+                "Fail to create ecdsa key transcript in previous interval, will continue in the next."
             );
+            None
         }
     };
 
     let is_new_key_transcript = match ecdsa_payload.key_transcript.current {
-        Some(unmasked) => unmasked.as_ref().transcript_id != created.as_ref().transcript_id,
-        None => true,
+        Some(unmasked) => {
+            Some(unmasked.as_ref().transcript_id)
+                != created.as_ref().map(|x| x.as_ref().transcript_id)
+        }
+        None => created.is_some(),
     };
 
     // Check for membership change, start next key creation if needed.
@@ -339,7 +280,7 @@ pub(crate) fn create_summary_payload(
     // For next interval: context.registry_version from the new summary block
     let next_in_creation = if is_subnet_membership_changing(
         registry_client,
-        prev_summary_block.context.registry_version,
+        registry_version,
         context.registry_version,
         subnet_id,
     )? {
@@ -378,8 +319,9 @@ pub(crate) fn create_summary_payload(
         },
         xnet_reshare_agreements: ecdsa_payload.xnet_reshare_agreements.clone(),
         key_transcript: ecdsa::EcdsaKeyTranscript {
-            current: Some(created),
+            current: created,
             next_in_creation,
+            key_id: ecdsa_payload.key_transcript.key_id.clone(),
         },
     };
     update_summary_refs(
@@ -478,10 +420,10 @@ pub(crate) fn create_data_payload(
     ecdsa_payload_metrics: &EcdsaPayloadMetrics,
     log: ReplicaLogger,
 ) -> Result<ecdsa::Payload, EcdsaPayloadError> {
-    let height = parent_block.height().increment();
-    if !ecdsa_feature_is_enabled(subnet_id, registry_client, pool_reader, height)? {
+    // Return None if parent block does not have ECDSA payload.
+    if parent_block.payload.as_ref().as_ecdsa().is_none() {
         return Ok(None);
-    }
+    };
     let summary_block = pool_reader
         .dkg_summary_block(parent_block)
         .unwrap_or_else(|| {
@@ -597,12 +539,12 @@ pub(crate) fn create_data_payload_helper(
     let summary = summary_block.payload.as_ref().as_summary();
     let summary_registry_version = summary.dkg.registry_version;
     let next_summary_registry_version = summary_block.context.registry_version;
-    let ecdsa_config = registry_client
-        .get_ecdsa_config(subnet_id, summary_registry_version)?
-        .unwrap_or(EcdsaConfig {
-            quadruples_to_create_in_advance: 1, // default value
-            ..EcdsaConfig::default()
-        });
+    let ecdsa_config =
+        get_ecdsa_config_if_enabled(subnet_id, summary_registry_version, registry_client, &log)?;
+    if ecdsa_config.is_none() {
+        return Ok(None);
+    }
+    let ecdsa_config = ecdsa_config.unwrap();
     let mut ecdsa_payload = if let Some(prev_payload) = parent_block.payload.as_ref().as_ecdsa() {
         prev_payload.clone()
     } else {
@@ -1469,23 +1411,7 @@ mod tests {
     use ic_types::{messages::CallbackId, Height, RegistryVersion};
     use std::collections::BTreeSet;
     use std::convert::TryInto;
-
-    fn empty_ecdsa_payload(subnet_id: SubnetId) -> ecdsa::EcdsaPayload {
-        ecdsa::EcdsaPayload {
-            signature_agreements: BTreeMap::new(),
-            ongoing_signatures: BTreeMap::new(),
-            available_quadruples: BTreeMap::new(),
-            quadruples_in_creation: BTreeMap::new(),
-            uid_generator: ecdsa::EcdsaUIDGenerator::new(subnet_id, Height::new(0)),
-            idkg_transcripts: BTreeMap::new(),
-            ongoing_xnet_reshares: BTreeMap::new(),
-            xnet_reshare_agreements: BTreeMap::new(),
-            key_transcript: ecdsa::EcdsaKeyTranscript {
-                current: None,
-                next_in_creation: ecdsa::KeyTranscriptCreation::Begin,
-            },
-        }
-    }
+    use std::str::FromStr;
 
     fn empty_ecdsa_summary_payload(
         subnet_id: SubnetId,
@@ -1552,6 +1478,14 @@ mod tests {
             dealings: Dealings::new_empty(dkg_interval_start_height),
             ecdsa: Some(ecdsa_payload),
         })
+    }
+
+    fn create_reshare_request(num_nodes: u64, registry_version: u64) -> ecdsa::EcdsaReshareRequest {
+        ecdsa::EcdsaReshareRequest {
+            key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+            receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
+            registry_version: RegistryVersion::from(registry_version),
+        }
     }
 
     fn create_new_quadruple_in_creation(

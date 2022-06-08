@@ -235,6 +235,8 @@ pub struct EcdsaKeyTranscript {
     pub current: Option<UnmaskedTranscript>,
     /// Progress of creating the next ECDSA key transcript.
     pub next_in_creation: KeyTranscriptCreation,
+    /// Key id.
+    pub key_id: EcdsaKeyId,
 }
 
 impl EcdsaKeyTranscript {
@@ -981,6 +983,7 @@ impl From<&EcdsaPayload> for pb::EcdsaSummaryPayload {
             .as_ref()
             .map(|transcript| transcript.into());
         let next_key_in_creation = Some((&summary.key_transcript.next_in_creation).into());
+        let key_id = Some((&summary.key_transcript.key_id).into());
 
         Self {
             signature_agreements,
@@ -994,6 +997,7 @@ impl From<&EcdsaPayload> for pb::EcdsaSummaryPayload {
             xnet_reshare_agreements,
             current_key_transcript,
             next_key_in_creation,
+            key_id,
         }
     }
 }
@@ -1003,6 +1007,12 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaPayload {
     fn try_from(
         (summary, height): (&pb::EcdsaSummaryPayload, Height),
     ) -> Result<Self, Self::Error> {
+        // Key Id must exist
+        let key_id = summary
+            .key_id
+            .clone()
+            .expect("pb::EcdsaSummaryPayload:: Missing key id");
+        let key_id = EcdsaKeyId::try_from(key_id).map_err(|err| format!("{:?}", err))?;
         // signature_agreements
         let mut signature_agreements = BTreeMap::new();
         for completed_signature in &summary.signature_agreements {
@@ -1156,6 +1166,7 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaPayload {
             key_transcript: EcdsaKeyTranscript {
                 current: current_key_transcript,
                 next_in_creation: next_key_in_creation,
+                key_id,
             },
         };
         ret.update_refs(height);

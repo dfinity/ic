@@ -1,17 +1,22 @@
 //! Common utils for the ECDSA implementation.
 
 use crate::ecdsa::complaints::{EcdsaTranscriptLoader, TranscriptLoadStatus};
+use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
+use ic_protobuf::registry::subnet::v1 as pb;
 use ic_types::consensus::ecdsa::{EcdsaBlockReader, TranscriptRef};
 use ic_types::consensus::ecdsa::{
     EcdsaMessage, EcdsaPayload, IDkgTranscriptParamsRef, KeyTranscriptCreation, RequestId,
     ThresholdEcdsaSigInputsRef, TranscriptLookupError,
 };
 use ic_types::consensus::{Block, BlockPayload, HasHeight};
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptOperation};
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
+};
 use ic_types::Height;
 use std::collections::BTreeSet;
+use std::convert::TryInto;
 use std::sync::Arc;
 
 pub(crate) struct EcdsaBlockReaderImpl {
@@ -177,6 +182,49 @@ pub(crate) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
             "UnmaskedTimesMasked({:?}, {:?})",
             t1.transcript_id, t2.transcript_id
         ),
+    }
+}
+
+/// Inspect ecdsa_initializations field in the CUPContent.
+/// Return key_id and dealings.
+pub(crate) fn inspect_ecdsa_initializations(
+    ecdsa_initializations: &[pb::EcdsaInitialization],
+) -> Result<Option<(EcdsaKeyId, InitialIDkgDealings)>, String> {
+    if !ecdsa_initializations.is_empty() {
+        if ecdsa_initializations.len() > 1 {
+            Err(
+                "More than one ecdsa_initialization is not supported. Choose the first one."
+                    .to_string(),
+            )
+        } else {
+            let ecdsa_init = ecdsa_initializations
+                .iter()
+                .next()
+                .expect("Error: Ecdsa Initialization is None")
+                .clone();
+            match (
+                (ecdsa_init
+                    .key_id
+                    .expect("Error: Failed to find key_id in ecdsa_initializations"))
+                .try_into(),
+                (&ecdsa_init
+                    .dealings
+                    .expect("Error: Failed to find dealings in ecdsa_initializations"))
+                    .try_into(),
+            ) {
+                (Ok(key_id), Ok(dealings)) => Ok(Some((key_id, dealings))),
+                (Err(err), _) => Err(format!(
+                    "Error reading ECDSA key_id: {:?}. Setting ecdsa_summary to None.",
+                    err
+                )),
+                (_, Err(err)) => Err(format!(
+                    "Error reading ECDSA dealings: {:?}. Setting ecdsa_summary to None.",
+                    err
+                )),
+            }
+        }
+    } else {
+        Ok(None)
     }
 }
 
@@ -1091,6 +1139,7 @@ pub(crate) mod test_utils {
     }
 
     pub(crate) fn empty_ecdsa_payload(subnet_id: SubnetId) -> EcdsaPayload {
+        use std::str::FromStr;
         EcdsaPayload {
             signature_agreements: BTreeMap::new(),
             ongoing_signatures: BTreeMap::new(),
@@ -1103,6 +1152,7 @@ pub(crate) mod test_utils {
             key_transcript: EcdsaKeyTranscript {
                 current: None,
                 next_in_creation: KeyTranscriptCreation::Begin,
+                key_id: ic_ic00_types::EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
             },
         }
     }
