@@ -97,6 +97,10 @@ def external_crates_repository(name):
             "float-cmp": crate.spec(version = "=0.9.0"),
             "futures-util": crate.spec(version = "=0.3.21"),
             "futures": crate.spec(version = "=0.3.21"),
+            "getrandom": crate.spec(
+                package = "getrandom",
+                version = "=0.2.6",
+            ),
             "hashlink": crate.spec(version = "=0.8.0"),
             "hex": crate.spec(version = "=0.4.3"),
             "hex-literal": crate.spec(version = "=0.2.1"),
@@ -111,10 +115,7 @@ def external_crates_repository(name):
                 version = "=0.14.18",
             ),
             "hyper-tls": crate.spec(version = "=0.5.0"),
-            "getrandom": crate.spec(
-                package = "getrandom",
-                version = "=0.2.6",
-            ),
+            "itertools": crate.spec(version = "=0.10.3"),
             "json5": crate.spec(version = "=0.4.1"),
             "lazy_static": crate.spec(version = "=1.4.0"),
             "leb128": crate.spec(version = "=0.2.4"),

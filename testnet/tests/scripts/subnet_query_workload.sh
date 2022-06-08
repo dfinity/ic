@@ -149,6 +149,7 @@ wg_status_file="$experiment_dir/wg_exit_status"
             --http2-only "$http2_only" \
             --periodic-output \
             --install-endpoint="$install_endpoints" \
+            --host "ic0.app" \
             --summary-file "$experiment_dir/workload-summary.json" 2>"$wg_err_log" \
             || local_wg_status=$?
         echo "$local_wg_status" >"$wg_status_file"
