@@ -4,6 +4,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
 pub use ic_ledger_core::{
     archive::{ArchiveCanisterWasm, ArchiveOptions},
+    balances::{BalanceError, Balances, BalancesStore},
     block::BlockHeight,
     tokens::{Tokens, DECIMAL_PLACES, TOKEN_SUBDIVIDABLE_BY},
 };
@@ -20,7 +21,6 @@ use serde::{
     Deserialize, Serialize, Serializer,
 };
 use std::borrow::Cow;
-use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::convert::TryFrom;
 use std::fmt;
@@ -71,200 +71,55 @@ pub struct Memo(pub u64);
 
 pub type Certification = Option<Vec<u8>>;
 
-pub type LedgerBalances = Balances<HashMap<AccountIdentifier, Tokens>>;
+pub type LedgerBalances = Balances<AccountIdentifier, HashMap<AccountIdentifier, Tokens>>;
 
-pub trait BalancesStore {
-    /// Returns the balance on the specified account.
-    fn get_balance(&self, k: &AccountIdentifier) -> Option<&Tokens>;
-
-    /// Update balance for an account using function f.
-    /// Its arg is previous balance or None if not found and
-    /// return value is the new balance.
-    fn update<F, E>(&mut self, acc: AccountIdentifier, action_on_acc: F) -> Result<Tokens, E>
-    where
-        F: FnMut(Option<&Tokens>) -> Result<Tokens, E>;
+pub fn apply_operation<S>(
+    balances: &mut Balances<AccountIdentifier, S>,
+    operation: &Operation,
+) -> Result<(), BalanceError>
+where
+    S: Default + BalancesStore<AccountIdentifier>,
+{
+    match operation {
+        Operation::Transfer {
+            from,
+            to,
+            amount,
+            fee,
+        } => balances.transfer(from, to, *amount, *fee),
+        Operation::Burn { from, amount, .. } => balances.burn(from, *amount),
+        Operation::Mint { to, amount, .. } => balances.mint(to, *amount),
+    }
 }
 
-impl BalancesStore for HashMap<AccountIdentifier, Tokens> {
-    fn get_balance(&self, k: &AccountIdentifier) -> Option<&Tokens> {
-        self.get(k)
+// Find the specified number of accounts with lowest balances so that their
+// balances can be reclaimed.
+fn select_accounts_to_trim(
+    balances: &LedgerBalances,
+    num_accounts: usize,
+) -> Vec<(Tokens, AccountIdentifier)> {
+    let mut to_trim: std::collections::BinaryHeap<(Tokens, AccountIdentifier)> =
+        std::collections::BinaryHeap::new();
+
+    let mut iter = balances.store.iter();
+
+    // Accumulate up to `trim_quantity` accounts
+    for (account, balance) in iter.by_ref().take(num_accounts) {
+        to_trim.push((*balance, *account));
     }
 
-    fn update<F, E>(&mut self, k: AccountIdentifier, mut f: F) -> Result<Tokens, E>
-    where
-        F: FnMut(Option<&Tokens>) -> Result<Tokens, E>,
-    {
-        match self.entry(k) {
-            Occupied(mut entry) => {
-                let new_v = f(Some(entry.get()))?;
-                if new_v != Tokens::ZERO {
-                    *entry.get_mut() = new_v;
-                } else {
-                    entry.remove_entry();
-                }
-                Ok(new_v)
-            }
-            Vacant(entry) => {
-                let new_v = f(None)?;
-                if new_v != Tokens::ZERO {
-                    entry.insert(new_v);
-                }
-                Ok(new_v)
+    for (account, balance) in iter {
+        // If any account's balance is lower than the maximum in our set,
+        // include that account, and remove the current maximum
+        if let Some((greatest_balance, _)) = to_trim.peek() {
+            if balance < greatest_balance {
+                to_trim.push((*balance, *account));
+                to_trim.pop();
             }
         }
     }
-}
 
-/// An error returned by `Balances` if the debit operation fails.
-#[derive(Debug)]
-pub enum BalanceError {
-    /// An error indicating that the account doesn't hold enough funds for
-    /// completing the transaction.
-    InsufficientFunds { balance: Tokens },
-}
-
-/// Describes the state of users accounts at the tip of the chain
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct Balances<S: BalancesStore> {
-    // This uses a mutable map because we don't want to risk a space leak and we only require the
-    // account balances at the tip of the chain
-    pub store: S,
-    #[serde(alias = "icpt_pool")]
-    pub token_pool: Tokens,
-}
-
-impl<S: Default + BalancesStore> Default for Balances<S> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<S: Default + BalancesStore> Balances<S> {
-    pub fn new() -> Self {
-        Self {
-            store: S::default(),
-            token_pool: Tokens::MAX,
-        }
-    }
-
-    pub fn add_payment(&mut self, payment: &Operation) -> Result<(), BalanceError> {
-        match payment {
-            Operation::Transfer {
-                from,
-                to,
-                amount,
-                fee,
-            } => {
-                let debit_amount = (*amount + *fee).map_err(|_| {
-                    // No account can hold more than u64::MAX.
-                    let balance = self.account_balance(from);
-                    BalanceError::InsufficientFunds { balance }
-                })?;
-                self.debit(from, debit_amount)?;
-                self.credit(to, *amount);
-                // NB. integer overflow is not possible here unless there is a
-                // severe bug in the system: total amount of tokens in the
-                // circulation cannot exceed u64::MAX.
-                self.token_pool += *fee;
-            }
-            Operation::Burn { from, amount, .. } => {
-                self.debit(from, *amount)?;
-                self.token_pool += *amount;
-            }
-            Operation::Mint { to, amount, .. } => {
-                self.token_pool = (self.token_pool - *amount).expect("total token supply exceeded");
-                self.credit(to, *amount);
-            }
-        }
-        Ok(())
-    }
-
-    // Debiting an account will automatically remove it from the `inner`
-    // HashMap if the balance reaches zero.
-    pub fn debit(
-        &mut self,
-        from: &AccountIdentifier,
-        amount: Tokens,
-    ) -> Result<Tokens, BalanceError> {
-        self.store.update(*from, |prev| {
-            let mut balance = match prev {
-                Some(x) => *x,
-                None => {
-                    return Err(BalanceError::InsufficientFunds {
-                        balance: Tokens::ZERO,
-                    });
-                }
-            };
-            if balance < amount {
-                return Err(BalanceError::InsufficientFunds { balance });
-            }
-
-            balance -= amount;
-            Ok(balance)
-        })
-    }
-
-    // Crediting an account will automatically add it to the `inner` HashMap if
-    // not already present.
-    pub fn credit(&mut self, to: &AccountIdentifier, amount: Tokens) {
-        self.store
-            .update(*to, |prev| -> Result<Tokens, std::convert::Infallible> {
-                // NB. credit cannot overflow unless there is a bug in the
-                // system: the total amount of tokens in the circulation cannot
-                // exceed u64::MAX, so it's impossible to have more than
-                // u64::MAX tokens on a single account.
-                Ok((amount + *prev.unwrap_or(&Tokens::ZERO)).expect("bug: overflow in credit"))
-            })
-            .unwrap();
-    }
-
-    pub fn account_balance(&self, account: &AccountIdentifier) -> Tokens {
-        self.store
-            .get_balance(account)
-            .cloned()
-            .unwrap_or(Tokens::ZERO)
-    }
-
-    /// Returns the total quantity of Tokens that are "in existence" -- that
-    /// is, excluding un-minted "potential" Tokens.
-    pub fn total_supply(&self) -> Tokens {
-        (Tokens::MAX - self.token_pool).unwrap_or_else(|e| {
-            panic!(
-                "It is expected that the token_pool is always smaller than \
-            or equal to Tokens::MAX, yet subtracting it lead to the following error: {}",
-                e
-            )
-        })
-    }
-}
-
-impl LedgerBalances {
-    // Find the specified number of accounts with lowest balances so that their
-    // balances can be reclaimed.
-    fn select_accounts_to_trim(&mut self, num_accounts: usize) -> Vec<(Tokens, AccountIdentifier)> {
-        let mut to_trim: std::collections::BinaryHeap<(Tokens, AccountIdentifier)> =
-            std::collections::BinaryHeap::new();
-
-        let mut iter = self.store.iter();
-
-        // Accumulate up to `trim_quantity` accounts
-        for (account, balance) in iter.by_ref().take(num_accounts) {
-            to_trim.push((*balance, *account));
-        }
-
-        for (account, balance) in iter {
-            // If any account's balance is lower than the maximum in our set,
-            // include that account, and remove the current maximum
-            if let Some((greatest_balance, _)) = to_trim.peek() {
-                if balance < greatest_balance {
-                    to_trim.push((*balance, *account));
-                    to_trim.pop();
-                }
-            }
-        }
-
-        to_trim.into_vec()
-    }
+    to_trim.into_vec()
 }
 
 /// An operation which modifies account balances
@@ -655,7 +510,7 @@ impl Ledger {
         let block = Block::new_from_transaction(self.blockchain.last_hash, transaction, now);
         let block_timestamp = block.timestamp;
 
-        self.balances.add_payment(&payment).map_err(|e| match e {
+        apply_operation(&mut self.balances, &payment).map_err(|e| match e {
             BalanceError::InsufficientFunds { balance } => {
                 PaymentError::TransferError(TransferError::InsufficientFunds { balance })
             }
@@ -675,8 +530,7 @@ impl Ledger {
         let to_trim = if self.balances.store.len()
             >= self.maximum_number_of_accounts + self.accounts_overflow_trim_quantity
         {
-            self.balances
-                .select_accounts_to_trim(self.accounts_overflow_trim_quantity)
+            select_accounts_to_trim(&self.balances, self.accounts_overflow_trim_quantity)
         } else {
             vec![]
         };
@@ -686,8 +540,7 @@ impl Ledger {
                 from: account,
                 amount: balance,
             };
-            self.balances
-                .add_payment(&operation)
+            apply_operation(&mut self.balances, &operation)
                 .expect("failed to burn funds that must have existed");
             self.blockchain
                 .add_block(Block::new_from_transaction(
@@ -741,8 +594,7 @@ impl Ledger {
     /// This adds a pre created block to the ledger. This should only be used
     /// during canister migration or upgrade
     pub fn add_block(&mut self, block: Block) -> Result<BlockHeight, String> {
-        self.balances
-            .add_payment(&block.transaction.operation)
+        apply_operation(&mut self.balances, &block.transaction.operation)
             .map_err(|e| format!("failed to execute transfer {:?}: {:?}", block, e))?;
         self.blockchain.add_block(block)
     }
@@ -1102,21 +954,27 @@ mod tests {
         let mut b = LedgerBalances::new();
         let canister = CanisterId::from_u64(7).get().into();
         let target_canister = CanisterId::from_u64(13).into();
-        b.add_payment(&Operation::Mint {
-            to: canister,
-            amount: Tokens::from_e8s(1000),
-        })
+        apply_operation(
+            &mut b,
+            &Operation::Mint {
+                to: canister,
+                amount: Tokens::from_e8s(1000),
+            },
+        )
         .unwrap();
         // verify that an account entry exists for the `canister`
         assert_eq!(b.store.get(&canister), Some(&Tokens::from_e8s(1000)));
         // make 2 transfers that empty the account
         for _ in 0..2 {
-            b.add_payment(&Operation::Transfer {
-                from: canister,
-                to: target_canister,
-                amount: Tokens::from_e8s(400),
-                fee: Tokens::from_e8s(100),
-            })
+            apply_operation(
+                &mut b,
+                &Operation::Transfer {
+                    from: canister,
+                    to: target_canister,
+                    amount: Tokens::from_e8s(400),
+                    fee: Tokens::from_e8s(100),
+                },
+            )
             .unwrap();
         }
         // target canister's balance adds up
@@ -1128,31 +986,40 @@ mod tests {
         // one account left in the store
         assert_eq!(b.store.len(), 1);
 
-        b.add_payment(&Operation::Transfer {
-            from: target_canister,
-            to: canister,
-            amount: Tokens::from_e8s(0),
-            fee: Tokens::from_e8s(100),
-        })
+        apply_operation(
+            &mut b,
+            &Operation::Transfer {
+                from: target_canister,
+                to: canister,
+                amount: Tokens::from_e8s(0),
+                fee: Tokens::from_e8s(100),
+            },
+        )
         .unwrap();
         // No new account should have been created
         assert_eq!(b.store.len(), 1);
         // and the fee should have been taken from sender
         assert_eq!(b.store.get(&target_canister), Some(&Tokens::from_e8s(700)));
 
-        b.add_payment(&Operation::Mint {
-            to: canister,
-            amount: Tokens::from_e8s(0),
-        })
+        apply_operation(
+            &mut b,
+            &Operation::Mint {
+                to: canister,
+                amount: Tokens::from_e8s(0),
+            },
+        )
         .unwrap();
 
         // No new account should have been created
         assert_eq!(b.store.len(), 1);
 
-        b.add_payment(&Operation::Burn {
-            from: target_canister,
-            amount: Tokens::from_e8s(700),
-        })
+        apply_operation(
+            &mut b,
+            &Operation::Burn {
+                from: target_canister,
+                amount: Tokens::from_e8s(700),
+            },
+        )
         .unwrap();
 
         // And burn should have exhausted the target_canister
@@ -1169,20 +1036,26 @@ mod tests {
         let send_amount = 10000;
         let send_fee = 100;
 
-        b.add_payment(&Operation::Mint {
-            to: uid0,
-            amount: Tokens::from_e8s(mint_amount),
-        })
+        apply_operation(
+            &mut b,
+            &Operation::Mint {
+                to: uid0,
+                amount: Tokens::from_e8s(mint_amount),
+            },
+        )
         .unwrap();
         assert_eq!(b.token_pool.get_e8s(), pool_start_balance - mint_amount);
         assert_eq!(b.account_balance(&uid0).get_e8s(), mint_amount);
 
-        b.add_payment(&Operation::Transfer {
-            from: uid0,
-            to: uid1,
-            amount: Tokens::from_e8s(send_amount),
-            fee: Tokens::from_e8s(send_fee),
-        })
+        apply_operation(
+            &mut b,
+            &Operation::Transfer {
+                from: uid0,
+                to: uid1,
+                amount: Tokens::from_e8s(send_amount),
+                fee: Tokens::from_e8s(send_fee),
+            },
+        )
         .unwrap();
 
         assert_eq!(

@@ -2,7 +2,7 @@ use crate::errors::ApiError;
 use ledger_canister::{AccountIdentifier, BalancesStore, BlockHeight, Tokens};
 use std::collections::HashMap;
 
-pub type BalanceBook = ledger_canister::Balances<ClientBalancesStore>;
+pub type BalanceBook = ledger_canister::Balances<AccountIdentifier, ClientBalancesStore>;
 
 const EMPTY_HISTORY: [(BlockHeight, Tokens); 0] = [];
 
@@ -178,7 +178,7 @@ impl ClientBalancesStore {
     }
 }
 
-impl BalancesStore for ClientBalancesStore {
+impl BalancesStore<AccountIdentifier> for ClientBalancesStore {
     fn get_balance(&self, k: &AccountIdentifier) -> Option<&Tokens> {
         self.acc_to_hist.get(k).and_then(|hist| hist.get_last_ref())
     }
