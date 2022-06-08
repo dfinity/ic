@@ -1,0 +1,39 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(include = ["**"])],
+)
+
+rust_library(
+    name = "canonical_state",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_canonical_state",
+    edition = "2018",
+    deps = [
+        "//rs/canonical_state/certification_version",
+        "//rs/crypto/tree_hash",
+        "//rs/phantom_newtype",
+        "//rs/protobuf",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/types/base_types",
+        "//rs/types/error_types",
+        "//rs/types/types",
+        "@crate_index//:leb128",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+    ],
+)
+
+# TODO(IC-1207): migrate rust_test when unblocked dependencies.
