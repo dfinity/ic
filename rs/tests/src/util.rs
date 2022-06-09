@@ -91,7 +91,7 @@ impl<'a> UniversalCanister<'a> {
     pub async fn new_with_comp_alloc(
         agent: &'a Agent,
         compute_allocation: Option<u64>,
-        cycles: Option<u64>,
+        cycles: Option<u128>,
     ) -> Result<UniversalCanister<'a>, String> {
         let payload = universal_canister_argument_builder().stable_grow(1).build();
 
@@ -116,7 +116,7 @@ impl<'a> UniversalCanister<'a> {
         Ok(Self { agent, canister_id })
     }
 
-    pub async fn new_with_cycles<C: Into<u64>>(
+    pub async fn new_with_cycles<C: Into<u128>>(
         agent: &'a Agent,
         cycles: C,
     ) -> UniversalCanister<'a> {

@@ -97,9 +97,9 @@ impl From<Cycles> for Vec<u8> {
     }
 }
 
-impl From<Cycles> for u64 {
+impl From<Cycles> for u128 {
     fn from(val: Cycles) -> Self {
-        val.0 as u64
+        val.0
     }
 }
 
