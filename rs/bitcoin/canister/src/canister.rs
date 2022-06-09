@@ -1,3 +1,4 @@
+pub use crate::fees::get_current_fee_percentiles;
 use crate::{metrics::BitcoinCanisterMetrics, state::State, store};
 use bitcoin::{util::psbt::serialize::Deserialize, Transaction};
 use ic_btc_types::{

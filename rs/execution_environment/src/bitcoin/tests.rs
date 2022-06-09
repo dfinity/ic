@@ -130,6 +130,7 @@ where
     });
 }
 
+// TODO: refactor tests same way it was done in RUN-192.
 fn execute_get_balance(
     message_id: MessageId,
     exec_env: &ExecutionEnvironmentImpl,
@@ -167,6 +168,7 @@ fn execute_get_balance(
     state
 }
 
+// TODO: refactor tests same way it was done in RUN-192.
 fn execute_get_utxos(
     exec_env: &ExecutionEnvironmentImpl,
     bitcoin_get_utxos_args: BitcoinGetUtxosArgs,
@@ -195,6 +197,68 @@ fn execute_get_utxos(
                     .receiver(ic00::IC_00)
                     .method_name(Method::BitcoinGetUtxos)
                     .method_payload(bitcoin_get_utxos_args.encode())
+                    .build(),
+            ),
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
+
+    let mut state = exec_env
+        .execute_subnet_message(
+            state.subnet_queues_mut().pop_input().unwrap(),
+            state,
+            MAX_NUM_INSTRUCTIONS,
+            &mut mock_random_number_generator(),
+            &None,
+            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+            &test_registry_settings(),
+        )
+        .0;
+
+    let subnet_id = subnet_test_id(1);
+    assert_eq!(
+        state
+            .subnet_queues_mut()
+            .pop_canister_output(&canister_test_id(0))
+            .unwrap()
+            .1,
+        RequestOrResponse::Response(
+            ResponseBuilder::new()
+                .originator(canister_test_id(0))
+                .respondent(CanisterId::new(subnet_id.get()).unwrap())
+                .response_payload(expected_payload)
+                .build()
+        )
+    );
+}
+
+// TODO: refactor tests same way it was done in RUN-192.
+fn execute_get_current_fee_percentiles(
+    exec_env: &ExecutionEnvironmentImpl,
+    bitcoin_feature: &str,
+    bitcoin_state: BitcoinState,
+    expected_payload: Payload,
+) {
+    let mut state = ReplicatedStateBuilder::new()
+        .with_subnet_id(subnet_test_id(1))
+        .with_canister(
+            CanisterStateBuilder::new()
+                .with_canister_id(canister_test_id(0))
+                .build(),
+        )
+        .with_subnet_features(SubnetFeatures::from_str(bitcoin_feature).unwrap())
+        .with_bitcoin_state(bitcoin_state)
+        .build();
+
+    state
+        .subnet_queues_mut()
+        .push_input(
+            QUEUE_INDEX_NONE,
+            RequestOrResponse::Request(
+                RequestBuilder::new()
+                    .sender(canister_test_id(0))
+                    .receiver(ic00::IC_00)
+                    .method_name(Method::BitcoinGetCurrentFees)
                     .build(),
             ),
             InputQueueType::RemoteSubnet,
@@ -727,6 +791,66 @@ fn get_utxos_of_valid_request_succeeds() {
                 })
                 .unwrap(),
             ),
+        );
+    });
+}
+
+#[test]
+fn get_current_fee_percentiles_rejects_if_feature_not_enabled() {
+    with_setup(SubnetType::Application, |exec_env, _, _, _| {
+        execute_get_current_fee_percentiles(
+            &exec_env,
+            "None", // Bitcoin feature is disabled.
+            BitcoinState::default(),
+            Payload::Reject(RejectContext {
+                code: RejectCode::CanisterReject,
+                message: String::from("The bitcoin API is not enabled on this subnet."),
+            }),
+        );
+    });
+}
+
+#[test]
+fn get_current_fee_percentiles_succeeds() {
+    with_setup(SubnetType::Application, |exec_env, _, _, _| {
+        let initial_balance: Satoshi = 1_000;
+        let pay: Satoshi = 1;
+        let fee: Satoshi = 2;
+        let change = initial_balance - pay - fee;
+
+        // Create 2 blocks with 2 transactions:
+        // - genesis block receives initial balance on address_1
+        // - the next block sends a payment to address_2 with a fee, a change is returned to address_1.
+        let network = Network::Testnet;
+        let address_1 = random_p2pkh_address(network);
+        let address_2 = random_p2pkh_address(network);
+        let coinbase_tx = TransactionBuilder::coinbase()
+            .with_output(&address_1, initial_balance)
+            .build();
+        let block_0 = BlockBuilder::genesis()
+            .with_transaction(coinbase_tx.clone())
+            .build();
+
+        let tx = TransactionBuilder::new()
+            .with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
+            .with_output(&address_1, change)
+            .with_output(&address_2, pay)
+            .build();
+        let block_1 = BlockBuilder::with_prev_header(block_0.header)
+            .with_transaction(tx.clone())
+            .build();
+
+        let mut state = ic_btc_canister::state::State::new(0, network, block_0);
+        ic_btc_canister::store::insert_block(&mut state, block_1).unwrap();
+
+        let bitcoin_state = BitcoinState::from(state);
+
+        let millisatoshi_per_byte = (1_000 * fee) / (tx.size() as u64);
+        execute_get_current_fee_percentiles(
+            &exec_env,
+            "bitcoin_testnet", // Bitcoin testnet is enabled.
+            bitcoin_state,
+            Payload::Data(Encode!(&vec![millisatoshi_per_byte; 100]).unwrap()),
         );
     });
 }
