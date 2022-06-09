@@ -138,7 +138,7 @@ fn instantiate_module(
     for i in module.imports() {
         let module_name = i.module().to_string();
         if let Some((instance, map)) = module_registry.get(&module_name) {
-            let field_name = i.name().unwrap().to_string();
+            let field_name = i.name().to_string();
             if let Some(export_index) = map.get(&field_name) {
                 imports.push(
                     instance
