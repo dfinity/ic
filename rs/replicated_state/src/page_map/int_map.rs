@@ -454,6 +454,12 @@ impl<T: Clone> IntMap<T> {
     pub fn is_empty(&self) -> bool {
         matches!(self.0, Tree::Empty)
     }
+
+    /// Returns the largest key in the given tree.
+    /// If the tree is empty, then it returns `None`.
+    pub fn max_key(&self) -> Option<u64> {
+        self.0.max_key()
+    }
 }
 
 impl<T: Clone> std::iter::FromIterator<(u64, T)> for IntMap<T> {

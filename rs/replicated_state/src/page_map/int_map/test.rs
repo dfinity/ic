@@ -73,3 +73,26 @@ fn test_int_map_bounds() {
         }
     }
 }
+
+#[test]
+fn test_max_key() {
+    let m = IntMap::<u64>::new();
+    assert_eq!(m.max_key(), None);
+    let m = m.insert(100, 101);
+    assert_eq!(m.max_key(), Some(100));
+    let m = m.insert(10, 101);
+    assert_eq!(m.max_key(), Some(100));
+    let m = m.insert(1000, 101);
+    assert_eq!(m.max_key(), Some(1000));
+    let m = m.insert(1000000, 101);
+    assert_eq!(m.max_key(), Some(1000000));
+}
+
+#[test]
+fn test_max_key_range() {
+    let mut m = IntMap::<u64>::new();
+    for i in 0..1000u64 {
+        m = m.insert(i, i + 100);
+        assert_eq!(m.max_key(), Some(i));
+    }
+}

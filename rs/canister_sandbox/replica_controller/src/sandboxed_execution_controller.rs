@@ -19,7 +19,7 @@ use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memo
 use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_types::{CanisterId, NumInstructions};
 use ic_wasm_types::CanisterModule;
-use prometheus::{Histogram, HistogramVec, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::path::PathBuf;
@@ -41,6 +41,8 @@ use crate::process_os_metrics;
 const SANDBOX_PROCESS_INACTIVE_TIME_BEFORE_EVICTION: Duration = Duration::from_secs(60);
 const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 
+const SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE: &str = "sandboxed_execution_invalid_memory_size";
+
 struct SandboxedExecutionMetrics {
     sandboxed_execution_replica_execute_duration: HistogramVec,
     sandboxed_execution_replica_execute_prepare_duration: HistogramVec,
@@ -56,6 +58,7 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_subprocess_rss: Histogram,
     sandboxed_execution_subprocess_active_last_used: Histogram,
     sandboxed_execution_subprocess_evicted_last_used: Histogram,
+    sandboxed_execution_critical_error_invalid_memory_size: IntCounter,
 }
 
 impl SandboxedExecutionMetrics {
@@ -136,6 +139,8 @@ impl SandboxedExecutionMetrics {
                 "Time since the last usage of an evicted sandbox process in seconds",
                 decimal_buckets_with_zero(-1, 4), // 0.1s - 13h.
             ),
+            sandboxed_execution_critical_error_invalid_memory_size: metrics_registry.error_counter(
+                SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE),
         }
     }
 }
@@ -673,6 +678,18 @@ impl SandboxedExecutionController {
                 execution_state.wasm_memory.sandbox_memory = SandboxMemory::synced(
                     wrap_remote_memory(&sandbox_process, next_wasm_memory_id),
                 );
+                if let Err(err) = execution_state.wasm_memory.verify_size() {
+                    error!(
+                        self.logger,
+                        "{}: Canister {} has invalid wasm memory size: {}",
+                        SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE,
+                        canister_id,
+                        err
+                    );
+                    self.metrics
+                        .sandboxed_execution_critical_error_invalid_memory_size
+                        .inc();
+                }
 
                 execution_state
                     .stable_memory
@@ -682,6 +699,18 @@ impl SandboxedExecutionController {
                 execution_state.stable_memory.sandbox_memory = SandboxMemory::synced(
                     wrap_remote_memory(&sandbox_process, next_stable_memory_id),
                 );
+                if let Err(err) = execution_state.stable_memory.verify_size() {
+                    error!(
+                        self.logger,
+                        "{}: Canister {} has invalid stable memory size: {}",
+                        SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE,
+                        canister_id,
+                        err
+                    );
+                    self.metrics
+                        .sandboxed_execution_critical_error_invalid_memory_size
+                        .inc();
+                }
 
                 execution_state.exported_globals = state_modifications.globals;
 
@@ -755,6 +784,18 @@ impl SandboxedExecutionController {
             .deserialize_delta(reply.wasm_memory_modifications.page_delta);
         wasm_memory.sandbox_memory =
             SandboxMemory::synced(wrap_remote_memory(&sandbox_process, next_wasm_memory_id));
+        if let Err(err) = wasm_memory.verify_size() {
+            error!(
+                self.logger,
+                "{}: Canister {} has invalid initial wasm memory size: {}",
+                SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE,
+                canister_id,
+                err
+            );
+            self.metrics
+                .sandboxed_execution_critical_error_invalid_memory_size
+                .inc();
+        }
 
         let stable_memory = Memory::default();
         let execution_state = ExecutionState::new(
