@@ -36,7 +36,7 @@ rust_library(
         "//rs/types/wasm_types",
         "//rs/utils",
         "@crate_index//:prost",
-        "@crate_index//:rand",
+        "@crate_index//:rand_0_8_4",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:thiserror",

@@ -1,10 +1,11 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 filegroup(
     name = "sources",
     srcs = glob(["**"]),
+    visibility = ["//visibility:public"],
 )
 
 ALIASES = {
@@ -49,6 +50,6 @@ rust_test_suite(
         "//rs/crypto/internal/crypto_lib/bls12_381/serde/miracl",
         "//rs/crypto/internal/crypto_lib/types",
         "@crate_index//:miracl_core_bls12381",
-        "@crate_index//:rand",
+        "@crate_index//:rand_0_8_4",
     ],
 )

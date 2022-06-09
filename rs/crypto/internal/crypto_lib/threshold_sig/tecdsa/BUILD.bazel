@@ -1,0 +1,42 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs/crypto:__subpackages__"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(include = ["**"])],
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "tecdsa",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_internal_threshold_sig_ecdsa",
+    edition = "2018",
+    proc_macro_deps = [
+        "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/fe-derive",
+        "@crate_index//:paste",
+    ],
+    deps = [
+        "//rs/crypto/internal/crypto_lib/hmac",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/sha",
+        "//rs/types/types",
+        "@crate_index//:hex",
+        "@crate_index//:hex-literal",
+        "@crate_index//:k256",
+        "@crate_index//:lazy_static",
+        "@crate_index//:p256",
+        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand_chacha_0_3_1",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:subtle",
+        "@crate_index//:zeroize",
+    ],
+)
