@@ -283,7 +283,6 @@ impl Player {
         let execution_service = ExecutionServices::setup_execution(
             log.clone(),
             &metrics_registry,
-            tokio::runtime::Handle::current(),
             subnet_id,
             subnet_type,
             subnet_config.scheduler_config,

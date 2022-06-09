@@ -203,7 +203,6 @@ fn criterion_calls(criterion: &mut Criterion) {
         ExecutionServices::setup_execution(
             bench_replica.log.clone(),
             &bench_replica.metrics_registry,
-            tokio::runtime::Handle::current(),
             bench_replica.replica_config.subnet_id,
             subnet_type,
             subnet_config.scheduler_config,

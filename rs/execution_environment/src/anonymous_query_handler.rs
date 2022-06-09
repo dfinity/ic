@@ -14,8 +14,9 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use tokio::sync::oneshot;
-use tower::{util::BoxService, Service, ServiceBuilder};
+use tower::{limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder};
 
+#[derive(Clone)]
 // Struct that is responsible for handling queries sent by internal IC components.
 pub(crate) struct AnonymousQueryHandler {
     exec_env: Arc<ExecutionEnvironmentImpl>,
@@ -26,26 +27,20 @@ pub(crate) struct AnonymousQueryHandler {
 
 impl AnonymousQueryHandler {
     pub(crate) fn new_service(
-        threads: usize,
-        max_buffered_queries: usize,
+        concurrency_buffer: GlobalConcurrencyLimitLayer,
         threadpool: Arc<Mutex<threadpool::ThreadPool>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         exec_env: Arc<ExecutionEnvironmentImpl>,
         max_instructions_per_message: NumInstructions,
     ) -> AnonymousQueryService {
-        let base_service = Self {
+        let base_service = BoxCloneService::new(Self {
             exec_env,
             state_reader,
             threadpool,
             max_instructions_per_message,
-        };
-        let base_service = BoxService::new(
-            ServiceBuilder::new()
-                .concurrency_limit(threads)
-                .service(base_service),
-        );
+        });
         ServiceBuilder::new()
-            .buffer(max_buffered_queries)
+            .layer(concurrency_buffer)
             .service(base_service)
     }
 }

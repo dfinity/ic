@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use std::ops;
 use std::sync::{Arc, RwLock};
 use std::{convert::Infallible, fmt};
-use tower::{buffer::Buffer, util::BoxService};
+use tower::{limit::ConcurrencyLimit, util::BoxCloneService};
 
 /// Instance execution statistics. The stats are cumulative and
 /// contain measurements from the point in time when the instance was
@@ -291,7 +291,7 @@ pub type HypervisorResult<T> = Result<T, HypervisorError>;
 // The buffer also dampens usage by reducing the risk of
 // spiky traffic when users retry in case failed requests.
 pub type AnonymousQueryService =
-    Buffer<BoxService<AnonymousQuery, AnonymousQueryResponse, Infallible>, AnonymousQuery>;
+    ConcurrencyLimit<BoxCloneService<AnonymousQuery, AnonymousQueryResponse, Infallible>>;
 
 /// Interface for the component to filter out ingress messages that
 /// the canister is not willing to accept.
@@ -300,9 +300,12 @@ pub type AnonymousQueryService =
 // https://docs.rs/tower/0.4.10/tower/buffer/index.html
 // The buffer also dampens usage by reducing the risk of
 // spiky traffic when users retry in case failed requests.
-pub type IngressFilterService = Buffer<
-    BoxService<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>, Infallible>,
-    (ProvisionalWhitelist, SignedIngressContent),
+pub type IngressFilterService = ConcurrencyLimit<
+    BoxCloneService<
+        (ProvisionalWhitelist, SignedIngressContent),
+        Result<(), UserError>,
+        Infallible,
+    >,
 >;
 
 // Since this service will be shared across many connections we must
@@ -310,9 +313,8 @@ pub type IngressFilterService = Buffer<
 // https://docs.rs/tower/0.4.10/tower/buffer/index.html
 // The buffer also dampens usage by reducing the risk of
 // spiky traffic when users retry in case failed requests.
-pub type QueryExecutionService = Buffer<
-    BoxService<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse, Infallible>,
-    (UserQuery, Option<CertificateDelegation>),
+pub type QueryExecutionService = ConcurrencyLimit<
+    BoxCloneService<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse, Infallible>,
 >;
 
 /// Interface for the component to execute queries on canisters.  It can be used

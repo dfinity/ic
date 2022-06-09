@@ -26,4 +26,4 @@ pub trait NonBlockingChannel<Request> {
 }
 
 pub type CanisterHttpAdapterClient =
-    Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send + Sync>;
+    Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
