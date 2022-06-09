@@ -66,7 +66,11 @@ pub fn app_subnet_recovery(
 
                 // We could pick a node with highest finalization height automatically,
                 // but we might have a preference between nodes of the same finalization height.
-                print_height_info(&logger, subnet_recovery.params.subnet_id);
+                print_height_info(
+                    &logger,
+                    subnet_recovery.get_recovery_api(),
+                    subnet_recovery.params.subnet_id,
+                );
 
                 if subnet_recovery.params.download_node.is_none() {
                     subnet_recovery.params.download_node =
@@ -121,7 +125,11 @@ pub fn nns_recovery_same_nodes(
 
     let mut nns_recovery = NNSRecoverySameNodes::new(logger.clone(), args, nns_recovery_args, test);
 
-    print_height_info(&logger, nns_recovery.params.subnet_id);
+    print_height_info(
+        &logger,
+        nns_recovery.get_recovery_api(),
+        nns_recovery.params.subnet_id,
+    );
 
     if nns_recovery.params.download_node.is_none() {
         nns_recovery.params.download_node = read_optional_ip(&logger, "Enter download IP:");
@@ -176,7 +184,11 @@ pub fn nns_recovery_failover_nodes(
     let mut nns_recovery =
         NNSRecoveryFailoverNodes::new(logger.clone(), args, neuron_args, nns_recovery_args);
 
-    print_height_info(&logger, nns_recovery.params.subnet_id);
+    print_height_info(
+        &logger,
+        nns_recovery.get_recovery_api(),
+        nns_recovery.params.subnet_id,
+    );
 
     if nns_recovery.params.download_node.is_none() {
         nns_recovery.params.download_node = read_optional_ip(&logger, "Enter download IP:");
@@ -252,17 +264,12 @@ pub fn print_summary(logger: &Logger, args: &RecoveryArgs, subnet_id: SubnetId) 
     info!(logger, "Creating recovery directory in {:?}", args.dir);
 }
 
-pub fn print_height_info(logger: &Logger, subnet_id: SubnetId) {
+pub fn print_height_info(logger: &Logger, recovery: &Recovery, subnet_id: SubnetId) {
     info!(logger, "Select a node with highest finalization height:");
-    if consent_given(logger, "Query height info?") {
-        let cert_height = Recovery::get_certification_height(subnet_id);
-        let finalization_heights = Recovery::get_finalization_heights(subnet_id);
-        if let (Ok(ch), Ok(fh)) = (cert_height, finalization_heights) {
-            info!(logger, "Certification height: {}", ch);
-            info!(logger, "Finalization heights: {:#?}", fh);
-        } else {
-            warn!(logger, "Failed to query height info.");
-        }
+    if let Ok(heights) = recovery.get_node_heights_from_metrics(subnet_id) {
+        info!(logger, "{:#?}", heights);
+    } else {
+        warn!(logger, "Failed to query height info.");
     }
 }
 
