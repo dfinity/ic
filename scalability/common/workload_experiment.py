@@ -301,11 +301,12 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         f_stdout = os.path.join(curr_outdir, "workload-generator-{}.stdout.txt")
         f_stderr = os.path.join(curr_outdir, "workload-generator-{}.stderr.txt")
 
-        # Set timeout to 2 + len(targets) of the duration.
-        # E.g. timeout will linearly increase as target machines number increase
-        # Wait at least 300s, as there is a potentially high startup overhead for super-small
-        # workloads.
-        timeout = max((len(targets) / 10 + 2) * duration, 300)
+        # To handle stragglers we allow the workload generator to run longer than "duration".
+        # We don't really care about requests that took longer than 2min to complete, so
+        # we timeout the workload generator after duration + 120s.
+        #
+        # Note that otherwise, CD jobs run significantly longer unnecessarily.
+        timeout = max(duration + 120, 300)
         print(f"Setting workload generator timeout to: {timeout}")
 
         print(f"Running on {targets}")

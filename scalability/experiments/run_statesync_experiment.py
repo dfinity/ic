@@ -51,7 +51,6 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
         super().__init__()
         super().init()
         super().init_experiment()
-        self.canister = CANISTER
         hostname = self.get_node_ip_address(self.get_subnet_members(FLAGS.subnet_index)[0])
         for i in range(FLAGS.num_canisters):
             self.install_canister(hostname, canister=os.path.join(self.artifacts_path, f"../canisters/{CANISTER}"))

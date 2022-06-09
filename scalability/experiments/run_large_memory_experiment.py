@@ -28,6 +28,7 @@ Suggested success criteria (Updates):
 Maximum number of updates not be below xxx updates per second with less than 20% failure and a maximum latency of 10000ms
 """
 import codecs
+import itertools
 import json
 import os
 import sys
@@ -69,7 +70,8 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
         # The workload generator can only target a single canister.
         # If we want to target num_canister canisters, we hence need num_canister workload generators.
         # They can all be on the same machine.
-        assert len(self.canister_ids) == FLAGS.num_canisters
+        num_canisters_installed = len(list(itertools.chain.from_iterable([i for _, i in self.canister_ids.items()])))
+        assert num_canisters_installed == FLAGS.num_canisters
         r = self.run_workload_generator(
             [self.machines[0] for _ in range(FLAGS.num_canisters)],
             self.target_nodes,
