@@ -103,6 +103,10 @@ pub struct ExecutionTest {
 }
 
 impl ExecutionTest {
+    pub fn hypervisor_deprecated(&self) -> &Hypervisor {
+        self.exec_env.hypervisor_for_testing()
+    }
+
     pub fn user_id(&self) -> UserId {
         self.user_id
     }

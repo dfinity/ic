@@ -2,34 +2,29 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
-use ic_config::execution_environment::Config;
 use ic_error_types::RejectCode;
-use ic_execution_environment::Hypervisor;
 use ic_interfaces::{
     execution_environment::{
         AvailableMemory, ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
     },
     messages::RequestOrIngress,
 };
-use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology, SubnetTopology};
+use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
+use ic_test_utilities::execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder,
-    get_test_replica_logger, mock_time,
+    mock_time,
     state::canister_from_exec_state,
-    types::ids::{canister_test_id, subnet_test_id, user_test_id},
+    types::ids::{canister_test_id, user_test_id},
     types::messages::IngressBuilder,
 };
 use ic_types::{
     messages::{CallbackId, Payload, RejectContext},
     methods::{Callback, WasmClosure},
-    CanisterId, Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
+    Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
 };
 use lazy_static::lazy_static;
-use maplit::btreemap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
@@ -38,7 +33,6 @@ pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(10_000_00
 pub const LOCAL_CANISTER_ID: u64 = CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 pub const REMOTE_CANISTER_ID: u64 = 1;
 pub const USER_ID: u64 = 0;
-pub const SUBNET_ID: u64 = 1;
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
@@ -61,36 +55,18 @@ pub struct BenchmarkArgs {
 /// Benchmark to run: name (id), WAT, expected number of instructions.
 pub struct Benchmark(pub &'static str, pub String, pub u64);
 
-pub fn get_hypervisor() -> (Hypervisor, std::path::PathBuf) {
-    let log = get_test_replica_logger();
-    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-    let metrics_registry = MetricsRegistry::new();
-    let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-    let hypervisor = Hypervisor::new(
-        Config::default(),
-        &metrics_registry,
-        subnet_test_id(1),
-        SubnetType::Application,
-        log,
-        cycles_account_manager,
-    );
-    (hypervisor, tmpdir.path().into())
-}
-
-pub fn get_execution_args<W>(
-    hypervisor: &Hypervisor,
-    canister_root: &std::path::Path,
-    wat: W,
-) -> BenchmarkArgs
+pub fn get_execution_args<W>(ee_test: &ExecutionTest, wat: W) -> BenchmarkArgs
 where
     W: AsRef<str>,
 {
+    let hypervisor = ee_test.hypervisor_deprecated();
+    let canister_root = ee_test.state().root.clone();
     // Create Canister state
     let canister_id = canister_test_id(LOCAL_CANISTER_ID);
     let (_, execution_state) = hypervisor
         .create_execution_state(
             wabt::wat2wasm_with_features(wat.as_ref(), wabt::Features::new()).unwrap(),
-            canister_root.into(),
+            canister_root,
             canister_id,
         )
         .expect("Failed to create execution state");
@@ -131,22 +107,7 @@ where
         message: "reject message".to_string(),
     });
 
-    // Create a routing table
-    let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_test_id(SUBNET_ID),
-    }).unwrap());
-
-    // Create network topology
-    let network_topology = Arc::new(NetworkTopology {
-        routing_table,
-        subnets: btreemap! {
-            subnet_test_id(SUBNET_ID) => SubnetTopology {
-                subnet_type: SubnetType::Application,
-                ..SubnetTopology::default()
-            }
-        },
-        ..NetworkTopology::default()
-    });
+    let network_topology = Arc::new(ee_test.state().metadata.network_topology.clone());
 
     // Create execution parameters
     let execution_parameters = ExecutionParameters {
@@ -178,14 +139,13 @@ fn run_benchmark<G, I, W, R>(
     id: I,
     wat: W,
     expected_instructions: u64,
-    hypervisor: &Hypervisor,
-    canister_root: &std::path::Path,
     routine: R,
+    ee_test: &ExecutionTest,
 ) where
     G: AsRef<str>,
     I: AsRef<str>,
     W: AsRef<str>,
-    R: Fn(&Hypervisor, u64, BenchmarkArgs),
+    R: Fn(&ExecutionTest, u64, BenchmarkArgs),
 {
     let mut group = c.benchmark_group(group.as_ref());
     let mut bench_args = None;
@@ -202,13 +162,12 @@ fn run_benchmark<G, I, W, R>(
                             expected_instructions / 1_000_000
                         );
                         println!("    WAT: {}", wat.as_ref());
-                        bench_args =
-                            Some(get_execution_args(hypervisor, canister_root, wat.as_ref()));
+                        bench_args = Some(get_execution_args(ee_test, wat.as_ref()));
                     }
                     bench_args.as_ref().unwrap().clone()
                 },
                 |args| {
-                    routine(hypervisor, expected_instructions, args);
+                    routine(ee_test, expected_instructions, args);
                 },
                 BatchSize::SmallInput,
             );
@@ -221,9 +180,9 @@ fn run_benchmark<G, I, W, R>(
 pub fn run_benchmarks<G, R>(c: &mut Criterion, group: G, benchmarks: &[Benchmark], routine: R)
 where
     G: AsRef<str>,
-    R: Fn(&Hypervisor, u64, BenchmarkArgs) + Copy,
+    R: Fn(&ExecutionTest, u64, BenchmarkArgs) + Copy,
 {
-    let (hypervisor, canister_root) = get_hypervisor();
+    let ee_test = ExecutionTestBuilder::new().build();
     for Benchmark(id, wat, expected_instructions) in benchmarks {
         run_benchmark(
             c,
@@ -231,9 +190,8 @@ where
             id,
             wat,
             *expected_instructions,
-            &hypervisor,
-            &canister_root,
             routine,
+            &ee_test,
         );
     }
 }

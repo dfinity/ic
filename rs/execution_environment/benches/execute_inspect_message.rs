@@ -8,6 +8,7 @@ use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_types::PrincipalId;
 
+use ic_test_utilities::execution_environment::ExecutionTest;
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -43,7 +44,7 @@ pub fn bench_execute_inspect_message(c: &mut Criterion) {
         c,
         "inspect",
         &BENCHMARKS,
-        |hypervisor,
+        |ee_test: &ExecutionTest,
          expected_instructions,
          common::BenchmarkArgs {
              canister_state,
@@ -52,6 +53,7 @@ pub fn bench_execute_inspect_message(c: &mut Criterion) {
              network_topology,
              ..
          }| {
+            let hypervisor = ee_test.hypervisor_deprecated();
             let (instructions_left, result) = hypervisor.execute_inspect_message(
                 canister_state,
                 sender,
