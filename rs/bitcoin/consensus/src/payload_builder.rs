@@ -118,7 +118,7 @@ impl BitcoinPayloadBuilder {
             BitcoinFeatureStatus::Enabled | BitcoinFeatureStatus::Syncing => {
                 let adapter_client = match bitcoin_feature.network {
                     Network::Mainnet => &self.bitcoin_mainnet_adapter_client,
-                    Network::Testnet => &self.bitcoin_testnet_adapter_client,
+                    Network::Testnet | Network::Regtest => &self.bitcoin_testnet_adapter_client,
                 };
 
                 let past_callback_ids: std::collections::HashSet<u64> = past_payloads

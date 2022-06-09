@@ -120,7 +120,7 @@ type FirewallRulesScope = variant {
   Global;
 };
 type Gps = record { latitude : float32; longitude : float32 };
-type Network = variant { Mainnet; Testnet };
+type Network = variant { Mainnet; Regtest; Testnet };
 type NodeOperatorRecord = record {
   ipv6 : opt text;
   node_operator_principal_id : vec nat8;

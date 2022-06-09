@@ -14,6 +14,7 @@ pub type Page = ByteBuf;
 pub enum Network {
     Mainnet,
     Testnet,
+    Regtest,
 }
 
 /// A reference to a transaction output.

@@ -139,6 +139,7 @@ fn maybe_reset_state(
     let feature_network = match feature.network {
         BitcoinNetwork::Mainnet => Network::Bitcoin,
         BitcoinNetwork::Testnet => Network::Testnet,
+        BitcoinNetwork::Regtest => Network::Regtest,
     };
 
     // If the bitcoin feature is set for a different network than what's in the state
