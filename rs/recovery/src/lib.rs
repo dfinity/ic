@@ -6,6 +6,7 @@
 //! reproducable) description of the step, as well as its potential automatic
 //! execution.
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
+use candid::Deserialize;
 use command_helper::{exec_cmd, pipe_all};
 use error::{RecoveryError, RecoveryResult};
 use file_sync_helper::{create_dir, download_binary, read_dir};
@@ -15,10 +16,9 @@ use ic_replay::cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCom
 use ic_replay::player::StateParams;
 use ic_types::messages::HttpStatusResponse;
 use ic_types::{Height, ReplicaVersion, SubnetId};
-use serde::{Deserialize, Serialize};
-use slog::{info, Logger};
+use slog::{info, warn, Logger};
 use ssh_helper::SshHelper;
-use std::net::{IpAddr, SocketAddr};
+use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
@@ -62,10 +62,11 @@ pub struct NeuronArgs {
     key_id: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct NodeHeight {
-    pub instance: SocketAddr,
-    pub height: Height,
+#[derive(Debug)]
+pub struct NodeMetrics {
+    _ip: IpAddr,
+    finalization_height: Height,
+    certification_height: Height,
 }
 
 pub struct RecoveryArgs {
@@ -82,6 +83,7 @@ pub struct RecoveryArgs {
 /// Although operations on subnets and the downloaded state are idempotent, certain
 /// orders of execution will naturally lead to errors (i.e. replaying the state
 /// before downloading it).
+#[derive(Clone)]
 pub struct Recovery {
     pub recovery_dir: PathBuf,
     pub binary_dir: PathBuf,
@@ -170,72 +172,49 @@ impl Recovery {
         }
     }
 
-    // Return a curl [Command] base for querying prometheus.
-    fn get_prometheus_curl_base() -> Command {
-        let mut curl = Command::new("curl");
-        curl.args(&["-G", "http://prometheus.dfinity.systems:9090/api/v1/query"]);
-        curl.args(&["-fsSL", "-m", "30", "--retry", "10", "--retry-connrefused"]);
-        curl.args(&["-H", "Accept: application/json", "--data-urlencode"]);
-        curl
-    }
-
-    /// Return the currently highest reported certification height of the given
-    /// subnet by querying prometheus.
-    pub fn get_certification_height(subnet_id: SubnetId) -> RecoveryResult<Height> {
-        let mut curl = Recovery::get_prometheus_curl_base();
-        curl.arg(format!("query=(max_over_time(certification_last_certified_height{{job=\"replica\",ic_subnet=~\"{:?}\"}}[1d]))", subnet_id));
-
-        let mut jq = Command::new("jq");
-        jq.arg(".data.result | map({instance: .metric.instance, height: (.value[1] | tonumber) }) | max_by(.height) | .height");
-
-        if let Some(res) = pipe_all(&mut [curl, jq])? {
-            let height = Height::from(res.trim().parse::<u64>().map_err(|e| {
-                RecoveryError::invalid_output_error(format!(
-                    "Could not parse height: {}, {}",
-                    res, e
-                ))
-            })?);
-            Ok(height)
-        } else {
-            Err(RecoveryError::invalid_output_error(
-                "Empty prometheus output.".to_string(),
-            ))
-        }
-    }
-
-    /// Return current finalization heights of all replica instances on the
-    /// given subnet, as reported by prometheus.
-    pub fn get_finalization_heights(subnet_id: SubnetId) -> RecoveryResult<Vec<NodeHeight>> {
-        let mut curl = Recovery::get_prometheus_curl_base();
-        curl.arg(format!("query=(max_over_time(artifact_pool_consensus_height_stat{{job=\"replica\",ic_subnet=~\"{}\",type=\"finalization\",pool_type=\"validated\",stat=\"max\"}}[1d]))", subnet_id));
-
-        let mut jq = Command::new("jq");
-        jq.arg(".data.result | map({instance: .metric.instance, height: (.value[1] | tonumber) })");
-
-        if let Some(res) = pipe_all(&mut [curl, jq])? {
-            let r: Vec<NodeHeight> = serde_json::from_str(&res).map_err(|e| {
-                RecoveryError::invalid_output_error(format!("Failed to parse json {}: {}", res, e))
-            })?;
-            Ok(r)
-        } else {
-            Err(RecoveryError::invalid_output_error(
-                "Empty prometheus output.".to_string(),
-            ))
-        }
-    }
-
-    // Query prometheus to get current finalization heights of nodes in the given
-    // subnet, then randomly select one with max height and return.
-    pub fn get_rnd_node_ip_with_max_finalization(
+    /// Grabs metrics from all nodes and greps for the certification and finalization heights.
+    pub fn get_node_heights_from_metrics(
+        &self,
         subnet_id: SubnetId,
-    ) -> RecoveryResult<NodeHeight> {
-        let node_heights = Recovery::get_finalization_heights(subnet_id)?;
-        node_heights
-            .into_iter()
-            .max_by_key(|s| s.height)
-            .ok_or_else(|| {
-                RecoveryError::invalid_output_error("No finalization heights found".to_string())
+    ) -> RecoveryResult<Vec<NodeMetrics>> {
+        Ok(self
+            .get_member_ips(subnet_id)?
+            .iter()
+            .filter_map(|ip| {
+                let body = match reqwest::blocking::get(format!("http://[{}]:9090", ip)).and_then(|r|r.text()) {
+                    Ok(val) => val,
+                    Err(e) => {
+                        warn!(self.logger, "Http request failed: {:?}", e);
+                        return None;
+                    }
+                };
+                let mut node_heights = NodeMetrics { finalization_height : Height::from(0), certification_height : Height::from(0), _ip: *ip};
+                for line in body.split('\n') {
+                    let mut parts = line.split(' ');
+                    if let (Some(prefix), Some(height)) = (parts.next(), parts.next()) {
+                        match prefix {
+                            "certification_last_certified_height" => match height.trim().parse::<u64>() {
+                                Ok(val) => node_heights.certification_height = Height::from(val),
+                                error => warn!(
+                                    self.logger,
+                                    "Couldn't parse height {}: {:?}", height, error
+                                ),
+                            },
+                            r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="finalization"}"# => 
+                                match height.trim().parse::<u64>() {
+                                    Ok(val) => node_heights.finalization_height = Height::from(val),
+                                    error => warn!(
+                                        self.logger,
+                                        "Couldn't parse height {}: {:?}", height, error
+                                    ),
+                                },
+                            _ => continue,
+                        }
+                    }
+                }
+                Some(node_heights)
             })
+        .collect())
     }
 
     /// Executes the given SSH command.
@@ -292,62 +271,56 @@ impl Recovery {
     }
 
     /// Lookup IP addresses of all members of the given subnet
-    pub fn get_member_ips(
-        logger: &Logger,
-        admin_helper: &AdminHelper,
-        subnet_id: SubnetId,
-    ) -> RecoveryResult<Vec<IpAddr>> {
-        let get_subnet =
-            AdminHelper::to_system_command(&admin_helper.get_subnet_command(subnet_id));
-        let mut jq = Command::new("jq");
-        jq.arg(".records[0].value.membership");
-        pipe_all(&mut [get_subnet, jq])
-            .and_then(|res| {
-                let membership = res.ok_or_else(|| {
-                    RecoveryError::invalid_output_error("Empty membership record".to_string())
-                })?;
-                serde_json::from_str::<Vec<String>>(&membership).map_err(|e| {
+    pub fn get_member_ips(&self, subnet_id: SubnetId) -> RecoveryResult<Vec<IpAddr>> {
+        #[derive(Deserialize)]
+        struct Membership {
+            membership: Vec<String>,
+        }
+        #[derive(Deserialize)]
+        struct Record {
+            value: Membership,
+        }
+        #[derive(Deserialize)]
+        struct SubnetRecords {
+            records: Vec<Record>,
+        }
+        let mut cmd =
+            AdminHelper::to_system_command(&self.admin_helper.get_subnet_command(subnet_id));
+        let bytes = &cmd
+            .output()
+            .map_err(|e| RecoveryError::cmd_error(&cmd, None, e.to_string()))?
+            .stdout;
+        serde_json::from_slice::<SubnetRecords>(bytes)
+            .map_err(|e| {
+                RecoveryError::invalid_output_error(format!("Failed to parse JSON: {}", e))
+            })?
+            .records[0]
+            .value
+            .membership
+            .iter()
+            .map(|s| {
+                let principal = PrincipalId::from_str(s).map_err(|err| {
                     RecoveryError::invalid_output_error(format!(
-                        "Failed to parse json {}: {}",
-                        membership, e
+                        "Could not parse node id: {}, {}",
+                        s, err
                     ))
-                })
+                })?;
+                let id = NodeId::from(principal);
+                let ip = self.get_ip_of_node(&id);
+                info!(self.logger, "Node id = {}, ip = {:?}", id, &ip);
+                ip
             })
-            .and_then(|id_strings| {
-                info!(logger, "{:?}", id_strings);
-                id_strings
-                    .iter()
-                    .map(|s| {
-                        let principal = PrincipalId::from_str(s).map_err(|err| {
-                            RecoveryError::invalid_output_error(format!(
-                                "Could not parse node id: {}, {}",
-                                s, err
-                            ))
-                        })?;
-                        Ok(NodeId::from(principal))
-                    })
-                    .collect::<RecoveryResult<Vec<NodeId>>>()
-            })
-            .and_then(|ids| {
-                ids.iter()
-                    .map(|id| Recovery::get_ip_of_node(logger, admin_helper, id))
-                    .collect::<RecoveryResult<Vec<IpAddr>>>()
-            })
+            .collect::<RecoveryResult<Vec<IpAddr>>>()
     }
 
     /// Lookup IP of the given node
-    pub fn get_ip_of_node(
-        logger: &Logger,
-        admin_helper: &AdminHelper,
-        node_id: &NodeId,
-    ) -> RecoveryResult<IpAddr> {
-        let get_node = AdminHelper::to_system_command(&admin_helper.get_node_command(node_id));
+    pub fn get_ip_of_node(&self, node_id: &NodeId) -> RecoveryResult<IpAddr> {
+        let get_node = AdminHelper::to_system_command(&self.admin_helper.get_node_command(node_id));
         let mut tail = Command::new("tail");
         tail.arg("-n1");
         let mut sed = Command::new("sed");
         sed.arg("-e").arg(r#"s/^.* ip_addr: "\([^"]*\)".*$/\1/"#);
         pipe_all(&mut [get_node, tail, sed]).and_then(|res| {
-            info!(logger, "{:?}", res);
             let ip_string = res.ok_or_else(|| {
                 RecoveryError::invalid_output_error("Empty node IP record".to_string())
             })?;
@@ -490,6 +463,7 @@ impl Recovery {
             subnet_id,
             work_dir: self.work_dir.clone(),
             extra_batches,
+            recovery: self.clone(),
         }
     }
 
@@ -845,6 +819,7 @@ impl Recovery {
         upload_node: Option<IpAddr>,
     ) -> impl Step {
         UploadCUPAndTar {
+            recovery: self.clone(),
             logger: self.logger.clone(),
             admin_helper: self.admin_helper.clone(),
             subnet_id,

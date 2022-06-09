@@ -281,8 +281,8 @@ impl Step for ReplayStep {
     }
 }
 
-#[derive(Debug)]
 pub struct ValidateReplayStep {
+    pub recovery: Recovery,
     pub logger: Logger,
     pub subnet_id: SubnetId,
     pub work_dir: PathBuf,
@@ -298,9 +298,24 @@ impl Step for ValidateReplayStep {
         let latest_height =
             replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?.height;
 
-        let cert_height = Recovery::get_certification_height(self.subnet_id)?;
-        let finalization_height =
-            Recovery::get_rnd_node_ip_with_max_finalization(self.subnet_id)?.height;
+        let heights = self
+            .recovery
+            .get_node_heights_from_metrics(self.subnet_id)?;
+        let cert_height = &heights
+            .iter()
+            .max_by_key(|v| v.certification_height)
+            .map(|v| v.certification_height)
+            .ok_or_else(|| {
+                RecoveryError::OutputError("No certification heights found".to_string())
+            })?;
+
+        let finalization_height = &heights
+            .iter()
+            .max_by_key(|v| v.finalization_height)
+            .map(|v| v.finalization_height)
+            .ok_or_else(|| {
+                RecoveryError::invalid_output_error("No finalization heights found".to_string())
+            })?;
 
         info!(self.logger, "Certification height: {}", cert_height);
         info!(
@@ -601,6 +616,7 @@ impl Step for CreateTarsStep {
 }
 
 pub struct UploadCUPAndTar {
+    pub recovery: Recovery,
     pub logger: Logger,
     pub admin_helper: AdminHelper,
     pub subnet_id: SubnetId,
@@ -674,7 +690,7 @@ impl Step for UploadCUPAndTar {
         let ips = if let Some(ip) = self.upload_node {
             vec![ip]
         } else {
-            Recovery::get_member_ips(&self.logger, &self.admin_helper, self.subnet_id)?
+            self.recovery.get_member_ips(self.subnet_id)?
         };
 
         ips.into_iter()

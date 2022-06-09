@@ -6,7 +6,6 @@ To this end it provides a library of functions useful for recovery operations, s
 Using the same library functions, it additionally offers a command line interface guiding operators through the process of subnet recovery. Therein, required operations may be conducted by the tool automatically.
 
 ## Application Subnet Recovery
-0. Install `jq` dependency.
 1. Prepare `NNS_URL`, `SUBNET_ID` and the `REPLICA_VERSION` of the subnet to be recovered.
 2. Execute the tool using `ic-recovery --nns-url <NNS_URL> --replica-version <REPLICA_VERSION> --dir <recovery_directory> [--test] app-subnet-recovery --subnet-id <SUBNET_ID>`.
 3. Optionally specify more parameters (if known ahead of time), see: `ic-recovery app-subnet-recovery --help`
