@@ -1009,9 +1009,10 @@ pub fn total_compute_allocation_cannot_be_exceeded(
             .for_each(|x| x.expect("Could not delete canister."));
 
         // Create universal canister with 'best effort' compute allocation of `0`.
-        let uni_can = UniversalCanister::new_with_comp_alloc(&agent, Some(0), Some(std::u64::MAX))
-            .await
-            .expect("Could not create and install universal canister.");
+        let uni_can =
+            UniversalCanister::new_with_comp_alloc(&agent, Some(0), Some(std::u64::MAX as u128))
+                .await
+                .expect("Could not create and install universal canister.");
         let arbitrary_bytes = b";ioapusdvzn,x";
 
         async fn install_canister(
@@ -1020,7 +1021,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(
         ) -> Result<(Principal, Vec<u8>), AgentError> {
             let created_canister = universal_canister
                 .update(wasm().call(management::create_canister(
-                    Cycles::from(100_000_000_000_000u64).into_parts(),
+                    Cycles::from(100_000_000_000_000u128).into_parts(),
                 )))
                 .await
                 .map(|res| {

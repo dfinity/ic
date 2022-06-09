@@ -1048,7 +1048,7 @@ async fn deposit_cycles(canister_id: CanisterId, cycles: Cycles) -> Result<(), S
         &Method::DepositCycles.to_string(),
         dfn_candid::candid_multi_arity,
         (CanisterIdRecord::from(canister_id),),
-        dfn_core::api::Funds::new(cycles.into()),
+        dfn_core::api::Funds::new(u128::from(cycles) as u64),
     )
     .await;
 
