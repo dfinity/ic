@@ -6,7 +6,7 @@ use crate::{
     canister_settings::CanisterSettings,
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
-    IngressHistoryWriterImpl, QueryExecutionType,
+    IngressHistoryWriterImpl,
 };
 use assert_matches::assert_matches;
 use ic_base_types::{NumSeconds, PrincipalId};
@@ -43,7 +43,6 @@ use ic_test_utilities::{
         messages::{RequestBuilder, SignedIngressBuilder},
     },
     universal_canister::{wasm, UNIVERSAL_CANISTER_WASM},
-    with_test_replica_logger,
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -144,7 +143,7 @@ impl Default for InstallCodeContextBuilder {
             ctx: InstallCodeContext {
                 sender: PrincipalId::new_user_test_id(0),
                 canister_id: canister_test_id(0),
-                wasm_module: wabt::wat2wasm(r#"(module (memory $memory 1 1000))"#).unwrap(),
+                wasm_module: wabt::wat2wasm(EMPTY_WAT).unwrap(),
                 arg: vec![],
                 compute_allocation: Some(ComputeAllocation::default()),
                 memory_allocation: None,
@@ -1168,185 +1167,37 @@ const COUNTER_WAT: &str = r#"
         (export "canister_init" (func $canister_init))
     )"#;
 
+const EMPTY_WAT: &str = r#"(module (memory $memory 1 1000))"#;
+
 #[test]
 fn reinstall_calls_canister_start_and_canister_init() {
-    with_test_replica_logger(|log| {
-        let subnet_id = subnet_test_id(1);
-        let subnet_type = SubnetType::Application;
-        let metrics_registry = MetricsRegistry::new();
-        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let hypervisor = Hypervisor::new(
-            Config::default(),
-            &metrics_registry,
-            subnet_id,
-            subnet_type,
-            log.clone(),
-            Arc::clone(&cycles_account_manager),
-        );
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let hypervisor = Arc::new(hypervisor);
-        let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
-            Config::default(),
-            log.clone(),
-            &metrics_registry,
-        ));
-        let canister_manager = CanisterManager::new(
-            Arc::clone(&hypervisor) as Arc<_>,
-            log,
-            canister_manager_config(subnet_id, subnet_type, FlagStatus::Disabled),
-            cycles_account_manager,
-            ingress_history_writer,
-        );
+    // install wasm module with no exported functions
+    let id = test
+        .canister_from_cycles_and_wat(*INITIAL_CYCLES, EMPTY_WAT)
+        .unwrap();
 
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let mut state = initial_state(tmpdir.path(), subnet_id);
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let canister_id = canister_manager
-            .create_canister(
-                sender,
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-            )
-            .0
-            .unwrap();
-
-        // Install a wasm module with no exported functions.
-        canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id)
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
-
-        // Reinstalling with new code.
-        canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id)
-                    .wasm_module(wabt::wat2wasm(COUNTER_WAT).unwrap())
-                    .mode(CanisterInstallMode::Reinstall)
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
-
-        // If canister_start and canister_init were called, then the counter
-        // should be initialized to 42.
-        let canister = state.take_canister_state(&canister_id).unwrap();
-        let user_id = user_test_id(0);
-        assert_eq!(
-            hypervisor
-                .execute_query(
-                    QueryExecutionType::Replicated,
-                    "read",
-                    &[],
-                    user_id.get(),
-                    canister,
-                    None,
-                    mock_time(),
-                    EXECUTION_PARAMETERS.clone(),
-                    &state.metadata.network_topology
-                )
-                .2
-                .unwrap(),
-            Some(WasmResult::Reply(vec![42, 0, 0, 0]))
-        );
-    });
+    let wasm = wabt::wat2wasm(COUNTER_WAT).unwrap();
+    test.reinstall_canister(id, wasm).unwrap();
+    // If canister_start and canister_init were called, then the counter
+    // should be initialized to 42.
+    let reply = test.ingress(id, "read", vec![]);
+    assert_eq!(reply, Ok(WasmResult::Reply(vec![42, 0, 0, 0])));
 }
 
 #[test]
 fn install_calls_canister_start_and_canister_init() {
-    with_test_replica_logger(|log| {
-        let subnet_id = subnet_test_id(1);
-        let subnet_type = SubnetType::Application;
-        let metrics_registry = MetricsRegistry::new();
-        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
-        let hypervisor = Hypervisor::new(
-            Config::default(),
-            &metrics_registry,
-            subnet_id,
-            subnet_type,
-            log.clone(),
-            Arc::clone(&cycles_account_manager),
-        );
-        let hypervisor = Arc::new(hypervisor);
-        let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
-            Config::default(),
-            log.clone(),
-            &metrics_registry,
-        ));
+    let mut test = ExecutionTestBuilder::new().build();
 
-        let canister_manager = CanisterManager::new(
-            Arc::clone(&hypervisor) as Arc<_>,
-            log,
-            canister_manager_config(subnet_id, subnet_type, FlagStatus::Disabled),
-            cycles_account_manager,
-            ingress_history_writer,
-        );
+    let id = test
+        .canister_from_cycles_and_wat(*INITIAL_CYCLES, COUNTER_WAT)
+        .unwrap();
 
-        let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-        let mut state = initial_state(tmpdir.path(), subnet_id);
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let canister_id = canister_manager
-            .create_canister(
-                sender,
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-            )
-            .0
-            .unwrap();
-
-        canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id)
-                    .wasm_module(wabt::wat2wasm(COUNTER_WAT).unwrap())
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
-
-        // If canister_start and canister_init were called, then the counter
-        // should be initialized to 42.
-        let canister = state.take_canister_state(&canister_id).unwrap();
-        let user_id = user_test_id(0);
-        assert_eq!(
-            hypervisor
-                .execute_query(
-                    QueryExecutionType::Replicated,
-                    "read",
-                    &[],
-                    user_id.get(),
-                    canister,
-                    None,
-                    mock_time(),
-                    EXECUTION_PARAMETERS.clone(),
-                    &state.metadata.network_topology,
-                )
-                .2
-                .unwrap(),
-            Some(WasmResult::Reply(vec![42, 0, 0, 0]))
-        );
-    });
+    // If canister_start and canister_init were called, then the counter
+    // should be initialized to 42.
+    let reply = test.ingress(id, "read", vec![]);
+    assert_eq!(reply, Ok(WasmResult::Reply(vec![42, 0, 0, 0])));
 }
 
 #[test]

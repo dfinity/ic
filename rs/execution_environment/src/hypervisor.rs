@@ -1,5 +1,3 @@
-use crate::execution::common::validate_method;
-use crate::{NonReplicatedQueryKind as QueryKind, QueryExecutionType};
 use ic_canister_sandbox_replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
@@ -20,9 +18,7 @@ use ic_replicated_state::{
     SchedulerState, SystemState,
 };
 use ic_sys::PAGE_SIZE;
-use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, NonReplicatedQueryKind,
-};
+use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{
     ingress::WasmResult,
     messages::Payload,
@@ -221,123 +217,6 @@ impl Hypervisor {
         let canister =
             CanisterState::from_parts(Some(output_execution_state), system_state, scheduler_state);
         (canister, output.num_instructions_left, action, heap_delta)
-    }
-
-    /// Execute a query call.
-    ///
-    /// Query calls are different from update calls as follows:
-    /// - A different set of system APIs can be used.
-    /// - Any modifications to the canister's state (like Wasm heap, etc.) will
-    ///   be rolled back.
-    #[allow(clippy::too_many_arguments)]
-    pub fn execute_query(
-        &self,
-        query_execution_type: QueryExecutionType,
-        method: &str,
-        payload: &[u8],
-        caller: PrincipalId,
-        canister: CanisterState,
-        data_certificate: Option<Vec<u8>>,
-        time: Time,
-        execution_parameters: ExecutionParameters,
-        network_topology: &NetworkTopology,
-    ) -> (
-        CanisterState,
-        NumInstructions,
-        HypervisorResult<Option<WasmResult>>,
-    ) {
-        // Validate that the canister is running.
-        if CanisterStatusType::Running != canister.status() {
-            return (
-                canister,
-                execution_parameters.total_instruction_limit,
-                Err(HypervisorError::CanisterStopped),
-            );
-        }
-        let method = WasmMethod::Query(method.to_string());
-        let memory_usage = canister.memory_usage(self.own_subnet_type);
-
-        // Validate that the Wasm module is present and exports the method
-        if let Err(err) = validate_method(&method, &canister) {
-            return (
-                canister,
-                execution_parameters.total_instruction_limit,
-                Err(err),
-            );
-        }
-
-        let (execution_state, system_state, scheduler_state) = canister.into_parts();
-        let execution_state = execution_state.unwrap();
-
-        match query_execution_type {
-            QueryExecutionType::Replicated => {
-                let api_type =
-                    ApiType::replicated_query(time, payload.to_vec(), caller, data_certificate);
-                // As we are executing the query in the replicated mode, we do
-                // not want to commit updates, i.e. we must return the
-                // unmodified version of the canister. Hence, execute on clones
-                // of system and execution states so that we have the original
-                // versions.
-                let (output, _output_execution_state, _system_state_accessor) = self.execute(
-                    api_type,
-                    system_state.clone(),
-                    memory_usage,
-                    execution_parameters,
-                    FuncRef::Method(method),
-                    execution_state.clone(),
-                    network_topology,
-                );
-
-                let canister =
-                    CanisterState::from_parts(Some(execution_state), system_state, scheduler_state);
-                (canister, output.num_instructions_left, output.wasm_result)
-            }
-            QueryExecutionType::NonReplicated {
-                call_context_id,
-                network_topology,
-                query_kind,
-            } => {
-                let non_replicated_query_kind = match &query_kind {
-                    QueryKind::Pure => NonReplicatedQueryKind::Pure,
-                    QueryKind::Stateful { call_origin: _ } => NonReplicatedQueryKind::Stateful {
-                        call_context_id,
-                        outgoing_request: None,
-                    },
-                };
-                let api_type = ApiType::non_replicated_query(
-                    time,
-                    caller,
-                    self.own_subnet_id,
-                    payload.to_vec(),
-                    data_certificate,
-                    non_replicated_query_kind,
-                );
-                // As we are executing the query in non-replicated mode, we can
-                // modify the canister as the caller is not going to be able to
-                // commit modifications to the canister anyway.
-                let (output, output_execution_state, output_system_state) = self.execute(
-                    api_type,
-                    system_state,
-                    memory_usage,
-                    execution_parameters,
-                    FuncRef::Method(method),
-                    execution_state.clone(),
-                    &network_topology,
-                );
-
-                let new_execution_state = match query_kind {
-                    QueryKind::Pure => execution_state,
-                    QueryKind::Stateful { call_origin: _ } => output_execution_state,
-                };
-
-                let canister = CanisterState::from_parts(
-                    Some(new_execution_state),
-                    output_system_state,
-                    scheduler_state,
-                );
-                (canister, output.num_instructions_left, output.wasm_result)
-            }
-        }
     }
 
     /// Execute a callback.

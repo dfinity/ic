@@ -9,6 +9,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use ic_types::Cycles;
 
 use ic_replicated_state::CallContextAction;
+use ic_test_utilities::execution_environment::ExecutionTest;
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -52,7 +53,7 @@ pub fn bench_execute_callback(c: &mut Criterion) {
         c,
         "callback",
         &BENCHMARKS,
-        |hypervisor,
+        |ee_test: &ExecutionTest,
          expected_instructions,
          common::BenchmarkArgs {
              canister_state,
@@ -64,6 +65,7 @@ pub fn bench_execute_callback(c: &mut Criterion) {
              callback,
              ..
          }| {
+            let hypervisor = ee_test.hypervisor_deprecated();
             let (_state, instructions, action, _bytes) = hypervisor.execute_callback(
                 canister_state,
                 &call_origin,

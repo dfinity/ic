@@ -6,7 +6,11 @@ mod common_wat;
 
 use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
-use ic_execution_environment::QueryExecutionType;
+use ic_execution_environment::{
+    execution::nonreplicated_query::execute_non_replicated_query, NonReplicatedQueryKind,
+};
+use ic_interfaces::execution_environment::ExecutionMode;
+use ic_test_utilities::execution_environment::ExecutionTest;
 use ic_types::PrincipalId;
 
 use lazy_static::lazy_static;
@@ -36,27 +40,29 @@ pub fn bench_execute_query(c: &mut Criterion) {
     let sender = PrincipalId::new_node_test_id(common::REMOTE_CANISTER_ID);
     common::run_benchmarks(
         c,
-        "inspect",
+        "query",
         &BENCHMARKS,
-        |hypervisor,
+        |ee_test: &ExecutionTest,
          expected_instructions,
          common::BenchmarkArgs {
              canister_state,
              time,
-             execution_parameters,
+             mut execution_parameters,
              network_topology,
              ..
          }| {
-            let (_state, instructions_left, result) = hypervisor.execute_query(
-                QueryExecutionType::Replicated,
+            execution_parameters.execution_mode = ExecutionMode::NonReplicated;
+            let (_, instructions_left, result) = execute_non_replicated_query(
+                NonReplicatedQueryKind::Pure,
                 "test",
-                &Vec::new(),
+                &[],
                 sender,
                 canister_state,
                 Some(vec![0; 256]),
                 time,
                 execution_parameters,
                 &network_topology,
+                ee_test.hypervisor_deprecated(),
             );
             assert_eq!(result, Ok(None), "Error executing a query method");
             assert_eq!(
