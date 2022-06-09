@@ -93,6 +93,11 @@ def external_crates_repository(name):
             "erased-serde": crate.spec(version = "=0.3.11"),
             "eyre": crate.spec(version = "=0.6.8"),
             "features": crate.spec(version = "=0.10.0"),
+            "ff": crate.spec(
+                default_features = False,
+                features = ["std"],
+                version = "=0.10.0",
+            ),
             "flate2": crate.spec(version = "=1.0.20"),
             "float-cmp": crate.spec(version = "=0.9.0"),
             "futures-util": crate.spec(version = "=0.3.21"),
@@ -117,9 +122,15 @@ def external_crates_repository(name):
             "hyper-tls": crate.spec(version = "=0.5.0"),
             "itertools": crate.spec(version = "=0.10.3"),
             "json5": crate.spec(version = "=0.4.1"),
+            "k256": crate.spec(
+                default_features = False,
+                features = ["arithmetic"],
+                version = "=0.10.3",
+            ),
             "lazy_static": crate.spec(version = "=1.4.0"),
             "leb128": crate.spec(version = "=0.2.4"),
             "libc": crate.spec(version = "=0.2.126"),
+            "libsecp256k1": crate.spec(version = "=0.5.0"),
             "linked-hash-map": crate.spec(version = "0.5.3"),
             "lru": crate.spec(
                 default_features = False,
@@ -140,8 +151,14 @@ def external_crates_repository(name):
             "once_cell": crate.spec(version = "=1.10.0"),
             "openssl": crate.spec(version = "=0.10.38"),
             "openssl-sys": crate.spec(version = "=0.9.70"),
+            "p256": crate.spec(
+                default_features = False,
+                features = ["arithmetic"],
+                version = "=0.10",
+            ),
             "pairing": crate.spec(version = "=0.20.0"),
             "parking_lot": crate.spec(version = "0.11.1"),
+            "paste": crate.spec(version = "=1.0.0"),
             "pathdiff": crate.spec(version = "=0.2.1"),
             "pkg-config": crate.spec(version = "=0.3.25"),
             "pprof": crate.spec(
@@ -167,8 +184,19 @@ def external_crates_repository(name):
             "prost": crate.spec(version = "=0.10.4"),
             "prost-build": crate.spec(version = "=0.10.4"),
             "quote": crate.spec(version = "=1.0.17"),
-            "rand": crate.spec(version = "=0.7.3"),
+            "rand-0_7_3": crate.spec(
+                package = "rand",
+                version = "=0.7.3",
+            ),
+            "rand-0_8_4": crate.spec(
+                package = "rand",
+                version = "=0.8.4",
+            ),
             "rand_chacha": crate.spec(version = "=0.2.2"),
+            "rand_chacha-0_3_1": crate.spec(
+                package = "rand_chacha",
+                version = "=0.3.1",
+            ),
             "rand_core": crate.spec(version = "=0.5.1"),
             "regex": crate.spec(version = "=1.5.6"),
             "rustversion": crate.spec(version = "=1.0.2"),
@@ -205,6 +233,7 @@ def external_crates_repository(name):
             "slog_derive": crate.spec(version = "=0.2.0"),
             "strum": crate.spec(version = "=0.23.0"),
             "strum_macros": crate.spec(version = "=0.23.0"),
+            "subtle": crate.spec(version = "=2.4"),
             "syn": crate.spec(
                 features = [
                     "fold",

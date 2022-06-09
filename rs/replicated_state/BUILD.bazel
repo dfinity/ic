@@ -44,7 +44,7 @@ rust_library(
         "@crate_index//:libc",
         "@crate_index//:maplit",
         "@crate_index//:nix",
-        "@crate_index//:rand",
+        "@crate_index//:rand_0_7_3",
         "@crate_index//:rand_chacha",
         "@crate_index//:serde",
         "@crate_index//:slog",

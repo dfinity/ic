@@ -1,5 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_proc_macro")
 
+package(default_visibility = ["//rs/crypto:__subpackages__"])
+
 filegroup(
     name = "sources",
     srcs = glob(
@@ -14,7 +16,6 @@ rust_proc_macro(
     srcs = glob(["src/**"]),
     crate_name = "fe_derive",
     edition = "2018",
-    visibility = ["//rs/crypto:__subpackages__"],
     deps = [
         "@crate_index//:hex",
         "@crate_index//:num-bigint-dig",
