@@ -296,8 +296,9 @@ mod tests {
         transport::{Channel, Endpoint, Server, Uri},
         Request, Response, Status,
     };
-    use tower::{service_fn, util::BoxService, Service, ServiceBuilder};
+    use tower::{service_fn, util::BoxCloneService, Service, ServiceBuilder};
 
+    #[derive(Clone)]
     struct SingleResponseAnonymousQueryService {
         response: AnonymousQueryResponse,
     }
@@ -479,8 +480,10 @@ mod tests {
                 reject_code: RejectCode::SysFatal,
                 reject_message: "dsf".to_string(),
             });
-        let base_service = BoxService::new(ServiceBuilder::new().service(mock_anon_svc));
-        let svc = ServiceBuilder::new().buffer(1).service(base_service);
+        let base_service = BoxCloneService::new(ServiceBuilder::new().service(mock_anon_svc));
+        let svc = ServiceBuilder::new()
+            .concurrency_limit(1)
+            .service(base_service);
 
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -531,8 +534,10 @@ mod tests {
                 reject_code: RejectCode::SysFatal,
                 reject_message: "dsf".to_string(),
             });
-        let base_service = BoxService::new(ServiceBuilder::new().service(mock_anon_svc));
-        let svc = ServiceBuilder::new().buffer(1).service(base_service);
+        let base_service = BoxCloneService::new(ServiceBuilder::new().service(mock_anon_svc));
+        let svc = ServiceBuilder::new()
+            .concurrency_limit(1)
+            .service(base_service);
 
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -581,8 +586,10 @@ mod tests {
                 reject_code: RejectCode::SysFatal,
                 reject_message: "dsf".to_string(),
             });
-        let base_service = BoxService::new(ServiceBuilder::new().service(mock_anon_svc));
-        let svc = ServiceBuilder::new().buffer(1).service(base_service);
+        let base_service = BoxCloneService::new(ServiceBuilder::new().service(mock_anon_svc));
+        let svc = ServiceBuilder::new()
+            .concurrency_limit(1)
+            .service(base_service);
 
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -659,8 +666,10 @@ mod tests {
                     ),
                 },
             });
-        let base_service = BoxService::new(ServiceBuilder::new().service(mock_anon_svc));
-        let svc = ServiceBuilder::new().buffer(1).service(base_service);
+        let base_service = BoxCloneService::new(ServiceBuilder::new().service(mock_anon_svc));
+        let svc = ServiceBuilder::new()
+            .concurrency_limit(1)
+            .service(base_service);
 
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -730,8 +739,10 @@ mod tests {
                 reject_code: RejectCode::SysFatal,
                 reject_message: "test fail".to_string(),
             });
-        let base_service = BoxService::new(ServiceBuilder::new().service(mock_anon_svc));
-        let svc = ServiceBuilder::new().buffer(1).service(base_service);
+        let base_service = BoxCloneService::new(ServiceBuilder::new().service(mock_anon_svc));
+        let svc = ServiceBuilder::new()
+            .concurrency_limit(1)
+            .service(base_service);
 
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -782,8 +793,10 @@ mod tests {
                 reject_code: RejectCode::SysFatal,
                 reject_message: "dsf".to_string(),
             });
-        let base_service = BoxService::new(ServiceBuilder::new().service(mock_anon_svc));
-        let svc = ServiceBuilder::new().buffer(1).service(base_service);
+        let base_service = BoxCloneService::new(ServiceBuilder::new().service(mock_anon_svc));
+        let svc = ServiceBuilder::new()
+            .concurrency_limit(1)
+            .service(base_service);
 
         // Create a client with a capacity of 2.
         let mut client = CanisterHttpAdapterClientImpl::new(

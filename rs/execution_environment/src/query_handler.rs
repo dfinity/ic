@@ -38,7 +38,7 @@ use std::{
     task::{Context, Poll},
 };
 use tokio::sync::oneshot;
-use tower::{util::BoxService, Service, ServiceBuilder};
+use tower::{limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder};
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -95,6 +95,7 @@ pub(crate) struct InternalHttpQueryHandler {
     max_instructions_per_message: NumInstructions,
 }
 
+#[derive(Clone)]
 /// Struct that is responsible for handling queries sent by user.
 pub(crate) struct HttpQueryHandler {
     internal: Arc<dyn QueryHandler<State = ReplicatedState>>,
@@ -165,24 +166,18 @@ impl QueryHandler for InternalHttpQueryHandler {
 
 impl HttpQueryHandler {
     pub(crate) fn new_service(
-        max_buffered_queries: usize,
-        threads: usize,
+        concurrency_buffer: GlobalConcurrencyLimitLayer,
         internal: Arc<dyn QueryHandler<State = ReplicatedState>>,
         threadpool: Arc<Mutex<threadpool::ThreadPool>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> QueryExecutionService {
-        let base_service = Self {
+        let base_service = BoxCloneService::new(Self {
             internal,
             state_reader,
             threadpool,
-        };
-        let base_service = BoxService::new(
-            ServiceBuilder::new()
-                .concurrency_limit(threads)
-                .service(base_service),
-        );
+        });
         ServiceBuilder::new()
-            .buffer(max_buffered_queries)
+            .layer(concurrency_buffer)
             .service(base_service)
     }
 }

@@ -22,6 +22,6 @@ prost = "0.10.4"
 rand = "0.7.3"
 serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"
-tower = { version = "0.4.11", features = ["util", "load-shed", "buffer"] }
+tower = { version = "0.4.11", features = ["util", "limit"] }
 thiserror = "1.0"
 

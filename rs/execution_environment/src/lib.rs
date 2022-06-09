@@ -38,9 +38,9 @@ use ingress_filter::IngressFilter;
 use query_handler::{HttpQueryHandler, InternalHttpQueryHandler};
 use scheduler::SchedulerImpl;
 use std::sync::{Arc, Mutex};
+use tower::limit::GlobalConcurrencyLimitLayer;
 
-const MAX_BUFFERED_QUERIES: usize = 2000;
-const CONCURRENT_QUERIES_PER_THREAD: usize = 4;
+const MAX_INFLIGHT_QUERIES_PER_THREAD: usize = 100;
 
 /// When executing a wasm method of query type, this enum indicates if we are
 /// running in an replicated or non-replicated context. This information is
@@ -91,7 +91,6 @@ impl ExecutionServices {
     pub fn setup_execution(
         logger: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
-        rt_handle: tokio::runtime::Handle,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
         scheduler_config: SchedulerConfig,
@@ -143,34 +142,30 @@ impl ExecutionServices {
 
         let threadpool = Arc::new(Mutex::new(threadpool));
 
+        let concurrency_buffer = GlobalConcurrencyLimitLayer::new(
+            config.query_execution_threads * MAX_INFLIGHT_QUERIES_PER_THREAD,
+        );
         // Creating the async services require that a tokio runtime context is available.
-        let (async_query_handler, ingress_filter, anonymous_query_handler) = {
-            let _rt_guard = rt_handle.enter();
-            (
-                HttpQueryHandler::new_service(
-                    MAX_BUFFERED_QUERIES,
-                    config.query_execution_threads * CONCURRENT_QUERIES_PER_THREAD,
-                    Arc::clone(&sync_query_handler) as Arc<_>,
-                    Arc::clone(&threadpool),
-                    Arc::clone(&state_reader),
-                ),
-                IngressFilter::new_service(
-                    MAX_BUFFERED_QUERIES,
-                    config.query_execution_threads * CONCURRENT_QUERIES_PER_THREAD,
-                    Arc::clone(&threadpool),
-                    Arc::clone(&state_reader),
-                    Arc::clone(&exec_env),
-                ),
-                AnonymousQueryHandler::new_service(
-                    MAX_BUFFERED_QUERIES,
-                    config.query_execution_threads * CONCURRENT_QUERIES_PER_THREAD,
-                    threadpool,
-                    Arc::clone(&state_reader),
-                    Arc::clone(&exec_env),
-                    scheduler_config.max_instructions_per_message,
-                ),
-            )
-        };
+
+        let async_query_handler = HttpQueryHandler::new_service(
+            concurrency_buffer.clone(),
+            Arc::clone(&sync_query_handler) as Arc<_>,
+            Arc::clone(&threadpool),
+            Arc::clone(&state_reader),
+        );
+        let ingress_filter = IngressFilter::new_service(
+            concurrency_buffer.clone(),
+            Arc::clone(&threadpool),
+            Arc::clone(&state_reader),
+            Arc::clone(&exec_env),
+        );
+        let anonymous_query_handler = AnonymousQueryHandler::new_service(
+            concurrency_buffer,
+            threadpool,
+            Arc::clone(&state_reader),
+            Arc::clone(&exec_env),
+            scheduler_config.max_instructions_per_message,
+        );
 
         let bitcoin_canister = Arc::new(BitcoinCanister::new(metrics_registry, logger.clone()));
 
