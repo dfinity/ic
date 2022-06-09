@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-num-bigint = "0.4"
+num-bigint = "~0.4.3"
 hex = "0.4"
 
 [dependencies.tecdsa]
