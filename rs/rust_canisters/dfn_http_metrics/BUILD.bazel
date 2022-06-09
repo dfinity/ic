@@ -1,0 +1,24 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/monitoring/metrics_encoder",
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/dfn_http",
+    "@crate_index//:serde_bytes",
+]
+
+rust_library(
+    name = "dfn_http_metrics",
+    srcs = glob(["src/**"]),
+    crate_name = "dfn_http_metrics",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)

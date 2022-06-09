@@ -11,7 +11,8 @@ filegroup(
 )
 
 rust_library(
-    name = "ic_metrics_encoder",
+    name = "metrics_encoder",
     srcs = glob(["src/**"]),
+    crate_name = "ic_metrics_encoder",
     edition = "2018",
 )

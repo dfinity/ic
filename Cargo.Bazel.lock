@@ -1,5 +1,5 @@
 {
-  "checksum": "cc77916a1daf7025a663fd716e381fd8e159149d0669adfe6d11a75c03add2cb",
+  "checksum": "de429116ff32e2536595bac4a444185aa8d86739c1754dd7b21389447a2e6093",
   "crates": {
     "addr2line 0.17.0": {
       "name": "addr2line",
@@ -22368,18 +22368,6 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
             "srcs": {
@@ -22394,6 +22382,18 @@
           "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
