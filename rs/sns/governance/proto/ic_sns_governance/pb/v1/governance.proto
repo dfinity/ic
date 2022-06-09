@@ -886,11 +886,15 @@ message Governance {
   map<uint64, NervousSystemFunction> id_to_nervous_system_functions = 18;
 
   enum Mode {
-    MODE_NORMAL = 0;
+    // This forces people to explicitly populate the mode field.
+    MODE_UNSPECIFIED = 0;
+
+    // All operations are allowed.
+    MODE_NORMAL = 1;
 
     // In this mode, various operations are not allowed in order to ensure the
     // integrity of the initial token sale.
-    MODE_PRE_GENESIS = 1;
+    MODE_PRE_INITIALIZATION_SWAP = 2;
   }
 
   Mode mode = 19;

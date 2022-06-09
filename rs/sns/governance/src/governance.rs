@@ -15,7 +15,7 @@ use crate::canister_control::{
 use crate::pb::v1::{
     get_neuron_response, get_proposal_response,
     governance::{
-        neuron_in_flight_command::Command as InFlightCommand, Mode, NeuronInFlightCommand,
+        self, neuron_in_flight_command::Command as InFlightCommand, Mode, NeuronInFlightCommand,
     },
     governance_error::ErrorType,
     manage_neuron::{
@@ -35,6 +35,7 @@ use crate::pb::v1::{
 use ic_base_types::PrincipalId;
 use lazy_static::lazy_static;
 use ledger_canister::{AccountIdentifier, Subaccount, Tokens};
+use maplit::hashset;
 use num::{bigint::BigInt, rational::Ratio, Zero};
 use strum::IntoEnumIterator;
 
@@ -322,6 +323,28 @@ impl ValidGovernanceProto {
             .as_ref()
             .ok_or_else(|| format!("GovernanceProto {} field must be populated.", field_name))
     }
+
+    fn mode_is_valid_or_err(g: &GovernanceProto) -> Result<(), String> {
+        let mode = match governance::Mode::from_i32(g.mode) {
+            Some(mode) => mode,
+            None => {
+                return Err(format!(
+                    "Not a known governance mode code: {}\n{:#?}",
+                    g.mode, g
+                ));
+            }
+        };
+
+        if mode != governance::Mode::Unspecified {
+            return Ok(());
+        }
+
+        Err(format!(
+            "The mode field must be populated (with something other \
+             than Unspecified): {:#?}",
+            g
+        ))
+    }
 }
 
 impl TryFrom<GovernanceProto> for ValidGovernanceProto {
@@ -333,6 +356,7 @@ impl TryFrom<GovernanceProto> for ValidGovernanceProto {
     fn try_from(base: GovernanceProto) -> Result<Self, Self::Error> {
         Self::validate_required_field("root_canister_id", &base.root_canister_id)?;
         Self::validate_required_field("ledger_canister_id", &base.ledger_canister_id)?;
+        Self::mode_is_valid_or_err(&base)?;
 
         let parameters = Self::validate_required_field("parameters", &base.parameters)?;
         parameters.validate()?;
@@ -1985,6 +2009,18 @@ impl Governance {
         // This should not panic, because the proposal was just validated.
         let action = proposal.action.as_ref().expect("No action.");
 
+        // These cannot be the target of a ExecuteGenericNervousSystemFunction proposal.
+        let disallowed_target_canister_ids = hashset! {
+            self.proto.root_canister_id_or_panic(),
+            self.proto.ledger_canister_id_or_panic(),
+            self.env.canister_id(),
+        };
+        self.mode().allows_proposal_action_or_err(
+            action,
+            &disallowed_target_canister_ids,
+            &self.proto.id_to_nervous_system_functions,
+        )?;
+
         let reject_cost_e8s = self
             .nervous_system_parameters()
             .reject_cost_e8s
@@ -2851,6 +2887,37 @@ impl Governance {
             .unwrap_or_else(ManageNeuronResponse::error)
     }
 
+    /// Returns a governance::Mode, according to self.proto.mode.
+    ///
+    /// That field is actually an i32, so this has to do some translation.
+    ///
+    /// If translation is unsuccessful, panics (in non-release builds) or
+    /// defaults to Normal (in release builds).
+    ///
+    /// Similarly, if the translation results in Unspecified, panics (in
+    /// non-release builds) or defaults to Normal (in release builds).
+    fn mode(&self) -> governance::Mode {
+        let result = governance::Mode::from_i32(self.proto.mode).unwrap_or_else(|| {
+            debug_assert!(
+                false,
+                "Governance is in an unknown mode: {}",
+                self.proto.mode
+            );
+            governance::Mode::Normal
+        });
+
+        if result != governance::Mode::Unspecified {
+            return result;
+        }
+
+        debug_assert!(
+            false,
+            "Governance's mode is not explicitly set. In production, this would default to Normal.",
+        );
+
+        governance::Mode::Normal
+    }
+
     /// Parses manage neuron commands coming from a given caller and calls the
     /// corresponding internal method to perform the neuron command.
     pub async fn manage_neuron_internal(
@@ -2870,6 +2937,9 @@ impl Governance {
                     "ManageNeuron lacks a value in its command field.",
                 )
             })?;
+
+        self.mode()
+            .allows_manage_neuron_command_or_err(command, self.is_sale_canister(caller))?;
 
         // All operations on a neuron exclude each other.
         let _hold = self.lock_neuron_for_command(
@@ -3508,6 +3578,7 @@ mod tests {
             root_canister_id: Some(PrincipalId::try_from(vec![42_u8]).unwrap()),
             ledger_canister_id: Some(PrincipalId::try_from(vec![99_u8]).unwrap()),
             parameters: Some(NervousSystemParameters::with_default_values()),
+            mode: governance::Mode::Normal as i32,
             ..Default::default()
         };
 
@@ -3516,6 +3587,32 @@ mod tests {
                 "We have not tried to corrupt the test subject yet but it is already invalid???",
             )
             .into_inner()
+    }
+
+    #[test]
+    fn unspecified_mode_is_invalid() {
+        let g = GovernanceProto {
+            mode: governance::Mode::Unspecified as i32,
+            ..basic_governance_proto()
+        };
+        assert!(
+            ValidGovernanceProto::try_from(g.clone()).is_err(),
+            "{:#?}",
+            g
+        );
+    }
+
+    #[test]
+    fn garbage_mode_is_invalid() {
+        let g = GovernanceProto {
+            mode: 0xDEADBEF,
+            ..basic_governance_proto()
+        };
+        assert!(
+            ValidGovernanceProto::try_from(g.clone()).is_err(),
+            "{:#?}",
+            g
+        );
     }
 
     #[tokio::test]

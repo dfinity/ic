@@ -12,6 +12,7 @@ use ic_sns_governance::{
     governance::Governance,
     neuron::NeuronState,
     pb::v1::{
+        governance,
         governance_error::ErrorType,
         manage_neuron::{
             claim_or_refresh::{By, MemoAndController},
@@ -873,6 +874,7 @@ async fn zero_total_reward_shares() {
         root_canister_id: Some(PrincipalId::new(29, root_canister_id)),
         ledger_canister_id: Some(PrincipalId::new(29, ledger_canister_id)),
         parameters: Some(NervousSystemParameters::with_default_values()),
+        mode: governance::Mode::Normal as i32,
 
         genesis_timestamp_seconds,
 
