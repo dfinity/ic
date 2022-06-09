@@ -8,6 +8,10 @@ use ic_ic00_types::{
 use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_replicated_state::ReplicatedState;
 
+// A number of last transactions in a block chain to calculate fee percentiles.
+// Assumed to be ~10'000 transactions to cover the last ~4-10 blocks.
+const NUMBER_OF_TRANSACTIONS_FOR_CALCULATING_FEES: u32 = 10_000;
+
 /// Handles a `bitcoin_get_balance` request.
 pub fn get_balance(payload: &[u8], state: &mut ReplicatedState) -> Result<Vec<u8>, UserError> {
     verify_feature_is_enabled(state)?;
@@ -78,6 +82,20 @@ pub fn get_utxos(payload: &[u8], state: &mut ReplicatedState) -> Result<Vec<u8>,
                 })
         }
     }
+}
+
+/// Handles a `get_current_fee_percentiles` request.
+pub fn get_current_fee_percentiles(state: &mut ReplicatedState) -> Result<Vec<u8>, UserError> {
+    verify_feature_is_enabled(state)?;
+
+    let btc_canister_state = BitcoinCanisterState::from(state.take_bitcoin_state());
+    let response = ic_btc_canister::get_current_fee_percentiles(
+        &btc_canister_state,
+        NUMBER_OF_TRANSACTIONS_FOR_CALCULATING_FEES,
+    );
+    state.put_bitcoin_state(btc_canister_state.into());
+
+    Ok(Encode!(&response).unwrap())
 }
 
 fn verify_feature_is_enabled(state: &mut ReplicatedState) -> Result<(), UserError> {
