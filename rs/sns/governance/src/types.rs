@@ -1,15 +1,17 @@
-use crate::governance::{
-    log_prefix, Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
-};
-use crate::pb::v1::governance_error::ErrorType;
-use crate::pb::v1::manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse};
-use crate::pb::v1::proposal::Action;
-use crate::pb::v1::Empty;
-use crate::pb::v1::{
-    governance::neuron_in_flight_command, manage_neuron, manage_neuron_response,
-    nervous_system_function::FunctionType, DefaultFollowees, GovernanceError, ManageNeuronResponse,
-    NervousSystemFunction, NervousSystemParameters, NeuronId, NeuronPermissionList,
-    NeuronPermissionType, ProposalId, RewardEvent, Vote,
+use crate::{
+    governance::{log_prefix, Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
+    pb::v1::{
+        governance::{self, neuron_in_flight_command},
+        governance_error::ErrorType,
+        manage_neuron, manage_neuron_response,
+        manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse},
+        nervous_system_function::FunctionType,
+        proposal::Action,
+        DefaultFollowees, Empty, ExecuteGenericNervousSystemFunction, GovernanceError,
+        ManageNeuronResponse, NervousSystemFunction, NervousSystemParameters, NeuronId,
+        NeuronPermissionList, NeuronPermissionType, ProposalId, RewardEvent, Vote,
+    },
+    proposal::ValidGenericNervousSystemFunction,
 };
 
 use async_trait::async_trait;
@@ -18,8 +20,11 @@ use ic_base_types::CanisterId;
 use ic_nervous_system_common::NervousSystemError;
 use ledger_canister::{DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
 
-use std::collections::{BTreeMap, HashSet};
-use std::fmt;
+use std::{
+    collections::{BTreeMap, HashSet},
+    convert::TryFrom,
+    fmt,
+};
 
 pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
 pub const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
@@ -56,6 +61,166 @@ pub mod native_action_ids {
 
     /// ExecuteGenericNervousSystemFunction Action.
     pub const EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION: u64 = 6;
+}
+
+impl governance::Mode {
+    pub fn allows_manage_neuron_command_or_err(
+        &self,
+        command: &manage_neuron::Command,
+        caller_is_sale_canister: bool,
+    ) -> Result<(), GovernanceError> {
+        use governance::Mode;
+        match self {
+            Mode::Unspecified => panic!("Governance's mode is not specified."),
+            Mode::Normal => Ok(()),
+            Mode::PreInitializationSwap => {
+                Self::manage_neuron_command_is_allowed_in_pre_initialization_swap_or_err(
+                    command,
+                    caller_is_sale_canister,
+                )
+            }
+        }
+    }
+
+    fn manage_neuron_command_is_allowed_in_pre_initialization_swap_or_err(
+        command: &manage_neuron::Command,
+        caller_is_sale_canister: bool,
+    ) -> Result<(), GovernanceError> {
+        use manage_neuron::Command as C;
+        let ok = match command {
+            C::Follow(_)
+            | C::MakeProposal(_)
+            | C::RegisterVote(_)
+            | C::AddNeuronPermissions(_)
+            | C::RemoveNeuronPermissions(_) => true,
+
+            C::ClaimOrRefresh(_) => caller_is_sale_canister,
+
+            _ => false,
+        };
+
+        if ok {
+            return Ok(());
+        }
+
+        Err(GovernanceError::new_with_message(
+            ErrorType::PreconditionFailed,
+            format!(
+                "Because governance is currently in PreInitializationSwap mode, \
+                 manage_neuron commands of this type are not allowed \
+                 (caller_is_sale_canister={}). command: {:#?}",
+                caller_is_sale_canister, command,
+            ),
+        ))
+    }
+
+    /// Returns Err if the (proposal) action is not allowed by self.
+    ///
+    ///
+    /// # Arguments
+    /// * `action` Value in the action field of a Proposal. This function
+    ///   determins whether to allow submission of the proposal.
+    /// * `disallowed_target_canister_ids`: When the action is a
+    ///   ExecuteGenericNervousSystemFunction, the target of the function cannot
+    ///   be one of these canisters. Generally, this would contain the ID of the
+    ///   (SNS) root, governance, and ledger canisters, but this function does
+    ///   not know what role these canisters play. Not used when the action is
+    ///   not a EGNSF.
+    /// * `id_to_nervous_system_function` From GovernanceProto (from the field
+    ///   by the same name). This is used to determine the target of
+    ///   ExecuteGenericNervousSystemFunction proposals. Otherwise, this is not
+    ///   used.
+    pub fn allows_proposal_action_or_err(
+        &self,
+        action: &Action,
+        disallowed_target_canister_ids: &HashSet<CanisterId>,
+        id_to_nervous_system_function: &BTreeMap<u64, NervousSystemFunction>,
+    ) -> Result<(), GovernanceError> {
+        use governance::Mode;
+        match self {
+            Mode::Normal => Ok(()),
+
+            Mode::PreInitializationSwap => {
+                Self::proposal_action_is_allowed_in_pre_initialization_swap_or_err(
+                    action,
+                    disallowed_target_canister_ids,
+                    id_to_nervous_system_function,
+                )
+            }
+
+            Mode::Unspecified => {
+                panic!("Governance's mode is not specified.");
+            }
+        }
+    }
+
+    fn proposal_action_is_allowed_in_pre_initialization_swap_or_err(
+        action: &Action,
+        disallowed_target_canister_ids: &HashSet<CanisterId>,
+        id_to_nervous_system_function: &BTreeMap<u64, NervousSystemFunction>,
+    ) -> Result<(), GovernanceError> {
+        match action {
+            Action::ExecuteGenericNervousSystemFunction(execute) => {
+                Self::execute_generic_nervous_system_function_is_allowed_in_pre_initialization_swap_or_err(
+                    execute,
+                    disallowed_target_canister_ids,
+                    id_to_nervous_system_function,
+                )
+            }
+
+            Action::ManageNervousSystemParameters(_) => Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "ManageNervousSystemParameters proposals are not allowed while \
+                         governance is in PreInitializationSwap mode: {:#?}",
+                    action,
+                ),
+            )),
+
+            _ => Ok(()),
+        }
+    }
+
+    fn execute_generic_nervous_system_function_is_allowed_in_pre_initialization_swap_or_err(
+        execute: &ExecuteGenericNervousSystemFunction,
+        disallowed_target_canister_ids: &HashSet<CanisterId>,
+        id_to_nervous_system_function: &BTreeMap<u64, NervousSystemFunction>,
+    ) -> Result<(), GovernanceError> {
+        let function_id = execute.function_id;
+        let function = id_to_nervous_system_function
+            .get(&function_id)
+            .ok_or_else(|| {
+                // This should never happen in practice, because the caller
+                // should have already validated the proposal. This code is just
+                // defense in depth.
+                GovernanceError::new_with_message(
+                    ErrorType::NotFound,
+                    format!(
+                        "ExecuteGenericNervousSystemFunction specifies an unknown function ID: \
+                         {:#?}.\nKnown functions: {:#?}",
+                        execute, id_to_nervous_system_function,
+                    ),
+                )
+            })?;
+
+        let target_canister_id = ValidGenericNervousSystemFunction::try_from(function)
+            .expect("Invalid GenericNervousSystemFunction.")
+            .target_canister_id;
+
+        let bad = disallowed_target_canister_ids.contains(&target_canister_id);
+        if bad {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "ExecuteGenericNervousSystemFunction proposals are not allowed while \
+                     governance is in PreInitializationSwap mode: {:#?}",
+                    execute,
+                ),
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 impl From<&manage_neuron::Command> for neuron_in_flight_command::Command {
@@ -1019,8 +1184,16 @@ pub mod test_helpers {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::pb::v1::neuron::Followees;
-    use maplit::btreemap;
+    use crate::pb::v1::{
+        governance::Mode::PreInitializationSwap,
+        nervous_system_function::{FunctionType, GenericNervousSystemFunction},
+        neuron::Followees,
+        ExecuteGenericNervousSystemFunction,
+    };
+    use ic_base_types::PrincipalId;
+    use lazy_static::lazy_static;
+    use maplit::{btreemap, hashset};
+    use std::convert::TryInto;
 
     #[test]
     fn test_nervous_system_parameters_validate() {
@@ -1228,5 +1401,348 @@ pub(crate) mod tests {
         };
 
         assert_eq!(new_params, expected_params);
+    }
+
+    lazy_static! {
+        static ref MANAGE_NEURON_COMMANDS: (Vec<manage_neuron::Command>, Vec<manage_neuron::Command>, manage_neuron::Command) = {
+            use manage_neuron::Command;
+
+            #[rustfmt::skip]
+            let allowed_in_pre_initialization_swap = vec! [
+                Command::Follow                  (Default::default()),
+                Command::MakeProposal            (Default::default()),
+                Command::RegisterVote            (Default::default()),
+                Command::AddNeuronPermissions    (Default::default()),
+                Command::RemoveNeuronPermissions (Default::default()),
+            ];
+
+            #[rustfmt::skip]
+            let disallowed_in_pre_initialization_swap = vec! [
+                Command::Configure        (Default::default()),
+                Command::Disburse         (Default::default()),
+                Command::Split            (Default::default()),
+                Command::MergeMaturity    (Default::default()),
+                Command::DisburseMaturity (Default::default()),
+            ];
+
+            // Only the sale canister is allowed to do this in PreInitializationSwap.
+            let claim_or_refresh = Command::ClaimOrRefresh(Default::default());
+
+            (allowed_in_pre_initialization_swap, disallowed_in_pre_initialization_swap, claim_or_refresh)
+        };
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_mode_allows_manage_neuron_command_or_err_unspecified_kaboom() {
+        let caller_is_sale_canister = true;
+        let innocuous_command = &MANAGE_NEURON_COMMANDS.0[0];
+        let _clippy = governance::Mode::Unspecified
+            .allows_manage_neuron_command_or_err(innocuous_command, caller_is_sale_canister);
+    }
+
+    #[test]
+    fn test_mode_allows_manage_neuron_command_or_err_normal_is_generally_ok() {
+        let mut commands = MANAGE_NEURON_COMMANDS.0.clone();
+        commands.append(&mut MANAGE_NEURON_COMMANDS.1.clone());
+        commands.push(MANAGE_NEURON_COMMANDS.2.clone());
+
+        for command in commands {
+            for caller_is_sale_canister in [true, false] {
+                let result = governance::Mode::Normal
+                    .allows_manage_neuron_command_or_err(&command, caller_is_sale_canister);
+                assert!(result.is_ok(), "{:#?}", result);
+            }
+        }
+    }
+
+    #[test]
+    fn test_mode_allows_manage_neuron_command_or_err_pre_initialization_swap_ok() {
+        let allowed = &MANAGE_NEURON_COMMANDS.0;
+        for command in allowed {
+            for caller_is_sale_canister in [true, false] {
+                let result = PreInitializationSwap
+                    .allows_manage_neuron_command_or_err(command, caller_is_sale_canister);
+                assert!(result.is_ok(), "{:#?}", result);
+            }
+        }
+    }
+
+    #[test]
+    fn test_mode_allows_manage_neuron_command_or_err_pre_initialization_swap_verboten() {
+        let disallowed = &MANAGE_NEURON_COMMANDS.1;
+        for command in disallowed {
+            for caller_is_sale_canister in [true, false] {
+                let result = PreInitializationSwap
+                    .allows_manage_neuron_command_or_err(command, caller_is_sale_canister);
+                assert!(result.is_err(), "{:#?}", result);
+            }
+        }
+    }
+
+    #[test]
+    fn test_mode_allows_manage_neuron_command_or_err_pre_initialization_swap_claim_or_refresh() {
+        let claim_or_refresh = &MANAGE_NEURON_COMMANDS.2;
+
+        let caller_is_sale_canister = false;
+        let result = PreInitializationSwap
+            .allows_manage_neuron_command_or_err(claim_or_refresh, caller_is_sale_canister);
+        assert!(result.is_err(), "{:#?}", result);
+
+        let caller_is_sale_canister = true;
+        let result = PreInitializationSwap
+            .allows_manage_neuron_command_or_err(claim_or_refresh, caller_is_sale_canister);
+        assert!(result.is_ok(), "{:#?}", result);
+    }
+
+    const ROOT_TARGETING_FUNCTION_ID: u64 = 1001;
+    const GOVERNANCE_TARGETING_FUNCTION_ID: u64 = 1002;
+    const LEDGER_TARGETING_FUNCTION_ID: u64 = 1003;
+    const RANDOM_CANISTER_TARGETING_FUNCTION_ID: u64 = 1004;
+
+    #[rustfmt::skip]
+    lazy_static! {
+        static ref       ROOT_CANISTER_ID: PrincipalId =                    [101][..].try_into().unwrap();
+        static ref GOVERNANCE_CANISTER_ID: PrincipalId =                    [102][..].try_into().unwrap();
+        static ref     LEDGER_CANISTER_ID: PrincipalId =                    [103][..].try_into().unwrap();
+        static ref     RANDOM_CANISTER_ID: PrincipalId = [0xDE, 0xAD, 0xBE, 0xEF][..].try_into().unwrap();
+
+        static ref PROPOSAL_ACTIONS: (
+            Vec<Action>, // Allowed    in PreInitializationSwap.
+            Vec<Action>, // Disallowed in PreInitializationSwap.
+            Vec<Action>, // ExecuteGenericNervousSystemFunction where target is root, governance, or ledger
+            Action,      // ExecuteGenericNervousSystemFunction, but target is not one of the distinguished canisters.
+        ) = {
+            let allowed_in_pre_initialization_swap = vec! [
+                Action::Motion                             (Default::default()),
+                Action::UpgradeSnsControlledCanister       (Default::default()),
+                Action::AddGenericNervousSystemFunction    (Default::default()),
+                Action::RemoveGenericNervousSystemFunction (Default::default()),
+            ];
+
+            let disallowed_in_pre_initialization_swap = vec! [
+                Action::ManageNervousSystemParameters(Default::default()),
+            ];
+
+            // Conditionally allow: No targetting SNS canisters.
+            fn execute(function_id: u64) -> Action {
+                Action::ExecuteGenericNervousSystemFunction(ExecuteGenericNervousSystemFunction {
+                    function_id,
+                    ..Default::default()
+                })
+            }
+
+            let target_sns_canister_actions = vec! [
+                execute(      ROOT_TARGETING_FUNCTION_ID),
+                execute(GOVERNANCE_TARGETING_FUNCTION_ID),
+                execute(    LEDGER_TARGETING_FUNCTION_ID),
+            ];
+
+            let target_random_canister_action = execute(RANDOM_CANISTER_TARGETING_FUNCTION_ID);
+
+            (
+                allowed_in_pre_initialization_swap,
+                disallowed_in_pre_initialization_swap,
+                target_sns_canister_actions,
+                target_random_canister_action
+            )
+        };
+
+        static ref ID_TO_NERVOUS_SYSTEM_FUNCTION: BTreeMap<u64, NervousSystemFunction> = {
+            fn new_fn(function_id: u64, target_canister_id: &PrincipalId) -> NervousSystemFunction {
+                NervousSystemFunction {
+                    id: function_id,
+                    name: "Amaze".to_string(),
+                    description: Some("Best function evar.".to_string()),
+                    function_type: Some(FunctionType::GenericNervousSystemFunction(GenericNervousSystemFunction {
+                        target_canister_id: Some(*target_canister_id),
+                        target_method_name: Some("Foo".to_string()),
+                        validator_canister_id: Some(*target_canister_id),
+                        validator_method_name: Some("Bar".to_string()),
+                    })),
+                }
+            }
+
+            vec![
+                new_fn(           ROOT_TARGETING_FUNCTION_ID,       &ROOT_CANISTER_ID),
+                new_fn(     GOVERNANCE_TARGETING_FUNCTION_ID, &GOVERNANCE_CANISTER_ID),
+                new_fn(         LEDGER_TARGETING_FUNCTION_ID,     &LEDGER_CANISTER_ID),
+                new_fn(RANDOM_CANISTER_TARGETING_FUNCTION_ID,     &RANDOM_CANISTER_ID),
+            ]
+            .into_iter()
+            .map(|f| (f.id, f))
+            .collect()
+        };
+
+        static ref DISALLOWED_TARGET_CANISTER_IDS: HashSet<CanisterId> = hashset! {
+            CanisterId::new(*ROOT_CANISTER_ID).unwrap(),
+            CanisterId::new(*GOVERNANCE_CANISTER_ID).unwrap(),
+            CanisterId::new(*LEDGER_CANISTER_ID).unwrap(),
+        };
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_mode_allows_proposal_action_or_err_unspecified_kaboom() {
+        let innocuous_action = &PROPOSAL_ACTIONS.0[0];
+        let _clippy = governance::Mode::Unspecified.allows_proposal_action_or_err(
+            innocuous_action,
+            &DISALLOWED_TARGET_CANISTER_IDS,
+            &ID_TO_NERVOUS_SYSTEM_FUNCTION,
+        );
+    }
+
+    #[test]
+    fn test_mode_allows_proposal_action_or_err_normal_is_always_ok() {
+        // Flatten PROPOSAL_ACTIONS into one big Vec.
+        let mut actions = PROPOSAL_ACTIONS.0.clone();
+        actions.append(&mut PROPOSAL_ACTIONS.1.clone());
+        actions.append(&mut PROPOSAL_ACTIONS.2.clone());
+        actions.push(PROPOSAL_ACTIONS.3.clone());
+
+        for action in actions {
+            let result = governance::Mode::Normal.allows_proposal_action_or_err(
+                &action,
+                &DISALLOWED_TARGET_CANISTER_IDS,
+                &ID_TO_NERVOUS_SYSTEM_FUNCTION,
+            );
+            assert!(result.is_ok(), "{:#?} {:#?}", result, action);
+        }
+    }
+
+    #[test]
+    fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_happy() {
+        for action in &PROPOSAL_ACTIONS.0 {
+            let result = PreInitializationSwap.allows_proposal_action_or_err(
+                action,
+                &DISALLOWED_TARGET_CANISTER_IDS,
+                &ID_TO_NERVOUS_SYSTEM_FUNCTION,
+            );
+            assert!(result.is_ok(), "{:#?} {:#?}", result, action);
+        }
+    }
+
+    #[test]
+    fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_sad() {
+        for action in &PROPOSAL_ACTIONS.1 {
+            let result = PreInitializationSwap.allows_proposal_action_or_err(
+                action,
+                &DISALLOWED_TARGET_CANISTER_IDS,
+                &ID_TO_NERVOUS_SYSTEM_FUNCTION,
+            );
+            assert!(result.is_err(), "{:#?}", action);
+        }
+    }
+
+    #[test]
+    fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_disallows_targeting_an_sns_canister(
+    ) {
+        for action in &PROPOSAL_ACTIONS.2 {
+            let result = PreInitializationSwap.allows_proposal_action_or_err(
+                action,
+                &DISALLOWED_TARGET_CANISTER_IDS,
+                &ID_TO_NERVOUS_SYSTEM_FUNCTION,
+            );
+            assert!(result.is_err(), "{:#?}", action);
+        }
+    }
+
+    #[test]
+    fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_allows_targeting_a_random_canister(
+    ) {
+        let action = &PROPOSAL_ACTIONS.3;
+        let result = PreInitializationSwap.allows_proposal_action_or_err(
+            action,
+            &DISALLOWED_TARGET_CANISTER_IDS,
+            &ID_TO_NERVOUS_SYSTEM_FUNCTION,
+        );
+        assert!(result.is_ok(), "{:#?} {:#?}", result, action);
+    }
+
+    #[test]
+    fn test_mode_allows_proposal_action_or_err_function_not_found() {
+        let execute =
+            Action::ExecuteGenericNervousSystemFunction(ExecuteGenericNervousSystemFunction {
+                function_id: 0xDEADBEF,
+                ..Default::default()
+            });
+
+        let result = governance::Mode::PreInitializationSwap.allows_proposal_action_or_err(
+            &execute,
+            &DISALLOWED_TARGET_CANISTER_IDS,
+            &ID_TO_NERVOUS_SYSTEM_FUNCTION,
+        );
+
+        let err = match result {
+            Err(err) => err,
+            Ok(_) => panic!(
+                "Make proposal is supposed to result in NotFound when \
+                 it specifies an unknown function ID."
+            ),
+        };
+        assert_eq!(err.error_type, ErrorType::NotFound as i32, "{:#?}", err);
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_mode_allows_proposal_action_or_err_panic_when_function_has_no_type() {
+        let function_id = 42;
+
+        let execute =
+            Action::ExecuteGenericNervousSystemFunction(ExecuteGenericNervousSystemFunction {
+                function_id,
+                ..Default::default()
+            });
+
+        let mut functions = ID_TO_NERVOUS_SYSTEM_FUNCTION.clone();
+        functions.insert(
+            function_id,
+            NervousSystemFunction {
+                id: function_id,
+                function_type: None, // This is evil.
+                name: "Toxic".to_string(),
+                description: None,
+            },
+        );
+
+        let _unused = governance::Mode::PreInitializationSwap.allows_proposal_action_or_err(
+            &execute,
+            &DISALLOWED_TARGET_CANISTER_IDS,
+            &functions,
+        );
+    }
+
+    #[should_panic]
+    #[test]
+    fn test_mode_allows_proposal_action_or_err_panic_when_function_has_no_target_canister_id() {
+        let function_id = 42;
+
+        let execute =
+            Action::ExecuteGenericNervousSystemFunction(ExecuteGenericNervousSystemFunction {
+                function_id,
+                ..Default::default()
+            });
+
+        let mut functions = ID_TO_NERVOUS_SYSTEM_FUNCTION.clone();
+        functions.insert(
+            function_id,
+            NervousSystemFunction {
+                id: function_id,
+                name: "Toxic".to_string(),
+                description: None,
+                function_type: Some(FunctionType::GenericNervousSystemFunction(
+                    GenericNervousSystemFunction {
+                        target_canister_id: None, // This is evil.
+                        ..Default::default()
+                    },
+                )),
+            },
+        );
+
+        let _unused = governance::Mode::PreInitializationSwap.allows_proposal_action_or_err(
+            &execute,
+            &DISALLOWED_TARGET_CANISTER_IDS,
+            &functions,
+        );
     }
 }

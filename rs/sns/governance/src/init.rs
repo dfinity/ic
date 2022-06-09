@@ -3,7 +3,7 @@ use rand::rngs::StdRng;
 #[cfg(target_arch = "x86_64")]
 use rand_core::SeedableRng;
 
-use crate::pb::v1::{Governance, NervousSystemParameters};
+use crate::pb::v1::{governance, Governance, NervousSystemParameters};
 use ic_base_types::{CanisterId, PrincipalId};
 
 #[allow(dead_code)]
@@ -20,6 +20,7 @@ impl GovernanceCanisterInitPayloadBuilder {
         Self {
             proto: Governance {
                 parameters: Some(NervousSystemParameters::with_default_values()),
+                mode: governance::Mode::Normal as i32,
                 ..Default::default()
             },
             voters_to_add_to_all_neurons: Vec::new(),

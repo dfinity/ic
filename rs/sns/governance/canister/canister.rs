@@ -173,25 +173,7 @@ impl Environment for CanisterEnv {
 
 #[export_name = "canister_init"]
 fn canister_init() {
-    over_init(|CandidOne(arg)| canister_init_(set_pre_genesis_mode(arg)))
-}
-
-/// Returns g, except with g.mode set to PreGenesis.
-///
-/// Panics unless the value of the mode field is Normal (the default) or PreGenesis.
-fn set_pre_genesis_mode(mut g: GovernanceProto) -> GovernanceProto {
-    use governance::Mode::{Normal, PreGenesis};
-    let ok = [Normal as i32, PreGenesis as i32].contains(&g.mode);
-    if !ok {
-        panic!(
-            "The mode field was explicitly set to some value other than Normal \
-             (the default) or PreGensis: {:#?}",
-            g
-        );
-    }
-
-    g.mode = PreGenesis as i32;
-    g
+    over_init(|CandidOne(arg)| canister_init_(arg))
 }
 
 /// In contrast to canister_init(), this method does not do deserialization.
@@ -262,13 +244,26 @@ fn canister_post_upgrade() {
             );
             Err(err)
         }
-        Ok(proto) => {
+        Ok(mut proto) => {
+            set_mode_to_normal_if_unspecified(&mut proto);
             canister_init_(proto);
             Ok(())
         }
     }
     .expect("Couldn't upgrade canister.");
     println!("{}Completed post upgrade", log_prefix());
+}
+
+/// Sets the GovernanceProto's mode to Normal if it is Unspecified.
+///
+/// This is NOT used during installation, because the installer needs to make an
+/// explicit choice about what mode to use. Wheres, this IS INDEED used during
+/// upgrades, because mode did not used to exist, but is now required (because
+/// Unspecified is not allowed); this is called in post_upgrade).
+fn set_mode_to_normal_if_unspecified(g: &mut GovernanceProto) {
+    if g.mode == governance::Mode::Unspecified as i32 {
+        g.mode = governance::Mode::Normal as i32;
+    }
 }
 
 #[cfg(feature = "test")]
@@ -460,8 +455,8 @@ async fn get_root_canister_status_(_: ()) -> CanisterStatusResultV2 {
 /// Sets the mode. Only the sale canister is allowed to call this.
 ///
 /// In practice, the only mode that the sale canister would ever choose is
-/// Normal. Also, in practice, the current value of mode should be PreGenesis
-/// whenever the sale canister calls this.
+/// Normal. Also, in practice, the current value of mode should be
+/// PreInitializationSwap.  whenever the sale canister calls this.
 #[export_name = "canister_update set_mode"]
 fn set_mode() {
     println!("{}set_mode", log_prefix());
@@ -547,47 +542,58 @@ fn check_governance_candid_file() {
     }
 }
 
-/// A test that checks that set_time_warp advances time correctly.
-#[test]
-fn test_set_time_warp() {
-    let mut environment = CanisterEnv::new();
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use strum::IntoEnumIterator;
 
-    let start = environment.now();
-    environment.set_time_warp(TimeWarp { delta_s: 1_000 });
-    let delta_s = environment.now() - start;
+    /// A test that checks that set_time_warp advances time correctly.
+    #[test]
+    fn test_set_time_warp() {
+        let mut environment = CanisterEnv::new();
 
-    assert!(delta_s >= 1000, "delta_s = {}", delta_s);
-    assert!(delta_s < 1005, "delta_s = {}", delta_s);
-}
+        let start = environment.now();
+        environment.set_time_warp(TimeWarp { delta_s: 1_000 });
+        let delta_s = environment.now() - start;
 
-#[test]
-fn test_set_pre_genesis_mode() {
-    use governance::Mode::{Normal, PreGenesis};
+        assert!(delta_s >= 1000, "delta_s = {}", delta_s);
+        assert!(delta_s < 1005, "delta_s = {}", delta_s);
+    }
 
-    let normal_governance = GovernanceProto::default();
-    assert_eq!(normal_governance.mode, Normal as i32);
+    #[test]
+    fn test_set_mode_to_normal_if_unspecified_already_specified() {
+        for mode in governance::Mode::iter() {
+            if mode == governance::Mode::Unspecified {
+                continue;
+            }
 
-    let pre_genesis_governance = GovernanceProto {
-        mode: PreGenesis as i32,
-        ..Default::default()
-    };
+            let before = GovernanceProto {
+                mode: mode as i32,
+                ..Default::default()
+            };
 
-    assert_eq!(
-        set_pre_genesis_mode(normal_governance),
-        pre_genesis_governance
-    );
-    assert_eq!(
-        set_pre_genesis_mode(pre_genesis_governance.clone()),
-        pre_genesis_governance
-    );
-}
+            let mut after = before.clone();
+            set_mode_to_normal_if_unspecified(&mut after);
+            // No change.
+            assert_eq!(after, before);
+        }
+    }
 
-#[should_panic]
-#[test]
-fn test_set_pre_genesis_mode_panics() {
-    #[allow(clippy::mixed_case_hex_literals)]
-    set_pre_genesis_mode(GovernanceProto {
-        mode: 0xDeadBef, // Bef is like Beef, except that it fits into an i32.
-        ..Default::default()
-    });
+    #[test]
+    fn test_set_mode_to_normal_if_unspecified_originally_unspecified() {
+        let mut result = GovernanceProto {
+            mode: governance::Mode::Unspecified as i32,
+            ..Default::default()
+        };
+
+        set_mode_to_normal_if_unspecified(&mut result);
+        // Change!
+        assert_eq!(
+            result,
+            GovernanceProto {
+                mode: governance::Mode::Normal as i32,
+                ..Default::default()
+            },
+        );
+    }
 }

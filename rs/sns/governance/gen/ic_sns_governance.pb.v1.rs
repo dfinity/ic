@@ -884,13 +884,17 @@ pub mod governance {
         #[prost(uint64, tag="15")]
         pub neurons_with_less_than_6_months_dissolve_delay_e8s: u64,
     }
+    #[derive(strum_macros::EnumIter)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
     #[repr(i32)]
     pub enum Mode {
-        Normal = 0,
+        /// This forces people to explicitly populate the mode field.
+        Unspecified = 0,
+        /// All operations are allowed.
+        Normal = 1,
         /// In this mode, various operations are not allowed in order to ensure the
         /// integrity of the initial token sale.
-        PreGenesis = 1,
+        PreInitializationSwap = 2,
     }
 }
 /// Empty message to use in oneof fields that represent empty
