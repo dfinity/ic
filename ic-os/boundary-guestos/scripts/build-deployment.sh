@@ -103,7 +103,7 @@ fi
 
 echo "Using domain name $NGINX_DOMAIN_NAME"
 NGINX_DOMAIN=${NGINX_DOMAIN_NAME%.*}
-NGINX_TLD=${NGINX_DOMAIN_NAME#*.}
+NGINX_TLD=${NGINX_DOMAIN_NAME##*.}
 if [[ $NGINX_DOMAIN == "" ]] || [[ $NGINX_TLD == "" ]]; then
     echo "Malformed nginx domain $NGINX_DOMAIN_NAME using defaults"
     NGINX_DOMAIN="${NGINX_DOMAIN:="ic0"}"
