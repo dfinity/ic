@@ -303,7 +303,11 @@ struct CliArgs {
             "bitcoin_testnet_paused",
             "bitcoin_mainnet",
             "bitcoin_mainnet_syncing",
-            "bitcoin_mainnet_paused"],
+            "bitcoin_mainnet_paused",
+            "bitcoin_regtest",
+            "bitcoin_regtest_syncing",
+            "bitcoin_regtest_paused",
+        ],
         multiple_values(true))]
     subnet_features: Vec<String>,
 
@@ -529,6 +533,14 @@ fn to_subnet_features(features: &[String]) -> SubnetFeatures {
             network: BitcoinNetwork::Testnet.into(),
             status: BitcoinFeatureStatus::Paused.into(),
         })
+    } else if features
+        .iter()
+        .any(|s| s.as_str() == "bitcoin_testnet_syncing")
+    {
+        Some(BitcoinFeatureInfo {
+            network: BitcoinNetwork::Testnet.into(),
+            status: BitcoinFeatureStatus::Syncing.into(),
+        })
     } else if features.iter().any(|s| s.as_str() == "bitcoin_mainnet") {
         Some(BitcoinFeatureInfo {
             network: BitcoinNetwork::Mainnet.into(),
@@ -540,6 +552,35 @@ fn to_subnet_features(features: &[String]) -> SubnetFeatures {
     {
         Some(BitcoinFeatureInfo {
             network: BitcoinNetwork::Mainnet.into(),
+            status: BitcoinFeatureStatus::Paused.into(),
+        })
+    } else if features
+        .iter()
+        .any(|s| s.as_str() == "bitcoin_mainnet_syncing")
+    {
+        Some(BitcoinFeatureInfo {
+            network: BitcoinNetwork::Mainnet.into(),
+            status: BitcoinFeatureStatus::Syncing.into(),
+        })
+    } else if features.iter().any(|s| s.as_str() == "bitcoin_regtest") {
+        Some(BitcoinFeatureInfo {
+            network: BitcoinNetwork::Regtest.into(),
+            status: BitcoinFeatureStatus::Enabled.into(),
+        })
+    } else if features
+        .iter()
+        .any(|s| s.as_str() == "bitcoin_regtest_syncing")
+    {
+        Some(BitcoinFeatureInfo {
+            network: BitcoinNetwork::Regtest.into(),
+            status: BitcoinFeatureStatus::Syncing.into(),
+        })
+    } else if features
+        .iter()
+        .any(|s| s.as_str() == "bitcoin_regtest_paused")
+    {
+        Some(BitcoinFeatureInfo {
+            network: BitcoinNetwork::Regtest.into(),
             status: BitcoinFeatureStatus::Paused.into(),
         })
     } else {

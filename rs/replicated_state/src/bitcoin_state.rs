@@ -162,6 +162,7 @@ impl UtxoSet {
             network: match network {
                 BitcoinNetwork::Mainnet => Network::Bitcoin,
                 BitcoinNetwork::Testnet => Network::Testnet,
+                BitcoinNetwork::Regtest => Network::Regtest,
             },
             utxos_small: PageMap::default(),
             utxos_medium: PageMap::default(),
@@ -240,6 +241,7 @@ impl BitcoinState {
                 genesis_block(match network {
                     BitcoinNetwork::Mainnet => Network::Bitcoin,
                     BitcoinNetwork::Testnet => Network::Testnet,
+                    BitcoinNetwork::Regtest => Network::Regtest,
                 }),
             ),
             stable_height: 0,

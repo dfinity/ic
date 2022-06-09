@@ -133,6 +133,7 @@ enum Network {
   NETWORK_UNSPECIFIED = 0;
   NETWORK_TESTNET = 1;
   NETWORK_MAINNET = 2;
+  NETWORK_REGTEST = 3;
 }
 
 // Represents the Bitcoin state that isn't stored in PageMaps.

@@ -47,6 +47,7 @@ impl From<SubnetFeatures> for pb::SubnetFeatures {
                     network: match bitcoin_feature.network {
                         BitcoinNetwork::Testnet => 1,
                         BitcoinNetwork::Mainnet => 2,
+                        BitcoinNetwork::Regtest => 3,
                     },
                     status: bitcoin_feature.status.into(),
                 }),
@@ -65,6 +66,7 @@ impl From<pb::SubnetFeatures> for SubnetFeatures {
                     network: match bitcoin.network {
                         1 => BitcoinNetwork::Testnet,
                         2 => BitcoinNetwork::Mainnet,
+                        3 => BitcoinNetwork::Regtest,
                         // If an invalid value is provided, assume mainnet.
                         _ => BitcoinNetwork::Mainnet,
                     },

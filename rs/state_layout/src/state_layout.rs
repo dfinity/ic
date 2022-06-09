@@ -1181,6 +1181,7 @@ impl From<&BitcoinStateBits> for pb_bitcoin::BitcoinStateBits {
             network: match item.network {
                 Network::Testnet => 1,
                 Network::Bitcoin => 2,
+                Network::Regtest => 3,
                 // TODO(EXC-1096): Define our Network struct to avoid this panic.
                 _ => panic!("Invalid network ID"),
             },
@@ -1229,10 +1230,14 @@ impl TryFrom<pb_bitcoin::BitcoinStateBits> for BitcoinStateBits {
                 }
                 1 => Network::Testnet,
                 2 => Network::Bitcoin,
+                3 => Network::Regtest,
                 other => {
                     return Err(ProxyDecodeError::ValueOutOfRange {
                         typ: "Network",
-                        err: format!("Expected 0 or 1 (testnet), 2 (mainnet), got {}", other),
+                        err: format!(
+                            "Expected 0 or 1 (testnet), 2 (mainnet), 3 (regtest), got {}",
+                            other
+                        ),
                     })
                 }
             },

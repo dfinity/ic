@@ -226,4 +226,5 @@ pub enum Network {
     Unspecified = 0,
     Testnet = 1,
     Mainnet = 2,
+    Regtest = 3,
 }
