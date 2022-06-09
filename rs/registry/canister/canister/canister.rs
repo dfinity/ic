@@ -1,5 +1,3 @@
-use prost::Message;
-
 use candid::{candid_method, Decode};
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
@@ -12,8 +10,9 @@ use ic_nervous_system_common::MethodAuthzChange;
 use ic_nns_common::{access_control::check_caller_is_root, pb::v1::CanisterAuthzInfo};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_protobuf::registry::{
-    dc::v1::AddOrRemoveDataCentersProposalPayload, dc::v1::DataCenterRecord,
-    node_operator::v1::NodeOperatorRecord, node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
+    dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
+    node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
+    node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
@@ -26,8 +25,8 @@ use ic_registry_transport::{
     serialize_atomic_mutate_response, serialize_get_changes_since_response,
     serialize_get_value_response,
 };
-use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as MAX_RESPONSE_SIZE;
 use ic_types::PrincipalId;
+use prost::Message;
 use registry_canister::{
     certification::{current_version_tree, hash_tree_to_proto},
     common::LOG_PREFIX,
@@ -41,6 +40,7 @@ use registry_canister::{
         do_delete_subnet::DeleteSubnetPayload,
         do_recover_subnet::RecoverSubnetPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
+        do_set_firewall_config::SetFirewallConfigPayload,
         do_update_node_directly::UpdateNodeDirectlyPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
@@ -59,22 +59,16 @@ use registry_canister::{
     },
     pb::v1::{NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage},
     proto_on_wire::protobuf,
-    registry::{EncodedVersion, Registry},
+    registry::{EncodedVersion, Registry, MAX_REGISTRY_DELTAS_SIZE},
     registry_lifecycle,
 };
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
-use ic_protobuf::registry::node_operator::v1::RemoveNodeOperatorsPayload;
-use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
-
 static mut REGISTRY: Option<Registry> = None;
 
 const MAX_VERSIONS_PER_QUERY: usize = 1000;
-// The maximum size of deltas that the registry will attempt to send.
-// We reserve ⅓ of the response buffer capacity for encoding overhead.
-const MAX_REGISTRY_DELTAS_SIZE: usize = (MAX_RESPONSE_SIZE - MAX_RESPONSE_SIZE / 3) as usize;
 
 fn registry() -> &'static Registry {
     registry_mut()
