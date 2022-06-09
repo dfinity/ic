@@ -1,9 +1,10 @@
 use super::SessionNonce;
-use crate::{num_bytes_try_from, NumWasmPages, PageMap};
+use crate::{canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from, NumWasmPages, PageMap};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::canister_state_bits::v1 as pb,
 };
+use ic_sys::PAGE_SIZE;
 use ic_types::{methods::WasmMethod, ExecutionRound, NumBytes};
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
@@ -228,6 +229,24 @@ impl Memory {
             page_map,
             size,
             sandbox_memory: SandboxMemory::new(),
+        }
+    }
+
+    /// Returns an error if `self.size` is less than the modified prefix of
+    /// `self.page_map`. The impact of such case:
+    ///  - if the canister tries to access pages above `self.size`, then
+    ///    it will crash.
+    ///  - otherwise, charging for storage will be inaccurate.
+    pub fn verify_size(&self) -> Result<(), String> {
+        let page_map_bytes = self.page_map.num_host_pages() * PAGE_SIZE;
+        let memory_bytes = self.size.get() * WASM_PAGE_SIZE_IN_BYTES;
+        if page_map_bytes <= memory_bytes {
+            Ok(())
+        } else {
+            Err(format!(
+                "The page map size {} exceeds the memory size {}",
+                page_map_bytes, memory_bytes
+            ))
         }
     }
 }

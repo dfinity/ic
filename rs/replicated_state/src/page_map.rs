@@ -127,6 +127,12 @@ impl PageDelta {
     fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// Returns the largest page index in the page delta.
+    /// If the page delta is empty, then it returns `None`.
+    fn max_page_index(&self) -> Option<PageIndex> {
+        self.0.max_key().map(PageIndex::from)
+    }
 }
 
 impl<I> From<I> for PageDelta
@@ -479,13 +485,11 @@ impl PageMap {
     /// ```
     pub fn num_host_pages(&self) -> usize {
         let pages_in_checkpoint = self.checkpoint.num_pages();
-
         pages_in_checkpoint.max(
             self.page_delta
-                .iter()
-                .map(|(k, _v)| (k.get() + 1) as usize)
-                .max()
-                .unwrap_or(pages_in_checkpoint),
+                .max_page_index()
+                .map(|i| i.get() + 1)
+                .unwrap_or(0) as usize,
         )
     }
 

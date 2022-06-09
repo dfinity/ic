@@ -114,6 +114,13 @@ table, this would indicate a bug in MR code.
 
 Escalate to the Message Routing team.
 
+=== `sandboxed_execution_invalid_memory_size`
+
+The memory size returned by the sandbox process is smaller than the actual Wasm/stable memory of a canister.
+This indicates either a bug in the sandbox code or malicious code controlling the sandbox process.
+
+Escalate to the Runtime team.
+
 === `scheduler_canister_invariant_broken`
 
 At least one canister has an invalid state after the execution round.
