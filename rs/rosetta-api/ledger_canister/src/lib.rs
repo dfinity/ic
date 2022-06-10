@@ -15,17 +15,12 @@ use ic_ledger_core::{
 use intmap::IntMap;
 use lazy_static::lazy_static;
 use on_wire::{FromWire, IntoWire};
-use serde::{
-    de::{Deserializer, MapAccess, Visitor},
-    ser::SerializeMap,
-    Deserialize, Serialize, Serializer,
-};
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::convert::TryFrom;
 use std::fmt;
 use std::hash::Hash;
-use std::marker::PhantomData;
 use std::sync::RwLock;
 use std::time::Duration;
 
@@ -261,60 +256,6 @@ impl ArchiveCanisterWasm for IcpLedgerArchiveWasm {
     }
 }
 
-fn serialize_int_map<S>(im: &IntMap<()>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    let mut map = serializer.serialize_map(Some(im.len()))?;
-    for (k, v) in im.iter() {
-        map.serialize_entry(k, v)?;
-    }
-    map.end()
-}
-
-struct IntMapVisitor<V> {
-    marker: PhantomData<fn() -> IntMap<V>>,
-}
-
-impl<V> IntMapVisitor<V> {
-    fn new() -> Self {
-        IntMapVisitor {
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<'de, V> Visitor<'de> for IntMapVisitor<V>
-where
-    V: Deserialize<'de>,
-{
-    type Value = IntMap<V>;
-
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("a very special map")
-    }
-
-    fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
-    where
-        M: MapAccess<'de>,
-    {
-        let mut map = IntMap::with_capacity(access.size_hint().unwrap_or(0));
-
-        while let Some((key, value)) = access.next_entry()? {
-            map.insert(key, value);
-        }
-
-        Ok(map)
-    }
-}
-
-fn deserialize_int_map<'de, D>(deserializer: D) -> Result<IntMap<()>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    deserializer.deserialize_map(IntMapVisitor::new())
-}
-
 fn default_max_transactions_in_window() -> usize {
     Ledger::DEFAULT_MAX_TRANSACTIONS_IN_WINDOW
 }
@@ -353,11 +294,7 @@ pub struct Ledger {
     accounts_overflow_trim_quantity: usize,
     pub minting_account_id: Option<AccountIdentifier>,
     // This is a set of blockheights that have been notified
-    #[serde(
-        serialize_with = "serialize_int_map",
-        deserialize_with = "deserialize_int_map",
-        default = "IntMap::new"
-    )]
+    #[serde(default = "IntMap::new")]
     pub blocks_notified: IntMap<()>,
     /// How long transactions are remembered to detect duplicates.
     pub transaction_window: Duration,
