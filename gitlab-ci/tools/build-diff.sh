@@ -44,6 +44,25 @@ diffoscope_check() {
     fi
 }
 
+alert() {
+    # no alert if this is not a scheduled CI job!
+    if [ ${CI_PIPELINE_SOURCE:-} != "schedule" ]; then
+        exit 1
+    fi
+
+    MESSAGE="Release Build Reproducibility Failure in <$CI_JOB_URL|$CI_JOB_NAME>! "
+    MESSAGE+="Follow <http://go/reproducible-builds-incident-runbook|this run-book>! "
+    MESSAGE+="<!subteam^S022UEH2AKE>"
+    # https://stackoverflow.com/questions/54284389/mention-users-group-via-slack-api
+
+    ./gitlab-ci/src/notify_slack/notify_slack.py \
+        "$MESSAGE" --channel "#eng-idx"
+
+    # TODO(marko): create jira ticket
+
+    exit 1
+}
+
 if [ $# -lt 2 ]; then
     usage
     exit 1
@@ -86,32 +105,38 @@ if [[ $PATH0 == *".gz" && $PATH1 == *".gz" ]]; then
     exit 0
 fi
 
+TMPDIR=$(mktemp -d)
+trap "rm -rf $TMPDIR" EXIT
+SHA256SUMS0="$TMPDIR/SHA256SUMS0"
+SHA256SUMS1="$TMPDIR/SHA256SUMS01"
+rm -f $SHA256SUMS0 $SHA256SUMS1
+
 curl -sfS --retry 5 --retry-delay 10 \
     "https://download.dfinity.systems/ic/$PATH0/SHA256SUMS" \
-    -o SHA256SUMS-0
+    -o $SHA256SUMS0
 curl -sfS --retry 5 --retry-delay 10 \
     "https://download.dfinity.systems/ic/$PATH1/SHA256SUMS" \
-    -o SHA256SUMS-1
+    -o $SHA256SUMS1
 
 echo "$PATH0/SHA256SUMS:"
-cat SHA256SUMS-0
+cat $SHA256SUMS0
 echo "$PATH1/SHA256SUMS:"
-cat SHA256SUMS-1
+cat $SHA256SUMS1
 
 # XXX(marko): we ignore panics and sns-test-dapp-canister
-sed -i -E '/(panics.wasm|sns-test-dapp-canister.wasm)/d' SHA256SUMS-*
+sed -i -E '/(panics.wasm|sns-test-dapp-canister.wasm)/d' $SHA256SUMS0 $SHA256SUMS1
 
-if ! diff -u SHA256SUMS-0 SHA256SUMS-1; then
+if ! diff -u $SHA256SUMS0 $SHA256SUMS1; then
     set +x
     echo -e "\nThis script compares artifacts built from separate CI jobs"
     set -x
 
-    if grep -q "update-img" SHA256SUMS-*; then
+    if grep -q "update-img" $SHA256SUMS0; then
         echo "Running diffoscope for update-img"
         diffoscope_check
 
         ARTIFACT="update-img.tar.gz"
-        if grep -q "host-update-img" SHA256SUMS-*; then
+        if grep -q "host-update-img" $SHA256SUMS0; then
             ARTIFACT="host-update-img.tar.gz"
         fi
 
@@ -131,22 +156,28 @@ if ! diff -u SHA256SUMS-0 SHA256SUMS-1; then
         cd ..
 
         # we give diffoscope 20min to find the diff
+        TRIGGER_ALERT=false
         timeout 20m sudo diffoscope \
             "$PATH0/boot.img" \
             "$PATH1/boot.img" \
-            --html artifacts/output-boot.html --text -
+            --html artifacts/output-boot.html --text - || TRIGGER_ALERT=true
         timeout 20m sudo diffoscope \
             "$PATH0/root.img" \
             "$PATH1/root.img" \
-            --html artifacts/output-root.html --text -
+            --html artifacts/output-root.html --text - || TRIGGER_ALERT=true
+        if [ "$TRIGGER_ALERT" == true ]; then
+            alert
+        fi
     else
         set +x
         echo -e "Investigate with diffoscope [\xF0\x9F\x99\x8F]:"
         echo "  BIN=ic-admin.gz # (specify the right artifact)"
         echo "  $0 /${PATH0}/\$BIN /${PATH1}/\$BIN $VERSION"
         set -x
-        exit 1
+
+        alert
     fi
+
 else
     echo "Build Determinism Check Successful"
 fi
