@@ -1,22 +1,14 @@
-import os
 import re
 from datetime import datetime
 from datetime import timedelta
 from typing import Dict
-from typing import Iterable
 from typing import List
-from typing import Optional
 
 import gitlab.base
 import pytz
 from util.print import eprint
 
-
-class Group:
-    def __init__(self, gid: str, logs: Iterable = [], url: Optional[str] = None):
-        self.gid = gid
-        self.logs = logs
-        self.url = url
+from .group import Group
 
 
 class Ci:
@@ -30,10 +22,7 @@ class Ci:
         ]
     )
 
-    def __init__(self, url: str, project: str, token: Optional[str]):
-        if not token:
-            token = os.environ["GITLAB_ACCESS_TOKEN"]
-
+    def __init__(self, url: str, project: str, token: str):
         self.gl = gitlab.Gitlab(url=url, private_token=token)
         self.project = self.gl.projects.get(project)
 
@@ -84,7 +73,7 @@ class Ci:
                 eprint("Processed all existing CI jobs")
                 return jobs
 
-    def get_hourly_group_ids(self) -> Dict[str, Group]:
+    def get_hourly_group_names(self) -> Dict[str, Group]:
         """Returns: Map from group names to Groups"""
         jobs = self.get_last_hourly_jobs()
         eprint(f"Found {len(jobs)} jobs")
@@ -94,10 +83,10 @@ class Ci:
         for job in jobs:
             eprint(f"Searching for group names for job `{job.name}` ...")
             trace = str(job.trace())
-            group_ids = re.findall("creating group \\\\\\'(.*?)\\\\\\'", trace)
-            if not group_ids:
+            group_names = re.findall("creating group \\\\\\'(.*?)\\\\\\'", trace)
+            if not group_names:
                 eprint(f"Warning: cannot find test group name for job {Ci.job_url(job)}")
-            for gid in group_ids:
+            for gid in group_names:
                 eprint(f" + {gid}\n")
                 groups[gid] = Group(gid, url=Ci.job_url(job))
 

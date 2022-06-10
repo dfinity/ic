@@ -143,9 +143,9 @@ def run_test(prefix: str, test: str, instance: str, local_sig_file=True):
 
     assert_match(join(test, instance), "STDOUT", actual=actual_stdout, expected=expected_stdout)
     assert_match(join(test, instance), "STDERR", actual=actual_stderr, expected=expected_stderr)
-    assert expected_exit_code == actual_exit_status["code"], (
-        f"actual exit code {actual_exit_status['code']} did not" f" match expected exit code {expected_exit_code}"
-    )
+    assert (
+        expected_exit_code == actual_exit_status["code"]
+    ), f"actual exit code {actual_exit_status['code']} did not match expected exit code {expected_exit_code}"
 
     # Obtain the variable sequence,
     #  but only if monpoly is expected to succeed with -check

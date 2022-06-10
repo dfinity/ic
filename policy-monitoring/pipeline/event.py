@@ -40,7 +40,7 @@ class Event:
                     import pprint
 
                     str_repr = pprint.pformat(params)
-                    print(f"WARNING: unexpected parameter sequence " f"in {str(self)}: {str_repr}")
+                    print(f"WARNING: unexpected parameter sequence in {str(self)}: {str_repr}")
                 yield "@{unix_ts} {predicate}({arguments})\n".format(
                     unix_ts=self.unix_ts(), predicate=self.name, arguments=", ".join(params)
                 )

@@ -1,6 +1,4 @@
-import os
 import pprint
-import random
 from typing import Optional
 
 from slack_sdk.webhook import WebhookClient
@@ -8,51 +6,28 @@ from util.print import eprint
 
 
 class AlertService:
-    def __init__(self, secret_service: str, signature: Optional[str] = None):
+    def __init__(self, secret_service: str, signature: str):
         self.webhook = WebhookClient("https://hooks.slack.com/services/" + secret_service)
-        if signature:
-            self.signature = signature
+        self.signature = signature
+
+    def _form_message(
+        self,
+        text: str,
+        level: str,
+        url: Optional[str] = None,
+    ) -> str:
+        if url is not None:
+            message = " ".join((level, "%s\nSee <%s>" % (text, url)))
         else:
-            self.signature = "".join(
-                random.sample(
-                    [
-                        "a",
-                        "b",
-                        "c",
-                        "d",
-                        "e",
-                        "f",
-                        "g",
-                        "h",
-                        "i",
-                        "j",
-                        "k",
-                        "l",
-                        "m",
-                        "n",
-                        "o",
-                        "p",
-                        "q",
-                        "r",
-                        "s",
-                        "t",
-                        "u",
-                        "v",
-                        "w",
-                        "x",
-                        "y",
-                        "z",
-                    ],
-                    k=13,
-                )
-            )
+            message = " ".join((level, text))
+        return self.signature + "\n" + message
 
     def alert(
         self,
         text: str,
         short_text: Optional[str] = None,
         level="🔴",
-        with_url=True,
+        url: Optional[str] = None,
         with_logging=True,
     ) -> None:
 
@@ -60,16 +35,8 @@ class AlertService:
             fallback = short_text
         else:
             fallback = text
-        if with_url:
-            if "CI_PIPELINE_URL" in os.environ:
-                url = os.environ["CI_PIPELINE_URL"]
-            else:
-                url = "https://gitlab.com/ic-monitoring/es-log-processor/-/pipelines"
-            message = " ".join((level, "%s\nSee <%s>" % (text, url)))
-        else:
-            message = " ".join((level, text))
 
-        message = self.signature + "\n" + message
+        message = self._form_message(text, level, url)
 
         if with_logging:
             eprint(f"{message}", end="\n\n")
@@ -83,5 +50,23 @@ class AlertService:
             eprint(pprint.pformat(response.__dict__))
 
 
-# slack = AlertService()
-# slack.alert('Testing alert service')
+class DummyAlertService(AlertService):
+    def __init__(self, signature: str):
+        self.signature = signature
+
+    def alert(
+        self,
+        text: str,
+        short_text: Optional[str] = None,
+        level="🔴",
+        url: Optional[str] = None,
+        with_logging=True,
+    ) -> None:
+
+        message = self._form_message(text, level, url)
+
+        print(f"Warning: alert `{short_text}` cannot be sent via Slack:")
+        print(message, flush=True)
+
+        if with_logging:
+            eprint(f"{message}", end="\n\n")

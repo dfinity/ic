@@ -564,7 +564,7 @@ class Monpoly:
             returncode = func_timeout(term_timeout, self._proc.wait)
         except FunctionTimedOut:
             timeout = drain_timeout + term_timeout
-            self.print(f"Monpoly did not finish within {timeout} seconds after " f"closing STDIN.")
+            self.print(f"Monpoly did not finish within {timeout} seconds after closing STDIN.")
             self.print("Killing process by PID ...")
             try:
                 self._kill(self._proc.pid)

@@ -82,7 +82,7 @@ else:
     details = f"{daily_count} is more than 25 {common_details}"
 
 topic_text = (
-    f"Status: {symbol} ({details})\n\n" f"Last updated: {CURRENT_TIMEPOINT.strftime('%A %b %d, %Y at %I:%M:%S (%Z)')}"
+    f"Status: {symbol} ({details})\n\nLast updated: {CURRENT_TIMEPOINT.strftime('%A %b %d, %Y at %I:%M:%S (%Z)')}"
 )
 
 try:

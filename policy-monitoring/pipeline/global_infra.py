@@ -1,4 +1,5 @@
 import ipaddress
+from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -140,3 +141,12 @@ class GlobalInfra:
 
     def get_host_addr_to_node_id_mapping(self) -> Dict[str, str]:
         return self.host_addr_to_node_id_map
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "subnets": self.get_subnet_info(),
+            "original_subnet_types": self.get_original_subnet_types(),
+            "original_subnet_membership": self.get_original_subnet_membership(),
+            "data_centers": self.get_dc_info(),
+            "host_addr_to_node_id_mapping": self.get_host_addr_to_node_id_mapping(),
+        }
