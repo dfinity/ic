@@ -22,7 +22,9 @@ mod tests;
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EcdsaPublicKey {
     pub algorithm_id: AlgorithmId,
+    #[serde(with = "serde_bytes")]
     pub public_key: Vec<u8>,
+    #[serde(with = "serde_bytes")]
     pub chain_key: Vec<u8>,
 }
 
@@ -32,6 +34,7 @@ pub struct EcdsaPublicKey {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct MasterEcdsaPublicKey {
     pub algorithm_id: AlgorithmId,
+    #[serde(with = "serde_bytes")]
     pub public_key: Vec<u8>,
 }
 
@@ -40,6 +43,7 @@ pub struct MasterEcdsaPublicKey {
 /// The signature itself is stored as raw bytes.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThresholdEcdsaCombinedSignature {
+    #[serde(with = "serde_bytes")]
     pub signature: Vec<u8>,
 }
 
@@ -230,6 +234,7 @@ pub struct ExtendedDerivationPath {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThresholdEcdsaSigInputs {
     derivation_path: ExtendedDerivationPath,
+    #[serde(with = "serde_bytes")]
     hashed_message: Vec<u8>,
     nonce: Randomness,
     presig_quadruple: PreSignatureQuadruple,
@@ -367,5 +372,6 @@ impl ThresholdEcdsaSigInputs {
 /// A single threshold ECDSA signature share.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ThresholdEcdsaSigShare {
+    #[serde(with = "serde_bytes")]
     pub sig_share_raw: Vec<u8>,
 }

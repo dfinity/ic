@@ -151,6 +151,7 @@ pub enum IDkgLoadTranscriptError {
     },
     MalformedPublicKey {
         node_id: NodeId,
+        #[serde(with = "serde_bytes")]
         key_bytes: Vec<u8>,
     },
     UnsupportedAlgorithm {
@@ -167,6 +168,7 @@ pub enum IDkgCreateDealingError {
     },
     MalformedPublicKey {
         node_id: NodeId,
+        #[serde(with = "serde_bytes")]
         key_bytes: Vec<u8>,
     },
     PublicKeyNotFound {
@@ -212,6 +214,7 @@ pub enum IDkgVerifyDealingPrivateError {
     },
     MalformedPublicKey {
         node_id: NodeId,
+        #[serde(with = "serde_bytes")]
         key_bytes: Vec<u8>,
     },
     UnsupportedAlgorithm {
@@ -242,6 +245,7 @@ pub enum IDkgVerifyComplaintError {
     },
     MalformedComplainerPublicKey {
         node_id: NodeId,
+        #[serde(with = "serde_bytes")]
         key_bytes: Vec<u8>,
     },
     UnsupportedComplainerPublicKeyAlgorithm {

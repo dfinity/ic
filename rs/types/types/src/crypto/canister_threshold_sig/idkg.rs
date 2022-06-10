@@ -616,6 +616,7 @@ pub struct IDkgTranscript {
     pub verified_dealings: BTreeMap<NodeIndex, IDkgMultiSignedDealing>,
     pub transcript_type: IDkgTranscriptType,
     pub algorithm_id: AlgorithmId,
+    #[serde(with = "serde_bytes")]
     pub internal_transcript_raw: Vec<u8>,
 }
 
@@ -800,6 +801,7 @@ impl IDkgTranscript {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct IDkgDealing {
     pub transcript_id: IDkgTranscriptId,
+    #[serde(with = "serde_bytes")]
     pub internal_dealing_raw: Vec<u8>,
 }
 
@@ -875,6 +877,7 @@ pub struct IDkgMultiSignedDealing {
 pub struct IDkgComplaint {
     pub transcript_id: IDkgTranscriptId,
     pub dealer_id: NodeId,
+    #[serde(with = "serde_bytes")]
     pub internal_complaint_raw: Vec<u8>,
 }
 
@@ -883,6 +886,7 @@ pub struct IDkgComplaint {
 pub struct IDkgOpening {
     pub transcript_id: IDkgTranscriptId,
     pub dealer_id: NodeId,
+    #[serde(with = "serde_bytes")]
     pub internal_opening_raw: Vec<u8>,
 }
 
