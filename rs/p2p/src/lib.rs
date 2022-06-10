@@ -119,6 +119,7 @@ mod event_handler;
 mod gossip_protocol;
 mod malicious_gossip;
 mod metrics;
+mod peer_manager;
 
 pub use event_handler::{AdvertBroadcaster, P2PThreadJoiner};
 
