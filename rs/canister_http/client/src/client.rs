@@ -111,7 +111,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     CanisterHttpRequestContext {
                         request:
                             Request {
-                                receiver: request_receiver,
+                                sender: request_sender,
                                 ..
                             },
                         url: request_url,
@@ -150,7 +150,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             transform_adapter_response(
                                 anonymous_query_handler,
                                 adapter_response,
-                                request_receiver,
+                                request_sender,
                                 transform_method,
                             )
                             .await?
@@ -184,7 +184,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             permit.send(CanisterHttpResponse {
                 id: request_id,
                 timeout: request_timeout,
-                canister_id: request_receiver,
+                canister_id: request_sender,
                 content: match adapter_canister_http_response.await {
                     Ok(resp) => CanisterHttpResponseContent::Success(resp),
                     Err((reject_code, message)) => CanisterHttpResponseContent::Reject(CanisterHttpReject {
