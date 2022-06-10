@@ -236,6 +236,21 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
     /// as this will lead to concurrency issues e.g. when the components
     /// access the secret key store simultaneously.
     ///
+    /// If the `config`'s vault type is `UnixSocket`, a `tokio_runtime_handle`
+    /// must be provided, which is then used for the `async`hronous
+    /// communication with the vault via RPC for secret key operations. In most
+    /// cases, this is done by calling `tokio::runtime::Handle::block_on` and
+    /// it is the caller's responsibility to ensure that these calls to
+    /// `block_on` do not panic. This can be achieved, for example, by ensuring
+    /// that the crypto component's methods are not themselves called from
+    /// within a call to `block_on` (because calls to `block_on` cannot be
+    /// nested), or by wrapping them with `tokio::task::block_in_place`
+    /// and accepting the performance implications.
+    ///
+    /// # Panics
+    /// Panics if the `config`'s vault type is `UnixSocket` and
+    /// `tokio_runtime_handle` is `None`.
+    ///
     /// ```
     /// use ic_config::crypto::CryptoConfig;
     /// use ic_crypto::CryptoComponent;
@@ -256,18 +271,24 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
     ///
     ///     # // generate the node keys in the secret key store needed for this example to work:
     ///     # get_node_keys_or_generate_if_missing(config.crypto_root.as_path());
-    ///     let first_crypto_component = Arc::new(CryptoComponent::new(&config, Arc::new(registry_client), logger, Some(&metrics_registry)));
+    ///     let first_crypto_component = Arc::new(CryptoComponent::new(&config, None, Arc::new(registry_client), logger, Some(&metrics_registry)));
     ///     let second_crypto_component = Arc::clone(&first_crypto_component);
     /// });
     /// ```
     pub fn new(
         config: &CryptoConfig,
+        tokio_runtime_handle: Option<tokio::runtime::Handle>,
         registry_client: Arc<dyn RegistryClient>,
         logger: ReplicaLogger,
         metrics_registry: Option<&MetricsRegistry>,
     ) -> Self {
         let metrics = Arc::new(CryptoMetrics::new(metrics_registry));
-        let csp = Csp::new(config, Some(new_logger!(&logger)), Arc::clone(&metrics));
+        let csp = Csp::new(
+            config,
+            tokio_runtime_handle,
+            Some(new_logger!(&logger)),
+            Arc::clone(&metrics),
+        );
         let node_pks = csp.node_public_keys();
         let node_signing_pk = node_pks
             .node_signing_pk
@@ -285,8 +306,13 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
     }
 
     /// Creates a crypto component using a fake `node_id`.
+    ///
+    /// # Panics
+    /// Panics if the `config`'s vault type is `UnixSocket` and
+    /// `tokio_runtime_handle` is `None`.
     pub fn new_with_fake_node_id(
         config: &CryptoConfig,
+        tokio_runtime_handle: Option<tokio::runtime::Handle>,
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
         logger: ReplicaLogger,
@@ -294,7 +320,7 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
         let metrics = Arc::new(CryptoMetrics::none());
         CryptoComponentFatClient {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
-            csp: Csp::new(config, None, Arc::clone(&metrics)),
+            csp: Csp::new(config, tokio_runtime_handle, None, Arc::clone(&metrics)),
             registry_client,
             node_id,
             logger,
@@ -307,13 +333,36 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
     ///
     /// Please refer to the trait documentation of
     /// `CryptoComponentForNonReplicaProcess` for more details.
+    ///
+    /// If the `config`'s vault type is `UnixSocket`, a `tokio_runtime_handle`
+    /// must be provided, which is then used for the `async`hronous
+    /// communication with the vault via RPC for secret key operations. In most
+    /// cases, this is done by calling `tokio::runtime::Handle::block_on` and
+    /// it is the caller's responsibility to ensure that these calls to
+    /// `block_on` do not panic. This can be achieved, for example, by ensuring
+    /// that the crypto component's methods are not themselves called from
+    /// within a call to `block_on` (because calls to `block_on` cannot be
+    /// nested), or by wrapping them with `tokio::task::block_in_place`
+    /// and accepting the performance implications.
+    /// Because the asynchronous communication with the vault happens only for
+    /// secret key operations, for the `CryptoComponentFatClient` the concerned
+    /// methods are
+    /// * `KeyManager::check_keys_with_registry`
+    /// * `BasicSigner::sign_basic`
+    ///
+    /// The methods of the `TlsHandshake` trait are unaffected by this.
+    ///
+    /// # Panics
+    /// Panics if the `config`'s vault type is `UnixSocket` and
+    /// `tokio_runtime_handle` is `None`.
     pub fn new_for_non_replica_process(
         config: &CryptoConfig,
+        tokio_runtime_handle: Option<tokio::runtime::Handle>,
         registry_client: Arc<dyn RegistryClient>,
         logger: ReplicaLogger,
     ) -> impl CryptoComponentForNonReplicaProcess {
         // disable metrics for crypto in orchestrator:
-        CryptoComponentFatClient::new(config, registry_client, logger, None)
+        CryptoComponentFatClient::new(config, tokio_runtime_handle, registry_client, logger, None)
     }
 
     /// Creates a crypto component that only allows signature verification.

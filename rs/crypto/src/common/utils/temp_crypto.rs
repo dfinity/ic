@@ -75,8 +75,36 @@ pub type TempCryptoComponent =
 /// deleted once the struct goes out of scope.
 pub struct TempCryptoComponentGeneric<C: CryptoServiceProvider> {
     crypto_component: CryptoComponentFatClient<C>,
-    vault_server: Option<Arc<TempCspVaultServer>>,
+    remote_vault_environment: Option<RemoteVaultEnvironment>,
     temp_dir: TempDir,
+}
+
+struct RemoteVaultEnvironment {
+    vault_server: Arc<TempCspVaultServer>,
+    vault_client_runtime: TokioRuntimeOrHandle,
+}
+
+enum TokioRuntimeOrHandle {
+    Runtime(tokio::runtime::Runtime),
+    Handle(tokio::runtime::Handle),
+}
+
+impl TokioRuntimeOrHandle {
+    fn new(option_handle: Option<tokio::runtime::Handle>) -> Self {
+        if let Some(handle) = option_handle {
+            Self::Handle(handle)
+        } else {
+            let multi_thread_rt = tokio::runtime::Runtime::new().expect("failed to create runtime");
+            Self::Runtime(multi_thread_rt)
+        }
+    }
+
+    fn handle(&self) -> &tokio::runtime::Handle {
+        match &self {
+            TokioRuntimeOrHandle::Runtime(runtime) => runtime.handle(),
+            TokioRuntimeOrHandle::Handle(handle) => handle,
+        }
+    }
 }
 
 impl<C: CryptoServiceProvider> Deref for TempCryptoComponentGeneric<C> {
@@ -93,6 +121,8 @@ pub struct TempCryptoBuilder {
     registry_version: Option<RegistryVersion>,
     node_id: Option<NodeId>,
     start_remote_vault: bool,
+    vault_server_runtime_handle: Option<tokio::runtime::Handle>,
+    vault_client_runtime_handle: Option<tokio::runtime::Handle>,
     connected_remote_vault: Option<Arc<TempCspVaultServer>>,
 }
 
@@ -128,6 +158,16 @@ impl TempCryptoBuilder {
     pub fn with_remote_vault(mut self) -> Self {
         self.start_remote_vault = true;
         self.connected_remote_vault = None;
+        self
+    }
+
+    pub fn with_vault_client_runtime(mut self, rt_handle: tokio::runtime::Handle) -> Self {
+        self.vault_client_runtime_handle = Some(rt_handle);
+        self
+    }
+
+    pub fn with_vault_server_runtime(mut self, rt_handle: tokio::runtime::Handle) -> Self {
+        self.vault_server_runtime_handle = Some(rt_handle);
         self
     }
 
@@ -236,19 +276,30 @@ impl TempCryptoBuilder {
         public_key_store::store_node_public_keys(&config.crypto_root, &node_pubkeys)
             .unwrap_or_else(|_| panic!("failed to store public key material"));
 
-        let vault_server = if self.start_remote_vault {
-            let vault_server = TempCspVaultServer::start(&config.crypto_root);
+        let opt_remote_vault_environment = if self.start_remote_vault {
+            let vault_server =
+                TempCspVaultServer::start(&config.crypto_root, self.vault_server_runtime_handle);
             config.csp_vault_type = CspVaultType::UnixSocket(vault_server.vault_socket_path());
-            Some(Arc::new(vault_server))
+            Some(RemoteVaultEnvironment {
+                vault_server: Arc::new(vault_server),
+                vault_client_runtime: TokioRuntimeOrHandle::new(self.vault_client_runtime_handle),
+            })
         } else if let Some(vault_server) = self.connected_remote_vault {
             config.csp_vault_type = CspVaultType::UnixSocket(vault_server.vault_socket_path());
-            Some(vault_server)
+            Some(RemoteVaultEnvironment {
+                vault_server,
+                vault_client_runtime: TokioRuntimeOrHandle::new(self.vault_client_runtime_handle),
+            })
         } else {
             None
         };
 
+        let opt_vault_client_runtime_handle = opt_remote_vault_environment
+            .as_ref()
+            .map(|data| data.vault_client_runtime.handle().clone());
         let crypto_component = CryptoComponent::new_with_fake_node_id(
             &config,
+            opt_vault_client_runtime_handle,
             registry_client,
             node_id,
             no_op_logger(),
@@ -256,7 +307,7 @@ impl TempCryptoBuilder {
 
         TempCryptoComponent {
             crypto_component,
-            vault_server,
+            remote_vault_environment: opt_remote_vault_environment,
             temp_dir,
         }
     }
@@ -270,6 +321,7 @@ impl TempCryptoBuilder {
 /// listening on a unix socket that lives in this temporary directory. The
 /// directory is automatically deleted when this struct goes out of scope.
 pub struct TempCspVaultServer {
+    tokio_runtime: TokioRuntimeOrHandle,
     join_handle: tokio::task::JoinHandle<()>,
     temp_dir: TempDir,
 }
@@ -290,18 +342,23 @@ impl Drop for TempCspVaultServer {
 }
 
 impl TempCspVaultServer {
-    pub fn start(crypto_root: &Path) -> Self {
+    pub fn start(crypto_root: &Path, opt_tokio_rt_handle: Option<tokio::runtime::Handle>) -> Self {
         let temp_dir = tempfile::Builder::new()
             .prefix("ic_crypto_csp_vault_")
             .tempdir()
             .expect("failed to create temporary directory");
         let vault_socket_path = Self::vault_socket_path_in(temp_dir.path());
-        let listener = UnixListener::bind(&vault_socket_path).expect("failed to bind");
+        let tokio_runtime = TokioRuntimeOrHandle::new(opt_tokio_rt_handle);
+        let listener = {
+            let _enter_guard = tokio_runtime.handle().enter();
+            UnixListener::bind(&vault_socket_path).expect("failed to bind")
+        };
         let server = TarpcCspVaultServerImpl::new(crypto_root, listener, no_op_logger());
 
-        let join_handle = tokio::spawn(server.run());
+        let join_handle = tokio_runtime.handle().spawn(server.run());
 
         Self {
+            tokio_runtime,
             join_handle,
             temp_dir,
         }
@@ -309,6 +366,10 @@ impl TempCspVaultServer {
 
     pub fn vault_socket_path(&self) -> PathBuf {
         Self::vault_socket_path_in(self.temp_dir.path())
+    }
+
+    pub fn tokio_runtime_handle(&self) -> &tokio::runtime::Handle {
+        self.tokio_runtime.handle()
     }
 
     fn vault_socket_path_in(directory: &Path) -> PathBuf {
@@ -323,6 +384,8 @@ impl TempCryptoComponent {
         TempCryptoBuilder {
             node_id: None,
             start_remote_vault: false,
+            vault_server_runtime_handle: None,
+            vault_client_runtime_handle: None,
             registry_client: None,
             node_keys_to_generate: None,
             registry_version: None,
@@ -429,6 +492,7 @@ impl TempCryptoComponent {
     ) -> Self {
         let crypto_component = CryptoComponent::new_with_fake_node_id(
             config,
+            None,
             registry_client,
             node_id,
             no_op_logger(),
@@ -436,7 +500,7 @@ impl TempCryptoComponent {
 
         TempCryptoComponent {
             crypto_component,
-            vault_server: None,
+            remote_vault_environment: None,
             temp_dir,
         }
     }
@@ -459,9 +523,15 @@ impl TempCryptoComponent {
     }
 
     pub fn vault_server(&self) -> Option<Arc<TempCspVaultServer>> {
-        self.vault_server
+        self.remote_vault_environment
             .as_ref()
-            .map(|vault_server| Arc::clone(vault_server))
+            .map(|env| Arc::clone(&env.vault_server))
+    }
+
+    pub fn vault_client_runtime(&self) -> Option<&tokio::runtime::Handle> {
+        self.remote_vault_environment
+            .as_ref()
+            .map(|env| env.vault_client_runtime.handle())
     }
 }
 
@@ -572,7 +642,7 @@ impl TempCryptoComponentGeneric<Csp<ChaChaRng, ProtoSecretKeyStore, VolatileSecr
 
         TempCryptoComponentGeneric {
             crypto_component,
-            vault_server: None,
+            remote_vault_environment: None,
             temp_dir,
         }
     }

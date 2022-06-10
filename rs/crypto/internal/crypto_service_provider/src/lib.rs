@@ -201,16 +201,29 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
 
 impl Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
     /// Creates a production-grade crypto service provider.
+    ///
+    /// If the `config`'s vault type is `UnixSocket`, a `tokio_runtime_handle`
+    /// must be provided, which is then used for the `async`hronous
+    /// communication with the vault via RPC.
+    ///
+    /// # Panics
+    /// Panics if the `config`'s vault type is `UnixSocket` and
+    /// `tokio_runtime_handle` is `None`.
     pub fn new(
         config: &CryptoConfig,
+        tokio_runtime_handle: Option<tokio::runtime::Handle>,
         logger: Option<ReplicaLogger>,
         metrics: Arc<CryptoMetrics>,
     ) -> Self {
         match &config.csp_vault_type {
             CspVaultType::InReplica => Self::new_with_in_replica_vault(config, logger, metrics),
-            CspVaultType::UnixSocket(socket_path) => {
-                Self::new_with_unix_socket_vault(socket_path, config, logger, metrics)
-            }
+            CspVaultType::UnixSocket(socket_path) => Self::new_with_unix_socket_vault(
+                socket_path,
+                tokio_runtime_handle.expect("missing tokio runtime handle"),
+                config,
+                logger,
+                metrics,
+            ),
         }
     }
 
@@ -245,6 +258,7 @@ impl Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
 
     fn new_with_unix_socket_vault(
         socket_path: &Path,
+        rt_handle: tokio::runtime::Handle,
         config: &CryptoConfig,
         logger: Option<ReplicaLogger>,
         metrics: Arc<CryptoMetrics>,
@@ -254,13 +268,13 @@ impl Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
             logger,
             "Proceeding with a remote csp_vault, CryptoConfig: {:?}", config
         );
-        let csp_vault = Arc::new(RemoteCspVault::new(socket_path).unwrap_or_else(|e| {
+        let csp_vault = RemoteCspVault::new(socket_path, rt_handle).unwrap_or_else(|e| {
             panic!(
                 "Could not connect to CspVault at socket {:?}: {:?}",
                 socket_path, e
             )
-        }));
-        Self::csp_with(&config.crypto_root, logger, metrics, csp_vault)
+        });
+        Self::csp_with(&config.crypto_root, logger, metrics, Arc::new(csp_vault))
     }
 
     fn csp_with(

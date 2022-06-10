@@ -176,8 +176,12 @@ fn main() -> io::Result<()> {
         .set(1);
     }
 
-    let (registry, crypto) =
-        setup::setup_crypto_registry(config.clone(), Some(&metrics_registry), logger.clone());
+    let (registry, crypto) = setup::setup_crypto_registry(
+        config.clone(),
+        rt_main.handle().clone(),
+        Some(&metrics_registry),
+        logger.clone(),
+    );
 
     let node_id = crypto.get_node_id();
     let cup_with_proto = setup::get_catch_up_package(&replica_args, &logger);

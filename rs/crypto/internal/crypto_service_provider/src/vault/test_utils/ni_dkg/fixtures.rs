@@ -60,11 +60,17 @@ pub struct MockNode {
     pub csp_vault: Arc<dyn CspVault>,
 }
 impl MockNode {
-    pub fn random(rng: &mut ChaCha20Rng, csp_vault_factory: fn() -> Arc<dyn CspVault>) -> Self {
+    pub fn random(
+        rng: &mut ChaCha20Rng,
+        csp_vault_factory: impl Fn() -> Arc<dyn CspVault>,
+    ) -> Self {
         let node_id = node_test_id(rng.gen::<u64>());
         Self::from_node_id(node_id, csp_vault_factory)
     }
-    pub fn from_node_id(node_id: NodeId, csp_vault_factory: fn() -> Arc<dyn CspVault>) -> Self {
+    pub fn from_node_id(
+        node_id: NodeId,
+        csp_vault_factory: impl Fn() -> Arc<dyn CspVault>,
+    ) -> Self {
         let csp_vault = csp_vault_factory();
         Self {
             node_id,
@@ -115,10 +121,10 @@ impl MockNetwork {
     pub fn random(
         rng: &mut ChaCha20Rng,
         size: usize,
-        csp_vault_factory: fn() -> Arc<dyn CspVault>,
+        csp_vault_factory: impl Fn() -> Arc<dyn CspVault>,
     ) -> Self {
         let mut nodes_by_node_id: BTreeMap<NodeId, MockNode> = (0..size)
-            .map(|_| MockNode::random(rng, csp_vault_factory))
+            .map(|_| MockNode::random(rng, &csp_vault_factory))
             .map(|node| (node.node_id, node))
             .collect();
 

@@ -26,23 +26,23 @@ mod handshakes {
     use super::*;
     use ic_crypto_test_utils::tls::x509_certificates::{x509_public_key_cert, CertWithPrivateKey};
 
-    #[tokio::test]
-    async fn should_perform_tls_handshake() {
+    #[test]
+    fn should_perform_tls_handshake() {
         let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
         registry
             .add_cert(SERVER_ID_1, server.cert())
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, authenticated_client) =
-            tokio::join!(client.run(server.port()), server.run());
+        let (client_result, authenticated_client) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert!(client_result.is_ok());
         assert_peer_node_eq(authenticated_client.unwrap(), CLIENT_ID_1);
     }
 
-    #[tokio::test]
-    async fn should_perform_tls_handshake_if_multiple_clients_allowed() {
+    #[test]
+    fn should_perform_tls_handshake_if_multiple_clients_allowed() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_2)
@@ -61,8 +61,8 @@ mod handshakes {
             .add_cert(CLIENT_ID_1, client_1_cert)
             .update();
 
-        let (client_result, authenticated_client) =
-            tokio::join!(client_2.run(server.port()), server.run());
+        let (client_result, authenticated_client) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client_2.run(server.port()), server.run()) });
 
         assert!(client_result.is_ok());
         assert_peer_node_eq(authenticated_client.unwrap(), CLIENT_ID_2);
@@ -76,8 +76,8 @@ mod handshakes_against_openssl_implementation {
     use crate::tls_utils::test_server::Server as RustTlsServer;
     use crate::tls_utils::test_server_openssl::OpenSslServer;
 
-    #[tokio::test]
-    async fn should_perform_tls_handshake_from_rustls_client_to_openssl_server() {
+    #[test]
+    fn should_perform_tls_handshake_from_rustls_client_to_openssl_server() {
         let registry = TlsRegistry::new();
         let server = OpenSslServer::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
@@ -88,15 +88,15 @@ mod handshakes_against_openssl_implementation {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, authenticated_client) =
-            tokio::join!(client.run(server.port()), server.run());
+        let (client_result, authenticated_client) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert!(client_result.is_ok());
         assert_peer_node_eq(authenticated_client.unwrap(), CLIENT_ID_1);
     }
 
-    #[tokio::test]
-    async fn should_perform_tls_handshake_from_openssl_client_to_rustls_server() {
+    #[test]
+    fn should_perform_tls_handshake_from_openssl_client_to_rustls_server() {
         let registry = TlsRegistry::new();
         let server = RustTlsServer::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
@@ -107,8 +107,8 @@ mod handshakes_against_openssl_implementation {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, authenticated_client) =
-            tokio::join!(client.run(server.port()), server.run());
+        let (client_result, authenticated_client) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert!(client_result.is_ok());
         assert_peer_node_eq(authenticated_client.unwrap(), CLIENT_ID_1);
@@ -118,9 +118,8 @@ mod handshakes_against_openssl_implementation {
 mod server_allowing_all_nodes {
     use super::*;
 
-    #[tokio::test]
-    async fn should_perform_handshake_if_all_nodes_allowed_and_registry_contains_only_client_node()
-    {
+    #[test]
+    fn should_perform_handshake_if_all_nodes_allowed_and_registry_contains_only_client_node() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .allow_all_nodes()
@@ -131,15 +130,15 @@ mod server_allowing_all_nodes {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, authenticated_client) =
-            tokio::join!(client.run(server.port()), server.run());
+        let (client_result, authenticated_client) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert!(client_result.is_ok());
         assert_peer_node_eq(authenticated_client.unwrap(), CLIENT_ID_1);
     }
 
-    #[tokio::test]
-    async fn should_perform_handshake_if_all_nodes_allowed_and_registry_contains_several_nodes() {
+    #[test]
+    fn should_perform_handshake_if_all_nodes_allowed_and_registry_contains_several_nodes() {
         const CLIENT_THAT_CONNECTS: NodeId = CLIENT_ID_1;
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
@@ -153,15 +152,15 @@ mod server_allowing_all_nodes {
             .add_cert(CLIENT_ID_3, generate_cert_using_temp_crypto(CLIENT_ID_3))
             .update();
 
-        let (client_result, authenticated_client) =
-            tokio::join!(client.run(server.port()), server.run());
+        let (client_result, authenticated_client) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert!(client_result.is_ok());
         assert_peer_node_eq(authenticated_client.unwrap(), CLIENT_THAT_CONNECTS);
     }
 
-    #[tokio::test]
-    async fn should_succeed_if_an_uninvolved_node_does_not_have_cert_in_registry() {
+    #[test]
+    fn should_succeed_if_an_uninvolved_node_does_not_have_cert_in_registry() {
         const CLIENT_THAT_CONNECTS: NodeId = CLIENT_ID_1;
         const UNINVOLVED_NODE: NodeId = CLIENT_ID_2;
         let registry = TlsRegistry::new();
@@ -178,15 +177,16 @@ mod server_allowing_all_nodes {
             )
             .update();
 
-        let (_client_result, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_client_result, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert!(matches!(server_result, Ok(AuthenticatedPeer::Node(node_id))
                 if node_id == CLIENT_THAT_CONNECTS
         ));
     }
 
-    #[tokio::test]
-    async fn should_succeed_if_node_record_of_connecting_client_missing() {
+    #[test]
+    fn should_succeed_if_node_record_of_connecting_client_missing() {
         const CLIENT_THAT_CONNECTS_WITHOUT_NODE_RECORD: NodeId = CLIENT_ID_1;
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
@@ -202,7 +202,8 @@ mod server_allowing_all_nodes {
             .add_cert(CLIENT_ID_3, generate_cert_using_temp_crypto(CLIENT_ID_3))
             .update();
 
-        let (_client_result, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_client_result, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert!(matches!(server_result, Ok(AuthenticatedPeer::Node(node_id))
             if node_id == CLIENT_THAT_CONNECTS_WITHOUT_NODE_RECORD
@@ -219,8 +220,8 @@ mod server {
     use openssl::hash::MessageDigest;
     use openssl::ssl::SslVersion;
 
-    #[tokio::test]
-    async fn should_return_error_if_client_not_allowed_and_allowed_clients_exist() {
+    #[test]
+    fn should_return_error_if_client_not_allowed_and_allowed_clients_exist() {
         const NOT_ALLOWED_CLIENT: NodeId = CLIENT_ID_3;
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
@@ -236,7 +237,8 @@ mod server {
             .add_cert(CLIENT_ID_2, generate_cert_using_temp_crypto(CLIENT_ID_2))
             .update();
 
-        let (_client_result, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_client_result, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_server_error_containing(
             &server_result,
@@ -246,29 +248,31 @@ mod server {
         );
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_client_cert_in_registry_is_malformed() {
+    #[test]
+    fn should_return_error_if_client_cert_in_registry_is_malformed() {
         let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
         registry
             .add_cert(SERVER_ID_1, server.cert())
             .add_cert(CLIENT_ID_1, malformed_cert())
             .update();
 
-        let (_client_result, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_client_result, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         // Rustls unfortunately swallows the detailed error message we provide.
         assert_handshake_server_error_containing(&server_result, "tls handshake eof");
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_server_cert_in_registry_is_malformed() {
+    #[test]
+    fn should_return_error_if_server_cert_in_registry_is_malformed() {
         let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
         registry
             .add_cert(SERVER_ID_1, malformed_cert())
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (_client_result, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_client_result, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_malformed_self_cert_server_error_containing(
             &server_result,
@@ -276,19 +280,20 @@ mod server {
         );
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_client_cert_not_in_registry() {
+    #[test]
+    fn should_return_error_if_client_cert_not_in_registry() {
         let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
         registry.add_cert(SERVER_ID_1, server.cert()).update();
 
-        let (_client_result, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_client_result, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         // Rustls unfortunately swallows the detailed error message we provide.
         assert_handshake_server_error_containing(&server_result, "tls handshake eof");
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_secret_key_not_found() {
+    #[test]
+    fn should_return_error_if_secret_key_not_found() {
         let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
         let wrong_server_cert = generate_cert_using_temp_crypto(SERVER_ID_1);
         assert_ne!(wrong_server_cert, server.cert());
@@ -297,7 +302,8 @@ mod server {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (_client_result, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_client_result, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_server_error_containing(
             &server_result,
@@ -306,8 +312,8 @@ mod server {
         );
     }
 
-    #[tokio::test]
-    async fn should_allow_connection_from_custom_client_with_valid_cert() {
+    #[test]
+    fn should_allow_connection_from_custom_client_with_valid_cert() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
@@ -320,13 +326,14 @@ mod server {
             .add_cert(CLIENT_ID_1, client.client_auth_cert())
             .update();
 
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_peer_node_eq(server_result.unwrap(), CLIENT_ID_1);
     }
 
-    #[tokio::test]
-    async fn should_allow_connection_from_custom_client_only_supporting_aes_128_cipher() {
+    #[test]
+    fn should_allow_connection_from_custom_client_only_supporting_aes_128_cipher() {
         const AES_128_ONLY_CIPHER_SUITE: &str = "TLS_AES_128_GCM_SHA256";
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
@@ -341,13 +348,14 @@ mod server {
             .add_cert(CLIENT_ID_1, client.client_auth_cert())
             .update();
 
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_peer_node_eq(server_result.unwrap(), CLIENT_ID_1);
     }
 
-    #[tokio::test]
-    async fn should_allow_connection_from_custom_client_only_supporting_aes_256_cipher() {
+    #[test]
+    fn should_allow_connection_from_custom_client_only_supporting_aes_256_cipher() {
         const AES_256_ONLY_CIPHER_SUITE: &str = "TLS_AES_256_GCM_SHA384";
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
@@ -362,13 +370,14 @@ mod server {
             .add_cert(CLIENT_ID_1, client.client_auth_cert())
             .update();
 
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_peer_node_eq(server_result.unwrap(), CLIENT_ID_1);
     }
 
-    #[tokio::test]
-    async fn should_allow_connection_from_client_with_very_old_certificate() {
+    #[test]
+    fn should_allow_connection_from_client_with_very_old_certificate() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
@@ -387,13 +396,14 @@ mod server {
             .add_cert(CLIENT_ID_1, client.client_auth_cert())
             .update();
 
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_peer_node_eq(server_result.unwrap(), CLIENT_ID_1);
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_client_does_not_support_tls_1_3() {
+    #[test]
+    fn should_return_error_if_client_does_not_support_tls_1_3() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
@@ -408,7 +418,8 @@ mod server {
             .add_cert(CLIENT_ID_1, client.client_auth_cert())
             .update();
 
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_server_error_containing(
             &server_result,
@@ -416,8 +427,8 @@ mod server {
         )
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_client_does_not_support_required_ciphers() {
+    #[test]
+    fn should_return_error_if_client_does_not_support_required_ciphers() {
         const CIPHER_SUITES_NOT_SUPPORTED_BY_SERVER: &str = "TLS_CHACHA20_POLY1305_SHA256";
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
@@ -433,7 +444,8 @@ mod server {
             .add_cert(CLIENT_ID_1, client.client_auth_cert())
             .update();
 
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_server_error_containing(
             &server_result,
@@ -441,8 +453,8 @@ mod server {
         )
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_client_does_not_support_ed25519_sig_alg() {
+    #[test]
+    fn should_return_error_if_client_does_not_support_ed25519_sig_alg() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
@@ -457,7 +469,8 @@ mod server {
             .add_cert(CLIENT_ID_1, client.client_auth_cert())
             .update();
 
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_server_error_containing(
             &server_result,
@@ -465,8 +478,8 @@ mod server {
         )
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_client_does_not_use_ed25519_cert() {
+    #[test]
+    fn should_return_error_if_client_does_not_use_ed25519_cert() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
@@ -484,13 +497,14 @@ mod server {
             .add_cert(CLIENT_ID_1, client.client_auth_cert())
             .update();
 
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_server_error_containing(&server_result, "peer sent no certificates")
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_client_does_not_authenticate_with_cert() {
+    #[test]
+    fn should_return_error_if_client_does_not_authenticate_with_cert() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
@@ -506,13 +520,14 @@ mod server {
             .add_cert(CLIENT_ID_1, x509_public_key_cert(&client_cert.x509()))
             .update();
 
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_server_error_containing(&server_result, "peer sent no certificates")
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_client_cert_has_wrong_node_id() {
+    #[test]
+    fn should_return_error_if_client_cert_has_wrong_node_id() {
         const REGISTERED_NODE_ID: NodeId = CLIENT_ID_1;
         const WRONG_NODE_ID: NodeId = CLIENT_ID_2;
         let registry = TlsRegistry::new();
@@ -531,7 +546,8 @@ mod server {
             .add_cert(REGISTERED_NODE_ID, client.client_auth_cert())
             .update();
 
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_server_error_containing(
             &server_result,
@@ -540,8 +556,8 @@ mod server {
         );
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_client_cert_has_wrong_node_id_and_honest_node_is_allowed() {
+    #[test]
+    fn should_return_error_if_client_cert_has_wrong_node_id_and_honest_node_is_allowed() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
@@ -566,8 +582,9 @@ mod server {
             .add_cert(CLIENT_ID_2, client_2_with_illegal_cn.client_auth_cert())
             .update();
 
-        let (_, server_result) =
-            tokio::join!(client_2_with_illegal_cn.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime().block_on(async {
+            tokio::join!(client_2_with_illegal_cn.run(server.port()), server.run())
+        });
 
         assert_handshake_server_error_containing(
             &server_result,
@@ -576,8 +593,8 @@ mod server {
         );
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_client_cert_does_not_match_registry_cert() {
+    #[test]
+    fn should_return_error_if_client_cert_does_not_match_registry_cert() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
@@ -597,7 +614,8 @@ mod server {
             .add_cert(CLIENT_ID_1, different_client_cert_in_registry)
             .update();
 
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_server_error_containing(
             &server_result,
@@ -606,9 +624,8 @@ mod server {
         );
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_client_cert_does_not_match_registry_cert_and_signed_with_same_key(
-    ) {
+    #[test]
+    fn should_return_error_if_client_cert_does_not_match_registry_cert_and_signed_with_same_key() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
@@ -637,7 +654,8 @@ mod server {
             .add_cert(CLIENT_ID_1, different_client_cert_in_registry_with_same_key)
             .update();
 
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_server_error_containing(
             &server_result,
@@ -646,8 +664,8 @@ mod server {
         );
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_client_cert_is_issued_by_other_cert_in_registry() {
+    #[test]
+    fn should_return_error_if_client_cert_is_issued_by_other_cert_in_registry() {
         const CLIENT_CA_ID: NodeId = CLIENT_ID_1;
         const CLIENT_LEAF_ID: NodeId = CLIENT_ID_2;
         let registry = TlsRegistry::new();
@@ -659,7 +677,7 @@ mod server {
         let leaf_cert = CertWithPrivateKey::builder()
             .cn(CLIENT_LEAF_ID.to_string())
             .with_ca_signing(ca_cert_key_pair.clone(), CLIENT_CA_ID.to_string())
-            .build(leaf_cert_key_pair.clone(), MessageDigest::null());
+            .build(leaf_cert_key_pair, MessageDigest::null());
         let ca_cert = CertWithPrivateKey::builder()
             .cn(CLIENT_CA_ID.to_string())
             .set_ca_key_usage_extension()
@@ -675,7 +693,8 @@ mod server {
             .add_cert(CLIENT_CA_ID, x509_client_ca_cert)
             .update();
 
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_server_error_containing(
             &server_result,
@@ -684,8 +703,8 @@ mod server {
         );
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_client_uses_expired_cert() {
+    #[test]
+    fn should_return_error_if_client_uses_expired_cert() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
@@ -703,7 +722,8 @@ mod server {
             .add_cert(CLIENT_ID_1, client.client_auth_cert())
             .update();
 
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_server_error_containing(
             &server_result,
@@ -711,8 +731,8 @@ mod server {
         );
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_client_cert_not_yet_valid() {
+    #[test]
+    fn should_return_error_if_client_cert_not_yet_valid() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
@@ -730,7 +750,8 @@ mod server {
             .add_cert(CLIENT_ID_1, client.client_auth_cert())
             .update();
 
-        let (_, server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (_, server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_server_error_containing(
             &server_result,
@@ -745,23 +766,24 @@ mod server_without_client_auth {
     use crate::{matching_server_and_client, CLIENT_ID_1, SERVER_ID_1};
     use ic_crypto_test_utils::tls::custom_client::CustomClient;
 
-    #[tokio::test]
-    async fn should_perform_tls_handshake_without_server_asking_for_cert() {
+    #[test]
+    fn should_perform_tls_handshake_without_server_asking_for_cert() {
         let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
         registry
             .add_cert(SERVER_ID_1, server.cert())
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, server_result) =
-            tokio::join!(client.run(server.port()), server.run_without_client_auth());
+        let (client_result, server_result) = new_tokio_runtime().block_on(async {
+            tokio::join!(client.run(server.port()), server.run_without_client_auth())
+        });
 
         assert!(client_result.is_ok());
         assert!(server_result.is_ok());
     }
 
-    #[tokio::test]
-    async fn should_perform_tls_handshake_without_client_cert_and_without_server_asking_for_cert() {
+    #[test]
+    fn should_perform_tls_handshake_without_client_cert_and_without_server_asking_for_cert() {
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
             .add_allowed_client(CLIENT_ID_1)
@@ -771,8 +793,9 @@ mod server_without_client_auth {
             .build(server.cert());
         registry.add_cert(SERVER_ID_1, server.cert()).update();
 
-        let (_, server_result) =
-            tokio::join!(client.run(server.port()), server.run_without_client_auth());
+        let (_, server_result) = new_tokio_runtime().block_on(async {
+            tokio::join!(client.run(server.port()), server.run_without_client_auth())
+        });
 
         assert!(server_result.is_ok());
     }
@@ -787,8 +810,8 @@ mod client {
     use openssl::hash::MessageDigest;
     use openssl::ssl::SslVersion;
 
-    #[tokio::test]
-    async fn should_return_error_if_client_cert_in_registry_is_malformed() {
+    #[test]
+    fn should_return_error_if_client_cert_in_registry_is_malformed() {
         // the server is only required so the client can connect somewhere
         let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
         registry
@@ -796,7 +819,7 @@ mod client {
             .add_cert(CLIENT_ID_1, malformed_cert())
             .update();
 
-        let result = client.run(server.port()).await;
+        let result = new_tokio_runtime().block_on(client.run(server.port()));
 
         assert_malformed_self_cert_client_error_containing(
             &result,
@@ -804,8 +827,8 @@ mod client {
         );
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_server_cert_in_registry_is_malformed() {
+    #[test]
+    fn should_return_error_if_server_cert_in_registry_is_malformed() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
@@ -816,7 +839,8 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_client_error_containing(
             &client_result,
@@ -828,8 +852,8 @@ mod client {
         );
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_server_cert_not_in_registry() {
+    #[test]
+    fn should_return_error_if_server_cert_not_in_registry() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
@@ -840,7 +864,8 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_client_error_containing(
             &client_result,
@@ -854,8 +879,8 @@ mod client {
     /// responsibility to reject clients that do not present a valid
     /// certificate. From the client's perspective, things look fine as the
     /// server is successfully authenticated.
-    #[tokio::test]
-    async fn should_connect_even_if_server_rejects_client_cert_but_get_error_on_read() {
+    #[test]
+    fn should_connect_even_if_server_rejects_client_cert_but_get_error_on_read() {
         const NOT_ALLOWED_CLIENT: NodeId = CLIENT_ID_3;
         let registry = TlsRegistry::new();
         let server = Server::builder(SERVER_ID_1)
@@ -873,13 +898,14 @@ mod client {
             .add_cert(CLIENT_ID_2, generate_cert_using_temp_crypto(CLIENT_ID_2))
             .update();
 
-        let (client_result, _server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert!(client_result.is_ok());
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_secret_key_not_found() {
+    #[test]
+    fn should_return_error_if_secret_key_not_found() {
         let (server, client, registry) = matching_server_and_client(SERVER_ID_1, CLIENT_ID_1);
         let wrong_client_cert = generate_cert_using_temp_crypto(CLIENT_ID_1);
         registry
@@ -887,7 +913,8 @@ mod client {
             .add_cert(CLIENT_ID_1, wrong_client_cert)
             .update();
 
-        let (client_result, _server_result) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _server_result) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_client_error_containing(
             &client_result,
@@ -896,8 +923,8 @@ mod client {
         );
     }
 
-    #[tokio::test]
-    async fn should_allow_connection_to_custom_server_with_valid_cert() {
+    #[test]
+    fn should_allow_connection_to_custom_server_with_valid_cert() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
@@ -907,13 +934,14 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert!(client_result.is_ok())
     }
 
-    #[tokio::test]
-    async fn should_allow_connection_to_custom_server_only_supporting_aes_128_cipher() {
+    #[test]
+    fn should_allow_connection_to_custom_server_only_supporting_aes_128_cipher() {
         const AES_128_ONLY_CIPHER_SUITE: &str = "TLS_AES_128_GCM_SHA256";
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
@@ -925,13 +953,14 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert!(client_result.is_ok())
     }
 
-    #[tokio::test]
-    async fn should_allow_connection_to_custom_server_only_supporting_aes_256_cipher() {
+    #[test]
+    fn should_allow_connection_to_custom_server_only_supporting_aes_256_cipher() {
         const AES_256_ONLY_CIPHER_SUITE: &str = "TLS_AES_256_GCM_SHA384";
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
@@ -943,13 +972,14 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert!(client_result.is_ok())
     }
 
-    #[tokio::test]
-    async fn should_allow_connection_to_server_with_very_old_certificate() {
+    #[test]
+    fn should_allow_connection_to_server_with_very_old_certificate() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder().build(
@@ -965,13 +995,14 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert!(client_result.is_ok())
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_server_does_not_support_tls_1_3() {
+    #[test]
+    fn should_return_error_if_server_does_not_support_tls_1_3() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
@@ -983,7 +1014,8 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_client_error_containing(
             &client_result,
@@ -991,8 +1023,8 @@ mod client {
         )
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_server_does_not_support_required_ciphers() {
+    #[test]
+    fn should_return_error_if_server_does_not_support_required_ciphers() {
         const CIPHER_SUITES_NOT_SUPPORTED_BY_CLIENT: &str = "TLS_CHACHA20_POLY1305_SHA256";
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
@@ -1005,7 +1037,8 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_client_error_containing(
             &client_result,
@@ -1013,8 +1046,8 @@ mod client {
         )
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_server_does_not_support_ed25519_sig_alg() {
+    #[test]
+    fn should_return_error_if_server_does_not_support_ed25519_sig_alg() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
@@ -1026,7 +1059,8 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_client_error_containing(
             &client_result,
@@ -1034,8 +1068,8 @@ mod client {
         )
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_server_does_not_use_ed25519_cert() {
+    #[test]
+    fn should_return_error_if_server_does_not_use_ed25519_cert() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
@@ -1052,7 +1086,8 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_client_error_containing(
             &client_result,
@@ -1060,8 +1095,8 @@ mod client {
         )
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_server_cert_has_wrong_node_id() {
+    #[test]
+    fn should_return_error_if_server_cert_has_wrong_node_id() {
         const WRONG_NODE_ID: NodeId = SERVER_ID_2;
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
@@ -1078,7 +1113,8 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_client_error_containing(
             &client_result,
@@ -1086,8 +1122,8 @@ mod client {
         )
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_server_cert_does_not_match_registry_cert() {
+    #[test]
+    fn should_return_error_if_server_cert_does_not_match_registry_cert() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
@@ -1105,7 +1141,8 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_client_error_containing(
             &client_result,
@@ -1113,9 +1150,8 @@ mod client {
         )
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_server_cert_does_not_match_registry_cert_and_signed_with_same_key(
-    ) {
+    #[test]
+    fn should_return_error_if_server_cert_does_not_match_registry_cert_and_signed_with_same_key() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let ed25519_key_pair = ed25519_key_pair();
@@ -1143,7 +1179,8 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_client_error_containing(
             &client_result,
@@ -1151,8 +1188,8 @@ mod client {
         )
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_server_cert_is_issued_by_other_ca_in_registry() {
+    #[test]
+    fn should_return_error_if_server_cert_is_issued_by_other_ca_in_registry() {
         const SERVER_CA_ID: NodeId = SERVER_ID_1;
         const SERVER_LEAF_ID: NodeId = SERVER_ID_2;
         let registry = TlsRegistry::new();
@@ -1162,7 +1199,7 @@ mod client {
         let leaf_cert = CertWithPrivateKey::builder()
             .cn(SERVER_LEAF_ID.to_string())
             .with_ca_signing(ca_cert_key_pair.clone(), SERVER_CA_ID.to_string())
-            .build(leaf_cert_key_pair.clone(), MessageDigest::null());
+            .build(leaf_cert_key_pair, MessageDigest::null());
         let server = CustomServer::builder()
             .expect_error("sslv3 alert bad certificate")
             .build(leaf_cert, vec![client.cert()]);
@@ -1176,7 +1213,8 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_client_error_containing(
             &client_result,
@@ -1184,8 +1222,8 @@ mod client {
         )
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_server_uses_expired_cert() {
+    #[test]
+    fn should_return_error_if_server_uses_expired_cert() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
@@ -1202,7 +1240,8 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_client_error_containing(
             &client_result,
@@ -1210,8 +1249,8 @@ mod client {
         );
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_server_cert_not_yet_valid() {
+    #[test]
+    fn should_return_error_if_server_cert_not_yet_valid() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
@@ -1228,7 +1267,8 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_client_error_containing(
             &client_result,
@@ -1236,8 +1276,8 @@ mod client {
         );
     }
 
-    #[tokio::test]
-    async fn should_return_error_if_allowed_server_cert_has_bad_sig() {
+    #[test]
+    fn should_return_error_if_allowed_server_cert_has_bad_sig() {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
@@ -1254,7 +1294,8 @@ mod client {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (client_result, _) = tokio::join!(client.run(server.port()), server.run());
+        let (client_result, _) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_handshake_client_error_containing(
             &client_result,
@@ -1266,8 +1307,8 @@ mod client {
 mod communication {
     use super::*;
 
-    #[tokio::test]
-    async fn should_send_message_from_server_to_client() {
+    #[test]
+    fn should_send_message_from_server_to_client() {
         let registry = TlsRegistry::new();
         let (server_builder, client_builder) =
             matching_server_and_client_builders(SERVER_ID_1, CLIENT_ID_1);
@@ -1283,14 +1324,14 @@ mod communication {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (_client_result, authenticated_client) =
-            tokio::join!(client.run(server.port()), server.run());
+        let (_client_result, authenticated_client) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_peer_node_eq(authenticated_client.unwrap(), CLIENT_ID_1);
     }
 
-    #[tokio::test]
-    async fn should_send_message_from_client_to_server() {
+    #[test]
+    fn should_send_message_from_client_to_server() {
         let registry = TlsRegistry::new();
         let (server_builder, client_builder) =
             matching_server_and_client_builders(SERVER_ID_1, CLIENT_ID_1);
@@ -1306,11 +1347,15 @@ mod communication {
             .add_cert(CLIENT_ID_1, client.cert())
             .update();
 
-        let (_client_result, authenticated_client) =
-            tokio::join!(client.run(server.port()), server.run());
+        let (_client_result, authenticated_client) = new_tokio_runtime()
+            .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
         assert_peer_node_eq(authenticated_client.unwrap(), CLIENT_ID_1);
     }
+}
+
+fn new_tokio_runtime() -> tokio::runtime::Runtime {
+    tokio::runtime::Runtime::new().expect("failed to build runtime")
 }
 
 fn matching_server_and_client(

@@ -25,7 +25,7 @@ pub fn test_ni_dkg_should_work_with_all_players_acting_correctly(
     seed: [u8; 32],
     network_size: usize,
     num_reshares: i32,
-    csp_vault_factory: fn() -> Arc<dyn CspVault>,
+    csp_vault_factory: impl Fn() -> Arc<dyn CspVault>,
 ) {
     let mut rng = ChaCha20Rng::from_seed(seed);
     let network = MockNetwork::random(&mut rng, network_size, csp_vault_factory);
@@ -126,7 +126,7 @@ fn threshold_signatures_should_work(
 /// The forward-secure encryption key should not have been erased, as it SHOULD
 /// have a different scope.  The presence of this key can be demonstrated by
 /// successfully reloading the transcript.
-pub fn test_retention(csp_vault_factory: fn() -> Arc<dyn CspVault>) {
+pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
     let seed = [69u8; 32];
     let network_size = 4;
     let mut rng = ChaCha20Rng::from_seed(seed);
@@ -237,7 +237,7 @@ pub fn test_create_dealing_should_detect_errors(
     seed: [u8; 32],
     network_size: usize,
     _num_reshares: i32,
-    csp_vault_factory: fn() -> Arc<dyn CspVault>,
+    csp_vault_factory: impl Fn() -> Arc<dyn CspVault>,
 ) {
     let mut rng = ChaCha20Rng::from_seed(seed);
     let network = MockNetwork::random(&mut rng, network_size, csp_vault_factory);

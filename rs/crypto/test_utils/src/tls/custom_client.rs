@@ -131,7 +131,7 @@ impl CustomClient {
 
     /// Run this client asynchronously. This tries to connect to the configured
     /// server.
-    pub async fn run(self, server_port: u16) {
+    pub async fn run(&self, server_port: u16) {
         let tcp_stream = TcpStream::connect(("127.0.0.1", server_port))
             .await
             .expect("failed to connect");
@@ -148,9 +148,9 @@ impl CustomClient {
             .expect("failed to create tokio_openssl::SslStream");
         let result = Pin::new(&mut tls_stream).connect().await;
 
-        if let Some(expected_error) = self.expected_error {
+        if let Some(expected_error) = &self.expected_error {
             let error = result.err().expect("expected error");
-            if !error.to_string().contains(&expected_error) {
+            if !error.to_string().contains(expected_error) {
                 panic!(
                     "expected the client error to contain \"{}\" but got error: {:?}",
                     expected_error, error

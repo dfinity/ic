@@ -1,6 +1,5 @@
 use crate::args::OrchestratorArgs;
 use crate::catch_up_package_provider::CatchUpPackageProvider;
-use crate::crypto_helper::setup_crypto;
 use crate::firewall::Firewall;
 use crate::firewall_deprecated::Firewall as FirewallDeprecated;
 use crate::metrics::OrchestratorMetrics;
@@ -11,7 +10,7 @@ use crate::ssh_access_manager::SshAccessManager;
 use crate::upgrade::Upgrade;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
-use ic_crypto::CryptoComponentForNonReplicaProcess;
+use ic_crypto::{CryptoComponent, CryptoComponentForNonReplicaProcess};
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
@@ -105,8 +104,9 @@ impl Orchestrator {
             logger.clone(),
         ));
 
-        let crypto = Arc::new(setup_crypto(
+        let crypto = Arc::new(CryptoComponent::new_for_non_replica_process(
             &config.crypto,
+            Some(tokio::runtime::Handle::current()),
             registry.get_registry_client(),
             logger.clone(),
         ));

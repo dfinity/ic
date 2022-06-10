@@ -21,24 +21,27 @@ pub fn get_temp_file_path() -> PathBuf {
 
 /// Starts a fresh CSP Vault server instance for testing, and returns
 /// a socket path at which the server is listening.
-pub fn start_new_remote_csp_vault_server_for_test() -> PathBuf {
+pub fn start_new_remote_csp_vault_server_for_test(rt_handle: &tokio::runtime::Handle) -> PathBuf {
     let socket_path = get_temp_file_path();
     let return_socket_path = socket_path.clone();
     let _ignore_if_file_does_not_exist = std::fs::remove_file(&socket_path);
     let sks_dir = mk_temp_dir_with_permissions(0o700);
-    let listener = UnixListener::bind(&socket_path).unwrap_or_else(|e| {
-        panic!(
-            "Error binding to socket at {}: {}",
-            socket_path.display(),
-            e
-        )
-    });
+    let listener = {
+        let _enter_guard = rt_handle.enter();
+        UnixListener::bind(&socket_path).unwrap_or_else(|e| {
+            panic!(
+                "Error binding to socket at {}: {}",
+                socket_path.display(),
+                e
+            )
+        })
+    };
     let server = ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl::new(
         sks_dir.path(),
         listener,
         no_op_logger(),
     );
-    tokio::spawn(async move {
+    rt_handle.spawn(async move {
         let _move_temp_dir_here_to_ensure_it_is_not_cleaned_up = sks_dir;
         server.run().await;
     });

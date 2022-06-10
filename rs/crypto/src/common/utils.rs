@@ -331,5 +331,5 @@ pub(crate) fn csp_at_root(
 ) -> Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
     let config = CryptoConfig::new(crypto_root.to_path_buf());
     // disable metrics
-    Csp::new(&config, None, Arc::new(CryptoMetrics::none()))
+    Csp::new(&config, None, None, Arc::new(CryptoMetrics::none()))
 }

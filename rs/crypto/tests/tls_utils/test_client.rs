@@ -70,7 +70,7 @@ impl Client {
         }
     }
 
-    pub async fn run(self, server_port: u16) -> Result<(), TlsClientHandshakeError> {
+    pub async fn run(&self, server_port: u16) -> Result<(), TlsClientHandshakeError> {
         let tcp_stream = TcpStream::connect(("127.0.0.1", server_port))
             .await
             .expect("failed to connect");

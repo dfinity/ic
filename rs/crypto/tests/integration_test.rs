@@ -36,6 +36,7 @@ fn should_successfully_construct_crypto_component_with_default_config() {
         let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
         CryptoComponent::new_with_fake_node_id(
             &config,
+            None,
             Arc::new(registry_client),
             node_test_id(42),
             no_op_logger(),
@@ -43,15 +44,17 @@ fn should_successfully_construct_crypto_component_with_default_config() {
     })
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn should_successfully_construct_crypto_component_with_remote_csp_vault() {
-    let socket_path = start_new_remote_csp_vault_server_for_test();
+#[test]
+fn should_successfully_construct_crypto_component_with_remote_csp_vault() {
+    let tokio_rt = new_tokio_runtime();
+    let socket_path = start_new_remote_csp_vault_server_for_test(tokio_rt.handle());
     let temp_dir = temp_dir(); // temp dir with correct permissions
     let crypto_root = temp_dir.path().to_path_buf();
     let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path);
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
     CryptoComponent::new_with_fake_node_id(
         &config,
+        Some(tokio_rt.handle().clone()),
         Arc::new(registry_client),
         node_test_id(42),
         no_op_logger(),
@@ -65,9 +68,11 @@ fn should_not_construct_crypto_component_if_remote_csp_vault_is_missing() {
     let temp_dir = temp_dir(); // temp dir with correct permissions
     let crypto_root = temp_dir.path().to_path_buf();
     let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path);
+    let tokio_rt = new_tokio_runtime();
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
     CryptoComponent::new_with_fake_node_id(
         &config,
+        Some(tokio_rt.handle().clone()),
         Arc::new(registry_client),
         node_test_id(42),
         no_op_logger(),
@@ -81,6 +86,7 @@ fn should_not_construct_crypto_component_for_non_replica_process_without_keys() 
         let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
         let _crypto = CryptoComponent::new_for_non_replica_process(
             &config,
+            None,
             Arc::new(registry_client),
             no_op_logger(),
         );
@@ -98,6 +104,7 @@ fn should_successfully_construct_crypto_component_for_non_replica_process_with_d
         let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
         let _crypto = CryptoComponent::new_for_non_replica_process(
             &config,
+            None,
             Arc::new(registry_client),
             no_op_logger(),
         );
@@ -114,6 +121,7 @@ fn should_provide_public_keys_via_crypto_for_non_replica_process() {
         let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
         let crypto = CryptoComponent::new_for_non_replica_process(
             &config,
+            None,
             Arc::new(registry_client),
             no_op_logger(),
         );
@@ -840,6 +848,10 @@ fn algorithm_id_should_match_algorithm_id_proto() {
         AlgorithmId::MegaSecp256k1 as i32,
         AlgorithmIdProto::MegaSecp256k1 as i32
     );
+}
+
+fn new_tokio_runtime() -> tokio::runtime::Runtime {
+    tokio::runtime::Runtime::new().expect("failed to create runtime")
 }
 
 fn well_formed_dkg_dealing_encryption_pk() -> PublicKey {
