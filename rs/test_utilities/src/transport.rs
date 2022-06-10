@@ -40,12 +40,6 @@ mock! {
             &self,
             peer: &NodeId,
         );
-
-        fn clear_send_queue(
-            &self,
-            peer: &NodeId,
-            flow_tag: FlowTag,
-        );
     }
 }
 

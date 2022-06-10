@@ -230,6 +230,4 @@ impl Transport for ThreadPort {
     }
 
     fn clear_send_queues(&self, _peer_id: &NodeId) {}
-
-    fn clear_send_queue(&self, _peer_id: &NodeId, _flow_tag: FlowTag) {}
 }

@@ -59,10 +59,6 @@ pub trait Transport: Send + Sync {
 
     /// Clear any unsent messages in all the send queues for the peer.
     fn clear_send_queues(&self, peer_id: &NodeId);
-
-    /// Clear any unsent messages in the send queue for the given peer and flow
-    /// tag.
-    fn clear_send_queue(&self, peer_id: &NodeId, flow_tag: FlowTag);
 }
 
 #[derive(Debug)]
