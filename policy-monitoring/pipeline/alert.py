@@ -1,4 +1,3 @@
-import pprint
 from typing import Optional
 
 from slack_sdk.webhook import WebhookClient
@@ -7,7 +6,8 @@ from util.print import eprint
 
 class AlertService:
     def __init__(self, secret_service: str, signature: str):
-        self.webhook = WebhookClient("https://hooks.slack.com/services/" + secret_service)
+        self.endpoint = "https://hooks.slack.com/services/" + secret_service
+        self.webhook = WebhookClient(self.endpoint)
         self.signature = signature
 
     def _form_message(
@@ -46,8 +46,12 @@ class AlertService:
         )
 
         if response.status_code != 200 or response.body != "ok":
-            eprint("Slack error with webhook query response:")
-            eprint(pprint.pformat(response.__dict__))
+            response_file = f"slack_response--{self.signature}.html"
+            eprint(
+                f"Unexpected Slack WebHook response for endpoint {self.endpoint}: status code {response.status_code}; body saved to {response_file}"
+            )
+            with open(response_file, "w") as fout:
+                fout.write(response.body)
 
 
 class DummyAlertService(AlertService):

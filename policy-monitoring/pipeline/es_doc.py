@@ -52,15 +52,18 @@ class EsDoc:
     def host(self) -> Dict[str, str]:
         return self.repr["_source"]["host"]
 
-    def host_addr(self) -> str:
-        hostname = self.host()["hostname"]
-        if hostname in ["localhost", "blank"]:
-            return hostname
-        else:
+    def host_addr(self) -> Optional[str]:
+        host = self.host()
+        if "ip" not in host:
+            return None
+        addr = host["ip"]
+        if addr.startswith("ip6"):
             # E.g. ip62001-4d78-40d-0-5000-51ff-fe05-3b52
-            assert hostname.startswith("ip6"), f"expected IPv6 but found `{hostname}`"
-            addr_str = hostname[3:].replace("-", ":")
-            return addr_str
+            return addr[3:].replace("-", ":")
+        elif addr.startswith("ip4"):
+            return addr[3:].replace("-", ".")
+        else:
+            return addr
 
     def message(self) -> str:
         return self.repr["_source"]["message"]

@@ -69,10 +69,11 @@ class GlobalInfra:
                 self.prefixes = doc.get_ipv6_prefixes()
 
             host_addr = doc.host_addr()
-            self.known_hosts.add(host_addr)
+            if host_addr:
+                self.known_hosts.add(host_addr)
 
             # Compute host_addr_to_node_id_map
-            if node_id:
+            if node_id and host_addr is not None:  # FIXME https://dfinity.atlassian.net/browse/NODE-519
                 if host_addr in self.host_addr_to_node_id_map:
                     old_node_id = self.host_addr_to_node_id_map[host_addr]
                     assert old_node_id == node_id, (
@@ -82,7 +83,7 @@ class GlobalInfra:
                 else:
                     self.host_addr_to_node_id_map[host_addr] = node_id
 
-        if not self.prefixes:
+        if False and not self.prefixes:  # FIXME https://dfinity.atlassian.net/browse/NODE-519
             raise GlobalInfra.Error(
                 "Cannot find data center prefixes in ORCH logs. Consider downloading more ES logs.\n"
             )
@@ -124,9 +125,10 @@ class GlobalInfra:
     def get_original_subnet_membership(self) -> Dict[str, str]:
         return self.original_subnet_membership
 
-    def get_dc_info(self) -> Dict[ipaddress.IPv6Network, Set[ipaddress.IPv6Address]]:
+    def get_dc_info(self) -> Optional[Dict[ipaddress.IPv6Network, Set[ipaddress.IPv6Address]]]:
         """Returns a map from data center ipv6 to set of host ipv6s"""
-        assert self.prefixes is not None, "cannot call GlobalInfra.get_dc_info() as self.prefixes is None"
+        if self.prefixes is None:
+            return None
         dcs: Dict[ipaddress.IPv6Network, Set[ipaddress.IPv6Address]]
         dcs = dict()
         for host_addr in self.known_hosts:

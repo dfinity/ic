@@ -1,5 +1,4 @@
 import functools
-import sys
 import time
 from typing import Any
 from typing import Dict
@@ -8,6 +7,9 @@ from typing import Iterable
 from typing import List
 from typing import Optional
 from typing import Set
+
+from util.print import assert_with_trace
+from util.print import eprint
 
 from .es_doc import EsDoc
 from .event import ConsensusFinalizedEvent
@@ -116,18 +118,18 @@ class PreProcessor:
 
     def run(self, logs: Iterable[EsDoc]) -> Iterable[str]:
         """Returns a generator of events corresponding to [logs]"""
-        sys.stderr.write("Running pre-processor %s ...\n" % self.name)
+        eprint(f"Running pre-processor {self.name} ...")
 
         timestamp = 0
         first_timestamp = None
 
         # Synthetic events added at the very beginning of the testnet run
-        sys.stderr.write(" Generating preamble relations ...")
+        eprint(" Generating preamble relations ...", end=None, flush=True)
         with Timed(self.stat["pre_processing"]):
             yield from self.preamble()
-        sys.stderr.write(" done.\n")
+        eprint(" done.", flush=True)
 
-        sys.stderr.write(" Processing logs ...")
+        eprint(" Processing logs ...", end=None, flush=True)
 
         for doc in logs:
             timestamp = doc.unix_ts()
@@ -142,7 +144,7 @@ class PreProcessor:
         with Timed(self.stat["pre_processing"]):
             yield from FinalEvent(timestamp).compile()
 
-        sys.stderr.write(" done.\n")
+        eprint(" done.", flush=True)
 
         # report test runtime statistics
         if first_timestamp:
@@ -150,7 +152,7 @@ class PreProcessor:
         else:
             self.stat["test_runtime_milliseconds"] = 0.0
 
-        sys.stderr.write("Pre-processor %s completed.\n" % self.name)
+        eprint(f"Pre-processor {self.name} completed.")
 
 
 class DeclarativePreProcessor(PreProcessor):
@@ -286,78 +288,72 @@ class UniversalPreProcessor(DeclarativePreProcessor):
         ]
     )
 
-    # The values stored in this map can be used in the future to encode
-    # policies that are *expected* to generate outputs. _NORMAL == no outputs.
-    _FORMULAS = {
-        # 'dummy': {
-        #     'exit_code': 0,
-        #     'should_crash': False,
-        #     'should_be_violated': True,
+    _POLICIES: Dict[str, Dict[str, FrozenSet[str]]]
+    _POLICIES = {
+        "artifact_pool_latency": {
+            "preambles": frozenset([]),
+            "dependencies": frozenset(
+                [
+                    "p2p__node_added",
+                    "p2p__node_removed",
+                    "registry__subnet_created",
+                    "registry__subnet_updated",
+                    "validated_BlockProposal_Added",
+                    "validated_BlockProposal_Moved",
+                ]
+            ),
+        },
+        # FIXME The following two policies are disabled due to https://dfinity.atlassian.net/browse/NODE-519
+        # "unauthorized_connections": {
+        #     "preambles": frozenset([]),
+        #     "dependencies": frozenset(
+        #         [
+        #             "ControlPlane_accept_error",
+        #             "ControlPlane_accept_aborted",
+        #             "ControlPlane_spawn_accept_task",
+        #             "ControlPlane_tls_server_handshake_failed",
+        #             "registry__node_added_to_subnet",
+        #             "registry__node_removed_from_subnet",
+        #         ]
+        #     ),
         # },
-        "artifact_pool_latency": NORMAL,
-        "unauthorized_connections": NORMAL,  # Demo 2: fails, needs adjustment (node did not use updated registry version yet)
-        "reboot_count": NORMAL,
-        "finalization_consistency": NORMAL,  # Demo 1: succeeds
-        "finalized_height": NORMAL,
-        "clean_logs": NORMAL,
+        # "reboot_count": {
+        #     "preambles": frozenset([]),
+        #     "dependencies": frozenset(
+        #         [
+        #             "reboot",
+        #         ]
+        #     ),
+        # },
+        "finalization_consistency": {
+            "preambles": frozenset([]),
+            "dependencies": frozenset(
+                [
+                    "finalized",
+                ]
+            ),
+        },
+        "finalized_height": {
+            "preambles": frozenset([]),
+            "dependencies": frozenset(
+                [
+                    "finalized",
+                ]
+            ),
+        },
+        "clean_logs": {
+            "preambles": frozenset([]),
+            "dependencies": frozenset(["log"]),
+        },
     }
 
-    _PREAMBLES: Dict[str, FrozenSet[str]]
-    _PREAMBLES = {
-        "artifact_pool_latency": frozenset(
-            [
-                "p2p__original_subnet_type",
-            ]
-        ),
-        "unauthorized_connections": frozenset(
-            [
-                "p2p__originally_in_subnet",
-            ]
-        ),
-        "reboot_count": frozenset(),
-        "finalization_consistency": frozenset(),
-        "finalized_height": frozenset(),
-        "clean_logs": frozenset(),
-    }
+    @staticmethod
+    def _preambles(policy: str) -> FrozenSet[str]:
+        return UniversalPreProcessor._POLICIES[policy]["preambles"]
 
-    _DEPENDENCIES = {
-        "artifact_pool_latency": frozenset(
-            [
-                "p2p__node_added",
-                "p2p__node_removed",
-                "registry__subnet_created",
-                "registry__subnet_updated",
-                "validated_BlockProposal_Added",
-                "validated_BlockProposal_Moved",
-            ]
-        ),
-        "unauthorized_connections": frozenset(
-            [
-                "ControlPlane_accept_error",
-                "ControlPlane_accept_aborted",
-                "ControlPlane_spawn_accept_task",
-                "ControlPlane_tls_server_handshake_failed",
-                "registry__node_added_to_subnet",
-                "registry__node_removed_from_subnet",
-            ]
-        ),
-        "reboot_count": frozenset(
-            [
-                "reboot",
-            ]
-        ),
-        "finalization_consistency": frozenset(
-            [
-                "finalized",
-            ]
-        ),
-        "finalized_height": frozenset(
-            [
-                "finalized",
-            ]
-        ),
-        "clean_logs": frozenset(["log"]),
-    }
+    @staticmethod
+    def _dependencies(policy: str) -> FrozenSet[str]:
+        return UniversalPreProcessor._POLICIES[policy]["dependencies"]
 
     @staticmethod
     def is_global_infra_required(formula_names: Optional[Set[str]]) -> bool:
@@ -370,8 +366,8 @@ class UniversalPreProcessor(DeclarativePreProcessor):
             [
                 pred
                 for formula in formula_names
-                for pred in UniversalPreProcessor._DEPENDENCIES[formula].union(
-                    UniversalPreProcessor._PREAMBLES[formula]
+                for pred in UniversalPreProcessor._dependencies(formula).union(
+                    UniversalPreProcessor._preambles(formula)
                 )
             ]
         )
@@ -385,25 +381,25 @@ class UniversalPreProcessor(DeclarativePreProcessor):
     @staticmethod
     def get_supported_formulas() -> List[str]:
         """Returns list of all the formulas supported by this pre-processor"""
-        return sorted(list(UniversalPreProcessor._FORMULAS.keys()))
+        return sorted(list(UniversalPreProcessor._POLICIES.keys()))
 
     def __init__(self, infra: Optional[GlobalInfra], formulas: Optional[Set[str]] = None):
 
         if formulas is None:
-            formulas = set(UniversalPreProcessor._DEPENDENCIES.keys())
-            assert formulas == set(
-                UniversalPreProcessor._PREAMBLES.keys()
-            ), "unsynched _DEPENDENCIES / _PREAMBLES in UniversalPreProcessor"
+            formulas = set(UniversalPreProcessor._POLICIES.keys())
+
+        all_formulas = UniversalPreProcessor.get_supported_formulas()
+        assert_with_trace(formulas.issubset(all_formulas), "unexpected formulas")
 
         unit: FrozenSet[str] = frozenset()
-        preambles = UniversalPreProcessor._PREAMBLES
         required_preamble_events = functools.reduce(
-            lambda val, elem: val.union(elem), [preambles[f] for f in preambles if f in formulas], unit
+            lambda val, elem: val.union(elem), [UniversalPreProcessor._preambles(f) for f in formulas], unit
         )
-        deps = UniversalPreProcessor._DEPENDENCIES
         required_predicates = functools.reduce(
-            lambda val, elem: val.union(elem), [deps[f] for f in deps if f in formulas], unit
+            lambda val, elem: val.union(elem), [UniversalPreProcessor._dependencies(f) for f in formulas], unit
         )
+
+        eprint(f"Creating UniversalPreProcessor supporting formulas: {', '.join(formulas)}")
 
         super().__init__(
             name="unipol",

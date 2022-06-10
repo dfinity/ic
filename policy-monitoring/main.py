@@ -17,6 +17,7 @@ from pipeline.pipeline import Pipeline
 from pipeline.pre_processor import UniversalPreProcessor
 from util import docker
 from util import env
+from util.print import eprint
 
 
 def main():
@@ -132,8 +133,10 @@ def main():
 
     if args.list_policies:
         for formula in UniversalPreProcessor.get_supported_formulas():
-            rgi = UniversalPreProcessor.is_global_infra_required(set([formula]))
-            print(f"{formula}{' (requires global infra)' if rgi else ''}")
+            if UniversalPreProcessor.is_global_infra_required(set([formula])):
+                print(f"{formula} (requires global infra)")
+            else:
+                print(f"{formula}")
         exit(0)
 
     # Read environment variables
@@ -144,24 +147,22 @@ def main():
         args.slack_liveness_service_id, "IC_SLACK_POLICY_MONITORING_LIVENESS_SERVICE"
     )
     artifacts_location = env.extract_value_with_default(
-        args.artifacts, "MONPOLY_PIPELINE_ARTIFACTS", default="artifacts"
+        args.artifacts, "MONPOLY_PIPELINE_ARTIFACTS", default="./artifacts"
     )
 
     signature = env.generate_signature()
 
-    def warn_no_slack(service_name: str) -> None:
-        sys.stderr.write(
-            f"WARNING: {service_name} is disabled; pass WebHook service ID via --slack_service_id to enable it.\n"
-        )
+    def warn_no_slack(service_name: str, option: str) -> None:
+        sys.stderr.write(f"WARNING: {service_name} is disabled; pass WebHook service ID via {option} to enable it.\n")
 
     if slack_token is None:
-        warn_no_slack("Slack Alert Service")
+        warn_no_slack("Slack Alert Service", "--slack_service_id")
         slack = DummyAlertService(signature)
     else:
         slack = AlertService(slack_token, signature)
 
     if liveness_slack_token is None:
-        warn_no_slack("Slack Liveness Service")
+        warn_no_slack("Slack Liveness Service", "--liveness_slack_token")
         liveness_slack = DummyAlertService(signature)
     else:
         liveness_slack = AlertService(liveness_slack_token, signature)
@@ -185,6 +186,9 @@ def main():
                 f" dfinity/monpoly_pipeline:latest"
             ]
         )
+    else:
+        docker_starter = None
+
     project_root = Path(__file__).absolute().parent
 
     # The flag below indicates whether the pipeline should run Monpoly from
@@ -208,26 +212,32 @@ def main():
         if args.read:
             groups = file_io.read_logs(log_file=args.read)
         else:
+
+            def report_es_endpoint(scenario: str, endpoint: str) -> None:
+                eprint(f"Choosing {scenario} Elasticsearch endpoint for mainnet logs: {endpoint}")
+
+            if not elasticsearch_endpoint and not args.mainnet:
+                es_url = "elasticsearch.testnet.dfinity.systems"
+                report_es_endpoint("MAINNET", es_url)
+            elif not elasticsearch_endpoint and args.mainnet:
+                es_url = "elasticsearch.mercury.dfinity.systems"
+                report_es_endpoint("TESTNET", es_url)
+            else:
+                es_url = elasticsearch_endpoint
+                report_es_endpoint("CUSTOM", es_url)
+
             if args.mainnet:
-                if not elasticsearch_endpoint:
-                    es_url = "elasticsearch.mercury.dfinity.systems"
-                else:
-                    es_url = elasticsearch_endpoint
                 es = Es(es_url, alert_service=slack, mainnet=True)
                 gid = "mainnet"
                 groups = {gid: Group(gid)}
             else:
-                if not elasticsearch_endpoint:
-                    es_url = "elasticsearch.testnet.dfinity.systems"
-                else:
-                    es_url = elasticsearch_endpoint
                 es = Es(es_url, alert_service=slack, mainnet=False)
                 if args.group_names:
                     groups = {gid: Group(gid) for gid in args.group_names}
                 else:
                     if gitlab_token is None:
                         print(
-                            "Please specify at least one of the following options: --gitlab_token, --mainnet, group_names"
+                            "Please specify at least one of the following options: --gitlab_token, --mainnet, --group_names"
                         )
                         exit(1)
                     ci = Ci(url="https://gitlab.com", project="dfinity-lab/public/ic", token=gitlab_token)

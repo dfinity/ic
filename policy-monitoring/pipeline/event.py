@@ -105,7 +105,7 @@ class RebootEvent(InfraEvent):
             return []
         else:
             host_addr = self.doc.host_addr()
-            if host_addr in ["localhost", "blank"]:
+            if host_addr is None or host_addr in ["localhost", "blank"]:
                 # FIXME
                 return [
                     (
