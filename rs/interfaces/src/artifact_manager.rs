@@ -172,10 +172,14 @@ pub trait ArtifactProcessor<Artifact: artifact::ArtifactKind>: Send {
 
 /// The Artifact Manager stores artifacts to be used by this and other nodes in
 /// the same subnet in the artifact pool.
+///
+/// The Artifact Manager is the API between P2P(Gossip+Transport) and
+/// its clients.
+///
 // tag::artifact_manager[]
 pub trait ArtifactManager: Send + Sync {
-    /// When a new artifact is received by Gossip, it is forwarded to
-    /// the ArtifactManager together with its advert via the on_artifact call.
+    /// When a new artifact is received, it is forwarded to the
+    /// ArtifactManager together with its advert via the on_artifact call.
     /// This then forwards them to be processed by the corresponding
     /// ArtifactClient/ArtifactProcessor based on the artifact type.
     /// Returns `OnArtifactError` if no clients were able to process it or
@@ -191,9 +195,18 @@ pub trait ArtifactManager: Send + Sync {
 
     /// Checks if any of the ArtifactClient already has the artifact in the pool
     /// by the given identifier.
+    ///
+    /// P2P calls `has_artifact` after an advert is received to determine if
+    /// it should ignore the advert or proceed with downloading the corresponding
+    /// artifact.
+    ///
     fn has_artifact(&self, message_id: &artifact::ArtifactId) -> bool;
 
     /// Return a validated artifact by its identifier, or `None` if not found.
+    ///
+    /// P2P calls `get_validated_by_identifier` when it needs to send a
+    /// `Chunk` (from a particular artifact) to the requesting peer.
+    ///
     fn get_validated_by_identifier(
         &self,
         message_id: &artifact::ArtifactId,
@@ -208,6 +221,9 @@ pub trait ArtifactManager: Send + Sync {
 
     /// Get adverts of all validated artifacts by the filter from all clients.
     ///
+    /// After P2P receives a re-tranmission request it calls `get_all_validated_by_filter` to get a new set of adverts
+    /// that sends to the requesting peer.
+    ///
     /// See `ArtifactClient::get_all_validated_by_filter` for more details.
     fn get_all_validated_by_filter(
         &self,
@@ -216,6 +232,9 @@ pub trait ArtifactManager: Send + Sync {
 
     /// Gets the remaining quota the given peer is allowed to consume for a
     /// specific client that is identified by the given artifact tag.
+    ///
+    /// Before P2P schedules to download an artifact it first checks that
+    /// the corresponding artifact pool has enough space to store the artifact.
     ///
     /// See `ArtifactClient::get_remaining_quota` for more details.
     fn get_remaining_quota(&self, tag: artifact::ArtifactTag, peer_id: NodeId) -> Option<usize>;
@@ -227,6 +246,14 @@ pub trait ArtifactManager: Send + Sync {
     fn get_priority_function(&self, tag: artifact::ArtifactTag) -> Option<ArtifactPriorityFn>;
 
     /// Get Chunk tracker for an advert.
+    ///
+    /// Artifacts don't necessary fit into memory. So each P2P client
+    /// is given the flexibility to chunk and serialize their artifacts via
+    /// the `Chunkbable` trait.
+    ///
+    /// When P2P decided to download an artifact it requests the corresponding
+    /// chunk tracker for that particular artifact type via the
+    /// `get_chunk_tracker` method.
     ///
     /// See `ArtifactClient::get_chunk_tracker` for more details
     fn get_chunk_tracker(
