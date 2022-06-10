@@ -108,7 +108,6 @@ fn mock_dealings(
     for node_id in dealers {
         let dealing = IDkgDealing {
             transcript_id,
-            dealer_id: *node_id,
             internal_dealing_raw: format!("Dummy raw dealing for dealer {}", node_id).into_bytes(),
         };
         dealings.insert(*node_id, dealing);

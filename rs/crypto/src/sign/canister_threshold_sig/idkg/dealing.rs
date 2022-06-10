@@ -59,7 +59,6 @@ pub fn create_dealing<C: CspIDkgProtocol>(
 
     Ok(IDkgDealing {
         transcript_id: params.transcript_id(),
-        dealer_id: *self_node_id,
         internal_dealing_raw,
     })
 }

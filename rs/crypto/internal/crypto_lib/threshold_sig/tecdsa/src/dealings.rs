@@ -461,6 +461,6 @@ impl TryFrom<&IDkgMultiSignedDealing> for IDkgDealingInternal {
     type Error = ThresholdEcdsaError;
 
     fn try_from(signed_dealing: &IDkgMultiSignedDealing) -> ThresholdEcdsaResult<Self> {
-        Self::deserialize(&signed_dealing.dealing.idkg_dealing.internal_dealing_raw)
+        Self::deserialize(&signed_dealing.signed_dealing.content.internal_dealing_raw)
     }
 }

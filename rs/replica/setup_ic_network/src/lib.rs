@@ -431,7 +431,7 @@ fn setup_artifact_manager(
                         replica_logger.clone(),
                         malicious_flags,
                     ),
-                    ecdsa::EcdsaGossipImpl::new(Arc::clone(&consensus_block_cache)),
+                    ecdsa::EcdsaGossipImpl::new(subnet_id, Arc::clone(&consensus_block_cache)),
                 )
             },
             Arc::clone(&time_source) as Arc<_>,

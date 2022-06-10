@@ -316,13 +316,15 @@ impl Ecdsa for EcdsaImpl {
 /// `EcdsaGossipImpl` implements the priority function and other gossip related
 /// functionality
 pub struct EcdsaGossipImpl {
+    subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
 }
 
 impl EcdsaGossipImpl {
     /// Builds a new EcdsaGossipImpl component
-    pub fn new(consensus_block_cache: Arc<dyn ConsensusBlockCache>) -> Self {
+    pub fn new(subnet_id: SubnetId, consensus_block_cache: Arc<dyn ConsensusBlockCache>) -> Self {
         Self {
+            subnet_id,
             consensus_block_cache,
         }
     }
@@ -334,9 +336,10 @@ impl EcdsaGossip for EcdsaGossipImpl {
         _ecdsa_pool: &dyn EcdsaPool,
     ) -> PriorityFn<EcdsaMessageId, EcdsaMessageAttribute> {
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
+        let subnet_id = self.subnet_id;
         let cached_finalized_height = block_reader.tip_height();
         Box::new(move |_, attr: &'_ EcdsaMessageAttribute| {
-            compute_priority(attr, cached_finalized_height)
+            compute_priority(attr, subnet_id, cached_finalized_height)
         })
     }
 }
@@ -351,10 +354,26 @@ impl EcdsaGossip for EcdsaGossipImpl {
 // we are not interested in, and use the latest state of the artifact pools.
 // But this would require more processing per call to priority function, and
 // cause extra lock contention for the main processing paths.
-fn compute_priority(attr: &EcdsaMessageAttribute, cached_finalized_height: Height) -> Priority {
+// 3. The height in the dealings/support shares is the source subnet height, which
+// may be different in the xnet resharing case. Local requested height is not available
+// in these cases. Hence fetch them immediately. The requested_height will be removed
+// for other artifact types as well in near future.
+fn compute_priority(
+    attr: &EcdsaMessageAttribute,
+    subnet_id: SubnetId,
+    cached_finalized_height: Height,
+) -> Priority {
     let height = match attr {
-        EcdsaMessageAttribute::EcdsaSignedDealing(height) => *height,
-        EcdsaMessageAttribute::EcdsaDealingSupport(height) => *height,
+        EcdsaMessageAttribute::EcdsaSignedDealing(transcript_id)
+        | EcdsaMessageAttribute::EcdsaDealingSupport(transcript_id) => {
+            // For xnet dealings(target side), always fetch the artifacts,
+            // as the source_height from different subnet cannot be compared
+            // anyways.
+            if *transcript_id.source_subnet() != subnet_id {
+                return Priority::Fetch;
+            }
+            transcript_id.source_height()
+        }
         EcdsaMessageAttribute::EcdsaSigShare(height) => *height,
         EcdsaMessageAttribute::EcdsaComplaint(height) => *height,
         EcdsaMessageAttribute::EcdsaOpening(height) => *height,
@@ -370,48 +389,73 @@ fn compute_priority(attr: &EcdsaMessageAttribute, cached_finalized_height: Heigh
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
+    use ic_types::{PrincipalId, SubnetId};
 
     // Tests the priority computation
     #[test]
-    fn test_ecdsa_priority_dealing() {
+    fn test_ecdsa_priority_fn() {
         let cached_finalized_height = Height::from(100);
+        let xnet_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
+        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
+        let xnet_transcript_id = IDkgTranscriptId::new(xnet_subnet_id, 1, Height::from(1000));
+        let local_transcript_id = IDkgTranscriptId::new(subnet_id, 1, Height::from(120));
         let tests = vec![
             (
-                EcdsaMessageAttribute::EcdsaSignedDealing(Height::from(90)),
+                EcdsaMessageAttribute::EcdsaSignedDealing(xnet_transcript_id),
                 Priority::Fetch,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSignedDealing(Height::from(109)),
+                EcdsaMessageAttribute::EcdsaDealingSupport(xnet_transcript_id),
                 Priority::Fetch,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSignedDealing(Height::from(110)),
+                EcdsaMessageAttribute::EcdsaSignedDealing(local_transcript_id),
                 Priority::Stash,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSignedDealing(Height::from(120)),
+                EcdsaMessageAttribute::EcdsaDealingSupport(local_transcript_id),
                 Priority::Stash,
             ),
             (
-                EcdsaMessageAttribute::EcdsaDealingSupport(Height::from(90)),
+                EcdsaMessageAttribute::EcdsaSigShare(Height::from(90)),
                 Priority::Fetch,
             ),
             (
-                EcdsaMessageAttribute::EcdsaDealingSupport(Height::from(109)),
+                EcdsaMessageAttribute::EcdsaSigShare(Height::from(109)),
                 Priority::Fetch,
             ),
             (
-                EcdsaMessageAttribute::EcdsaDealingSupport(Height::from(110)),
+                EcdsaMessageAttribute::EcdsaComplaint(Height::from(110)),
                 Priority::Stash,
             ),
             (
-                EcdsaMessageAttribute::EcdsaDealingSupport(Height::from(120)),
+                EcdsaMessageAttribute::EcdsaComplaint(Height::from(120)),
+                Priority::Stash,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaOpening(Height::from(90)),
+                Priority::Fetch,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaOpening(Height::from(109)),
+                Priority::Fetch,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaOpening(Height::from(110)),
+                Priority::Stash,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaOpening(Height::from(120)),
                 Priority::Stash,
             ),
         ];
 
         for (attr, expected) in tests {
-            assert_eq!(compute_priority(&attr, cached_finalized_height), expected);
+            assert_eq!(
+                compute_priority(&attr, subnet_id, cached_finalized_height),
+                expected
+            );
         }
     }
 }

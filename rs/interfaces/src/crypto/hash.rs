@@ -7,13 +7,13 @@ use ic_types::consensus::dkg as consensus_dkg;
 use ic_types::consensus::{
     certification::{Certification, CertificationContent, CertificationShare},
     ecdsa::{
-        EcdsaComplaintContent, EcdsaDealing, EcdsaMessage, EcdsaOpeningContent, EcdsaSigShare,
-        EcdsaTranscript,
+        EcdsaComplaintContent, EcdsaMessage, EcdsaOpeningContent, EcdsaSigShare, EcdsaTranscript,
     },
     Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes, CatchUpShareContent,
     ConsensusMessage, FinalizationContent, HashedBlock, NotarizationContent, RandomBeaconContent,
     RandomTapeContent,
 };
+use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
 use ic_types::crypto::Signed;
 use ic_types::messages::{HttpCanisterUpdate, MessageId, SignedRequestBytes};
 use ic_types::signature::{
@@ -72,10 +72,10 @@ const DOMAIN_STATE_SYNC_MESSAGE: &str = "state_sync_message_domain";
 const DOMAIN_CONSENSUS_MESSAGE: &str = "consensus_message_domain";
 const DOMAIN_CERTIFICATION_MESSAGE: &str = "certification_message_domain";
 const DOMAIN_ECDSA_MESSAGE: &str = "ic-threshold-ecdsa-message-domain";
-pub(crate) const DOMAIN_ECDSA_DEALING: &str = "ic-threshold-ecdsa-dealing-domain";
-pub const DOMAIN_ECDSA_SIGNED_DEALING: &str = "ic-threshold-ecdsa-signed-dealing-domain";
-const DOMAIN_ECDSA_DEALING_SUPPORT: &str = "ic-threshold-ecdsa-dealing-support-domain";
-const DOMAIN_ECDSA_VERIFIED_DEALING: &str = "ic-threshold-ecdsa-verified-dealing-domain";
+pub(crate) const DOMAIN_IDKG_DEALING: &str = "ic-idkg-dealing-domain";
+pub(crate) const DOMAIN_SIGNED_IDKG_DEALING: &str = "ic-idkg-signed-dealing-domain";
+const DOMAIN_IDKG_DEALING_SUPPORT: &str = "ic-idkg-dealing-support-domain";
+const DOMAIN_VERIFIED_IDKG_DEALING: &str = "ic-idkg-verified-dealing-domain";
 const DOMAIN_ECDSA_TRANSCRIPT: &str = "ic-idkg-transcript-domain";
 const DOMAIN_ECDSA_SIG_SHARE: &str = "ic-threshold-ecdsa-sig-share-domain";
 pub(crate) const DOMAIN_ECDSA_COMPLAINT_CONTENT: &str =
@@ -108,6 +108,7 @@ pub trait CryptoHashDomain: private::CryptoHashDomainSeal {
 mod private {
 
     use ic_types::canister_http::CanisterHttpResponseShare;
+    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
 
     use super::*;
 
@@ -172,10 +173,11 @@ mod private {
 
     impl CryptoHashDomainSeal for EcdsaMessage {}
 
-    impl CryptoHashDomainSeal for EcdsaDealing {}
-    impl CryptoHashDomainSeal for Signed<EcdsaDealing, BasicSignature<EcdsaDealing>> {}
-    impl CryptoHashDomainSeal for Signed<EcdsaDealing, MultiSignatureShare<EcdsaDealing>> {}
-    impl CryptoHashDomainSeal for Signed<EcdsaDealing, MultiSignature<EcdsaDealing>> {}
+    impl CryptoHashDomainSeal for IDkgDealing {}
+
+    impl CryptoHashDomainSeal for SignedIDkgDealing {}
+    impl CryptoHashDomainSeal for Signed<SignedIDkgDealing, MultiSignatureShare<SignedIDkgDealing>> {}
+    impl CryptoHashDomainSeal for Signed<SignedIDkgDealing, MultiSignature<SignedIDkgDealing>> {}
 
     impl CryptoHashDomainSeal for EcdsaTranscript {}
     impl CryptoHashDomainSeal for EcdsaSigShare {}
@@ -405,27 +407,27 @@ impl CryptoHashDomain for EcdsaMessage {
     }
 }
 
-impl CryptoHashDomain for EcdsaDealing {
+impl CryptoHashDomain for IDkgDealing {
     fn domain(&self) -> String {
-        DOMAIN_ECDSA_DEALING.to_string()
+        DOMAIN_IDKG_DEALING.to_string()
     }
 }
 
-impl CryptoHashDomain for Signed<EcdsaDealing, BasicSignature<EcdsaDealing>> {
+impl CryptoHashDomain for SignedIDkgDealing {
     fn domain(&self) -> String {
-        DOMAIN_ECDSA_SIGNED_DEALING.to_string()
+        DOMAIN_SIGNED_IDKG_DEALING.to_string()
     }
 }
 
-impl CryptoHashDomain for Signed<EcdsaDealing, MultiSignatureShare<EcdsaDealing>> {
+impl CryptoHashDomain for Signed<SignedIDkgDealing, MultiSignatureShare<SignedIDkgDealing>> {
     fn domain(&self) -> String {
-        DOMAIN_ECDSA_DEALING_SUPPORT.to_string()
+        DOMAIN_IDKG_DEALING_SUPPORT.to_string()
     }
 }
 
-impl CryptoHashDomain for Signed<EcdsaDealing, MultiSignature<EcdsaDealing>> {
+impl CryptoHashDomain for Signed<SignedIDkgDealing, MultiSignature<SignedIDkgDealing>> {
     fn domain(&self) -> String {
-        DOMAIN_ECDSA_VERIFIED_DEALING.to_string()
+        DOMAIN_VERIFIED_IDKG_DEALING.to_string()
     }
 }
 

@@ -102,7 +102,7 @@ pub fn verify_transcript<C: CspIDkgProtocol + CspSigner>(
             csp_client,
             Arc::clone(registry),
             &signed_dealing.signature,
-            &signed_dealing.dealing,
+            &signed_dealing.signed_dealing,
             signed_dealing.signers.clone(),
             params.registry_version(),
         )
@@ -408,7 +408,7 @@ fn verify_multisignatures<C: CspSigner>(
             csp_client,
             Arc::clone(registry),
             &dealing.signature,
-            &dealing.dealing,
+            &dealing.signed_dealing,
             dealing.signers.clone(),
             registry_version,
         )
@@ -426,7 +426,7 @@ fn internal_dealings_from_signed_dealings(
         .iter()
         .map(|(index, d)| {
             let internal_dealing =
-                IDkgDealingInternal::deserialize(&d.dealing.idkg_dealing.internal_dealing_raw)
+                IDkgDealingInternal::deserialize(&d.signed_dealing.content.internal_dealing_raw)
                     .map_err(|e| IDkgCreateTranscriptError::SerializationError {
                         internal_error: format!("{:?}", e),
                     })?;

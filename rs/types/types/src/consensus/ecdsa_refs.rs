@@ -778,14 +778,8 @@ pub trait EcdsaBlockReader {
     /// Returns the height of the tip
     fn tip_height(&self) -> Height;
 
-    /// Returns true if xnet reshare is in progress.
-    fn xnet_reshare_in_progress(&self) -> bool;
-
     /// Returns the transcripts requested by the tip.
     fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
-
-    /// Returns the ongoing xnet reshare transcripts requested by the tip.
-    fn xnet_reshare_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
 
     /// Returns the signatures requested by the tip.
     fn requested_signatures(
@@ -794,6 +788,18 @@ pub trait EcdsaBlockReader {
 
     /// Returns the set of all the active references.
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef>;
+
+    /// Returns the transcript params for the xnet reshares in progress, on the source subnet side.
+    /// One entry is returned per <key_id, target_subnet> in progress.
+    fn source_subnet_xnet_transcripts(
+        &self,
+    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
+
+    /// Returns the transcript params for the xnet key creation in progress, on the target
+    /// subnet side. One entry is returned per key_id being bootstrapped.
+    fn target_subnet_xnet_transcripts(
+        &self,
+    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
 
     /// Looks up the transcript for the given transcript ref.
     fn transcript(

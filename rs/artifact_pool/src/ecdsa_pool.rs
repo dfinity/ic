@@ -16,18 +16,17 @@ use ic_interfaces::ecdsa::{
     MutableEcdsaPoolSection,
 };
 use ic_interfaces::gossip_pool::{EcdsaGossipPool, GossipPool};
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::catchup::CUPWithOriginalProtobuf;
 use ic_types::consensus::ecdsa::{
-    EcdsaComplaint, EcdsaDealing, EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash,
-    EcdsaMessageType, EcdsaOpening, EcdsaSigShare, EcdsaSignedDealing,
+    EcdsaComplaint, EcdsaMessage, EcdsaMessageHash, EcdsaMessageType, EcdsaOpening, EcdsaSigShare,
 };
 use ic_types::consensus::BlockPayload;
+use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
 use ic_types::crypto::{BasicSig, BasicSigOf};
 use ic_types::signature::BasicSignature;
-use ic_types::Height;
 
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -155,14 +154,14 @@ impl EcdsaPoolSection for InMemoryEcdsaPoolSection {
 
     fn signed_dealings(
         &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSignedDealing)> + '_> {
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SignedIDkgDealing)> + '_> {
         let object_pool = self.get_pool(EcdsaMessageType::Dealing);
         object_pool.iter()
     }
 
     fn dealing_support(
         &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaDealingSupport)> + '_> {
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, IDkgDealingSupport)> + '_> {
         let object_pool = self.get_pool(EcdsaMessageType::DealingSupport);
         object_pool.iter()
     }
@@ -254,21 +253,23 @@ impl EcdsaPoolImpl {
         let initial_dealings = initial_dealings.as_ref().unwrap();
 
         let mut change_set = Vec::new();
-        for dealing in initial_dealings.dealings().values() {
-            let ecdsa_dealing = EcdsaDealing {
-                requested_height: Height::new(0),
-                idkg_dealing: dealing.clone(),
-            };
-            let signed_dealing = EcdsaSignedDealing {
+        for (dealer_id, dealing) in initial_dealings.dealings().iter() {
+            info!(
+                self.log,
+                "add_initial_dealings(): dealer: {:?}, transcript_id = {:?}",
+                dealer_id,
+                dealing.transcript_id,
+            );
+            let signed_dealing = SignedIDkgDealing {
                 // Fake the basic signature. This should be fine as we
                 // are adding to the validated pool, which happens after
                 // the signature validation. The signature won't be validated
                 // again.
                 signature: BasicSignature {
                     signature: BasicSigOf::new(BasicSig(vec![])),
-                    signer: dealing.dealer_id,
+                    signer: *dealer_id,
                 },
-                content: ecdsa_dealing,
+                content: dealing.clone(),
             };
             change_set.push(EcdsaChangeAction::AddToValidated(
                 EcdsaMessage::EcdsaSignedDealing(signed_dealing),
@@ -380,21 +381,15 @@ mod tests {
     use ic_test_utilities::types::ids::NODE_1;
     use ic_test_utilities::with_test_replica_logger;
     use ic_test_utilities::FastForwardTimeSource;
-    use ic_types::consensus::ecdsa::EcdsaDealing;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::signature::BasicSignature;
-    use ic_types::Height;
     use std::collections::BTreeSet;
 
-    fn create_ecdsa_dealing(transcript_id: IDkgTranscriptId) -> EcdsaSignedDealing {
+    fn create_ecdsa_dealing(transcript_id: IDkgTranscriptId) -> SignedIDkgDealing {
         let mut idkg_dealing = dummy_idkg_dealing_for_tests();
-        idkg_dealing.dealer_id = NODE_1;
         idkg_dealing.transcript_id = transcript_id;
-        EcdsaSignedDealing {
-            content: EcdsaDealing {
-                requested_height: Height::from(10),
-                idkg_dealing,
-            },
+        SignedIDkgDealing {
+            content: idkg_dealing,
             signature: BasicSignature::fake(NODE_1),
         }
     }
@@ -491,7 +486,7 @@ mod tests {
         assert!(object_pool.get_object(&key_2).is_some());
 
         let iter_pool = |object_pool: &EcdsaObjectPool| {
-            let iter: Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSignedDealing)>> =
+            let iter: Box<dyn Iterator<Item = (EcdsaMessageId, SignedIDkgDealing)>> =
                 object_pool.iter();
             let mut items: Vec<EcdsaMessageHash> = Vec::new();
             for item in iter {

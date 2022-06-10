@@ -2,10 +2,8 @@
 
 use crate::artifact_pool::UnvalidatedArtifact;
 use ic_types::artifact::{EcdsaMessageAttribute, EcdsaMessageId, PriorityFn};
-use ic_types::consensus::ecdsa::{
-    EcdsaComplaint, EcdsaDealingSupport, EcdsaMessage, EcdsaOpening, EcdsaSigShare,
-    EcdsaSignedDealing,
-};
+use ic_types::consensus::ecdsa::{EcdsaComplaint, EcdsaMessage, EcdsaOpening, EcdsaSigShare};
+use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
 
 // TODO: purge/remove from validated
 #[derive(Debug)]
@@ -28,14 +26,13 @@ pub trait EcdsaPoolSection: Send + Sync {
     fn get(&self, msg_id: &EcdsaMessageId) -> Option<EcdsaMessage>;
 
     /// Iterator for signed dealing objects.
-    fn signed_dealings(
-        &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSignedDealing)> + '_>;
+    fn signed_dealings(&self)
+        -> Box<dyn Iterator<Item = (EcdsaMessageId, SignedIDkgDealing)> + '_>;
 
     /// Iterator for dealing support objects.
     fn dealing_support(
         &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaDealingSupport)> + '_>;
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, IDkgDealingSupport)> + '_>;
 
     /// Iterator for signature share objects.
     fn signature_shares(&self) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSigShare)> + '_>;

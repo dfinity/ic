@@ -1,16 +1,17 @@
 //! Defines interactive distributed key generation (IDkg) types.
-use crate::consensus::ecdsa::EcdsaDealing;
 use crate::consensus::get_faults_tolerated;
 use crate::crypto::canister_threshold_sig::error::{
     IDkgParamsValidationError, IDkgTranscriptIdError, InitialIDkgDealingsValidationError,
 };
-use crate::crypto::{AlgorithmId, CombinedMultiSigOf};
+use crate::crypto::{AlgorithmId, CombinedMultiSigOf, Signed, SignedBytesWithoutDomainSeparator};
+use crate::signature::{BasicSignature, MultiSignature, MultiSignatureShare};
 use crate::{Height, NodeId, NumberOfNodes, RegistryVersion};
 use ic_base_types::SubnetId;
 use ic_crypto_internal_types::NodeIndex;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
+use std::fmt::{self, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
 pub mod conversions;
@@ -659,15 +660,15 @@ impl IDkgTranscript {
     pub fn dealer_id_for_index(&self, index: NodeIndex) -> Option<NodeId> {
         self.verified_dealings
             .get(&index)
-            .map(|signed_dealing| signed_dealing.dealing.idkg_dealing.dealer_id)
+            .map(|verified_dealing| verified_dealing.signed_dealing.dealer_id())
     }
 
     /// Returns the index of the dealer with the given ID, or `None` if there is no such index.
     pub fn index_for_dealer_id(&self, dealer_id: NodeId) -> Option<NodeIndex> {
         self.verified_dealings
             .iter()
-            .find(|(_index, signed_dealing)| {
-                signed_dealing.dealing.idkg_dealing.dealer_id == dealer_id
+            .find(|(_index, verified_dealing)| {
+                verified_dealing.signed_dealing.dealer_id() == dealer_id
             })
             .map(|(index, _signed_dealing)| *index)
     }
@@ -755,7 +756,9 @@ impl IDkgTranscript {
         let dealer_index_to_dealer_id: BTreeMap<NodeIndex, NodeId> = self
             .verified_dealings
             .iter()
-            .map(|(dealer_index, dealing)| (*dealer_index, dealing.dealing.idkg_dealing.dealer_id))
+            .map(|(dealer_index, verified_dealing)| {
+                (*dealer_index, verified_dealing.signed_dealing.dealer_id())
+            })
             .collect();
         for (dealer_index, dealer_id) in dealer_index_to_dealer_id {
             let dealer_index_in_params = params.dealer_index(dealer_id).ok_or_else(|| {
@@ -797,16 +800,74 @@ impl IDkgTranscript {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct IDkgDealing {
     pub transcript_id: IDkgTranscriptId,
-    pub dealer_id: NodeId,
     pub internal_dealing_raw: Vec<u8>,
+}
+
+impl Display for IDkgDealing {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "Dealing[transcript_id = {:?}]", self.transcript_id,)
+    }
+}
+
+impl SignedBytesWithoutDomainSeparator for IDkgDealing {
+    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
+        serde_cbor::to_vec(&self).unwrap()
+    }
+}
+
+/// The signed dealing sent by dealers
+pub type SignedIDkgDealing = Signed<IDkgDealing, BasicSignature<IDkgDealing>>;
+
+impl SignedIDkgDealing {
+    pub fn idkg_dealing(&self) -> &IDkgDealing {
+        &self.content
+    }
+
+    pub fn dealer_id(&self) -> NodeId {
+        self.signature.signer
+    }
+}
+
+impl Display for SignedIDkgDealing {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}, dealer_id = {:?}",
+            self.content, self.signature.signer,
+        )
+    }
+}
+
+impl SignedBytesWithoutDomainSeparator for SignedIDkgDealing {
+    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
+        serde_cbor::to_vec(&self).unwrap()
+    }
+}
+
+/// TODO: IDkgDealing can be big, consider sending only the signature
+/// as part of the shares
+/// The individual signature share in support of a dealing
+pub type IDkgDealingSupport = Signed<SignedIDkgDealing, MultiSignatureShare<SignedIDkgDealing>>;
+
+/// The multi-signature verified dealing
+pub type VerifiedIdkgDealing = Signed<SignedIDkgDealing, MultiSignature<SignedIDkgDealing>>;
+
+impl Display for IDkgDealingSupport {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}, multi_signer_id = {:?}",
+            self.content, self.signature.signer,
+        )
+    }
 }
 
 /// Dealing of an IDkg sharing, along with a combined multisignature.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct IDkgMultiSignedDealing {
-    pub signature: CombinedMultiSigOf<EcdsaDealing>,
+    pub signature: CombinedMultiSigOf<SignedIDkgDealing>,
     pub signers: BTreeSet<NodeId>,
-    pub dealing: EcdsaDealing,
+    pub signed_dealing: SignedIDkgDealing,
 }
 
 /// Complaint against an individual IDkg dealing in a transcript.
