@@ -1,11 +1,10 @@
-use crate::{gossip_protocol::Percentage, P2PError, P2PErrorCode, P2PResult};
+use crate::{P2PError, P2PErrorCode, P2PResult};
 use ic_interfaces_transport::Transport;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_types::{
     artifact::ArtifactId, chunkable::ChunkId, crypto::CryptoHash, NodeId, RegistryVersion,
 };
-use rand::{seq::SliceRandom, thread_rng};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
@@ -16,9 +15,6 @@ use std::{
 pub(crate) trait PeerManager {
     /// The method returns the current list of peers.
     fn get_current_peer_ids(&self) -> Vec<NodeId>;
-
-    /// The method returns a randomized subset of the current list of peers.
-    fn get_random_subset(&self, percentage: Percentage) -> Vec<NodeId>;
 
     /// The method sets the list of peers to the given list.
     fn set_current_peer_ids(&self, new_peers: Vec<NodeId>);
@@ -93,13 +89,13 @@ pub(crate) type PeerContextDictionary = HashMap<NodeId, PeerContext>;
 /// An implementation of the `PeerManager` trait.
 pub(crate) struct PeerManagerImpl {
     /// The node ID of the peer.
-    pub(crate) node_id: NodeId,
+    node_id: NodeId,
     /// The logger.
-    pub(crate) log: ReplicaLogger,
+    log: ReplicaLogger,
     /// The dictionary containing all peer contexts.
     pub(crate) current_peers: Arc<Mutex<PeerContextDictionary>>,
     /// The underlying *Transport*.
-    pub(crate) transport: Arc<dyn Transport>,
+    transport: Arc<dyn Transport>,
 }
 
 impl PeerManagerImpl {
@@ -127,18 +123,6 @@ impl PeerManager for PeerManagerImpl {
             .unwrap()
             .iter()
             .map(|(k, _v)| k.to_owned())
-            .collect()
-    }
-
-    /// The method returns a randomized subset of the current list of peers.
-    fn get_random_subset(&self, percentage: Percentage) -> Vec<NodeId> {
-        let peers = self.get_current_peer_ids();
-        let multiplier = (percentage.get() as f64) / 100.0_f64;
-        let subset_size = (peers.len() as f64 * multiplier).ceil() as usize;
-        let mut rng = thread_rng();
-        peers
-            .choose_multiple(&mut rng, subset_size)
-            .cloned()
             .collect()
     }
 
