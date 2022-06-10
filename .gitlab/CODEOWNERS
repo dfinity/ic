@@ -74,6 +74,7 @@
 /rs/artifact_pool/                      @dfinity-lab/teams/consensus-owners
 /rs/bitcoin/adapter/                    @dfinity-lab/teams/networking-team
 /rs/bitcoin/canister/                   @dfinity-lab/teams/execution-owners
+/rs/bitcoin/ckbtc/                      @dfinity-lab/teams/financial-integrations
 /rs/bitcoin/client/                     @dfinity-lab/teams/networking-team
 /rs/bitcoin/consensus/                  @dfinity-lab/teams/execution-owners
 /rs/bitcoin/service/                    @dfinity-lab/teams/networking-team
