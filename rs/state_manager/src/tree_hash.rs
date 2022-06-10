@@ -81,7 +81,6 @@ mod tests {
     };
     use ic_types::{
         ingress::IngressStatus,
-        messages::RequestOrResponse,
         xnet::{StreamIndex, StreamIndexedQueue},
         Cycles, ExecutionRound,
     };
@@ -209,7 +208,7 @@ mod tests {
                 StreamIndex::new(10),
             );
             for _ in 1..6 {
-                stream.push(RequestOrResponse::Response(ResponseBuilder::new().build()));
+                stream.push(ResponseBuilder::new().build().into());
             }
             if certification_version >= CertificationVersion::V8 {
                 stream.push_reject_signal(10.into());

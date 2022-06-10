@@ -36,7 +36,7 @@ pub fn process_responses(
         }
         Response::Canister(canister_response) => {
             if let Some(canister) = state.canister_state_mut(&canister_response.respondent) {
-                canister.push_output_response(canister_response)
+                canister.push_output_response(canister_response.into())
             } else {
                 error!(log, "[EXC-BUG] Canister {} is attempting to send a response, but the canister doesn't exist in the state!", canister_response.respondent);
             }
@@ -53,7 +53,7 @@ pub fn process_response(
             res.canister.canister_id(),
             "Respondent mismatch"
         );
-        res.canister.push_output_response(response);
+        res.canister.push_output_response(response.into());
         res.result = ExecResult::Empty;
     }
     res
@@ -116,7 +116,7 @@ pub fn process_stopping_canisters(
                             refund: cycles,
                             response_payload: Payload::Data(EmptyBlob::encode()),
                         };
-                        state.push_subnet_output_response(response);
+                        state.push_subnet_output_response(response.into());
                     }
                 }
             }

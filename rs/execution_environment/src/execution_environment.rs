@@ -232,13 +232,16 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 return match request {
                     None => (state, instructions_limit),
                     Some(request) => {
-                        state.push_subnet_output_response(Response {
-                            originator: request.sender,
-                            respondent: CanisterId::from(self.own_subnet_id),
-                            originator_reply_callback: request.sender_reply_callback,
-                            refund: request.payment,
-                            response_payload: response.response_payload,
-                        });
+                        state.push_subnet_output_response(
+                            Response {
+                                originator: request.sender,
+                                respondent: CanisterId::from(self.own_subnet_id),
+                                originator_reply_callback: request.sender_reply_callback,
+                                refund: request.payment,
+                                response_payload: response.response_payload.clone(),
+                            }
+                            .into(),
+                        );
                         (state, instructions_limit)
                     }
                 };
@@ -252,14 +255,15 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         let payload = msg.method_payload();
         let (result, instructions_left) = match method {
             Ok(Ic00Method::CreateCanister) => {
-                match &mut msg { RequestOrIngress::Ingress(_) =>
-                    (Some((Err(UserError::new(
-                        ErrorCode::CanisterMethodNotFound,
-                        "create_canister can only be called by other canisters, not via ingress messages.")),
-                          Cycles::zero(),
-                    )), instructions_limit),
+                match &mut msg {
+                    RequestOrIngress::Ingress(_) =>
+                        (Some((Err(UserError::new(
+                            ErrorCode::CanisterMethodNotFound,
+                            "create_canister can only be called by other canisters, not via ingress messages.")),
+                            Cycles::zero(),
+                        )), instructions_limit),
                     RequestOrIngress::Request(req) => {
-                        let cycles = req.take_cycles();
+                        let cycles = Arc::make_mut(req).take_cycles();
                         match CreateCanisterArgs::decode(req.method_payload()) {
                             Err(err) => (Some((Err(err), cycles)), instructions_limit),
                             Ok(args) => {
@@ -510,7 +514,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                     .metadata
                                     .subnet_call_context_manager
                                     .push_http_request(CanisterHttpRequestContext {
-                                        request: request.clone(),
+                                        request: (**request).clone(),
                                         url: args.url,
                                         headers: args
                                             .headers
@@ -593,16 +597,21 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
                     if !reject_message.is_empty() {
                         use ic_types::messages;
-                        state.push_subnet_output_response(Response {
-                            originator: request.sender,
-                            respondent: CanisterId::from(self.own_subnet_id),
-                            originator_reply_callback: request.sender_reply_callback,
-                            refund: request.payment,
-                            response_payload: messages::Payload::Reject(messages::RejectContext {
-                                code: ic_error_types::RejectCode::CanisterReject,
-                                message: reject_message,
-                            }),
-                        });
+                        state.push_subnet_output_response(
+                            Response {
+                                originator: request.sender,
+                                respondent: CanisterId::from(self.own_subnet_id),
+                                originator_reply_callback: request.sender_reply_callback,
+                                refund: request.payment,
+                                response_payload: messages::Payload::Reject(
+                                    messages::RejectContext {
+                                        code: ic_error_types::RejectCode::CanisterReject,
+                                        message: reject_message,
+                                    },
+                                ),
+                            }
+                            .into(),
+                        );
                         return (state, instructions_limit);
                     }
 
@@ -610,7 +619,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                         Err(err) => Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
                         Ok(args) => self
                             .sign_with_ecdsa(
-                                request.clone(),
+                                (**request).clone(),
                                 args.message_hash,
                                 args.derivation_path,
                                 &args.key_id,
@@ -817,7 +826,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         if let CanisterInputMessage::Response(response) = msg {
             let (should_refund_remaining_cycles, mut res) = self.execute_canister_response(
                 canister,
-                response,
+                &*response,
                 instructions_limit,
                 time,
                 network_topology,
@@ -1111,7 +1120,7 @@ impl ExecutionEnvironmentImpl {
     pub fn execute_canister_response(
         &self,
         mut canister: CanisterState,
-        mut resp: Response,
+        resp: &Response,
         cycles: NumInstructions,
         time: Time,
         network_topology: Arc<NetworkTopology>,
@@ -1232,7 +1241,7 @@ impl ExecutionEnvironmentImpl {
             &self.log,
             self.metrics.response_cycles_refund_error_counter(),
             &mut canister.system_state,
-            &mut resp,
+            resp,
         );
 
         if is_call_context_deleted {
@@ -1268,7 +1277,7 @@ impl ExecutionEnvironmentImpl {
                 canister,
                 &call_origin,
                 callback,
-                resp.response_payload,
+                resp.response_payload.clone(),
                 refunded_cycles,
                 time,
                 network_topology,
@@ -1472,7 +1481,7 @@ impl ExecutionEnvironmentImpl {
                     response_payload: payload,
                 };
 
-                state.push_subnet_output_response(response);
+                state.push_subnet_output_response(response.into());
                 state
             }
             RequestOrIngress::Ingress(ingress) => {
@@ -1498,8 +1507,11 @@ impl ExecutionEnvironmentImpl {
                     },
                 };
 
-                self.ingress_history_writer
-                    .set_status(&mut state, ingress.message_id, status);
+                self.ingress_history_writer.set_status(
+                    &mut state,
+                    ingress.message_id.clone(),
+                    status,
+                );
                 state
             }
         }
@@ -1549,7 +1561,7 @@ impl ExecutionEnvironmentImpl {
                             message: format!("Canister {}'s stop request cancelled", canister_id),
                         }),
                     };
-                    state.push_subnet_output_response(response);
+                    state.push_subnet_output_response(response.into());
                 }
             }
         }

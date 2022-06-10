@@ -552,7 +552,7 @@ impl CyclesAccountManager {
         log: &ReplicaLogger,
         error_counter: &IntCounter,
         system_state: &mut SystemState,
-        response: &mut Response,
+        response: &Response,
     ) {
         // We originally charged for the maximum number of bytes possible so
         // figure out how many extra bytes we charged for.

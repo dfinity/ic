@@ -24,7 +24,7 @@ mod canister_state {
         assert_eq!(
             canister.system_state.queues_mut().push_input(
                 QueueIndex::new(0),
-                RequestOrResponse::Request(RequestBuilder::new().build()),
+                RequestBuilder::new().build().into(),
                 InputQueueType::RemoteSubnet,
             ),
             Ok(())
@@ -40,7 +40,8 @@ mod canister_state {
                 RequestBuilder::new()
                     .sender(canister_test_id(0))
                     .receiver(canister_test_id(1))
-                    .build(),
+                    .build()
+                    .into(),
             ),
             Ok(())
         );
@@ -48,12 +49,11 @@ mod canister_state {
         assert_eq!(
             canister.system_state.queues_mut().push_input(
                 QueueIndex::new(0),
-                RequestOrResponse::Response(
-                    ResponseBuilder::new()
-                        .originator(canister_test_id(0))
-                        .respondent(canister_test_id(1))
-                        .build()
-                ),
+                ResponseBuilder::new()
+                    .originator(canister_test_id(0))
+                    .respondent(canister_test_id(1))
+                    .build()
+                    .into(),
                 InputQueueType::RemoteSubnet,
             ),
             Ok(())
@@ -64,7 +64,7 @@ mod canister_state {
     fn stopping_canister_rejects_requests() {
         let mut canister = get_stopping_canister(canister_test_id(0));
 
-        let request = RequestOrResponse::Request(RequestBuilder::new().build());
+        let request: RequestOrResponse = RequestBuilder::new().build().into();
         assert_eq!(
             canister.push_input(
                 QueueIndex::new(0),
@@ -87,17 +87,17 @@ mod canister_state {
                 RequestBuilder::new()
                     .sender(canister_test_id(0))
                     .receiver(canister_test_id(1))
-                    .build(),
+                    .build()
+                    .into(),
             ),
             Ok(())
         );
 
-        let response = RequestOrResponse::Response(
-            ResponseBuilder::new()
-                .originator(canister_test_id(0))
-                .respondent(canister_test_id(1))
-                .build(),
-        );
+        let response: RequestOrResponse = ResponseBuilder::new()
+            .originator(canister_test_id(0))
+            .respondent(canister_test_id(1))
+            .build()
+            .into();
         assert_eq!(
             canister.system_state.queues_mut().push_input(
                 QueueIndex::new(0),
@@ -112,7 +112,7 @@ mod canister_state {
     fn stopped_canister_rejects_requests() {
         let mut canister = get_stopped_canister(canister_test_id(0));
 
-        let request = RequestOrResponse::Request(RequestBuilder::new().build());
+        let request: RequestOrResponse = RequestBuilder::new().build().into();
         assert_eq!(
             canister.push_input(
                 QueueIndex::new(0),
@@ -135,17 +135,17 @@ mod canister_state {
                 RequestBuilder::new()
                     .sender(canister_test_id(0))
                     .receiver(canister_test_id(1))
-                    .build(),
+                    .build()
+                    .into(),
             ),
             Ok(())
         );
 
-        let response = RequestOrResponse::Response(
-            ResponseBuilder::new()
-                .originator(canister_test_id(0))
-                .respondent(canister_test_id(1))
-                .build(),
-        );
+        let response: RequestOrResponse = ResponseBuilder::new()
+            .originator(canister_test_id(0))
+            .respondent(canister_test_id(1))
+            .build()
+            .into();
         assert_eq!(
             canister.push_input(
                 QueueIndex::new(0),

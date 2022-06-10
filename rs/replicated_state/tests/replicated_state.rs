@@ -13,7 +13,7 @@ use ic_replicated_state::{
     SystemState,
 };
 use ic_test_utilities::state::{
-    arb_replicated_state_with_queues, assert_next_eq, get_running_canister, register_callback,
+    arb_replicated_state_with_queues, get_running_canister, register_callback,
 };
 use ic_test_utilities::types::ids::canister_test_id;
 use ic_test_utilities::types::{
@@ -135,7 +135,7 @@ fn total_memory_taken_by_canister_queues() {
         state
             .canister_state_mut(&CANISTER_ID)
             .unwrap()
-            .push_output_response(response.clone());
+            .push_output_response(response.clone().into());
 
         // Memory used by response only.
         assert_total_memory_taken(response.count_bytes(), &state);
@@ -189,7 +189,7 @@ fn total_memory_taken_by_subnet_queues() {
             .respondent(SUBNET_ID.into())
             .originator(CANISTER_ID)
             .build();
-        state.push_subnet_output_response(response.clone());
+        state.push_subnet_output_response(response.clone().into());
 
         // Memory used by response only.
         assert_total_memory_taken(response.count_bytes(), &state);
@@ -529,7 +529,8 @@ fn validate_response_fails_when_unknown_callback_id() {
             .originator(canister_a_id)
             .respondent(canister_b_id)
             .originator_reply_callback(CallbackId::from(1))
-            .build(),
+            .build()
+            .into(),
     );
     assert_eq!(
         canister_a.push_input(
@@ -576,7 +577,8 @@ fn validate_responses_against_callback_details() {
                 .sender(canister_a_id)
                 .receiver(canister_b_id)
                 .sender_reply_callback(callback_id_1)
-                .build(),
+                .build()
+                .into(),
         ),
         Ok(())
     );
@@ -587,7 +589,8 @@ fn validate_responses_against_callback_details() {
                 .sender(canister_a_id)
                 .receiver(canister_c_id)
                 .sender_reply_callback(callback_id_2)
-                .build(),
+                .build()
+                .into(),
         ),
         Ok(())
     );
@@ -599,7 +602,8 @@ fn validate_responses_against_callback_details() {
             .originator(canister_a_id)
             .respondent(canister_c_id)
             .originator_reply_callback(callback_id_1)
-            .build(),
+            .build()
+            .into(),
     );
     assert_eq!(
         canister_a.push_input(
@@ -623,7 +627,8 @@ fn validate_responses_against_callback_details() {
             .originator(canister_a_id)
             .respondent(canister_c_id)
             .originator_reply_callback(callback_id_2)
-            .build(),
+            .build()
+            .into(),
     );
     assert_eq!(
         canister_a.push_input(
@@ -644,7 +649,8 @@ fn validate_responses_against_callback_details() {
             .originator(canister_a_id)
             .respondent(canister_b_id)
             .originator_reply_callback(callback_id_1)
-            .build(),
+            .build()
+            .into(),
     );
     assert_eq!(
         canister_a.push_input(
@@ -778,9 +784,9 @@ proptest! {
         let mut output_iter = replicated_state.output_into_iter();
 
         let mut num_requests = 0;
-        while let Some(peeked) = output_iter.peek() {
+        while let Some((queue_id, idx, msg)) = output_iter.peek() {
             num_requests += 1;
-            assert_next_eq(peeked, output_iter.next());
+            assert_eq!(Some((queue_id, idx, msg.clone())), output_iter.next());
         }
 
         drop(output_iter);
@@ -804,13 +810,13 @@ proptest! {
         let mut i = start;
         let mut excluded = 0;
         let mut consumed = 0;
-        while let Some(peeked) = output_iter.peek() {
+        while let Some((queue_id, idx, msg)) = output_iter.peek() {
             i += 1;
             if i % exclude_step == 0 {
                 output_iter.exclude_queue();
                 excluded += 1;
             } else {
-                assert_next_eq(peeked, output_iter.next());
+                assert_eq!(Some((queue_id, idx, msg.clone())), output_iter.next());
                 consumed += 1;
             }
         }

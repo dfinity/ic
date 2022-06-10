@@ -21,7 +21,7 @@ use ic_test_utilities::{
     },
 };
 use ic_types::{
-    messages::{CallbackId, Payload, RequestOrResponse},
+    messages::{CallbackId, Payload},
     xnet::StreamIndex,
     Cycles,
 };
@@ -41,26 +41,24 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
             for i in 0..NUM_STREAM_MESSAGES {
                 stream.increment_signals_end();
                 let msg = if i % 2 == 0 {
-                    RequestOrResponse::Request(
-                        RequestBuilder::new()
-                            .receiver(canister_test_id(i))
-                            .sender(canister_test_id(i))
-                            .sender_reply_callback(CallbackId::from(i))
-                            .payment(Cycles::from(10))
-                            .method_name("test".to_string())
-                            .method_payload(vec![1; 100])
-                            .build(),
-                    )
+                    RequestBuilder::new()
+                        .receiver(canister_test_id(i))
+                        .sender(canister_test_id(i))
+                        .sender_reply_callback(CallbackId::from(i))
+                        .payment(Cycles::from(10))
+                        .method_name("test".to_string())
+                        .method_payload(vec![1; 100])
+                        .build()
+                        .into()
                 } else {
-                    RequestOrResponse::Response(
-                        ResponseBuilder::new()
-                            .originator(canister_test_id(i))
-                            .respondent(canister_test_id(i))
-                            .originator_reply_callback(CallbackId::from(i))
-                            .refund(Cycles::from(10))
-                            .response_payload(Payload::Data(vec![2, 100]))
-                            .build(),
-                    )
+                    ResponseBuilder::new()
+                        .originator(canister_test_id(i))
+                        .respondent(canister_test_id(i))
+                        .originator_reply_callback(CallbackId::from(i))
+                        .refund(Cycles::from(10))
+                        .response_payload(Payload::Data(vec![2, 100]))
+                        .build()
+                        .into()
                 };
                 stream.push(msg);
             }

@@ -556,7 +556,7 @@ impl ExecutionTest {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let (execution_cycles_refund, result) = self.exec_env.execute_canister_response(
             canister,
-            response,
+            &response,
             self.instruction_limit,
             mock_time(),
             network_topology,
@@ -821,15 +821,14 @@ impl ExecutionTest {
             .subnet_queues_mut()
             .push_input(
                 QUEUE_INDEX_NONE,
-                RequestOrResponse::Request(
-                    RequestBuilder::new()
-                        .sender(caller_canister_id)
-                        .receiver(CanisterId::ic_00())
-                        .method_name(method_name)
-                        .method_payload(method_payload)
-                        .payment(payment)
-                        .build(),
-                ),
+                RequestBuilder::new()
+                    .sender(caller_canister_id)
+                    .receiver(CanisterId::ic_00())
+                    .method_name(method_name)
+                    .method_payload(method_payload)
+                    .payment(payment)
+                    .build()
+                    .into(),
                 InputQueueType::RemoteSubnet,
             )
             .unwrap();

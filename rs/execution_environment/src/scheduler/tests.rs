@@ -42,7 +42,7 @@ use ic_types::{
     ingress::WasmResult, methods::WasmMethod, time::UNIX_EPOCH, ComputeAllocation, Cycles, NumBytes,
 };
 use ic_types::{
-    messages::{CallbackId, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES},
+    messages::{CallbackId, MAX_RESPONSE_COUNT_BYTES},
     MAX_MEMORY_ALLOCATION,
 };
 use ic_wasm_types::WasmEngineError;
@@ -588,7 +588,8 @@ fn basic_induct_messages_on_same_subnet_works() {
                     RequestBuilder::default()
                         .sender(source_canister_id)
                         .receiver(dest_canister_id)
-                        .build(),
+                        .build()
+                        .into(),
                 )
                 .unwrap();
             state.put_canister_states(canisters);
@@ -645,7 +646,8 @@ fn induct_messages_on_same_subnet_handles_foreign_subnet() {
                     RequestBuilder::default()
                         .sender(source_canister_id)
                         .receiver(canister_test_id(0xffff))
-                        .build(),
+                        .build()
+                        .into(),
                 )
                 .unwrap();
             state.put_canister_states(canisters);
@@ -702,7 +704,8 @@ fn induct_messages_to_self_works() {
                     RequestBuilder::default()
                         .sender(source_canister_id)
                         .receiver(source_canister_id)
-                        .build(),
+                        .build()
+                        .into(),
                 )
                 .unwrap();
             state.put_canister_states(canisters);
@@ -782,17 +785,21 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
                     .receiver(source_canister_id)
                     .build();
                 source_canister
-                    .push_output_request(self_request.clone())
+                    .push_output_request(self_request.clone().into())
                     .unwrap();
-                source_canister.push_output_request(self_request).unwrap();
+                source_canister
+                    .push_output_request(self_request.into())
+                    .unwrap();
                 let other_request = RequestBuilder::default()
                     .sender(source_canister_id)
                     .receiver(dest_canister_id)
                     .build();
                 source_canister
-                    .push_output_request(other_request.clone())
+                    .push_output_request(other_request.clone().into())
                     .unwrap();
-                source_canister.push_output_request(other_request).unwrap();
+                source_canister
+                    .push_output_request(other_request.into())
+                    .unwrap();
                 state.put_canister_states(canisters);
 
                 let (own_subnet_id, routing_table) = setup_routing_table();
@@ -871,17 +878,11 @@ fn test_message_limit_from_message_overhead() {
         .times(..)
         .returning(move |mut canister, instruction_limit, msg, _, _, _| {
             let mut exec_result = ExecResult::Empty;
-            if let CanisterInputMessage::Request(ic_types::messages::Request {
-                receiver,
-                sender,
-                sender_reply_callback,
-                ..
-            }) = msg
-            {
+            if let CanisterInputMessage::Request(req) = &msg {
                 exec_result = ExecResult::ResponseResult(Response {
-                    originator: sender,
-                    respondent: receiver,
-                    originator_reply_callback: sender_reply_callback,
+                    originator: req.sender,
+                    respondent: req.receiver,
+                    originator_reply_callback: req.sender_reply_callback,
                     refund: Cycles::from(0u64),
                     response_payload: Payload::Data(vec![]),
                 })
@@ -922,7 +923,8 @@ fn test_message_limit_from_message_overhead() {
                                 .sender(canister_id)
                                 .receiver(other_canister)
                                 .sender_reply_callback(callback_id)
-                                .build(),
+                                .build()
+                                .into(),
                         )
                         .unwrap();
                 }
@@ -1039,7 +1041,8 @@ fn test_multiple_iterations_of_inner_loop() {
                         RequestBuilder::new()
                             .sender(canister0)
                             .receiver(canister1)
-                            .build(),
+                            .build()
+                            .into(),
                     )
                     .unwrap();
                 if let CanisterInputMessage::Ingress(msg) = msg {
@@ -1047,7 +1050,7 @@ fn test_multiple_iterations_of_inner_loop() {
                         canister: canister.clone(),
                         num_instructions_left: NumInstructions::new(0),
                         result: ExecResult::IngressResult((
-                            msg.message_id,
+                            msg.message_id.clone(),
                             IngressStatus::Known {
                                 receiver: canister.canister_id().get(),
                                 user_id: user_test_id(0),
@@ -1176,7 +1179,8 @@ fn canister_can_run_for_multiple_iterations() {
                     RequestBuilder::new()
                         .sender(canister_id)
                         .receiver(canister_id)
-                        .build(),
+                        .build()
+                        .into(),
                 )
                 .unwrap();
             ExecuteMessageResult {
@@ -1995,15 +1999,14 @@ fn subnet_messages_respect_instruction_limit_per_round() {
                     .subnet_queues_mut()
                     .push_input(
                         QUEUE_INDEX_NONE,
-                        RequestOrResponse::Request(
-                            RequestBuilder::new()
-                                .sender(controller)
-                                .receiver(CanisterId::from(subnet_id))
-                                .method_name(Method::CanisterStatus)
-                                .method_payload(payload.clone())
-                                .payment(Cycles::from(cycles))
-                                .build(),
-                        ),
+                        RequestBuilder::new()
+                            .sender(controller)
+                            .receiver(CanisterId::from(subnet_id))
+                            .method_name(Method::CanisterStatus)
+                            .method_payload(payload.clone())
+                            .payment(Cycles::from(cycles))
+                            .build()
+                            .into(),
                         InputQueueType::RemoteSubnet,
                     )
                     .unwrap();
@@ -3110,15 +3113,14 @@ fn execution_round_metrics_are_recorded() {
                     .subnet_queues_mut()
                     .push_input(
                         QUEUE_INDEX_NONE,
-                        RequestOrResponse::Request(
-                            RequestBuilder::new()
-                                .sender(controller)
-                                .receiver(CanisterId::from(subnet_id))
-                                .method_name(Method::CanisterStatus)
-                                .method_payload(payload.clone())
-                                .payment(Cycles::from(cycles))
-                                .build(),
-                        ),
+                        RequestBuilder::new()
+                            .sender(controller)
+                            .receiver(CanisterId::from(subnet_id))
+                            .method_name(Method::CanisterStatus)
+                            .method_payload(payload.clone())
+                            .payment(Cycles::from(cycles))
+                            .build()
+                            .into(),
                         InputQueueType::RemoteSubnet,
                     )
                     .unwrap();
@@ -3934,7 +3936,7 @@ fn scheduler_maintains_canister_order() {
                     canister: canister.clone(),
                     num_instructions_left,
                     result: ExecResult::IngressResult((
-                        msg.message_id,
+                        msg.message_id.clone(),
                         IngressStatus::Known {
                             receiver: canister.canister_id().get(),
                             user_id: user_test_id(0),
@@ -4305,7 +4307,7 @@ fn default_exec_env_mock(
                     canister: canister.clone(),
                     num_instructions_left,
                     result: ExecResult::IngressResult((
-                        msg.message_id,
+                        msg.message_id.clone(),
                         IngressStatus::Known {
                             receiver: canister.canister_id().get(),
                             user_id: user_test_id(0),

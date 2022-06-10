@@ -963,7 +963,7 @@ impl Scheduler for SchedulerImpl {
             // state. That can be changed in the future as we optimize scheduling.
             while let Some(response) = state.consensus_queue.pop() {
                 let (new_state, instructions_left) = self.exec_env.execute_subnet_message(
-                    CanisterInputMessage::Response(response),
+                    CanisterInputMessage::Response(response.into()),
                     state,
                     self.config.max_instructions_per_message,
                     &mut csprng,

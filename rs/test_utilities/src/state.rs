@@ -29,15 +29,17 @@ use ic_types::messages::CallbackId;
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse},
-    xnet::{QueueId, StreamHeader, StreamIndex, StreamIndexedQueue},
+    xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes, PrincipalId,
-    QueueIndex, SubnetId, Time,
+    SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::TryFrom;
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    sync::Arc,
+};
 
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
 const DEFAULT_FREEZE_THRESHOLD: NumSeconds = NumSeconds::new(1 << 30);
@@ -231,7 +233,7 @@ impl CanisterStateBuilder {
     }
 
     pub fn with_canister_request(mut self, request: Request) -> Self {
-        self.inputs.push(RequestOrResponse::Request(request));
+        self.inputs.push(request.into());
         self
     }
 
@@ -997,15 +999,4 @@ prop_compose! {
 
         (replicated_state, raw_requests, total_requests)
     }
-}
-
-/// Asserts that the values returned by `next()` match the ones returned by
-/// `peek()` before.
-pub fn assert_next_eq(
-    peek: (QueueId, QueueIndex, Arc<RequestOrResponse>),
-    next: Option<(QueueId, QueueIndex, RequestOrResponse)>,
-) {
-    let next =
-        next.unwrap_or_else(|| panic!("Peek returned a message {:?}, while pop didn't", peek));
-    assert_eq!((peek.0, peek.1, peek.2.as_ref()), (next.0, next.1, &next.2));
 }

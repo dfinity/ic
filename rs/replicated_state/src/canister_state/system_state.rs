@@ -356,7 +356,10 @@ impl SystemState {
     /// Returns a `CanisterOutOfCycles` error along with the provided message if
     /// the canister's cycles balance is not sufficient to pay for cost of
     /// sending the message.
-    pub fn push_output_request(&mut self, msg: Request) -> Result<(), (StateError, Request)> {
+    pub fn push_output_request(
+        &mut self,
+        msg: Arc<Request>,
+    ) -> Result<(), (StateError, Arc<Request>)> {
         assert_eq!(
             msg.sender, self.canister_id,
             "Expected `Request` to have been sent by canister ID {}, but instead got {}",
@@ -382,7 +385,7 @@ impl SystemState {
     ///
     /// Panics if the queue does not already exist or there is no reserved slot
     /// to push the `Response` into.
-    pub fn push_output_response(&mut self, msg: Response) {
+    pub fn push_output_response(&mut self, msg: Arc<Response>) {
         assert_eq!(
             msg.respondent, self.canister_id,
             "Expected `Response` to have been sent by canister ID {}, but instead got {}",
@@ -504,7 +507,7 @@ impl SystemState {
     /// retained.
     pub fn output_queues_for_each<F>(&mut self, f: F)
     where
-        F: FnMut(&CanisterId, Arc<RequestOrResponse>) -> Result<(), ()>,
+        F: FnMut(&CanisterId, &RequestOrResponse) -> Result<(), ()>,
     {
         self.queues.output_queues_for_each(f)
     }

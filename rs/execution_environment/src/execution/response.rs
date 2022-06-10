@@ -49,7 +49,7 @@ pub enum ExecutionCyclesRefund {
 #[allow(dead_code)]
 pub fn execute_response(
     mut canister: CanisterState,
-    mut response: Response,
+    response: Response,
     time: Time,
     own_subnet_type: SubnetType,
     network_topology: Arc<NetworkTopology>,
@@ -112,7 +112,7 @@ pub fn execute_response(
         logger,
         error_counter,
         &mut canister.system_state,
-        &mut response,
+        &response,
     );
 
     // If the call context was deleted (e.g. in uninstall), then do not execute anything.

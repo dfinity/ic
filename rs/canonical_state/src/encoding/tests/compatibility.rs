@@ -161,16 +161,15 @@ fn canonical_encoding_stream_header_v8_plus() {
 /// ```
 #[test]
 fn canonical_encoding_request() {
-    let request = RequestOrResponse::Request(
-        RequestBuilder::new()
-            .receiver(canister_test_id(1))
-            .sender(canister_test_id(2))
-            .sender_reply_callback(CallbackId::from(3))
-            .payment(Cycles::new(4))
-            .method_name("test".to_string())
-            .method_payload(vec![6])
-            .build(),
-    );
+    let request: RequestOrResponse = RequestBuilder::new()
+        .receiver(canister_test_id(1))
+        .sender(canister_test_id(2))
+        .sender_reply_callback(CallbackId::from(3))
+        .payment(Cycles::new(4))
+        .method_name("test".to_string())
+        .method_payload(vec![6])
+        .build()
+        .into();
 
     assert_eq!(
         "A1 00 A6 00 4A 00 00 00 00 00 00 00 01 01 01 01 4A 00 00 00 00 00 00 00 02 01 01 02 03 03 A1 00 A1 00 04 04 64 74 65 73 74 05 41 06",
@@ -225,16 +224,15 @@ fn canonical_encoding_request() {
 /// ```
 #[test]
 fn canonical_encoding_request_u128() {
-    let request = RequestOrResponse::Request(
-        RequestBuilder::new()
-            .receiver(canister_test_id(1))
-            .sender(canister_test_id(2))
-            .sender_reply_callback(CallbackId::from(3))
-            .payment(Cycles::new(123456789012345678901234567890))
-            .method_name("test".to_string())
-            .method_payload(vec![6])
-            .build(),
-    );
+    let request: RequestOrResponse = RequestBuilder::new()
+        .receiver(canister_test_id(1))
+        .sender(canister_test_id(2))
+        .sender_reply_callback(CallbackId::from(3))
+        .payment(Cycles::new(123456789012345678901234567890))
+        .method_name("test".to_string())
+        .method_payload(vec![6])
+        .build()
+        .into();
 
     assert_eq!(
         "A1 00 A6 00 4A 00 00 00 00 00 00 00 01 01 01 01 4A 00 00 00 00 00 00 00 02 01 01 02 03 03 A1 00 A2 00 1B C3 73 E0 EE 4E 3F 0A D2 01 1B 00 00 00 01 8E E9 0F F6 04 64 74 65 73 74 05 41 06",
@@ -285,15 +283,14 @@ fn canonical_encoding_request_u128() {
 /// ```
 #[test]
 fn canonical_encoding_response() {
-    let response = RequestOrResponse::Response(
-        ResponseBuilder::new()
-            .originator(canister_test_id(5))
-            .respondent(canister_test_id(4))
-            .originator_reply_callback(CallbackId::from(3))
-            .refund(Cycles::new(2))
-            .response_payload(Payload::Data(vec![1]))
-            .build(),
-    );
+    let response: RequestOrResponse = ResponseBuilder::new()
+        .originator(canister_test_id(5))
+        .respondent(canister_test_id(4))
+        .originator_reply_callback(CallbackId::from(3))
+        .refund(Cycles::new(2))
+        .response_payload(Payload::Data(vec![1]))
+        .build()
+        .into();
 
     assert_eq!(
         "A1 01 A5 00 4A 00 00 00 00 00 00 00 05 01 01 01 4A 00 00 00 00 00 00 00 04 01 01 02 03 03 A1 00 A1 00 02 04 A1 00 41 01",
@@ -347,15 +344,14 @@ fn canonical_encoding_response() {
 /// ```
 #[test]
 fn canonical_encoding_response_u128() {
-    let response = RequestOrResponse::Response(
-        ResponseBuilder::new()
-            .originator(canister_test_id(5))
-            .respondent(canister_test_id(4))
-            .originator_reply_callback(CallbackId::from(3))
-            .refund(Cycles::new(123456789012345678901234567890))
-            .response_payload(Payload::Data(vec![1]))
-            .build(),
-    );
+    let response: RequestOrResponse = ResponseBuilder::new()
+        .originator(canister_test_id(5))
+        .respondent(canister_test_id(4))
+        .originator_reply_callback(CallbackId::from(3))
+        .refund(Cycles::new(123456789012345678901234567890))
+        .response_payload(Payload::Data(vec![1]))
+        .build()
+        .into();
 
     assert_eq!(
         "A1 01 A5 00 4A 00 00 00 00 00 00 00 05 01 01 01 4A 00 00 00 00 00 00 00 04 01 01 02 03 03 A1 00 A2 00 1B C3 73 E0 EE 4E 3F 0A D2 01 1B 00 00 00 01 8E E9 0F F6 04 A1 00 41 01",
@@ -412,18 +408,17 @@ fn canonical_encoding_response_u128() {
 /// ```
 #[test]
 fn canonical_encoding_reject_response() {
-    let reject_response = RequestOrResponse::Response(
-        ResponseBuilder::new()
-            .originator(canister_test_id(6))
-            .respondent(canister_test_id(5))
-            .originator_reply_callback(CallbackId::from(4))
-            .refund(Cycles::new(3))
-            .response_payload(Payload::Reject(RejectContext {
-                code: RejectCode::SysFatal,
-                message: "Oops".into(),
-            }))
-            .build(),
-    );
+    let reject_response: RequestOrResponse = ResponseBuilder::new()
+        .originator(canister_test_id(6))
+        .respondent(canister_test_id(5))
+        .originator_reply_callback(CallbackId::from(4))
+        .refund(Cycles::new(3))
+        .response_payload(Payload::Reject(RejectContext {
+            code: RejectCode::SysFatal,
+            message: "Oops".into(),
+        }))
+        .build()
+        .into();
 
     assert_eq!(
         "A1 01 A5 00 4A 00 00 00 00 00 00 00 06 01 01 01 4A 00 00 00 00 00 00 00 05 01 01 02 04 03 A1 00 A1 00 03 04 A1 01 A2 00 01 01 64 4F 6F 70 73",
@@ -896,7 +891,7 @@ fn encode_with_mutation<T: serde::Serialize>(
 //
 
 pub fn request_message() -> RequestOrResponse {
-    RequestOrResponse::Request(request())
+    request().into()
 }
 
 fn request() -> Request {

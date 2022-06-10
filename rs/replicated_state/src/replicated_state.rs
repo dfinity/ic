@@ -197,7 +197,7 @@ pub trait PeekableOutputIterator:
 {
     /// Peeks into the iterator and returns a reference to the item `next`
     /// would return.
-    fn peek(&self) -> Option<(QueueId, QueueIndex, Arc<RequestOrResponse>)>;
+    fn peek(&self) -> Option<(QueueId, QueueIndex, &RequestOrResponse)>;
 
     /// Permanently filters out from iteration the next queue (i.e. all messages
     /// with the same sender and receiver as the next). The mesages are retained
@@ -206,7 +206,7 @@ pub trait PeekableOutputIterator:
 }
 
 impl PeekableOutputIterator for OutputIterator<'_> {
-    fn peek(&self) -> Option<(QueueId, QueueIndex, Arc<RequestOrResponse>)> {
+    fn peek(&self) -> Option<(QueueId, QueueIndex, &RequestOrResponse)> {
         self.canister_iterators.front().and_then(|it| it.peek())
     }
 
@@ -692,7 +692,7 @@ impl ReplicatedState {
     ///
     /// Panics if the queue does not already exist or there is no reserved slot
     /// to push the `Response` into.
-    pub fn push_subnet_output_response(&mut self, msg: Response) {
+    pub fn push_subnet_output_response(&mut self, msg: Arc<Response>) {
         self.subnet_queues.push_output_response(msg)
     }
 

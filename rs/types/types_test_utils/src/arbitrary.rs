@@ -1,16 +1,13 @@
 use crate::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
-use ic_types::crypto::{AlgorithmId, KeyId, KeyPurpose, UserPublicKey};
-use ic_types::messages::{Payload, RejectContext, RequestOrResponse, Response};
-use ic_types::RegistryVersion;
 use ic_types::{
-    messages::{CallbackId, Request},
+    crypto::{AlgorithmId, KeyId, KeyPurpose, UserPublicKey},
+    messages::{CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response},
     time::UNIX_EPOCH,
     xnet::StreamIndex,
-    CanisterId, Cycles, Height, IDkgId, NodeId, SubnetId, Time, UserId,
+    CanisterId, Cycles, Height, IDkgId, NodeId, RegistryVersion, SubnetId, Time, UserId,
 };
 use proptest::prelude::*;
-use std::convert::TryInto;
-use std::time::Duration;
+use std::{convert::TryInto, time::Duration};
 use strum::IntoEnumIterator;
 
 prop_compose! {
@@ -173,8 +170,8 @@ prop_compose! {
 /// Produces an arbitrary [`RequestOrResponse`].
 pub fn request_or_response() -> impl Strategy<Value = RequestOrResponse> {
     prop_oneof![
-        request().prop_flat_map(|req| Just(RequestOrResponse::Request(req))),
-        response().prop_flat_map(|rep| Just(RequestOrResponse::Response(rep))),
+        request().prop_flat_map(|req| Just(req.into())),
+        response().prop_flat_map(|rep| Just(rep.into())),
     ]
 }
 

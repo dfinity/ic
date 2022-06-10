@@ -122,7 +122,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     }
 
     /// Returns a reference to the message that `pop` / `next` would return.
-    pub fn peek(&self) -> Option<(QueueId, QueueIndex, Arc<RequestOrResponse>)> {
+    pub fn peek(&self) -> Option<(QueueId, QueueIndex, &RequestOrResponse)> {
         if let Some((receiver, queue)) = self.queues.front() {
             let (queue_index, msg) = queue.peek().expect("Empty queue in iterator");
             let queue_id = QueueId {
@@ -212,7 +212,7 @@ impl CanisterQueues {
     }
 
     /// Pops the next ingress message from `ingress_queue`.
-    fn pop_ingress(&mut self) -> Option<Ingress> {
+    fn pop_ingress(&mut self) -> Option<Arc<Ingress>> {
         self.ingress_queue.pop()
     }
 
@@ -224,7 +224,7 @@ impl CanisterQueues {
     /// queue are retained.
     pub(crate) fn output_queues_for_each<F>(&mut self, mut f: F)
     where
-        F: FnMut(&CanisterId, Arc<RequestOrResponse>) -> Result<(), ()>,
+        F: FnMut(&CanisterId, &RequestOrResponse) -> Result<(), ()>,
     {
         for (canister_id, (_, queue)) in self.canister_queues.iter_mut() {
             while let Some((_, msg)) = queue.peek() {
@@ -427,7 +427,10 @@ impl CanisterQueues {
     ///
     /// Returns a `QueueFull` error along with the provided message if either
     /// the output queue or the matching input queue is full.
-    pub fn push_output_request(&mut self, msg: Request) -> Result<(), (StateError, Request)> {
+    pub fn push_output_request(
+        &mut self,
+        msg: Arc<Request>,
+    ) -> Result<(), (StateError, Arc<Request>)> {
         let (input_queue, output_queue) = self.get_or_insert_queues(&msg.receiver);
 
         if let Err(e) = output_queue.check_has_slot() {
@@ -479,7 +482,7 @@ impl CanisterQueues {
     ///
     /// Panics if the queue does not already exist or there is no reserved slot
     /// to push the `Response` into.
-    pub fn push_output_response(&mut self, msg: Response) {
+    pub fn push_output_response(&mut self, msg: Arc<Response>) {
         let mu_stats_delta = MemoryUsageStats::response_stats_delta(QueueOp::Push, &msg);
         let oq_stats_delta =
             OutputQueuesStats::stats_delta(&RequestOrResponse::Response(msg.clone()));
@@ -501,7 +504,7 @@ impl CanisterQueues {
 
     /// Returns a reference to the message at the head of the respective output
     /// queue, if any.
-    pub(super) fn peek_output(&self, canister_id: &CanisterId) -> Option<Arc<RequestOrResponse>> {
+    pub(super) fn peek_output(&self, canister_id: &CanisterId) -> Option<&RequestOrResponse> {
         Some(self.canister_queues.get(canister_id)?.1.peek()?.1)
     }
 
@@ -509,18 +512,16 @@ impl CanisterQueues {
     /// into the input queue from `own_canister_id`. Returns `Err(())` if there
     /// was no message to induct or the input queue was full.
     pub(super) fn induct_message_to_self(&mut self, own_canister_id: CanisterId) -> Result<(), ()> {
-        let (_, msg) = self
+        let msg = self
             .canister_queues
             .get(&own_canister_id)
             .and_then(|(_, output_queue)| output_queue.peek())
-            .ok_or(())?;
+            .ok_or(())?
+            .1
+            .clone();
 
-        self.push_input(
-            QUEUE_INDEX_NONE,
-            (*msg).clone(),
-            InputQueueType::LocalSubnet,
-        )
-        .map_err(|_| ())?;
+        self.push_input(QUEUE_INDEX_NONE, msg, InputQueueType::LocalSubnet)
+            .map_err(|_| ())?;
 
         let msg = self
             .canister_queues
@@ -1110,7 +1111,7 @@ pub mod testing {
         messages::{Request, RequestOrResponse},
         CanisterId, QueueIndex,
     };
-    use std::collections::VecDeque;
+    use std::{collections::VecDeque, sync::Arc};
 
     /// Exposes public testing-only `CanisterQueues` methods to be used in other
     /// crates' unit tests.
@@ -1219,7 +1220,8 @@ pub mod testing {
         requests.into_iter().enumerate().for_each(|(i, mut req)| {
             req.sender = sender;
             req.receiver = CanisterId::from_u64((i % num_receivers) as u64);
-            updated_requests.push_back(RequestOrResponse::Request(req.clone()));
+            let req = Arc::new(req);
+            updated_requests.push_back(RequestOrResponse::Request(Arc::clone(&req)));
             canister_queues.push_output_request(req).unwrap();
         });
         (canister_queues, updated_requests)

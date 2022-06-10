@@ -208,7 +208,7 @@ fn output_queue_push_to_full_queue_fails() {
     let mut output_queue = OutputQueue::new(capacity);
     for _index in 0..capacity / 2 {
         output_queue
-            .push_request(RequestBuilder::default().build())
+            .push_request(RequestBuilder::default().build().into())
             .unwrap();
     }
     for _index in capacity / 2..capacity {
@@ -219,7 +219,7 @@ fn output_queue_push_to_full_queue_fails() {
     // Now push an extraneous message in
     assert_eq!(
         output_queue
-            .push_request(RequestBuilder::default().build())
+            .push_request(RequestBuilder::default().build().into())
             .map_err(|(err, _)| err),
         Err(StateError::QueueFull { capacity })
     );
@@ -240,7 +240,7 @@ fn output_queue_pop_returns_incrementing_indices() {
     for _ in 0..capacity {
         let req = RequestBuilder::default().build();
         msgs_list.push_back(RequestOrResponse::from(req.clone()));
-        output_queue.push_request(req).unwrap();
+        output_queue.push_request(req.into()).unwrap();
     }
 
     for expected_index in 0..capacity {
@@ -258,7 +258,7 @@ fn output_queue_pop_returns_incrementing_indices() {
 #[should_panic(expected = "called `Result::unwrap()` on an `Err` value")]
 fn output_push_into_reserved_slot_fails() {
     let mut queue = OutputQueue::new(10);
-    queue.push_response(ResponseBuilder::default().build());
+    queue.push_response(ResponseBuilder::default().build().into());
 }
 
 #[test]
@@ -267,7 +267,7 @@ fn output_queue_available_slots_is_correct() {
     let mut output_queue = OutputQueue::new(capacity);
     assert_eq!(output_queue.available_slots(), 2);
     output_queue
-        .push_request(RequestBuilder::default().build())
+        .push_request(RequestBuilder::default().build().into())
         .unwrap();
     assert_eq!(output_queue.available_slots(), 1);
     output_queue.reserve_slot().unwrap();
@@ -316,10 +316,10 @@ fn order_is_fifo() {
     q.push(msg2.clone());
 
     assert_eq!(q.size(), 2);
-    assert_eq!(q.pop(), Some(msg1));
+    assert_eq!(q.pop(), Some(msg1.into()));
 
     assert_eq!(q.size(), 1);
-    assert_eq!(q.pop(), Some(msg2));
+    assert_eq!(q.pop(), Some(msg2.into()));
 
     assert_eq!(q.size(), 0);
     assert_eq!(q.pop(), None);
@@ -337,7 +337,7 @@ fn ingress_filter() {
 
     queue.filter_messages(|ingress| *ingress != Arc::new(msg2.clone()));
     assert_eq!(queue.size(), 2);
-    assert_eq!(queue.pop(), Some(msg1));
+    assert_eq!(queue.pop(), Some(msg1.into()));
     assert_eq!(queue.size(), 1);
-    assert_eq!(queue.pop(), Some(msg3));
+    assert_eq!(queue.pop(), Some(msg3.into()));
 }

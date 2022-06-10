@@ -160,7 +160,7 @@ impl SystemStateChanges {
                 callback_changes.insert(msg.sender_reply_callback, destination_subnet);
             }
             system_state
-                .push_output_request(msg)
+                .push_output_request(msg.into())
                 .expect("Unable to send new request");
         }
 

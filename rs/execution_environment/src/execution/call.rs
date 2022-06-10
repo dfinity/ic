@@ -56,7 +56,7 @@ fn early_error_to_result(
                 time,
                 state: IngressState::Failed(user_error),
             };
-            ExecResult::IngressResult((ingress.message_id, status))
+            ExecResult::IngressResult((ingress.message_id.clone(), status))
         }
     };
     ExecuteMessageResult {

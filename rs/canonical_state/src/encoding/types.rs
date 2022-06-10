@@ -15,8 +15,11 @@ use ic_error_types::TryFromError;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::xnet::StreamIndex;
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
-use std::convert::{From, Into, TryFrom, TryInto};
+use std::{
+    collections::VecDeque,
+    convert::{From, Into, TryFrom, TryInto},
+    sync::Arc,
+};
 
 pub(crate) type Bytes = Vec<u8>;
 
@@ -195,12 +198,12 @@ impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for Re
         use ic_types::messages::RequestOrResponse::*;
         match message {
             Request(request) => Self {
-                request: Some((request, certification_version).into()),
+                request: Some((request.as_ref(), certification_version).into()),
                 response: None,
             },
             Response(response) => Self {
                 request: None,
-                response: Some((response, certification_version).into()),
+                response: Some((response.as_ref(), certification_version).into()),
             },
         }
     }
@@ -214,11 +217,11 @@ impl TryFrom<RequestOrResponse> for ic_types::messages::RequestOrResponse {
             RequestOrResponse {
                 request: Some(request),
                 response: None,
-            } => Ok(Self::Request(request.try_into()?)),
+            } => Ok(Self::Request(Arc::new(request.try_into()?))),
             RequestOrResponse {
                 request: None,
                 response: Some(response),
-            } => Ok(Self::Response(response.try_into()?)),
+            } => Ok(Self::Response(Arc::new(response.try_into()?))),
             other => Err(ProxyDecodeError::Other(format!(
                 "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `{:?}`",
                 other

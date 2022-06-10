@@ -3,7 +3,10 @@
 //! Whenever a canonical type is modified, a copy of the "old" type should be
 //! made here.
 
-use std::convert::{TryFrom, TryInto};
+use std::{
+    convert::{TryFrom, TryInto},
+    sync::Arc,
+};
 
 use crate::CertificationVersion;
 
@@ -126,12 +129,12 @@ impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for Re
     ) -> Self {
         match message {
             RequestOrResponse::Request(req) => RequestOrResponseV3 {
-                request: Some(RequestV3::from((req, certification_version))),
+                request: Some(RequestV3::from((req.as_ref(), certification_version))),
                 response: None,
             },
             RequestOrResponse::Response(resp) => RequestOrResponseV3 {
                 request: None,
-                response: Some(ResponseV3::from((resp, certification_version))),
+                response: Some(ResponseV3::from((resp.as_ref(), certification_version))),
             },
         }
     }
@@ -145,11 +148,11 @@ impl TryFrom<RequestOrResponseV3> for ic_types::messages::RequestOrResponse {
             RequestOrResponseV3 {
                 request: Some(request),
                 response: None,
-            } => Ok(Self::Request(request.try_into()?)),
+            } => Ok(Self::Request(Arc::new(request.try_into()?))),
             RequestOrResponseV3 {
                 request: None,
                 response: Some(response),
-            } => Ok(Self::Response(response.try_into()?)),
+            } => Ok(Self::Response(Arc::new(response.try_into()?))),
             other => Err(ProxyDecodeError::Other(format!(
                 "RequestOrResponseV3: expected exactly one of `request` or `response` to be `Some(_)`, got `{:?}`",
                 other

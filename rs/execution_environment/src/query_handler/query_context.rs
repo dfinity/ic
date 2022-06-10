@@ -82,7 +82,7 @@ enum EnqueueRequestsResult {
 }
 
 // A handy function to create a `Response` using parameters from the `Request`
-fn generate_response(request: Request, payload: Payload) -> Response {
+fn generate_response(request: Arc<Request>, payload: Payload) -> Response {
     Response {
         originator: request.sender,
         respondent: request.receiver,
@@ -103,7 +103,7 @@ pub(super) struct QueryContext<'a> {
     network_topology: Arc<NetworkTopology>,
     data_certificate: Vec<u8>,
     canisters: BTreeMap<CanisterId, CanisterState>,
-    outstanding_requests: Vec<Request>,
+    outstanding_requests: Vec<Arc<Request>>,
     // Response (if available) waiting to be executed. We always process
     // responses first if one is available hence, there will never be more than
     // one outstanding response.
@@ -476,7 +476,7 @@ impl<'a> QueryContext<'a> {
     // graph is detected, then an error is returned.
     fn handle_request(
         &mut self,
-        request: Request,
+        request: Arc<Request>,
         measurement_scope: &MeasurementScope,
     ) -> Option<UserError> {
         // we are always prioritising responses over requests so when we execute

@@ -194,7 +194,7 @@ fn correct_charging_source_canister_for_a_request() {
         .unwrap();
 
     // Assume the destination canister got the message and prepared a response
-    let mut response = ResponseBuilder::default()
+    let response = ResponseBuilder::default()
         .respondent(canister_test_id(1))
         .originator(canister_test_id(0))
         .build();
@@ -216,7 +216,7 @@ fn correct_charging_source_canister_for_a_request() {
         &no_op_logger(),
         &no_op_counter,
         &mut system_state,
-        &mut response,
+        &response,
     );
 
     // MAX_NUM_INSTRUCTIONS also gets partially refunded in the real

@@ -181,7 +181,7 @@ impl StreamBuilderImpl {
     fn reject_local_request(
         &self,
         state: &mut ReplicatedState,
-        req: Request,
+        req: &Request,
         reject_code: RejectCode,
         reject_message: String,
     ) {
@@ -252,13 +252,13 @@ impl StreamBuilderImpl {
             (expected_id, expected_index, expected_message): (
                 QueueId,
                 QueueIndex,
-                Arc<RequestOrResponse>,
+                &RequestOrResponse,
             ),
         ) -> RequestOrResponse {
             let (queue_id, queue_index, message) = iterator.next().unwrap();
             debug_assert_eq!(
                 (queue_id, queue_index, &message),
-                (expected_id, expected_index, expected_message.as_ref())
+                (expected_id, expected_index, expected_message)
             );
             message
         }
@@ -315,6 +315,8 @@ impl StreamBuilderImpl {
         // when unable to (no route to canister). When a stream's byte size reaches or
         // exceeds `target_stream_size_bytes`, any matching queues are skipped.
         while let Some((queue_id, queue_index, msg)) = output_iter.peek() {
+            // Cheap to clone, `RequestOrResponse` wraps `Arcs`.
+            let msg = msg.clone();
             // Safeguard to guarantee that iteration always terminates. Will always loop at
             // least once, if messages are available.
             let output_size = output_iter.size_hint().0;
@@ -349,7 +351,7 @@ impl StreamBuilderImpl {
                     }
 
                     // We will route (or reject) the message, pop it.
-                    let msg = validated_next(&mut output_iter, (queue_id, queue_index, msg));
+                    let mut msg = validated_next(&mut output_iter, (queue_id, queue_index, &msg));
 
                     // Reject messages with oversized payloads, as they may
                     // cause streams to permanently stall. Also reject messages
@@ -397,7 +399,7 @@ impl StreamBuilderImpl {
                         }
 
                         // Response above the payload size limit.
-                        RequestOrResponse::Response(mut rep)
+                        RequestOrResponse::Response(ref mut rep)
                             if rep.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES =>
                         {
                             error!(
@@ -413,7 +415,8 @@ impl StreamBuilderImpl {
                                 LABEL_VALUE_STATUS_PAYLOAD_TOO_LARGE,
                             );
 
-                            match rep.response_payload {
+                            let rep = Arc::make_mut(rep);
+                            match &mut rep.response_payload {
                                 // Replace oversized data payloads with reject payloads.
                                 Payload::Data(_) => {
                                     rep.response_payload = Payload::Reject(RejectContext {
@@ -425,7 +428,7 @@ impl StreamBuilderImpl {
                                     })
                                 }
                                 // Truncate error messages of oversized reject payloads.
-                                Payload::Reject(mut context @ RejectContext { .. }) => {
+                                &mut Payload::Reject(ref mut context @ RejectContext { .. }) => {
                                     use ic_utils::str::StrTruncate;
                                     const KB: usize = 1024;
                                     let mut message = String::with_capacity(8 * KB);
@@ -433,11 +436,10 @@ impl StreamBuilderImpl {
                                     message.push_str("...");
                                     message.push_str(context.message.safe_truncate_right(2 * KB));
                                     context.message = message;
-                                    rep.response_payload = Payload::Reject(context);
                                 }
                             }
 
-                            streams.push(dst_net_id, rep.into());
+                            streams.push(dst_net_id, msg);
                         }
 
                         _ => {
@@ -453,7 +455,7 @@ impl StreamBuilderImpl {
                 None => {
                     warn!(self.log, "No route to canister {}", queue_id.dst_canister);
                     self.observe_message_status(&msg, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND);
-                    match validated_next(&mut output_iter, (queue_id, queue_index, msg)) {
+                    match validated_next(&mut output_iter, (queue_id, queue_index, &msg)) {
                         // A Request: generate a reject Response.
                         RequestOrResponse::Request(req) => {
                             requests_to_reject.push(req);
@@ -481,7 +483,7 @@ impl StreamBuilderImpl {
             let receiver = req.receiver;
             self.reject_local_request(
                 &mut state,
-                req,
+                &req,
                 RejectCode::CanisterError,
                 format!("Canister {} violated contract: Canisters on Application subnets cannot send cycles to canister {} on a Verified Application subnet", sender, receiver),
             );
@@ -491,7 +493,7 @@ impl StreamBuilderImpl {
             let dst_canister_id = req.receiver;
             self.reject_local_request(
                 &mut state,
-                req,
+                &req,
                 RejectCode::DestinationInvalid,
                 format!("No route to canister {}", dst_canister_id),
             );
@@ -501,7 +503,7 @@ impl StreamBuilderImpl {
             let sender = req.sender;
             self.reject_local_request(
                 &mut state,
-                req,
+                &req,
                 RejectCode::CanisterError,
                 format!("Canister {} violated contract: payload too large", sender),
             );

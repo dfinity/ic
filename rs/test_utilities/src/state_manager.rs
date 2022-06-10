@@ -11,21 +11,18 @@ use ic_interfaces_state_manager::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_types::crypto::CryptoHash;
 use ic_types::{
     consensus::certification::Certification,
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-    crypto::CryptoHashOf,
-    xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
+    crypto::{CryptoHash, CryptoHashOf},
+    messages::{Request, RequestOrResponse, Response},
+    xnet::{CertifiedStreamSlice, StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
-use std::collections::VecDeque;
-use std::sync::{Arc, RwLock};
-
-use ic_types::messages::RequestOrResponse;
-use ic_types::xnet::{StreamHeader, StreamIndexedQueue};
 use mockall::*;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
+use std::sync::{Arc, RwLock};
 
 mock! {
     pub StateManager {}
@@ -368,19 +365,53 @@ impl StateReader for FakeStateManager {
     }
 }
 
-// Local helper to enable serialization and deserialization of
-// ic_types::xnet::StreamIndexedQueue for testing
+/// Local helper to enable serialization and deserialization of
+/// [`RequestOrResponse`] for testing.
+#[derive(Serialize, Deserialize)]
+enum SerializableRequestOrResponse {
+    Request(Request),
+    Response(Response),
+}
+
+impl From<&RequestOrResponse> for SerializableRequestOrResponse {
+    fn from(msg: &RequestOrResponse) -> Self {
+        match msg {
+            RequestOrResponse::Request(req) => {
+                SerializableRequestOrResponse::Request((**req).clone())
+            }
+            RequestOrResponse::Response(rep) => {
+                SerializableRequestOrResponse::Response((**rep).clone())
+            }
+        }
+    }
+}
+
+impl From<SerializableRequestOrResponse> for RequestOrResponse {
+    fn from(msg: SerializableRequestOrResponse) -> RequestOrResponse {
+        match msg {
+            SerializableRequestOrResponse::Request(req) => {
+                RequestOrResponse::Request(Arc::new(req))
+            }
+            SerializableRequestOrResponse::Response(rep) => {
+                RequestOrResponse::Response(Arc::new(rep))
+            }
+        }
+    }
+}
+
+/// Local helper to enable serialization and deserialization of
+/// [`StreamIndexedQueue`] for testing.
 #[derive(Serialize, Deserialize)]
 struct SerializableStreamIndexedQueue {
     begin: StreamIndex,
-    queue: VecDeque<RequestOrResponse>,
+    queue: VecDeque<SerializableRequestOrResponse>,
 }
 
 impl From<&StreamIndexedQueue<RequestOrResponse>> for SerializableStreamIndexedQueue {
     fn from(q: &StreamIndexedQueue<RequestOrResponse>) -> Self {
         SerializableStreamIndexedQueue {
             begin: q.begin(),
-            queue: q.iter().map(|(_, msg)| msg.clone()).collect(),
+            queue: q.iter().map(|(_, msg)| msg.into()).collect(),
         }
     }
 }
@@ -388,13 +419,15 @@ impl From<&StreamIndexedQueue<RequestOrResponse>> for SerializableStreamIndexedQ
 impl From<SerializableStreamIndexedQueue> for StreamIndexedQueue<RequestOrResponse> {
     fn from(q: SerializableStreamIndexedQueue) -> StreamIndexedQueue<RequestOrResponse> {
         let mut queue = StreamIndexedQueue::with_begin(q.begin);
-        q.queue.iter().for_each(|entry| queue.push(entry.clone()));
+        q.queue
+            .into_iter()
+            .for_each(|entry| queue.push(entry.into()));
         queue
     }
 }
 
-// Local helper to enable serialization and deserialization of
-// ic_types::xnet::StreamSlice for testing
+/// Local helper to enable serialization and deserialization of
+/// [`StreamSlice`] for testing.
 #[derive(Serialize, Deserialize)]
 struct SerializableStreamSlice {
     header: StreamHeader,

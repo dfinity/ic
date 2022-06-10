@@ -31,7 +31,7 @@ use ic_types::{
     chunkable::ChunkId,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, RequestOrResponse},
+    messages::CallbackId,
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, PrincipalId,
 };
@@ -2704,7 +2704,7 @@ proptest! {
                         .sender_reply_callback(CallbackId::from(999))
                         .build();
 
-                    messages.push(RequestOrResponse::Request(req));
+                    messages.push(req.into());
 
                     let signals_end = decoded_slice.header().signals_end;
 
