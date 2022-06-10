@@ -43,7 +43,15 @@ function setup_domain_name() {
     cp /etc/nginx/conf.d/* "$NGINX_RUN"/conf.d/
     mount --bind "${NGINX_RUN}"/conf.d /etc/nginx/conf.d
 
-    source /boot/config/nginxdomain.conf
+    # Read limited set of keys. Be extra-careful quoting values as it could
+    # otherwise lead to executing arbitrary shell code!
+    while IFS="=" read -r key value; do
+        case "${key}" in
+            "DOMAIN") DOMAIN="${value}" ;;
+            "TLD") TLD="${value}" ;;
+        esac
+    done </boot/config/nginxdomain.conf
+
     if [[ -z "$DOMAIN" ]] || [[ -z "$TLD" ]]; then
         echo "\$DOMAIN or \$TLD variable not set. Nginx won't be configured. " 1>&2
         exit 1
