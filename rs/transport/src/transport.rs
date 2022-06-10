@@ -199,21 +199,4 @@ impl Transport for TransportImpl {
                 flow_state.send_queue.clear();
             });
     }
-
-    fn clear_send_queue(&self, peer_id: &NodeId, flow_tag: FlowTag) {
-        let client_map = self.client_map.read().unwrap();
-        let client_state = client_map.as_ref().expect("Transport client not found");
-        let peer_state = client_state
-            .peer_map
-            .get(peer_id)
-            .expect("Transport client not found");
-        peer_state
-            .flow_map
-            .iter()
-            .for_each(|(flow_id, flow_state)| {
-                if flow_id.eq(&flow_tag) {
-                    flow_state.send_queue.clear();
-                }
-            });
-    }
 }
