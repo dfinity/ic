@@ -1,0 +1,54 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "@crate_index//:anyhow",
+    "@crate_index//:axum",
+    "@crate_index//:base64",
+    "@crate_index//:candid",
+    "@crate_index//:clap",
+    "@crate_index//:futures",
+    "@crate_index//:garcon",
+    "@crate_index//:glob",
+    "@crate_index//:humantime",
+    "@crate_index//:hyper",
+    "@crate_index//:ic-agent",
+    "@crate_index//:ic-utils",
+    "@crate_index//:mockall",
+    "@crate_index//:opentelemetry",
+    "@crate_index//:opentelemetry-prometheus",
+    "@crate_index//:prometheus",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:tower",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-appender",
+    "@crate_index//:tracing-subscriber",
+    "@crate_index//:wabt",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+    "@crate_index//:indoc",
+]
+
+rust_binary(
+    name = "prober",
+    srcs = [
+        "src/main.rs",
+        "src/metrics.rs",
+    ],
+    crate_name = "boundary_node_prober",
+    data = ["src/canister.wat"],
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
