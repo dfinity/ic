@@ -201,6 +201,7 @@ pub fn create_consensus_pool_dir(config: &Config) {
 
 pub fn setup_crypto_registry(
     config: Config,
+    tokio_runtime_handle: tokio::runtime::Handle,
     metrics_registry: Option<&MetricsRegistry>,
     logger: ReplicaLogger,
 ) -> (std::sync::Arc<RegistryClientImpl>, CryptoComponent) {
@@ -215,6 +216,7 @@ pub fn setup_crypto_registry(
     // TODO(RPL-49): pass in registry_client
     let crypto = setup_crypto_provider(
         &config.crypto,
+        tokio_runtime_handle,
         Arc::clone(&registry) as Arc<dyn RegistryClient>,
         logger,
         metrics_registry,
@@ -287,10 +289,17 @@ Examples:
 /// created.
 pub fn setup_crypto_provider(
     config: &CryptoConfig,
+    tokio_runtime_handle: tokio::runtime::Handle,
     registry: Arc<dyn RegistryClient>,
     replica_logger: ReplicaLogger,
     metrics_registry: Option<&MetricsRegistry>,
 ) -> CryptoComponent {
     CryptoConfig::check_dir_has_required_permissions(&config.crypto_root).unwrap();
-    CryptoComponent::new(config, registry, replica_logger, metrics_registry)
+    CryptoComponent::new(
+        config,
+        Some(tokio_runtime_handle),
+        registry,
+        replica_logger,
+        metrics_registry,
+    )
 }

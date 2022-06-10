@@ -378,6 +378,7 @@ fn crypto_component(config: &CryptoConfig) -> CryptoComponent {
     let dummy_registry = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
     CryptoComponent::new_with_fake_node_id(
         config,
+        None,
         Arc::new(dummy_registry),
         node_test_id(42),
         no_op_logger(),

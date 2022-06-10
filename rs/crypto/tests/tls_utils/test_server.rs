@@ -117,7 +117,7 @@ impl Server {
         }
     }
 
-    pub async fn run(self) -> Result<AuthenticatedPeer, TlsServerHandshakeError> {
+    pub async fn run(&self) -> Result<AuthenticatedPeer, TlsServerHandshakeError> {
         let tcp_stream = self.accept_connection_on_listener().await;
 
         let (tls_stream, authenticated_node) = self
@@ -133,7 +133,7 @@ impl Server {
         Ok(authenticated_node)
     }
 
-    pub async fn run_without_client_auth(self) -> Result<(), TlsServerHandshakeError> {
+    pub async fn run_without_client_auth(&self) -> Result<(), TlsServerHandshakeError> {
         let tcp_stream = self.accept_connection_on_listener().await;
 
         let tls_stream = self

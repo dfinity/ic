@@ -105,7 +105,7 @@ impl CustomServer {
     }
 
     /// Run this client asynchronously. This allows a client to connect.
-    pub async fn run(self) {
+    pub async fn run(&self) {
         self.listener
             .set_nonblocking(true)
             .expect("failed to make listener non-blocking");
@@ -123,9 +123,9 @@ impl CustomServer {
             .expect("failed to create tokio_openssl::SslStream");
         let result = Pin::new(&mut tls_stream).accept().await;
 
-        if let Some(expected_error) = self.expected_error {
+        if let Some(expected_error) = &self.expected_error {
             let error = result.err().expect("expected error");
-            if !error.to_string().contains(&expected_error) {
+            if !error.to_string().contains(expected_error) {
                 panic!(
                     "expected the server error to contain \"{}\" but got error: {:?}",
                     expected_error, error

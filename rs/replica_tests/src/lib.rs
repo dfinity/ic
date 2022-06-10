@@ -354,6 +354,7 @@ where
         let registry = fake_registry_client.clone() as Arc<dyn RegistryClient + Send + Sync>;
         let crypto = setup_crypto_provider(
             &config.crypto,
+            rt.handle().clone(),
             registry.clone(),
             logger.clone(),
             Some(&metrics_registry),

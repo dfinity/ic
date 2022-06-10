@@ -5,13 +5,15 @@ use std::time::{Duration, Instant};
 /// Creates a TempCryptoComponent with a remote vault, starts multiple tokio
 /// tasks performing a basic-sig operation and measuring the running times, and then
 /// asserts that the total running time is smaller than the sum of the individual ones.
-#[tokio::test(flavor = "multi_thread")]
+#[test]
 #[ignore] // The test is ignored because its time-based test approach makes it flaky on CI.
-async fn should_run_parallel_vault_calls_from_tokio_tasks_in_parallel() {
+fn should_run_parallel_vault_calls_from_tokio_tasks_in_parallel() {
     const NUM_TASKS: i32 = 3;
     let registry_version = REG_V1;
+    let tokio_rt = new_tokio_runtime();
     let temp_crypto = TempCryptoComponent::builder()
         .with_remote_vault()
+        .with_vault_client_runtime(tokio_rt.handle().clone())
         .with_keys_in_registry_version(
             NodeKeysToGenerate::only_node_signing_key(),
             registry_version,
@@ -24,7 +26,7 @@ async fn should_run_parallel_vault_calls_from_tokio_tasks_in_parallel() {
     for _ in 0..NUM_TASKS {
         let msg = msg.clone();
         let temp_crypto = Arc::clone(&temp_crypto);
-        join_handles.push(tokio::spawn(async move {
+        join_handles.push(tokio_rt.spawn_blocking(move || {
             let start = Instant::now();
             let result = temp_crypto.sign_basic(&msg, temp_crypto.get_node_id(), registry_version);
             let task_duration = start.elapsed();
@@ -34,7 +36,7 @@ async fn should_run_parallel_vault_calls_from_tokio_tasks_in_parallel() {
 
     let mut sum_of_task_durations = Duration::ZERO;
     for join_handle in join_handles {
-        let (result, task_duration) = join_handle.await.expect("task panicked");
+        let (result, task_duration) = tokio_rt.block_on(join_handle).expect("task panicked");
         assert!(result.is_ok());
         println!("task_duration = {:?}", task_duration);
         sum_of_task_durations += task_duration;
@@ -47,9 +49,9 @@ async fn should_run_parallel_vault_calls_from_tokio_tasks_in_parallel() {
 /// Creates a TempCryptoComponent with a remote vault, starts multiple threads
 /// performing a basic-sig operation and measuring the running times, and then asserts
 /// that the total running time is smaller than the sum of the individual ones.
-#[tokio::test(flavor = "multi_thread")]
+#[test]
 #[ignore] // The test is ignored because its time-based test approach makes it flaky on CI.
-async fn should_run_parallel_vault_calls_from_std_threads_in_parallel() {
+fn should_run_parallel_vault_calls_from_std_threads_in_parallel() {
     const NUM_TASKS: i32 = 3;
     let registry_version = REG_V1;
     let temp_crypto = TempCryptoComponent::builder()
@@ -90,13 +92,15 @@ async fn should_run_parallel_vault_calls_from_std_threads_in_parallel() {
 /// tasks and threads performing a basic-sig operation and measuring the
 /// running time, and then asserts that the total running time is smaller than
 /// the sum of the individual ones.
-#[tokio::test(flavor = "multi_thread")]
+#[test]
 #[ignore] // The test is ignored because its time-based test approach makes it flaky on CI.
-async fn should_run_parallel_vault_calls_from_tokio_tasks_and_std_threads_in_parallel() {
+fn should_run_parallel_vault_calls_from_tokio_tasks_and_std_threads_in_parallel() {
     const NUM_TASKS_PER_CLIENT: i32 = 3;
     let registry_version = REG_V1;
+    let tokio_rt = new_tokio_runtime();
     let temp_crypto = TempCryptoComponent::builder()
         .with_remote_vault()
+        .with_vault_client_runtime(tokio_rt.handle().clone())
         .with_keys_in_registry_version(
             NodeKeysToGenerate::only_node_signing_key(),
             registry_version,
@@ -109,7 +113,7 @@ async fn should_run_parallel_vault_calls_from_tokio_tasks_and_std_threads_in_par
     for _ in 0..NUM_TASKS_PER_CLIENT {
         let msg = msg.clone();
         let temp_crypto = Arc::clone(&temp_crypto);
-        task_handles.push(tokio::spawn(async move {
+        task_handles.push(tokio_rt.spawn_blocking(move || {
             let start = Instant::now();
             let result = temp_crypto.sign_basic(&msg, temp_crypto.get_node_id(), registry_version);
             let task_duration = start.elapsed();
@@ -131,7 +135,7 @@ async fn should_run_parallel_vault_calls_from_tokio_tasks_and_std_threads_in_par
 
     let mut sum_of_task_and_thread_durations = Duration::ZERO;
     for task_handle in task_handles {
-        let (result, task_duration) = task_handle.await.expect("failed to await");
+        let (result, task_duration) = tokio_rt.block_on(task_handle).expect("task panicked");
         assert!(result.is_ok());
         println!("task_duration = {:?}", task_duration);
         sum_of_task_and_thread_durations += task_duration;
@@ -152,13 +156,15 @@ async fn should_run_parallel_vault_calls_from_tokio_tasks_and_std_threads_in_par
 /// measuring the running times for one of the two, and does the same for the other
 /// with standard threads, and then asserts that the total running time is smaller
 /// than the sum of the individual ones.
-#[tokio::test(flavor = "multi_thread")]
+#[test]
 #[ignore] // The test is ignored because its time-based test approach makes it flaky on CI.
-async fn should_run_parallel_vault_calls_from_multiple_clients_in_parallel() {
+fn should_run_parallel_vault_calls_from_multiple_clients_in_parallel() {
     const NUM_TASKS_PER_CLIENT: i32 = 3;
     let registry_version = REG_V1;
+    let tokio_rt = new_tokio_runtime();
     let temp_crypto_1 = TempCryptoComponent::builder()
         .with_remote_vault()
+        .with_vault_client_runtime(tokio_rt.handle().clone())
         .with_keys_in_registry_version(
             NodeKeysToGenerate::only_node_signing_key(),
             registry_version,
@@ -166,6 +172,7 @@ async fn should_run_parallel_vault_calls_from_multiple_clients_in_parallel() {
         .build_arc();
     let temp_crypto_2 = TempCryptoComponent::builder()
         .with_existing_remote_vault(temp_crypto_1.vault_server().unwrap())
+        .with_vault_client_runtime(tokio_rt.handle().clone())
         .with_node_id(temp_crypto_1.get_node_id())
         .with_registry(Arc::clone(temp_crypto_1.registry_client()))
         .build_arc();
@@ -176,7 +183,7 @@ async fn should_run_parallel_vault_calls_from_multiple_clients_in_parallel() {
     for _ in 0..NUM_TASKS_PER_CLIENT {
         let msg = msg.clone();
         let temp_crypto = Arc::clone(&temp_crypto_1);
-        task_handles.push(tokio::spawn(async move {
+        task_handles.push(tokio_rt.spawn_blocking(move || {
             let start = Instant::now();
             let result = temp_crypto.sign_basic(&msg, temp_crypto.get_node_id(), registry_version);
             let task_duration = start.elapsed();
@@ -198,7 +205,7 @@ async fn should_run_parallel_vault_calls_from_multiple_clients_in_parallel() {
 
     let mut sum_of_task_and_thread_durations = Duration::ZERO;
     for task_handle in task_handles {
-        let (result, task_duration) = task_handle.await.expect("failed to await");
+        let (result, task_duration) = tokio_rt.block_on(task_handle).expect("task panicked");
         assert!(result.is_ok());
         println!("task_duration = {:?}", task_duration);
         sum_of_task_and_thread_durations += task_duration;
@@ -212,4 +219,8 @@ async fn should_run_parallel_vault_calls_from_multiple_clients_in_parallel() {
     let total_duration = start.elapsed();
     println!("total_duration = {:?}", total_duration);
     assert!(total_duration < sum_of_task_and_thread_durations);
+}
+
+fn new_tokio_runtime() -> tokio::runtime::Runtime {
+    tokio::runtime::Runtime::new().expect("failed to build runtime")
 }
