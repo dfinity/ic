@@ -205,12 +205,7 @@ fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
 
 #[test]
 fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
-    let mut ic_config = get_ic_config();
-    let mut subnet_config = ic_config.topology_config.get_subnet(0).unwrap();
-    // println!("Topology config {:?}", ic_config.topology_config);
-    subnet_config.features.ecdsa_signatures = true;
-    ic_config.topology_config.insert_subnet(0, subnet_config);
-
+    let ic_config = get_ic_config();
     let (config, _tmpdir) = Config::temp_config();
     let subnet_config = ic_config::subnet_config::SubnetConfig::default_system_subnet();
     canister_test_with_config_async(

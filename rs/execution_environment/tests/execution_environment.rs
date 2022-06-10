@@ -1572,40 +1572,6 @@ fn compute_initial_ecdsa_dealings_sender_not_on_nns() {
     );
 }
 
-#[test]
-fn compute_initial_ecdsa_dealings_without_ecdsa_enabled() {
-    let own_subnet = subnet_test_id(1);
-    let nns_subnet = subnet_test_id(2);
-    let nns_canister = canister_test_id(0x10);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_nns_subnet_id(nns_subnet)
-        .with_caller(nns_subnet, nns_canister)
-        .build();
-
-    let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
-    let args = ic00::ComputeInitialEcdsaDealingsArgs::new(
-        make_key("secp256k1"),
-        None,
-        node_ids,
-        RegistryVersion::from(100),
-    );
-    test.inject_call_to_ic00(
-        Method::ComputeInitialEcdsaDealings,
-        args.encode(),
-        Cycles::new(0),
-    );
-    test.execute_all();
-    let response = test.xnet_messages()[0].clone();
-    assert_eq!(
-        get_reject_message(response),
-        format!(
-            "The {} API is not enabled on this subnet.",
-            Method::ComputeInitialEcdsaDealings
-        )
-    );
-}
-
 // TODO EXC-1060: After supporting multiple keys, execution will know which key_ids are
 // supported and can send the correct rejection message.
 #[test]

@@ -402,17 +402,14 @@ fn setup_artifact_manager(
 
     {
         let finalized = artifact_pools.consensus_pool_cache.finalized_block();
-        let ecdsa_enabled = registry_client
-            .get_features(subnet_id, registry_client.get_latest_version())
-            .ok()
-            .flatten()
-            .map(|features| features.ecdsa_signatures);
+        let ecdsa_config =
+            registry_client.get_ecdsa_config(subnet_id, registry_client.get_latest_version());
         info!(
             replica_logger,
-            "ECDSA: finalized_height = {:?}, ecdsa_enabled = {:?}, \
+            "ECDSA: finalized_height = {:?}, ecdsa_config = {:?}, \
                  DKG interval start = {:?}, is_summary = {}, has_ecdsa = {}",
             finalized.height(),
-            ecdsa_enabled,
+            ecdsa_config,
             finalized.payload.as_ref().dkg_interval_start_height(),
             finalized.payload.as_ref().is_summary(),
             finalized.payload.as_ref().as_ecdsa().is_some(),
@@ -426,7 +423,6 @@ fn setup_artifact_manager(
                         subnet_id,
                         Arc::clone(&consensus_block_cache),
                         Arc::clone(&consensus_crypto),
-                        Arc::clone(&registry_client),
                         metrics_registry.clone(),
                         replica_logger.clone(),
                         malicious_flags,

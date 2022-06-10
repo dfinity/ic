@@ -403,7 +403,6 @@ mod tests {
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
             features: Some(SubnetFeatures {
-                ecdsa_signatures: false,
                 canister_sandboxing: false,
                 http_requests: false,
                 bitcoin: None,
@@ -524,7 +523,6 @@ mod tests {
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
             features: Some(SubnetFeatures {
-                ecdsa_signatures: false,
                 canister_sandboxing: false,
                 http_requests: false,
                 bitcoin: None,
@@ -574,7 +572,6 @@ mod tests {
                 max_instructions_per_install_code: 300_000_000_000,
                 features: Some(
                     SubnetFeatures {
-                        ecdsa_signatures: false,
                         canister_sandboxing: false,
                         http_requests: false,
                         bitcoin: None,

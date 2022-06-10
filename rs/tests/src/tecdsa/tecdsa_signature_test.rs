@@ -109,19 +109,11 @@ pub fn config_without_ecdsa_on_nns(test_env: TestEnv) {
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(19))
-                .with_features(SubnetFeatures {
-                    ecdsa_signatures: false,
-                    ..SubnetFeatures::default()
-                })
                 .add_nodes(4),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .with_features(SubnetFeatures {
-                    ecdsa_signatures: true,
-                    ..SubnetFeatures::default()
-                })
                 .add_nodes(4),
         )
         .with_unassigned_nodes(4)
@@ -147,28 +139,16 @@ pub fn config(test_env: TestEnv) {
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .with_features(SubnetFeatures {
-                    ecdsa_signatures: true,
-                    ..SubnetFeatures::default()
-                })
                 .add_nodes(4),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .with_features(SubnetFeatures {
-                    ecdsa_signatures: true,
-                    ..SubnetFeatures::default()
-                })
                 .add_nodes(4),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .with_features(SubnetFeatures {
-                    ecdsa_signatures: true,
-                    ..SubnetFeatures::default()
-                })
                 .add_nodes(4),
         )
         .with_unassigned_nodes(4)
@@ -419,10 +399,7 @@ async fn create_new_subnet_with_keys(
         max_instructions_per_message: scheduler.max_instructions_per_message.get(),
         max_instructions_per_round: scheduler.max_instructions_per_round.get(),
         max_instructions_per_install_code: scheduler.max_instructions_per_install_code.get(),
-        features: SubnetFeatures {
-            ecdsa_signatures: true,
-            ..SubnetFeatures::default()
-        },
+        features: SubnetFeatures::default(),
         max_number_of_canisters: 4,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
