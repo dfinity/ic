@@ -239,5 +239,80 @@
       </div>
     </div>
 
-  </div>
+    <h2>State Sync duration</h2>
+
+    <p>
+      Purpose: Measure the duration of state sync after a machine has been down for a few checkpoints while
+      issuing a lot of updates to the state sync test canister.
+    </p>
+
+    <div id="plot-statesync" class="plot"></div>
+    <script>
+      const plot_statesync_links = new Map();
+      {{#each plot_statesync.data}}
+        plot_statesync_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot-statesync');
+          Plotly.newPlot( plot, {{{ plot_statesync.plot }}},  {{{plot_statesync.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_statesync_links.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+
+      }, false);
+    </script>
+
+    <div class="w3-dropdown-hover">
+      <button class="w3-button">Show list of detailed reports</button>
+      <div class="w3-dropdown-content w3-bar-block w3-border" style="min-width: 250px;">
+        {{#each plot_statesync.data}}
+        <a href="{{this.githash}}/{{this.timestamp}}/report.html" class="w3-bar-item w3-button">
+          {{this.date}}
+        </a>
+        {{/each}}
+      </div>
+    </div>
+    
+    <h2>Maximum Xnet capacity</h2>
+
+    <p>
+      Purpose: Measure the maximum capacity of all-to-all Xnet communication.
+    </p>
+
+    <div id="plot-xnet" class="plot"></div>
+    <script>
+      const plot_xnet_links = new Map();
+      {{#each plot_xnet.data}}
+        plot_xnet_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot-xnet');
+          Plotly.newPlot( plot, {{{ plot_xnet.plot }}},  {{{plot_xnet.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_xnet_links.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+
+      }, false);
+    </script>
+
+    <div class="w3-dropdown-hover">
+      <button class="w3-button">Show list of detailed reports</button>
+      <div class="w3-dropdown-content w3-bar-block w3-border" style="min-width: 250px;">
+        {{#each plot_xnet.data}}
+        <a href="{{this.githash}}/{{this.timestamp}}/report.html" class="w3-bar-item w3-button">
+          {{this.date}}
+        </a>
+        {{/each}}
+      </div>
+    </div>
+    
+  </div> <!-- Container //-->
 </body>
