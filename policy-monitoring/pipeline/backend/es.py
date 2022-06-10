@@ -162,7 +162,7 @@ class Es:
 
                 # Save statistics:
                 # total number of raw log messages sent to Elasticsearch
-                tag = "mainnet"
+                tag = f"mainnet--{index}"
                 assert_with_trace(tag not in self.stat["raw_logs"], "duplicate tag")
                 self.stat["raw_logs"][tag] = size
             else:
