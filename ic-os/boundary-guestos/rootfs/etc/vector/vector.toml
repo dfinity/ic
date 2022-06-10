@@ -54,9 +54,6 @@ source = """
 .@timestamp = to_timestamp!(.timestamp, unit: "milliseconds")
 .@timestamp = to_unix_timestamp!(.@timestamp, unit: "milliseconds")
 del(.timestamp)
-
-. = merge!(., .span)
-del(.span)
 """
 
 [sinks.elasticsearch_prober]
