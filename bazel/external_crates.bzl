@@ -277,11 +277,6 @@ def external_crates_repository(name):
                 features = ["v4"],
                 version = "=0.8.1",
             ),
-            "wabt": crate.spec(
-                git = "https://github.com/dfinity-lab/wabt-rs",
-                # tag = "0.10.0-dfinity"
-                rev = "7ab9062ddc63067843b62af8ae2cb83bf4bf601e",
-            ),
             "wsl": crate.spec(version = "=0.1.0"),
             "wycheproof": crate.spec(version = "=0.4.0"),
             "zeroize": crate.spec(

@@ -1,5 +1,5 @@
 {
-  "checksum": "b65b676e92ee0bf1c49005c95ccda866770fceb5e528aac845b666f594aa65e8",
+  "checksum": "825859c8925ac8e6e12f0fada528c0d15d75521c7c7befede1d53194d72f7153",
   "crates": {
     "addr2line 0.17.0": {
       "name": "addr2line",
@@ -6098,10 +6098,6 @@
               "target": "uuid"
             },
             {
-              "id": "wabt 0.10.0",
-              "target": "wabt"
-            },
-            {
               "id": "wsl 0.1.0",
               "target": "wsl"
             },
@@ -8532,39 +8528,6 @@
         "version": "0.26.1"
       },
       "license": "Apache-2.0/MIT"
-    },
-    "glob 0.2.11": {
-      "name": "glob",
-      "version": "0.2.11",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/glob/0.2.11/download",
-          "sha256": "8be18de09a56b60ed0edf84bc9df007e30040691af7acd1c41874faac5895bfb"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "glob",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "glob",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.2.11"
-      },
-      "license": "MIT/Apache-2.0"
     },
     "glob 0.3.0": {
       "name": "glob",
@@ -26169,149 +26132,6 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "wabt 0.10.0": {
-      "name": "wabt",
-      "version": "0.10.0",
-      "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity-lab/wabt-rs",
-          "commitish": {
-            "Rev": "7ab9062ddc63067843b62af8ae2cb83bf4bf601e"
-          }
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wabt",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "wabt",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "serde 1.0.136",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.40",
-              "target": "serde_json"
-            },
-            {
-              "id": "wabt-sys 0.8.0",
-              "target": "wabt_sys"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "serde_derive 1.0.136",
-              "target": "serde_derive"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.10.0"
-      },
-      "license": "Apache-2.0"
-    },
-    "wabt-sys 0.8.0": {
-      "name": "wabt-sys",
-      "version": "0.8.0",
-      "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity-lab/wabt-rs",
-          "commitish": {
-            "Rev": "7ab9062ddc63067843b62af8ae2cb83bf4bf601e"
-          },
-          "strip_prefix": "wabt-sys"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wabt_sys",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "wabt_sys",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "wabt-sys 0.8.0",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.8.0"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "cc 1.0.73",
-              "target": "cc"
-            },
-            {
-              "id": "cmake 0.1.48",
-              "target": "cmake"
-            }
-          ],
-          "selects": {
-            "cfg(windows)": [
-              {
-                "id": "glob 0.2.11",
-                "target": "glob"
-              }
-            ]
-          }
-        }
-      },
-      "license": "Apache-2.0"
-    },
     "wait-timeout 0.2.0": {
       "name": "wait-timeout",
       "version": "0.2.0",
@@ -26336,6 +26156,18 @@
         },
         {
           "Binary": {
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
             "srcs": {
@@ -26350,18 +26182,6 @@
           "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
