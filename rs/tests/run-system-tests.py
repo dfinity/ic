@@ -40,6 +40,7 @@ logging.basicConfig(level=logging.DEBUG, format="%(levelname)s:%(name)s:%(messag
 RED = "\033[1;31m"
 GREEN = "\033[1;32m"
 NC = "\033[0m"
+TIMEOUT_CODE = 124
 
 # This timeout should be shorter than the CI job timeout.
 TIMEOUT_DEFAULT_SEC = 50 * 60
@@ -197,7 +198,7 @@ def run_command_with_timeout(command: List[str], timeout=None, **kwargs) -> int:
         p.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         # Normally, in case of TimeoutExpired return code is not set.
-        p.returncode = p.returncode if p.returncode is not None else 124
+        p.returncode = p.returncode if p.returncode is not None else TIMEOUT_CODE
     finally:
         # Kill the whole process group.
         try_kill_pgid(pgid)
@@ -240,7 +241,8 @@ def main(
     CI_COMMIT_SHORT_SHA = os.getenv("CI_COMMIT_SHORT_SHA", default="")
     ARTIFACT_DIR = os.getenv("ARTIFACT_DIR", default="")
     CI_JOB_NAME = os.getenv("CI_JOB_NAME", default="")
-    SYSTEM_TESTS_TIMEOUT_SEC = os.getenv("SYSTEM_TESTS_TIMEOUT", default=TIMEOUT_DEFAULT_SEC)
+    SYSTEM_TESTS_TIMEOUT_SEC = int(os.getenv("SYSTEM_TESTS_TIMEOUT", default=TIMEOUT_DEFAULT_SEC))
+    logging.info(f"{RED}Test suite execution timeout is {SYSTEM_TESTS_TIMEOUT_SEC} sec.{NC}")
     # Start set variables.
     is_local_run = JOB_ID is None
     use_locally_prebuilt_artifacts = ARTIFACT_DIR != ""
@@ -436,7 +438,7 @@ def main(
         logging.error(f"Execution of the `prod-test-driver` terminated with code={testrun_returncode}.")
 
     # In case of timeout error, we optionally send a slack notification.
-    if testrun_returncode == 124 and is_slack_timeout_notify:
+    if testrun_returncode == TIMEOUT_CODE and is_slack_timeout_notify:
         slack_message = "\n".join(
             [
                 f"Scheduled job `{CI_JOB_NAME}` *timed out*. <{CI_JOB_URL}|log>.",  # noqa
@@ -500,7 +502,13 @@ def main(
         logging.info("Summary created successfully.")
     else:
         logging.error(f"{RED}Failed to create summary.{NC}")
-
+    # For a better visibility of this log, it is placed closer to the end of the execution.
+    if testrun_returncode == TIMEOUT_CODE:
+        logging.info(
+            f"{RED}Test suite execution has timed out after {SYSTEM_TESTS_TIMEOUT_SEC} sec. "
+            f"Consider changing the SYSTEM_TESTS_TIMEOUT environment variable to a higher value."
+            f"{NC}"
+        )
     return test_suite_returncode
 
 

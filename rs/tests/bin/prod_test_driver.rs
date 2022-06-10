@@ -121,7 +121,7 @@ fn process_test_results(validated_args: ValidatedCliProcessTestsArgs) -> anyhow:
         .unwrap_or_else(|e| panic!("Could not serialize suite result to string. error={:?}", e));
     fs::write(suite_result_file, content)
         .unwrap_or_else(|e| panic!("Could not save test suite result to a file. error={:?}", e));
-    if let TestResult::Failed(_) = suite_result.result {
+    if suite_result.result != TestResult::Passed {
         anyhow::bail!(format!("Test suite {} failed", suite_result.name))
     } else {
         Ok(())

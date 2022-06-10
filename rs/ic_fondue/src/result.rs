@@ -180,6 +180,11 @@ impl Default for TestResultNode {
 
 impl From<&TestSuiteContract> for TestResultNode {
     fn from(contract: &TestSuiteContract) -> Self {
+        let result = if contract.is_skipped {
+            TestResult::Skipped
+        } else {
+            TestResult::Failed("Execution not finished.".to_string())
+        };
         Self {
             name: contract.name.clone(),
             children: contract
@@ -187,6 +192,7 @@ impl From<&TestSuiteContract> for TestResultNode {
                 .iter()
                 .map(|child| TestResultNode::from(child))
                 .collect(),
+            result,
             ..Default::default()
         }
     }
