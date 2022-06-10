@@ -360,7 +360,7 @@ class UniversalPreProcessor(DeclarativePreProcessor):
     }
 
     @staticmethod
-    def is_global_infra_required(formula_names: Optional[Set[str]] = None) -> bool:
+    def is_global_infra_required(formula_names: Optional[Set[str]]) -> bool:
 
         if formula_names is None:
             # All formulas are enabled

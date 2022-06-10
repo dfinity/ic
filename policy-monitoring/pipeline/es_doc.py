@@ -65,8 +65,12 @@ class EsDoc:
     def message(self) -> str:
         return self.repr["_source"]["message"]
 
-    def component_identifier(self) -> str:
-        return self.repr["_source"]["syslog"]["identifier"]
+    def component_identifier(self) -> Optional[str]:
+        syslog = self.repr["_source"]["syslog"]
+        if "identifier" in syslog:
+            return syslog["identifier"]
+        else:
+            return None
 
     __ES_TIMESTAMP_FMT = "%Y-%m-%dT%H:%M:%S.%f%z"
 
