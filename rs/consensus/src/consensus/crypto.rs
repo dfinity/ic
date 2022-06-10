@@ -1,8 +1,9 @@
 use crate::consensus::prelude::*;
 use ic_interfaces::{crypto::*, validation::ValidationResult};
+use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
 use ic_types::{
     canister_http::CanisterHttpResponseMetadata,
-    consensus::ecdsa::{EcdsaComplaintContent, EcdsaDealing, EcdsaOpeningContent},
+    consensus::ecdsa::{EcdsaComplaintContent, EcdsaOpeningContent},
     crypto::{
         threshold_sig::ni_dkg::{DkgId, NiDkgId},
         CryptoError,
@@ -385,8 +386,8 @@ pub trait ConsensusCrypto:
     SignVerify<HashedBlock, BasicSignature<Block>, RegistryVersion>
     + SignVerify<NotarizationContent, MultiSignatureShare<NotarizationContent>, RegistryVersion>
     + SignVerify<FinalizationContent, MultiSignatureShare<FinalizationContent>, RegistryVersion>
-    + SignVerify<EcdsaDealing, MultiSignatureShare<EcdsaDealing>, RegistryVersion>
-    + SignVerify<EcdsaDealing, BasicSignature<EcdsaDealing>, RegistryVersion>
+    + SignVerify<SignedIDkgDealing, MultiSignatureShare<SignedIDkgDealing>, RegistryVersion>
+    + SignVerify<IDkgDealing, BasicSignature<IDkgDealing>, RegistryVersion>
     + SignVerify<EcdsaComplaintContent, BasicSignature<EcdsaComplaintContent>, RegistryVersion>
     + SignVerify<EcdsaOpeningContent, BasicSignature<EcdsaOpeningContent>, RegistryVersion>
     + SignVerify<RandomBeaconContent, ThresholdSignatureShare<RandomBeaconContent>, NiDkgId>
@@ -412,10 +413,10 @@ pub trait ConsensusCrypto:
         RegistryVersion,
         MultiSignature<FinalizationContent>,
     > + Aggregate<
-        EcdsaDealing,
-        MultiSignatureShare<EcdsaDealing>,
+        SignedIDkgDealing,
+        MultiSignatureShare<SignedIDkgDealing>,
         RegistryVersion,
-        MultiSignature<EcdsaDealing>,
+        MultiSignature<SignedIDkgDealing>,
     > + Aggregate<
         RandomBeaconContent,
         ThresholdSignatureShare<RandomBeaconContent>,

@@ -157,11 +157,16 @@ message IDkgTranscriptId {
 }
 
 message VerifiedIDkgDealing {
+  reserved 4;
+  reserved "requested_height";
+  reserved 5;
+  reserved "dealing_tuple";
+
   uint32 dealer_index = 1;
+  // Multi signature and the corresponding signers.
   bytes signature = 2;
   repeated types.v1.NodeId signers = 3;
-  uint64 requested_height = 4;
-  IDkgDealingTuple dealing_tuple = 5;
+  IDkgSignedDealingTuple signed_dealing_tuple = 6;
 }
 
 message IDkgTranscript {
@@ -203,6 +208,8 @@ message IDkgDealing {
   bytes raw_dealing = 2;   // serialised InternalRawDealing
 }
 
+// TODO: to be removed after initial dealings are migrated to use
+// signed dealings.
 message IDkgDealingTuple {
   types.v1.NodeId dealer = 1;
   IDkgDealing dealing = 2;

@@ -189,7 +189,6 @@ fn mock_dealings(
         let node_id = node_id(i);
         let dealing = IDkgDealing {
             transcript_id,
-            dealer_id: node_id,
             internal_dealing_raw: vec![],
         };
         dealings.insert(node_id, dealing);

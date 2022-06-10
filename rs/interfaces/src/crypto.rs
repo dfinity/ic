@@ -36,10 +36,11 @@ pub use sign::canister_threshold_sig::*;
 use ic_types::consensus::certification::CertificationContent;
 use ic_types::consensus::dkg as consensus_dkg;
 use ic_types::consensus::{
-    ecdsa::{EcdsaComplaintContent, EcdsaDealing, EcdsaOpeningContent},
+    ecdsa::{EcdsaComplaintContent, EcdsaOpeningContent},
     Block, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent, NotarizationContent,
     RandomBeaconContent, RandomTapeContent,
 };
+use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
 use ic_types::messages::{MessageId, WebAuthnEnvelope};
 
 /// The functionality offered by the crypto component
@@ -65,12 +66,12 @@ pub trait Crypto:
     // NotarizationContent
     + MultiSigner<NotarizationContent>
     + MultiSigVerifier<NotarizationContent>
-    // EcdsaDealing
-    + MultiSigner<EcdsaDealing>
-    + MultiSigVerifier<EcdsaDealing>
-    // EcdsaSignedDealing
-    + BasicSigner<EcdsaDealing>
-    + BasicSigVerifier<EcdsaDealing>
+    // SignedIDkgDealing
+    + MultiSigner<SignedIDkgDealing>
+    + MultiSigVerifier<SignedIDkgDealing>
+    // IDkgDealing
+    + BasicSigner<IDkgDealing>
+    + BasicSigVerifier<IDkgDealing>
     // EcdsaComplaintContent
     + BasicSigner<EcdsaComplaintContent>
     + BasicSigVerifier<EcdsaComplaintContent>
@@ -129,10 +130,10 @@ impl<T> Crypto for T where
         + MultiSigVerifier<FinalizationContent>
         + MultiSigner<NotarizationContent>
         + MultiSigVerifier<NotarizationContent>
-        + MultiSigner<EcdsaDealing>
-        + MultiSigVerifier<EcdsaDealing>
-        + BasicSigner<EcdsaDealing>
-        + BasicSigVerifier<EcdsaDealing>
+        + MultiSigner<SignedIDkgDealing>
+        + MultiSigVerifier<SignedIDkgDealing>
+        + BasicSigner<IDkgDealing>
+        + BasicSigVerifier<IDkgDealing>
         + BasicSigner<EcdsaComplaintContent>
         + BasicSigVerifier<EcdsaComplaintContent>
         + BasicSigner<EcdsaOpeningContent>

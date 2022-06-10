@@ -4,9 +4,9 @@
 use ic_crypto_hash::crypto_hash;
 use ic_interfaces::crypto::CryptoHashable;
 use ic_types::consensus::ecdsa::{
-    EcdsaComplaint, EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash, EcdsaOpening,
-    EcdsaSigShare, EcdsaSignedDealing,
+    EcdsaComplaint, EcdsaMessage, EcdsaMessageHash, EcdsaOpening, EcdsaSigShare,
 };
+use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
 
 /// EcdsaObject should be implemented by the ECDSA message types
 /// (e.g) EcdsaSignedDealing, EcdsaDealingSupport, etc
@@ -15,13 +15,13 @@ pub trait EcdsaObject: CryptoHashable + Clone + Sized {
     fn message_hash(&self) -> EcdsaMessageHash;
 }
 
-impl EcdsaObject for EcdsaSignedDealing {
+impl EcdsaObject for SignedIDkgDealing {
     fn message_hash(&self) -> EcdsaMessageHash {
         EcdsaMessageHash::EcdsaSignedDealing(crypto_hash(self))
     }
 }
 
-impl EcdsaObject for EcdsaDealingSupport {
+impl EcdsaObject for IDkgDealingSupport {
     fn message_hash(&self) -> EcdsaMessageHash {
         EcdsaMessageHash::EcdsaDealingSupport(crypto_hash(self))
     }

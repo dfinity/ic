@@ -23,13 +23,14 @@ use ic_types::{
         certification::{Certification, CertificationMessage, CertificationShare},
         dkg,
         ecdsa::{
-            EcdsaComplaint, EcdsaDealingSupport, EcdsaMessage, EcdsaMessageHash, EcdsaMessageType,
-            EcdsaOpening, EcdsaSigShare, EcdsaSignedDealing,
+            EcdsaComplaint, EcdsaMessage, EcdsaMessageHash, EcdsaMessageType, EcdsaOpening,
+            EcdsaSigShare,
         },
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
         ConsensusMessageHash, Finalization, FinalizationShare, HasHeight, Notarization,
         NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
     },
+    crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
     crypto::{CryptoHash, CryptoHashOf},
     Height, Time,
 };
@@ -1607,14 +1608,14 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
 
     fn signed_dealings(
         &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaSignedDealing)> + '_> {
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, SignedIDkgDealing)> + '_> {
         let message_db = self.get_message_db(EcdsaMessageType::Dealing);
         message_db.iter()
     }
 
     fn dealing_support(
         &self,
-    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, EcdsaDealingSupport)> + '_> {
+    ) -> Box<dyn Iterator<Item = (EcdsaMessageId, IDkgDealingSupport)> + '_> {
         let message_db = self.get_message_db(EcdsaMessageType::DealingSupport);
         message_db.iter()
     }

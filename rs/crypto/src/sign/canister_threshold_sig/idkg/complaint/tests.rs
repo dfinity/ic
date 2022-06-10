@@ -10,11 +10,14 @@ use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, IDkgDealingInternal, 
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_42};
-use ic_types::consensus::ecdsa::EcdsaDealing;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptType,
+    SignedIDkgDealing,
 };
-use ic_types::crypto::{AlgorithmId, CombinedMultiSig, CombinedMultiSigOf, KeyPurpose};
+use ic_types::crypto::{
+    AlgorithmId, BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, KeyPurpose,
+};
+use ic_types::signature::BasicSignature;
 use ic_types::{registry::RegistryClientError, Height, Randomness, RegistryVersion};
 use rand::{thread_rng, Rng};
 use std::collections::BTreeSet;
@@ -464,36 +467,40 @@ fn multi_signed_dealing_with(
     internal_dealing_raw: Vec<u8>,
     dealer_id: NodeId,
 ) -> IDkgMultiSignedDealing {
-    let ecdsa_dealing = EcdsaDealing {
-        requested_height: Height::new(123),
-        idkg_dealing: IDkgDealing {
-            transcript_id: IDkgTranscriptId::new(SUBNET_42, 1234, Height::new(123)),
-            dealer_id,
-            internal_dealing_raw,
+    let dealing = IDkgDealing {
+        transcript_id: IDkgTranscriptId::new(SUBNET_42, 1234, Height::new(123)),
+        internal_dealing_raw,
+    };
+    let signed_dealing = SignedIDkgDealing {
+        content: dealing,
+        signature: BasicSignature {
+            signature: BasicSigOf::new(BasicSig(vec![1, 2, 3])),
+            signer: dealer_id,
         },
     };
-
     IDkgMultiSignedDealing {
         signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![])),
         signers: BTreeSet::new(),
-        dealing: ecdsa_dealing,
+        signed_dealing,
     }
 }
 
 fn multi_signed_dealing_with_invalid_internal(dealer_id: NodeId) -> IDkgMultiSignedDealing {
-    let ecdsa_dealing = EcdsaDealing {
-        requested_height: Height::new(123),
-        idkg_dealing: IDkgDealing {
-            transcript_id: IDkgTranscriptId::new(SUBNET_42, 1234, Height::new(123)),
-            dealer_id,
-            internal_dealing_raw: vec![],
+    let dealing = IDkgDealing {
+        transcript_id: IDkgTranscriptId::new(SUBNET_42, 1234, Height::new(123)),
+        internal_dealing_raw: vec![],
+    };
+    let signed_dealing = SignedIDkgDealing {
+        content: dealing,
+        signature: BasicSignature {
+            signature: BasicSigOf::new(BasicSig(vec![1, 2, 3])),
+            signer: dealer_id,
         },
     };
-
     IDkgMultiSignedDealing {
         signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![])),
         signers: BTreeSet::new(),
-        dealing: ecdsa_dealing,
+        signed_dealing,
     }
 }
 

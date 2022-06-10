@@ -144,7 +144,7 @@ pub fn index_and_dealing_of_dealer(
     let (index, signed_dealing) = transcript
         .verified_dealings
         .iter()
-        .find(|(_index, signed_dealing)| signed_dealing.dealing.idkg_dealing.dealer_id == dealer_id)
+        .find(|(_index, signed_dealing)| signed_dealing.signed_dealing.dealer_id() == dealer_id)
         .ok_or(IDkgDealingExtractionError::MissingDealingInTranscript { dealer_id })?;
     let internal_dealing = IDkgDealingInternal::try_from(signed_dealing).map_err(|e| {
         IDkgDealingExtractionError::SerializationError {

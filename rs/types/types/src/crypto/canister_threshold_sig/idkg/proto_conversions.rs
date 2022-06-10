@@ -1,13 +1,14 @@
-use crate::consensus::ecdsa::EcdsaDealing;
 use crate::crypto::canister_threshold_sig::error::{
     ExtendedDerivationPathSerializationError, InitialIDkgDealingsValidationError,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgMultiSignedDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
     IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType, InitialIDkgDealings,
+    SignedIDkgDealing,
 };
 use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
-use crate::crypto::{AlgorithmId, CombinedMultiSig, CombinedMultiSigOf};
+use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf};
+use crate::signature::BasicSignature;
 use crate::{node_id_into_protobuf, node_id_try_from_protobuf, Height, NodeIndex};
 use ic_base_types::{
     subnet_id_into_protobuf, subnet_id_try_from_protobuf, NodeId, PrincipalId, RegistryVersion,
@@ -56,30 +57,6 @@ impl TryFrom<&IDkgTranscriptProto> for IDkgTranscript {
 
     fn try_from(proto: &IDkgTranscriptProto) -> Result<Self, Self::Error> {
         idkg_transcript_struct(proto)
-    }
-}
-
-impl From<&IDkgDealing> for IDkgDealingTupleProto {
-    fn from(idkg_dealing: &IDkgDealing) -> Self {
-        idkg_dealing_tuple_proto(&idkg_dealing.dealer_id, idkg_dealing)
-    }
-}
-
-impl TryFrom<&IDkgDealingTupleProto> for IDkgDealing {
-    type Error = InitialIDkgDealingsValidationError;
-
-    fn try_from(proto: &IDkgDealingTupleProto) -> Result<Self, Self::Error> {
-        let dealing_proto = proto.dealing.as_ref().ok_or(
-            InitialIDkgDealingsValidationError::DeserializationError {
-                error: "Missing IDkgDealing.".to_string(),
-            },
-        )?;
-
-        Ok(IDkgDealing {
-            transcript_id: idkg_transcript_id_struct(&dealing_proto.transcript_id)?,
-            dealer_id: node_id_struct(&proto.dealer)?,
-            internal_dealing_raw: dealing_proto.raw_dealing.clone(),
-        })
     }
 }
 
@@ -423,6 +400,21 @@ fn idkg_dealing_tuple_proto(
     }
 }
 
+fn signed_idkg_dealing_tuple_proto(
+    signed_dealing: &SignedIDkgDealing,
+) -> IDkgSignedDealingTupleProto {
+    let idkg_dealing = signed_dealing.idkg_dealing();
+    let dealing = IDkgDealingProto {
+        transcript_id: Some(idkg_transcript_id_proto(&idkg_dealing.transcript_id)),
+        raw_dealing: idkg_dealing.internal_dealing_raw.clone(),
+    };
+    IDkgSignedDealingTupleProto {
+        dealer: Some(node_id_into_protobuf(signed_dealing.dealer_id())),
+        dealing: Some(dealing),
+        signature: signed_dealing.signature.signature.as_ref().0.clone(),
+    }
+}
+
 fn verified_idkg_dealing_proto(
     dealer_index: &NodeIndex,
     signed_dealing: &IDkgMultiSignedDealing,
@@ -435,10 +427,8 @@ fn verified_idkg_dealing_proto(
             .iter()
             .map(|node_id| node_id_into_protobuf(*node_id))
             .collect(),
-        requested_height: signed_dealing.dealing.requested_height.get(),
-        dealing_tuple: Some(idkg_dealing_tuple_proto(
-            &signed_dealing.dealing.idkg_dealing.dealer_id,
-            &signed_dealing.dealing.idkg_dealing,
+        signed_dealing_tuple: Some(signed_idkg_dealing_tuple_proto(
+            &signed_dealing.signed_dealing,
         )),
     }
 }
@@ -461,8 +451,37 @@ fn idkg_dealing_struct(
             })?;
     Ok(IDkgDealing {
         transcript_id: idkg_transcript_id_struct(&dealing_proto.transcript_id)?,
-        dealer_id: node_id_struct(&proto.dealer)?,
         internal_dealing_raw: dealing_proto.raw_dealing.clone(),
+    })
+}
+
+fn signed_idkg_dealing_struct(
+    maybe_proto: &Option<IDkgSignedDealingTupleProto>,
+) -> Result<SignedIDkgDealing, InitialIDkgDealingsValidationError> {
+    let proto =
+        maybe_proto
+            .as_ref()
+            .ok_or(InitialIDkgDealingsValidationError::DeserializationError {
+                error: "Missing IDkgDealingTuple.".to_string(),
+            })?;
+    let idkg_dealing_proto =
+        proto
+            .dealing
+            .as_ref()
+            .ok_or(InitialIDkgDealingsValidationError::DeserializationError {
+                error: "Missing IDkgDealing.".to_string(),
+            })?;
+    let idkg_dealing = IDkgDealing {
+        transcript_id: idkg_transcript_id_struct(&idkg_dealing_proto.transcript_id)?,
+        internal_dealing_raw: idkg_dealing_proto.raw_dealing.clone(),
+    };
+    let basic_signature = BasicSignature {
+        signature: BasicSigOf::new(BasicSig(proto.signature.clone())),
+        signer: node_id_struct(&proto.dealer)?,
+    };
+    Ok(SignedIDkgDealing {
+        content: idkg_dealing,
+        signature: basic_signature,
     })
 }
 
@@ -472,22 +491,19 @@ fn verified_dealings_map(
     let mut result = BTreeMap::new();
     for proto in verified_protos.iter() {
         let node_index = proto.dealer_index;
-        let dealing = EcdsaDealing {
-            requested_height: Height::from(proto.requested_height),
-            idkg_dealing: idkg_dealing_struct(&proto.dealing_tuple)?,
-        };
+        let signed_dealing = signed_idkg_dealing_struct(&proto.signed_dealing_tuple)?;
         let signers: Result<Vec<_>, _> = proto
             .signers
             .iter()
             .map(|node_id| node_id_struct(&Some(node_id.clone())))
             .collect();
         let signers = BTreeSet::from_iter(signers?.iter().cloned());
-        let signed_dealing = IDkgMultiSignedDealing {
+        let multi_signed_dealing = IDkgMultiSignedDealing {
             signature: CombinedMultiSigOf::new(CombinedMultiSig(proto.signature.clone())),
             signers,
-            dealing,
+            signed_dealing,
         };
-        result.insert(node_index, signed_dealing);
+        result.insert(node_index, multi_signed_dealing);
     }
     Ok(result)
 }
@@ -502,8 +518,9 @@ fn initial_dealings_map(
             dealer: proto.dealer.clone(),
             dealing: proto.dealing.clone(),
         };
+        let dealer_id = node_id_struct(&proto.dealer)?;
         let dealing = idkg_dealing_struct(&Some(unsigned_proto))?;
-        result.insert(dealing.dealer_id, dealing);
+        result.insert(dealer_id, dealing);
     }
     Ok(result)
 }

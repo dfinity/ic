@@ -166,6 +166,14 @@ pub fn make_bootstrap_summary(
                         Box::new(dealings),
                         params,
                     ));
+                if let Some(log) = log {
+                    info!(
+                        log,
+                        "make_ecdsa_genesis_summary(): height = {:?}, key_transcript = [{}]",
+                        height,
+                        summary_payload.key_transcript
+                    );
+                }
             }
             None => {
                 // Leave the feature disabled if the initial dealings are incorrect.
@@ -260,7 +268,8 @@ pub(crate) fn create_summary_payload(
         _ => {
             warn!(
                 log,
-                "Fail to create ecdsa key transcript in previous interval, will continue in the next."
+                "Key not created in previous interval, to retry in next interval(height = {:?}), key_transcript = {}",
+                height, ecdsa_payload.key_transcript
             );
             None
         }
@@ -286,7 +295,11 @@ pub(crate) fn create_summary_payload(
     )? {
         info!(
             log,
-            "Noticed subnet membership change, will start key_transcript_creation."
+            "Noticed subnet membership change, will start key_transcript_creation: height = {:?} \
+                current_version = {:?}, next_version = {:?}",
+            height,
+            registry_version,
+            context.registry_version
         );
         ecdsa::KeyTranscriptCreation::Begin
     } else {
@@ -922,9 +935,10 @@ fn update_next_key_transcript_helper(
             if dealers_set != receivers_set {
                 info!(
                     log,
-                    "Node membership changed. Reshare key transcript from dealers {:?} to receivers {:?}",
+                    "Node membership changed. Reshare key transcript from dealers {:?} to receivers {:?}, height = {:?}",
                     dealers,
-                    receivers
+                    receivers,
+                    height,
                 );
             }
             *next_key_transcript_creation = ecdsa::KeyTranscriptCreation::ReshareOfUnmaskedParams(
@@ -1017,11 +1031,12 @@ fn update_next_key_transcript_helper(
             {
                 // next_unused_transcript_id is not updated, since the transcript_id specified
                 // by the reshared param will be used.
-                debug!(
+                info!(
                     log,
-                    "Key transcript created from XnetReshareOfMasked {:?} registry_version {:?}",
+                    "Key transcript created from XnetReshareOfMasked {:?}, registry_version {:?}, height = {:?}",
                     config.as_ref().transcript_id,
                     transcript.registry_version,
+                    height,
                 );
                 let transcript_ref = ecdsa::UnmaskedTranscript::try_from((height, &transcript))?;
                 *next_key_transcript_creation =

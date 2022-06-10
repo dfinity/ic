@@ -42,7 +42,6 @@ use ic_types::crypto::{
 };
 use ic_types::*;
 use ic_types::{NodeId, RegistryVersion};
-use ic_types_test_utils::ids::NODE_1;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
@@ -179,7 +178,6 @@ pub fn dummy_idkg_dealing_for_tests() -> IDkgDealing {
             1,
             Height::new(1),
         ),
-        dealer_id: NodeId::from(PrincipalId::new_node_test_id(0)),
         internal_dealing_raw: vec![],
     }
 }
@@ -324,7 +322,6 @@ pub fn mock_dealings(
     for node_id in dealers {
         let dealing = IDkgDealing {
             transcript_id,
-            dealer_id: *node_id,
             internal_dealing_raw: format!("Dummy raw dealing for dealer {}", node_id).into_bytes(),
         };
         dealings.insert(*node_id, dealing);
@@ -546,7 +543,6 @@ impl IDkgProtocol for CryptoReturningOk {
     ) -> Result<IDkgDealing, IDkgCreateDealingError> {
         let dealing = IDkgDealing {
             transcript_id: params.transcript_id(),
-            dealer_id: NODE_1,
             internal_dealing_raw: vec![],
         };
         Ok(dealing)

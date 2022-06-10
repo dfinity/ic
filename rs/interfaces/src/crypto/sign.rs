@@ -25,11 +25,12 @@
 use crate::crypto::hash::{
     DOMAIN_BLOCK, DOMAIN_CATCH_UP_CONTENT, DOMAIN_CERTIFICATION_CONTENT,
     DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE_METADATA, DOMAIN_DEALING_CONTENT,
-    DOMAIN_ECDSA_COMPLAINT_CONTENT, DOMAIN_ECDSA_DEALING, DOMAIN_ECDSA_OPENING_CONTENT,
-    DOMAIN_FINALIZATION_CONTENT, DOMAIN_NOTARIZATION_CONTENT, DOMAIN_RANDOM_BEACON_CONTENT,
-    DOMAIN_RANDOM_TAPE_CONTENT,
+    DOMAIN_ECDSA_COMPLAINT_CONTENT, DOMAIN_ECDSA_OPENING_CONTENT, DOMAIN_FINALIZATION_CONTENT,
+    DOMAIN_IDKG_DEALING, DOMAIN_NOTARIZATION_CONTENT, DOMAIN_RANDOM_BEACON_CONTENT,
+    DOMAIN_RANDOM_TAPE_CONTENT, DOMAIN_SIGNED_IDKG_DEALING,
 };
 use ic_types::canister_http::CanisterHttpResponseMetadata;
+use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
 use ic_types::crypto::{
     BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CryptoResult, IndividualMultiSigOf,
     SignedBytesWithoutDomainSeparator, UserPublicKey,
@@ -39,7 +40,7 @@ use ic_types::{
     consensus::{
         certification::CertificationContent,
         dkg::DealingContent,
-        ecdsa::{EcdsaComplaintContent, EcdsaDealing, EcdsaOpeningContent, EcdsaSigShare},
+        ecdsa::{EcdsaComplaintContent, EcdsaOpeningContent, EcdsaSigShare},
         Block, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
         NotarizationContent, RandomBeaconContent, RandomTapeContent,
     },
@@ -87,8 +88,8 @@ pub trait SignatureDomain: private::SignatureDomainSeal {
 }
 
 mod private {
-
     use super::*;
+    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
 
     pub trait SignatureDomainSeal {}
 
@@ -96,7 +97,8 @@ mod private {
     impl SignatureDomainSeal for DealingContent {}
     impl SignatureDomainSeal for NotarizationContent {}
     impl SignatureDomainSeal for FinalizationContent {}
-    impl SignatureDomainSeal for EcdsaDealing {}
+    impl SignatureDomainSeal for IDkgDealing {}
+    impl SignatureDomainSeal for SignedIDkgDealing {}
     impl SignatureDomainSeal for EcdsaSigShare {}
     impl SignatureDomainSeal for EcdsaComplaintContent {}
     impl SignatureDomainSeal for EcdsaOpeningContent {}
@@ -142,9 +144,15 @@ impl SignatureDomain for FinalizationContent {
     }
 }
 
-impl SignatureDomain for EcdsaDealing {
+impl SignatureDomain for IDkgDealing {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_ECDSA_DEALING)
+        domain_with_prepended_length(DOMAIN_IDKG_DEALING)
+    }
+}
+
+impl SignatureDomain for SignedIDkgDealing {
+    fn domain(&self) -> Vec<u8> {
+        domain_with_prepended_length(DOMAIN_SIGNED_IDKG_DEALING)
     }
 }
 

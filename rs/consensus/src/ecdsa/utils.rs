@@ -7,8 +7,8 @@ use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_types::consensus::ecdsa::{EcdsaBlockReader, TranscriptRef};
 use ic_types::consensus::ecdsa::{
-    EcdsaMessage, EcdsaPayload, IDkgTranscriptParamsRef, KeyTranscriptCreation, RequestId,
-    ThresholdEcdsaSigInputsRef, TranscriptLookupError,
+    EcdsaMessage, EcdsaPayload, IDkgTranscriptParamsRef, RequestId, ThresholdEcdsaSigInputsRef,
+    TranscriptLookupError,
 };
 use ic_types::consensus::{Block, BlockPayload, HasHeight};
 use ic_types::crypto::canister_threshold_sig::idkg::{
@@ -46,43 +46,11 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
         self.tip.height()
     }
 
-    fn xnet_reshare_in_progress(&self) -> bool {
-        if self.tip.payload.is_summary() {
-            let ecdsa = &self.tip.payload.as_ref().as_summary().ecdsa;
-            if let Some(ecdsa_payload) = ecdsa {
-                matches!(
-                    ecdsa_payload.key_transcript.next_in_creation,
-                    KeyTranscriptCreation::XnetReshareOfUnmaskedParams(_)
-                )
-            } else {
-                false
-            }
-        } else {
-            let ecdsa = &self.tip.payload.as_ref().as_data().ecdsa;
-            if let Some(ecdsa_payload) = ecdsa {
-                matches!(
-                    ecdsa_payload.key_transcript.next_in_creation,
-                    KeyTranscriptCreation::XnetReshareOfUnmaskedParams(_)
-                )
-            } else {
-                false
-            }
-        }
-    }
-
     fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
         self.tip_ecdsa_payload
             .as_ref()
             .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
                 ecdsa_payload.iter_transcript_configs_in_creation()
-            })
-    }
-
-    fn xnet_reshare_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
-        self.tip_ecdsa_payload
-            .as_ref()
-            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
-                ecdsa_payload.iter_xnet_reshare_transcript_configs()
             })
     }
 
@@ -100,6 +68,28 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
         self.tip_ecdsa_payload
             .as_ref()
             .map_or(BTreeSet::new(), |payload| payload.active_transcripts())
+    }
+
+    fn source_subnet_xnet_transcripts(
+        &self,
+    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
+        // TODO: chain iters for multiple key_id support
+        self.tip_ecdsa_payload
+            .as_ref()
+            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
+                ecdsa_payload.iter_xnet_transcripts_source_subnet()
+            })
+    }
+
+    fn target_subnet_xnet_transcripts(
+        &self,
+    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
+        // TODO: chain iters for multiple key_id support
+        self.tip_ecdsa_payload
+            .as_ref()
+            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
+                ecdsa_payload.iter_xnet_transcripts_target_subnet()
+            })
     }
 
     fn transcript(
@@ -249,17 +239,16 @@ pub(crate) mod test_utils {
     use ic_test_utilities::types::ids::{node_test_id, NODE_1, NODE_2};
     use ic_types::artifact::EcdsaMessageId;
     use ic_types::consensus::ecdsa::{
-        EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaDealing, EcdsaDealingSupport,
-        EcdsaKeyTranscript, EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload,
-        EcdsaReshareRequest, EcdsaSigShare, EcdsaSignedDealing, EcdsaUIDGenerator,
-        IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript, PreSignatureQuadrupleRef,
-        RequestId, ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef, TranscriptLookupError,
-        TranscriptRef, UnmaskedTranscript,
+        EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript, EcdsaMessage,
+        EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaReshareRequest, EcdsaSigShare,
+        EcdsaUIDGenerator, IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript,
+        PreSignatureQuadrupleRef, RequestId, ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef,
+        TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{
-        IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgOpening, IDkgReceivers,
-        IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
-        IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
+        IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin, IDkgOpening,
+        IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
+        IDkgTranscriptParams, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
     };
     use ic_types::crypto::canister_threshold_sig::{
         ExtendedDerivationPath, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigShare,
@@ -373,18 +362,8 @@ pub(crate) mod test_utils {
             self.height
         }
 
-        fn xnet_reshare_in_progress(&self) -> bool {
-            false
-        }
-
         fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
             Box::new(self.requested_transcripts.iter())
-        }
-
-        fn xnet_reshare_transcripts(
-            &self,
-        ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
-            Box::new(std::iter::empty())
         }
 
         fn requested_signatures(
@@ -395,6 +374,18 @@ pub(crate) mod test_utils {
                     .iter()
                     .map(|(id, sig_inputs)| (id, sig_inputs)),
             )
+        }
+
+        fn source_subnet_xnet_transcripts(
+            &self,
+        ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
+            Box::new(std::iter::empty())
+        }
+
+        fn target_subnet_xnet_transcripts(
+            &self,
+        ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
+            Box::new(std::iter::empty())
         }
 
         fn transcript(
@@ -637,6 +628,12 @@ pub(crate) mod test_utils {
         dummy_idkg_transcript_id_for_tests(id)
     }
 
+    // Creates a TranscriptID for tests
+    pub(crate) fn create_transcript_id_with_height(id: u64, height: Height) -> IDkgTranscriptId {
+        let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(314159));
+        IDkgTranscriptId::new(subnet, id, height)
+    }
+
     // Creates a test transcript
     pub(crate) fn create_transcript(
         transcript_id: IDkgTranscriptId,
@@ -721,23 +718,19 @@ pub(crate) mod test_utils {
     }
 
     // Creates a test dealing
-    fn create_dealing_content(transcript_id: IDkgTranscriptId, dealer_id: NodeId) -> EcdsaDealing {
+    fn create_dealing_content(transcript_id: IDkgTranscriptId) -> IDkgDealing {
         let mut idkg_dealing = dummy_idkg_dealing_for_tests();
-        idkg_dealing.dealer_id = dealer_id;
         idkg_dealing.transcript_id = transcript_id;
-        EcdsaDealing {
-            requested_height: Height::from(10),
-            idkg_dealing,
-        }
+        idkg_dealing
     }
 
     // Creates a test signed dealing
     pub(crate) fn create_dealing(
         transcript_id: IDkgTranscriptId,
         dealer_id: NodeId,
-    ) -> EcdsaSignedDealing {
-        EcdsaSignedDealing {
-            content: create_dealing_content(transcript_id, dealer_id),
+    ) -> SignedIDkgDealing {
+        SignedIDkgDealing {
+            content: create_dealing_content(transcript_id),
             signature: BasicSignature::fake(dealer_id),
         }
     }
@@ -747,9 +740,12 @@ pub(crate) mod test_utils {
         transcript_id: IDkgTranscriptId,
         dealer_id: NodeId,
         signer: NodeId,
-    ) -> EcdsaDealingSupport {
-        EcdsaDealingSupport {
-            content: create_dealing_content(transcript_id, dealer_id),
+    ) -> IDkgDealingSupport {
+        IDkgDealingSupport {
+            content: SignedIDkgDealing {
+                content: create_dealing_content(transcript_id),
+                signature: BasicSignature::fake(dealer_id),
+            },
             signature: MultiSignatureShare::fake(signer),
         }
     }
@@ -967,18 +963,14 @@ pub(crate) mod test_utils {
     pub(crate) fn is_dealing_added_to_validated(
         change_set: &[EcdsaChangeAction],
         transcript_id: &IDkgTranscriptId,
-        requested_height: Height,
     ) -> bool {
         for action in change_set {
             if let EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(
                 signed_dealing,
             )) = action
             {
-                let dealing = signed_dealing.get();
-                if dealing.requested_height == requested_height
-                    && dealing.idkg_dealing.transcript_id == *transcript_id
-                    && dealing.idkg_dealing.dealer_id == NODE_1
-                {
+                let dealing = signed_dealing.idkg_dealing();
+                if dealing.transcript_id == *transcript_id && signed_dealing.dealer_id() == NODE_1 {
                     return true;
                 }
             }
@@ -997,9 +989,9 @@ pub(crate) mod test_utils {
             if let EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealingSupport(support)) =
                 action
             {
-                let dealing = &support.content;
-                if dealing.idkg_dealing.transcript_id == *transcript_id
-                    && dealing.idkg_dealing.dealer_id == *dealer_id
+                let dealing = &support.content.idkg_dealing();
+                if dealing.transcript_id == *transcript_id
+                    && support.content.dealer_id() == *dealer_id
                     && support.signature.signer == NODE_1
                 {
                     return true;
