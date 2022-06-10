@@ -122,6 +122,7 @@ mod tests {
     use ic_interfaces::execution_environment::{
         AvailableMemory, ExecutionMode, ExecutionParameters, HypervisorError,
     };
+    use ic_logger::replica_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{Global, NumWasmPages, PageIndex, PageMap};
     use ic_system_api::{
@@ -513,6 +514,7 @@ mod tests {
         let srv = SandboxServer::new(SandboxManager::new(
             setup_mock_controller(exec_finished_sync.clone()),
             EmbeddersConfig::default(),
+            no_op_logger(),
         ));
 
         let wasm_id = WasmId::new();
@@ -587,6 +589,7 @@ mod tests {
         let srv = SandboxServer::new(SandboxManager::new(
             setup_mock_controller(exec_finished_sync.clone()),
             EmbeddersConfig::default(),
+            no_op_logger(),
         ));
 
         let wasm_id = WasmId::new();
@@ -646,6 +649,7 @@ mod tests {
         let srv = SandboxServer::new(SandboxManager::new(
             setup_mock_controller(exec_finished_sync.clone()),
             EmbeddersConfig::default(),
+            no_op_logger(),
         ));
 
         let wasm_id = WasmId::new();
@@ -729,7 +733,11 @@ mod tests {
 
         let controller = Arc::new(controller);
 
-        let srv = SandboxServer::new(SandboxManager::new(controller, EmbeddersConfig::default()));
+        let srv = SandboxServer::new(SandboxManager::new(
+            controller,
+            EmbeddersConfig::default(),
+            no_op_logger(),
+        ));
 
         let wasm_id = WasmId::new();
         let rep = srv
@@ -840,6 +848,7 @@ mod tests {
         let srv = SandboxServer::new(SandboxManager::new(
             setup_mock_controller(exec_finished_sync.clone()),
             EmbeddersConfig::default(),
+            no_op_logger(),
         ));
 
         let wasm_id = WasmId::new();
@@ -899,6 +908,7 @@ mod tests {
         let srv = SandboxServer::new(SandboxManager::new(
             setup_mock_controller(exec_finished_sync.clone()),
             EmbeddersConfig::default(),
+            no_op_logger(),
         ));
 
         let wasm_id = WasmId::new();
@@ -967,6 +977,7 @@ mod tests {
         let srv = SandboxServer::new(SandboxManager::new(
             setup_mock_controller(exec_finished_sync.clone()),
             EmbeddersConfig::default(),
+            no_op_logger(),
         ));
 
         let wasm_id = WasmId::new();
@@ -1067,6 +1078,7 @@ mod tests {
         let srv = SandboxServer::new(SandboxManager::new(
             setup_mock_controller(exec_finished_sync.clone()),
             EmbeddersConfig::default(),
+            no_op_logger(),
         ));
 
         let wasm_id = WasmId::new();
@@ -1191,6 +1203,7 @@ mod tests {
         let srv = SandboxServer::new(SandboxManager::new(
             Arc::new(controller),
             EmbeddersConfig::default(),
+            no_op_logger(),
         ));
 
         // Compile the wasm code.
@@ -1306,6 +1319,7 @@ mod tests {
         let srv = SandboxServer::new(SandboxManager::new(
             Arc::new(controller),
             EmbeddersConfig::default(),
+            no_op_logger(),
         ));
 
         // Compile the wasm code.

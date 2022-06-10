@@ -4025,6 +4025,7 @@ dependencies = [
  "mockall 0.7.2",
  "nix 0.23.0",
  "serde_json",
+ "slog",
  "threadpool",
  "wabt",
 ]
