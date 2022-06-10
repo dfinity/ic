@@ -562,8 +562,8 @@ pub struct Stream {
     /// Stream indices of rejected messages, in ascending order.
     reject_signals: VecDeque<StreamIndex>,
 
-    /// Estimated stream byte size.
-    size_bytes: usize,
+    /// Estimated byte size of `self.messages`.
+    messages_size_bytes: usize,
 }
 
 impl Default for Stream {
@@ -571,12 +571,12 @@ impl Default for Stream {
         let messages = Default::default();
         let signals_end = Default::default();
         let reject_signals = VecDeque::default();
-        let size_bytes = Self::size_bytes(&messages);
+        let messages_size_bytes = Self::size_bytes(&messages);
         Self {
             messages,
             signals_end,
             reject_signals,
-            size_bytes,
+            messages_size_bytes,
         }
     }
 }
@@ -605,7 +605,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
         for req_or_resp in item.messages {
             messages.push(req_or_resp.try_into()?);
         }
-        let size_bytes = Self::size_bytes(&messages);
+        let messages_size_bytes = Self::size_bytes(&messages);
 
         let reject_signals = item
             .reject_signals
@@ -617,7 +617,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
             messages,
             signals_end: item.signals_end.into(),
             reject_signals,
-            size_bytes,
+            messages_size_bytes,
         })
     }
 }
@@ -625,12 +625,12 @@ impl TryFrom<pb_queues::Stream> for Stream {
 impl Stream {
     /// Creates a new `Stream` with the given `messages` and `signals_end`.
     pub fn new(messages: StreamIndexedQueue<RequestOrResponse>, signals_end: StreamIndex) -> Self {
-        let size_bytes = Self::size_bytes(&messages);
+        let messages_size_bytes = Self::size_bytes(&messages);
         Self {
             messages,
             signals_end,
             reject_signals: VecDeque::new(),
-            size_bytes,
+            messages_size_bytes,
         }
     }
 
@@ -640,12 +640,12 @@ impl Stream {
         signals_end: StreamIndex,
         reject_signals: VecDeque<StreamIndex>,
     ) -> Self {
-        let size_bytes = Self::size_bytes(&messages);
+        let messages_size_bytes = Self::size_bytes(&messages);
         Self {
             messages,
             signals_end,
             reject_signals,
-            size_bytes,
+            messages_size_bytes,
         }
     }
 
@@ -683,9 +683,9 @@ impl Stream {
 
     /// Appends the given message to the tail of the stream.
     pub fn push(&mut self, message: RequestOrResponse) {
-        self.size_bytes += message.count_bytes();
+        self.messages_size_bytes += message.count_bytes();
         self.messages.push(message);
-        debug_assert_eq!(Self::size_bytes(&self.messages), self.size_bytes);
+        debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
     }
 
     /// Garbage collects messages before `new_begin`, collecting and returning all
@@ -724,8 +724,8 @@ impl Stream {
             let (index, msg) = self.messages.pop().unwrap();
 
             // Deduct every discarded message from the stream's byte size.
-            self.size_bytes -= msg.count_bytes();
-            debug_assert_eq!(Self::size_bytes(&self.messages), self.size_bytes);
+            self.messages_size_bytes -= msg.count_bytes();
+            debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
 
             // If we received a reject signal for this message, collect it in
             // `rejected_messages`.
@@ -777,16 +777,16 @@ impl Stream {
         self.reject_signals.push_back(index)
     }
 
-    /// Calculates the byte size of a `Stream` holding the given messages.
+    /// Calculates the estimated byte size of the given messages.
     fn size_bytes(messages: &StreamIndexedQueue<RequestOrResponse>) -> usize {
-        let messages_bytes: usize = messages.iter().map(|(_, m)| m.count_bytes()).sum();
-        size_of::<Stream>() + messages_bytes
+        messages.iter().map(|(_, m)| m.count_bytes()).sum()
     }
 }
 
 impl CountBytes for Stream {
     fn count_bytes(&self) -> usize {
-        self.size_bytes
+        // Count one byte per reject signal, same as the payload builder.
+        size_of::<Stream>() + self.messages_size_bytes + self.reject_signals.len()
     }
 }
 
