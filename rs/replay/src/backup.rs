@@ -328,7 +328,15 @@ pub(crate) fn deserialize_consensus_artifacts(
         }
 
         assert!(
-            artifacts.iter().all(|v| v.check_integrity()),
+            artifacts
+                .iter()
+                .filter(|v| matches!(
+                    v,
+                    ic_types::artifact::ConsensusMessage::BlockProposal(_)
+                        | ic_types::artifact::ConsensusMessage::CatchUpPackage(_)
+                        | ic_types::artifact::ConsensusMessage::CatchUpPackageShare(_)
+                ))
+                .all(|v| v.check_integrity()),
             "The integrity of all artifacts is ensured"
         );
 

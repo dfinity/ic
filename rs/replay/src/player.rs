@@ -178,6 +178,11 @@ impl Player {
             log.clone(),
         );
 
+        println!("Setting default replica version {}", replica_version);
+        if ReplicaVersion::set_default_version(replica_version.clone()).is_err() {
+            println!("Failed to set default replica version");
+        }
+
         let mut player = Player::new_with_params(
             cfg,
             Arc::new(backup::MockVerifier {}),

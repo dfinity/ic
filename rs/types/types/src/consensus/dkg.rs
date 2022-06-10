@@ -33,6 +33,19 @@ impl DealingContent {
             dkg_id,
         }
     }
+
+    /// Create a new DealingContent with replica version
+    pub fn new_with_replica_version(
+        version: ReplicaVersion,
+        dealing: NiDkgDealing,
+        dkg_id: NiDkgId,
+    ) -> Self {
+        DealingContent {
+            version,
+            dealing,
+            dkg_id,
+        }
+    }
 }
 
 impl SignedBytesWithoutDomainSeparator for DealingContent {
@@ -57,7 +70,10 @@ impl TryFrom<pb::DkgMessage> for Message {
     type Error = String;
     fn try_from(message: pb::DkgMessage) -> Result<Self, Self::Error> {
         Ok(Self {
-            content: DealingContent::new(
+            content: DealingContent::new_with_replica_version(
+                ReplicaVersion::try_from(message.replica_version).map_err(|err| {
+                    format!("Couldn't deserialize the replica version: {:?}", err)
+                })?,
                 bincode::deserialize(&message.dealing)
                     .map_err(|err| format!("Couldn't deserialize the dealing: {:?}", err))?,
                 NiDkgId::try_from(message.dkg_id.expect("No Dkg id found"))

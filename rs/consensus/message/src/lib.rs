@@ -6,11 +6,11 @@ pub trait ConsensusMessageHashable: Clone {
     fn assert(msg: &ConsensusMessage) -> Option<&Self>;
     fn into_message(self) -> ConsensusMessage;
 
-    /// Check integrity of a message. Default is true.
+    /// Check integrity of a message. Default is false.
     /// This should be implemented for those that have `Hashed<H, V>`.
     /// Note that if lazy loading is also used, it will force evaluation.
     fn check_integrity(&self) -> bool {
-        true
+        false
     }
 }
 
@@ -349,5 +349,21 @@ impl ConsensusMessageHashable for ConsensusMessage {
 
     fn into_message(self) -> ConsensusMessage {
         self
+    }
+
+    fn check_integrity(&self) -> bool {
+        match self {
+            ConsensusMessage::RandomBeacon(value) => value.check_integrity(),
+            ConsensusMessage::Finalization(value) => value.check_integrity(),
+            ConsensusMessage::Notarization(value) => value.check_integrity(),
+            ConsensusMessage::BlockProposal(value) => value.check_integrity(),
+            ConsensusMessage::RandomBeaconShare(value) => value.check_integrity(),
+            ConsensusMessage::NotarizationShare(value) => value.check_integrity(),
+            ConsensusMessage::FinalizationShare(value) => value.check_integrity(),
+            ConsensusMessage::RandomTape(value) => value.check_integrity(),
+            ConsensusMessage::RandomTapeShare(value) => value.check_integrity(),
+            ConsensusMessage::CatchUpPackage(value) => value.check_integrity(),
+            ConsensusMessage::CatchUpPackageShare(value) => value.check_integrity(),
+        }
     }
 }
