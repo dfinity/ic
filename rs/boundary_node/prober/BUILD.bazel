@@ -32,7 +32,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing",
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
-    "@crate_index//:wabt",
+    "@wabt_rs//:wabt",
 ]
 
 MACRO_DEPENDENCIES = [
