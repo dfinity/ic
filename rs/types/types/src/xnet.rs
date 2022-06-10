@@ -3,7 +3,6 @@ use crate::{consensus::certification::Certification, messages::RequestOrResponse
 use phantom_newtype::{AmountOf, Id};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::sync::Arc;
 
 pub mod proto;
 
@@ -16,18 +15,10 @@ pub type StreamIndex = AmountOf<StreamIndexTag, u64>;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct StreamIndexedQueue<T> {
     begin: StreamIndex,
-    queue: VecDeque<Arc<T>>,
+    queue: VecDeque<T>,
 }
 
-impl<T> StreamIndexedQueue<T> {
-    /// Constructs a `StreamIndexedQueue` beginning at the given index.
-    pub fn with_begin(begin: StreamIndex) -> Self {
-        StreamIndexedQueue {
-            begin,
-            queue: VecDeque::new(),
-        }
-    }
-
+impl<T: Clone> StreamIndexedQueue<T> {
     /// Extracts a slice of the given queue beginning at `slice_begin` and
     /// containing at most `max` items.
     pub fn slice(&self, slice_begin: StreamIndex, max: Option<usize>) -> StreamIndexedQueue<T> {
@@ -53,8 +44,18 @@ impl<T> StreamIndexedQueue<T> {
                 .iter()
                 .skip(skip)
                 .take(max)
-                .map(Arc::clone)
+                .cloned()
                 .collect::<VecDeque<_>>(),
+        }
+    }
+}
+
+impl<T> StreamIndexedQueue<T> {
+    /// Constructs a `StreamIndexedQueue` beginning at the given index.
+    pub fn with_begin(begin: StreamIndex) -> Self {
+        StreamIndexedQueue {
+            begin,
+            queue: VecDeque::new(),
         }
     }
 
@@ -70,7 +71,7 @@ impl<T> StreamIndexedQueue<T> {
 
     /// Enqueues an item into the queue, assigning it the next available index.
     pub fn push(&mut self, item: T) {
-        self.queue.push_back(Arc::new(item));
+        self.queue.push_back(item);
     }
 
     /// Pops the next item with its index, if one is available.
@@ -81,10 +82,6 @@ impl<T> StreamIndexedQueue<T> {
         self.queue.pop_front().map(|msg| {
             let index = self.begin;
             self.begin.inc_assign();
-            let msg = match Arc::try_unwrap(msg) {
-                Ok(owned_value) => owned_value,
-                Err(shared_ref) => (*shared_ref).clone(),
-            };
             (index, msg)
         })
     }
@@ -92,9 +89,7 @@ impl<T> StreamIndexedQueue<T> {
     /// Retrieves the item with the given index.
     pub fn get(&self, index: StreamIndex) -> Option<&T> {
         if index >= self.begin {
-            self.queue
-                .get((index - self.begin).get() as usize)
-                .map(|entry| entry.as_ref())
+            self.queue.get((index - self.begin).get() as usize)
         } else {
             None
         }
@@ -137,7 +132,7 @@ impl<T> StreamIndexedQueue<T> {
     pub fn iter<'a>(&'a self) -> impl std::iter::Iterator<Item = (StreamIndex, &T)> + 'a {
         (self.begin.get()..)
             .zip(self.queue.iter())
-            .map(|(index, item)| (StreamIndex::from(index), item.as_ref()))
+            .map(|(index, item)| (StreamIndex::from(index), item))
     }
 }
 
@@ -462,7 +457,7 @@ mod test {
         assert_eq!(
             StreamIndexedQueue {
                 begin: EIGHT,
-                queue: vec![13, 14].into_iter().map(Arc::new).collect()
+                queue: vec![13, 14].into()
             },
             q.slice(EIGHT, Some(10))
         );
@@ -470,7 +465,7 @@ mod test {
         assert_eq!(
             StreamIndexedQueue {
                 begin: NINE,
-                queue: vec![14].into_iter().map(Arc::new).collect()
+                queue: vec![14].into()
             },
             q.slice(NINE, None)
         );
@@ -478,7 +473,7 @@ mod test {
         assert_eq!(
             StreamIndexedQueue {
                 begin: EIGHT,
-                queue: vec![13].into_iter().map(Arc::new).collect()
+                queue: vec![13].into()
             },
             q.slice(EIGHT, Some(1))
         );
