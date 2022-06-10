@@ -42,6 +42,7 @@ def external_crates_repository(name):
             "assert_matches": crate.spec(version = "=1.3.0"),
             "async-stream": crate.spec(version = "=0.3.3"),
             "async-trait": crate.spec(version = "=0.1.53"),
+            "axum": crate.spec(version = "=0.5.1"),
             "backoff": crate.spec(version = "=0.3.0"),
             "base32": crate.spec(version = "=0.4.0"),
             "base64": crate.spec(version = "=0.11.0"),
@@ -66,7 +67,7 @@ def external_crates_repository(name):
                 ],
                 version = "=0.5.0",
             ),
-            "candid": crate.spec(version = "=0.7.13"),
+            "candid": crate.spec(version = "=0.7.14"),
             "candid_derive": crate.spec(version = "=0.4.5"),
             "cc": crate.spec(version = "=1.0.73"),
             "cfg-if": crate.spec(version = "=0.1.10"),
@@ -102,14 +103,17 @@ def external_crates_repository(name):
             "float-cmp": crate.spec(version = "=0.9.0"),
             "futures-util": crate.spec(version = "=0.3.21"),
             "futures": crate.spec(version = "=0.3.21"),
+            "garcon": crate.spec(version = "=0.2.3"),
             "getrandom": crate.spec(
                 package = "getrandom",
                 version = "=0.2.6",
             ),
+            "glob": crate.spec(version = "=0.3.0"),
             "hashlink": crate.spec(version = "=0.8.0"),
             "hex": crate.spec(version = "=0.4.3"),
             "hex-literal": crate.spec(version = "=0.2.1"),
-            "http": crate.spec(version = "=0.2.5"),
+            "http": crate.spec(version = "=0.2.6"),
+            "humantime": crate.spec(version = "=2.1.0"),
             "hyper": crate.spec(
                 features = [
                     "client",
@@ -120,6 +124,9 @@ def external_crates_repository(name):
                 version = "=0.14.18",
             ),
             "hyper-tls": crate.spec(version = "=0.5.0"),
+            "ic-agent": crate.spec(version = "=0.15.0"),
+            "ic-utils": crate.spec(version = "=0.15.0"),
+            "indoc": crate.spec(version = "=1.0.6"),
             "itertools": crate.spec(version = "=0.10.3"),
             "json5": crate.spec(version = "=0.4.1"),
             "k256": crate.spec(
@@ -128,7 +135,7 @@ def external_crates_repository(name):
                 version = "=0.10.3",
             ),
             "lazy_static": crate.spec(version = "=1.4.0"),
-            "leb128": crate.spec(version = "=0.2.4"),
+            "leb128": crate.spec(version = "=0.2.5"),
             "libc": crate.spec(version = "=0.2.126"),
             "libsecp256k1": crate.spec(version = "=0.5.0"),
             "linked-hash-map": crate.spec(version = "0.5.3"),
@@ -138,6 +145,7 @@ def external_crates_repository(name):
             ),
             "maplit": crate.spec(version = "=1.0.2"),
             "miracl_core_bls12381": crate.spec(version = "=4.1.2"),
+            "mockall": crate.spec(version = "=0.11.1"),
             "native-tls": crate.spec(
                 features = ["alpn"],
                 version = "=0.2.7",
@@ -151,6 +159,8 @@ def external_crates_repository(name):
             "once_cell": crate.spec(version = "=1.10.0"),
             "openssl": crate.spec(version = "=0.10.38"),
             "openssl-sys": crate.spec(version = "=0.9.70"),
+            "opentelemetry": crate.spec(version = "=0.17.0"),
+            "opentelemetry-prometheus": crate.spec(version = "=0.10.0"),
             "p256": crate.spec(
                 default_features = False,
                 features = ["arithmetic"],
@@ -202,7 +212,7 @@ def external_crates_repository(name):
             "rustversion": crate.spec(version = "=1.0.2"),
             "scoped_threadpool": crate.spec(version = "=0.1.0"),
             "serde_bytes": crate.spec(version = "=0.11.6"),
-            "serde_cbor": crate.spec(version = "=0.11.1"),
+            "serde_cbor": crate.spec(version = "=0.11.2"),
             "serde_derive": crate.spec(version = "=1.0.136"),
             "serde_json": crate.spec(version = "=1.0.40"),
             "serde_with": crate.spec(version = "=1.6.2"),
@@ -253,6 +263,12 @@ def external_crates_repository(name):
             "tonic": crate.spec(version = "=0.7.2"),
             "tonic-build": crate.spec(version = "=0.7.2"),
             "tower": crate.spec(version = "=0.4.11"),
+            "tracing": crate.spec(version = "=0.1.34"),
+            "tracing-appender": crate.spec(version = "=0.2.2"),
+            "tracing-subscriber": crate.spec(
+                features = ["json"],
+                version = "=0.3.11",
+            ),
             "url": crate.spec(
                 features = ["serde"],
                 version = "=2.2.1",
@@ -260,6 +276,11 @@ def external_crates_repository(name):
             "uuid": crate.spec(
                 features = ["v4"],
                 version = "=0.8.1",
+            ),
+            "wabt": crate.spec(
+                git = "https://github.com/dfinity-lab/wabt-rs",
+                # tag = "0.10.0-dfinity"
+                rev = "7ab9062ddc63067843b62af8ae2cb83bf4bf601e",
             ),
             "wsl": crate.spec(version = "=0.1.0"),
             "wycheproof": crate.spec(version = "=0.4.0"),
