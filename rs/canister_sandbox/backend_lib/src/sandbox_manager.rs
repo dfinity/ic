@@ -36,7 +36,7 @@ use ic_embedders::{
     WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorResult, WasmExecutionOutput};
-use ic_logger::replica_logger::no_op_logger;
+use ic_logger::ReplicaLogger;
 use ic_replicated_state::page_map::PageMapSerialization;
 use ic_replicated_state::{EmbedderCache, Memory, PageMap};
 use ic_types::CanisterId;
@@ -153,7 +153,7 @@ impl Execution {
             &mut wasm_memory,
             &mut stable_memory,
             &exec_input.globals,
-            no_op_logger(),
+            self.sandbox_manager.log.clone(),
             exec_input.wasm_reserved_pages,
             Arc::new(out_of_instructions_handler),
         );
@@ -275,6 +275,7 @@ pub struct SandboxManager {
     controller: Arc<dyn ControllerService>,
     embedder: Arc<WasmtimeEmbedder>,
     config: ic_config::embedders::Config,
+    log: ReplicaLogger,
 }
 struct SandboxManagerInt {
     canister_wasms: HashMap<WasmId, Arc<CanisterWasm>>,
@@ -289,9 +290,12 @@ impl SandboxManager {
     /// Creates new sandbox manager. In order to operate, it needs
     /// an established backward RPC channel to the controller process
     /// to relay e.g. syscalls and completions.
-    pub fn new(controller: Arc<dyn ControllerService>, config: EmbeddersConfig) -> Self {
-        let log = ic_logger::replica_logger::no_op_logger();
-        let embedder = Arc::new(WasmtimeEmbedder::new(config.clone(), log));
+    pub fn new(
+        controller: Arc<dyn ControllerService>,
+        config: EmbeddersConfig,
+        log: ReplicaLogger,
+    ) -> Self {
+        let embedder = Arc::new(WasmtimeEmbedder::new(config.clone(), log.clone()));
         SandboxManager {
             repr: Mutex::new(SandboxManagerInt {
                 canister_wasms: HashMap::new(),
@@ -306,6 +310,7 @@ impl SandboxManager {
             controller,
             embedder,
             config,
+            log,
         }
     }
 

@@ -7,6 +7,7 @@ use ic_canister_sandbox_common::{
     child_process_initialization, controller_client_stub, protocol, rpc, transport,
 };
 use ic_config::embedders::Config as EmbeddersConfig;
+use ic_logger::new_replica_logger_from_config;
 use std::sync::Arc;
 
 pub use ic_canister_sandbox_common::{RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG};
@@ -53,6 +54,15 @@ pub fn run_canister_sandbox(
     socket: std::os::unix::net::UnixStream,
     embedder_config: EmbeddersConfig,
 ) {
+    // TODO(RUN-204): Get the logger config from the replica instead of
+    // hardcoding the parameters.
+    let logger_config = ic_config::logger::Config {
+        target: ic_config::logger::LogTarget::Stderr,
+        level: slog::Level::Warning,
+        ..Default::default()
+    };
+    let (log, _log_guard) = new_replica_logger_from_config(&logger_config);
+
     let socket = Arc::new(socket);
 
     let out_stream =
@@ -72,7 +82,7 @@ pub fn run_canister_sandbox(
     // Construct RPC server for the  service offered by this binary,
     // namely access to the sandboxed canister runner functions.
     let svc = Arc::new(sandbox_server::SandboxServer::new(
-        sandbox_manager::SandboxManager::new(controller, embedder_config),
+        sandbox_manager::SandboxManager::new(controller, embedder_config, log),
     ));
 
     // Wrap it all up to handle frames received on socket -- either
