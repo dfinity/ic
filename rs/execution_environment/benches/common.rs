@@ -98,7 +98,8 @@ where
             .method_name("test")
             .method_payload(vec![0; 8192])
             .source(user_test_id(USER_ID))
-            .build(),
+            .build()
+            .into(),
     );
 
     // Create a reject

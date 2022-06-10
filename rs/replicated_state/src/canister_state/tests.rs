@@ -110,7 +110,8 @@ fn canister_state_push_input_response_success() {
                 RequestBuilder::default()
                     .sender(CANISTER_ID)
                     .receiver(OTHER_CANISTER_ID)
-                    .build(),
+                    .build()
+                    .into(),
             )
             .unwrap();
         canister_state.output_into_iter().count();
@@ -441,7 +442,8 @@ fn canister_state_push_input_response_memory_limit_test_impl(
                 RequestBuilder::default()
                     .sender(CANISTER_ID)
                     .receiver(OTHER_CANISTER_ID)
-                    .build(),
+                    .build()
+                    .into(),
             )
             .unwrap();
         canister_state.output_into_iter().count();
@@ -500,7 +502,12 @@ fn canister_state_push_input_response_memory_limit_test_impl(
 fn canister_state_push_output_request_mismatched_sender() {
     canister_state_test(|mut canister_state| {
         canister_state
-            .push_output_request(RequestBuilder::default().sender(OTHER_CANISTER_ID).build())
+            .push_output_request(
+                RequestBuilder::default()
+                    .sender(OTHER_CANISTER_ID)
+                    .build()
+                    .into(),
+            )
             .unwrap();
     })
 }
@@ -512,7 +519,8 @@ fn canister_state_push_output_response_mismatched_respondent() {
         canister_state.push_output_response(
             ResponseBuilder::default()
                 .respondent(OTHER_CANISTER_ID)
-                .build(),
+                .build()
+                .into(),
         );
     })
 }

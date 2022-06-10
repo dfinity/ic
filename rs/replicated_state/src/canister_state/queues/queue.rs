@@ -16,29 +16,13 @@ use std::{
     sync::Arc,
 };
 
-fn pop_queue<T: std::clone::Clone>(queue: &mut VecDeque<Arc<T>>) -> Option<T> {
-    // If there's only one reference to the ref-counted value, we extract it
-    // from the Arc and pass it to the caller. If the value is shared, we
-    // make another copy for the caller.
-    //
-    // This is safe as long as we never attempt to clone the state that is
-    // currently being modified.
-    queue.pop_front().map(|arc| match Arc::try_unwrap(arc) {
-        Ok(owned_value) => owned_value,
-        Err(shared_ref) => (*shared_ref).clone(),
-    })
-}
-
 /// A FIFO queue that enforces an upper bound on the number of slots used and
 /// reserved. Pushing an item into the queue or reserving a slot may fail if the
 /// queue is full. Pushing an item into a reserved slot will always succeed
 /// (unless a reservation has not been made, in which case it will panic).
-///
-/// Stores items inside an `Arc` making it cheaper to copy the queue for
-/// creating snapshots.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct QueueWithReservation<T: std::clone::Clone> {
-    queue: VecDeque<Arc<T>>,
+    queue: VecDeque<T>,
     /// Maximum number of messages allowed in the `queue` above.
     capacity: usize,
     /// Number of slots in the above `queue` currently reserved.  A slot must
@@ -87,7 +71,7 @@ impl<T: std::clone::Clone + CountBytes> QueueWithReservation<T> {
         if let Err(e) = self.check_has_slot() {
             return Err((e, msg));
         }
-        self.queue.push_back(Arc::new(msg));
+        self.queue.push_back(msg);
         Ok(())
     }
 
@@ -96,7 +80,7 @@ impl<T: std::clone::Clone + CountBytes> QueueWithReservation<T> {
     fn push_into_reserved_slot(&mut self, msg: T) -> Result<(), (StateError, T)> {
         if self.num_slots_reserved > 0 {
             self.num_slots_reserved -= 1;
-            self.queue.push_back(Arc::new(msg));
+            self.queue.push_back(msg);
             Ok(())
         } else {
             Err((StateError::QueueFull { capacity: 0 }, msg))
@@ -105,13 +89,13 @@ impl<T: std::clone::Clone + CountBytes> QueueWithReservation<T> {
 
     /// Pops an item off the tail of the queue or `None` if the queue is empty.
     fn pop(&mut self) -> Option<T> {
-        pop_queue(&mut self.queue)
+        self.queue.pop_front()
     }
 
-    /// Returns an Arc<item> at the head of the queue or `None` if the queue is
-    /// empty.
-    fn peek(&self) -> Option<Arc<T>> {
-        self.queue.front().map(Arc::clone)
+    /// Returns a reference to the item at the head of the queue or `None` if
+    /// the queue is empty.
+    fn peek(&self) -> Option<&T> {
+        self.queue.front()
     }
 
     /// Number of actual messages in the queue.
@@ -134,7 +118,7 @@ impl<T: std::clone::Clone + CountBytes> QueueWithReservation<T> {
 
 impl From<&QueueWithReservation<RequestOrResponse>> for Vec<pb_queues::RequestOrResponse> {
     fn from(item: &QueueWithReservation<RequestOrResponse>) -> Self {
-        item.queue.iter().map(|rr| rr.as_ref().into()).collect()
+        item.queue.iter().map(|rr| rr.into()).collect()
     }
 }
 
@@ -161,7 +145,7 @@ impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<RequestOrResp
         let queue = item
             .queue
             .into_iter()
-            .map(|rr| rr.try_into().map(Arc::new))
+            .map(|rr| rr.try_into())
             .collect::<Result<VecDeque<_>, _>>()?;
 
         Ok(QueueWithReservation {
@@ -309,7 +293,10 @@ impl OutputQueue {
         self.queue.available_slots()
     }
 
-    pub(super) fn push_request(&mut self, msg: Request) -> Result<(), (StateError, Request)> {
+    pub(super) fn push_request(
+        &mut self,
+        msg: Arc<Request>,
+    ) -> Result<(), (StateError, Arc<Request>)> {
         if let Err((err, RequestOrResponse::Request(msg))) =
             self.queue.push(RequestOrResponse::Request(msg))
         {
@@ -318,7 +305,7 @@ impl OutputQueue {
         Ok(())
     }
 
-    pub(super) fn push_response(&mut self, msg: Response) {
+    pub(super) fn push_response(&mut self, msg: Arc<Response>) {
         self.queue
             .push_into_reserved_slot(RequestOrResponse::Response(msg))
             .unwrap();
@@ -341,7 +328,7 @@ impl OutputQueue {
 
     /// Returns the message that `pop` would have returned, without removing it
     /// from the queue.
-    pub(crate) fn peek(&self) -> Option<(QueueIndex, Arc<RequestOrResponse>)> {
+    pub(crate) fn peek(&self) -> Option<(QueueIndex, &RequestOrResponse)> {
         self.queue.peek().map(|msg| (self.ind, msg))
     }
 
@@ -419,10 +406,10 @@ impl IngressQueue {
         debug_assert_eq!(Self::size_bytes(&self.queue), self.size_bytes);
     }
 
-    pub(super) fn pop(&mut self) -> Option<Ingress> {
-        let res = pop_queue(&mut self.queue);
+    pub(super) fn pop(&mut self) -> Option<Arc<Ingress>> {
+        let res = self.queue.pop_front();
         if let Some(msg) = res.as_ref() {
-            self.size_bytes -= Self::ingress_size_bytes(msg);
+            self.size_bytes -= Self::ingress_size_bytes(msg.as_ref());
             debug_assert_eq!(Self::size_bytes(&self.queue), self.size_bytes);
         }
         res

@@ -3,26 +3,26 @@ use ic_types::{
     messages::{Ingress, Request, Response, StopCanisterContext},
     Cycles, PrincipalId,
 };
-use std::convert::TryFrom;
+use std::{convert::TryFrom, sync::Arc};
 
 use std::fmt::{self, Debug, Display, Formatter};
 
 /// A wrapper around ingress messages and canister requests/responses.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CanisterInputMessage {
-    Response(Response),
-    Request(Request),
-    Ingress(Ingress),
+    Response(Arc<Response>),
+    Request(Arc<Request>),
+    Ingress(Arc<Ingress>),
 }
 
 impl Display for CanisterInputMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            CanisterInputMessage::Ingress(Ingress { method_name, .. }) => {
-                write!(f, "Ingress, method name {},", method_name)
+            CanisterInputMessage::Ingress(ingress) => {
+                write!(f, "Ingress, method name {},", ingress.method_name)
             }
-            CanisterInputMessage::Request(Request { method_name, .. }) => {
-                write!(f, "Request, method name {},", method_name)
+            CanisterInputMessage::Request(request) => {
+                write!(f, "Request, method name {},", request.method_name)
             }
             CanisterInputMessage::Response(_) => write!(f, "Response"),
         }
@@ -32,8 +32,8 @@ impl Display for CanisterInputMessage {
 /// A wrapper around a canister request and an ingress message.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RequestOrIngress {
-    Request(Request),
-    Ingress(Ingress),
+    Request(Arc<Request>),
+    Ingress(Arc<Ingress>),
 }
 
 impl RequestOrIngress {
@@ -53,16 +53,16 @@ impl RequestOrIngress {
 
     pub fn method_name(&self) -> &str {
         match self {
-            RequestOrIngress::Request(Request { method_name, .. })
-            | RequestOrIngress::Ingress(Ingress { method_name, .. }) => method_name.as_str(),
+            RequestOrIngress::Request(request) => request.method_name.as_str(),
+            RequestOrIngress::Ingress(ingress) => ingress.method_name.as_str(),
         }
     }
 
     /// Extracts the cycles received with this message.
     pub fn take_cycles(&mut self) -> Cycles {
         match self {
-            RequestOrIngress::Request(Request { payment, .. }) => payment.take(),
-            RequestOrIngress::Ingress(Ingress { .. }) => Cycles::zero(),
+            RequestOrIngress::Request(request) => Arc::make_mut(request).payment.take(),
+            RequestOrIngress::Ingress(_) => Cycles::zero(),
         }
     }
 }
@@ -74,11 +74,11 @@ impl From<RequestOrIngress> for StopCanisterContext {
             RequestOrIngress::Request(mut req) => StopCanisterContext::Canister {
                 sender: req.sender,
                 reply_callback: req.sender_reply_callback,
-                cycles: req.payment.take(),
+                cycles: Arc::make_mut(&mut req).payment.take(),
             },
             RequestOrIngress::Ingress(ingress) => StopCanisterContext::Ingress {
                 sender: ingress.source,
-                message_id: ingress.message_id,
+                message_id: ingress.message_id.clone(),
             },
         }
     }

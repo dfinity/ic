@@ -36,6 +36,7 @@ use rand_chacha::ChaChaRng;
 use std::{
     collections::{BTreeMap, VecDeque},
     convert::TryFrom,
+    mem::size_of,
 };
 
 const LOCAL_SUBNET: SubnetId = SUBNET_27;
@@ -81,7 +82,9 @@ fn reject_local_request() {
             msg.sender_reply_callback,
         );
 
-        canister_state.push_output_request(msg.clone()).unwrap();
+        canister_state
+            .push_output_request(msg.clone().into())
+            .unwrap();
         canister_state
             .system_state
             .queues_mut()
@@ -94,7 +97,7 @@ fn reject_local_request() {
         let reject_message = "Reject response";
         stream_builder.reject_local_request(
             &mut state,
-            msg.clone(),
+            &msg,
             RejectCode::SysFatal,
             reject_message.to_string(),
         );
@@ -145,7 +148,7 @@ fn reject_local_request_for_subnet() {
 
         state
             .subnet_queues_mut()
-            .push_output_request(msg.clone())
+            .push_output_request(msg.clone().into())
             .unwrap();
         state
             .subnet_queues_mut()
@@ -158,7 +161,7 @@ fn reject_local_request_for_subnet() {
         let reject_message = "Reject response";
         stream_builder.reject_local_request(
             &mut state,
-            msg.clone(),
+            &msg,
             RejectCode::SysFatal,
             reject_message.to_string(),
         );
@@ -481,16 +484,23 @@ fn build_streams_impl_respects_limits(
             streams.insert(REMOTE_SUBNET, expected_stream);
         });
 
+        // Target stream size: stream struct plus `max_stream_messages_by_byte_size - 1`
+        // messages plus 1 byte. Since this is a target / soft limit, it should ensure
+        // that exactly `max_stream_messages_by_byte_size` messages (or
+        // `max_stream_messages_by_byte_size * msg_size` bytes) are routed.
+        let target_stream_size_bytes =
+            size_of::<Stream>() + (max_stream_messages_by_byte_size - 1) * msg_size as usize + 1;
+
         // Act.
         let result_state = stream_builder.build_streams_impl(
             provided_state,
             max_stream_messages,
-            max_stream_messages_by_byte_size * msg_size as usize,
+            target_stream_size_bytes,
         );
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
-        assert_eq!(result_state.metadata, expected_state.metadata);
-        assert_eq!(result_state, expected_state);
+        assert_eq!(expected_state.canister_states, result_state.canister_states);
+        assert_eq!(expected_state.metadata, result_state.metadata);
+        assert_eq!(expected_state, result_state);
 
         assert_routed_messages_eq(
             metric_vec(&[(
@@ -559,7 +569,7 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
             let receiver = msg.receiver;
             stream_builder.reject_local_request(
                 &mut expected_state,
-                msg,
+                &msg,
                 RejectCode::DestinationInvalid,
                 format!("No route to canister {}", receiver),
             );
@@ -922,7 +932,7 @@ fn requests_into_queue_round_robin(
                         break;
                     }
                 }
-                let req = RequestOrResponse::Request(request);
+                let req: RequestOrResponse = request.into();
                 bytes_routed += req.count_bytes() as u64;
                 queue.push(req);
                 requests.push_back((dst, req_queue));
@@ -934,8 +944,8 @@ fn requests_into_queue_round_robin(
     queue
 }
 
-// Generates a collection of messages for test purposes based on the number of
-// canisters that should send/receive messages.
+/// Generates a collection of messages for test purposes based on the number of
+/// canisters that should send/receive messages.
 fn generate_messages_for_test(senders: u64, receivers: u64) -> Vec<Request> {
     let mut messages = Vec::new();
     for snd in 3..(3 + senders) {

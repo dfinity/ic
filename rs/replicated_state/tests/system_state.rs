@@ -11,9 +11,10 @@ use ic_test_utilities::types::{
     messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
-    messages::{RequestOrResponse, MAX_RESPONSE_COUNT_BYTES},
+    messages::{Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
     Cycles, QueueIndex,
 };
+use std::sync::Arc;
 
 const CANISTER_AVAILABLE_MEMORY: i64 = 4 << 30;
 const SUBNET_AVAILABLE_MEMORY: i64 = 300 << 30;
@@ -50,12 +51,11 @@ fn correct_charging_target_canister_for_a_response() {
     );
     let initial_cycles_balance = system_state.balance();
 
-    let request = RequestOrResponse::Request(
-        RequestBuilder::default()
-            .sender(canister_test_id(1))
-            .receiver(canister_test_id(0))
-            .build(),
-    );
+    let request: RequestOrResponse = RequestBuilder::default()
+        .sender(canister_test_id(1))
+        .receiver(canister_test_id(0))
+        .build()
+        .into();
 
     // Enqueue the Request.
     system_state
@@ -69,7 +69,7 @@ fn correct_charging_target_canister_for_a_response() {
         .originator(canister_test_id(1))
         .build();
 
-    system_state.push_output_response(response);
+    system_state.push_output_response(response.into());
 
     // Target canister should not be charged for receiving the request or sending
     // the response
@@ -91,7 +91,7 @@ fn induct_messages_to_self_in_running_status_works() {
         .build();
     system_state
         .queues_mut()
-        .push_output_request(request)
+        .push_output_request(request.into())
         .unwrap();
     system_state.induct_messages_to_self(
         CANISTER_AVAILABLE_MEMORY,
@@ -117,7 +117,7 @@ fn induct_messages_to_self_in_stopped_status_does_not_work() {
         .build();
     system_state
         .queues_mut()
-        .push_output_request(request)
+        .push_output_request(request.into())
         .unwrap();
     system_state.induct_messages_to_self(
         CANISTER_AVAILABLE_MEMORY,
@@ -143,7 +143,7 @@ fn induct_messages_to_self_in_stopping_status_does_not_work() {
         .build();
     system_state
         .queues_mut()
-        .push_output_request(request)
+        .push_output_request(request.into())
         .unwrap();
     system_state.induct_messages_to_self(
         CANISTER_AVAILABLE_MEMORY,
@@ -215,14 +215,16 @@ fn induct_messages_to_self_memory_limit_test_impl(
     let canister_id = canister_test_id(1);
 
     // Request and response to self.
-    let request = RequestBuilder::default()
+    let request: Arc<Request> = RequestBuilder::default()
         .sender(canister_id)
         .receiver(canister_id)
-        .build();
-    let response = ResponseBuilder::default()
+        .build()
+        .into();
+    let response: Arc<Response> = ResponseBuilder::default()
         .respondent(canister_id)
         .originator(canister_id)
-        .build();
+        .build()
+        .into();
 
     // A system state with a reservation for an outgoing response.
     let mut system_state = SystemState::new_running(
@@ -235,7 +237,7 @@ fn induct_messages_to_self_memory_limit_test_impl(
         .queues_mut()
         .push_input(
             QUEUE_INDEX_NONE,
-            request.clone().into(),
+            RequestOrResponse::Request(request.clone()),
             InputQueueType::RemoteSubnet,
         )
         .unwrap();
@@ -303,10 +305,11 @@ fn induct_messages_to_self_full_queue() {
     );
 
     // Request to self.
-    let request = RequestBuilder::default()
+    let request: Arc<Request> = RequestBuilder::default()
         .sender(canister_id)
         .receiver(canister_id)
-        .build();
+        .build()
+        .into();
 
     // Push`DEFAULT_QUEUE_CAPACITY - 1` requests.
     for _ in 0..DEFAULT_QUEUE_CAPACITY - 1 {

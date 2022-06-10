@@ -1064,7 +1064,7 @@ fn setup_initial_dkg_sender_not_on_nns() {
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         response,
-        RequestOrResponse::Response(Response {
+        Response {
             originator: other_canister,
             respondent: CanisterId::from(own_subnet),
             originator_reply_callback: CallbackId::new(0),
@@ -1077,7 +1077,8 @@ fn setup_initial_dkg_sender_not_on_nns() {
                     other_canister,
                 )
             })
-        })
+        }
+        .into()
     );
 }
 
@@ -1494,9 +1495,9 @@ fn execute_canister_http_request_disabled() {
 fn get_reject_message(response: RequestOrResponse) -> String {
     match response {
         RequestOrResponse::Request(_) => panic!("Expected Response"),
-        RequestOrResponse::Response(resp) => match resp.response_payload {
+        RequestOrResponse::Response(resp) => match &resp.response_payload {
             Payload::Data(_) => panic!("Expected Reject"),
-            Payload::Reject(reject) => reject.message,
+            Payload::Reject(reject) => reject.message.clone(),
         },
     }
 }

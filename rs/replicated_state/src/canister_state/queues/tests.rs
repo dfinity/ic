@@ -4,7 +4,7 @@ use super::{
 };
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_test_utilities::{
-    state::{arb_num_receivers, assert_next_eq},
+    state::arb_num_receivers,
     types::{
         arbitrary,
         ids::{canister_test_id, message_test_id, user_test_id},
@@ -21,7 +21,7 @@ fn can_push_output_request() {
     let this = canister_test_id(13);
     let mut queues = CanisterQueues::default();
     queues
-        .push_output_request(RequestBuilder::default().sender(this).build())
+        .push_output_request(RequestBuilder::default().sender(this).build().into())
         .unwrap();
 }
 
@@ -32,7 +32,7 @@ fn can_push_output_request() {
 fn cannot_push_output_response_without_input_request() {
     let this = canister_test_id(13);
     let mut queues = CanisterQueues::default();
-    queues.push_output_response(ResponseBuilder::default().respondent(this).build());
+    queues.push_output_response(ResponseBuilder::default().respondent(this).build().into());
 }
 
 #[test]
@@ -88,7 +88,8 @@ fn can_push_output_response_after_input_request() {
         ResponseBuilder::default()
             .respondent(this)
             .originator(other)
-            .build(),
+            .build()
+            .into(),
     );
 }
 
@@ -133,7 +134,8 @@ fn can_push_input_response_after_output_request() {
             RequestBuilder::default()
                 .sender(this)
                 .receiver(other)
-                .build(),
+                .build()
+                .into(),
         )
         .unwrap();
     queues
@@ -249,7 +251,8 @@ fn test_message_picking_round_robin() {
             RequestBuilder::default()
                 .sender(this)
                 .receiver(other_2)
-                .build(),
+                .build()
+                .into(),
         )
         .unwrap();
     // This succeeds because we pushed a request to other_2 to the output_queue
@@ -420,7 +423,8 @@ fn test_output_into_iter() {
                     .sender(this)
                     .receiver(*id)
                     .method_payload(vec![i as u8])
-                    .build(),
+                    .build()
+                    .into(),
             )
             .expect("could not push");
     }
@@ -559,7 +563,7 @@ fn test_stats() {
         .refund(Cycles::new(2))
         .build();
     msg_size[3] = msg.count_bytes();
-    queues.push_output_response(msg);
+    queues.push_output_response(msg.into());
     // Input queue stats are unchanged.
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     expected_oq_stats += OutputQueuesStats {
@@ -585,7 +589,7 @@ fn test_stats() {
         .payment(Cycles::new(5))
         .build();
     msg_size[4] = msg.count_bytes();
-    queues.push_output_request(msg).unwrap();
+    queues.push_output_request(msg.into()).unwrap();
     // One more reserved slot, no reserved response bytes, oversized request.
     expected_iq_stats.reserved_slots += 1;
     expected_mu_stats.reserved_slots += 1;
@@ -767,7 +771,9 @@ fn test_stats_induct_message_to_self() {
         .method_name("self")
         .build();
     let request_size = request.count_bytes();
-    queues.push_output_request(request).expect("could not push");
+    queues
+        .push_output_request(request.into())
+        .expect("could not push");
 
     // New input queue was created, with one reservation.
     expected_iq_stats.size_bytes += iq_size;
@@ -814,7 +820,7 @@ fn test_stats_induct_message_to_self() {
         .originator(this)
         .build();
     let response_size = response.count_bytes();
-    queues.push_output_response(response);
+    queues.push_output_response(response.into());
     // Input queue stats are unchanged.
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Consumed output queue reservation and added a response.
@@ -885,9 +891,9 @@ proptest! {
         let mut output_iter = canister_queues.output_into_iter(CanisterId::from_u64(0));
 
         let mut popped = 0;
-        while let Some(peeked) = output_iter.peek() {
+        while let Some((queue_id, idx, msg)) = output_iter.peek() {
             popped += 1;
-            assert_next_eq(peeked, output_iter.next());
+            assert_eq!(Some((queue_id, idx, msg.clone())), output_iter.next());
         }
 
         assert_eq!(output_iter.next(), None);
@@ -905,7 +911,7 @@ proptest! {
         let mut i = start;
         let mut popped = 0;
         let mut excluded = 0;
-        while let Some(peeked) = output_iter.peek() {
+        while let Some((queue_id, idx, msg)) = output_iter.peek() {
             i += 1;
             if i % exclude_step == 0 {
                 output_iter.exclude_queue();
@@ -913,7 +919,7 @@ proptest! {
                 continue;
             }
             popped += 1;
-            assert_next_eq(peeked, output_iter.next());
+            assert_eq!(Some((queue_id, idx, msg.clone())), output_iter.next());
         }
         assert_eq!(output_iter.pop(), None);
         assert_eq!(raw_requests.len(), excluded + popped);

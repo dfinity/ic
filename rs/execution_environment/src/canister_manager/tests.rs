@@ -46,7 +46,7 @@ use ic_test_utilities::{
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, RequestOrResponse, StopCanisterContext},
+    messages::{CallbackId, StopCanisterContext},
     nominal_cycles::NominalCycles,
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     QueryAllocation, SubnetId,
@@ -2710,9 +2710,12 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .with_status(CanisterStatusType::Running)
         .with_controller(controller)
         .with_call_context(CallContextBuilder::new().build())
-        .with_input(RequestOrResponse::Request(
-            RequestBuilder::default().receiver(canister_id).build(),
-        ))
+        .with_input(
+            RequestBuilder::default()
+                .receiver(canister_id)
+                .build()
+                .into(),
+        )
         .build();
 
     let mut state = ReplicatedStateBuilder::new()

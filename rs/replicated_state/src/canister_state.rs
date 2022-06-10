@@ -23,6 +23,7 @@ use phantom_newtype::AmountOf;
 pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY, QUEUE_INDEX_NONE};
 use std::collections::BTreeSet;
 use std::convert::From;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq)]
 /// State maintained by the scheduler.
@@ -189,12 +190,15 @@ impl CanisterState {
     }
 
     /// See `SystemState::push_output_request` for documentation.
-    pub fn push_output_request(&mut self, msg: Request) -> Result<(), (StateError, Request)> {
+    pub fn push_output_request(
+        &mut self,
+        msg: Arc<Request>,
+    ) -> Result<(), (StateError, Arc<Request>)> {
         self.system_state.push_output_request(msg)
     }
 
     /// See `SystemState::push_output_response` for documentation.
-    pub fn push_output_response(&mut self, msg: Response) {
+    pub fn push_output_response(&mut self, msg: Arc<Response>) {
         self.system_state.push_output_response(msg)
     }
 

@@ -25,41 +25,38 @@ pub fn stream_header(certification_version: CertificationVersion) -> StreamHeade
 }
 
 pub fn request() -> RequestOrResponse {
-    RequestOrResponse::Request(
-        RequestBuilder::new()
-            .receiver(canister_test_id(1))
-            .sender(canister_test_id(2))
-            .sender_reply_callback(CallbackId::from(3))
-            .payment(Cycles::from(4))
-            .method_name("test".to_string())
-            .method_payload(vec![6])
-            .build(),
-    )
+    RequestBuilder::new()
+        .receiver(canister_test_id(1))
+        .sender(canister_test_id(2))
+        .sender_reply_callback(CallbackId::from(3))
+        .payment(Cycles::from(4))
+        .method_name("test".to_string())
+        .method_payload(vec![6])
+        .build()
+        .into()
 }
 
 pub fn response() -> RequestOrResponse {
-    RequestOrResponse::Response(
-        ResponseBuilder::new()
-            .originator(canister_test_id(6))
-            .respondent(canister_test_id(5))
-            .originator_reply_callback(CallbackId::from(4))
-            .refund(Cycles::from(3))
-            .response_payload(Payload::Data(vec![1]))
-            .build(),
-    )
+    ResponseBuilder::new()
+        .originator(canister_test_id(6))
+        .respondent(canister_test_id(5))
+        .originator_reply_callback(CallbackId::from(4))
+        .refund(Cycles::from(3))
+        .response_payload(Payload::Data(vec![1]))
+        .build()
+        .into()
 }
 
 pub fn reject_response() -> RequestOrResponse {
-    RequestOrResponse::Response(
-        ResponseBuilder::new()
-            .originator(canister_test_id(6))
-            .respondent(canister_test_id(5))
-            .originator_reply_callback(CallbackId::from(4))
-            .refund(Cycles::from(3))
-            .response_payload(Payload::Reject(RejectContext {
-                code: RejectCode::SysFatal,
-                message: "Oops".into(),
-            }))
-            .build(),
-    )
+    ResponseBuilder::new()
+        .originator(canister_test_id(6))
+        .respondent(canister_test_id(5))
+        .originator_reply_callback(CallbackId::from(4))
+        .refund(Cycles::from(3))
+        .response_payload(Payload::Reject(RejectContext {
+            code: RejectCode::SysFatal,
+            message: "Oops".into(),
+        }))
+        .build()
+        .into()
 }

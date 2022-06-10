@@ -509,7 +509,7 @@ impl StreamHandlerImpl {
                     );
                     streams
                         .get_mut_or_insert(new_destination)
-                        .push(response.into());
+                        .push(RequestOrResponse::Response(response));
                 }
             }
         }

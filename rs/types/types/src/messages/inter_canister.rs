@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     convert::{From, TryFrom, TryInto},
     mem::size_of,
+    sync::Arc,
 };
 
 pub struct CallbackIdTag;
@@ -209,10 +210,13 @@ impl Response {
 }
 
 /// Canister-to-canister message.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+///
+/// The underlying request / response is wrapped within an `Arc`, for cheap
+/// cloning.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RequestOrResponse {
-    Request(Request),
-    Response(Response),
+    Request(Arc<Request>),
+    Response(Arc<Response>),
 }
 
 impl RequestOrResponse {
@@ -256,7 +260,10 @@ impl RequestOrResponse {
 /// `self` into a `RequestOrResponse` only to calculate its estimated byte size.
 impl CountBytes for Request {
     fn count_bytes(&self) -> usize {
-        size_of::<RequestOrResponse>() + self.method_name.len() + self.method_payload.len()
+        size_of::<RequestOrResponse>()
+            + size_of::<Request>()
+            + self.method_name.len()
+            + self.method_payload.len()
     }
 }
 
@@ -269,7 +276,7 @@ impl CountBytes for Response {
             Payload::Data(data) => data.len(),
             Payload::Reject(context) => context.message.len(),
         };
-        size_of::<RequestOrResponse>() + var_fields_size
+        size_of::<RequestOrResponse>() + size_of::<Response>() + var_fields_size
     }
 }
 
@@ -284,13 +291,13 @@ impl CountBytes for RequestOrResponse {
 
 impl From<Request> for RequestOrResponse {
     fn from(req: Request) -> Self {
-        RequestOrResponse::Request(req)
+        RequestOrResponse::Request(Arc::new(req))
     }
 }
 
 impl From<Response> for RequestOrResponse {
     fn from(resp: Response) -> Self {
-        RequestOrResponse::Response(resp)
+        RequestOrResponse::Response(Arc::new(resp))
     }
 }
 
@@ -407,10 +414,14 @@ impl From<&RequestOrResponse> for pb_queues::RequestOrResponse {
     fn from(rr: &RequestOrResponse) -> Self {
         match rr {
             RequestOrResponse::Request(req) => pb_queues::RequestOrResponse {
-                r: Some(pb_queues::request_or_response::R::Request(req.into())),
+                r: Some(pb_queues::request_or_response::R::Request(
+                    req.as_ref().into(),
+                )),
             },
             RequestOrResponse::Response(rep) => pb_queues::RequestOrResponse {
-                r: Some(pb_queues::request_or_response::R::Response(rep.into())),
+                r: Some(pb_queues::request_or_response::R::Response(
+                    rep.as_ref().into(),
+                )),
             },
         }
     }
@@ -425,10 +436,10 @@ impl TryFrom<pb_queues::RequestOrResponse> for RequestOrResponse {
             .ok_or(ProxyDecodeError::MissingField("RequestOrResponse::r"))?
         {
             pb_queues::request_or_response::R::Request(r) => {
-                Ok(RequestOrResponse::Request(r.try_into()?))
+                Ok(RequestOrResponse::Request(Arc::new(r.try_into()?)))
             }
             pb_queues::request_or_response::R::Response(r) => {
-                Ok(RequestOrResponse::Response(r.try_into()?))
+                Ok(RequestOrResponse::Response(Arc::new(r.try_into()?)))
             }
         }
     }

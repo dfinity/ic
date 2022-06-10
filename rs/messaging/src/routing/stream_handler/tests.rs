@@ -2942,7 +2942,7 @@ fn make_input_queue_reservations(canister: &mut CanisterState, count: usize, rem
             msg.receiver,
             msg.sender_reply_callback,
         );
-        canister.push_output_request(msg).unwrap();
+        canister.push_output_request(msg.into()).unwrap();
     }
     canister.output_into_iter().count();
 }

@@ -155,7 +155,8 @@ fn execute_get_balance(
                     .receiver(receiver)
                     .method_name(Method::BitcoinGetBalance)
                     .method_payload(bitcoin_get_balance_args.encode())
-                    .build(),
+                    .build()
+                    .into(),
             ),
             state,
             MAX_NUM_INSTRUCTIONS,
@@ -197,7 +198,8 @@ fn execute_get_utxos(
                     .receiver(ic00::IC_00)
                     .method_name(Method::BitcoinGetUtxos)
                     .method_payload(bitcoin_get_utxos_args.encode())
-                    .build(),
+                    .build()
+                    .into(),
             ),
             InputQueueType::RemoteSubnet,
         )
@@ -228,6 +230,7 @@ fn execute_get_utxos(
                 .respondent(CanisterId::new(subnet_id.get()).unwrap())
                 .response_payload(expected_payload)
                 .build()
+                .into()
         )
     );
 }
@@ -254,13 +257,12 @@ fn execute_get_current_fee_percentiles(
         .subnet_queues_mut()
         .push_input(
             QUEUE_INDEX_NONE,
-            RequestOrResponse::Request(
-                RequestBuilder::new()
-                    .sender(canister_test_id(0))
-                    .receiver(ic00::IC_00)
-                    .method_name(Method::BitcoinGetCurrentFees)
-                    .build(),
-            ),
+            RequestBuilder::new()
+                .sender(canister_test_id(0))
+                .receiver(ic00::IC_00)
+                .method_name(Method::BitcoinGetCurrentFees)
+                .build()
+                .into(),
             InputQueueType::RemoteSubnet,
         )
         .unwrap();
@@ -284,13 +286,12 @@ fn execute_get_current_fee_percentiles(
             .pop_canister_output(&canister_test_id(0))
             .unwrap()
             .1,
-        RequestOrResponse::Response(
-            ResponseBuilder::new()
-                .originator(canister_test_id(0))
-                .respondent(CanisterId::new(subnet_id.get()).unwrap())
-                .response_payload(expected_payload)
-                .build()
-        )
+        ResponseBuilder::new()
+            .originator(canister_test_id(0))
+            .respondent(CanisterId::new(subnet_id.get()).unwrap())
+            .response_payload(expected_payload)
+            .build()
+            .into()
     );
 }
 
