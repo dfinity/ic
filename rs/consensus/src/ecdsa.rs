@@ -178,10 +178,8 @@ use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
 use ic_interfaces::ecdsa::{Ecdsa, EcdsaChangeSet, EcdsaGossip, EcdsaPool};
-use ic_interfaces::registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     artifact::{EcdsaMessageAttribute, EcdsaMessageId, Priority, PriorityFn},
     consensus::ecdsa::EcdsaBlockReader,
@@ -212,7 +210,6 @@ pub struct EcdsaImpl {
     pre_signer: Box<dyn EcdsaPreSigner>,
     signer: Box<dyn EcdsaSigner>,
     complaint_handler: Box<dyn EcdsaComplaintHandler>,
-    registry_client: Arc<dyn RegistryClient>,
     schedule: RoundRobin,
     metrics: EcdsaClientMetrics,
     logger: ReplicaLogger,
@@ -225,7 +222,6 @@ impl EcdsaImpl {
         subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
-        registry_client: Arc<dyn RegistryClient>,
         metrics_registry: MetricsRegistry,
         logger: ReplicaLogger,
         malicious_flags: MaliciousFlags,
@@ -258,7 +254,6 @@ impl EcdsaImpl {
             pre_signer,
             signer,
             complaint_handler,
-            registry_client,
             schedule: RoundRobin::default(),
             metrics: EcdsaClientMetrics::new(metrics_registry),
             logger,
@@ -268,17 +263,6 @@ impl EcdsaImpl {
 
 impl Ecdsa for EcdsaImpl {
     fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet {
-        if self
-            .registry_client
-            .get_features(self.subnet_id, self.registry_client.get_latest_version())
-            .ok()
-            .flatten()
-            .map(|features| features.ecdsa_signatures)
-            != Some(true)
-        {
-            return vec![];
-        }
-
         let metrics = self.metrics.clone();
         let pre_signer = || {
             timed_call(

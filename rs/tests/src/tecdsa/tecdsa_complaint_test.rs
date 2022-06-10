@@ -12,7 +12,6 @@ use ic_fondue::{
     ic_manager::IcHandle,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_protobuf::registry::subnet::v1::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::Height;
@@ -26,11 +25,7 @@ pub fn config() -> InternetComputer {
         Subnet::new(SubnetType::System)
             .with_dkg_interval_length(Height::from(DKG_INTERVAL))
             .add_nodes(3)
-            .add_malicious_nodes(1, malicious_behaviour)
-            .with_features(SubnetFeatures {
-                ecdsa_signatures: true,
-                ..SubnetFeatures::default()
-            }),
+            .add_malicious_nodes(1, malicious_behaviour),
     )
 }
 

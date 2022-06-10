@@ -27,7 +27,6 @@ use canister_test::{Canister, Cycles};
 use ic_fondue::ic_manager::IcHandle;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
-use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
@@ -43,11 +42,7 @@ pub fn config() -> InternetComputer {
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .add_nodes(NODES_COUNT)
-                .with_features(SubnetFeatures {
-                    ecdsa_signatures: true,
-                    ..SubnetFeatures::default()
-                }),
+                .add_nodes(NODES_COUNT),
         )
         .with_unassigned_nodes(UNASSIGNED_NODES_COUNT)
 }

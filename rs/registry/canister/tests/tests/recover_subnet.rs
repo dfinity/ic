@@ -186,11 +186,7 @@ fn test_recover_subnet_with_replacement_nodes() {
 
 #[test]
 fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
-    let mut ic_config = get_ic_config();
-    let mut subnet_config = ic_config.topology_config.get_subnet(0).unwrap();
-    subnet_config.features.ecdsa_signatures = true;
-    ic_config.topology_config.insert_subnet(0, subnet_config);
-
+    let ic_config = get_ic_config();
     let (config, _tmpdir) = Config::temp_config();
     let subnet_config = ic_config::subnet_config::SubnetConfig::default_system_subnet();
     canister_test_with_config_async(

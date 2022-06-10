@@ -342,9 +342,7 @@ enum BitcoinFeatureStatus {
 }
 
 message SubnetFeatures {
-    // This feature flag controls, whether canisters of this subnet are capable of
-    // issuing threshold ecdsa signatures.
-    bool ecdsa_signatures = 1;
+    reserved 1;
     // This feature flag controls whether canister execution happens
     // in sandboxed process or not. It is disabled by default.
     bool canister_sandboxing = 2;

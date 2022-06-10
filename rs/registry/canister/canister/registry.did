@@ -179,7 +179,6 @@ type SubnetFeatures = record {
   canister_sandboxing : bool;
   http_requests : bool;
   bitcoin : opt BitcoinFeature;
-  ecdsa_signatures : bool;
 };
 type SubnetType = variant { application; verified_application; system };
 type UpdateNodeDirectlyPayload = record {

@@ -587,9 +587,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
             Ok(Ic00Method::SignWithECDSA) => match &msg {
                 RequestOrIngress::Request(request) => {
-                    let reject_message = if !state.metadata.own_subnet_features.ecdsa_signatures {
-                        "This API is not enabled on this subnet".to_string()
-                    } else if payload.is_empty() {
+                    let reject_message = if payload.is_empty() {
                         "An empty message cannot be signed".to_string()
                     } else {
                         String::new()
@@ -647,11 +645,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             Ok(Ic00Method::ECDSAPublicKey) => {
                 let res = match &msg {
                     RequestOrIngress::Request(_request) => {
-                        if !state.metadata.own_subnet_features.ecdsa_signatures {
-                            Some(Err(UserError::new(ErrorCode::CanisterContractViolation,
-                              "This API is not enabled on this subnet".to_string())))
-                        }
-                        else {
                             match ECDSAPublicKeyArgs::decode(payload) {
                                 Err(err) => Some(Err(candid_error_to_user_error(err))),
                                 Ok(args) => match ecdsa_subnet_public_key {
@@ -671,7 +664,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                     }
                                 }
                             }
-                        }
                     }
                     RequestOrIngress::Ingress(_) => {
                         error!(self.log, "[EXC-BUG] Ingress messages to ECDSAPublicKey should've been filtered earlier.");
@@ -688,17 +680,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             Ok(Ic00Method::ComputeInitialEcdsaDealings) => {
                 let res = match &msg {
                     RequestOrIngress::Request(request) => {
-                        if !state.metadata.own_subnet_features.ecdsa_signatures {
-                            Some(
-                                UserError::new(
-                                    ErrorCode::CanisterContractViolation,
-                                    format!(
-                                        "The {} API is not enabled on this subnet.", Ic00Method::ComputeInitialEcdsaDealings
-                                    )
-                                )
-                            )
-                        }
-                        else {
                             match ComputeInitialEcdsaDealingsArgs::decode(payload) {
                                 Err(err) => Some(candid_error_to_user_error(err)),
                                 Ok(args) => {
@@ -710,7 +691,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                         .map_or_else(Some, |()| None)
                                 }
                             }
-                        }
                     }
                     RequestOrIngress::Ingress(_) => {
                         error!(self.log, "[EXC-BUG] Ingress messages to ComputeInitialEcdsaDealings should've been filtered earlier.");

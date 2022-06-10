@@ -330,10 +330,6 @@ pub struct BitcoinFeatureInfo {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetFeatures {
-    /// This feature flag controls, whether canisters of this subnet are capable of
-    /// issuing threshold ecdsa signatures.
-    #[prost(bool, tag="1")]
-    pub ecdsa_signatures: bool,
     /// This feature flag controls whether canister execution happens
     /// in sandboxed process or not. It is disabled by default.
     #[prost(bool, tag="2")]

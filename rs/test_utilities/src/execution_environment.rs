@@ -1059,10 +1059,8 @@ impl ExecutionTestBuilder {
             .cycles_account_manager_config;
         if let Some(ecdsa_signature_fee) = self.ecdsa_signature_fee {
             config.ecdsa_signature_fee = ecdsa_signature_fee;
-            state.metadata.own_subnet_features.ecdsa_signatures = true;
         }
         if let Some(ecdsa_key) = self.ecdsa_key {
-            state.metadata.own_subnet_features.ecdsa_signatures = true;
             state
                 .metadata
                 .network_topology

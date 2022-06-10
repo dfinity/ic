@@ -295,7 +295,6 @@ struct CliArgs {
     /// Subnet features
     #[clap(long = "subnet-features",
         possible_values = &[
-            "ecdsa_signatures",
             "canister_sandboxing",
             "http_requests",
             "bitcoin_testnet",
@@ -517,7 +516,6 @@ impl CliArgs {
 }
 
 fn to_subnet_features(features: &[String]) -> SubnetFeatures {
-    let ecdsa_signatures = features.iter().any(|s| s.as_str() == "ecdsa_signatures");
     let canister_sandboxing = features.iter().any(|s| s.as_str() == "canister_sandboxing");
     let http_requests = features.iter().any(|s| s.as_str() == "http_requests");
     let bitcoin = if features.iter().any(|s| s.as_str() == "bitcoin_testnet") {
@@ -588,7 +586,6 @@ fn to_subnet_features(features: &[String]) -> SubnetFeatures {
     };
 
     SubnetFeatures {
-        ecdsa_signatures,
         canister_sandboxing,
         http_requests,
         bitcoin_testnet_feature: None,

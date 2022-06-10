@@ -9,10 +9,6 @@ pub const DEFAULT_ECDSA_MAX_QUEUE_SIZE: u32 = 20;
 /// List of features that can be enabled or disabled on the given subnet.
 #[derive(CandidType, Clone, Copy, Default, Deserialize, Debug, Eq, PartialEq, Serialize)]
 pub struct SubnetFeatures {
-    /// This feature flag controls whether canisters of this subnet are capable of
-    /// issuing threshold ecdsa signatures.
-    pub ecdsa_signatures: bool,
-
     /// This feature flag controls whether canister execution happens
     /// in sandboxed process or not. It is disabled by default.
     pub canister_sandboxing: bool,
@@ -37,7 +33,6 @@ impl SubnetFeatures {
 impl From<SubnetFeatures> for pb::SubnetFeatures {
     fn from(features: SubnetFeatures) -> pb::SubnetFeatures {
         Self {
-            ecdsa_signatures: features.ecdsa_signatures,
             canister_sandboxing: features.canister_sandboxing,
             http_requests: features.http_requests,
             bitcoin_testnet_feature: None,
@@ -58,7 +53,6 @@ impl From<SubnetFeatures> for pb::SubnetFeatures {
 impl From<pb::SubnetFeatures> for SubnetFeatures {
     fn from(features: pb::SubnetFeatures) -> SubnetFeatures {
         Self {
-            ecdsa_signatures: features.ecdsa_signatures,
             canister_sandboxing: features.canister_sandboxing,
             http_requests: features.http_requests,
             bitcoin: match features.bitcoin {
@@ -101,7 +95,6 @@ impl FromStr for SubnetFeatures {
 
         for feature in string.split(',') {
             match feature {
-                "ecdsa_signatures" => features.ecdsa_signatures = true,
                 "canister_sandboxing" => features.canister_sandboxing = true,
                 "http_requests" => features.http_requests = true,
                 "bitcoin_testnet" => {
@@ -264,11 +257,11 @@ mod tests {
 
     #[test]
     fn test_double_entries_are_handled() {
-        let result = SubnetFeatures::from_str("ecdsa_signatures,ecdsa_signatures").unwrap();
+        let result = SubnetFeatures::from_str("canister_sandboxing,canister_sandboxing").unwrap();
         assert_eq!(
             result,
             SubnetFeatures {
-                ecdsa_signatures: true,
+                canister_sandboxing: true,
                 ..SubnetFeatures::default()
             }
         );
@@ -276,14 +269,11 @@ mod tests {
 
     #[test]
     fn test_all_can_be_set_true() {
-        let result = SubnetFeatures::from_str(
-            "ecdsa_signatures,canister_sandboxing,http_requests,bitcoin_testnet",
-        )
-        .unwrap();
+        let result =
+            SubnetFeatures::from_str("canister_sandboxing,http_requests,bitcoin_testnet").unwrap();
         assert_eq!(
             result,
             SubnetFeatures {
-                ecdsa_signatures: true,
                 canister_sandboxing: true,
                 http_requests: true,
                 bitcoin: Some(BitcoinFeature {
@@ -302,7 +292,6 @@ mod tests {
         assert_eq!(
             result,
             SubnetFeatures {
-                ecdsa_signatures: false,
                 canister_sandboxing: true,
                 http_requests: true,
                 bitcoin: Some(BitcoinFeature {
@@ -320,7 +309,6 @@ mod tests {
         assert_eq!(
             result,
             SubnetFeatures {
-                ecdsa_signatures: false,
                 canister_sandboxing: true,
                 http_requests: true,
                 bitcoin: Some(BitcoinFeature {
