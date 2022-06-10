@@ -36,6 +36,9 @@ build-determinism-canisters-release:
 build-determinism-guest-update-img-release:
   extends:
     - .build-determinism-release
+  needs:
+    - job: build-determinism-binaries-release
+      artifacts: false
   variables:
     PATH0: "docker-build-ic-release/guest-os/update-img"
     PATH1: "guest-os/update-img"
