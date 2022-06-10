@@ -1,21 +1,17 @@
 use fast_socks5::server::{Config as SocksConfig, Socks5Server};
 use futures::{StreamExt, TryFutureExt};
 use http::StatusCode;
-use hyper::{
-    client::{connect::Connect, HttpConnector},
-    Client,
-};
-use hyper_socks2::SocksConnector;
-use ic_canister_http_adapter::CanisterHttp;
+use hyper::{client::HttpConnector, Client};
+use ic_canister_http_adapter::{AdapterServer, Config};
 use ic_canister_http_service::{
-    canister_http_service_client::CanisterHttpServiceClient,
-    canister_http_service_server::CanisterHttpServiceServer, CanisterHttpSendRequest, HttpHeader,
+    canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest, HttpHeader,
 };
 use ic_logger::replica_logger::no_op_logger;
 use std::convert::TryFrom;
+use std::str::FromStr;
 use std::{convert::Infallible, net::SocketAddr};
 use tokio::net::UnixStream;
-use tonic::transport::{Channel, Endpoint, Server, Uri};
+use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
 use unix::UnixListenerDrop;
 use uuid::Uuid;
@@ -35,18 +31,16 @@ async fn test_canister_http_server() {
         .mount(&mock_server)
         .await;
 
-    // Setup unix domain socket and start gRPC server on one side of the UDS.
-    let canister_http = setup_grpc_server_with_http_client();
-    let channel = setup_loop_channel_unix(canister_http).await;
-
-    // Create gRPC client that communicated with gRPC server through UDS channel.
-    let mut client = CanisterHttpServiceClient::new(channel);
+    let server_config = Config {
+        ..Default::default()
+    };
+    // Spawn grpc server and return client.
+    let mut client = spawn_grpc_server(server_config);
 
     let request = tonic::Request::new(build_http_canister_request(format!(
         "{}/hello",
         &mock_server.uri()
     )));
-
     let response = client.canister_http_send(request).await;
     assert!(response.is_ok());
     assert_eq!(
@@ -70,16 +64,15 @@ async fn test_nonascii_header() {
             .await;
     }
 
-    let canister_http = setup_grpc_server_with_http_client();
-    let channel = setup_loop_channel_unix(canister_http).await;
-
-    let mut client = CanisterHttpServiceClient::new(channel);
+    let server_config = Config {
+        ..Default::default()
+    };
+    let mut client = spawn_grpc_server(server_config);
 
     let request = tonic::Request::new(build_http_canister_request(format!(
         "{}/hello",
         &mock_server.uri()
     )));
-
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
 }
@@ -87,12 +80,12 @@ async fn test_nonascii_header() {
 #[tokio::test]
 async fn test_missing_protocol() {
     // Test that missing http protocol specification returns error.
-    let canister_http = setup_grpc_server_with_http_client();
-    let channel = setup_loop_channel_unix(canister_http).await;
-    let mut client = CanisterHttpServiceClient::new(channel);
+    let server_config = Config {
+        ..Default::default()
+    };
+    let mut client = spawn_grpc_server(server_config);
 
     let request = tonic::Request::new(build_http_canister_request("127.0.0.1".to_string()));
-
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
 }
@@ -100,10 +93,13 @@ async fn test_missing_protocol() {
 #[tokio::test]
 async fn test_bad_socks() {
     // Try to connect through failing proxy.
-    let canister_http =
-        setup_grpc_server_with_socks_client(Uri::from_static("socks5://doesnotexist:8088"));
-    let channel = setup_loop_channel_unix(canister_http).await;
-    let mut client = CanisterHttpServiceClient::new(channel);
+    let socks_url = "socks5://doesnotexist:8088".to_string();
+    let server_config = Config {
+        socks_proxy: Some(socks_url),
+        ..Default::default()
+    };
+    // Spawn grpc server and return client.
+    let mut client = spawn_grpc_server(server_config);
 
     let request = tonic::Request::new(build_http_canister_request("https://127.0.0.1".to_string()));
 
@@ -114,10 +110,12 @@ async fn test_bad_socks() {
 #[tokio::test]
 async fn test_socks() {
     // Spawn socks proxy on localhost and connect thourgh poxy.
-    let canister_http =
-        setup_grpc_server_with_socks_client(Uri::from_static("socks5://127.0.0.1:8088"));
-    let channel = setup_loop_channel_unix(canister_http).await;
-    let mut client = CanisterHttpServiceClient::new(channel);
+    let server_config = Config {
+        socks_proxy: Some("socks5://127.0.0.1:8088".to_string()),
+        ..Default::default()
+    };
+    // Spawn grpc server and return client.
+    let mut client = spawn_grpc_server(server_config);
 
     let mock_server = MockServer::start().await;
     Mock::given(method("GET"))
@@ -138,11 +136,21 @@ async fn test_socks() {
     assert!(response.is_ok());
 }
 
-// DNS returns multiple addresses and only one is valid. The proxy connector should fallback to the working one.
+// DNS returns multiple addresses and only one is valid. The Http connector should fallback to the working one.
+// This test only verifies the fallback behaviour of the hyper HttpConnector that is used in the adapter client.
 #[tokio::test]
 async fn test_socks_fallback() {
+    let mock_server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/hello"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&mock_server)
+        .await;
+
+    let addr = mock_server.address().to_owned();
+
     // Setup dns resolver for connecting to socks proxy. Only 127.0.0.1:8089 is working
-    let resolver = tower::service_fn(|_name| async move {
+    let resolver = tower::service_fn(move |_name| async move {
         Ok::<_, Infallible>(
             vec![
                 SocketAddr::from(([127, 0, 0, 9], 8089)),
@@ -153,7 +161,7 @@ async fn test_socks_fallback() {
                 SocketAddr::from(([127, 0, 0, 4], 8089)),
                 SocketAddr::from(([127, 0, 0, 3], 8089)),
                 SocketAddr::from(([127, 0, 0, 2], 8089)),
-                SocketAddr::from(([127, 0, 0, 1], 8089)),
+                addr,
             ]
             .into_iter(),
         )
@@ -161,37 +169,14 @@ async fn test_socks_fallback() {
 
     // Create socks connector. This test case uses the custom resolver to mimic the boundary nodes.
     // The boundary node domain should resolve to multiple domain names and the connector should fallback if some are not working.
-    let mut connector = HttpConnector::new_with_resolver(resolver);
-    connector.enforce_http(false);
-    let proxy = SocksConnector {
-        proxy_addr: Uri::from_static("socks5://somesocks.com:8089"),
-        auth: None,
-        connector,
-    };
+    let connector = HttpConnector::new_with_resolver(resolver);
+    let http_client = Client::builder().build::<_, hyper::Body>(connector);
 
-    let http_client = Client::builder().build::<_, hyper::Body>(proxy);
-    let canister_http = CanisterHttp::new(http_client, no_op_logger());
-
-    let channel = setup_loop_channel_unix(canister_http).await;
-    let mut client = CanisterHttpServiceClient::new(channel);
-
-    let mock_server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .and(path("/hello"))
-        .respond_with(ResponseTemplate::new(200))
-        .mount(&mock_server)
-        .await;
-
-    // Spawn socks prox on 127.0.0.1:8089
-    tokio::task::spawn(async move {
-        spawn_socks5_server("127.0.0.1:8089".to_string()).await;
-    });
-    let request = tonic::Request::new(build_http_canister_request(format!(
-        "{}/hello",
-        &mock_server.uri()
-    )));
-    let response = client.canister_http_send(request).await;
-    assert!(response.is_ok());
+    let response = http_client
+        .get(Uri::from_str(&format!("{}/hello", &mock_server.uri())).unwrap())
+        .await
+        .unwrap();
+    assert!(response.status() == 200);
 }
 
 // TODO: increase functionality of this function (NET-883)
@@ -206,23 +191,6 @@ fn build_http_canister_request(url: String) -> CanisterHttpSendRequest {
         body: "".to_string().into_bytes(),
         headers,
     }
-}
-
-fn setup_grpc_server_with_http_client() -> CanisterHttp<HttpConnector> {
-    CanisterHttp::new(Client::new(), no_op_logger())
-}
-
-fn setup_grpc_server_with_socks_client(uri: Uri) -> CanisterHttp<SocksConnector<HttpConnector>> {
-    let mut connector = HttpConnector::new();
-    connector.enforce_http(false);
-    let proxy = SocksConnector {
-        proxy_addr: uri, // scheme is required by HttpConnector
-        auth: None,
-        connector,
-    };
-
-    let https_client = Client::builder().build::<_, hyper::Body>(proxy);
-    CanisterHttp::new(https_client, no_op_logger())
 }
 
 async fn spawn_socks5_server(listen_addr: String) {
@@ -247,9 +215,8 @@ async fn spawn_socks5_server(listen_addr: String) {
     }
 }
 
-async fn setup_loop_channel_unix<C: Clone + Connect + Send + Sync + 'static>(
-    canister_http: CanisterHttp<C>,
-) -> Channel {
+// Spawn grpc server and return canister http client
+fn spawn_grpc_server(config: Config) -> CanisterHttpServiceClient<Channel> {
     let uuid = Uuid::new_v4();
     let path = "/tmp/canister-http-test-".to_string() + &uuid.to_string();
 
@@ -265,26 +232,20 @@ async fn setup_loop_channel_unix<C: Clone + Connect + Send + Sync + 'static>(
         }
     };
 
+    let server = AdapterServer::new(config, no_op_logger(), false);
+
     // spawn gRPC server
-    tokio::spawn(async move {
-        Server::builder()
-            .add_service(CanisterHttpServiceServer::new(canister_http))
-            .serve_with_incoming(incoming)
-            .await
-            .expect("server shutdown")
-    });
+    tokio::spawn(async move { server.serve(incoming).await.expect("server shutdown") });
 
     // port can be ignored
     let channel = Endpoint::try_from("http://[::]:50151")
         .unwrap()
-        .connect_with_connector(service_fn(move |_: Uri| {
+        .connect_with_connector_lazy(service_fn(move |_: Uri| {
             // Connect to a Uds socket
             UnixStream::connect(path.clone())
-        }))
-        .await
-        .unwrap();
+        }));
 
-    channel
+    CanisterHttpServiceClient::new(channel)
 }
 // implements unix listener that removes socket file when done
 // adapter does not need this because the socket is managed by systemd
