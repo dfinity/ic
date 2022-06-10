@@ -3984,6 +3984,7 @@ dependencies = [
  "clap 3.1.18",
  "fast-socks5",
  "futures",
+ "futures-core",
  "http",
  "hyper",
  "hyper-socks2",
