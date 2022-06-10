@@ -13,6 +13,22 @@
 //! most important  downloads and is consulted by the peer manager to compute
 //! the download order.
 
+use crate::metrics::DownloadPrioritizerMetrics;
+use ic_interfaces::artifact_manager::ArtifactManager;
+use ic_types::{
+    artifact::{ArtifactAttribute, ArtifactId, ArtifactPriorityFn, ArtifactTag, Priority},
+    chunkable::ChunkId,
+    crypto::CryptoHash,
+    p2p::GossipAdvert,
+    NodeId,
+};
+use linked_hash_map::LinkedHashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::ops::{Deref, DerefMut, Index, IndexMut};
+use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::time::Instant;
+use strum::IntoEnumIterator;
+
 /// DownloadPrioritizer trait definition.
 /// Used for adding, removing, and managing adverts per peer, as well as to set
 /// the priority function.
@@ -129,24 +145,6 @@ pub(crate) trait DownloadPrioritizer: Send + Sync {
         integrity_hash: &CryptoHash,
     ) -> Result<AdvertTrackerRef, DownloadPrioritizerError>;
 }
-
-use crate::metrics::DownloadPrioritizerMetrics;
-use linked_hash_map::LinkedHashMap;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::ops::{Deref, DerefMut, Index, IndexMut};
-use std::sync::{Arc, RwLock, RwLockReadGuard};
-use std::time::Instant;
-use strum::IntoEnumIterator;
-
-use ic_types::{
-    artifact::{ArtifactAttribute, ArtifactId, ArtifactPriorityFn, ArtifactTag, Priority},
-    chunkable::ChunkId,
-    p2p::GossipAdvert,
-    NodeId,
-};
-
-use ic_interfaces::artifact_manager::ArtifactManager;
-use ic_types::crypto::CryptoHash;
 
 /// Function type that returns a corresponding priority function
 type GetPriorityFn =

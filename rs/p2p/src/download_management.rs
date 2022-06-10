@@ -74,7 +74,7 @@ use crate::{
     },
     gossip_protocol::{
         GossipAdvertAction, GossipAdvertSendRequest, GossipChunk, GossipChunkRequest,
-        GossipMessage, GossipRetransmissionRequest,
+        GossipMessage, GossipRetransmissionRequest, Percentage,
     },
     metrics::{DownloadManagementMetrics, DownloadPrioritizerMetrics},
     peer_manager::*,
@@ -105,6 +105,7 @@ use ic_types::{
     NodeId, RegistryVersion, SubnetId,
 };
 use lru::LruCache;
+use rand::{seq::SliceRandom, thread_rng};
 use std::{
     collections::{BTreeMap, HashMap},
     error::Error,
@@ -222,7 +223,7 @@ impl DownloadManager for DownloadManagerImpl {
                 (self.peer_manager.get_current_peer_ids(), "all_peers")
             }
             GossipAdvertAction::SendToRandomSubset(percentage) => (
-                self.peer_manager.get_random_subset(percentage),
+                get_random_subset_of_peers(self.peer_manager.as_ref(), percentage),
                 "random_subset",
             ),
         };
@@ -739,6 +740,21 @@ impl DownloadManager for DownloadManagerImpl {
             let _ = self.download_next(peer_id);
         }
     }
+}
+
+/// The method returns a randomized subset of the current list of peers.
+fn get_random_subset_of_peers(
+    peer_manager: &dyn PeerManager,
+    percentage: Percentage,
+) -> Vec<NodeId> {
+    let peers = peer_manager.get_current_peer_ids();
+    let multiplier = (percentage.get() as f64) / 100.0_f64;
+    let subset_size = (peers.len() as f64 * multiplier).ceil() as usize;
+    let mut rng = thread_rng();
+    peers
+        .choose_multiple(&mut rng, subset_size)
+        .cloned()
+        .collect()
 }
 
 impl DownloadManagerImpl {
@@ -2185,12 +2201,12 @@ pub mod tests {
 
             // Context:
             transport.register_client(Arc::new(new_test_event_handler( MAX_ADVERT_BUFFER, node_test_id(0)).0)).unwrap();
-            let peer_manager = PeerManagerImpl {
-                node_id: node_test_id(0),
-                log: p2p_test_setup_logger().root.clone().into(),
+            let peer_manager = PeerManagerImpl::new(
+                node_test_id(0),
+                p2p_test_setup_logger().root.clone().into(),
                 current_peers,
                 transport,
-            };
+            );
 
             let current_peers = peer_manager.get_current_peer_ids();
             peer_manager.set_current_peer_ids(peers);
@@ -2234,12 +2250,12 @@ pub mod tests {
 
             // Context
             transport.register_client(Arc::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)).0)).unwrap();
-            let peer_manager = PeerManagerImpl {
-                node_id: node_test_id(0),
-                log: p2p_test_setup_logger().root.clone().into(),
+            let peer_manager = PeerManagerImpl::new(
+                node_test_id(0),
+                p2p_test_setup_logger().root.clone().into(),
                 current_peers,
                 transport,
-            };
+            );
 
             // Set property on one node.
             let mut current_peers = peer_manager.current_peers.lock().unwrap();
@@ -2286,7 +2302,7 @@ pub mod tests {
 
         {
             // Verify 10% of 28 = 3 (rounded up) nodes are returned.
-            let ret = peer_manager.get_random_subset(Percentage::from(10));
+            let ret = get_random_subset_of_peers(&peer_manager, Percentage::from(10));
             assert_eq!(ret.len(), 3);
             {
                 let current_peers = current_peers.lock().unwrap();
@@ -2300,7 +2316,7 @@ pub mod tests {
 
         {
             // Verify all 28 nodes are returned.
-            let ret = peer_manager.get_random_subset(Percentage::from(100));
+            let ret = get_random_subset_of_peers(&peer_manager, Percentage::from(100));
             assert_eq!(ret.len(), 28);
             {
                 let current_peers = current_peers.lock().unwrap();
@@ -2321,7 +2337,7 @@ pub mod tests {
             Arc::new(Mutex::new(PeerContextDictionary::default())),
             Arc::new(MockTransport::new()),
         );
-        let ret = peer_manager.get_random_subset(Percentage::from(10));
+        let ret = get_random_subset_of_peers(&peer_manager, Percentage::from(10));
         assert!(ret.is_empty());
     }
 }
