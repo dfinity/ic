@@ -101,7 +101,7 @@ ENV ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib ROCKSDB_STATIC=1 \
     BZ2_INCLUDE_DIR=/usr/include BZ2_LIB_DIR=/usr/lib/x86_64-linux-gnu BZ2_STATIC=1
 
 # Pre-populate the Bazel installation.
-RUN USE_BAZEL_VERSION=5.1.1 bazel version
+RUN USE_BAZEL_VERSION=5.2.0 bazel version
 
 # Adds the GitHub and GitLab signatures to known_hosts so that `git pull` calls don't require user approval
 RUN mkdir --mode=0700 /home/${USER}/.ssh && \
