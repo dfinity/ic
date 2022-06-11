@@ -92,20 +92,7 @@ class Es:
                 # total number of raw log messages sent to Elasticsearch
                 assert_with_trace(tag not in self.stat["raw_logs"], "duplicate tag")
                 self.stat["raw_logs"][tag] = size
-            else:
-                msg = f"WARNING: index {index} contains {size} documents tagged {tag}"
-                eprint(msg)
-                self.alert_service.alert(
-                    text=msg,
-                    short_text="ES index is empty",
-                )
 
-        if len(result) == 0:
-            raise EsException(
-                f"Could not find any ES indices with documents tagged `{tag}`. "
-                f"Try repeating this script in a few minutes if the hourly tests "
-                f"have started recently)"
-            )
         return result
 
     @staticmethod
@@ -186,6 +173,19 @@ class Es:
             indices = self.find_mainnet_inidices(window_minutes)
         else:
             indices = self.find_testnet_indices(tag=group_name)
+            if len(indices) == 0:
+                msg = (
+                    f"Could not find any ES indices with documents tagged `{group_name}`. "
+                    f"Try repeating this script in a few minutes if the hourly tests "
+                    f"have started recently)"
+                )
+                eprint(msg)
+                self.alert_service.alert(
+                    level="🕳️",
+                    text=msg,
+                    short_text=f"could not find ES index for {group_name}",
+                )
+                return
 
         if limit > 0:
             page_size = min(Es._DEFAULT_PAGE_SIZE, limit)

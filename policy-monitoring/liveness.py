@@ -23,7 +23,7 @@ parser.add_argument(
     "-e",
     type=int,
     default=3,
-    help="Number of days after which policy monitoring " "artifacts should be removed (0 = delete all)",
+    help="Number of days after which policy monitoring artifacts should be removed (0 = delete all)",
 )
 parser.add_argument("--artifacts", "-a", type=str, help="Directory in which the pipeline artifacts are stored")
 args = parser.parse_args()
