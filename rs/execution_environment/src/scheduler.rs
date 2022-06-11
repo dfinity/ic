@@ -2,7 +2,7 @@ use crate::{
     canister_manager::{uninstall_canister, InstallCodeContext},
     execution_environment::ExecutionEnvironment,
     metrics::MeasurementScope,
-    util::{self, process_response, process_responses},
+    util::{self, process_responses, process_result},
 };
 use ic_btc_canister::BitcoinCanister;
 use ic_config::flag_status::FlagStatus;
@@ -12,7 +12,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{CanisterStatusType, InstallCodeArgs, Method as Ic00Method, Payload as _};
 use ic_interfaces::execution_environment::{
-    AvailableMemory, ExecResult, ExecutionRoundType, RegistryExecutionSettings,
+    AvailableMemory, ExecutionRoundType, RegistryExecutionSettings,
 };
 use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, Scheduler, SubnetAvailableMemory},
@@ -1332,30 +1332,25 @@ fn execute_canisters_on_thread(
                 Arc::clone(&network_topology),
                 subnet_available_memory.clone(),
             );
-            let result = process_response(result);
-            let instructions_consumed = canister_execution_limits.instruction_limit_per_message
-                - result.num_instructions_left;
+            let (new_canister, num_instructions_left, heap_delta, ingress) = process_result(result);
+            ingress_results.extend(ingress);
+            let instructions_consumed =
+                canister_execution_limits.instruction_limit_per_message - num_instructions_left;
             measurement_scope.add(instructions_consumed, NumMessages::from(1));
             observe_instructions_consumed_per_message(
                 &logger,
                 &metrics,
-                &result.canister,
+                &new_canister,
                 instructions_consumed,
                 canister_execution_limits.instruction_limit_per_message,
             );
-            canister = result.canister;
-            let ingress_status = if let ExecResult::IngressResult(status) = result.result {
-                Some(status)
-            } else {
-                None
-            };
-            ingress_results.extend(ingress_status);
+            canister = new_canister;
             total_instructions_executed +=
                 instructions_consumed + canister_execution_limits.instruction_overhead_per_message;
             total_messages_executed.inc_assign();
-            total_heap_delta += result.heap_delta;
+            total_heap_delta += heap_delta;
             if rate_limiting_of_heap_delta == FlagStatus::Enabled {
-                canister.scheduler_state.heap_delta_debit += result.heap_delta;
+                canister.scheduler_state.heap_delta_debit += heap_delta;
             }
             let msg_execution_duration = timer.stop_and_record();
             if msg_execution_duration

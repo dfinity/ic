@@ -1,17 +1,16 @@
 // This module defines how response callbacks are executed.
 // See https://smartcontracts.org/docs/interface-spec/index.html#_callback_invocation.
 
+use crate::execution_environment::{ExecuteMessageResult, ExecutionResponse};
 use crate::Hypervisor;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState, NetworkTopology};
 use ic_types::messages::{Payload, Response};
 use ic_types::{NumBytes, NumInstructions, Time};
 
-use crate::execution::common::action_to_result;
+use crate::execution::common::action_to_response;
 use ic_ic00_types::CanisterStatusType;
-use ic_interfaces::execution_environment::{
-    ExecResult, ExecuteMessageResult, ExecutionParameters, HypervisorError,
-};
+use ic_interfaces::execution_environment::{ExecutionParameters, HypervisorError};
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
@@ -58,7 +57,7 @@ pub fn execute_response(
     error_counter: &IntCounter,
     hypervisor: &Hypervisor,
     cycles_account_manager: &CyclesAccountManager,
-) -> (ExecutionCyclesRefund, ExecuteMessageResult<CanisterState>) {
+) -> (ExecutionCyclesRefund, ExecuteMessageResult) {
     let (callback, call_context) =
         match get_call_context_and_callback(&mut canister, &response, logger) {
             Some(call_context) => call_context,
@@ -68,7 +67,7 @@ pub fn execute_response(
                     ExecuteMessageResult {
                         canister,
                         num_instructions_left: execution_parameters.slice_instruction_limit,
-                        result: ExecResult::Empty,
+                        response: ExecutionResponse::Empty,
                         heap_delta: NumBytes::from(0),
                     },
                 )
@@ -122,7 +121,7 @@ pub fn execute_response(
             ExecuteMessageResult {
                 canister,
                 num_instructions_left: execution_parameters.slice_instruction_limit,
-                result: ExecResult::Empty,
+                response: ExecutionResponse::Empty,
                 heap_delta: NumBytes::from(0),
             },
         )
@@ -143,14 +142,14 @@ pub fn execute_response(
                     callback.call_context_id,
                     Err(HypervisorError::WasmModuleNotFound),
                 );
-            let result = action_to_result(&canister, action, call_origin, time, logger);
+            let result = action_to_response(&canister, action, call_origin, time, logger);
 
             return (
                 ExecutionCyclesRefund::Yes,
                 ExecuteMessageResult {
                     canister,
                     num_instructions_left: execution_parameters.slice_instruction_limit,
-                    result,
+                    response: result,
                     heap_delta: NumBytes::from(0),
                 },
             );
@@ -234,14 +233,14 @@ pub fn execute_response(
             .call_context_manager_mut()
             .unwrap()
             .on_canister_result(call_context_id, result);
-        let result = action_to_result(&canister, action, call_origin, time, logger);
+        let result = action_to_response(&canister, action, call_origin, time, logger);
 
         (
             ExecutionCyclesRefund::Yes,
             ExecuteMessageResult {
                 canister,
                 num_instructions_left: instructions_left,
-                result,
+                response: result,
                 heap_delta,
             },
         )

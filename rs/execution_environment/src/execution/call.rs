@@ -5,15 +5,15 @@
 // context.
 
 use crate::execution::common::{
-    action_to_result, validate_canister, validate_method, wasm_result_to_query_exec_result,
+    action_to_response, validate_canister, validate_method, wasm_result_to_query_exec_result,
 };
+use crate::execution_environment::{ExecuteMessageResult, ExecutionResponse};
 use crate::hypervisor::Hypervisor;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::{
     execution_environment::{
-        AvailableMemory, ExecResult, ExecuteMessageResult, ExecutionMode, ExecutionParameters,
-        HypervisorError, SubnetAvailableMemory,
+        AvailableMemory, ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
     },
     messages::RequestOrIngress,
 };
@@ -37,7 +37,7 @@ fn early_error_to_result(
     req: RequestOrIngress,
     cycles: NumInstructions,
     time: Time,
-) -> ExecuteMessageResult<CanisterState> {
+) -> ExecuteMessageResult {
     let result = match req {
         RequestOrIngress::Request(request) => {
             let response = Response {
@@ -47,7 +47,7 @@ fn early_error_to_result(
                 refund: request.payment,
                 response_payload: Payload::from(Err(user_error)),
             };
-            ExecResult::ResponseResult(response)
+            ExecutionResponse::Request(response)
         }
         RequestOrIngress::Ingress(ingress) => {
             let status = IngressStatus::Known {
@@ -56,13 +56,13 @@ fn early_error_to_result(
                 time,
                 state: IngressState::Failed(user_error),
             };
-            ExecResult::IngressResult((ingress.message_id.clone(), status))
+            ExecutionResponse::Ingress((ingress.message_id.clone(), status))
         }
     };
     ExecuteMessageResult {
         canister,
         num_instructions_left: cycles,
-        result,
+        response: result,
         heap_delta: NumBytes::from(0),
     }
 }
@@ -109,7 +109,7 @@ pub fn execute_call(
     hypervisor: &Hypervisor,
     cycles_account_manager: &CyclesAccountManager,
     log: &ReplicaLogger,
-) -> ExecuteMessageResult<CanisterState> {
+) -> ExecuteMessageResult {
     let memory_usage = canister.memory_usage(subnet_type);
     let compute_allocation = canister.scheduler_state.compute_allocation;
     if let Err(err) = cycles_account_manager.withdraw_execution_cycles(
@@ -180,7 +180,7 @@ fn execute_update_method(
     execution_parameters: ExecutionParameters,
     hypervisor: &Hypervisor,
     log: &ReplicaLogger,
-) -> ExecuteMessageResult<CanisterState> {
+) -> ExecuteMessageResult {
     let call_origin = CallOrigin::from(&req);
     let method = WasmMethod::Update(req.method_name().to_string());
     let memory_usage = canister.memory_usage(hypervisor.subnet_type());
@@ -226,12 +226,12 @@ fn execute_update_method(
         .unwrap()
         .on_canister_result(call_context_id, output.wasm_result);
 
-    let result = action_to_result(&canister, action, call_origin, time, log);
+    let result = action_to_response(&canister, action, call_origin, time, log);
 
     ExecuteMessageResult {
         canister,
         num_instructions_left: output.num_instructions_left,
-        result,
+        response: result,
         heap_delta,
     }
 }
@@ -246,7 +246,7 @@ fn execute_query_method(
     execution_parameters: ExecutionParameters,
     hypervisor: &Hypervisor,
     log: &ReplicaLogger,
-) -> ExecuteMessageResult<CanisterState> {
+) -> ExecuteMessageResult {
     let call_origin = CallOrigin::from(&req);
 
     let method = WasmMethod::Query(req.method_name().to_string());
@@ -278,7 +278,7 @@ fn execute_query_method(
     ExecuteMessageResult {
         canister,
         num_instructions_left: output.num_instructions_left,
-        result,
+        response: result,
         heap_delta: NumBytes::from(0),
     }
 }
