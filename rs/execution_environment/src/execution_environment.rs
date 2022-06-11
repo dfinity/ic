@@ -6,7 +6,7 @@ use crate::{
     },
     canister_settings::CanisterSettings,
     execution::call::execute_call,
-    execution::common::action_to_result,
+    execution::common::action_to_response,
     execution_environment_metrics::ExecutionEnvironmentMetrics,
     hypervisor::Hypervisor,
     util::candid_error_to_user_error,
@@ -29,12 +29,12 @@ use ic_ic00_types::{
     UpdateSettingsArgs, IC_00,
 };
 use ic_interfaces::execution_environment::{
-    AvailableMemory, CanisterOutOfCyclesError, ExecResult, RegistryExecutionSettings,
+    AvailableMemory, CanisterOutOfCyclesError, RegistryExecutionSettings,
 };
 use ic_interfaces::{
     execution_environment::{
-        ExecuteMessageResult, ExecutionMode, ExecutionParameters, HypervisorError,
-        IngressHistoryWriter, SubnetAvailableMemory,
+        ExecutionMode, ExecutionParameters, HypervisorError, IngressHistoryWriter,
+        SubnetAvailableMemory,
     },
     messages::{CanisterInputMessage, RequestOrIngress},
 };
@@ -48,6 +48,7 @@ use ic_replicated_state::{
     },
     CanisterState, NetworkTopology, ReplicatedState,
 };
+use ic_types::messages::MessageId;
 use ic_types::{
     canister_http::{CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequestContext},
     crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey},
@@ -65,6 +66,33 @@ use rand::RngCore;
 use std::str::FromStr;
 use std::{convert::Into, convert::TryFrom, sync::Arc};
 use strum::ParseError;
+
+/// The response of the executed message created by the `ic0.msg_reply()`
+/// or `ic0.msg_reject()` System API functions.
+/// If the execution failed or did not call these System API functions,
+/// then the response is empty.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ExecutionResponse {
+    Ingress((MessageId, IngressStatus)),
+    Request(Response),
+    Empty,
+}
+
+/// The data structure returned by
+/// `ExecutionEnvironment.execute_canister_message()`.
+pub struct ExecuteMessageResult {
+    /// The `CanisterState` after message execution
+    pub canister: CanisterState,
+    /// The amount of instructions left after message execution. This must be <=
+    /// to the instructions_limit that `execute_canister_message()` was called
+    /// with.
+    pub num_instructions_left: NumInstructions,
+    /// The response of the executed message. The caller needs to either push it
+    /// to the output queue of the canister or update the ingress status.
+    pub response: ExecutionResponse,
+    /// The size of the heap delta the canister produced
+    pub heap_delta: NumBytes,
+}
 
 /// ExecutionEnvironment is the component responsible for executing messages
 /// on the IC.
@@ -104,7 +132,7 @@ pub trait ExecutionEnvironment: Sync + Send {
         time: Time,
         network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
-    ) -> ExecuteMessageResult<CanisterState>;
+    ) -> ExecuteMessageResult;
 
     /// Executes a heartbeat of a given canister.
     #[allow(clippy::too_many_arguments)]
@@ -822,7 +850,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         time: Time,
         network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
-    ) -> ExecuteMessageResult<CanisterState> {
+    ) -> ExecuteMessageResult {
         if let CanisterInputMessage::Response(response) = msg {
             let (should_refund_remaining_cycles, mut res) = self.execute_canister_response(
                 canister,
@@ -1125,7 +1153,7 @@ impl ExecutionEnvironmentImpl {
         time: Time,
         network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
-    ) -> (bool, ExecuteMessageResult<CanisterState>) {
+    ) -> (bool, ExecuteMessageResult) {
         let call_context_manager = match canister.status() {
             CanisterStatusType::Stopped => {
                 // A canister by definition can only be stopped when its input
@@ -1144,7 +1172,7 @@ impl ExecutionEnvironmentImpl {
                     ExecuteMessageResult {
                         canister,
                         num_instructions_left: cycles,
-                        result: ExecResult::Empty,
+                        response: ExecutionResponse::Empty,
                         heap_delta: NumBytes::from(0),
                     },
                 );
@@ -1173,7 +1201,7 @@ impl ExecutionEnvironmentImpl {
                     ExecuteMessageResult {
                         canister,
                         num_instructions_left: cycles,
-                        result: ExecResult::Empty,
+                        response: ExecutionResponse::Empty,
                         heap_delta: NumBytes::from(0),
                     },
                 );
@@ -1197,7 +1225,7 @@ impl ExecutionEnvironmentImpl {
                     ExecuteMessageResult {
                         canister,
                         num_instructions_left: cycles,
-                        result: ExecResult::Empty,
+                        response: ExecutionResponse::Empty,
                         heap_delta: NumBytes::from(0),
                     },
                 );
@@ -1262,7 +1290,7 @@ impl ExecutionEnvironmentImpl {
                 ExecuteMessageResult {
                     canister,
                     num_instructions_left: cycles,
-                    result: ExecResult::Empty,
+                    response: ExecutionResponse::Empty,
                     heap_delta: NumBytes::from(0),
                 },
             )
@@ -1286,12 +1314,12 @@ impl ExecutionEnvironmentImpl {
 
             let log = self.log.clone();
 
-            let result = action_to_result(&canister, action, call_origin, time, &log);
+            let result = action_to_response(&canister, action, call_origin, time, &log);
 
             let res = ExecuteMessageResult {
                 canister,
                 num_instructions_left: cycles,
-                result,
+                response: result,
                 heap_delta,
             };
             (true, res)

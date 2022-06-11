@@ -4,13 +4,15 @@
 use ic_base_types::CanisterId;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::CanisterStatusType;
-use ic_interfaces::execution_environment::{ExecResult, HypervisorError};
+use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{fatal, warn, ReplicaLogger};
 use ic_replicated_state::{CallContextAction, CallOrigin, CanisterState};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{CallbackId, MessageId, Payload, RejectContext, Response};
 use ic_types::methods::WasmMethod;
 use ic_types::{Cycles, Time, UserId};
+
+use crate::execution_environment::ExecutionResponse;
 
 pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserError> {
     if CanisterStatusType::Running != canister.status() {
@@ -26,15 +28,15 @@ pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserErro
     Ok(())
 }
 
-pub(crate) fn action_to_result(
+pub(crate) fn action_to_response(
     canister: &CanisterState,
     action: CallContextAction,
     call_origin: CallOrigin,
     time: Time,
     log: &ReplicaLogger,
-) -> ExecResult {
+) -> ExecutionResponse {
     match call_origin {
-        CallOrigin::Ingress(user_id, message_id) => action_to_ingress_result(
+        CallOrigin::Ingress(user_id, message_id) => action_to_ingress_response(
             &canister.canister_id(),
             user_id,
             action,
@@ -43,7 +45,7 @@ pub(crate) fn action_to_result(
             log,
         ),
         CallOrigin::CanisterUpdate(caller_canister_id, callback_id) => {
-            action_to_request_result(canister, action, caller_canister_id, callback_id)
+            action_to_request_response(canister, action, caller_canister_id, callback_id)
         }
         CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => fatal!(
             log,
@@ -53,17 +55,17 @@ pub(crate) fn action_to_result(
             // Since heartbeat messages are invoked by the system as opposed
             // to a principal, they cannot respond since there's no one to
             // respond to. Do nothing.
-            ExecResult::Empty
+            ExecutionResponse::Empty
         }
     }
 }
 
-pub(crate) fn action_to_request_result(
+pub(crate) fn action_to_request_response(
     canister: &CanisterState,
     action: CallContextAction,
     originator: CanisterId,
     reply_callback_id: CallbackId,
-) -> ExecResult {
+) -> ExecutionResponse {
     let response_payload_and_refund = match action {
         CallContextAction::NotYetResponded | CallContextAction::AlreadyResponded => None,
         CallContextAction::NoResponse { refund } => Some((
@@ -97,7 +99,7 @@ pub(crate) fn action_to_request_result(
     };
 
     if let Some((response_payload, refund)) = response_payload_and_refund {
-        ExecResult::ResponseResult(Response {
+        ExecutionResponse::Request(Response {
             originator,
             respondent: canister.canister_id(),
             originator_reply_callback: reply_callback_id,
@@ -105,18 +107,18 @@ pub(crate) fn action_to_request_result(
             response_payload,
         })
     } else {
-        ExecResult::Empty
+        ExecutionResponse::Empty
     }
 }
 
-pub(crate) fn action_to_ingress_result(
+pub(crate) fn action_to_ingress_response(
     canister_id: &CanisterId,
     user_id: UserId,
     action: CallContextAction,
     message_id: MessageId,
     time: Time,
     log: &ReplicaLogger,
-) -> ExecResult {
+) -> ExecutionResponse {
     let mut refund_amount = Cycles::zero();
     let receiver = canister_id.get();
     let ingress_status = match action {
@@ -175,8 +177,8 @@ pub(crate) fn action_to_ingress_result(
         );
     }
     match ingress_status {
-        Some(status) => ExecResult::IngressResult((message_id, status)),
-        None => ExecResult::Empty,
+        Some(status) => ExecutionResponse::Ingress((message_id, status)),
+        None => ExecutionResponse::Empty,
     }
 }
 
@@ -186,7 +188,7 @@ pub(crate) fn wasm_result_to_query_exec_result(
     time: Time,
     call_origin: CallOrigin,
     log: &ReplicaLogger,
-) -> ExecResult {
+) -> ExecutionResponse {
     match call_origin {
         CallOrigin::Ingress(user_id, message_id) => {
             wasm_result_to_ingress_result(result, canister, user_id, message_id, time)
@@ -199,7 +201,7 @@ pub(crate) fn wasm_result_to_query_exec_result(
                 refund: Cycles::zero(),
                 response_payload: Payload::from(result),
             };
-            ExecResult::ResponseResult(response)
+            ExecutionResponse::Request(response)
         }
         CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
             fatal!(log, "The update path should not have a query origin",)
@@ -208,7 +210,7 @@ pub(crate) fn wasm_result_to_query_exec_result(
             // Since heartbeat messages are invoked by the system as opposed
             // to a principal, they cannot respond since there's no one to
             // respond to. Do nothing.
-            ExecResult::Empty
+            ExecutionResponse::Empty
         }
     }
 }
@@ -219,7 +221,7 @@ pub(crate) fn wasm_result_to_ingress_result(
     user_id: UserId,
     msg_id: MessageId,
     time: Time,
-) -> ExecResult {
+) -> ExecutionResponse {
     let ingress_status = match result {
         Ok(wasm_result) => match wasm_result {
             None => IngressStatus::Known {
@@ -249,7 +251,7 @@ pub(crate) fn wasm_result_to_ingress_result(
         },
     };
 
-    ExecResult::IngressResult((msg_id, ingress_status))
+    ExecutionResponse::Ingress((msg_id, ingress_status))
 }
 
 pub(crate) fn validate_method(

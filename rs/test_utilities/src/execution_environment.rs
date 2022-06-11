@@ -11,9 +11,9 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_utils::instrumentation::{instrument, InstructionCostTable};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::{
-    util::{process_response, process_stopping_canisters},
-    CanisterHeartbeatError, ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor,
-    IngressHistoryWriterImpl,
+    util::{process_result, process_stopping_canisters},
+    CanisterHeartbeatError, ExecutionEnvironment, ExecutionEnvironmentImpl, ExecutionResponse,
+    Hypervisor, IngressHistoryWriterImpl,
 };
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterStatusType, EcdsaKeyId, EmptyBlob,
@@ -22,7 +22,7 @@ use ic_ic00_types::{
 use ic_interfaces::execution_environment::{IngressHistoryWriter, RegistryExecutionSettings};
 use ic_interfaces::messages::RequestOrIngress;
 use ic_interfaces::{
-    execution_environment::{AvailableMemory, ExecResult, ExecutionMode, SubnetAvailableMemory},
+    execution_environment::{AvailableMemory, ExecutionMode, SubnetAvailableMemory},
     messages::CanisterInputMessage,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
@@ -550,7 +550,7 @@ impl ExecutionTest {
         &mut self,
         canister_id: CanisterId,
         response: Response,
-    ) -> (ExecutionCyclesRefund, ExecResult) {
+    ) -> (ExecutionCyclesRefund, ExecutionResponse) {
         let mut state = self.state.take().unwrap();
         let canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
@@ -576,7 +576,7 @@ impl ExecutionTest {
         );
         state.put_canister_state(result.canister);
         self.state = Some(state);
-        (execution_cycles_refund, result.result)
+        (execution_cycles_refund, result.response)
     }
 
     // A low-level helper to send subnet messages to the IC management canister.
@@ -689,15 +689,16 @@ impl ExecutionTest {
                     Arc::clone(&network_topology),
                     self.subnet_available_memory.clone(),
                 );
-                let result = process_response(result);
-                state.metadata.heap_delta_estimate += result.heap_delta;
+                let (new_canister, num_instructions_left, heap_delta, ingress) =
+                    process_result(result);
+                state.metadata.heap_delta_estimate += heap_delta;
                 self.update_execution_stats(
                     canister_id,
                     self.instruction_limit,
-                    result.num_instructions_left,
+                    num_instructions_left,
                 );
-                canister = result.canister;
-                if let ExecResult::IngressResult(ir) = result.result {
+                canister = new_canister;
+                if let Some(ir) = ingress {
                     self.ingress_history_writer
                         .set_status(&mut state, ir.0, ir.1);
                 };
@@ -726,15 +727,11 @@ impl ExecutionTest {
                 Arc::clone(&network_topology),
                 self.subnet_available_memory.clone(),
             );
-            let result = process_response(result);
-            state.metadata.heap_delta_estimate += result.heap_delta;
-            self.update_execution_stats(
-                canister_id,
-                self.instruction_limit,
-                result.num_instructions_left,
-            );
-            canister = result.canister;
-            if let ExecResult::IngressResult(ir) = result.result {
+            let (new_canister, num_instructions_left, heap_delta, ingress) = process_result(result);
+            state.metadata.heap_delta_estimate += heap_delta;
+            self.update_execution_stats(canister_id, self.instruction_limit, num_instructions_left);
+            canister = new_canister;
+            if let Some(ir) = ingress {
                 self.ingress_history_writer
                     .set_status(&mut state, ir.0, ir.1);
             };

@@ -1,16 +1,17 @@
-use crate::types::Response;
-use ic_base_types::SubnetId;
+use crate::{
+    execution_environment::{ExecuteMessageResult, ExecutionResponse},
+    types::Response,
+};
+use ic_base_types::{NumBytes, SubnetId};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{CanisterStatusType, EmptyBlob, IC_00};
-use ic_interfaces::execution_environment::{
-    ExecResult, ExecuteMessageResult, IngressHistoryWriter,
-};
+use ic_interfaces::execution_environment::IngressHistoryWriter;
 use ic_logger::{error, ReplicaLogger};
 use ic_replicated_state::{CanisterState, CanisterStatus, ReplicatedState};
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{Payload, StopCanisterContext},
-    CanisterId,
+    messages::{MessageId, Payload, StopCanisterContext},
+    CanisterId, NumInstructions,
 };
 use std::{mem, sync::Arc};
 
@@ -44,21 +45,39 @@ pub fn process_responses(
     });
 }
 
-pub fn process_response(
-    mut res: ExecuteMessageResult<CanisterState>,
-) -> ExecuteMessageResult<CanisterState> {
-    if let ExecResult::ResponseResult(response) = res.result {
-        debug_assert_eq!(
-            response.respondent,
-            res.canister.canister_id(),
-            "Respondent mismatch"
-        );
-        res.canister.push_output_response(response.into());
-        res.result = ExecResult::Empty;
-    }
-    res
+/// Inspects the response produced by message execution:
+/// - if the response is for a call, then it pushes the response onto the output
+///   queue of the canister.
+/// - if the response is for an ingress, then it returns the response.
+/// The function also returns other fields of the given result.
+pub fn process_result(
+    mut result: ExecuteMessageResult,
+) -> (
+    CanisterState,
+    NumInstructions,
+    NumBytes,
+    Option<(MessageId, IngressStatus)>,
+) {
+    let ingress_status = match result.response {
+        ExecutionResponse::Ingress(ingress_status) => Some(ingress_status),
+        ExecutionResponse::Request(response) => {
+            debug_assert_eq!(
+                response.respondent,
+                result.canister.canister_id(),
+                "Respondent mismatch"
+            );
+            result.canister.push_output_response(response.into());
+            None
+        }
+        ExecutionResponse::Empty => None,
+    };
+    (
+        result.canister,
+        result.num_instructions_left,
+        result.heap_delta,
+        ingress_status,
+    )
 }
-
 /// Checks for stopping canisters and, if any of them are ready to stop,
 /// transitions them to be fully stopped. Responses to the pending stop
 /// message(s) are written to ingress history.

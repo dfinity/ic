@@ -2,13 +2,13 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use ic_base_types::NumSeconds;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_execution_environment::execution::response::ExecutionCyclesRefund;
+use ic_execution_environment::{execution::response::ExecutionCyclesRefund, ExecutionResponse};
 use ic_ic00_types::{
     self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2,
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, EmptyBlob, HttpMethod, Method,
     Payload as Ic00Payload, IC_00,
 };
-use ic_interfaces::execution_environment::{ExecResult, HypervisorError};
+use ic_interfaces::execution_environment::HypervisorError;
 
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -1795,7 +1795,7 @@ fn execute_response_with_incorrect_canister_status() {
     // Execute response when canister status is not Running.
     let (refund_cycles, exec_result) = test.execute_response(canister_id, response);
     assert_eq!(refund_cycles, ExecutionCyclesRefund::No);
-    assert_eq!(exec_result, ExecResult::Empty);
+    assert_eq!(exec_result, ExecutionResponse::Empty);
 }
 
 #[test]
@@ -1822,7 +1822,7 @@ fn execute_response_with_unknown_callback_id() {
     // Execute response when callback id cannot be found.
     let (refund_cycles, exec_result) = test.execute_response(canister_id, response);
     assert_eq!(refund_cycles, ExecutionCyclesRefund::No);
-    assert_eq!(exec_result, ExecResult::Empty);
+    assert_eq!(exec_result, ExecutionResponse::Empty);
 }
 
 #[test]
@@ -1919,7 +1919,7 @@ fn execute_response_when_call_context_deleted() {
     // Execute response with deleted call context.
     let (refund_cycles, exec_result) = test.execute_response(a_id, response);
     assert_eq!(refund_cycles, ExecutionCyclesRefund::Yes);
-    assert_eq!(exec_result, ExecResult::Empty);
+    assert_eq!(exec_result, ExecutionResponse::Empty);
 }
 
 #[test]
@@ -1962,7 +1962,7 @@ fn execute_response_successfully() {
     let (refund_cycles, exec_result) = test.execute_response(a_id, response);
     assert_eq!(refund_cycles, ExecutionCyclesRefund::Yes);
     match exec_result {
-        ExecResult::IngressResult((_, ingress_status)) => {
+        ExecutionResponse::Ingress((_, ingress_status)) => {
             let user_id = ingress_status.user_id().unwrap();
             assert_eq!(
                 ingress_status,
@@ -1974,7 +1974,9 @@ fn execute_response_successfully() {
                 }
             );
         }
-        ExecResult::ResponseResult(_) | ExecResult::Empty => panic!("Wrong execution result"),
+        ExecutionResponse::Request(_) | ExecutionResponse::Empty => {
+            panic!("Wrong execution result")
+        }
     }
 }
 
@@ -2009,7 +2011,7 @@ fn execute_response_traps() {
     let (refund_cycles, exec_result) = test.execute_response(a_id, response);
     assert_eq!(refund_cycles, ExecutionCyclesRefund::Yes);
     match exec_result {
-        ExecResult::IngressResult((_, ingress_status)) => {
+        ExecutionResponse::Ingress((_, ingress_status)) => {
             let user_id = ingress_status.user_id().unwrap();
             assert_eq!(
                 ingress_status,
@@ -2023,7 +2025,9 @@ fn execute_response_traps() {
                 }
             );
         }
-        ExecResult::ResponseResult(_) | ExecResult::Empty => panic!("Wrong execution result."),
+        ExecutionResponse::Request(_) | ExecutionResponse::Empty => {
+            panic!("Wrong execution result.")
+        }
     }
 }
 
@@ -2063,7 +2067,7 @@ fn execute_response_with_trapping_cleanup() {
     let (refund_cycles, exec_result) = test.execute_response(a_id, response);
     assert_eq!(refund_cycles, ExecutionCyclesRefund::Yes);
     match exec_result {
-        ExecResult::IngressResult((_, ingress_status)) => {
+        ExecutionResponse::Ingress((_, ingress_status)) => {
             let user_id = ingress_status.user_id().unwrap();
             let err_trapped = Box::new(HypervisorError::CalledTrap(String::new()));
             assert_eq!(
@@ -2082,6 +2086,8 @@ fn execute_response_with_trapping_cleanup() {
                 }
             );
         }
-        ExecResult::ResponseResult(_) | ExecResult::Empty => panic!("Wrong execution result."),
+        ExecutionResponse::Request(_) | ExecutionResponse::Empty => {
+            panic!("Wrong execution result.")
+        }
     }
 }
