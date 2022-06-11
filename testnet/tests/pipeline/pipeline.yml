@@ -491,6 +491,7 @@ system-tests-prod-slo:
     - .with-monitoring
   variables:
     SUITE_NAME: "prod_slo"
+    SYSTEM_TESTS_TIMEOUT: "4800"  # 1 h + 20 min
     cd_target_env: "SLO"
   script:
     - *run-farm-based-test
