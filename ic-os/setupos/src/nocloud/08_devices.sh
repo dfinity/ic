@@ -6,43 +6,54 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
-function mount_config_partition() {
-    echo "* Mounting config partition..."
+function mount_src_config_partition() {
+    echo "* Mounting source config partition..."
 
-    mkdir --parents /media/config
+    mkdir --parents /media/config_src
+    log_and_reboot_on_error "${?}" "Unable to create mount directory."
+
+    # TODO: Use UUID or label instead of hard-coded path
+    mount /dev/sda3 /media/config_src
+    log_and_reboot_on_error "${?}" "Unable to mount config partition."
+}
+
+function mount_dst_config_partition() {
+    echo "* Mounting destination config partition..."
+
+    mkdir --parents /media/config_dst
     log_and_reboot_on_error "${?}" "Unable to create mount directory."
 
     vgchange -ay hostlvm
     log_and_reboot_on_error "${?}" "Unable to activate config partition."
 
-    mount /dev/mapper/hostlvm-config /media/config
+    mount /dev/mapper/hostlvm-config /media/config_dst
     log_and_reboot_on_error "${?}" "Unable to mount config partition."
 }
 
 function copy_config_files() {
-    echo "* Copying config.json to config partition..."
-    cp /media/cdrom/nocloud/config.json /media/config/config.json
-    log_and_reboot_on_error "${?}" "Unable to copy config.json to config partition."
+    echo "* Copying config.ini to config partition..."
+    if [ -f "/media/config_src/config.ini" ]; then
+        cp /media/config_src/config.ini /media/config_dst/config.ini
+        log_and_reboot_on_error "${?}" "Unable to copy config.ini to config partition."
+    else
+        log_and_reboot_on_error "1" "Configuration file 'config.ini' does not exist."
+    fi
+
+    echo "* Copying SSH authorized keys..."
+    if [ -d "/media/config_src/ssh_authorized_keys" ]; then
+        cp -r /media/config_src/ssh_authorized_keys /media/config_dst/
+        log_and_reboot_on_error "${?}" "Unable to copy SSH authorized keys to config partition."
+    else
+        log_and_reboot_on_error "1" "Directory 'ssh_authorized_keys' does not exist."
+    fi
 
     echo "* Copying deployment.json to config partition..."
-    cp /media/cdrom/nocloud/deployment.json /media/config/deployment.json
+    cp /media/cdrom/nocloud/deployment.json /media/config_dst/deployment.json
     log_and_reboot_on_error "${?}" "Unable to copy deployment.json to config partition."
 
     echo "* Copying NNS public key to config partition..."
-    cp /media/cdrom/nocloud/nns_public_key.pem /media/config/nns_public_key.pem
+    cp /media/cdrom/nocloud/nns_public_key.pem /media/config_dst/nns_public_key.pem
     log_and_reboot_on_error "${?}" "Unable to copy NNS public key to config partition."
-
-    if [ -d "/media/cdrom/nocloud/hostos_accounts_ssh_authorized_keys" ]; then
-        echo "* Copying HostOS accounts SSH authorized keys..."
-        cp -r /media/cdrom/nocloud/hostos_accounts_ssh_authorized_keys /media/config/
-        log_and_reboot_on_error "${?}" "Unable to copy HostOS accounts SSH authorized keys to config partition."
-    fi
-
-    if [ -d "/media/cdrom/nocloud/guestos_accounts_ssh_authorized_keys" ]; then
-        echo "* Copying GuestOS accounts SSH authorized keys..."
-        cp -r /media/cdrom/nocloud/guestos_accounts_ssh_authorized_keys /media/config/
-        log_and_reboot_on_error "${?}" "Unable to copy GuestOS accounts SSH authorized keys to config partition."
-    fi
 }
 
 function insert_hsm() {
@@ -65,8 +76,11 @@ function unmount_config_partition() {
     sync
     log_and_reboot_on_error "${?}" "Unable to synchronize cached writes to persistent storage."
 
-    umount /media/config
-    log_and_reboot_on_error "${?}" "Unable to unmount config partition."
+    umount /media/config_src
+    log_and_reboot_on_error "${?}" "Unable to unmount source config partition."
+
+    umount /media/config_dst
+    log_and_reboot_on_error "${?}" "Unable to unmount destination config partition."
 
     vgchange -an hostlvm
     log_and_reboot_on_error "${?}" "Unable to deactivate config partition."
@@ -76,7 +90,8 @@ function unmount_config_partition() {
 main() {
     source /media/cdrom/nocloud/00_common.sh
     log_start
-    mount_config_partition
+    mount_src_config_partition
+    mount_dst_config_partition
     copy_config_files
     insert_hsm
     unmount_config_partition

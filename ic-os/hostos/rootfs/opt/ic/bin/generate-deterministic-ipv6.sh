@@ -19,7 +19,7 @@ for argument in "${@}"; do
 Generate Deterministic IPV6 Address
 
 Arguments:
-  -c=, --config=        specify the config.json configuration file (Default: /boot/config/config.json)
+  -c=, --config=        specify the config.ini configuration file (Default: /boot/config/config.ini)
   -h, --help            show this help message and exit
   -i=, --index=         mandatory: specify the single digit node index (Examples: host: 0, guest: 1, boundary: 2)
 '
@@ -37,7 +37,7 @@ Arguments:
 done
 
 # Set arguments if undefined
-CONFIG="${CONFIG:=/boot/config/config.json}"
+CONFIG="${CONFIG:=/boot/config/config.ini}"
 
 function validate_arguments() {
     if [ "${CONFIG}" == "" -o "${INDEX}" == "" ]; then
@@ -64,13 +64,25 @@ write_metric() {
     echo -e "# HELP ${name} ${help}\n# INDEX ${type}\n${name} ${value}" >"${METRICS_DIR}/${name}.prom"
 }
 
+function read_variables() {
+    # Read limited set of keys. Be extra-careful quoting values as it could
+    # otherwise lead to executing arbitrary shell code!
+    while IFS="=" read -r key value; do
+        case "$key" in
+            "ipv6_prefix") ipv6_prefix="${value}" ;;
+            "ipv6_subnet") ipv6_subnet="${value}" ;;
+            "ipv6_gateway") ipv6_gateway="${value}" ;;
+            "ipv6_address") ipv6_address="${value}" ;;
+            "hostname") hostname="${value}" ;;
+        esac
+    done <"${CONFIG}"
+}
+
 # Generate a deterministic IPV6 address based on the:
 #  - Deterministic MAC
 #  - Node index
 function generate_deterministic_ipv6() {
     local mac_6=$(/opt/ic/bin/generate-deterministic-mac.sh --version=6 --index=${INDEX})
-    local ipv6_prefix=$(/opt/ic/bin/fetch-property.sh --key=.ipv6_prefix --metric=hostos_ipv6_prefix --config=${CONFIG} -u)
-    local ipv6_subnet=$(/opt/ic/bin/fetch-property.sh --key=.ipv6_subnet --metric=hostos_ipv6_subnet --config=${CONFIG} -u)
     local output=$(echo "${mac_6}" | sed 's/[.:-]//g' | tr '[:upper:]' '[:lower:]')
     local output="${output:0:6}fffe${output:6}"
     local output=$(printf "%02x%s" "$((0x${output:0:2} ^ 2))" "${output:2}")
@@ -89,6 +101,7 @@ function generate_deterministic_ipv6() {
 function main() {
     # Establish run order
     validate_arguments
+    read_variables
     generate_deterministic_ipv6
 }
 

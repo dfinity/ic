@@ -4,7 +4,7 @@
 
 # Build Requirements:
 # - Operating System: Ubuntu 20.04
-# - Packages: ca-certificates, curl, git, isolinux, p7zip-full, syslinux, xorriso
+# - Packages: ca-certificates, curl, git, isolinux, mtools, p7zip-full, syslinux, xorriso
 # - Connectivity: 443/tcp outbound
 
 set -o errexit
@@ -44,10 +44,6 @@ export SOURCE_DATE_EPOCH="1231006505"
 # Get keyword arguments
 for argument in "${@}"; do
     case ${argument} in
-        -c=* | --config=*)
-            CONFIG="${argument#*=}"
-            shift
-            ;;
         -d=* | --deployment=*)
             DEPLOYMENT="${argument#*=}"
             shift
@@ -57,20 +53,16 @@ for argument in "${@}"; do
 SetupOS Builder
 
 Arguments:
-  -c=, --config=        specify the config.json configuration file (Default: ./src/nocloud/config.json)
   -d=, --deployment=    specify the deployment name (Default: mainnet)
   --host-os=            specify the HostOS disk-image file (Default: ./src/nocloud/host-os.img.tar.gz)
-  --host-ssh=           specify a folder containing the accounts SSH public keys (Example: ./ssh_authorized_keys)
-                        the folder is expected to contain files named after the built-in accounts (admin, backup, readonly)
   --guest-os=           specify the GuestOS disk-image file (Default: ./src/nocloud/guest-os.img.tar.gz)
-  --guest-ssh=          specify a folder containing the accounts SSH public keys (Example: ./ssh_authorized_keys)
-                        the folder is expected to contain files named after the built-in accounts (admin, backup, readonly)
   -h, --help            show this help message and exit
   -k=, --key=           specify the NNS public key (Default: ./src/nocloud/nns_public_key.pem)
   -l=, --logging=       specify the logging hosts/destination (Default: telemetry01.mainnet.dfinity.network telemetry02.mainnet.dfinity.network telemetry03.mainnet.dfinity.network)
   -n=, --nns-url=       specify the NNS URL for the GuestOS (Default: <http://[mainnet]:8080>)
   -o=, --output=        ISO output directory (Default: ./build-out/)
   -u=, --ubuntu=        specify a folder containing the Ubuntu Live Server ISO image (Example: ./ubuntu/)
+  -s=, --name-servers=  specify the DNS name servers (Default: 2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844)
   --memory=             specify the amount of memory in GiB (Gibibytes) for the GuestOS (Default: 490)
 '
             exit 1
@@ -79,16 +71,8 @@ Arguments:
             HOST_OS="${argument#*=}"
             shift
             ;;
-        --host-ssh=*)
-            HOST_SSH="${argument#*=}"
-            shift
-            ;;
         --guest-os=*)
             GUEST_OS="${argument#*=}"
-            shift
-            ;;
-        --guest-ssh=*)
-            GUEST_SSH="${argument#*=}"
             shift
             ;;
         -k=* | --key=*)
@@ -107,6 +91,10 @@ Arguments:
             OUTPUT="${argument#*=}"
             shift
             ;;
+        -s=* | --name-servers=*)
+            NAME_SERVERS="${argument#*=}"
+            shift
+            ;;
         -u=* | --ubuntu=*)
             UBUNTU="${argument#*=}"
             shift
@@ -123,7 +111,6 @@ Arguments:
 done
 
 # Set arguments if undefined
-CONFIG="${CONFIG:=${BASE_DIR}/src/nocloud/config.json}"
 DEPLOYMENT="${DEPLOYMENT:=mainnet}"
 HOST_OS="${HOST_OS:=${BASE_DIR}/src/nocloud/host-os.img.tar.gz}"
 GUEST_OS="${GUEST_OS:=${BASE_DIR}/src/nocloud/guest-os.img.tar.gz}"
@@ -131,6 +118,7 @@ KEY="${KEY:=${BASE_DIR}/src/nocloud/nns_public_key.pem}"
 LOGGING="${LOGGING:=elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443}"
 MEMORY="${MEMORY:=490}"
 NNS_URL="${NNS_URL:=http://[2600:c02:b002:15:5000:ceff:fecc:d5cd]:8080,http://[2604:3fc0:3002:0:5000:6bff:feb9:6baf]:8080,http://[2a00:fb01:400:100:5000:5bff:fe6b:75c6]:8080,http://[2604:3fc0:2001:0:5000:b0ff:fe7b:ff55]:8080,http://[2600:3000:6100:200:5000:cbff:fe4b:b207]:8080,http://[2604:3fc0:3002:0:5000:4eff:fec2:4806]:8080,http://[2001:920:401a:1708:5000:5fff:fec1:9ddb]:8080,http://[2001:920:401a:1706:5000:87ff:fe11:a9a0]:8080,http://[2401:3f00:1000:24:5000:deff:fed6:1d7]:8080,http://[2a00:fb01:400:100:5000:61ff:fe2c:14ac]:8080,http://[2a04:9dc0:0:108:5000:ccff:feb7:c03b]:8080,http://[2600:c02:b002:15:5000:53ff:fef7:d3c0]:8080,http://[2401:3f00:1000:22:5000:c3ff:fe44:36f4]:8080,http://[2607:f1d0:10:1:5000:a7ff:fe91:44e]:8080,http://[2a04:9dc0:0:108:5000:96ff:fe4a:be10]:8080,http://[2604:7e00:50:0:5000:20ff:fea7:efee]:8080,http://[2600:3004:1200:1200:5000:59ff:fe54:4c4b]:8080,http://[2a0f:cd00:2:1:5000:3fff:fe36:cab8]:8080,http://[2401:3f00:1000:23:5000:80ff:fe84:91ad]:8080,http://[2607:f758:c300:0:5000:72ff:fe35:3797]:8080,http://[2607:f758:1220:0:5000:12ff:fe0c:8a57]:8080,http://[2a01:138:900a:0:5000:2aff:fef4:c47e]:8080,http://[2a0f:cd00:2:1:5000:87ff:fe58:ceba]:8080,http://[2401:3f00:1000:24:5000:86ff:fea6:9bb5]:8080,http://[2600:2c01:21:0:5000:27ff:fe23:4839]:8080,http://[2a04:9dc0:0:108:5000:7cff:fece:97d]:8080,http://[2001:920:401a:1708:5000:4fff:fe92:48f1]:8080,http://[2604:3fc0:3002:0:5000:acff:fe31:12e8]:8080,http://[2a04:9dc0:0:108:5000:6bff:fe08:5f57]:8080,http://[2607:f758:c300:0:5000:3eff:fe6d:af08]:8080,http://[2607:f758:1220:0:5000:bfff:feb9:6794]:8080,http://[2607:f758:c300:0:5000:8eff:fe8b:d68]:8080,http://[2607:f758:1220:0:5000:3aff:fe16:7aec]:8080,http://[2a00:fb01:400:100:5000:ceff:fea2:bb0]:8080,http://[2a00:fa0:3:0:5000:5aff:fe89:b5fc]:8080,http://[2a00:fa0:3:0:5000:68ff:fece:922e]:8080,http://[2600:3000:6100:200:5000:c4ff:fe43:3d8a]:8080,http://[2001:920:401a:1710:5000:d7ff:fe6f:fde7]:8080,http://[2a01:138:900a:0:5000:5aff:fece:cf05]:8080,http://[2600:3006:1400:1500:5000:20ff:fe3f:3c98]:8080}"
+NAME_SERVERS="${NAME_SERVERS:=2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844}"
 OUTPUT="${OUTPUT:=${BASE_DIR}/build-out}"
 
 function validate_input() {
@@ -262,41 +250,15 @@ function prepare_build() {
     cp --preserve=timestamp "${BASE_DIR}/src/nocloud/08_devices.sh" "${ISO_DIR}/nocloud"
     cp --preserve=timestamp "${BASE_DIR}/src/nocloud/09_setupos.sh" "${ISO_DIR}/nocloud"
 
-    # Copy config.json, deployment.json, nns_public_key.pem to ISO
-    cp --preserve=timestamp "${CONFIG}" "${ISO_DIR}/nocloud/config.json"
+    # Copy deployment.json, nns_public_key.pem to ISO
     cp --preserve=timestamp "${BASE_DIR}/src/nocloud/deployment.json" "${ISO_DIR}/nocloud"
     cp --preserve=timestamp "${KEY}" "${ISO_DIR}/nocloud/nns_public_key.pem"
-
-    # Copy HostOS accounts SSH authorized keys
-    if [ ! -z "${HOST_SSH}" ]; then
-        echo "* Copying HostOS accounts SSH authorized keys..."
-        mkdir -p "${ISO_DIR}/nocloud/hostos_accounts_ssh_authorized_keys"
-
-        for file in admin backup readonly; do
-            if [ -r "${HOST_SSH}/${file}" ]; then
-                echo "* Copying HostOS '${file}' SSH authorized keys..."
-                cp --preserve=timestamp "${HOST_SSH}/${file}" "${ISO_DIR}/nocloud/hostos_accounts_ssh_authorized_keys/"
-            fi
-        done
-    fi
-
-    # Copy GuestOS accounts SSH authorized keys
-    if [ ! -z "${GUEST_SSH}" ]; then
-        echo "* Copying GuestOS accounts SSH authorized keys..."
-        mkdir -p "${ISO_DIR}/nocloud/guestos_accounts_ssh_authorized_keys"
-
-        for file in admin backup readonly; do
-            if [ -r "${GUEST_SSH}/${file}" ]; then
-                echo "* Copying GuestOS '${file}' SSH authorized keys..."
-                cp --preserve=timestamp "${GUEST_SSH}/${file}" "${ISO_DIR}/nocloud/guestos_accounts_ssh_authorized_keys/"
-            fi
-        done
-    fi
 
     # Inject deployment configuration
     sed -i "s@{{ nns_url }}@${NNS_URL}@g" "${ISO_DIR}/nocloud/deployment.json"
     sed -i "s@{{ deployment_name }}@${DEPLOYMENT}@g" "${ISO_DIR}/nocloud/deployment.json"
     sed -i "s@{{ logging_hosts }}@${LOGGING}@g" "${ISO_DIR}/nocloud/deployment.json"
+    sed -i "s@{{ dns_name_servers }}@${NAME_SERVERS}@g" "${ISO_DIR}/nocloud/deployment.json"
     sed -i "s@{{ resources_memory }}@${MEMORY}@g" "${ISO_DIR}/nocloud/deployment.json"
 
     # Copy disk-image files
@@ -315,7 +277,8 @@ function prepare_build() {
     sed -i "s@${ISO_DIR}/@./@g" ${ISO_DIR}/md5sum.txt
 
     # Fix timestamps for reproducible build
-    touch -t ${TOUCH_TIMESTAMP} ${ISO_DIR}/nocloud \
+    touch -t ${TOUCH_TIMESTAMP} \
+        ${ISO_DIR}/nocloud \
         ${ISO_DIR}/nocloud/deployment.json \
         ${ISO_DIR}/boot/grub \
         ${ISO_DIR}/boot/grub/grub.cfg \
@@ -329,6 +292,53 @@ function prepare_build() {
         ${ISO_DIR}
 }
 
+function create_config_partition() {
+    CONFIG_IMG="${TMP_DIR}/config.img"
+    truncate -s 8M ${CONFIG_IMG}
+    mkfs.vfat ${CONFIG_IMG}
+}
+
+function create_config_templates() {
+    CONFIG_PART="${TMP_DIR}/config"
+    mkdir -p ${CONFIG_PART}
+
+    (
+        cat <<EOF
+# Please update the template/example below.
+#
+# If you need help, please do not hesitate to contact the
+# Internet Computer Association.
+#
+ipv6_prefix=2a00:fb01:400:100
+ipv6_subnet=/64
+ipv6_gateway=2a00:fb01:400:100::1
+EOF
+    ) >"${CONFIG_PART}/config.ini"
+
+    mkdir -p ${CONFIG_PART}/ssh_authorized_keys
+
+    for file in admin backup readonly; do
+        (
+            cat <<EOF
+# Please insert your SSH public keys here.
+#
+# Each line of the file must only contain one key. For details on the format,
+# please consult 'man authorized_keys'.
+#
+EOF
+        ) >"${CONFIG_PART}/ssh_authorized_keys/${file}"
+    done
+
+    # Fix timestamps for reproducible build
+    touch -t ${TOUCH_TIMESTAMP} \
+        ${CONFIG_PART}/config.ini \
+        ${CONFIG_PART}/ssh_authorized_keys \
+        ${CONFIG_PART}/ssh_authorized_keys/{admin,backup,readonly}
+
+    mcopy -m -i "${TMP_DIR}/config.img" "${CONFIG_PART}/config.ini" ::
+    mcopy -sm -i "${TMP_DIR}/config.img" "${CONFIG_PART}/ssh_authorized_keys" ::
+}
+
 function build_iso() {
     echo "* Building SetupOS ISO image..."
 
@@ -340,6 +350,7 @@ function build_iso() {
         -eltorito-alt-boot -e boot/grub/efi.img -no-emul-boot \
         -isohybrid-gpt-basdat -isohybrid-apm-hfsplus \
         -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
+        -append_partition 3 0xef "${CONFIG_IMG}" \
         ${TMP_DIR}/iso/boot ${TMP_DIR}/iso \
         -- \
         -volume_date "c" "${XORRISO_TIMESTAMP}" \
@@ -354,6 +365,7 @@ function remove_temporary_directory() {
     echo "* Cleaning up build directories..."
 
     rm -rf ${TMP_DIR}
+    rm -rf ${BOOT_IMG}
 }
 
 function log_end() {
@@ -378,6 +390,8 @@ function main() {
     verify_ubuntu_iso
     extract_ubuntu_iso
     prepare_build
+    create_config_partition
+    create_config_templates
     build_iso
     remove_temporary_directory
     log_end

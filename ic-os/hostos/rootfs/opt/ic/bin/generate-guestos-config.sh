@@ -23,7 +23,7 @@ for argument in "${@}"; do
 Generate GuestOS Configuration
 
 Arguments:
-  -c=, --config=        specify the config.json configuration file (Default: /boot/config/config.json)
+  -c=, --config=        specify the config.ini configuration file (Default: /boot/config/config.ini)
   -d=, --deployment=    specify the deployment.json configuration file (Default: /boot/config/deployment.json)
   -h, --help            show this help message and exit
   -i=, --input=         specify the input template file (Default: /opt/ic/share/guestos.xml.template)
@@ -58,7 +58,7 @@ function validate_arguments() {
 }
 
 # Set arguments if undefined
-CONFIG="${CONFIG:=/boot/config/config.json}"
+CONFIG="${CONFIG:=/boot/config/config.ini}"
 DEPLOYMENT="${DEPLOYMENT:=/boot/config/deployment.json}"
 INPUT="${INPUT:=/opt/ic/share/guestos.xml.template}"
 MEDIA="${MEDIA:=/run/ic-node/config.img}"
@@ -83,16 +83,30 @@ write_metric() {
     echo -e "# HELP ${name} ${help}\n# INDEX ${type}\n${name} ${value}" >"${METRICS_DIR}/${name}.prom"
 }
 
+function read_variables() {
+    # Read limited set of keys. Be extra-careful quoting values as it could
+    # otherwise lead to executing arbitrary shell code!
+    while IFS="=" read -r key value; do
+        case "$key" in
+            "ipv6_prefix") ipv6_prefix="${value}" ;;
+            "ipv6_subnet") ipv6_subnet="${value}" ;;
+            "ipv6_gateway") ipv6_gateway="${value}" ;;
+            "ipv6_address") ipv6_address="${value}" ;;
+            "hostname") hostname="${value}" ;;
+        esac
+    done <"${CONFIG}"
+}
+
 function assemble_config_media() {
     cmd=(/opt/ic/bin/build-bootstrap-config-image.sh ${MEDIA})
-    if [ -d "/boot/config/guestos_accounts_ssh_authorized_keys" ]; then
-        cmd+=(--accounts_ssh_authorized_keys /boot/config/guestos_accounts_ssh_authorized_keys)
+    if [ -d "/boot/config/ssh_authorized_keys" ]; then
+        cmd+=(--accounts_ssh_authorized_keys /boot/config/ssh_authorized_keys)
     fi
     cmd+=(--nns_public_key "/boot/config/nns_public_key.pem")
     cmd+=(--journalbeat_hosts "$(/opt/ic/bin/fetch-property.sh --key=.logging.hosts --metric=hostos_logging_hosts --config=${DEPLOYMENT})")
     cmd+=(--ipv6_address "$(/opt/ic/bin/generate-deterministic-ipv6.sh --index=1)")
-    cmd+=(--ipv6_gateway "$(/opt/ic/bin/fetch-property.sh --key=.ipv6_gateway --metric=hostos_ipv6_gateway --config=${CONFIG} -u)")
-    cmd+=(--name_servers "$(/opt/ic/bin/fetch-property.sh --key=.network.name_servers --metric=hostos_name_servers --config=${CONFIG})")
+    cmd+=(--ipv6_gateway "${ipv6_gateway}")
+    cmd+=(--name_servers "$(/opt/ic/bin/fetch-property.sh --key=.dns.name_servers --metric=hostos_dns_name_servers --config=${DEPLOYMENT})")
     cmd+=(--hostname "guest-$(/opt/ic/bin/fetch-mgmt-mac.sh | sed 's/://g')")
     cmd+=(--nns_url "$(/opt/ic/bin/fetch-property.sh --key=.nns.url --metric=hostos_nns_url --config=${DEPLOYMENT})")
 
@@ -126,6 +140,7 @@ function generate_guestos_config() {
 function main() {
     # Establish run order
     validate_arguments
+    read_variables
     assemble_config_media
     generate_guestos_config
 }

@@ -8,6 +8,9 @@
   "nns": {
     "url": "{{ nns_url }}"
   },
+  "dns": {
+    "name_servers": "{{ dns_name_servers }}"
+  },
   "resources": {
     "memory": "{{ resources_memory }}"
   }

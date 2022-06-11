@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import atexit
-import json
 import os
 import shutil
 import subprocess
@@ -86,11 +85,11 @@ def build_config_folder(name, ip, ssh_keys):
 
     ip_address = "%s/%d" % (ip["address"], ip["mask_length"])
     ip_gateway = ip["gateway"]
-    config = {"overrides": {"ipv6_address": ip_address, "ipv6_gateway": ip_gateway, "hostname": name}}
-    config_json = json.dumps(config)
-    with open(os.path.join(output, "config.json"), "w") as f:
-        f.write(config_json)
-    subprocess.run(["cp", "-r", ssh_keys, "%s/hostos_accounts_ssh_authorized_keys" % output], check=True)
+    with open(os.path.join(output, "config.ini"), "w") as f:
+        f.write("ipv6_address=%s\n" % ip_address)
+        f.write("ipv6_gateway=%s\n" % ip_gateway)
+        f.write("hostname=%s\n" % name)
+    subprocess.run(["cp", "-r", ssh_keys, "%s/ssh_authorized_keys" % output], check=True)
     return output
 
 
