@@ -160,4 +160,4 @@ def run_test(prefix: str, test: str, instance: str, local_sig_file=True):
         assert var_seq is not None, "could not obtain sequence of variables"
         print(f"obtained sequence of variables: {', '.join(var_seq)}")
     else:
-        print("skipped obtaining sequence of variables for test with non-zero" " expected exit code")
+        print("skipped obtaining sequence of variables for test with non-zero expected exit code")
