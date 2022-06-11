@@ -26,6 +26,7 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     libssl-dev \
     ssl-cert \
     rustc \
+    cron \
     cargo \
     perl
 
