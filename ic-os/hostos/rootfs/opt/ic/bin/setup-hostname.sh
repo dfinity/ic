@@ -23,7 +23,7 @@ for argument in "${@}"; do
 Set Transient Or Persistent Hostname
 
 Arguments:
-  -c=, --config=        optional: specify the config.json configuration file (Default: /boot/config/config.json)
+  -c=, --config=        optional: specify the config.ini configuration file (Default: /boot/config/config.ini)
   -f=, --file=          optional: specify the file containing the node-id (Default: /boot/config/node-id)
   -h, --help            show this help message and exit
   -t=, --type=          mandatory: specify the node type (Examples: host, guest, boundary...)
@@ -42,7 +42,7 @@ Arguments:
 done
 
 # Set arguments if undefined
-CONFIG="${CONFIG:=/boot/config/config.json}"
+CONFIG="${CONFIG:=/boot/config/config.ini}"
 FILE="${FILE:=/boot/config/node-id}"
 
 function validate_arguments() {
@@ -70,12 +70,22 @@ write_metric() {
     echo -e "# HELP ${name} ${help}\n# TYPE ${type}\n${name} ${value}" >"${METRICS_DIR}/${name}.prom"
 }
 
+function read_variables() {
+    # Read limited set of keys. Be extra-careful quoting values as it could
+    # otherwise lead to executing arbitrary shell code!
+    while IFS="=" read -r key value; do
+        case "$key" in
+            "ipv6_prefix") ipv6_prefix="${value}" ;;
+            "ipv6_subnet") ipv6_subnet="${value}" ;;
+            "ipv6_gateway") ipv6_gateway="${value}" ;;
+            "ipv6_address") ipv6_address="${value}" ;;
+            "hostname") hostname="${value}" ;;
+        esac
+    done <"${CONFIG}"
+}
+
 function construct_hostname() {
-    # TODO: This field is not mandatory, so we need to be able to optionally grab it
-    overrides=$(jq -r ".overrides" ${CONFIG})
-    if [ "${overrides}" != "null" ]; then
-        HOSTNAME=$(/opt/ic/bin/fetch-property.sh --key=.overrides.hostname --metric=overrides_hostname --config=${CONFIG})
-    else
+    if [ -z "${hostname}" ]; then
         local mac=$(/opt/ic/bin/fetch-mgmt-mac.sh | sed 's/://g')
 
         if [[ -r ${FILE} && $(cat ${FILE}) != "" ]]; then
@@ -93,6 +103,8 @@ function construct_hostname() {
                 "HostOS setup hostname" \
                 "gauge"
         fi
+    else
+        HOSTNAME="${hostname}"
     fi
 }
 
@@ -112,6 +124,7 @@ function setup_hostname() {
 function main() {
     # Establish run order
     validate_arguments
+    read_variables
     construct_hostname
     setup_hostname
 }

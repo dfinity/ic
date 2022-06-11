@@ -12,7 +12,7 @@ for ACCOUNT in backup readonly; do
     if [ ! -r "${ORIGIN}" ]; then
         continue
     fi
-    TARGET="/boot/config/hostos_accounts_ssh_authorized_keys/${ACCOUNT}"
+    TARGET="/boot/config/ssh_authorized_keys/${ACCOUNT}"
     if [ ! -r "${TARGET}" ]; then
         echo "${ORIGIN} keys exist, but no ${TARGET} keys are present, skipping"
         continue

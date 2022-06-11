@@ -14,19 +14,24 @@ for argument in "${@}"; do
             CONFIG="${argument#*=}"
             shift
             ;;
+        -d=* | --deployment=*)
+            DEPLOYMENT="${argument#*=}"
+            shift
+            ;;
         -h | --help)
             echo 'Usage:
 Generate Network Configuration
 
 Arguments:
-  -c=, --config=        specify the config.json configuration file (Default: /boot/config/config.json)
+  -c=, --config=        specify the config.ini configuration file (Default: /boot/config/config.ini)
+  -d=, --deployment=    specify the deployment.json configuration file (Default: /boot/config/deployment.json)
   -h, --help            show this help message and exit
   -o=, --output=        specify the systemd-networkd output directory (Default: /run/systemd/network)
 '
             exit 1
             ;;
-        -t=* | --type=*)
-            TYPE="${argument#*=}"
+        -o=* | --output=*)
+            OUTPUT="${argument#*=}"
             shift
             ;;
         *)
@@ -37,13 +42,28 @@ Arguments:
 done
 
 # Set arguments if undefined
-CONFIG="${CONFIG:=/boot/config/config.json}"
+CONFIG="${CONFIG:=/boot/config/config.ini}"
+DEPLOYMENT="${DEPLOYMENT:=/boot/config/deployment.json}"
 OUTPUT="${OUTPUT:=/run/systemd/network}"
 
 function validate_arguments() {
-    if [ "${CONFIG}" == "" -o "${OUTPUT}" == "" ]; then
+    if [ "${CONFIG}" == "" -o "${DEPLOYMENT}" == "" -o "${OUTPUT}" == "" ]; then
         $0 --help
     fi
+}
+
+function read_variables() {
+    # Read limited set of keys. Be extra-careful quoting values as it could
+    # otherwise lead to executing arbitrary shell code!
+    while IFS="=" read -r key value; do
+        case "$key" in
+            "ipv6_prefix") ipv6_prefix="${value}" ;;
+            "ipv6_subnet") ipv6_subnet="${value}" ;;
+            "ipv6_gateway") ipv6_gateway="${value}" ;;
+            "ipv6_address") ipv6_address="${value}" ;;
+            "hostname") hostname="${value}" ;;
+        esac
+    done <"${CONFIG}"
 }
 
 function generate_name_server_list() {
@@ -56,22 +76,13 @@ function generate_name_server_list() {
 
 # Convert MAC address to SLAAC compatible (EUI64) IPv6 address
 function generate_ipv6_address() {
-    # TODO: This field is not mandatory, so we need to be able to optionally grab it
-    overrides=$(jq -r ".overrides" ${CONFIG})
-    if [ "${overrides}" != "null" ]; then
-        IPV6_ADDRESS=$(/opt/ic/bin/fetch-property.sh --key=.overrides.ipv6_address --metric=overrides_ipv6_address --config=${CONFIG})
-        IPV6_GATEWAY=$(/opt/ic/bin/fetch-property.sh --key=.overrides.ipv6_gateway --metric=overrides_ipv6_gateway --config=${CONFIG})
-
-        # TODO: This field is not mandatory, so we need to be able to optionally grab it
-        NAME_SERVERS=$(jq -r ".overrides.name_servers" ${CONFIG})
-    else
-        IPV6_GATEWAY=$(/opt/ic/bin/fetch-property.sh --key=.ipv6_gateway --metric=hostos_ipv6_gateway --config=${CONFIG} -u)
-        # TODO: This field is not mandatory, so we need to be able to optionally grab it
-        NAME_SERVERS=$(jq -r ".network.name_servers" ${CONFIG})
-
+    if [ -z "${ipv6_address}" ]; then
+        NAME_SERVERS="$(/opt/ic/bin/fetch-property.sh --key=.dns.name_servers --metric=hostos_dns_name_servers --config=${DEPLOYMENT})"
         MAC_6=$(/opt/ic/bin/generate-deterministic-mac.sh --version=6 --index=0)
         MAC_4=$(/opt/ic/bin/generate-deterministic-mac.sh --version=4 --index=0)
         IPV6_ADDRESS=$(/opt/ic/bin/generate-deterministic-ipv6.sh --index=0)
+    else
+        IPV6_ADDRESS="${ipv6_address}"
     fi
 }
 
@@ -247,7 +258,7 @@ DHCP=no
 IPv6AcceptRA=no
 LinkLocalAddressing=yes
 Address=$(echo ${IPV6_ADDRESS})
-Gateway=$(echo ${IPV6_GATEWAY})
+Gateway=$(echo ${ipv6_gateway})
 EOF
         generate_name_server_list
     ) >"${OUTPUT}/20-br6.network"
@@ -279,6 +290,7 @@ EOF
 function main() {
     # Establish run order
     validate_arguments
+    read_variables
     detect_network_interfaces
     generate_ipv6_address
     generate_network_config

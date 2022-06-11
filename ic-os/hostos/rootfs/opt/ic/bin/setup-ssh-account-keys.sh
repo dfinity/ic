@@ -10,7 +10,7 @@ set -e
 mount --bind /run/ic-node/root/.ssh /root/.ssh
 
 for ACCOUNT in root backup readonly admin; do
-    ORIGIN="/boot/config/hostos_accounts_ssh_authorized_keys/${ACCOUNT}"
+    ORIGIN="/boot/config/ssh_authorized_keys/${ACCOUNT}"
     if [ -e "${ORIGIN}" ]; then
         HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
         GROUP=$(id -ng "${ACCOUNT}")
