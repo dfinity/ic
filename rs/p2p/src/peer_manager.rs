@@ -29,6 +29,8 @@ pub(crate) trait PeerManager {
 
     /// The method removes the given peer from the list of current peers.
     fn remove_peer(&self, peer: NodeId);
+
+    fn current_peers(&self) -> &Arc<Mutex<PeerContextDictionary>>;
 }
 
 /// A per-peer chunk request tracker for a chunk request sent to a peer.
@@ -206,5 +208,11 @@ impl PeerManager for PeerManagerImpl {
         // Remove the peer irrespective of the result of the stop_connections() call.
         current_peers.remove(&node_id);
         info!(self.log, "Nodes {:0} removed", node_id);
+    }
+
+    // As a temporary hack return a reference to an Arc. There is little risk in doing
+    // this given the code compiles.
+    fn current_peers(&self) -> &Arc<Mutex<PeerContextDictionary>> {
+        &self.current_peers
     }
 }
