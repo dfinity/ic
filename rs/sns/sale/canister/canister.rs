@@ -303,3 +303,21 @@ fn main() {
 /// Empty main for test target.
 #[cfg(any(target_arch = "wasm32", test))]
 fn main() {}
+
+/// A test that fails if the API was updated but the candid definition was not.
+#[test]
+fn check_sale_candid_file() {
+    let governance_did = String::from_utf8(std::fs::read("canister/sale.did").unwrap()).unwrap();
+
+    // See comments in main above
+    candid::export_service!();
+    let expected = __export_service();
+
+    if governance_did != expected {
+        panic!(
+            "Generated candid definition does not match canister/sale.did. \
+            Run `cargo run --bin sns-sale-canister > canister/sale.did` in \
+            rs/sns/sale to update canister/sale.did."
+        )
+    }
+}

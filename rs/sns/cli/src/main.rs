@@ -6,11 +6,11 @@ use crate::deploy::SnsDeployer;
 use candid::{CandidType, Encode, IDLArgs};
 use clap::Parser;
 use ic_base_types::PrincipalId;
-use ic_sns_init::{NeuronBlueprint, SnsInitPayload, SnsInitPayloadBuilder};
-use ledger_canister::{AccountIdentifier, BinaryAccountBalanceArgs, Tokens};
-use std::collections::HashMap;
-use std::fs::File;
-use std::path::PathBuf;
+use ic_sns_init::{
+    distributions::{InitialTokenDistribution, TokenDistribution},
+    SnsInitPayload, SnsInitPayloadBuilder,
+};
+use ledger_canister::{AccountIdentifier, BinaryAccountBalanceArgs};
 use std::process::{Command, Output};
 use std::str::FromStr;
 
@@ -60,17 +60,6 @@ pub struct DeployArgs {
     #[clap(long)]
     pub token_symbol: String,
 
-    /// The initial Ledger accounts that the SNS will be initialized with. This is a JSON file
-    /// containing a JSON map from principal ID to the number of e8s to initialize the corresponding
-    /// principal's account with. Note that sub-accounts are not yet supported.
-    ///
-    /// For example, this file can contain:
-    ///
-    /// { "fpyvw-ycywu-lzoho-vmluf-zivfl-534ds-uccto-ovwu6-xxpnj-j2hzq-dqe": 1000000000,
-    ///   "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe": 2000000000 }
-    #[clap(long, parse(from_os_str))]
-    pub initial_ledger_accounts: Option<PathBuf>,
-
     /// The number of e8s (10E-8 of a token) that a rejected proposal costs the proposer.
     #[clap(long)]
     pub proposal_reject_cost_e8s: Option<u64>,
@@ -81,37 +70,6 @@ pub struct DeployArgs {
     /// must be larger than the transaction_fee_e8s.
     #[clap(long)]
     pub neuron_minimum_stake_e8s: Option<u64>,
-
-    /// The initial neurons that the SNS will be initialized with. This is a JSON file
-    /// containing a JSON list of neuron objects. The possible fields of these neuron
-    /// objects are:
-    ///
-    /// * controller: the Principal ID of the controller of the neuron
-    ///
-    /// * stake_e8s: the stake of the neuron, in e8s
-    ///
-    /// * dissolve_delay_seconds: the number of seconds it will take for this neuron to dissolve
-    ///
-    /// * nonce (optional): An ID to differentiate neurons with the same controller
-    ///
-    /// * age_seconds (optional): The initial age of the neuron, in seconds
-    ///
-    /// For example, this file might contain:
-    ///
-    /// [
-    ///     { "controller": "x4vjn-rrapj-c2kqe-a6m2b-7pzdl-ntmc4-riutz-5bylw-2q2bh-ds5h2-lae",
-    ///       "stake_e8s": 100000000,
-    ///       "dissolve_delay_seconds": 86400,
-    ///       "nonce": 12,
-    ///       "age_seconds": 55
-    ///     },
-    ///     { "controller": "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe",
-    ///       "stake_e8s": 800000000,
-    ///       "dissolve_delay_seconds": 200000
-    ///     }
-    /// ]
-    #[clap(long, parse(from_os_str))]
-    pub initial_neurons: Option<PathBuf>,
 }
 
 /// The arguments used to display the account balance of a user
@@ -139,56 +97,38 @@ impl DeployArgs {
         }
     }
 
-    /// Parse the supplied `initial_ledger_accounts` JSON file into a map of account identifiers
-    /// to `Tokens`.
-    pub fn get_initial_accounts(&self) -> HashMap<AccountIdentifier, Tokens> {
-        // Read and parse the accounts JSON file.
-        self.initial_ledger_accounts
-            .clone()
-            .map(|file_name| {
-                let file =
-                    File::open(file_name).expect("Couldn't open initial ledger accounts file");
-                let accounts: HashMap<String, u64> = serde_json::from_reader(file)
-                    .expect("Could not parse the initial ledger accounts file");
-                accounts
-            })
-            .unwrap_or_default()
-            .iter()
-            .map(|(principal_str, e8s)| {
-                let principal_id = PrincipalId::from_str(principal_str).unwrap_or_else(|_| {
-                    panic!("Could not parse {} as a principal ID", principal_str)
-                });
-                (principal_id.into(), Tokens::from_e8s(*e8s))
-            })
-            .collect()
-    }
-
-    /// Return the "blueprints" of the neurons that the user sets to exist on initialization
-    /// of the SNS.
-    pub fn get_initial_neuron_blueprints(&self) -> Vec<NeuronBlueprint> {
-        let neurons: Vec<NeuronBlueprint> = self
-            .initial_neurons
-            .clone()
-            .map(|file_name| {
-                let file = File::open(file_name).expect("Couldn't open initial neurons file");
-                let neurons: Vec<NeuronBlueprint> = serde_json::from_reader(file)
-                    .expect("Could not parse the initial neurons file");
-                neurons
-            })
-            .unwrap_or_default();
-
-        neurons
-    }
-
     pub fn generate_sns_init_payload(&self) -> SnsInitPayload {
-        SnsInitPayloadBuilder::new()
-            .with_transaction_fee_e8s(self.transaction_fee_e8s)
+        let mut builder = SnsInitPayloadBuilder::new();
+        builder
             .with_token_name(self.token_name.clone())
             .with_token_symbol(self.token_symbol.clone())
-            .with_initial_ledger_accounts(self.get_initial_accounts())
-            .with_proposal_reject_cost_e8s(self.proposal_reject_cost_e8s)
-            .with_neuron_minimum_stake_e8s(self.neuron_minimum_stake_e8s)
-            .with_initial_neurons(self.get_initial_neuron_blueprints())
+            // TODO NNS1-1463: Include the InitialTokenDistribution as input
+            .with_initial_token_distribution(InitialTokenDistribution {
+                developers: TokenDistribution {
+                    total_e8s: 100,
+                    distributions: Default::default(),
+                },
+
+                treasury: TokenDistribution {
+                    total_e8s: 100,
+                    distributions: Default::default(),
+                },
+                swap: 100,
+            });
+
+        if let Some(transaction_fee_e8s) = self.transaction_fee_e8s {
+            builder.with_transaction_fee_e8s(transaction_fee_e8s);
+        }
+
+        if let Some(proposal_reject_cost_e8s) = self.proposal_reject_cost_e8s {
+            builder.with_proposal_reject_cost_e8s(proposal_reject_cost_e8s);
+        }
+
+        if let Some(neuron_minimum_stake_e8s) = self.neuron_minimum_stake_e8s {
+            builder.with_neuron_minimum_stake_e8s(neuron_minimum_stake_e8s);
+        }
+
+        builder
             .build()
             .unwrap_or_else(|e| panic!("Error creating the SnsInitPayload: {}", e))
     }

@@ -26,6 +26,15 @@
       "candid": "../root/canister/root.did",
       "wasm": "../../target/wasm32-unknown-unknown/canister-release/sns-root-canister-opt.wasm",
       "type": "custom"
+    },
+    "sns_swap": {
+      "build": [
+        "cargo build --manifest-path ../../Cargo.toml --target wasm32-unknown-unknown --profile canister-release --bin sns-sale-canister",
+        "ic-cdk-optimizer ../../target/wasm32-unknown-unknown/canister-release/sns-sale-canister.wasm -o ../../target/wasm32-unknown-unknown/canister-release/sns-sale-canister-opt.wasm"
+      ],
+      "candid": "../sale/canister/sale.did",
+      "wasm": "../../target/wasm32-unknown-unknown/canister-release/sns-sale-canister-opt.wasm",
+      "type": "custom"
     }
   }
 }

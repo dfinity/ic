@@ -33,6 +33,7 @@ fn lookup(args: &DeployArgs) -> Option<SnsCanisterIds> {
         governance: get_canister_id("sns_governance", args)?,
         ledger: get_canister_id("sns_ledger", args)?,
         root: get_canister_id("sns_root", args)?,
+        swap: get_canister_id("sns_swap", args)?,
     })
 }
 

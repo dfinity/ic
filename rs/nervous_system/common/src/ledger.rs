@@ -143,3 +143,18 @@ pub fn compute_neuron_staking_subaccount(controller: PrincipalId, nonce: u64) ->
         hasher.finish()
     })
 }
+
+/// Computes the subaccount to which locked token distributions are initialized to.
+pub fn compute_distribution_subaccount(principal_id: PrincipalId, nonce: u64) -> Subaccount {
+    const DOMAIN: &[u8] = b"token-distribution";
+    const DOMAIN_LENGTH: [u8; 1] = [0x12];
+
+    Subaccount({
+        let mut hasher = Sha256::new();
+        hasher.write(&DOMAIN_LENGTH);
+        hasher.write(DOMAIN);
+        hasher.write(principal_id.as_slice());
+        hasher.write(&nonce.to_be_bytes());
+        hasher.finish()
+    })
+}
