@@ -314,7 +314,7 @@ fn remove_nodes_removes_all_keys() {
         let mut nodes_to_remove = vec![];
 
         let (keys, node_id) = get_node_keys_or_generate_if_missing(temp_dir().path());
-        let valid_keys = ValidNodePublicKeys::try_from(&keys, node_id).unwrap();
+        let valid_keys = ValidNodePublicKeys::try_from(keys, node_id).unwrap();
 
         // Add the node along with keys and certs
         let mut mutations = make_add_node_registry_mutations(node_id, node, valid_keys);

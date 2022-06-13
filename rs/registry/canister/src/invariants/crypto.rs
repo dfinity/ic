@@ -122,7 +122,7 @@ fn check_node_keys(
         tls_certificate: certs.remove(node_id),
         idkg_dealing_encryption_pk,
     };
-    let vnpk = ValidNodePublicKeys::try_from(&npk, *node_id).map_err(|e| InvariantCheckError {
+    let vnpk = ValidNodePublicKeys::try_from(npk, *node_id).map_err(|e| InvariantCheckError {
         msg: format!(
             "crypto key validation for node {} failed with {}",
             node_id, e

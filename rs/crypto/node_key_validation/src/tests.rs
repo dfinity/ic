@@ -9,7 +9,7 @@ fn should_succeed_on_valid_keys() {
     let (keys, node_id) = valid_node_keys_and_node_id();
     assert!(keys.version >= 1);
 
-    let valid_keys = ValidNodePublicKeys::try_from(&keys, node_id).unwrap();
+    let valid_keys = ValidNodePublicKeys::try_from(keys.clone(), node_id).unwrap();
 
     assert_eq!(valid_keys.node_id(), node_id);
     assert_eq!(
@@ -40,7 +40,7 @@ fn should_fail_if_node_signing_key_is_missing() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(matches!(result, Err(KeyValidationError { error })
         if error == "invalid node signing key: key is missing"
@@ -55,7 +55,7 @@ fn should_fail_if_node_signing_key_pubkey_conversion_fails() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(matches!(result, Err(KeyValidationError { error })
         if error.contains("invalid node signing key: PublicKeyBytesFromProtoError")
@@ -83,7 +83,7 @@ fn should_fail_if_node_signing_key_verification_fails() {
         (keys, node_id_for_corrupted_node_signing_key)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(matches!(result, Err(KeyValidationError { error })
         if error == "invalid node signing key: verification failed"
@@ -96,7 +96,7 @@ fn should_fail_if_node_signing_key_is_not_valid_for_the_given_node_id() {
     let (keys, node_id) = valid_node_keys_and_node_id();
     assert_ne!(node_id, wrong_node_id);
 
-    let result = ValidNodePublicKeys::try_from(&keys, wrong_node_id);
+    let result = ValidNodePublicKeys::try_from(keys, wrong_node_id);
 
     assert!(matches!(result, Err(KeyValidationError { error })
         if error.contains("invalid node signing key")
@@ -112,7 +112,7 @@ fn should_fail_if_committee_signing_key_is_missing() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(matches!(result, Err(KeyValidationError { error })
         if error == "invalid committee signing key: key is missing"
@@ -129,7 +129,7 @@ fn should_fail_if_committee_signing_key_pubkey_conversion_fails() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(matches!(result, Err(KeyValidationError { error })
         if error.contains("invalid committee signing key: PublicKeyBytesFromProtoError")
@@ -148,7 +148,7 @@ fn should_fail_if_committee_signing_key_pubkey_is_corrupted() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(matches!(result, Err(KeyValidationError { error })
         if error.contains("invalid committee signing key: Malformed MultiBls12_381 public key")
@@ -165,7 +165,7 @@ fn should_fail_if_committee_signing_key_pop_conversion_fails() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(matches!(result, Err(KeyValidationError { error })
         if error.contains("invalid committee signing key: PopBytesFromProtoError")
@@ -183,7 +183,7 @@ fn should_fail_if_committee_signing_key_pop_is_corrupted() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(matches!(result, Err(KeyValidationError { error })
         if error.contains("invalid committee signing key: Malformed MultiBls12_381 PoP")
@@ -203,7 +203,7 @@ fn should_fail_if_committee_signing_key_pop_verification_fails() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(matches!(result, Err(KeyValidationError { error })
         if error.contains("invalid committee signing key: MultiBls12_381 PoP could not be verified")
@@ -219,7 +219,7 @@ fn should_fail_if_dkg_dealing_encryption_key_is_missing() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert_eq!(
         result.unwrap_err(),
@@ -239,7 +239,7 @@ fn should_fail_if_dkg_dealing_encryption_key_pop_is_missing() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert_eq!(
         result.unwrap_err(),
@@ -261,7 +261,7 @@ fn should_fail_if_dkg_dealing_encryption_key_conversion_fails() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert_eq!(
         result.unwrap_err(),
@@ -286,7 +286,7 @@ fn should_fail_if_dkg_dealing_encryption_key_is_invalid() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert_eq!(
         result.unwrap_err(),
@@ -316,7 +316,7 @@ fn should_fail_if_idkg_dealing_encryption_key_is_missing() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(matches!(result, Err(KeyValidationError { error })
         if error == "invalid I-DKG dealing encryption key: key is missing"
@@ -334,7 +334,7 @@ fn should_fail_if_idkg_dealing_encryption_key_algorithm_unsupported() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(matches!(result, Err(KeyValidationError { error })
         if error == "invalid I-DKG dealing encryption key: unsupported algorithm: Some(Unspecified)"
@@ -352,7 +352,7 @@ fn should_fail_if_idkg_dealing_encryption_key_is_invalid() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(matches!(result, Err(KeyValidationError { error })
         if error == "invalid I-DKG dealing encryption key: verification failed: InvalidPublicKey"));
@@ -367,7 +367,7 @@ fn should_not_fail_if_idkg_dealing_encryption_key_is_missing_in_version_0() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(result.is_ok());
 }
@@ -384,7 +384,7 @@ fn should_not_fail_if_idkg_dealing_encryption_key_algorithm_unsupported_in_versi
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(result.is_ok());
 }
@@ -401,7 +401,7 @@ fn should_not_fail_if_idkg_dealing_encryption_key_is_invalid_in_version_0() {
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(result.is_ok());
 }
@@ -416,7 +416,7 @@ fn should_not_include_some_idkg_dealing_encryption_key_in_valid_keys_in_version_
         (keys, node_id)
     };
 
-    let result = ValidNodePublicKeys::try_from(&keys, node_id);
+    let result = ValidNodePublicKeys::try_from(keys, node_id);
 
     assert!(matches!(result, Ok(valid_keys) if valid_keys.idkg_dealing_encryption_key().is_none()));
 }
@@ -434,7 +434,7 @@ mod tls_certificate_validation {
             ..valid_node_keys
         };
 
-        let result = ValidNodePublicKeys::try_from(&keys, node_id);
+        let result = ValidNodePublicKeys::try_from(keys, node_id);
 
         assert!(matches!(result, Err(KeyValidationError { error })
             if error == "invalid TLS certificate: certificate is missing"
@@ -451,7 +451,7 @@ mod tls_certificate_validation {
             ..valid_node_keys
         };
 
-        let result = ValidNodePublicKeys::try_from(&keys, node_id);
+        let result = ValidNodePublicKeys::try_from(keys, node_id);
 
         assert!(matches!(result, Err(KeyValidationError { error })
             if error.contains("invalid TLS certificate: failed to parse DER")
