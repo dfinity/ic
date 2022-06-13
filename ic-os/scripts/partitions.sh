@@ -24,14 +24,6 @@ function prepare_disk_image() {
     generate_sfdisk_script | sfdisk "$DISK_IMAGE"
 }
 
-# Clear any existing LVM mounts.
-function clear_lvm_mounts() {
-    local OPEN_LVM=$(losetup -O BACK-FILE,NAME | grep 'lvm.img\|disk-node0.img' | tr -s ' ' | cut -d ' ' -f 2)
-    for LOOP in $OPEN_LVM; do
-        losetup -d $LOOP
-    done
-}
-
 # Prepare an LVM PV with LVs set up as specified.
 #
 # Arguments:
@@ -50,7 +42,6 @@ function prepare_lvm_image() {
     truncate --size 0 "$DISK_IMAGE"
     truncate --size "$IMAGE_SIZE_BYTES" "$DISK_IMAGE"
 
-    clear_lvm_mounts
     LOOP_NAME=$(losetup -P -f --show "$DISK_IMAGE")
     trap "losetup -d $LOOP_NAME" EXIT
 
