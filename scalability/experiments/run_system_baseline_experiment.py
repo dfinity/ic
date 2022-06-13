@@ -130,11 +130,18 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
 
             from statistics import mean
 
-            t_median = mean(t_median_list)
-            t_average = max(t_average_list)
-            t_max = max(t_max_list)
-            t_min = max(t_min_list)
-            p99 = evaluated_summaries.percentiles[99]
+            if num_success > 0:
+                t_median = mean(t_median_list)
+                t_average = max(t_average_list)
+                t_max = max(t_max_list)
+                t_min = max(t_min_list)
+                p99 = evaluated_summaries.percentiles[99]
+            else:
+                t_median = sys.float_info.max
+                t_average = sys.float_info.max
+                t_max = sys.float_info.max
+                t_min = sys.float_info.max
+                p99 = sys.float_info.max
 
             num_succ_per_iteration.append(num_success)
             avg_succ_rate = evaluated_summaries.get_avg_success_rate(iter_duration)
