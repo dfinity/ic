@@ -1,26 +1,27 @@
+pub mod distributions;
+
+use crate::distributions::InitialTokenDistribution;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
-use ic_sns_governance::pb::v1::neuron::DissolveState;
 use ic_sns_governance::pb::v1::{
-    Governance, NervousSystemParameters, Neuron, NeuronPermission, NeuronPermissionList,
-    NeuronPermissionType,
+    Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
 };
 use ic_sns_root::pb::v1::SnsRootCanister;
-use ledger_canister::{
-    AccountIdentifier, ArchiveOptions, LedgerCanisterInitPayload, Subaccount, Tokens,
-};
-use maplit::{btreemap, hashset};
-use serde::{Deserialize, Serialize};
+use ledger_canister::{AccountIdentifier, ArchiveOptions, LedgerCanisterInitPayload, Tokens};
+use maplit::{btreemap, hashmap, hashset};
 use std::collections::{BTreeMap, HashMap};
-use std::str::FromStr;
-use std::time::SystemTime;
 
 /// The maximum number of characters allowed for token symbol.
 const MAX_TOKEN_SYMBOL_LENGTH: usize = 10;
 
+/// The minimum number of characters allowed for token symbol.
+const MIN_TOKEN_SYMBOL_LENGTH: usize = 3;
+
 /// The maximum number of characters allowed for token name.
 const MAX_TOKEN_NAME_LENGTH: usize = 255;
+
+/// The minimum number of characters allowed for token name.
+const MIN_TOKEN_NAME_LENGTH: usize = 10;
 
 /// The canister IDs of all SNS canisters
 #[derive(Debug, Clone)]
@@ -28,6 +29,7 @@ pub struct SnsCanisterIds {
     pub governance: PrincipalId,
     pub ledger: PrincipalId,
     pub root: PrincipalId,
+    pub swap: PrincipalId,
 }
 
 /// The Init payloads for all SNS Canisters
@@ -59,47 +61,36 @@ impl SnsInitPayloadBuilder {
         }
     }
 
-    pub fn with_transaction_fee_e8s(&mut self, transaction_fee_e8s: Option<u64>) -> &mut Self {
-        self.sns_init_payload.transaction_fee_e8s = transaction_fee_e8s;
+    pub fn with_transaction_fee_e8s(&mut self, transaction_fee_e8s: u64) -> &mut Self {
+        self.sns_init_payload.transaction_fee_e8s = Some(transaction_fee_e8s);
         self
     }
 
     pub fn with_token_name(&mut self, token_name: String) -> &mut Self {
-        self.sns_init_payload.token_name = token_name;
+        self.sns_init_payload.token_name = Some(token_name);
         self
     }
 
     pub fn with_token_symbol(&mut self, token_symbol: String) -> &mut Self {
-        self.sns_init_payload.token_symbol = token_symbol;
+        self.sns_init_payload.token_symbol = Some(token_symbol);
         self
     }
 
-    pub fn with_initial_ledger_accounts(
+    pub fn with_proposal_reject_cost_e8s(&mut self, proposal_reject_cost_e8s: u64) -> &mut Self {
+        self.sns_init_payload.proposal_reject_cost_e8s = Some(proposal_reject_cost_e8s);
+        self
+    }
+
+    pub fn with_neuron_minimum_stake_e8s(&mut self, neuron_minimum_stake_e8s: u64) -> &mut Self {
+        self.sns_init_payload.neuron_minimum_stake_e8s = Some(neuron_minimum_stake_e8s);
+        self
+    }
+
+    pub fn with_initial_token_distribution(
         &mut self,
-        initial_ledger_accounts: HashMap<AccountIdentifier, Tokens>,
+        initial_token_distribution: InitialTokenDistribution,
     ) -> &mut Self {
-        self.sns_init_payload.initial_ledger_accounts = initial_ledger_accounts;
-        self
-    }
-
-    pub fn with_proposal_reject_cost_e8s(
-        &mut self,
-        proposal_reject_cost_e8s: Option<u64>,
-    ) -> &mut Self {
-        self.sns_init_payload.proposal_reject_cost_e8s = proposal_reject_cost_e8s;
-        self
-    }
-
-    pub fn with_neuron_minimum_stake_e8s(
-        &mut self,
-        neuron_minimum_stake_e8s: Option<u64>,
-    ) -> &mut Self {
-        self.sns_init_payload.neuron_minimum_stake_e8s = neuron_minimum_stake_e8s;
-        self
-    }
-
-    pub fn with_initial_neurons(&mut self, initial_neurons: Vec<NeuronBlueprint>) -> &mut Self {
-        self.sns_init_payload.initial_neurons = initial_neurons;
+        self.sns_init_payload.initial_token_distribution = Some(initial_token_distribution);
         self
     }
 
@@ -109,20 +100,17 @@ impl SnsInitPayloadBuilder {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct SnsInitPayload {
     /// The transaction fee that must be paid for ledger transactions (except
     /// minting and burning governance tokens), denominated in e8s (1 token = 100,000,000 e8s).
     pub transaction_fee_e8s: Option<u64>,
 
     /// The name of the governance token controlled by this SNS, for example "Bitcoin".
-    pub token_name: String,
+    pub token_name: Option<String>,
 
     /// The symbol of the governance token controlled by this SNS, for example "BTC".
-    pub token_symbol: String,
-
-    /// The initial Ledger accounts that the SNS will be initialized with.
-    pub initial_ledger_accounts: HashMap<AccountIdentifier, Tokens>,
+    pub token_symbol: Option<String>,
 
     /// The number of e8s (10E-8 of a token) that a rejected proposal costs the proposer.
     pub proposal_reject_cost_e8s: Option<u64>,
@@ -133,9 +121,29 @@ pub struct SnsInitPayload {
     /// must be larger than the transaction_fee_e8s.
     pub neuron_minimum_stake_e8s: Option<u64>,
 
-    /// The initial neurons that the SNS will be initialized with specified in the
-    /// NeuronBlueprint form.
-    pub initial_neurons: Vec<NeuronBlueprint>,
+    /// The initial tokens and neurons will be distributed according to the
+    /// `InitialTokenDistribution`. This configures the accounts for the
+    /// the decentralization swap, and will store distributions for future
+    /// use.
+    ///
+    /// An example of a InitialTokenDistribution:
+    ///
+    /// InitialTokenDistribution {
+    ///     developers: TokenDistribution {
+    ///         total_e8s: 500_000_000,
+    ///         distributions: {
+    ///             "x4vjn-rrapj-c2kqe-a6m2b-7pzdl-ntmc4-riutz-5bylw-2q2bh-ds5h2-lae": 250_000_000,
+    ///         }
+    ///     },
+    ///     treasury: TokenDistribution {
+    ///         total_e8s: 500_000_000,
+    ///         distributions: {
+    ///             "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe": 100_000_000,
+    ///         }
+    ///     },
+    ///     swap: 1_000_000_000
+    /// }
+    pub initial_token_distribution: Option<InitialTokenDistribution>,
 }
 
 impl SnsInitPayload {
@@ -148,7 +156,7 @@ impl SnsInitPayload {
         self.validate()?;
         Ok(SnsCanisterInitPayloads {
             governance: self.governance_init_args(sns_canister_ids),
-            ledger: self.ledger_init_args(sns_canister_ids),
+            ledger: self.ledger_init_args(sns_canister_ids)?,
             root: self.root_init_args(sns_canister_ids),
         })
     }
@@ -184,12 +192,23 @@ impl SnsInitPayload {
     }
 
     /// Construct the params used to initialize a SNS Ledger canister.
-    fn ledger_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> LedgerCanisterInitPayload {
+    fn ledger_init_args(
+        &self,
+        sns_canister_ids: &SnsCanisterIds,
+    ) -> Result<LedgerCanisterInitPayload, String> {
         let root_canister_id = CanisterId::new(sns_canister_ids.root).unwrap();
+        let token_symbol = self
+            .token_symbol
+            .as_ref()
+            .expect("Expected token_symbol to be set");
+        let token_name = self
+            .token_name
+            .as_ref()
+            .expect("Expected token_name to be set");
 
         let mut payload = LedgerCanisterInitPayload::builder()
             .minting_account(sns_canister_ids.governance.into())
-            .token_symbol_and_name(&self.token_symbol, &self.token_name)
+            .token_symbol_and_name(token_symbol, token_name)
             .archive_options(ArchiveOptions {
                 trigger_threshold: 2000,
                 num_blocks_to_archive: 1000,
@@ -206,13 +225,13 @@ impl SnsInitPayload {
             .unwrap();
 
         payload.transfer_fee = self.transaction_fee_e8s.map(Tokens::from_e8s);
-        payload.initial_values = self.get_all_ledger_accounts(sns_canister_ids);
+        payload.initial_values = self.get_all_ledger_accounts(sns_canister_ids)?;
 
         let governance_canister_id = CanisterId::new(sns_canister_ids.governance).unwrap();
         let ledger_canister_id = CanisterId::new(sns_canister_ids.ledger).unwrap();
         payload.send_whitelist = hashset! { governance_canister_id, ledger_canister_id };
 
-        payload
+        Ok(payload)
     }
 
     /// Construct the params used to initialize a SNS Root canister.
@@ -223,159 +242,127 @@ impl SnsInitPayload {
         }
     }
 
-    /// Now that the Governance canister id is available, combine `initial_ledger_accounts`
-    /// with ledger accounts created from `neuron_blueprints`.
+    /// Given `SnsCanisterIds`, get all the ledger accounts of the TokenDistributions. These
+    /// accounts represent the allocation of tokens at genesis.
     fn get_all_ledger_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> HashMap<AccountIdentifier, Tokens> {
-        // Calculate the ledger accounts of the initial neurons
-        let neuron_accounts = self
-            .initial_neurons
-            .clone()
-            .into_iter()
-            .map(|neuron_blueprint| {
-                neuron_blueprint.as_ledger_account(sns_canister_ids.governance)
-            });
+    ) -> Result<HashMap<AccountIdentifier, Tokens>, String> {
+        if let Some(initial_token_distribution) = &self.initial_token_distribution {
+            return initial_token_distribution.get_account_ids_and_tokens(sns_canister_ids);
+        }
 
-        // Combine the initial ledger accounts with the ledger accounts of the neurons
-        self.initial_ledger_accounts
-            .clone()
-            .into_iter()
-            .chain(neuron_accounts)
-            .collect()
+        Ok(hashmap! {})
     }
 
     /// Return the initial neurons that the user specified. These neurons will exist in
     /// Governance at genesis, with the correct balance in their corresponding ledger
-    /// accounts in the Ledger. A map from neuron ID to Neuron is returned.
+    /// accounts. A map from neuron ID to Neuron is returned.
     fn get_initial_neurons(
         &self,
         parameters: &NervousSystemParameters,
     ) -> BTreeMap<String, Neuron> {
-        self.initial_neurons
-            .iter()
-            .map(|neuron_blueprint| {
-                let neuron = neuron_blueprint.as_neuron(parameters);
-                (neuron.id.as_ref().unwrap().to_string(), neuron)
-            })
-            .collect()
+        if let Some(initial_token_distribution) = &self.initial_token_distribution {
+            return initial_token_distribution.get_initial_neurons(parameters);
+        }
+
+        btreemap! {}
     }
 
     /// Validates the SnsInitPayload. This is called before building each SNS canister's
     /// payload and must pass. For a concise pattern, use `SnsInitPayloadBuilder` which
     /// will validate the payload at build time.
     pub fn validate(&self) -> Result<(), String> {
-        if self.token_symbol.len() > MAX_TOKEN_SYMBOL_LENGTH {
+        let validation_fns = [
+            self.validate_token_symbol(),
+            self.validate_token_name(),
+            self.validate_token_distribution(),
+        ];
+
+        let defect_msg = validation_fns
+            .into_iter()
+            .filter_map(|validation_fn| match validation_fn {
+                Err(msg) => Some(msg),
+                Ok(_) => None,
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
+
+        if defect_msg.is_empty() {
+            Ok(())
+        } else {
+            Err(defect_msg)
+        }
+    }
+
+    fn validate_token_symbol(&self) -> Result<(), String> {
+        let token_symbol = self
+            .token_symbol
+            .as_ref()
+            .ok_or_else(|| "Error: token-symbol must be specified".to_string())?;
+
+        if token_symbol.len() > MAX_TOKEN_SYMBOL_LENGTH {
             return Err(format!(
                 "Error: token-symbol must be fewer than {} characters, given character count: {}",
                 MAX_TOKEN_SYMBOL_LENGTH,
-                self.token_symbol.len()
+                token_symbol.len()
             ));
         }
 
-        if self.token_name.len() > MAX_TOKEN_NAME_LENGTH {
+        if token_symbol.len() < MIN_TOKEN_SYMBOL_LENGTH {
             return Err(format!(
-                "Error: token-name must be fewer than {} characters, given character count: {}",
-                MAX_TOKEN_NAME_LENGTH,
-                self.token_name.len()
+                "Error: token-symbol must be greater than {} characters, given character count: {}",
+                MIN_TOKEN_SYMBOL_LENGTH,
+                token_symbol.len()
             ));
         }
 
         Ok(())
     }
-}
 
-/// Specifies the necessary info from which to create a Neuron
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct NeuronBlueprint {
-    controller: String,
-    nonce: Option<u64>,
-    stake_e8s: u64,
-    age_seconds: Option<u64>,
-    dissolve_delay_seconds: u64,
-}
+    fn validate_token_name(&self) -> Result<(), String> {
+        let token_name = self
+            .token_name
+            .as_ref()
+            .ok_or_else(|| "Error: token-name must be specified".to_string())?;
 
-impl NeuronBlueprint {
-    /// Build a `Neuron` from the blueprint
-    pub fn as_neuron(&self, parameters: &NervousSystemParameters) -> Neuron {
-        if let Some(neuron_minimum_stake_e8s) = parameters.neuron_minimum_stake_e8s {
-            if self.stake_e8s < neuron_minimum_stake_e8s {
-                panic!(
-                    "An initial neuron has stake {}, which is less than the configured \
-                    neuron_minimum_stake_e8s of {}",
-                    self.stake_e8s, neuron_minimum_stake_e8s
-                );
-            }
+        if token_name.len() > MAX_TOKEN_NAME_LENGTH {
+            return Err(format!(
+                "Error: token-name must be fewer than {} characters, given character count: {}",
+                MAX_TOKEN_NAME_LENGTH,
+                token_name.len()
+            ));
         }
 
-        if let Some(max_dissolve_delay_seconds) = parameters.max_dissolve_delay_seconds {
-            if self.dissolve_delay_seconds > max_dissolve_delay_seconds {
-                panic!(
-                    "An initial neuron has dissolve_delay_seconds {}, which is more than the \
-                    configured max_dissolve_delay_seconds of {}",
-                    self.dissolve_delay_seconds, max_dissolve_delay_seconds
-                );
-            }
+        if token_name.len() < MIN_TOKEN_NAME_LENGTH {
+            return Err(format!(
+                "Error: token-name must be greater than {} characters, given character count: {}",
+                MIN_TOKEN_NAME_LENGTH,
+                token_name.len()
+            ));
         }
 
-        let permission = NeuronPermission {
-            principal: Some(self.controller()),
-            permission_type: parameters
-                .neuron_claimer_permissions
-                .as_ref()
-                .unwrap()
-                .permissions
-                .clone(),
-        };
-
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        Neuron {
-            id: Some(self.subaccount().into()),
-            permissions: vec![permission],
-            cached_neuron_stake_e8s: self.stake_e8s,
-            neuron_fees_e8s: 0,
-            created_timestamp_seconds: now,
-            aging_since_timestamp_seconds: now.saturating_sub(self.age_seconds.unwrap_or_default()),
-            followees: btreemap! {},
-            maturity_e8s_equivalent: 0,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                self.dissolve_delay_seconds,
-            )),
-        }
+        Ok(())
     }
 
-    /// Get the ledger account that corresponds with this neuron
-    pub fn as_ledger_account(&self, governance_id: PrincipalId) -> (AccountIdentifier, Tokens) {
-        let account = AccountIdentifier::new(governance_id, Some(self.subaccount()));
-        let tokens = Tokens::from_e8s(self.stake_e8s);
+    fn validate_token_distribution(&self) -> Result<(), String> {
+        let initial_token_distribution = self
+            .initial_token_distribution
+            .as_ref()
+            .ok_or_else(|| "Error: initial-token-distribution must be specified".to_string())?;
 
-        (account, tokens)
-    }
+        initial_token_distribution.validate()?;
 
-    fn subaccount(&self) -> Subaccount {
-        compute_neuron_staking_subaccount(self.controller(), self.nonce.unwrap_or_default())
-    }
-
-    fn controller(&self) -> PrincipalId {
-        PrincipalId::from_str(&self.controller).unwrap_or_else(|_| {
-            panic!(
-                "Could not parse neuron controller {} as a PrincipalId",
-                &self.controller
-            )
-        })
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::distributions::TokenDistribution;
     use crate::{
-        SnsCanisterIds, SnsInitPayload, SnsInitPayloadBuilder, MAX_TOKEN_NAME_LENGTH,
-        MAX_TOKEN_SYMBOL_LENGTH,
+        InitialTokenDistribution, SnsCanisterIds, SnsInitPayload, SnsInitPayloadBuilder,
+        MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH,
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_sns_governance::governance::ValidGovernanceProto;
@@ -383,38 +370,72 @@ mod test {
     use maplit::hashset;
     use std::str::FromStr;
 
+    impl Default for InitialTokenDistribution {
+        fn default() -> Self {
+            InitialTokenDistribution {
+                developers: TokenDistribution {
+                    total_e8s: 100_000_000,
+                    distributions: Default::default(),
+                },
+                treasury: TokenDistribution {
+                    total_e8s: 500_000_000,
+                    distributions: Default::default(),
+                },
+                swap: 1_000_000_000,
+            }
+        }
+    }
+
     fn create_canister_ids() -> SnsCanisterIds {
         SnsCanisterIds {
             governance: PrincipalId::from_str(&CanisterId::from_u64(1).to_string()).unwrap(),
             ledger: PrincipalId::from_str(&CanisterId::from_u64(2).to_string()).unwrap(),
             root: PrincipalId::from_str(&CanisterId::from_u64(3).to_string()).unwrap(),
+            swap: PrincipalId::from_str(&CanisterId::from_u64(4).to_string()).unwrap(),
         }
     }
 
     #[test]
     fn test_sns_init_payload_validate() {
-        let mut sns_init_payload = SnsInitPayloadBuilder::new().build().unwrap();
+        // Build a payload that passes validation, then test the parts that wouldn't
+        let mut sns_init_payload = SnsInitPayloadBuilder::new()
+            .with_token_symbol("SNS".to_string())
+            .with_token_name("ServiceNervousSystem".to_string())
+            .with_initial_token_distribution(InitialTokenDistribution::default())
+            .build()
+            .expect("Expected reasonable values to validate");
 
-        sns_init_payload.token_symbol = "S".repeat(MAX_TOKEN_SYMBOL_LENGTH + 1);
+        sns_init_payload.token_symbol = Some("S".repeat(MAX_TOKEN_SYMBOL_LENGTH + 1));
         assert!(sns_init_payload.validate().is_err());
-        sns_init_payload.token_symbol = "SNS".to_string();
+        sns_init_payload.token_symbol = Some("SNS".to_string());
         assert!(sns_init_payload.validate().is_ok());
 
-        sns_init_payload.token_name = "S".repeat(MAX_TOKEN_NAME_LENGTH + 1);
+        sns_init_payload.token_name = Some("S".repeat(MAX_TOKEN_NAME_LENGTH + 1));
         assert!(sns_init_payload.validate().is_err());
-        sns_init_payload.token_name = "SNS Core Developer Team Governance Token".to_string();
+        sns_init_payload.token_name = Some("SNS Core Developer Team Governance Token".to_string());
         assert!(sns_init_payload.validate().is_ok());
     }
 
     #[test]
     fn test_sns_init_payload_builder_validates() {
+        // Initialize the required parameters to pass validation
         let mut sns_init_payload_builder = SnsInitPayloadBuilder::new();
+        sns_init_payload_builder.with_token_name("ServiceNervousSystem".to_string());
+        sns_init_payload_builder.with_token_symbol("SNS".to_string());
+        sns_init_payload_builder
+            .with_initial_token_distribution(InitialTokenDistribution::default());
 
+        // Assert that the builder works with valid state
+        assert!(sns_init_payload_builder.build().is_ok());
+
+        // Change one of the parameters to not pass validation
         sns_init_payload_builder.with_token_symbol("S".repeat(MAX_TOKEN_SYMBOL_LENGTH + 1));
 
+        // Ensure that when building, the validation method is called and will produce an error
         let build_result = sns_init_payload_builder.build();
         assert!(build_result.is_err());
 
+        // Change this parameter back and assert that the builder produced values as expected
         sns_init_payload_builder.with_token_symbol("SNS".to_string());
         let build_result = sns_init_payload_builder.build();
         let sns_init_payload = match build_result {
@@ -422,7 +443,7 @@ mod test {
             Err(e) => panic!("SnsInitPayloadBuilder failed validation: {}", e),
         };
 
-        assert_eq!(sns_init_payload.token_symbol, "SNS".to_string());
+        assert_eq!(sns_init_payload.token_symbol, Some("SNS".to_string()));
     }
 
     #[test]
@@ -430,12 +451,11 @@ mod test {
         // Create a SnsInitPayload with some reasonable defaults
         let sns_init_payload = SnsInitPayload {
             transaction_fee_e8s: Some(10_000),
-            token_name: "ServiceNervousSystem Coin".to_string(),
-            token_symbol: "SNS".to_string(),
-            initial_ledger_accounts: Default::default(),
+            token_name: Some("ServiceNervousSystem Coin".to_string()),
+            token_symbol: Some("SNS".to_string()),
             proposal_reject_cost_e8s: Some(10_000),
             neuron_minimum_stake_e8s: Some(100_000_000),
-            initial_neurons: vec![],
+            initial_token_distribution: Some(InitialTokenDistribution::default()),
         };
 
         // Create valid CanisterIds
@@ -492,10 +512,12 @@ mod test {
     fn test_governance_init_args_is_valid() {
         // Build an sns_init_payload with defaults for non-governance related configuration.
         let sns_init_payload = SnsInitPayloadBuilder::new()
-            .with_transaction_fee_e8s(Some(10_000))
-            .with_proposal_reject_cost_e8s(Some(10_000))
-            .with_neuron_minimum_stake_e8s(Some(100_000_000))
-            .with_initial_neurons(vec![])
+            .with_token_symbol("SNS".to_string())
+            .with_token_name("ServiceNervousSystem".to_string())
+            .with_transaction_fee_e8s(10_000)
+            .with_proposal_reject_cost_e8s(10_000)
+            .with_neuron_minimum_stake_e8s(100_000_000)
+            .with_initial_token_distribution(InitialTokenDistribution::default())
             .build()
             .expect("Expected SnsInitPayloadBuilder to produce a valid payload");
 
@@ -520,6 +542,9 @@ mod test {
     fn test_root_init_args_is_valid() {
         // Build an sns_init_payload with defaults for non-root related configuration.
         let sns_init_payload = SnsInitPayloadBuilder::new()
+            .with_token_symbol("SNS".to_string())
+            .with_token_name("ServiceNervousSystem".to_string())
+            .with_initial_token_distribution(InitialTokenDistribution::default())
             .build()
             .expect("Expected SnsInitPayloadBuilder to produce a valid payload");
 
@@ -549,9 +574,10 @@ mod test {
         let token_name = "ServiceNervousSystem Coin".to_string();
 
         let sns_init_payload = SnsInitPayloadBuilder::new()
-            .with_transaction_fee_e8s(Some(transaction_fee))
+            .with_transaction_fee_e8s(transaction_fee)
             .with_token_symbol(token_symbol.clone())
             .with_token_name(token_name.clone())
+            .with_initial_token_distribution(InitialTokenDistribution::default())
             .build()
             .expect("Expected SnsInitPayloadBuilder to produce a valid payload");
 

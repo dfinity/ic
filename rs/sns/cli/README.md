@@ -66,7 +66,7 @@ dfx start
 ```
 
 #### Barebones deploy
-To deploy SNS locally without any customization (e.g. no initial ledger accounts), run:
+To deploy SNS locally without any customization, run:
 ```shell
 sns deploy --token-name="My Example Token" --token-symbol="MET"
 ```
@@ -74,19 +74,6 @@ sns deploy --token-name="My Example Token" --token-symbol="MET"
 
 You should see the output of calls to `get_nervous_system_parameters` and `transfer_fee`, and see a 
 "Successfully deployed!" message if the deployment was successful.
-
-#### Deploy with initial Ledger accounts
-To deploy SNS locally initial ledger accounts, you can run `deploy` with the `--initial-ledger-accounts` arg.
-This arg takes a path to a file containing a JSON object that maps principal IDs to account values (in e8s). For 
-example, such a file can be generated with:
-```shell
-echo "{\"$(dfx identity get-principal)\": 1000000000 }" > accounts.json
-```
-You can deploy an SNS with this account with:
-```shell
-sns deploy --token-name="My Example Token" --token-symbol="MET" --initial-ledger-accounts=accounts.json;
-```
-You can run `sns account-balance` to view your account balance.
 
 There are other SNS parameters that can be customized, to view them run:
 ```shell
@@ -107,7 +94,7 @@ make
 Ensure there are cycles in your cycles wallet. If you don't have any cycles, follow 
 [these instructions](https://smartcontracts.org/docs/quickstart/4-quickstart.html) to acquire cycles. Choose a desired
 amount of cycles to initialize each SNS canister with (here we choose 200B cycles), choose a token name and symbol, 
-specify any optional params (e.g. initial ledger accounts) and call:
+specify any optional params and call:
 ```shell
-sns deploy --network ic --initial-cycles-per-canister 200000000000 --token-name="My Example Token" --token-symbol="MET" --initial-ledger-accounts=accounts.json;
+sns deploy --network ic --initial-cycles-per-canister 200000000000 --token-name="My Example Token" --token-symbol="MET";
 ```

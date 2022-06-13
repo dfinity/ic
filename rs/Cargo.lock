@@ -393,6 +393,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "assert_approx_eq"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c07dab4369547dbe5114677b33fbbf724971019f3818172d59a97a61c774ffd"
+
+[[package]]
 name = "assert_cmd"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7182,13 +7188,17 @@ dependencies = [
 name = "ic-sns-init"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "assert_approx_eq",
  "ic-base-types",
  "ic-crypto-sha",
  "ic-nervous-system-common",
+ "ic-nervous-system-common-test-keys",
  "ic-sns-governance",
  "ic-sns-root",
  "ledger-canister",
  "maplit",
+ "num",
  "serde",
  "serde_json",
 ]
