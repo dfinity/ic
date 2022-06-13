@@ -42,6 +42,13 @@ usually providing little value."#
             defined_in: std::file!(),
         },
         Rule {
+            package: pkg("ic-replica"),
+            should_not_depend_on: pkg("ic-canister-client"),
+            justification: "Replica must not depend on the ic-canister-client library.".to_string(),
+            dependency_kind: DepKind::normal(),
+            defined_in: std::file!(),
+        },
+        Rule {
             package: pkg("ic-types"),
             should_not_depend_on: pkg("bitcoin"),
             justification:
