@@ -71,17 +71,16 @@ fn main() -> Result<()> {
     let config = CliArgs::parse().validate()?;
     info!(log, "ic-starter. Configuration: {:?}", config);
     let config_path = config.state_dir.join("ic.json5");
-    if config_path.as_path().exists() {
-        info!(log, "Use existing replica configuration {:?}", config_path);
-    } else {
-        info!(log, "Initialize replica configuration {:?}", config_path);
 
-        let replica_config = config.build_replica_config();
+    info!(log, "Initialize replica configuration {:?}", config_path);
 
-        // assemble config
-        let config_json = serde_json::to_string(&replica_config).unwrap();
-        std::fs::write(config_path.clone(), config_json.into_bytes()).unwrap();
+    let replica_config = config.build_replica_config();
 
+    // assemble config
+    let config_json = serde_json::to_string(&replica_config).unwrap();
+    std::fs::write(config_path.clone(), config_json.into_bytes()).unwrap();
+
+    if !config.registry_local_store_path.exists() {
         // assemble registry.json
         // At the moment, this always regenerates the node key.
         // TODO: Only regenerate if necessary, depends on CRP-359
