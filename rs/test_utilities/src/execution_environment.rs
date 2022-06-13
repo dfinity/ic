@@ -560,17 +560,12 @@ impl ExecutionTest {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let (execution_cycles_refund, result) = self.exec_env.execute_canister_response(
             canister,
-            &response,
+            Arc::new(response),
             self.instruction_limit,
             mock_time(),
             network_topology,
             self.subnet_available_memory.clone(),
         );
-
-        let execution_cycles_refund = match execution_cycles_refund {
-            true => ExecutionCyclesRefund::Yes,
-            false => ExecutionCyclesRefund::No,
-        };
 
         state.metadata.heap_delta_estimate += result.heap_delta;
         self.update_execution_stats(

@@ -48,7 +48,7 @@ pub enum ExecutionCyclesRefund {
 #[allow(dead_code)]
 pub fn execute_response(
     mut canister: CanisterState,
-    response: Response,
+    response: Arc<Response>,
     time: Time,
     own_subnet_type: SubnetType,
     network_topology: Arc<NetworkTopology>,
@@ -169,7 +169,7 @@ pub fn execute_response(
             }
         };
 
-        let api_type = match response.response_payload {
+        let api_type = match &response.response_payload {
             Payload::Data(payload) => ApiType::reply_callback(
                 time,
                 payload.to_vec(),
@@ -179,7 +179,7 @@ pub fn execute_response(
             ),
             Payload::Reject(context) => ApiType::reject_callback(
                 time,
-                context,
+                context.clone(),
                 refunded_cycles,
                 call_context_id,
                 call_context.has_responded(),
