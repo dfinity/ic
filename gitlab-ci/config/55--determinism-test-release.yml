@@ -15,6 +15,7 @@
       # what we've build in docker-build-ic-release
       P0=$PATH0
       # what is live and available under $NNS_RELEASE_VERSION
+      # NNS_RELEASE_VERSION is set in docker-build-ic-release
       P1="/${NNS_RELEASE_VERSION}/${PATH1}"
 
       ./gitlab-ci/tools/build-diff.sh "$P0" "$P1"
@@ -37,6 +38,7 @@ build-determinism-guest-update-img-release:
   extends:
     - .build-determinism-release
   needs:
+    - job: docker-build-ic-release
     - job: build-determinism-binaries-release
       artifacts: false
   variables:
