@@ -29,15 +29,17 @@ class MachineFailure(threading.Thread):
         random.shuffle(services)
         for service in services:
             print(f"💥 Killing replicas on ${machines}")
-            ssh.run_ssh_in_parallel(machines, "sudo systemctl kill --signal SIGKILL ic-replica")
-            ssh.run_ssh_in_parallel(machines, "sudo systemctl stop ic-replica")
-            ssh.run_ssh_in_parallel(machines, "sudo systemctl status ic-replica")
+            ssh.run_ssh_in_parallel(
+                machines,
+                f"sudo systemctl kill --signal SIGKILL ${service}; "
+                f"sudo systemctl stop ${service}; "
+                f"sudo systemctl status ${service}",
+            )
 
     def start_nodes(machines: [str]):
         print(f"🔄 Restarting replicas on ${machines}")
         for service in MachineFailure.get_services():
-            ssh.run_ssh_in_parallel(machines, "sudo systemctl start ic-replica")
-            ssh.run_ssh_in_parallel(machines, "sudo systemctl status ic-replica")
+            ssh.run_ssh_in_parallel(machines, f"sudo systemctl start {service}; sudo systemctl status {service}")
 
     def run(self):
         """Simulate failures on the given machines."""
