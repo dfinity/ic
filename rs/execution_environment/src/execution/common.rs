@@ -182,7 +182,7 @@ pub(crate) fn action_to_ingress_response(
     }
 }
 
-pub(crate) fn wasm_result_to_query_exec_result(
+pub(crate) fn wasm_result_to_query_response(
     result: Result<Option<WasmResult>, UserError>,
     canister: &CanisterState,
     time: Time,
@@ -191,7 +191,7 @@ pub(crate) fn wasm_result_to_query_exec_result(
 ) -> ExecutionResponse {
     match call_origin {
         CallOrigin::Ingress(user_id, message_id) => {
-            wasm_result_to_ingress_result(result, canister, user_id, message_id, time)
+            wasm_result_to_ingress_response(result, canister, user_id, message_id, time)
         }
         CallOrigin::CanisterUpdate(caller_canister_id, callback_id) => {
             let response = Response {
@@ -215,7 +215,7 @@ pub(crate) fn wasm_result_to_query_exec_result(
     }
 }
 
-pub(crate) fn wasm_result_to_ingress_result(
+pub(crate) fn wasm_result_to_ingress_response(
     result: Result<Option<WasmResult>, UserError>,
     canister: &CanisterState,
     user_id: UserId,

@@ -5,7 +5,7 @@
 // context.
 
 use crate::execution::common::{
-    action_to_response, validate_canister, validate_method, wasm_result_to_query_exec_result,
+    action_to_response, validate_canister, validate_method, wasm_result_to_query_response,
 };
 use crate::execution_environment::{ExecuteMessageResult, ExecutionResponse};
 use crate::hypervisor::Hypervisor;
@@ -226,12 +226,12 @@ fn execute_update_method(
         .unwrap()
         .on_canister_result(call_context_id, output.wasm_result);
 
-    let result = action_to_response(&canister, action, call_origin, time, log);
+    let response = action_to_response(&canister, action, call_origin, time, log);
 
     ExecuteMessageResult {
         canister,
         num_instructions_left: output.num_instructions_left,
-        response: result,
+        response,
         heap_delta,
     }
 }
@@ -273,12 +273,12 @@ fn execute_query_method(
     let result = output.wasm_result;
     let result =
         result.map_err(|err| log_and_transform_to_user_error(log, err, &canister.canister_id()));
-    let result = wasm_result_to_query_exec_result(result, &canister, time, call_origin, log);
+    let response = wasm_result_to_query_response(result, &canister, time, call_origin, log);
 
     ExecuteMessageResult {
         canister,
         num_instructions_left: output.num_instructions_left,
-        response: result,
+        response,
         heap_delta: NumBytes::from(0),
     }
 }
