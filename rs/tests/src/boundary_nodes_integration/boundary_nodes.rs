@@ -173,6 +173,10 @@ pub fn test(env: TestEnv) {
             // FIXME: use `ClientBuilder::add_root_certificate` instead
             .danger_accept_invalid_certs(true)
             .resolve(
+                "raw.ic0.app",
+                SocketAddrV6::new(boundary_node_vm.ipv6, 443, 0, 0).into(),
+            )
+            .resolve(
                 &host,
                 SocketAddrV6::new(boundary_node_vm.ipv6, 443, 0, 0).into(),
             )
@@ -192,6 +196,14 @@ pub fn test(env: TestEnv) {
             .await
             .unwrap();
         assert_eq!(res.text().await.unwrap(), "Counter is 0 streaming\n");
+
+        // Check that `canisterId` parameters go unused
+        let res = client
+            .get(format!("https://raw.ic0.app/?canisterId={}", http_counter_canister_id))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.text().await.unwrap(), "Could not find a canister id to forward to.");
 
         // Update the denylist and reload nginx
         let denylist_command = format!(r#"printf "ryjl3-tyaaa-aaaaa-aaaba-cai 1;\n{} 1;\n" | sudo tee /etc/nginx/denylist.map && sudo service nginx reload"#, http_counter_canister_id);

@@ -3,7 +3,7 @@ OPTIONS=" \
 --address 127.0.0.1:9500 \
 --replica https://{{DOMAIN}}.{{TLD}}/ \
 --replica-resolve {{DOMAIN}}.{{TLD}}=127.0.0.1:443 \
---danger-accept-invalid-ssl \
+--ignore-url-canister-param \
 --dns-alias personhood.{{DOMAIN}}.{{TLD}}:g3wsl-eqaaa-aaaan-aaaaa-cai \
 --dns-alias personhood.raw.{{DOMAIN}}.{{TLD}}:g3wsl-eqaaa-aaaan-aaaaa-cai \
 --dns-alias identity.{{DOMAIN}}.{{TLD}}:rdmx6-jaaaa-aaaaa-aaadq-cai \
@@ -11,4 +11,7 @@ OPTIONS=" \
 --dns-alias nns.{{DOMAIN}}.{{TLD}}:qoctq-giaaa-aaaaa-aaaea-cai \
 --dns-alias nns.raw.{{DOMAIN}}.{{TLD}}:qoctq-giaaa-aaaaa-aaaea-cai \
 --dns-alias dscvr.{{DOMAIN}}.{{TLD}}:h5aet-waaaa-aaaab-qaamq-cai \
---dns-alias dscvr.raw.{{DOMAIN}}.{{TLD}}:h5aet-waaaa-aaaab-qaamq-cai " 
+--dns-alias dscvr.raw.{{DOMAIN}}.{{TLD}}:h5aet-waaaa-aaaab-qaamq-cai \
+--dns-suffix {{DOMAIN}}.{{TLD}} \
+--dns-suffix raw.{{DOMAIN}}.{{TLD}} \
+--danger-accept-invalid-ssl "
