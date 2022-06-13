@@ -1,12 +1,14 @@
-use crate::execution::heartbeat::execute_heartbeat;
-use crate::execution::nonreplicated_query::execute_non_replicated_query;
+use crate::execution::response::ExecutionCyclesRefund;
+use crate::execution::{
+    heartbeat::execute_heartbeat, nonreplicated_query::execute_non_replicated_query,
+    response::execute_response,
+};
 use crate::{
     canister_manager::{
         CanisterManager, CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
     },
     canister_settings::CanisterSettings,
     execution::call::execute_call,
-    execution::common::action_to_response,
     execution_environment_metrics::ExecutionEnvironmentMetrics,
     hypervisor::Hypervisor,
     util::candid_error_to_user_error,
@@ -831,33 +833,29 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
     ) -> ExecuteMessageResult {
-        if let CanisterInputMessage::Response(response) = msg {
-            let (should_refund_remaining_cycles, mut res) = self.execute_canister_response(
-                canister,
-                &*response,
-                instructions_limit,
-                time,
-                network_topology,
-                subnet_available_memory,
-            );
-
-            if should_refund_remaining_cycles {
-                // Refund the canister with any cycles left after message execution.
-                self.cycles_account_manager.refund_execution_cycles(
-                    &mut res.canister.system_state,
-                    res.num_instructions_left,
-                    instructions_limit,
-                );
-            }
-            return res;
-        };
-
         let req = match msg {
+            CanisterInputMessage::Response(response) => {
+                let (should_refund_remaining_cycles, mut result) = self.execute_canister_response(
+                    canister,
+                    response,
+                    instructions_limit,
+                    time,
+                    network_topology,
+                    subnet_available_memory,
+                );
+
+                if should_refund_remaining_cycles == ExecutionCyclesRefund::Yes {
+                    // Refund the canister with any cycles left after message execution.
+                    self.cycles_account_manager.refund_execution_cycles(
+                        &mut result.canister.system_state,
+                        result.num_instructions_left,
+                        instructions_limit,
+                    );
+                }
+                return result;
+            }
             CanisterInputMessage::Request(request) => RequestOrIngress::Request(request),
             CanisterInputMessage::Ingress(ingress) => RequestOrIngress::Ingress(ingress),
-            CanisterInputMessage::Response(_) => {
-                unreachable!();
-            }
         };
 
         execute_call(
@@ -1122,188 +1120,36 @@ impl ExecutionEnvironmentImpl {
 
     // Executes an inter-canister response.
     //
-    // Returns a tuple with the result, along with a boolean indicating whether or
+    // Returns a tuple with the result, along with a flag indicating whether or
     // not to refund the remaining cycles to the canister.
     #[allow(clippy::too_many_arguments)]
     pub fn execute_canister_response(
         &self,
-        mut canister: CanisterState,
-        resp: &Response,
-        cycles: NumInstructions,
+        canister: CanisterState,
+        response: Arc<Response>,
+        instruction_limit: NumInstructions,
         time: Time,
         network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
-    ) -> (bool, ExecuteMessageResult) {
-        let call_context_manager = match canister.status() {
-            CanisterStatusType::Stopped => {
-                // A canister by definition can only be stopped when its input
-                // queues are empty and it has no outstanding responses. Hence,
-                // if we receive a response for a stopped canister then that is
-                // a either a bug in the code or potentially a faulty (or
-                // malicious) subnet generating spurious messages.
-                error!(
-                    self.log,
-                    "Stopped canister got a response.  originator {} respondent {}.",
-                    resp.originator,
-                    resp.respondent,
-                );
-                return (
-                    false,
-                    ExecuteMessageResult {
-                        canister,
-                        num_instructions_left: cycles,
-                        response: ExecutionResponse::Empty,
-                        heap_delta: NumBytes::from(0),
-                    },
-                );
-            }
-            CanisterStatusType::Running | CanisterStatusType::Stopping => {
-                // We are sure there's a call context manager since the canister isn't stopped.
-                canister.system_state.call_context_manager_mut().unwrap()
-            }
-        };
-
-        let callback = match call_context_manager
-            .unregister_callback(resp.originator_reply_callback)
-        {
-            Some(callback) => callback,
-            None => {
-                // Received an unknown callback ID. Nothing to do.
-                error!(
-                    self.log,
-                    "Canister got a response with unknown callback ID {}.  originator {} respondent {}.",
-                    resp.originator_reply_callback,
-                    resp.originator,
-                    resp.respondent,
-                );
-                return (
-                    false,
-                    ExecuteMessageResult {
-                        canister,
-                        num_instructions_left: cycles,
-                        response: ExecutionResponse::Empty,
-                        heap_delta: NumBytes::from(0),
-                    },
-                );
-            }
-        };
-
-        let call_context_id = callback.call_context_id;
-        let call_context = match call_context_manager.call_context(call_context_id) {
-            Some(call_context) => call_context,
-            None => {
-                // Unknown call context. Nothing to do.
-                error!(
-                    self.log,
-                    "Canister got a response for unknown request.  originator {} respondent {} callback id {}.",
-                    resp.originator,
-                    resp.respondent,
-                    resp.originator_reply_callback,
-                );
-                return (
-                    false,
-                    ExecuteMessageResult {
-                        canister,
-                        num_instructions_left: cycles,
-                        response: ExecutionResponse::Empty,
-                        heap_delta: NumBytes::from(0),
-                    },
-                );
-            }
-        };
-        let call_origin = call_context.call_origin().clone();
-        let is_call_context_deleted = call_context.is_deleted();
-        let num_outstanding_calls = call_context_manager.outstanding_calls(call_context_id);
-
-        // Canister A sends a request to canister B with some cycles.
-        // Canister B can accept a subset of the cycles in the request.
-        // The unaccepted cycles are returned to A in the response.
-        //
-        // Therefore, the number of cycles in the response should always
-        // be <= to the cycles in the request. If this is not the case,
-        // then that indicates (potential malicious) faults.
-        let refunded_cycles = if resp.refund > callback.cycles_sent {
-            error!(
-                self.log,
-                "Canister got a response with too many cycles.  originator {} respondent {} max cycles expected {} got {}.",
-                resp.originator,
-                resp.respondent,
-                callback.cycles_sent,
-                resp.refund,
-            );
-            callback.cycles_sent
-        } else {
-            resp.refund
-        };
-
-        self.cycles_account_manager
-            .add_cycles(canister.system_state.balance_mut(), refunded_cycles);
-
-        // The canister that sends a request must also pay the fee for
-        // the transmission of the response. As we do not know how big
-        // the response might be, we reserve cycles for the largest
-        // possible response when the request is being sent. Now that we
-        // have received the response, we can refund the cycles based on
-        // the actual size of the response.
-        self.cycles_account_manager.response_cycles_refund(
+    ) -> (ExecutionCyclesRefund, ExecuteMessageResult) {
+        let execution_parameters = self.execution_parameters(
+            &canister,
+            instruction_limit,
+            subnet_available_memory,
+            ExecutionMode::Replicated,
+        );
+        execute_response(
+            canister,
+            response,
+            time,
+            self.own_subnet_type,
+            network_topology,
+            execution_parameters,
             &self.log,
             self.metrics.response_cycles_refund_error_counter(),
-            &mut canister.system_state,
-            resp,
-        );
-
-        if is_call_context_deleted {
-            // If the call context was deleted (e.g. in uninstall), then do not execute
-            // anything. The call context is completely removed if there are no
-            // outstanding callbacks.
-            if num_outstanding_calls == 0 {
-                // NOTE: This unwrap is safe since we acquired the call context earlier.
-                canister
-                    .system_state
-                    .call_context_manager_mut()
-                    .unwrap()
-                    .unregister_call_context(call_context_id);
-            }
-
-            (
-                true,
-                ExecuteMessageResult {
-                    canister,
-                    num_instructions_left: cycles,
-                    response: ExecutionResponse::Empty,
-                    heap_delta: NumBytes::from(0),
-                },
-            )
-        } else {
-            let execution_parameters = self.execution_parameters(
-                &canister,
-                cycles,
-                subnet_available_memory,
-                ExecutionMode::Replicated,
-            );
-            let (canister, cycles, action, heap_delta) = self.hypervisor.execute_callback(
-                canister,
-                &call_origin,
-                callback,
-                resp.response_payload.clone(),
-                refunded_cycles,
-                time,
-                network_topology,
-                execution_parameters,
-            );
-
-            let log = self.log.clone();
-
-            let result = action_to_response(&canister, action, call_origin, time, &log);
-
-            let res = ExecuteMessageResult {
-                canister,
-                num_instructions_left: cycles,
-                response: result,
-                heap_delta,
-            };
-            (true, res)
-        }
+            &self.hypervisor,
+            &self.cycles_account_manager,
+        )
     }
 
     /// Asks the canister if it is willing to accept the provided ingress
