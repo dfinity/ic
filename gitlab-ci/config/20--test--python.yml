@@ -2,6 +2,8 @@ python-tests:
   extends: .ubuntu-nix-docker
   needs: []  # don't wait on other jobs
   stage: test
+  variables: 
+    PYTHONPATH : ${CI_PROJECT_DIR}/gitlab-ci/src
   artifacts:
     reports:
       junit: test_report.xml
@@ -9,15 +11,11 @@ python-tests:
       - gitlab-ci/src/htmlcov
   script:
     - |
-      set -euo pipefail
+      set -xeuo pipefail
       cd gitlab-ci/src
-      $SHELL_WRAPPER nix-shell --run "
-        set -xeuo pipefail
-
-        pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch --ignore=simple_prober
-        python3 gitlab_config/main.py --job-list-validate
-        python3 gitlab_config/main.py --cfg-validate
-      "
+      $SHELL_WRAPPER pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch --ignore=simple_prober
+      $SHELL_WRAPPER python3 gitlab_config/main.py --job-list-validate
+      $SHELL_WRAPPER python3 gitlab_config/main.py --cfg-validate
     - |
       echo "Running outsource/remote tests"
       set -euo pipefail

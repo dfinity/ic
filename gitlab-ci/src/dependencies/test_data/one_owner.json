@@ -1,9 +1,0 @@
-{
-  "dependency1": {
-    "owners": [
-      {"email": "foo@example.com"},
-    ],
-    "description": "Single owner dependency",
-    "keywords": ["dependency"],
-  },
-}

@@ -1,0 +1,6 @@
+[package]
+name = "ic-vulnerable2"
+version = "0.1.0"
+
+[dependencies]
+tiny_http = "0.7.0"
