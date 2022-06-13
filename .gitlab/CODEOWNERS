@@ -76,6 +76,7 @@
 /rs/bitcoin/canister/                   @dfinity-lab/teams/execution-owners
 /rs/bitcoin/client/                     @dfinity-lab/teams/networking-team
 /rs/bitcoin/consensus/                  @dfinity-lab/teams/execution-owners
+/rs/bitcoin/library/                    @dfinity-lab/teams/financial-integrations
 /rs/bitcoin/service/                    @dfinity-lab/teams/networking-team
 /rs/bitcoin/types/                      @dfinity-lab/teams/execution-owners
 /rs/canister_client/                    @dfinity-lab/teams/networking-team
