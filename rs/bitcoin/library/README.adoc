@@ -1,0 +1,27 @@
+:hardbreaks-option:
+
+= Internet Computer Rust Bitcoin Library
+
+== Documentation
+
+The documentation can be found https://docs.rs/ic-btc-library[here].
+
+== Building
+
+Make sure that https://www.rust-lang.org/tools/install[Rust] is installed.
+
+The library can be built and tested using `cargo`:
+
+```
+git clone git@github.com:dfinity/ic.git
+cd ic/rs/bitcoin/library/
+cargo build
+```
+
+You can run tests with:
+
+```
+cargo test
+```
+
+Please refer to the https://doc.rust-lang.org/stable/cargo/[`cargo` documentation] for more detailed instructions.
