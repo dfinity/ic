@@ -54,7 +54,7 @@ def external_crates_repository(name):
             ),
             "bitflags": crate.spec(version = "=1.3.2"),
             "bit-vec": crate.spec(version = "=0.5"),
-            "byte-unit": crate.spec(version = "=1.0.1"),
+            "byte-unit": crate.spec(version = "=4.0.14"),
             "byteorder": crate.spec(version = "=1.4.3"),
             "bytes": crate.spec(version = "=1.0.1"),
             "bls12_381": crate.spec(
