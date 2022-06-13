@@ -34,7 +34,7 @@ if ! docker pull dfinity/ic-build:"$DOCKER_IMG_VERSION"; then
     echo "Image 'dfinity/ic-build:$DOCKER_IMG_VERSION' not in DockerHub"
     echo "Building 'dfinity/ic-build:$DOCKER_IMG_VERSION' image (--no-cache)"
     export DOCKER_BUILD_ARGS='--no-cache'
-    "$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
+    "$REPO_ROOT"/gitlab-ci/docker/docker-build-image.sh
     unset DOCKER_BUILD_ARGS
 fi
 

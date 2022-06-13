@@ -110,6 +110,12 @@
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
+.rules-prs-dockerfile-changes:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - gitlab-ci/docker/*
+
 .rules-any-schedule:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'

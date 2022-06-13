@@ -4,13 +4,12 @@ docker-autobuild-protected:
     - .rules-protected-branch
   image:
     name: "dfinity/ic-build-nix:latest"
-  needs: []  # don't wait on other jobs
+  needs: []
   stage: test
   tags:
     - dfinity-launch
   script:
     - |
-      echo "Running docker autobuild protected"
       set -euo pipefail
 
       nix-collect-garbage -d
@@ -21,7 +20,7 @@ docker-autobuild-protected:
       CI_IMAGE_NAME=$(echo "$CI_IMAGE" | cut -d':' -f1)
       CI_IMAGE_TAG=$(echo "$CI_IMAGE" | cut -d':' -f2)
       cd -
-      # short tag
+      # docker image tag
       TAG=$(cat ./gitlab-ci/docker/TAG)
 
       # check if we have it in dockerhub
@@ -34,7 +33,7 @@ docker-autobuild-protected:
         # no image on this protected runner
         # build it and push it to dockerhub
         echo -e "\e[0Ksection_start:$(date +%s):docker_build_script[collapsed=true]\r\e[0KClick here to see the docker_build_script"
-        ./gitlab-ci/docker/docker-build-local-image.sh --nix
+        ./gitlab-ci/docker/docker-build-image.sh --nix
         echo -e "\e[0Ksection_end:$(date +%s):docker_build_script\r\e[0K"
 
         # push new image to dockerhub
@@ -64,84 +63,72 @@ docker-autobuild-protected:
       docker ps -a
       echo -e "\e[0Ksection_end:$(date +%s):sys_info\r\e[0K"
 
-docker-autobuild-tests:
-  extends: 
+docker-autobuild:
+  extends:
     - .ubuntu-nix-docker
-    - .rules-prs-only
-  needs: []  # don't wait on other jobs
+    - .rules-prs-dockerfile-changes
+  needs: []
   stage: test
-  artifacts:
-    reports:
-      junit: test_report.xml
-    paths:
-      - gitlab-ci/src/htmlcov
   script:
     - |
-      # This job auto-pushes new commits to GitLab. 
-      echo "Running docker autobuild"
       set -euo pipefail
 
-      git fetch origin master:master
-
-      export PYTHONPATH="${CI_PROJECT_DIR}/gitlab-ci/src"
-      if ! python3 "${CI_PROJECT_DIR}"/gitlab-ci/src/git_changes/git_changes.py --ci-config-changes ; then
-       echo "No changes to GitLab CI YML configs. Skip Docker autoupdate test and check."
-       exit 0
+      # safeguard for feedback loop [this CI job pushes commits]
+      COMMIT_COUNT=$(git rev-list --count "$(git merge-base HEAD master)"..HEAD)
+      if [ "$COMMIT_COUNT" -gt 256 ]; then
+          echo "Reached hard safeguard limit of commits"
+          exit 1
       fi
 
-      COUNT=$(git rev-list --count "$(git merge-base HEAD master)"..HEAD)
-      LIMIT=256
-
-      # To prevent bugs or unexpected systems
-      # interactions, place a hard limit on the number of commits before these script
-      # gives up.
-  
-      echo "------------------------------------------------------------------"
-      echo "CHECKING FOR INFINITE PR COMMIT-PUSH LOOP"
-      echo "------------------------------------------------------------------"
-      if [ "$COUNT" -gt "$LIMIT" ]; then
-        echo "PR has over $LIMIT commits. Suspect infinite PR commit-push loop. Bailing out"
-        exit 1
-      else
-        echo "PR is NOT over $LIMIT commits. Continuing with tests."
+      # check if tag changed
+      pushd gitlab-ci/docker
+      TAG="$(./docker-get-image-tag.sh)"
+      cd ../config
+      # names must match with names in docker-build-image.sh!
+      IMG_NAME="registry.gitlab.com/dfinity-lab/core/docker/ic-build"
+      IMG_NIX_NAME="registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix"
+      IMG_NAME_FULL="$IMG_NAME:$TAG"
+      IMG_NIX_NAME_FULL="$IMG_NIX_NAME:$TAG"
+      # return if no changes
+      if grep -q "$IMG_NAME_FULL" -- *; then
+          echo "No changes required to build a new docker ic-build image"
+          exit 0
       fi
+      popd
 
-      # This script ensures the build process works before pushing the image to the gitlab
-      # registry and the commits to gitlab
-      echo "------------------------------------------------------------------"
-      echo "RUNNING CHECK_IT_TESTS.SH - ENSURING DOCKER BUILDS WORK CORRECTLY"
-      echo "------------------------------------------------------------------"
-      ./gitlab-ci/src/docker_image_check/check_it_test.sh
-      echo "------------------------------------------------------------------"
-      echo "FINISHED RUNNING CHECK_IT_TESTS.SH"
-      echo "------------------------------------------------------------------"
+      # build new ic-build image
+      ./gitlab-ci/docker/docker-build-image.sh --nix
 
-      # Need to check that the docker-build-local-image.sh script works correct.
-      # This script is run in a cronjob on the protected GitLab runners.
-      echo "------------------------------------------------------------------"
-      echo "RUNNING DOCKER-BUILD-LOCAL-IMAGE.SH - ENSURING PROTECTED RUNNER DOCKER BUILDS WORK CORRECTLY"
-      echo "------------------------------------------------------------------"
-      cd "${CI_PROJECT_DIR}"
-      echo -e "\e[0Ksection_start:$(date +%s):docker_build_script[collapsed=true]\r\e[0KClick here to see the docker_build_script"
-      ./gitlab-ci/docker/docker-build-local-image.sh
-      echo -e "\e[0Ksection_end:$(date +%s):docker_build_script\r\e[0K"
-      echo "------------------------------------------------------------------"
-      echo "FINISHED RUNNING DOCKER-BUILD-LOCAL-IMAGE.SH"
-      echo "------------------------------------------------------------------"
+      # push the new ic-build[-nix] image it to gitlab registry
+      docker login -u gitlab-ci-token -p "$GITLAB_API_TOKEN" registry.gitlab.com
+      docker push "$IMG_NAME_FULL"
+      docker push "$IMG_NIX_NAME_FULL"
 
-      echo "------------------------------------------------------------------"
-      echo "RUNNING CHECK_IT.SH - FINAL CHECK, WITH GITLAB PUSH AND REGISTRY PUSH"
-      echo "------------------------------------------------------------------"
-      cd "${CI_PROJECT_DIR}"
-      ./gitlab-ci/src/docker_image_check/check_it.sh
-      echo "------------------------------------------------------------------"
-      echo "FINISHED RUNNING CHECK_IT.SH"
-      echo "------------------------------------------------------------------"
+      # update gitlab's docker image tags
+      pushd gitlab-ci/config
+      sed -i -E "s|$IMG_NAME:[^\"]{5,}|$IMG_NAME_FULL|g" -- *
+      sed -i -E "s|$IMG_NIX_NAME:[^\"]{5,}|$IMG_NIX_NAME_FULL|g" -- *
+      cd ../docker
+      echo "$TAG" > TAG
+      popd
 
+      # commit and push the change upstream
+      git config --global user.email "idx@dfinity.org"
+      git config --global user.name "IDX GitLab Automation"
+      git commit -a -m "Updating docker image in CI"
+      git remote add origin \
+          "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" \
+          || true
+      git remote set-url origin \
+          "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" \
+          || true
+      git push --set-upstream origin HEAD:"$CI_COMMIT_REF_NAME"
+
+      # try to free some space if above 80%
       DISK_UTIL=$(df / | tail -1 | awk '{print 0+$5}')
-      if [ "$DISK_UTIL" -gt 80 ]; then 
-        df -h /
-        docker container prune -f
-        docker image prune -f
+      if [ "$DISK_UTIL" -gt 80 ]; then
+          df -h /
+          docker container prune -f
+          docker image prune -f
       fi
       df -h /

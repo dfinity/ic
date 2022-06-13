@@ -17,7 +17,7 @@ REPO_ROOT="$(
 )"
 
 if [ -z "${IMAGE:-}" ]; then
-    "$REPO_ROOT"/gitlab-ci/docker/docker-build-local-image.sh
+    "$REPO_ROOT"/gitlab-ci/docker/docker-build-image.sh
 fi
 
 source "$REPO_ROOT/gitlab-ci/docker/docker-run-include"

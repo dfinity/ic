@@ -85,9 +85,7 @@ RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit honeycomb-beeline
 ARG didc_release_date=2022-01-06
 RUN curl --fail \
          --location https://github.com/dfinity/candid/releases/download/${didc_release_date}/didc-linux64 \
-         --output /usr/bin/didc-linux64 \
-  && \
-    chmod +x /usr/bin/didc-linux64
+         --output /usr/bin/didc-linux64 && chmod +x /usr/bin/didc-linux64
 
 RUN . /opt/nvm/nvm.sh && nvm install ${node_version} && npm install -g @vscode/dev-container-cli
 
