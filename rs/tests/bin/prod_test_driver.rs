@@ -264,7 +264,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 par(vec![t(
                     "change_to_firewall_rules_takes_effect",
                     networking::firewall::change_to_firewall_rules_takes_effect,
-                )]),
+                ),
+                // Disabling this test until IC-1026 Upgraded Firewall feature is enabled
+                // t(
+                //     "firewall_priority",
+                //     networking::firewall_priority::override_firewall_rules_with_priority
+                // )
+                ])
             ),
             pot(
                 "create_subnet",
