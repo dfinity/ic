@@ -6,7 +6,6 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{error, info, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions};
 
 use wasmtime::{AsContextMut, Caller, Global, Linker, Store, Trap, Val};
@@ -848,7 +847,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE_GROW,
                         memory: 0.into(),
-                        disk: (additional_pages as u64 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+                        disk: 0.into(),
                         network: 0.into(),
                     },
                 )?;
@@ -931,7 +930,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE64_GROW,
                         memory: 0.into(),
-                        disk: (additional_pages as u64 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+                        disk: 0.into(),
                         network: 0.into(),
                     },
                 )?;
