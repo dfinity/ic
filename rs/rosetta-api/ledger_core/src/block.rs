@@ -173,6 +173,14 @@ impl EncodedBlock {
 }
 
 pub trait BlockType: Sized {
+    type Transaction;
+
+    fn from_transaction(
+        parent_hash: Option<HashOf<EncodedBlock>>,
+        tx: Self::Transaction,
+        block_timestamp: TimeStamp,
+    ) -> Self;
+
     fn encode(self) -> EncodedBlock;
 
     fn decode(encoded: EncodedBlock) -> Result<Self, String>;

@@ -9,6 +9,7 @@ use ic_base_types::CanisterId;
 use ic_ledger_core::{
     archive::{Archive, ArchiveOptions},
     block::{BlockType, EncodedBlock},
+    ledger::find_block_in_archive,
     timestamp::TimeStamp,
 };
 use ledger_canister::*;
@@ -384,9 +385,8 @@ fn block(block_index: BlockHeight) -> Option<Result<EncodedBlock, CanisterId>> {
     if block_index < state.blockchain.num_archived_blocks() {
         // The block we are looking for better be in the archive because it has
         // a height smaller than the number of blocks we've archived so far
-        let result = state
-            .find_block_in_archive(block_index)
-            .expect("block not found in the archive");
+        let result =
+            find_block_in_archive(&*state, block_index).expect("block not found in the archive");
         Some(Err(result))
     // Or the block may be in the ledger, or the block may not exist
     } else {

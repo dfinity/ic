@@ -2,7 +2,7 @@ mod basic_tests;
 mod rosetta_cli_tests;
 mod store_tests;
 
-use ic_ledger_core::block::BlockType;
+use ic_ledger_core::{block::BlockType, ledger::LedgerTransaction};
 use ic_rosetta_api::errors::ApiError;
 use ic_rosetta_api::models::{
     AccountBalanceRequest, EnvelopePair, PartialBlockIdentifier, SignedTransaction,

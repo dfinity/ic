@@ -13,6 +13,7 @@ rust_library(
     crate_name = "ic_ledger_core",
     edition = "2018",
     deps = [
+        "//rs/constants",
         "//rs/crypto/sha",
         "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_core",
