@@ -3,12 +3,10 @@
 ///
 use criterion::{BatchSize, Criterion};
 use ic_error_types::RejectCode;
-use ic_interfaces::{
-    execution_environment::{
-        AvailableMemory, ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
-    },
-    messages::RequestOrIngress,
+use ic_interfaces::execution_environment::{
+    AvailableMemory, ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
 };
+use ic_interfaces::messages::CanisterInputMessage;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
@@ -43,7 +41,7 @@ lazy_static! {
 #[derive(Clone)]
 pub struct BenchmarkArgs {
     pub canister_state: CanisterState,
-    pub ingress: RequestOrIngress,
+    pub ingress: CanisterInputMessage,
     pub reject: Payload,
     pub time: Time,
     pub network_topology: Arc<NetworkTopology>,
@@ -93,7 +91,7 @@ where
     );
 
     // Create an Ingress message
-    let ingress = RequestOrIngress::Ingress(
+    let ingress = CanisterInputMessage::Ingress(
         IngressBuilder::new()
             .method_name("test")
             .method_payload(vec![0; 8192])
@@ -101,7 +99,6 @@ where
             .build()
             .into(),
     );
-
     // Create a reject
     let reject = Payload::Reject(RejectContext {
         code: RejectCode::SysFatal,
