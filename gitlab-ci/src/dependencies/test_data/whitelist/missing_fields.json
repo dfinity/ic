@@ -1,0 +1,19 @@
+[
+    {
+        "name": "chrono",
+        "version": "0.4.19",
+        "expiry_days": 30
+    },
+    {
+        "name": "regex",
+        "version": "1.5.4",
+        "date_added": "23/05/2022",
+        "date_updated": "23/05/2022"
+    },
+    {
+        "version": "1.0.1",
+        "date_added": "23/05/2022",
+        "date_updated": "23/05/2022",
+        "expiry_days": 30
+    }
+]

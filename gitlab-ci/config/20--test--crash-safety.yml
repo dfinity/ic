@@ -19,7 +19,7 @@ crash-safe-io:
 
       # Search for imports of std::fs
       cd rs
-      which rg
+      command -v rg
       find . -path ./target -prune -name '*.rs' | xargs -n1 -0 rg -U '^use[^;]*std[^;]*fs' --color=never | sort > "$TGT_FILE"
 
       # exclude paths

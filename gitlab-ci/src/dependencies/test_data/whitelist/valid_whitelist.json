@@ -1,0 +1,30 @@
+[
+    {
+        "name": "chrono",
+        "version": "0.4.19",
+        "date_added": "23/05/2022",
+        "date_updated": "23/05/2022",
+        "expiry_days": 30
+    },
+    {
+        "name": "regex",
+        "version": "1.5.4",
+        "date_added": "23/05/2022",
+        "date_updated": "23/05/2022",
+        "expiry_days": 30
+    },
+    {
+        "name": "thread_local",
+        "version": "1.0.1",
+        "date_added": "23/05/2022",
+        "date_updated": "23/05/2022",
+        "expiry_days": 30
+    },
+    {
+        "name": "time",
+        "version": "0.1.43",
+        "date_added": "23/05/2022",
+        "date_updated": "23/05/2022",
+        "expiry_days": 30
+    }
+]

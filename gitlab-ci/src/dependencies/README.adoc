@@ -1,0 +1,101 @@
+Vulnerable Dependency Managememt
+================================
+:author: Venkkatesh Sekar
+:email: venkkatesh.sekar@dfinity.org
+:date: 2022-06-06
+:revision: 2
+
+Overview
+--------
+The vulnerable dependency management encloses the management logic for vulnerable crates into a CI job under +Stage : test / Job : dependencies-check+, since the exisitng CI security rules don't have support for Rust codebases / security advisories. The job effectively allows one to track the lifecycle of vulnerable crate within the codebase and inform the developer about the possible cause and fixes for such crate. 
+
+Job Failure 
+~~~~~~~~~~~
+.The failure of the CI job can be triggerd by the following conditions
+. A vulnerable crate is a direct dependency of any internal crate modified by the developer
++
+----
+    ic-crate-1 (modified by the developer)
+    └── vulnerable-crate
+----
+
+. A vulnerable crate is an indirect dependency of any internal crate modified by the developer
++
+----
+    ic-crate-1 (modified by the developer)
+    └── ic-crate-2 
+        └── vulnerable-crate
+----
+. A vulnerable crate has +none / invalid / expired+ entry in the whitelist
+
+For all the above conditions, a JIRA  will be created and linked to the MR on the first CI pipeline for the respective MR. The following CI jobs will update the same issue with information in the comments. The JIRA issue will also have a payload as attachment, which is a detailed description of the job output and useful for resolving the issue. 
+
+CAUTION: If the CI job fails and there is no JIRA issue linked, please reach out to #eng-prodsec
+
+
+Information
+-----------
+The summary field / following comments in the JIRA issue provides the following information.
+----
+The following internal crates have been modified : 
+
+* memory_tracker:0.8.0
+
+Vulnerability scan complete - The following dependencies are vulnerable. 
+
+* regex:1.5.4
+* thread_local:1.0.1
+
+The following internal crates are affected by : 
+
+* ic-base-types:0.8.0
+* ic-protobuf:0.8.0
+* phantom_newtype:0.8.0
+* ic-logger:0.8.0
+
+Whitelist status 
+
+* regex:1.5.4 is not fixed and not present in the Whitelist
+* thread_local:1.0.1 is not fixed and not present in the Whitelist
+----
+
+Mitigation
+----------
+
+Crate can be upgraded
+~~~~~~~~~~~~~~~~~~~~~
+
+Steps 
+^^^^^
+* Cargo update
+* Cargo upgrade
+
+[NOTE]
+
+Since certain crates are already migrating to Bazel, we will include a forward compatability section soon, on how these upgrades can be persisted to the respective bazel files, once the codebase has migrated to a complete bazel based build system.
+
+
+Crate can't be upgraded
+~~~~~~~~~~~~~~~~~~~~~~~
+.A vulnerable crate may not be upgradable for a variety of reasons
+* Updating the version introduces additional code complexity / issues
+* Upgraded version may have deprecated necessary APIs
+* A fixed version of the vulnerable crate is not yet available.
+
+In that case, an exemption for the crate can be made by adding it to a whitelist file. 
+
+Steps
+^^^^^
+commands
+
+
+Development 
+-----------
+
+how to run the tests for the code. 
+
+
+
+
+
+

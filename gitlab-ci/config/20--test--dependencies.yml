@@ -2,11 +2,15 @@ dependencies-check:
   extends: .ubuntu-nix-docker
   needs: []  # don't wait on other jobs
   stage: test
+  variables: 
+    PYTHONPATH : ${CI_PROJECT_DIR}/gitlab-ci/src
+    CARGO_AUDIT_VERSION : "0.16.0"
+    CARGO_WORKSPACES_VERSION : "0.2.31"
   script:
     - |
       set -euo pipefail
-      cd gitlab-ci/src
-      $SHELL_WRAPPER nix-shell --run "
-        set -xeuo pipefail
-        python3 dependencies/pre_commit.py
-      "
+      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+      $SHELL_WRAPPER cargo install cargo-workspaces --version "${CARGO_WORKSPACES_VERSION}"
+      cd "${CI_PROJECT_DIR}"/gitlab-ci/src/
+      $SHELL_WRAPPER python3 dependencies/merge_hook.py
+  allow_failure: true

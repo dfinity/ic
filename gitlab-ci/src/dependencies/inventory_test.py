@@ -1,14 +1,28 @@
 """Test package for dependency inventory."""
+import dataclasses
 import os
 import pathlib
 import shutil
+import stat
+import tempfile
+import typing
+import zipfile
+from urllib import request
 
 import git
 import inventory
 import pytest
 
+# TODO : remove once s3 link is replaced.
+pytestmark = pytest.mark.skip(reason="Skipping until the S3 link is fixed")
 
 TEST_DATA = pathlib.Path(__file__).parent / "test_data"
+BUCKET = "dfinity-adhoc"
+PREFIX = "vuln-deps/"
+
+# TODO : replace with s3 link
+TEST_CARGO = ""
+CARGO_HOME_DOWNLOAD_LINK = "http://localhost:80/cargo_home2.zip"
 
 
 def test_dfinity_repo_is_owned():
@@ -39,9 +53,19 @@ def test_dependency_compare():
     d2 = inventory.Dependency("package1", "1.2.2")
     d3 = inventory.Dependency("package2", "1.2.0")
     d4 = inventory.Dependency("package1", "1.2.0", is_external=False)
+
+    # For owners wrt internal crates
+    d5 = inventory.Dependency(
+        "package1", "1.2.0", is_external=False, owner=[("TEAM", "@dfinity-lab/teams/networking-team")]
+    )
+    d6 = inventory.Dependency(
+        "package2", "1.2.0", is_external=False, owner=[("TEAM", "@dfinity-lab/teams/networking-team")]
+    )
+
     assert d1 != d2
     assert d1 != d3
     assert d1 == d4
+    assert d5 != d6
 
 
 def test_dependency_from_cargo_line():
@@ -57,6 +81,21 @@ def test_dependency_from_cargo_line():
 
     d = inventory.Dependency.from_cargo_tree("ic-config v0.3.1 (/local)")
     assert d.name == "ic-config" and d.version == "0.3.1" and not d.is_external
+
+    d = inventory.Dependency.from_cargo_tree(f"orchestrator v0.8.0 ({inventory.PROJECT_ROOT}/rs/orchestrator)")
+    assert (
+        d.name == "orchestrator"
+        and d.version == "0.8.0"
+        and not d.is_external
+        and d.owner == [("TEAM", "@dfinity-lab/teams/orchestrator-owners")]
+    )
+
+    d = inventory.Dependency.from_cargo_tree(f"ic-prep v0.8.0 ({inventory.PROJECT_ROOT}/rs/prep)")
+    assert d.name == "ic-prep" and d.version == "0.8.0" and not d.is_external and d.owner == []
+
+    with pytest.raises(ValueError):
+        # Receives an empty line
+        d = inventory.Dependency.from_cargo_tree("")
 
     with pytest.raises(ValueError):
         # Missing v in version.
@@ -80,12 +119,9 @@ def test_package_diff_empty():
     pd.added_direct_deps.add(d)
     assert not pd.is_empty()
 
-
-def test_diff_delta_numbers():
-    """Verify correct numbers are calculated for diff delta."""
-    delta = inventory.PackageDiffDelta(total_added=123, total_removed=100, internal_added=77, internal_removed=60)
-    assert delta.get_total_delta() == 23
-    assert delta.get_internal_delta() == 17
+    pd.added_direct_deps.clear()
+    pd.removed_direct_deps.add(d)
+    assert not pd.is_empty()
 
 
 class FakeCargo(inventory.Cargo):
@@ -113,244 +149,6 @@ class FakeCargo(inventory.Cargo):
     def get_external_direct_deps(self):
         """Return empty dict."""
         return self.external_direct_deps
-
-
-def test_inventory_nothing_changed():
-    """Verify inventory returns no errors if no dependencies changed."""
-
-    class NoChanges(inventory.Cargo):
-        """Fake cargo with no changes."""
-
-        def inventory_changed(self):
-            """Return False."""
-            return False
-
-        def get_package_diff(self):
-            """Return empty dict."""
-            return {}
-
-    inv = inventory.Inventory(NoChanges())
-    errors = inv.validate()
-    assert not errors
-
-
-def test_inventory_too_few_owners():
-    """Assert validation fails if there is only one dependency owner."""
-    inv = inventory.Inventory(FakeCargo("one_owner.json"))
-    errors = inv.validate()
-    assert errors == [
-        inventory.Inventory.Error(
-            message="JSON Schema validation failed with the following error:\n"
-            "[{'email': 'foo@example.com'}] is too short\n"
-            "The schema can be found here: gitlab-ci/src/dependencies/inventory.schema.",
-            is_fatal=True,
-        )
-    ]
-
-
-def test_inventory_no_errors():
-    """Assert no errors reported if inventory matches the dependecy tree."""
-    inv = inventory.Inventory(
-        FakeCargo(
-            "valid.json",
-            external_direct_deps={"dependency1": set([inventory.Dependency(name="dependency1", version="1.1.0")])},
-        ),
-    )
-    errors = inv.validate()
-    assert not errors
-
-
-def test_inventory_unused_dependency():
-    """Assert validation has errors if inventory has unused dependencies."""
-    inv = inventory.Inventory(FakeCargo("valid.json"))
-    errors = inv.validate()
-    assert errors == [
-        inventory.Inventory.Error(message="dependency1 is not referenced in any manifest file.", is_fatal=True)
-    ]
-
-
-def test_inventory_version_missing():
-    """Assert validation fails if version is missing from the inventory."""
-    inv = inventory.Inventory(
-        FakeCargo(
-            "valid.json",
-            external_direct_deps={
-                "dependency1": set(
-                    [
-                        inventory.Dependency(name="dependency1", version="1.1.0"),
-                        inventory.Dependency(name="dependency1", version="1.1.1"),
-                    ]
-                )
-            },
-        ),
-    )
-    errors = inv.validate()
-    assert errors == [
-        inventory.Inventory.Error(
-            message="Multiple versions of dependency1 are in use: ['1.1.0', '1.1.1'], "
-            "but the following owners do not specify a version explicitly: "
-            "['foobar@example.com', 'test@example.com']",
-            is_fatal=True,
-        )
-    ]
-
-
-def test_inventory_version_owners():
-    """Assert validation fails if there is only one version owner."""
-    inv = inventory.Inventory(
-        FakeCargo(
-            "one_version_owner.json",
-            external_direct_deps={
-                "dependency1": set(
-                    [
-                        inventory.Dependency(name="dependency1", version="1.1.0"),
-                        inventory.Dependency(name="dependency1", version="1.1.1"),
-                    ]
-                )
-            },
-        ),
-    )
-    errors = inv.validate()
-    assert errors == [
-        inventory.Inventory.Error(
-            message="The following versions of dependency1 have less than 2 owners: 1.1.0,1.1.1",
-            is_fatal=True,
-        )
-    ]
-
-
-def test_inventory_unused_version():
-    inv = inventory.Inventory(
-        FakeCargo(
-            "one_version_owner.json",
-            external_direct_deps={
-                "dependency1": set(
-                    [
-                        inventory.Dependency(name="dependency1", version="1.1.0"),
-                        inventory.Dependency(name="dependency1", version="0.0.1"),
-                    ]
-                )
-            },
-        )
-    )
-    errors = inv.validate()
-    assert errors == [
-        inventory.Inventory.Error(
-            message="Version 1.1.1 of package dependency1 is not used, but is owned by test@example.com",
-            is_fatal=True,
-        ),
-        inventory.Inventory.Error(
-            message="The following versions of dependency1 have less than 2 owners: 1.1.0,1.1.1",
-            is_fatal=True,
-        ),
-    ]
-
-
-def test_inventory_one_version_in_use():
-    """Assert validation fails if inventory specifies a version while only one is in use."""
-    inv = inventory.Inventory(
-        FakeCargo(
-            "one_version_owner.json",
-            external_direct_deps={"dependency1": set([inventory.Dependency(name="dependency1", version="1.1.0")])},
-        )
-    )
-    errors = inv.validate()
-    assert errors == [
-        inventory.Inventory.Error(
-            message="Only one version of dependency1 is in use, but the following owners explicitly "
-            "specify versions: [\"foobar@example.com (['1.1.0'])\", \"test@example.com (['1.1.1'])\"]",
-            is_fatal=True,
-        )
-    ]
-
-
-def test_inventory_added_existing_dependency():
-    """Assert validation succeeds if an added dependency is already in the inventory."""
-    d = inventory.Dependency(name="dependency1", version="1.1.0")
-    inv = inventory.Inventory(
-        FakeCargo(
-            "valid.json",
-            external_direct_deps={"dependency1": set([d])},
-            diffs={
-                "ic-fake-package": inventory.PackageDiff(
-                    name="ic-fake-package",
-                    added_deps=set([d]),
-                    added_direct_deps=set([d]),
-                )
-            },
-        ),
-        use_gitlab=False,
-    )
-    errors = inv.validate()
-    assert errors == []
-
-
-def test_inventory_added_new_dependency():
-    """Assert validation fails if an added dependency is not in the inventory."""
-    d = inventory.Dependency(name="new-dependency", version="1.1.0")
-    inv = inventory.Inventory(
-        FakeCargo(
-            "valid.json",
-            external_direct_deps={
-                "new-dependency": set([d]),
-                "dependency1": set([inventory.Dependency(name="dependency1", version="1.1.0")]),
-            },
-            diffs={
-                "ic-fake-package": inventory.PackageDiff(
-                    name="ic-fake-package",
-                    added_deps=set([d]),
-                    added_direct_deps=set([d]),
-                )
-            },
-        ),
-        use_gitlab=False,
-    )
-    errors = inv.validate()
-    assert errors == [
-        inventory.Inventory.Error(message="New dependency new-dependency is added, but it is not in the inventory")
-    ]
-
-
-def test_inventory_added_new_version():
-    """Assert validation fails if an added version is not owned by anyone."""
-    d = inventory.Dependency(name="dependency1", version="1.1.1")
-    inv = inventory.Inventory(
-        FakeCargo(
-            "valid_with_versions.json",
-            external_direct_deps={"dependency1": set([inventory.Dependency(name="dependency1", version="1.1.0"), d])},
-            diffs={
-                "ic-fake-package": inventory.PackageDiff(
-                    name="ic-fake-package",
-                    added_deps=set([d]),
-                    added_direct_deps=set([d]),
-                )
-            },
-        ),
-        use_gitlab=False,
-    )
-    errors = inv.validate()
-    assert errors == [inventory.Inventory.Error("Version 1.1.1 of dependency1 is added, but is not owned by anyone.")]
-
-
-def test_inventory_added_existing_version():
-    """Assert validation succeeds if an added version is already used."""
-    d = inventory.Dependency(name="dependency1", version="1.1.0")
-    inv = inventory.Inventory(
-        FakeCargo(
-            "valid_with_versions.json",
-            external_direct_deps={"dependency1": set([inventory.Dependency(name="dependency1", version="1.1.1"), d])},
-            diffs={
-                "ic-fake-package": inventory.PackageDiff(
-                    name="ic-fake-package",
-                    added_deps=set([d]),
-                    added_direct_deps=set([d]),
-                )
-            },
-        ),
-        use_gitlab=False,
-    )
-    errors = inv.validate()
-    assert errors == []
 
 
 def test_cargo_duplicate_line():
@@ -396,82 +194,76 @@ def setup_git_repo(tmpdir, testcase):
     return r
 
 
-def test_cargo_inventory_not_changed(tmpdir):
-    """Verify inventory_changed returns False if inventory did not change."""
-    setup_git_repo(tmpdir, "not_changed_inventory")
-    cargo = inventory.Cargo(root=pathlib.Path(tmpdir))
-    assert not cargo.inventory_changed()
-
-
-def test_cargo_inventory_changed(tmpdir):
-    """Verify inventory changes are detected correctly."""
-    setup_git_repo(tmpdir, "changed_inventory")
-    cargo = inventory.Cargo(root=pathlib.Path(tmpdir))
-    assert cargo.inventory_changed()
+def setup_cargo_home():
+    global TEST_CARGO
+    if os.path.isdir(TEST_CARGO):
+        return
+    else:
+        tmpdir = tempfile.mkdtemp()
+        TEST_CARGO = pathlib.Path(tmpdir) / "test_data"
+        os.mkdir(TEST_CARGO)
+        _ = request.urlretrieve(
+            url=CARGO_HOME_DOWNLOAD_LINK, filename=pathlib.Path(TEST_CARGO / "cargo_home.zip").as_posix()
+        )
+        with zipfile.ZipFile(TEST_CARGO / "cargo_home.zip", "r") as zip_ref:
+            zip_ref.extractall(TEST_CARGO)
+            os.remove(TEST_CARGO / "cargo_home.zip")
+            os.chmod(TEST_CARGO / "cargo_home/bin/cargo", stat.S_IXUSR)
+            os.chmod(TEST_CARGO / "cargo_home/bin/cargo-audit", stat.S_IXUSR)
+    return
 
 
 class LocalCargo(inventory.Cargo):
     """Cargo patched up to use a local crate registry."""
 
-    def _get_cargo_tree_output(self, package=None):
+    def _get_cargo_tree_output(self, package=None, invert_deps=None):
         return super()._get_cargo_tree_output(
             package=package,
-            offline="--offline",
-            cargo_home=f"CARGO_HOME={TEST_DATA}/cargo_home",
+            offline=True,
+            cargo_home=pathlib.Path(TEST_CARGO / "cargo_home").as_posix(),
+            invert_deps=invert_deps,
         )
 
-
-def test_cargo_get_external_deps():
-    """Verify parsing of cargo tree for external direct dependencies."""
-    cargo = LocalCargo(root=TEST_DATA / "external_direct_deps")
-    assert cargo.get_external_direct_deps() == {
-        "ascii": {inventory.Dependency(name="ascii", version="1.0.0")},
-        "askama": {inventory.Dependency(name="askama", version="0.9.0")},
-        "async-trait": {inventory.Dependency(name="async-trait", version="0.1.48")},
-        "futures": {inventory.Dependency(name="futures", version="0.3.13")},
-        "tempfile": {inventory.Dependency(name="tempfile", version="3.2.0")},
-    }
-
-
-def test_cargo_package_diff_no_change(tmpdir):
-    """Verify no diff is reported if nothing changed."""
-    setup_git_repo(tmpdir, "package_diff_no_change")
-    cargo = LocalCargo(root=tmpdir)
-    assert cargo.get_package_diff() == {}
+    def _get_cargo_audit_output(self, cargo_home=None):
+        return super()._get_cargo_audit_output(cargo_home=pathlib.Path(TEST_CARGO / "cargo_home").as_posix())
 
 
 def test_cargo_get_package_diff(tmpdir):
     """Check package diffs are reported correctly."""
     setup_git_repo(tmpdir, "package_diff")
+    setup_cargo_home()
+    inventory.USE_NIX_SHELL = False
     cargo = LocalCargo(root=tmpdir)
+
     assert cargo.get_package_diff() == {
-        "ic-fake2": inventory.PackageDiff(
-            name="ic-fake2",
-            added_deps={inventory.Dependency(name="bytes", version="0.5.6", is_external=True)},
-            removed_deps=set(),
-            added_direct_deps={inventory.Dependency(name="bytes", version="0.5.6", is_external=True)},
-        ),
         "ic-fake1": inventory.PackageDiff(
             name="ic-fake1",
             added_deps=set(),
             removed_deps={
-                inventory.Dependency(name="futures", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-channel", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-core", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-executor", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-io", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-macro", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-sink", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-task", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-util", version="0.3.13", is_external=True),
-                inventory.Dependency(name="ic-fake2", version="0.1.0", is_external=False),
-                inventory.Dependency(name="pin-project-lite", version="0.2.6", is_external=True),
-                inventory.Dependency(name="pin-utils", version="0.1.0", is_external=True),
-                inventory.Dependency(name="proc-macro-hack", version="0.5.19", is_external=True),
-                inventory.Dependency(name="proc-macro-nested", version="0.1.7", is_external=True),
-                inventory.Dependency(name="slab", version="0.4.2", is_external=True),
+                inventory.Dependency(name="futures-util", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="futures", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="futures-core", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="proc-macro-nested", version="0.1.7", owner=[], is_external=True),
+                inventory.Dependency(name="pin-utils", version="0.1.0", owner=[], is_external=True),
+                inventory.Dependency(name="futures-sink", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="futures-task", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="pin-project-lite", version="0.2.6", owner=[], is_external=True),
+                inventory.Dependency(name="slab", version="0.4.2", owner=[], is_external=True),
+                inventory.Dependency(name="futures-channel", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="futures-executor", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="ic-fake2", version="0.1.0", owner=[], is_external=False),
+                inventory.Dependency(name="futures-io", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="memchr", version="2.3.4", owner=[], is_external=True),
             },
-            added_direct_deps={inventory.Dependency(name="async-trait", version="0.1.48", is_external=True)},
+            added_direct_deps=set(),
+            removed_direct_deps=set(),
+        ),
+        "ic-fake2": inventory.PackageDiff(
+            name="ic-fake2",
+            added_deps={inventory.Dependency(name="bytes", version="0.5.6", owner=[], is_external=True)},
+            removed_deps=set(),
+            added_direct_deps={inventory.Dependency(name="bytes", version="0.5.6", owner=[], is_external=True)},
+            removed_direct_deps=set(),
         ),
     }
 
@@ -479,35 +271,32 @@ def test_cargo_get_package_diff(tmpdir):
 def test_cargo_get_package_diff_new_toml(tmpdir):
     """Check package diffs are reported correctly if Cargo.toml was added."""
     setup_git_repo(tmpdir, "package_diff_new_toml")
+    setup_cargo_home()
+
+    inventory.USE_NIX_SHELL = False
     cargo = LocalCargo(root=tmpdir)
+
     assert cargo.get_package_diff() == {
         "ic-fake2": inventory.PackageDiff(
             name="ic-fake2",
             added_deps={
-                inventory.Dependency(name="futures", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-channel", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-core", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-executor", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-io", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-macro", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-sink", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-task", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-util", version="0.3.13", is_external=True),
-                inventory.Dependency(name="memchr", version="2.3.4", is_external=True),
-                inventory.Dependency(name="pin-project-lite", version="0.2.6", is_external=True),
-                inventory.Dependency(name="pin-utils", version="0.1.0", is_external=True),
-                inventory.Dependency(name="proc-macro2", version="1.0.24", is_external=True),
-                inventory.Dependency(name="proc-macro-hack", version="0.5.19", is_external=True),
-                inventory.Dependency(name="proc-macro-nested", version="0.1.7", is_external=True),
-                inventory.Dependency(name="quote", version="1.0.9", is_external=True),
-                inventory.Dependency(name="slab", version="0.4.2", is_external=True),
-                inventory.Dependency(name="syn", version="1.0.62", is_external=True),
-                inventory.Dependency(name="unicode-xid", version="0.2.1", is_external=True),
+                inventory.Dependency(name="futures", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="futures-util", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="futures-core", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="pin-project-lite", version="0.2.6", owner=[], is_external=True),
+                inventory.Dependency(name="futures-task", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="futures-channel", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="pin-utils", version="0.1.0", owner=[], is_external=True),
+                inventory.Dependency(name="futures-sink", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="proc-macro-nested", version="0.1.7", owner=[], is_external=True),
+                inventory.Dependency(name="futures-io", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="slab", version="0.4.2", owner=[], is_external=True),
+                inventory.Dependency(name="futures-executor", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="memchr", version="2.3.4", owner=[], is_external=True),
             },
             removed_deps=set(),
-            added_direct_deps={
-                inventory.Dependency(name="futures", version="0.3.13", is_external=True),
-            },
+            added_direct_deps={inventory.Dependency(name="futures", version="0.3.13", owner=[], is_external=True)},
+            removed_direct_deps=set(),
         )
     }
 
@@ -515,32 +304,103 @@ def test_cargo_get_package_diff_new_toml(tmpdir):
 def test_cargo_get_package_diff_remove_toml(tmpdir):
     """Check package diffs are reported correctly if Cargo.toml was removed."""
     setup_git_repo(tmpdir, "package_diff_remove_toml")
+    setup_cargo_home()
+
+    inventory.USE_NIX_SHELL = False
     cargo = LocalCargo(root=tmpdir)
+
     assert cargo.get_package_diff() == {
         "ic-fake2": inventory.PackageDiff(
             name="ic-fake2",
             added_deps=set(),
             removed_deps={
-                inventory.Dependency(name="futures", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-channel", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-core", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-executor", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-io", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-macro", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-sink", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-task", version="0.3.13", is_external=True),
-                inventory.Dependency(name="futures-util", version="0.3.13", is_external=True),
-                inventory.Dependency(name="memchr", version="2.3.4", is_external=True),
-                inventory.Dependency(name="pin-project-lite", version="0.2.6", is_external=True),
-                inventory.Dependency(name="pin-utils", version="0.1.0", is_external=True),
-                inventory.Dependency(name="proc-macro2", version="1.0.24", is_external=True),
-                inventory.Dependency(name="proc-macro-hack", version="0.5.19", is_external=True),
-                inventory.Dependency(name="proc-macro-nested", version="0.1.7", is_external=True),
-                inventory.Dependency(name="quote", version="1.0.9", is_external=True),
-                inventory.Dependency(name="slab", version="0.4.2", is_external=True),
-                inventory.Dependency(name="syn", version="1.0.62", is_external=True),
-                inventory.Dependency(name="unicode-xid", version="0.2.1", is_external=True),
+                inventory.Dependency(name="pin-project-lite", version="0.2.6", owner=[], is_external=True),
+                inventory.Dependency(name="proc-macro-nested", version="0.1.7", owner=[], is_external=True),
+                inventory.Dependency(name="memchr", version="2.3.4", owner=[], is_external=True),
+                inventory.Dependency(name="futures-executor", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="futures-sink", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="futures-channel", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="futures-task", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="futures-util", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="slab", version="0.4.2", owner=[], is_external=True),
+                inventory.Dependency(name="futures-core", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="futures-io", version="0.3.13", owner=[], is_external=True),
+                inventory.Dependency(name="pin-utils", version="0.1.0", owner=[], is_external=True),
+                inventory.Dependency(name="futures", version="0.3.13", owner=[], is_external=True),
             },
             added_direct_deps=set(),
+            removed_direct_deps={inventory.Dependency(name="futures", version="0.3.13", owner=[], is_external=True)},
         )
     }
+
+
+def test_get_vulnerable_dependencies(tmpdir):
+    """Check vulnerable dependencies are correctly identified."""
+    shutil.copytree(TEST_DATA / "vulnerable_deps", tmpdir, dirs_exist_ok=True)
+    setup_cargo_home()
+
+    inventory.USE_NIX_SHELL = False
+
+    cargo = LocalCargo(root=tmpdir)
+
+    set_ic_vulnerable1 = []
+    set_ic_vulnerable2 = []
+    set_ic_vulnerable1.append(
+        dataclasses.asdict(
+            inventory.PackageVulnerableDependency(
+                package_name="ic-vulnerable1:0.1.0",
+                is_vulnerable_dependency_direct=False,
+                direct_dependency=inventory.Dependency(name="prost-build", version="0.7.0", is_external=True, owner=[]),
+                vulnerable_dependency=inventory.Dependency(
+                    name="prost-types", version="0.7.0", is_external=True, owner=[]
+                ),
+                risk_rating=inventory.RiskRating(40),
+                dependency_chain=["prost-build:0.7.0"],
+                codeowner="",
+                reason="Conversion from `prost_types::Timestamp` to `SystemTime` can cause an overflow and panic Affected versions of this crate contained a bug in which untrusted input could cause an overflow and panic when converting a `Timestamp` to `SystemTime`.\n\nIt is recommended to upgrade to `prost-types` v0.8 and switch the usage of `From<Timestamp> for SystemTime` to `TryFrom<Timestamp> for SystemTime`.\n\nSee [#438] for more information.\n\n[#438]: https://github.com/tokio-rs/prost/issues/438",
+                fix=[">=0.8.0"],
+            )
+        )
+    )
+    set_ic_vulnerable1.append(
+        dataclasses.asdict(
+            inventory.PackageVulnerableDependency(
+                package_name="ic-vulnerable1:0.1.0",
+                is_vulnerable_dependency_direct=True,
+                direct_dependency=inventory.Dependency(name="wasmtime", version="0.29.0", is_external=True, owner=[]),
+                vulnerable_dependency=inventory.Dependency(
+                    name="wasmtime", version="0.29.0", is_external=True, owner=[]
+                ),
+                risk_rating=inventory.RiskRating(40),
+                codeowner="",
+                reason="Multiple Vulnerabilities in Wasmtime * [Use after free passing `externref`s to Wasm in\n  Wasmtime](https://github.com/bytecodealliance/wasmtime/security/advisories/GHSA-v4cp-h94r-m7xf)\n\n* [Out-of-bounds read/write and invalid free with `externref`s and GC safepoints\n  in\n  Wasmtime](https://github.com/bytecodealliance/wasmtime/security/advisories/GHSA-4873-36h9-wv49)\n\n* [Wrong type for `Linker`-define functions when used across two\n  `Engine`s](https://github.com/bytecodealliance/wasmtime/security/advisories/GHSA-q879-9g95-56mx)",
+                fix=[">=0.30.0"],
+            )
+        )
+    )
+
+    set_ic_vulnerable2.append(
+        dataclasses.asdict(
+            inventory.PackageVulnerableDependency(
+                package_name="ic-vulnerable2:0.1.0",
+                is_vulnerable_dependency_direct=True,
+                direct_dependency=inventory.Dependency(name="tiny_http", version="0.7.0", is_external=True, owner=[]),
+                vulnerable_dependency=inventory.Dependency(
+                    name="tiny_http", version="0.7.0", is_external=True, owner=[]
+                ),
+                risk_rating=inventory.RiskRating(40),
+                codeowner="",
+                reason="HTTP Request smuggling through malformed Transfer Encoding headers HTTP pipelining issues and request smuggling attacks are possible due to incorrect \nTransfer encoding header parsing.\n\nIt is possible conduct HTTP request smuggling attacks (CL:TE/TE:TE) by sending invalid Transfer Encoding headers. \n\nBy manipulating the HTTP response the attacker could poison a web-cache, perform an XSS attack, or obtain sensitive information \nfrom requests other than their own.",
+                fix=[">=0.8.0", "^0.6.3"],
+            )
+        )
+    )
+
+    expected: typing.Dict[str, typing.List[typing.Dict]] = {
+        "ic-vulnerable1:0.1.0": set_ic_vulnerable1,
+        "ic-vulnerable2:0.1.0": set_ic_vulnerable2,
+    }
+    result = cargo.get_vulnerable_dependencies()
+    assert result["metadata"] == ["prost-types:0.7.0", "tiny_http:0.7.0", "wasmtime:0.29.0"]
+    assert result["ic-vulnerable1:0.1.0"] == expected["ic-vulnerable1:0.1.0"]
+    assert result["ic-vulnerable2:0.1.0"] == expected["ic-vulnerable2:0.1.0"]
