@@ -243,7 +243,7 @@ fn node_cannot_be_removed_if_in_subnet() {
 fn init_mutation(node_record: &NodeRecord) -> (NodeId, RegistryAtomicMutateRequest) {
     let temp_dir = temp_dir();
     let (keys, node_id) = get_node_keys_or_generate_if_missing(temp_dir.path());
-    let valid_pks = ValidNodePublicKeys::try_from(&keys, node_id).unwrap();
+    let valid_pks = ValidNodePublicKeys::try_from(keys, node_id).unwrap();
     let mut mutations = make_add_node_registry_mutations(node_id, node_record.clone(), valid_pks);
     // Insert the node's operator
     mutations.push(RegistryMutation {

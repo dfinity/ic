@@ -92,51 +92,31 @@ impl ValidNodePublicKeys {
     /// Determines if the given node public key material is valid.
     ///
     /// Returns `ValidNodePublicKeys` iff the `keys` are valid and iff they
-    /// are valid for `node_id`. After successful validation, callers should
+    /// are valid for `node_id`. After successful validation, callers shall
     /// only work with `ValidNodePublicKeys` in their API and not with
     /// the possibly invalid `NodePublicKeys` so as to avoid confusion about
     /// whether key material is validated or not.
-    pub fn try_from(keys: &NodePublicKeys, node_id: NodeId) -> Result<Self, KeyValidationError> {
-        validate_node_signing_key(&keys.node_signing_pk, node_id)?;
-        validate_committee_signing_key(&keys.committee_signing_pk)?;
-        validate_dkg_dealing_encryption_key(&keys.dkg_dealing_encryption_pk, node_id)?;
-        validate_tls_certificate(&keys.tls_certificate, node_id)?;
+    pub fn try_from(keys: NodePublicKeys, node_id: NodeId) -> Result<Self, KeyValidationError> {
+        validate_node_signing_key(keys.node_signing_pk.as_ref(), node_id)?;
+        validate_committee_signing_key(keys.committee_signing_pk.as_ref())?;
+        validate_dkg_dealing_encryption_key(keys.dkg_dealing_encryption_pk.as_ref(), node_id)?;
+        validate_tls_certificate(keys.tls_certificate.as_ref(), node_id)?;
         if keys.version >= 1 {
-            validate_idkg_dealing_encryption_key(&keys.idkg_dealing_encryption_pk)?;
+            validate_idkg_dealing_encryption_key(keys.idkg_dealing_encryption_pk.as_ref())?;
         }
 
-        let node_signing_pubkey = keys
-            .node_signing_pk
-            .as_ref()
-            .expect("Value missing")
-            .clone();
-        let committee_signing_pubkey = keys
-            .committee_signing_pk
-            .as_ref()
-            .expect("Value missing")
-            .clone();
-        let dkg_dealing_encryption_pubkey = keys
-            .dkg_dealing_encryption_pk
-            .as_ref()
-            .expect("Value missing")
-            .clone();
+        let node_signing_pubkey = keys.node_signing_pk.expect("Value missing");
+        let committee_signing_pubkey = keys.committee_signing_pk.expect("Value missing");
+        let dkg_dealing_encryption_pubkey = keys.dkg_dealing_encryption_pk.expect("Value missing");
         let idkg_dealing_encryption_pubkey = {
             if keys.version >= 1 {
-                let idkg_pubkey = keys
-                    .idkg_dealing_encryption_pk
-                    .as_ref()
-                    .expect("Value missing")
-                    .clone();
+                let idkg_pubkey = keys.idkg_dealing_encryption_pk.expect("Value missing");
                 Some(idkg_pubkey)
             } else {
                 None
             }
         };
-        let tls_certificate = keys
-            .tls_certificate
-            .as_ref()
-            .expect("Value missing")
-            .clone();
+        let tls_certificate = keys.tls_certificate.expect("Value missing");
 
         Ok(ValidNodePublicKeys {
             node_id,
@@ -188,7 +168,7 @@ impl ValidIDkgDealingEncryptionPublicKey {
     /// instance in their API so as to avoid confusion about whether the key
     /// is validated or not.
     pub fn try_from(key: PublicKey) -> Result<Self, KeyValidationError> {
-        validate_idkg_dealing_encryption_key(&Some(key.clone()))?;
+        validate_idkg_dealing_encryption_key(Some(&key))?;
         Ok(Self {
             idkg_dealing_encryption_pubkey: key,
         })
@@ -216,12 +196,11 @@ impl fmt::Display for KeyValidationError {
 ///
 /// See the crate documentation for the exact checks that are performed.
 fn validate_node_signing_key(
-    node_signing_key: &Option<PublicKey>,
+    node_signing_key: Option<&PublicKey>,
     node_id: NodeId,
 ) -> Result<(), KeyValidationError> {
-    let pubkey_proto = node_signing_key
-        .as_ref()
-        .ok_or_else(|| invalid_node_signing_key_error("key is missing"))?;
+    let pubkey_proto =
+        node_signing_key.ok_or_else(|| invalid_node_signing_key_error("key is missing"))?;
 
     let pubkey_bytes = BasicSigEd25519PublicKeyBytes::try_from(pubkey_proto)
         .map_err(|e| invalid_node_signing_key_error(format!("{}", e)))?;
@@ -242,10 +221,9 @@ fn validate_node_signing_key(
 ///
 /// See the crate documentation for the exact checks that are performed.
 fn validate_committee_signing_key(
-    committee_signing_key: &Option<PublicKey>,
+    committee_signing_key: Option<&PublicKey>,
 ) -> Result<(), KeyValidationError> {
     let pubkey_proto = committee_signing_key
-        .as_ref()
         .ok_or_else(|| invalid_committee_signing_key_error("key is missing"))?;
 
     let pubkey_bytes = MultiSigBls12381PublicKeyBytes::try_from(pubkey_proto)
@@ -263,11 +241,10 @@ fn validate_committee_signing_key(
 ///
 /// See the crate documentation for the exact checks that are performed.
 fn validate_dkg_dealing_encryption_key(
-    dkg_dealing_encryption_key: &Option<PublicKey>,
+    dkg_dealing_encryption_key: Option<&PublicKey>,
     node_id: NodeId,
 ) -> Result<(), KeyValidationError> {
     let pubkey_proto = dkg_dealing_encryption_key
-        .as_ref()
         .ok_or_else(|| invalid_dkg_dealing_enc_pubkey_error("key is missing"))?;
 
     // Note: `fs_ni_dkg_pubkey_from_proto` also ensures that the
@@ -284,10 +261,9 @@ fn validate_dkg_dealing_encryption_key(
 ///
 /// See the crate documentation for the exact checks that are performed.
 fn validate_idkg_dealing_encryption_key(
-    idkg_dealing_encryption_key: &Option<PublicKey>,
+    idkg_dealing_encryption_key: Option<&PublicKey>,
 ) -> Result<(), KeyValidationError> {
     let pubkey_proto = idkg_dealing_encryption_key
-        .as_ref()
         .ok_or_else(|| invalid_idkg_dealing_enc_pubkey_error("key is missing"))?;
 
     let curve_type = match AlgorithmIdProto::from_i32(pubkey_proto.algorithm) {
@@ -305,14 +281,12 @@ fn validate_idkg_dealing_encryption_key(
 }
 
 pub fn validate_tls_certificate(
-    tls_certificate: &Option<X509PublicKeyCert>,
+    tls_certificate: Option<&X509PublicKeyCert>,
     node_id: NodeId,
 ) -> Result<(), TlsCertValidationError> {
-    let cert = tls_certificate
-        .as_ref()
-        .ok_or_else(|| TlsCertValidationError {
-            error: "invalid TLS certificate: certificate is missing".to_string(),
-        })?;
+    let cert = tls_certificate.ok_or_else(|| TlsCertValidationError {
+        error: "invalid TLS certificate: certificate is missing".to_string(),
+    })?;
 
     ic_crypto_tls_cert_validation::validate_tls_certificate(cert, node_id)
 }

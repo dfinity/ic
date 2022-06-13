@@ -254,7 +254,7 @@ mod test {
     fn new_node_mutations() -> (NodeId, Vec<RegistryMutation>) {
         let temp_dir = temp_dir();
         let (keys, node_id) = get_node_keys_or_generate_if_missing(temp_dir.path());
-        let valid_pks = ValidNodePublicKeys::try_from(&keys, node_id).unwrap();
+        let valid_pks = ValidNodePublicKeys::try_from(keys, node_id).unwrap();
         let node_record = NodeRecord {
             node_operator_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
             xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),

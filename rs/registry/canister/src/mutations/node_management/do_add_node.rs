@@ -228,7 +228,7 @@ fn valid_keys_from_payload(
     };
 
     // 5. validate the keys and the node_id
-    match ValidNodePublicKeys::try_from(&node_pks, node_id) {
+    match ValidNodePublicKeys::try_from(node_pks, node_id) {
         Ok(valid_pks) => Ok((node_id, valid_pks)),
         Err(e) => Err(format!("Could not validate public keys, due to {:?}", e)),
     }
