@@ -85,7 +85,7 @@ pub(crate) struct TransportImpl {
     /// Configuration
     pub config: TransportConfig,
     /// Map of clients to their corresponding state
-    pub client_map: RwLock<Option<ClientState>>,
+    pub client_state: RwLock<Option<ClientState>>,
 
     // Crypto and data required for TLS handshakes
     /// Clients that are allowed to connect to this node

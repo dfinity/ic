@@ -363,8 +363,8 @@ impl TransportImpl {
             return;
         }
         let event_handler = {
-            let mut cl_map = self.client_map.write().unwrap();
-            let client_state = match cl_map.as_mut() {
+            let mut client_state = self.client_state.write().unwrap();
+            let client_state = match client_state.as_mut() {
                 Some(client_state) => client_state,
                 _ => return,
             };
@@ -387,8 +387,8 @@ impl TransportImpl {
         reader: Box<TlsReadHalf>,
         writer: Box<TlsWriteHalf>,
     ) -> Result<Arc<dyn AsyncTransportEventHandler>, TransportErrorCode> {
-        let mut client_map = self.client_map.write().unwrap();
-        let client_state = match client_map.as_mut() {
+        let mut client_state = self.client_state.write().unwrap();
+        let client_state = match client_state.as_mut() {
             Some(client_state) => client_state,
             None => return Err(TransportErrorCode::TransportClientNotFound),
         };

@@ -108,7 +108,7 @@ impl TransportImpl {
             control_plane_metrics: ControlPlaneMetrics::new(metrics_registry.clone()),
             send_queue_metrics: SendQueueMetrics::new(metrics_registry),
             log,
-            client_map: RwLock::new(None),
+            client_state: RwLock::new(None),
             weak_self: RwLock::new(Weak::new()),
         });
         *arc.weak_self.write().unwrap() = Arc::downgrade(&arc);
@@ -166,8 +166,8 @@ impl Transport for TransportImpl {
         flow_tag: FlowTag,
         message: TransportPayload,
     ) -> Result<(), TransportErrorCode> {
-        let client_map = self.client_map.read().unwrap();
-        let client_state = match client_map.as_ref() {
+        let client_state = self.client_state.read().unwrap();
+        let client_state = match client_state.as_ref() {
             Some(client_state) => client_state,
             None => return Err(TransportErrorCode::TransportClientNotFound),
         };
@@ -186,8 +186,8 @@ impl Transport for TransportImpl {
     }
 
     fn clear_send_queues(&self, peer_id: &NodeId) {
-        let client_map = self.client_map.read().unwrap();
-        let client_state = client_map.as_ref().expect("Transport client not found");
+        let client_state = self.client_state.read().unwrap();
+        let client_state = client_state.as_ref().expect("Transport client not found");
         let peer_state = client_state
             .peer_map
             .get(peer_id)
