@@ -6,10 +6,11 @@ mod common_wat;
 
 use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
-use ic_replicated_state::CallContextAction;
+use ic_error_types::ErrorCode;
+use ic_execution_environment::{ExecutionEnvironment, ExecutionResponse};
 use ic_test_utilities::execution_environment::ExecutionTest;
 use ic_test_utilities::types::ids::canister_test_id;
-use ic_types::Cycles;
+use ic_types::ingress::{IngressState, IngressStatus};
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -370,28 +371,25 @@ pub fn bench_execute_update(c: &mut Criterion) {
              execution_parameters,
              ..
          }| {
-            let hypervisor = ee_test.hypervisor_deprecated();
-            let (_state, instructions, action, _bytes) = hypervisor.execute_update(
+            let res = ee_test.execution_environment().execute_canister_message(
                 canister_state,
+                execution_parameters.total_instruction_limit,
                 ingress,
                 time,
                 network_topology,
-                execution_parameters,
+                execution_parameters.subnet_available_memory,
             );
-            match action {
-                CallContextAction::NoResponse { .. }
-                | CallContextAction::NotYetResponded { .. }
-                | CallContextAction::Reply { .. }
-                | CallContextAction::Reject { .. } => {}
-                CallContextAction::Fail { .. } | CallContextAction::AlreadyResponded { .. } => {
-                    assert_eq!(
-                        action,
-                        CallContextAction::NoResponse {
-                            refund: Cycles::new(0),
-                        },
-                        "Error executing an update method"
-                    )
-                }
+            let instructions = res.num_instructions_left;
+            match res.response {
+                ExecutionResponse::Ingress((_, status)) => match status {
+                    IngressStatus::Known { state, .. } => {
+                        if let IngressState::Failed(err) = state {
+                            assert_eq!(err.code(), ErrorCode::CanisterDidNotReply)
+                        }
+                    }
+                    _ => panic!("Unexpected ingress status"),
+                },
+                _ => panic!("Expected ingress result"),
             }
             assert_eq!(
                 expected_instructions,

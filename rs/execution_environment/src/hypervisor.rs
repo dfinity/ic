@@ -8,8 +8,7 @@ use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
     ExecutionParameters, HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
-use ic_interfaces::messages::RequestOrIngress;
-use ic_logger::{debug, fatal, ReplicaLogger};
+use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NetworkTopology;
@@ -100,123 +99,6 @@ impl Hypervisor {
 
     pub(crate) fn subnet_type(&self) -> SubnetType {
         self.own_subnet_type
-    }
-
-    /// Execute an update call.
-    ///
-    /// Returns:
-    ///
-    /// - The updated `CanisterState` if the execution succeeded, otherwise
-    /// the old `CanisterState`.
-    ///
-    /// - Number of instructions left. This should be <= `instructions_limit`.
-    ///
-    /// - An enum describing the different actions that should be taken based
-    /// the current state of the call context associated with the request that
-    /// was executed.
-    ///
-    /// - The size of the heap delta change that the canister produced during
-    /// execution. If execution failed, then the value is 0.
-    #[allow(clippy::too_many_arguments)]
-    pub fn execute_update(
-        &self,
-        canister: CanisterState,
-        mut request: RequestOrIngress,
-        time: Time,
-        network_topology: Arc<NetworkTopology>,
-        execution_parameters: ExecutionParameters,
-    ) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
-        debug!(self.log, "execute_update: method {}", request.method_name());
-
-        let incoming_cycles = request.take_cycles();
-
-        // Validate that the canister is running.
-        if CanisterStatusType::Running != canister.status() {
-            return (
-                canister,
-                execution_parameters.total_instruction_limit,
-                CallContextAction::Fail {
-                    error: HypervisorError::CanisterStopped,
-                    refund: incoming_cycles,
-                },
-                NumBytes::from(0),
-            );
-        }
-
-        let method = WasmMethod::Update(request.method_name().to_string());
-        let memory_usage = canister.memory_usage(self.own_subnet_type);
-        let (execution_state, mut system_state, scheduler_state) = canister.into_parts();
-
-        // Validate that the Wasm module is present.
-        let execution_state = match execution_state {
-            None => {
-                return (
-                    CanisterState::from_parts(None, system_state, scheduler_state),
-                    execution_parameters.total_instruction_limit,
-                    CallContextAction::Fail {
-                        error: HypervisorError::WasmModuleNotFound,
-                        refund: incoming_cycles,
-                    },
-                    NumBytes::from(0),
-                );
-            }
-            Some(es) => es,
-        };
-
-        // Validate that the Wasm module exports the method.
-        if !execution_state.exports_method(&method) {
-            return (
-                CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
-                execution_parameters.total_instruction_limit,
-                CallContextAction::Fail {
-                    error: HypervisorError::MethodNotFound(method),
-                    refund: incoming_cycles,
-                },
-                NumBytes::from(0),
-            );
-        }
-
-        let call_context_id = system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .new_call_context(CallOrigin::from(&request), incoming_cycles, time);
-
-        let api_type = ApiType::update(
-            time,
-            request.method_payload().to_vec(),
-            incoming_cycles,
-            *request.sender(),
-            call_context_id,
-        );
-        let (output, output_execution_state, output_system_state) = self.execute(
-            api_type,
-            system_state.clone(),
-            memory_usage,
-            execution_parameters,
-            FuncRef::Method(method),
-            execution_state,
-            &network_topology,
-        );
-
-        let (mut system_state, heap_delta) = if output.wasm_result.is_ok() {
-            (
-                output_system_state,
-                NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64),
-            )
-        } else {
-            // In contrast to other methods, an update methods ignores the
-            // Wasm execution error and returns 0 as the heap delta.
-            (system_state, NumBytes::from(0))
-        };
-
-        let action = system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .on_canister_result(call_context_id, output.wasm_result);
-
-        let canister =
-            CanisterState::from_parts(Some(output_execution_state), system_state, scheduler_state);
-        (canister, output.num_instructions_left, action, heap_delta)
     }
 
     /// Execute a callback.

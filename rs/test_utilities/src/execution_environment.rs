@@ -107,6 +107,10 @@ impl ExecutionTest {
         self.exec_env.hypervisor_for_testing()
     }
 
+    pub fn execution_environment(&self) -> &ExecutionEnvironmentImpl {
+        &self.exec_env
+    }
+
     pub fn user_id(&self) -> UserId {
         self.user_id
     }
