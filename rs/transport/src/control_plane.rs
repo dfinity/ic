@@ -50,8 +50,8 @@ impl TransportImpl {
         peer_record: &NodeRecord,
         registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode> {
-        let mut client_map = self.client_map.write().unwrap();
-        let client_state = client_map
+        let mut client_state = self.client_state.write().unwrap();
+        let client_state = client_state
             .as_mut()
             .ok_or(TransportErrorCode::TransportClientNotFound)?;
         let role = Self::connection_role(&self.node_id, peer_id);
@@ -73,8 +73,8 @@ impl TransportImpl {
     /// Stops connection to a peer
     pub(crate) fn stop_peer_connections(&self, peer_id: &NodeId) -> Result<(), TransportErrorCode> {
         self.allowed_clients.write().unwrap().remove(peer_id);
-        let mut client_map = self.client_map.write().unwrap();
-        let client_state = client_map
+        let mut client_state = self.client_state.write().unwrap();
+        let client_state = client_state
             .as_mut()
             .ok_or(TransportErrorCode::TransportClientNotFound)?;
         let peer_state = client_state
@@ -479,8 +479,8 @@ impl TransportImpl {
             .with_label_values(&[&flow_id.peer_id.to_string(), &flow_id.flow_tag.to_string()])
             .inc();
 
-        let mut client_map = self.client_map.write().unwrap();
-        let client_state = client_map
+        let mut client_state = self.client_state.write().unwrap();
+        let client_state = client_state
             .as_mut()
             .ok_or(TransportErrorCode::TransportClientNotFound)?;
         let peer_state = client_state
@@ -903,8 +903,8 @@ impl TransportImpl {
         &self,
         event_handler: Arc<dyn AsyncTransportEventHandler>,
     ) -> Result<(), TransportErrorCode> {
-        let mut client_map = self.client_map.write().unwrap();
-        if client_map.is_some() {
+        let mut client_state = self.client_state.write().unwrap();
+        if client_state.is_some() {
             return Err(TransportErrorCode::TransportClientAlreadyRegistered);
         }
 
@@ -927,7 +927,7 @@ impl TransportImpl {
             let accept_task = self.spawn_accept_task(flow_tag, tcp_listener);
             accept_ports.insert(flow_tag, ServerPortState { accept_task });
         }
-        client_map.replace(ClientState {
+        client_state.replace(ClientState {
             accept_ports,
             peer_map: HashMap::new(),
             event_handler,
