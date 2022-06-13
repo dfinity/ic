@@ -188,9 +188,6 @@ pub(crate) struct DownloadManagerImpl {
     prioritizer: Arc<dyn DownloadPrioritizer>,
     /// The peer manager.
     peer_manager: Arc<dyn PeerManager + Send + Sync>,
-    /// The set of current peers, which is shared between the download manager
-    /// and the peer manager.
-    current_peers: Arc<Mutex<PeerContextDictionary>>,
     /// The underlying *Transport* layer.
     transport: Arc<dyn Transport>,
     /// The flow mapper.
@@ -251,7 +248,7 @@ impl DownloadManager for DownloadManagerImpl {
             return;
         }
 
-        let mut current_peers = self.current_peers.lock().unwrap();
+        let mut current_peers = self.peer_manager.current_peers().lock().unwrap();
         if let Some(_peer_context) = current_peers.get_mut(&peer_id) {
             let _ = self.prioritizer.add_advert(gossip_advert, peer_id);
         } else {
@@ -331,7 +328,7 @@ impl DownloadManager for DownloadManagerImpl {
         );
 
         // Remove the chunk request tracker.
-        let mut current_peers = self.current_peers.lock().unwrap();
+        let mut current_peers = self.peer_manager.current_peers().lock().unwrap();
         if let Some(peer_context) = current_peers.get_mut(&peer_id) {
             if let Some(tracker) = peer_context.requested.remove(&GossipRequestTrackerKey {
                 artifact_id: gossip_chunk.artifact_id.clone(),
@@ -564,7 +561,7 @@ impl DownloadManager for DownloadManagerImpl {
     fn peer_connection_down(&self, peer_id: NodeId) {
         self.metrics.connection_down_events.inc();
         let now = SystemTime::now();
-        let mut current_peers = self.current_peers.lock().unwrap();
+        let mut current_peers = self.peer_manager.current_peers().lock().unwrap();
         if let Some(peer_context) = current_peers.get_mut(&peer_id) {
             peer_context.disconnect_time = Some(now);
             trace!(
@@ -583,7 +580,8 @@ impl DownloadManager for DownloadManagerImpl {
         let _now = SystemTime::now();
 
         let last_disconnect = self
-            .current_peers
+            .peer_manager
+            .current_peers()
             .lock()
             .unwrap()
             .get_mut(&peer_id)
@@ -629,7 +627,8 @@ impl DownloadManager for DownloadManagerImpl {
             p2p_error_code: P2PErrorCode::Busy,
         });
         // Throttle processing of incoming re-transmission request
-        self.current_peers
+        self.peer_manager
+            .current_peers()
             .lock()
             .unwrap()
             .get_mut(&peer_id)
@@ -719,7 +718,8 @@ impl DownloadManager for DownloadManagerImpl {
 
         // Collect the peers with timed-out requests.
         let mut timed_out_peers = Vec::new();
-        for (node_id, peer_context) in self.current_peers.lock().unwrap().iter_mut() {
+        for (node_id, peer_context) in self.peer_manager.current_peers().lock().unwrap().iter_mut()
+        {
             if self.process_timed_out_requests(node_id, peer_context) {
                 timed_out_peers.push(*node_id);
             }
@@ -776,7 +776,7 @@ impl DownloadManagerImpl {
         let peer_manager = Arc::new(PeerManagerImpl::new(
             node_id,
             log.clone(),
-            current_peers.clone(),
+            current_peers,
             transport.clone(),
         ));
 
@@ -793,7 +793,6 @@ impl DownloadManagerImpl {
             consensus_pool_cache,
             prioritizer,
             peer_manager,
-            current_peers,
             transport: transport.clone(),
             flow_mapper,
             artifacts_under_construction: RwLock::new(ArtifactDownloadListImpl::new(log.clone())),
@@ -1102,7 +1101,7 @@ impl DownloadManagerImpl {
         peer_id: NodeId,
     ) -> Result<Vec<GossipChunkRequest>, impl Error> {
         // Get the peer context.
-        let mut current_peers = self.current_peers.lock().unwrap();
+        let mut current_peers = self.peer_manager.current_peers().lock().unwrap();
         let peer_context = self.is_peer_ready_for_download(peer_id, &current_peers)?;
         let requested_instant = Instant::now(); // function granularity for instant is good enough
         let max_streams_per_peer = self.gossip_config.max_artifact_streams_per_peer as usize;
@@ -1602,7 +1601,11 @@ pub mod tests {
             (download_manager.gossip_config.max_chunk_wait_ms * 2) as u64,
         );
         std::thread::sleep(sleep_duration);
-        let mut current_peers = download_manager.current_peers.lock().unwrap();
+        let mut current_peers = download_manager
+            .peer_manager
+            .current_peers()
+            .lock()
+            .unwrap();
         let peer_context = current_peers.get_mut(node_id).unwrap();
         download_manager.process_timed_out_requests(node_id, peer_context);
         assert_eq!(peer_context.requested.len(), 0);
