@@ -3,11 +3,11 @@ ARG IC_BUILD_IMG_VERSION=latest
 
 FROM dfinity/ic-build:$IC_BUILD_IMG_VERSION
 
-
 # Pulls the dependencies necessary for installing and using a Nix shell later on.
 
-# In addition to the volumes stated in Dockerfile, the following volumes should also be mount from the host for optimal performance:
-# /nix - to cache the Nix store
+# In addition to the volumes stated in Dockerfile, 
+# the following volumes should also be mount from the host for optimal performance:
+# * /nix - to cache the Nix store
 
 USER 0
 
@@ -32,8 +32,7 @@ ENV NIX_VERSION=${nix_version} \
     MANPATH="/home/${USER}/.nix-profile/share/man:$MANPATH"
 
 RUN echo 'curl --fail -L https://releases.nixos.org/nix/nix-${NIX_VERSION}/install | sh\n' \
-        > /usr/bin/nix-install && \
-    chmod 0755 /usr/bin/nix-install
+        > /usr/bin/nix-install && chmod 0755 /usr/bin/nix-install
 
 USER ${UID}
 

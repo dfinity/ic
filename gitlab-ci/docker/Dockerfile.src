@@ -1,4 +1,6 @@
-# There are a lot of third-party tools we download from somewhere and use in CI builds. This Dockerfile is the place to collect all of those.
+# There are a lot of third-party tools we download from somewhere and use in CI builds. 
+# This Dockerfile is the place to collect all of those.
+
 # Anything placed in the /opt directory will be copied to the corresponding location in the /usr directory.
 # If you need to build something from source, this is the place to do it (but you probably don't)
 
