@@ -5,3 +5,16 @@ exports_files(
     ],
     visibility = ["//visibility:public"],
 )
+
+EXTERNAL_CRATES = ["external_crates.bzl"]
+
+sh_test(
+    name = "external_crates_test",
+    size = "small",
+    srcs = ["external_crates_test.sh"],
+    args = ["%s/%s" % (
+        package_name(),
+        p,
+    ) for p in EXTERNAL_CRATES],
+    data = EXTERNAL_CRATES,
+)
