@@ -5648,6 +5648,7 @@ dependencies = [
  "dfn_core",
  "hex",
  "ic-base-types",
+ "ic-constants",
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-utils 0.8.0",

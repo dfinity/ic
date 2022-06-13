@@ -1,7 +1,10 @@
 use crate::balance_book::BalanceBook;
 use crate::errors::ApiError;
 use crate::store::{BlockStoreError, HashedBlock, SQLiteStore};
-use ic_ledger_core::block::{BlockType, EncodedBlock, HashOf};
+use ic_ledger_core::{
+    block::{BlockType, EncodedBlock, HashOf},
+    ledger::LedgerTransaction,
+};
 use ledger_canister::{
     apply_operation, AccountIdentifier, Block, BlockHeight, Tokens, Transaction,
 };

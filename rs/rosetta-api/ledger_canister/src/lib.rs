@@ -10,6 +10,7 @@ pub use ic_ledger_core::{
 };
 use ic_ledger_core::{
     block::{BlockType, EncodedBlock, HashOf, HASH_LENGTH},
+    ledger::{self as core_ledger, LedgerData, LedgerTransaction, TransactionInfo},
     timestamp::TimeStamp,
 };
 use intmap::IntMap;
@@ -20,7 +21,6 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::convert::TryFrom;
 use std::fmt;
-use std::hash::Hash;
 use std::sync::RwLock;
 use std::time::Duration;
 
@@ -87,36 +87,6 @@ where
     }
 }
 
-// Find the specified number of accounts with lowest balances so that their
-// balances can be reclaimed.
-fn select_accounts_to_trim(
-    balances: &LedgerBalances,
-    num_accounts: usize,
-) -> Vec<(Tokens, AccountIdentifier)> {
-    let mut to_trim: std::collections::BinaryHeap<(Tokens, AccountIdentifier)> =
-        std::collections::BinaryHeap::new();
-
-    let mut iter = balances.store.iter();
-
-    // Accumulate up to `trim_quantity` accounts
-    for (account, balance) in iter.by_ref().take(num_accounts) {
-        to_trim.push((*balance, *account));
-    }
-
-    for (account, balance) in iter {
-        // If any account's balance is lower than the maximum in our set,
-        // include that account, and remove the current maximum
-        if let Some((greatest_balance, _)) = to_trim.peek() {
-            if balance < greatest_balance {
-                to_trim.push((*balance, *account));
-                to_trim.pop();
-            }
-        }
-    }
-
-    to_trim.into_vec()
-}
-
 /// An operation which modifies account balances
 #[derive(
     Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
@@ -150,6 +120,35 @@ pub struct Transaction {
     pub created_at_time: TimeStamp,
 }
 
+impl LedgerTransaction for Transaction {
+    type AccountId = AccountIdentifier;
+
+    fn burn(from: Self::AccountId, amount: Tokens, created_at_time: TimeStamp) -> Self {
+        Self {
+            operation: Operation::Burn { from, amount },
+            memo: Memo::default(),
+            created_at_time,
+        }
+    }
+
+    fn created_at_time(&self) -> TimeStamp {
+        self.created_at_time
+    }
+
+    fn hash(&self) -> HashOf<Self> {
+        let mut state = Sha256::new();
+        state.write(&serde_cbor::ser::to_vec_packed(&self).unwrap());
+        HashOf::new(state.finish())
+    }
+
+    fn apply<S>(&self, balances: &mut Balances<Self::AccountId, S>) -> Result<(), BalanceError>
+    where
+        S: Default + BalancesStore<Self::AccountId>,
+    {
+        apply_operation(balances, &self.operation)
+    }
+}
+
 impl Transaction {
     pub fn new(
         from: AccountIdentifier,
@@ -170,12 +169,6 @@ impl Transaction {
             memo,
             created_at_time,
         }
-    }
-
-    pub fn hash(&self) -> HashOf<Self> {
-        let mut state = Sha256::new();
-        state.write(&serde_cbor::ser::to_vec_packed(&self).unwrap());
-        HashOf::new(state.finish())
     }
 }
 
@@ -201,23 +194,16 @@ impl Block {
             memo,
             created_at_time,
         };
-        Ok(Self::new_from_transaction(
-            parent_hash,
-            transaction,
-            timestamp,
-        ))
+        Ok(Self::from_transaction(parent_hash, transaction, timestamp))
     }
 
+    #[inline]
     pub fn new_from_transaction(
         parent_hash: Option<HashOf<EncodedBlock>>,
         transaction: Transaction,
         timestamp: TimeStamp,
     ) -> Self {
-        Self {
-            parent_hash,
-            transaction,
-            timestamp,
-        }
+        Self::from_transaction(parent_hash, transaction, timestamp)
     }
 
     pub fn transaction(&self) -> Cow<Transaction> {
@@ -226,6 +212,8 @@ impl Block {
 }
 
 impl BlockType for Block {
+    type Transaction = Transaction;
+
     fn encode(self) -> EncodedBlock {
         EncodedBlock::from_vec(
             ProtoBuf::new(self)
@@ -244,6 +232,18 @@ impl BlockType for Block {
 
     fn timestamp(&self) -> TimeStamp {
         self.timestamp
+    }
+
+    fn from_transaction(
+        parent_hash: Option<HashOf<EncodedBlock>>,
+        transaction: Self::Transaction,
+        timestamp: TimeStamp,
+    ) -> Self {
+        Self {
+            parent_hash,
+            transaction,
+            timestamp,
+        }
     }
 }
 
@@ -305,7 +305,7 @@ pub struct Ledger {
     /// The transactions in the transaction window, sorted by block
     /// index / block timestamp. (Block timestamps are monotonically
     /// non-decreasing, so this is the same.)
-    transactions_by_height: VecDeque<TransactionInfo>,
+    transactions_by_height: VecDeque<TransactionInfo<Transaction>>,
     /// Used to prevent non-whitelisted canisters from sending tokens
     send_whitelist: HashSet<CanisterId>,
     /// Maximum number of transactions which ledger will accept
@@ -324,10 +324,69 @@ pub struct Ledger {
     pub token_name: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct TransactionInfo {
-    block_timestamp: TimeStamp,
-    transaction_hash: HashOf<Transaction>,
+impl LedgerData for Ledger {
+    type AccountId = AccountIdentifier;
+    type ArchiveWasm = IcpLedgerArchiveWasm;
+    type Transaction = Transaction;
+    type Block = Block;
+
+    fn transaction_window(&self) -> Duration {
+        self.transaction_window
+    }
+
+    fn max_transactions_in_window(&self) -> usize {
+        self.max_transactions_in_window
+    }
+
+    fn max_transactions_to_purge(&self) -> usize {
+        Self::MAX_TRANSACTIONS_TO_PURGE
+    }
+
+    fn max_number_of_accounts(&self) -> usize {
+        self.maximum_number_of_accounts
+    }
+
+    fn accounts_overflow_trim_quantity(&self) -> usize {
+        self.accounts_overflow_trim_quantity
+    }
+
+    fn balances(&self) -> &Balances<Self::AccountId, HashMap<Self::AccountId, Tokens>> {
+        &self.balances
+    }
+
+    fn balances_mut(&mut self) -> &mut Balances<Self::AccountId, HashMap<Self::AccountId, Tokens>> {
+        &mut self.balances
+    }
+
+    fn blockchain(&self) -> &Blockchain<Self::ArchiveWasm> {
+        &self.blockchain
+    }
+
+    fn blockchain_mut(&mut self) -> &mut Blockchain<Self::ArchiveWasm> {
+        &mut self.blockchain
+    }
+
+    fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockHeight> {
+        &self.transactions_by_hash
+    }
+
+    fn transactions_by_hash_mut(
+        &mut self,
+    ) -> &mut BTreeMap<HashOf<Self::Transaction>, BlockHeight> {
+        &mut self.transactions_by_hash
+    }
+
+    fn transactions_by_height(&self) -> &VecDeque<TransactionInfo<Self::Transaction>> {
+        &self.transactions_by_height
+    }
+
+    fn transactions_by_height_mut(&mut self) -> &mut VecDeque<TransactionInfo<Self::Transaction>> {
+        &mut self.transactions_by_height
+    }
+
+    fn on_purged_transaction(&mut self, height: BlockHeight) {
+        self.blocks_notified.remove(height);
+    }
 }
 
 impl Default for Ledger {
@@ -361,171 +420,57 @@ impl Ledger {
     /// See Ledger::max_transactions_in_window
     const DEFAULT_MAX_TRANSACTIONS_IN_WINDOW: usize = 3_000_000;
 
-    /// Returns true if the next transaction should be throttled due to high
-    /// load on the ledger.
-    fn throttle(&self, now: TimeStamp) -> bool {
-        let num_in_window = self.transactions_by_height.len();
-        // We admit the first half of max_transactions_in_window freely.
-        // After that we start throttling on per-second basis.
-        // This way we guarantee that at most max_transactions_in_window will
-        // get through within the transaction window.
-        if num_in_window >= self.max_transactions_in_window / 2 {
-            // max num of transactions allowed per second
-            let max_rate = (0.5 * self.max_transactions_in_window as f64
-                / self.transaction_window.as_secs_f64())
-            .ceil() as usize;
-
-            if self
-                .transactions_by_height
-                .get(num_in_window.saturating_sub(max_rate))
-                .map(|x| x.block_timestamp)
-                .unwrap_or_else(|| TimeStamp::from_nanos_since_unix_epoch(0))
-                + Duration::from_secs(1)
-                > now
-            {
-                return true;
-            }
-        }
-        false
-    }
-
     /// This creates a block and adds it to the ledger
     pub fn add_payment(
         &mut self,
         memo: Memo,
-        payment: Operation,
+        operation: Operation,
         created_at_time: Option<TimeStamp>,
     ) -> Result<(BlockHeight, HashOf<EncodedBlock>), PaymentError> {
-        self.add_payment_with_timestamp(memo, payment, created_at_time, dfn_core::api::now().into())
+        let now = dfn_core::api::now().into();
+        self.add_payment_with_timestamp(memo, operation, created_at_time, now)
     }
 
-    /// Internal version of `add_payment` that takes a timestamp, for
-    /// testing.
-    fn add_payment_with_timestamp(
+    pub fn add_payment_with_timestamp(
         &mut self,
         memo: Memo,
-        payment: Operation,
+        operation: Operation,
         created_at_time: Option<TimeStamp>,
         now: TimeStamp,
     ) -> Result<(BlockHeight, HashOf<EncodedBlock>), PaymentError> {
-        let num_pruned = self.purge_old_transactions(now);
+        core_ledger::apply_transaction(
+            self,
+            Transaction {
+                operation,
+                memo,
+                created_at_time: created_at_time.unwrap_or(now),
+            },
+            now,
+        )
+        .map_err(|e| {
+            use core_ledger::TransferError as CTE;
+            use PaymentError::TransferError as PTE;
+            use TransferError as TE;
 
-        let created_at_time = created_at_time.unwrap_or(now);
-
-        if created_at_time + self.transaction_window < now {
-            return Err(PaymentError::TransferError(TransferError::TxTooOld {
-                allowed_window_nanos: self.transaction_window.as_nanos() as u64,
-            }));
-        }
-
-        if created_at_time > now + ic_constants::PERMITTED_DRIFT {
-            return Err(PaymentError::TransferError(
-                TransferError::TxCreatedInFuture,
-            ));
-        }
-
-        // If we pruned some transactions, let this one through
-        // otherwise throttle if there are too many
-        if num_pruned == 0 && self.throttle(now) {
-            return Err(PaymentError::Reject("Too many transactions in replay prevention window, ledger is throttling, please retry later".to_string()));
-        }
-
-        let transaction = Transaction {
-            operation: payment.clone(),
-            memo,
-            created_at_time,
-        };
-
-        let transaction_hash = transaction.hash();
-
-        if let Some(block_height) = self.transactions_by_hash.get(&transaction_hash) {
-            return Err(PaymentError::TransferError(TransferError::TxDuplicate {
-                duplicate_of: *block_height,
-            }));
-        }
-
-        let block = Block::new_from_transaction(self.blockchain.last_hash, transaction, now);
-        let block_timestamp = block.timestamp;
-
-        apply_operation(&mut self.balances, &payment).map_err(|e| match e {
-            BalanceError::InsufficientFunds { balance } => {
-                PaymentError::TransferError(TransferError::InsufficientFunds { balance })
+            match e {
+                CTE::BadFee { expected_fee } => PTE(TE::BadFee { expected_fee }),
+                CTE::InsufficientFunds { balance } => PTE(TE::InsufficientFunds { balance }),
+                CTE::TxTooOld {
+                    allowed_window_nanos,
+                } => PTE(TE::TxTooOld {
+                    allowed_window_nanos,
+                }),
+                CTE::TxCreatedInFuture => PTE(TE::TxCreatedInFuture),
+                CTE::TxDuplicate { duplicate_of } => PTE(TE::TxDuplicate { duplicate_of }),
+                CTE::TxThrottled => PaymentError::Reject(
+                    concat!(
+                        "Too many transactions in replay prevention window, ",
+                        "ledger is throttling, please retry later"
+                    )
+                    .to_string(),
+                ),
             }
-        })?;
-
-        let height = self
-            .blockchain
-            .add_block(block)
-            .expect("failed to add block");
-
-        self.transactions_by_hash.insert(transaction_hash, height);
-        self.transactions_by_height.push_back(TransactionInfo {
-            block_timestamp,
-            transaction_hash,
-        });
-
-        let to_trim = if self.balances.store.len()
-            >= self.maximum_number_of_accounts + self.accounts_overflow_trim_quantity
-        {
-            select_accounts_to_trim(&self.balances, self.accounts_overflow_trim_quantity)
-        } else {
-            vec![]
-        };
-
-        for (balance, account) in to_trim {
-            let operation = Operation::Burn {
-                from: account,
-                amount: balance,
-            };
-            apply_operation(&mut self.balances, &operation)
-                .expect("failed to burn funds that must have existed");
-            self.blockchain
-                .add_block(Block::new_from_transaction(
-                    self.blockchain.last_hash,
-                    Transaction {
-                        operation,
-                        memo: Memo::default(),
-                        created_at_time: now,
-                    },
-                    now,
-                ))
-                .unwrap();
-        }
-
-        Ok((height, self.blockchain.last_hash.unwrap()))
-    }
-
-    /// Removes at most [MAX_TRANSACTIONS_TO_PURGE] transactions older
-    /// than `now - transaction_window` and returns the number of pruned
-    /// transactions.
-    fn purge_old_transactions(&mut self, now: TimeStamp) -> usize {
-        let mut cnt = 0usize;
-        while let Some(TransactionInfo {
-            block_timestamp,
-            transaction_hash,
-        }) = self.transactions_by_height.front()
-        {
-            if *block_timestamp + self.transaction_window + ic_constants::PERMITTED_DRIFT >= now {
-                // Stop at a sufficiently recent block.
-                break;
-            }
-            let removed = self.transactions_by_hash.remove(transaction_hash);
-            assert!(removed.is_some());
-
-            // After 24 hours we don't need to store notification state because it isn't
-            // accessible. We don't inspect the result because we don't care whether a
-            // notification at this block height was made or not.
-            match removed {
-                Some(bh) => self.blocks_notified.remove(bh),
-                None => None,
-            };
-            self.transactions_by_height.pop_front();
-            cnt += 1;
-            if cnt >= Self::MAX_TRANSACTIONS_TO_PURGE {
-                break;
-            }
-        }
-        cnt
+        })
     }
 
     /// This adds a pre created block to the ledger. This should only be used
@@ -600,31 +545,6 @@ impl Ledger {
                 self.blocks_notified.insert(height, ());
                 Ok(())
             }
-        }
-    }
-
-    pub fn find_block_in_archive(&self, block_height: u64) -> Option<CanisterId> {
-        let index = self
-            .blockchain
-            .archive
-            .try_read()
-            .expect("Failed to get lock on archive")
-            .as_ref()
-            .expect("archiving not enabled")
-            .index();
-        let result = index.binary_search_by(|((from, to), _)| {
-            // If within the range we've found the right node
-            if *from <= block_height && block_height <= *to {
-                std::cmp::Ordering::Equal
-            } else if *from < block_height {
-                std::cmp::Ordering::Less
-            } else {
-                std::cmp::Ordering::Greater
-            }
-        });
-        match result {
-            Ok(i) => Some(index[i].1),
-            Err(_) => None,
         }
     }
 
@@ -1425,7 +1345,7 @@ mod tests {
         let res2 = ledger.blocks_notified.get(1);
         assert_eq!(res2, Some(&()), "You can see the lock in the store");
 
-        ledger.purge_old_transactions(genesis);
+        core_ledger::purge_old_transactions(&mut ledger, genesis);
 
         let res2 = ledger.blocks_notified.get(1);
         assert_eq!(
@@ -1435,7 +1355,7 @@ mod tests {
         );
 
         let later = genesis + Duration::from_secs(10) + ic_constants::PERMITTED_DRIFT;
-        ledger.purge_old_transactions(later);
+        core_ledger::purge_old_transactions(&mut ledger, later);
 
         let res3 = ledger.blocks_notified.get(1);
         assert_eq!(res3, None, "A purge afterwards does");

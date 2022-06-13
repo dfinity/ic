@@ -10,6 +10,7 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 hex = "0.4.2"
 ic-base-types = { path = "../../types/base_types" }
+ic-constants = { path = "../../constants" }
 ic-crypto-sha = { path = "../../crypto/sha/" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-utils = { path = "../../utils" }
