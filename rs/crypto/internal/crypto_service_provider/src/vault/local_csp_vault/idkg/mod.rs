@@ -1,6 +1,6 @@
 use crate::api::CspCreateMEGaKeyError;
 use crate::canister_threshold::IDKG_THRESHOLD_KEYS_SCOPE;
-use crate::keygen::mega_key_id;
+use crate::keygen::{commitment_key_id, mega_key_id};
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::IDkgProtocolCspVault;
@@ -14,19 +14,16 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     MEGaPrivateKeyK256Bytes, MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment,
     SecretShares, Seed,
 };
-use ic_crypto_sha::{DomainSeparationContext, Sha256};
 use ic_logger::debug;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
-    IDkgVerifyDealingPrivateError,
+    IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError,
 };
 use ic_types::crypto::{AlgorithmId, KeyId};
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
 use rand::{CryptoRng, Rng};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
-
-const COMMITMENT_KEY_ID_DOMAIN: &str = "ic-key-id-idkg-commitment";
 
 impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDkgProtocolCspVault
     for LocalCspVault<R, S, C>
@@ -276,6 +273,19 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
             internal_error: format!("{:?}", e),
         })
     }
+
+    fn idkg_retain_threshold_keys_if_present(
+        &self,
+        active_key_ids: BTreeSet<KeyId>,
+    ) -> Result<(), IDkgRetainThresholdKeysError> {
+        debug!(self.logger; crypto.method_name => "idkg_retain_threshold_keys_if_present");
+
+        self.canister_sks_write_lock().retain(
+            |key_id, _| active_key_ids.contains(key_id),
+            IDKG_THRESHOLD_KEYS_SCOPE,
+        );
+        Ok(())
+    }
 }
 
 impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
@@ -372,14 +382,4 @@ impl From<MEGaKeysetFromSksError> for IDkgLoadTranscriptError {
             Mkfse::PrivateKeyNotFound => Ilte::PrivateKeyNotFound,
         }
     }
-}
-
-pub(crate) fn commitment_key_id(commitment: &PolynomialCommitment) -> KeyId {
-    let mut hash = Sha256::new_with_context(&DomainSeparationContext::new(
-        COMMITMENT_KEY_ID_DOMAIN.to_string(),
-    ));
-    let commitment_encoding = commitment.to_bytes();
-    hash.write(&(commitment_encoding.len() as u64).to_be_bytes());
-    hash.write(&commitment_encoding);
-    KeyId::from(hash.finish())
 }

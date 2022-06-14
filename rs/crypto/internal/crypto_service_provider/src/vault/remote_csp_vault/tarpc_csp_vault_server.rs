@@ -31,7 +31,7 @@ use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
-    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
+    IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, KeyId};
@@ -370,6 +370,16 @@ impl TarpcCspVault for TarpcCspVaultServerWorker {
                 &transcript,
             )
         };
+        execute_on_thread_pool(self.thread_pool_handle, job).await
+    }
+
+    async fn idkg_retain_threshold_keys_if_present(
+        self,
+        _: context::Context,
+        active_key_ids: BTreeSet<KeyId>,
+    ) -> Result<(), IDkgRetainThresholdKeysError> {
+        let vault = self.local_csp_vault;
+        let job = move || vault.idkg_retain_threshold_keys_if_present(active_key_ids);
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 

@@ -42,9 +42,9 @@ use ic_crypto_tls_interfaces::{TlsPublicKeyCert, TlsStream};
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
-    IDkgVerifyDealingPublicError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    IDkgOpenTranscriptError, IDkgRetainThresholdKeysError, IDkgVerifyComplaintError,
+    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
+    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
@@ -439,6 +439,11 @@ mock! {
             public_key: &MEGaPublicKey,
             transcript: &IDkgTranscriptInternal,
         ) -> Result<(), IDkgLoadTranscriptError>;
+
+        fn idkg_retain_threshold_keys_if_present(
+            &self,
+            active_keys: &std::collections::BTreeSet<IDkgTranscriptInternal>
+        ) -> Result<(), IDkgRetainThresholdKeysError>;
 
         fn idkg_create_mega_key_pair(&mut self, algorithm_id: AlgorithmId) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
 

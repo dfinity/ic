@@ -642,7 +642,12 @@ impl IDkgProtocol for CryptoReturningOk {
         Ok(())
     }
 
-    fn retain_active_transcripts(&self, _active_transcripts: &[IDkgTranscript]) {}
+    fn retain_active_transcripts(
+        &self,
+        _active_transcripts: &BTreeSet<IDkgTranscript>,
+    ) -> Result<(), IDkgRetainThresholdKeysError> {
+        Ok(())
+    }
 }
 
 impl ThresholdEcdsaSigner for CryptoReturningOk {

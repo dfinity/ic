@@ -30,9 +30,9 @@ use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
-    IDkgVerifyDealingPublicError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    IDkgOpenTranscriptError, IDkgRetainThresholdKeysError, IDkgVerifyComplaintError,
+    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
+    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
@@ -772,7 +772,10 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
             .load_transcript_with_openings(transcript, openings)
     }
 
-    fn retain_active_transcripts(&self, active_transcripts: &[IDkgTranscript]) {
+    fn retain_active_transcripts(
+        &self,
+        active_transcripts: &BTreeSet<IDkgTranscript>,
+    ) -> Result<(), IDkgRetainThresholdKeysError> {
         self.crypto_component
             .retain_active_transcripts(active_transcripts)
     }

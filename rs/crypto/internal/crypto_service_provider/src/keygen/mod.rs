@@ -4,7 +4,7 @@ use crate::api::{CspKeyGenerator, CspSecretKeyStoreChecker};
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreError};
 use crate::types::{CspPop, CspPublicKey, CspSecretKey};
 use crate::Csp;
-use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
+use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey, PolynomialCommitment};
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_sha::Sha256;
@@ -18,6 +18,7 @@ use std::convert::TryFrom;
 pub use tls_keygen::tls_cert_hash_as_key_id;
 
 const KEY_ID_DOMAIN: &str = "ic-key-id";
+const COMMITMENT_KEY_ID_DOMAIN: &str = "ic-key-id-idkg-commitment";
 
 #[cfg(test)]
 mod tests;
@@ -127,6 +128,16 @@ pub fn mega_key_id(public_key: &MEGaPublicKey) -> KeyId {
         ),
         c => panic!("unsupported curve: {:?}", c),
     }
+}
+
+pub fn commitment_key_id(commitment: &PolynomialCommitment) -> KeyId {
+    let mut hash = Sha256::new_with_context(&DomainSeparationContext::new(
+        COMMITMENT_KEY_ID_DOMAIN.to_string(),
+    ));
+    let commitment_encoding = commitment.to_bytes();
+    hash.write(&(commitment_encoding.len() as u64).to_be_bytes());
+    hash.write(&commitment_encoding);
+    KeyId::from(hash.finish())
 }
 
 mod tls_keygen {

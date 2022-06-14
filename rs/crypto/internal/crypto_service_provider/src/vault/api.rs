@@ -16,7 +16,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
-    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
+    IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, KeyId};
@@ -486,6 +486,14 @@ pub trait IDkgProtocolCspVault {
         opener_index: NodeIndex,
         opener_key_id: &KeyId,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError>;
+
+    /// Retains canister threshold keys identified by `active_key_ids`, and removes other
+    /// canister threshold keys within the same IDKG threshold keys scope from the
+    /// canister SKS.
+    fn idkg_retain_threshold_keys_if_present(
+        &self,
+        active_key_ids: BTreeSet<KeyId>,
+    ) -> Result<(), IDkgRetainThresholdKeysError>;
 }
 
 /// Operations of `CspVault` related to threshold-ECDSA (cf.

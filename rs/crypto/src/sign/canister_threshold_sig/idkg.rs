@@ -5,19 +5,20 @@ use ic_interfaces::crypto::IDkgProtocol;
 use ic_logger::{debug, new_logger};
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
-    IDkgVerifyDealingPublicError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
+    IDkgOpenTranscriptError, IDkgRetainThresholdKeysError, IDkgVerifyComplaintError,
+    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
+    IDkgVerifyTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgMultiSignedDealing, IDkgOpening, IDkgTranscript,
     IDkgTranscriptParams,
 };
 use ic_types::NodeId;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 mod complaint;
 mod dealing;
-mod mocks;
+mod retain_active_keys;
 mod transcript;
 mod utils;
 
@@ -281,7 +282,10 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         result
     }
 
-    fn retain_active_transcripts(&self, active_transcripts: &[IDkgTranscript]) {
+    fn retain_active_transcripts(
+        &self,
+        active_transcripts: &BTreeSet<IDkgTranscript>,
+    ) -> Result<(), IDkgRetainThresholdKeysError> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",
             crypto.method_name => "retain_active_transcripts",
@@ -289,11 +293,12 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         debug!(logger;
             crypto.description => "start",
         );
-        mocks::retain_active_transcripts(active_transcripts);
+        let result = retain_active_keys::retain_active_transcripts(&self.csp, active_transcripts);
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => true,
             crypto.error => "none".to_string(),
         );
+        result
     }
 }

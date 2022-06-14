@@ -1,7 +1,7 @@
+use crate::keygen::commitment_key_id;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::ThresholdEcdsaSignerCspVault;
-use crate::vault::local_csp_vault::idkg::commitment_key_id;
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     sign_share as tecdsa_sign_share, CombinedCommitment, CommitmentOpening, IDkgTranscriptInternal,
