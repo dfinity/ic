@@ -99,18 +99,18 @@ def main():
                     print(jira_helper.create_description(data=result))
 
             else:
-                try:
-                    if jira_helper.check_ticket_exists():
-                        jira_helper.update_ticket(data=result)
-                    else:
-                        url = jira_helper.create_ticket(data=result)
-                        if url:
-                            curr.comment_on_gitlab(url)
-                except Exception as err:
-                    logging.error("Error in JIRA API " + str(err))
-
-            if fail_job:
-                sys.exit(1)
+                if fail_job:
+                    try:
+                        if jira_helper.check_ticket_exists():
+                            jira_helper.update_ticket(data=result)
+                        else:
+                            url = jira_helper.create_ticket(data=result)
+                            if url:
+                                curr.comment_on_gitlab(url)
+                    except Exception as err:
+                        logging.error("Error in JIRA API " + str(err))
+                    finally:
+                        sys.exit(1)
         else:
             print("No vulnerablility found in the modified crates")
     else:

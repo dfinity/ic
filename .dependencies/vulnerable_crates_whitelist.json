@@ -1,1 +1,9 @@
-[]
+[
+    {
+        "name": "time",
+        "version": "0.1.43",
+        "date_added": "13/06/2022",
+        "date_updated": "13/06/2022",
+        "expiry_days": 30
+    }
+]
