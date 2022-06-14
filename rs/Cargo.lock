@@ -5890,7 +5890,6 @@ dependencies = [
 name = "ic-nns-governance"
 version = "0.8.0"
 dependencies = [
- "anyhow",
  "assert_matches",
  "async-trait",
  "build-info",
@@ -5920,7 +5919,6 @@ dependencies = [
  "ic-types 0.8.0",
  "ledger-canister",
  "maplit",
- "num",
  "on_wire",
  "pretty_assertions 1.0.0",
  "proptest 1.0.0",
@@ -5932,7 +5930,6 @@ dependencies = [
  "strum 0.23.0",
  "strum_macros 0.23.1",
  "tempfile",
- "tokio",
  "tokio-test",
 ]
 
