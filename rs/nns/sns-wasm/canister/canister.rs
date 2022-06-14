@@ -1,14 +1,73 @@
+use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
-use dfn_core::{over, over_init};
-use ic_sns_wasm::pb::v1::{AddWasm, AddWasmResponse, GetWasm, GetWasmResponse};
+use dfn_core::{over, over_async, over_init};
+use ic_base_types::{PrincipalId, SubnetId};
+use ic_ic00_types::{CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, Method};
+use ic_sns_wasm::canister_api::CanisterApi;
+use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
+use ic_sns_wasm::pb::v1::{
+    AddWasm, AddWasmResponse, DeployNewSns, DeployNewSnsResponse, GetWasm, GetWasmResponse,
+};
 use ic_sns_wasm::sns_wasm::SnsWasmCanister;
+use ic_types::{CanisterId, Cycles};
 use std::cell::RefCell;
+use std::convert::TryInto;
 
 pub const LOG_PREFIX: &str = "[SNS-WASM] ";
 
 thread_local! {
   static SNS_WASM: RefCell<SnsWasmCanister> = RefCell::new(SnsWasmCanister::new());
+}
+
+// TODO possibly determine how to make a single static that is thread-safe?
+fn canister_api() -> CanisterApiImpl {
+    CanisterApiImpl {}
+}
+
+#[derive()]
+struct CanisterApiImpl {}
+
+#[async_trait]
+impl CanisterApi for CanisterApiImpl {
+    fn local_canister_id(&self) -> CanisterId {
+        dfn_core::api::id()
+    }
+
+    async fn create_canister(
+        &self,
+        target_subnet: SubnetId,
+        controller_id: PrincipalId,
+        cycles: Cycles,
+    ) -> Result<CanisterId, String> {
+        let result: Result<CanisterIdRecord, _> = dfn_core::api::call_with_funds_and_cleanup(
+            target_subnet.into(),
+            &Method::CreateCanister.to_string(),
+            candid_one,
+            CreateCanisterArgs {
+                settings: Some(CanisterSettingsArgs {
+                    controller: Some(controller_id),
+                    ..CanisterSettingsArgs::default()
+                }),
+            },
+            dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),
+        )
+        .await;
+
+        match result {
+            Ok(canister_id) => Ok(canister_id.get_canister_id()),
+            Err((code, msg)) => {
+                let err = format!(
+                    "Creating canister in subnet {} failed with code {}: {}",
+                    target_subnet,
+                    code.unwrap_or_default(),
+                    msg
+                );
+                println!("{}{}", LOG_PREFIX, err);
+                Err(err)
+            }
+        }
+    }
 }
 
 #[export_name = "canister_init"]
@@ -19,8 +78,9 @@ fn canister_init() {
 /// In contrast to canister_init(), this method does not do deserialization.
 /// In addition to canister_init, this method is called by canister_post_upgrade.
 #[candid_method(init)]
-fn canister_init_(_init_payload: ()) {
+fn canister_init_(_init_payload: SnsWasmCanisterInitPayload) {
     println!("{}canister_init_", LOG_PREFIX);
+    SNS_WASM.with(|c| c.borrow_mut().set_sns_subnets(_init_payload.sns_subnet_ids))
 }
 
 /// Executes some logic before executing an upgrade, including serializing and writing the
@@ -60,6 +120,16 @@ fn get_wasm() {
 #[candid_method(query, rename = "get_wasm")]
 fn get_wasm_(get_wasm_payload: GetWasm) -> GetWasmResponse {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_wasm(get_wasm_payload))
+}
+
+#[export_name = "canister_update deploy_new_sns"]
+fn deploy_new_sns() {
+    over_async(candid_one, deploy_new_sns_)
+}
+
+#[candid_method(update, rename = "deploy_new_sns")]
+async fn deploy_new_sns_(deploy_new_sns: DeployNewSns) -> DeployNewSnsResponse {
+    SnsWasmCanister::deploy_new_sns(&SNS_WASM, &canister_api(), deploy_new_sns).await
 }
 
 /// This makes this Candid service self-describing, so that for example Candid

@@ -1,4 +1,4 @@
-use ic_sns_wasm_proto_generator::generate_prost_files;
+use ic_sns_wasm_proto_generator::{generate_prost_files, ProtoPaths};
 use ic_test_utilities_compare_dirs::{compare, CompareError};
 use std::path::PathBuf;
 
@@ -10,9 +10,16 @@ fn check_generated_files() {
         std::env::var("CARGO_MANIFEST_DIR")
             .expect("CARGO_MANIFEST_DIR env variable is not defined"),
     );
-    let def = manifest_dir.join("proto");
     let out = tempfile::TempDir::new().expect("failed to create a temporary directory");
-    generate_prost_files(&def, out.path());
+    let sns_wasm_proto = manifest_dir.join("./proto");
+    let base_types_proto = manifest_dir.join("../../types/base_types/proto");
+    generate_prost_files(
+        ProtoPaths {
+            sns_wasm: &sns_wasm_proto,
+            base_types: &base_types_proto,
+        },
+        out.path(),
+    );
 
     let gen = manifest_dir.join("gen");
 

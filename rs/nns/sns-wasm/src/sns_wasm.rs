@@ -1,22 +1,32 @@
+use crate::canister_api::CanisterApi;
 use crate::pb::hash_to_hex_string;
 use crate::pb::v1::add_wasm_response::{AddWasmError, AddWasmOk};
 use crate::pb::v1::{
-    add_wasm_response, AddWasm, AddWasmResponse, GetWasm, GetWasmResponse, SnsCanisterType, SnsWasm,
+    add_wasm_response, AddWasm, AddWasmResponse, DeployNewSns, DeployNewSnsResponse, GetWasm,
+    GetWasmResponse, SnsCanisterIds, SnsCanisterType, SnsWasm,
 };
+use ic_types::{Cycles, SubnetId};
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
-
-type SnsWasmMap = BTreeMap<[u8; 32], SnsWasm>;
+use std::thread::LocalKey;
 
 /// The struct that implements the public API of the canister
 #[derive(Default)]
 pub struct SnsWasmCanister {
+    /// Internal store for wasms
     wasm_storage: SnsWasmStorage,
+    /// Allowed subnets for SNS's to be installed
+    sns_subnet_ids: Vec<SubnetId>,
 }
 
 impl SnsWasmCanister {
     pub fn new() -> Self {
         SnsWasmCanister::default()
+    }
+
+    pub fn set_sns_subnets(&mut self, subnet_ids: Vec<SubnetId>) {
+        self.sns_subnet_ids = subnet_ids;
     }
 
     /// Returns an Option(SnsWasm) in the GetWasmResponse (a struct with wasm bytecode and the install target)
@@ -43,12 +53,63 @@ impl SnsWasmCanister {
         };
         AddWasmResponse { result }
     }
+
+    /// Deploys a new SNS based on the parameters of the payload
+    pub async fn deploy_new_sns(
+        thread_safe_sns: &'static LocalKey<RefCell<SnsWasmCanister>>,
+        canister_api: &impl CanisterApi,
+        _deploy_new_sns_payload: DeployNewSns,
+    ) -> DeployNewSnsResponse {
+        let subnet_id =
+            thread_safe_sns.with(|sns_canister| sns_canister.borrow().get_available_sns_subnet());
+
+        let canisters = Self::create_sns_canisters(canister_api, subnet_id).await;
+
+        DeployNewSnsResponse {
+            subnet_id: Some(subnet_id.get()),
+            canisters: Some(canisters),
+        }
+    }
+
+    async fn create_sns_canisters(
+        canister_api: &impl CanisterApi,
+        subnet_id: SubnetId,
+    ) -> SnsCanisterIds {
+        println!("Making the canisters");
+        // TODO error handling
+        // TODO where do we get these cycles?
+        let this_canister_id = canister_api.local_canister_id().get();
+        let governance = canister_api
+            .create_canister(subnet_id, this_canister_id, Cycles::new(1_000_000_000))
+            .await
+            .unwrap();
+        let root = canister_api
+            .create_canister(subnet_id, this_canister_id, Cycles::new(1_000_000_000))
+            .await
+            .unwrap();
+        let ledger = canister_api
+            .create_canister(subnet_id, this_canister_id, Cycles::new(1_000_000_000))
+            .await
+            .unwrap();
+
+        SnsCanisterIds {
+            governance: Some(governance.get()),
+            root: Some(root.get()),
+            ledger: Some(ledger.get()),
+        }
+    }
+
+    pub fn get_available_sns_subnet(&self) -> SubnetId {
+        // TODO something more sophisticated
+        self.sns_subnet_ids[0]
+    }
 }
 
 /// This struct is responsible for storing and retrieving the wasms held by the canister
 #[derive(Default)]
 pub struct SnsWasmStorage {
-    wasm_map: SnsWasmMap,
+    /// Map of sha256 hashs of wasms to the WASM.  
+    wasm_map: BTreeMap<[u8; 32], SnsWasm>,
 }
 
 /// Converts a vector to a sha256 hash, or panics if the vector is the wrong length
@@ -102,11 +163,49 @@ impl SnsWasmStorage {
 
 #[cfg(test)]
 mod test {
+    use crate::canister_api::CanisterApi;
     use crate::pb::hash_to_hex_string;
     use crate::pb::v1::add_wasm_response::{AddWasmError, AddWasmOk};
-    use crate::pb::v1::{add_wasm_response, AddWasm, GetWasm, SnsCanisterType};
+    use crate::pb::v1::{
+        add_wasm_response, AddWasm, DeployNewSns, DeployNewSnsResponse, GetWasm, SnsCanisterIds,
+        SnsCanisterType,
+    };
     use crate::sns_wasm::{SnsWasm, SnsWasmCanister, SnsWasmStorage};
+    use async_trait::async_trait;
     use ic_crypto_sha::Sha256;
+    use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
+    use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
+    use std::cell::RefCell;
+    use std::sync::Arc;
+    use std::sync::Mutex;
+
+    struct TestCanisterApi {
+        canisters_created: Arc<Mutex<u64>>,
+    }
+    #[async_trait]
+    impl CanisterApi for TestCanisterApi {
+        fn local_canister_id(&self) -> CanisterId {
+            canister_test_id(0)
+        }
+
+        async fn create_canister(
+            &self,
+            _target_subnet: SubnetId,
+            _controller_id: PrincipalId,
+            _cycles: Cycles,
+        ) -> Result<CanisterId, String> {
+            let mut data = self.canisters_created.lock().unwrap();
+            *data += 1;
+            let canister_id = canister_test_id(*data);
+            Ok(canister_id)
+        }
+    }
+
+    fn new_canister_api() -> TestCanisterApi {
+        TestCanisterApi {
+            canisters_created: Arc::new(Mutex::new(0)),
+        }
+    }
 
     /// Provides a small wasm
     fn smallest_valid_wasm() -> SnsWasm {
@@ -280,6 +379,37 @@ mod test {
             add_wasm_response::Result::Ok(AddWasmOk {
                 hash: valid_hash.to_vec()
             })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_deploy_new_sns_to_subnet_creates_canisters() {
+        let test_id = subnet_test_id(1);
+        thread_local! {
+            static CANISTER_WRAPPER: RefCell<SnsWasmCanister> = RefCell::new(new_wasm_canister()) ;
+        }
+
+        CANISTER_WRAPPER.with(|c| {
+            c.borrow_mut().set_sns_subnets(vec![test_id]);
+        });
+
+        let response = SnsWasmCanister::deploy_new_sns(
+            &CANISTER_WRAPPER,
+            &new_canister_api(),
+            DeployNewSns {},
+        )
+        .await;
+
+        assert_eq!(
+            response,
+            DeployNewSnsResponse {
+                subnet_id: Some(test_id.get()),
+                canisters: Some(SnsCanisterIds {
+                    governance: Some(canister_test_id(1).get()),
+                    root: Some(canister_test_id(2).get()),
+                    ledger: Some(canister_test_id(3).get())
+                })
+            }
         );
     }
 }
