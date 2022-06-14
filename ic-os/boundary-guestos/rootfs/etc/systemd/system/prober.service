@@ -1,6 +1,6 @@
 [Unit]
 Description=Boundary Node Prober
-After=setup-prober.service
+# After=setup-prober.service
 
 [Service]
 User=prober
@@ -11,7 +11,9 @@ ExecStart=/opt/ic/bin/boundary-node-prober \
     --wallets-path "${WALLETS_PATH}" \
     --identity-path "${IDENTITY_PATH}" \
     --root-key-path "${ROOT_KEY_PATH}" \
+    --canister-ttl "${CANISTER_TTL}" \
+    --probe-interval "${PROBE_INTERVAL}" \
     --metrics-addr "${METRICS_ADDR}"
 
 [Install]
-WantedBy=multi-user.target
+# WantedBy=multi-user.target
