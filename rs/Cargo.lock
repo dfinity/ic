@@ -5669,6 +5669,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-ledger-icrc1"
+version = "0.8.0"
+dependencies = [
+ "candid",
+ "canister-test",
+ "ciborium",
+ "ic-base-types",
+ "ic-cdk 0.5.1",
+ "ic-cdk-macros",
+ "ic-ledger-core",
+ "ic-state-machine-tests",
+ "serde",
+]
+
+[[package]]
 name = "ic-ledger-types"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

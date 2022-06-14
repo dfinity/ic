@@ -61,6 +61,14 @@ pub trait LedgerData {
     /// [LedgerData::max_number_of_accounts].
     fn accounts_overflow_trim_quantity(&self) -> usize;
 
+    // Token configuration
+
+    /// Token name (e.g., Bitcoin).
+    fn token_name(&self) -> &str;
+
+    /// Token symbol (e.g., BTC).
+    fn token_symbol(&self) -> &str;
+
     // Ledger data structures
 
     fn balances(&self) -> &Balances<Self::AccountId, HashMap<Self::AccountId, Tokens>>;
