@@ -152,12 +152,12 @@ Default starter script that comes with the package. Relevant information is here
 
 Service:  `boundary-node-control-plane.service`. Has a pre-execution phase that extracts the NNS URLs from `/boot/config/nns.conf`
 
-Generates JSON with routing tables, IP:port, node certificates these are stored in `/etc/nginx/ic_routes`
+Generates JSON with routing tables, IP:port, node certificates these are stored in `/var/cache/ic_routes`
 
 ==  Start ic_router_control_plane_watcher
 Service: `ic-router-control-plane-watcher.service`
 
-Starts `/etc/nginx/ic/ic_router_control_plane_watcher.sh`, which on chnage collects information from `/etc/nginx/ic_routes` and feeds them into `ic_router_control_plane.py` which produces `ic_router_table.js`
+Starts `/etc/nginx/ic/ic_router_control_plane_watcher.sh`, which on chnage collects information from `/var/cache/ic_routes` and feeds them into `ic_router_control_plane.py` which produces `ic_router_table.js`
 that is usd by the njs-plugin of nginx to route requests to the IC.
 
 ==  Start icx_proxy
