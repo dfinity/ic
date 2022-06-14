@@ -28,6 +28,7 @@ pub use sign::{derive_tecdsa_public_key, get_tecdsa_master_public_key};
 
 use crate::common::utils::{derive_node_id, TempCryptoComponent};
 use crate::sign::ThresholdSigDataStoreImpl;
+use crate::utils::get_node_keys_or_generate_if_missing;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::NodePublicKeyData;
 use ic_crypto_internal_csp::keygen::public_key_hash_as_key_id;
@@ -55,6 +56,7 @@ use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
 use std::fmt;
 use std::sync::Arc;
+use tempfile::TempDir;
 
 /// Defines the maximum number of entries contained in the
 /// `ThresholdSigDataStore`.
@@ -326,6 +328,27 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
             logger,
             metrics,
         }
+    }
+
+    /// Creates a crypto component with all keys newly generated and secret keys
+    /// stored in a temporary directory.  The returned temporary directory must
+    /// remain alive as long as the component is in use.
+    pub fn new_temp_with_all_keys(
+        registry_client: Arc<dyn RegistryClient>,
+        logger: ReplicaLogger,
+    ) -> (Self, NodeId, TempDir) {
+        let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
+        let metrics = Arc::new(CryptoMetrics::none());
+        let (_npks, node_id) = get_node_keys_or_generate_if_missing(&config.crypto_root);
+        let crypto = CryptoComponentFatClient {
+            lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
+            csp: Csp::new(&config, None, None, Arc::clone(&metrics)),
+            registry_client,
+            node_id,
+            logger,
+            metrics,
+        };
+        (crypto, node_id, temp_dir)
     }
 
     /// Creates a crypto component that offers limited functionality and can be
