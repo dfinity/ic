@@ -3,7 +3,7 @@
 set -euo pipefail
 
 function remove_url_credentials() {
-    LC_ALL=en_US.UTF-8 LC_CTYPE=en_US.UTF-8 perl -pe 's#//.*?:.*?@#//#'
+    sed -Ee 's#//.*?:.*?@#//#'
 }
 
 repo_url=$(git config --get remote.origin.url | remove_url_credentials)
