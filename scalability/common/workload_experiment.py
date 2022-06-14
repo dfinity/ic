@@ -317,6 +317,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
             requests_per_second,
             duration,
             payload,
+            None,
             arguments,
             0,
             1.0,

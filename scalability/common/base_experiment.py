@@ -421,7 +421,11 @@ class BaseExperiment:
 
         cmd = [self.workload_generator_path, f"http://[{target}]:8080", "-n", "1", "-r", "1"]
         if this_canister_name != "counter":
-            cmd += ["--canister", this_canister]
+            canister_in_artifacts = os.path.join(self.artifacts_path, f"../canisters/{this_canister_name}.wasm")
+            if os.path.exists(canister_in_artifacts):
+                cmd += ["--canister", canister_in_artifacts]
+            else:
+                cmd += ["--canister", this_canister]
         try:
             p = subprocess.run(
                 cmd,
