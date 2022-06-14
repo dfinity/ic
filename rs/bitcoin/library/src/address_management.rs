@@ -1,17 +1,18 @@
-use crate::{BitcoinAgent, BitcoinCanister};
-use bitcoin::util::bip32::{ChainCode, ChildNumber, ExtendedPubKey};
+use crate::{
+    AddAddressWithParametersError, BitcoinAgent, BitcoinCanister, EcdsaPubKey, UtxosState,
+    STABILITY_THRESHOLD,
+};
 use bitcoin::{
     blockdata::{opcodes, script::Builder},
     hashes::Hash,
     secp256k1,
     secp256k1::Secp256k1,
-    util::address::Payload,
+    util::{
+        address::Payload,
+        bip32::{ChainCode, ChildNumber, ExtendedPubKey},
+    },
     Address, AddressType, Network, PrivateKey, PublicKey, ScriptHash,
 };
-use ic_btc_library_types::{
-    AddAddressWithParametersError, EcdsaPubKey, InitPayload, UtxosState, STABILITY_THRESHOLD,
-};
-use ic_cdk::export::Principal;
 use std::{cell::RefCell, error::Error};
 
 // A private key in WIF (wallet import format). This is only for demonstrational
@@ -22,31 +23,6 @@ const BTC_PRIVATE_KEY_WIF: &str = "L2C1QgyKqNgfV7BpEPAm6PVn2xW8zpXq6MojSbWdH18nG
 thread_local! {
     static BTC_PRIVATE_KEY: RefCell<PrivateKey> =
         RefCell::new(PrivateKey::from_wif(BTC_PRIVATE_KEY_WIF).unwrap());
-
-    // The ID of the Bitcoin canister that is installed locally.
-    // The value here is initialized with a dummy value, which will be overwritten in `init`.
-    static BTC_CANISTER_ID: RefCell<Principal> = RefCell::new(Principal::management_canister());
-}
-
-/// Initializes the `ic-btc-library`.
-pub fn init(payload: InitPayload) {
-    BTC_CANISTER_ID.with(|id| {
-        // Set the ID of the Bitcoin canister.
-        id.replace(payload.bitcoin_canister_id);
-    })
-}
-
-/// Post-upgrades the `ic-btc-library`.
-pub fn post_upgrade(payload: InitPayload) {
-    BTC_CANISTER_ID.with(|id| {
-        // Set the ID fo the Bitcoin canister.
-        id.replace(payload.bitcoin_canister_id);
-    })
-}
-
-/// Returns the Bitcoin canister id.
-pub(crate) fn get_btc_canister_id() -> Principal {
-    BTC_CANISTER_ID.with(|btc_canister_id| *btc_canister_id.borrow())
 }
 
 /// Returns the Bitcoin private key.
@@ -150,7 +126,7 @@ pub fn get_derivation_path(input: &[u8]) -> Vec<Vec<u8>> {
 pub(crate) fn add_address_with_parameters(
     bitcoin_agent: &mut BitcoinAgent<impl BitcoinCanister>,
     derivation_path: &[u8],
-    address_type: &ic_btc_library_types::AddressType,
+    address_type: &crate::AddressType,
     min_confirmations: u32,
 ) -> Result<Address, AddAddressWithParametersError> {
     if min_confirmations > STABILITY_THRESHOLD {
@@ -172,7 +148,7 @@ pub(crate) fn add_address_with_parameters(
 /// Returns the public key and address of the derived child from the given public key, chain code, derivation path, address type and network.
 pub(crate) fn derive_ecdsa_public_key_and_address_from_unhardened_path(
     derivation_path: &[Vec<u8>],
-    address_type: &ic_btc_library_types::AddressType,
+    address_type: &crate::AddressType,
     network: &Network,
     ecdsa_public_key: &EcdsaPubKey,
 ) -> (EcdsaPubKey, Address) {
@@ -216,7 +192,7 @@ pub(crate) fn derive_ecdsa_public_key_and_address_from_unhardened_path(
 pub(crate) fn add_address_from_unhardened_path(
     bitcoin_agent: &mut BitcoinAgent<impl BitcoinCanister>,
     derivation_path: &[Vec<u8>],
-    address_type: &ic_btc_library_types::AddressType,
+    address_type: &crate::AddressType,
     min_confirmations: u32,
 ) -> Address {
     let (ecdsa_public_key, address) = derive_ecdsa_public_key_and_address_from_unhardened_path(
@@ -308,7 +284,7 @@ pub(crate) fn get_p2wpkh_address(
 /// Returns the Bitcoin address from a given network, address type and ECDSA public key.
 fn get_address(
     network: &Network,
-    address_type: &ic_btc_library_types::AddressType,
+    address_type: &crate::AddressType,
     ecdsa_public_key: &EcdsaPubKey,
 ) -> Result<Address, Box<dyn Error>> {
     match get_bitcoin_address_type(address_type) {
@@ -322,35 +298,28 @@ fn get_address(
 }
 
 /// Returns the Bitcoin address for a given network, address type, and ECDSA public key.
-pub(crate) fn get_main_address(
-    network: &Network,
-    address_type: &ic_btc_library_types::AddressType,
-) -> Address {
+pub(crate) fn get_main_address(network: &Network, address_type: &crate::AddressType) -> Address {
     get_address(network, address_type, &get_btc_ecdsa_public_key()).unwrap()
 }
 
-/// Returns the bitcoin::AddressType converted from an ic_btc_library_types::AddressType
-pub(crate) fn get_bitcoin_address_type(
-    address_type: &ic_btc_library_types::AddressType,
-) -> AddressType {
+/// Returns the bitcoin::AddressType converted from an crate::AddressType
+pub(crate) fn get_bitcoin_address_type(address_type: &crate::AddressType) -> AddressType {
     match address_type {
-        ic_btc_library_types::AddressType::P2pkh => AddressType::P2pkh,
-        ic_btc_library_types::AddressType::P2sh => AddressType::P2sh,
-        ic_btc_library_types::AddressType::P2wpkh => AddressType::P2wpkh,
+        crate::AddressType::P2pkh => AddressType::P2pkh,
+        crate::AddressType::P2sh => AddressType::P2sh,
+        crate::AddressType::P2wpkh => AddressType::P2wpkh,
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::agent;
-    use crate::canister_mock::BitcoinCanisterMock;
-    use std::collections::HashSet;
-    use std::str::FromStr;
+    use crate::{agent, canister_mock::BitcoinCanisterMock};
+    use std::{collections::HashSet, str::FromStr};
 
     /// Returns the parsed `AddressType` based on a generated address of given `address_type`.
     fn get_parsed_address_type_from_generated_address(
-        address_type: &ic_btc_library_types::AddressType,
+        address_type: &crate::AddressType,
     ) -> AddressType {
         let bitcoin_agent = agent::new_mock(&Network::Regtest, address_type);
         bitcoin_agent.get_main_address().address_type().unwrap()
@@ -360,9 +329,9 @@ mod test {
     #[test]
     fn check_get_main_address() {
         for address_type in &[
-            ic_btc_library_types::AddressType::P2pkh,
-            ic_btc_library_types::AddressType::P2sh,
-            ic_btc_library_types::AddressType::P2wpkh,
+            crate::AddressType::P2pkh,
+            crate::AddressType::P2sh,
+            crate::AddressType::P2wpkh,
         ] {
             assert_eq!(
                 get_parsed_address_type_from_generated_address(address_type),
@@ -393,7 +362,7 @@ mod test {
     /// Check that `add_address`, `remove_address` and `list_addresses` respectively add, remove and list managed addresses.
     #[test]
     fn check_managed_addresses() {
-        let address_type = &ic_btc_library_types::AddressType::P2pkh;
+        let address_type = &crate::AddressType::P2pkh;
         let bitcoin_agent = &mut agent::new_mock(&Network::Regtest, address_type);
         let mut addresses = list_addresses(bitcoin_agent);
 
@@ -423,7 +392,7 @@ mod test {
     ) {
         let (ecdsa_public_key, address) = derive_ecdsa_public_key_and_address_from_unhardened_path(
             derivation_path,
-            &ic_btc_library_types::AddressType::P2pkh,
+            &crate::AddressType::P2pkh,
             &Network::Bitcoin,
             &EcdsaPubKey {
                 public_key: PublicKey::from_str(public_key).unwrap().to_bytes(),

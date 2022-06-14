@@ -1,8 +1,9 @@
-use crate::canister_common::BitcoinCanister;
-use crate::utxo_management;
+use crate::{
+    canister_common::BitcoinCanister, types::from_ic_btc_types_network, utxo_management,
+    MinConfirmationsTooHigh, Utxo,
+};
 use async_trait::async_trait;
 use bitcoin::{Address, Network};
-use ic_btc_library_types::{GetUtxosError, Utxo};
 
 /// The real Bitcoin canister is used to provide actual interaction with Bitcoin.
 #[derive(Clone)]
@@ -13,9 +14,9 @@ pub struct BitcoinCanisterImpl {
 #[async_trait]
 impl BitcoinCanister for BitcoinCanisterImpl {
     /// Creates a new instance of the real Bitcoin canister.
-    fn new(network: ic_btc_library_types::Network) -> Self {
+    fn new(network: crate::Network) -> Self {
         Self {
-            network: Network::from(network),
+            network: from_ic_btc_types_network(network),
         }
     }
 
@@ -30,7 +31,7 @@ impl BitcoinCanister for BitcoinCanisterImpl {
         &self,
         address: &Address,
         min_confirmations: u32,
-    ) -> Result<Vec<Utxo>, GetUtxosError> {
-        utxo_management::get_utxos(address, min_confirmations).await
+    ) -> Result<Vec<Utxo>, MinConfirmationsTooHigh> {
+        utxo_management::get_utxos(self, address, min_confirmations).await
     }
 }

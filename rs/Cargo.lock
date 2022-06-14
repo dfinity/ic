@@ -3914,22 +3914,13 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bitcoin",
+ "candid",
  "hex",
- "ic-btc-library-types",
+ "ic-btc-types",
  "ic-cdk 0.5.1",
  "ic-cdk-macros",
  "serde",
  "tokio",
-]
-
-[[package]]
-name = "ic-btc-library-types"
-version = "0.1.0"
-dependencies = [
- "bitcoin",
- "candid",
- "ic-cdk 0.5.1",
- "serde",
 ]
 
 [[package]]

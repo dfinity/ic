@@ -12,7 +12,6 @@ members = [
   "bitcoin/ckbtc/minter",
   "bitcoin/consensus",
   "bitcoin/library",
-  "bitcoin/library/types",
   "bitcoin/validation",
   "bitcoin/test-utils",
   "bitcoin/types/internal",
