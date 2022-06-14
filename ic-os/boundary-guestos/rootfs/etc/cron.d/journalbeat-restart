@@ -1,1 +1,1 @@
-* * * * root systemctl restart journalbeat
+0 * * * * root systemctl restart journalbeat
