@@ -423,7 +423,6 @@ def main(
             f"--nns-canister-path={ARTIFACT_DIR}",
             f"--artifacts-path={ARTIFACT_DIR}",
             f"--authorized-ssh-accounts={SSH_KEY_DIR}",
-            f"--result-file={RESULT_FILE}",
             f"--journalbeat-hosts={TEST_ES_HOSTNAMES}",
         ]
     )
