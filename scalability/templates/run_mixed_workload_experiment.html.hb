@@ -1,7 +1,7 @@
-<h1>Mixed workload experiment</h1>
+<h1>Mixed workload experiment: {{experiment_details.title}}</h1>
 
 <p>
-  Purpose: Measure system performance for the workload mix specified by the given description.
+  Purpose: {{experiment_details.description}}
 </p>
 
 {{#each toml}}

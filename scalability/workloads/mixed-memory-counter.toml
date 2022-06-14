@@ -1,5 +1,5 @@
-title = "Mixed query + update workload"
-description = "A mixture of query and update workloads running against the counter canister"
+title = "Memory test canister alongside counter canister"
+description = "Observe latency to counter canister while memory test canister is stressed"
 
 [[workload]]
 canister = "counter"
