@@ -43,10 +43,16 @@ use crate::util::{
     UniversalCanister,
 };
 
+const NNS_SUBNET_SIZE: usize = 40;
+const APP_SUBNET_SIZE: usize = 37; // f*4 +1 with f = 12
+
 pub fn config() -> InternetComputer {
     InternetComputer::new()
-        .add_subnet(Subnet::fast(SubnetType::System, 2).with_dkg_interval_length(Height::from(19)))
-        .with_unassigned_nodes(4)
+        .add_subnet(
+            Subnet::fast(SubnetType::System, NNS_SUBNET_SIZE)
+                .with_dkg_interval_length(Height::from(NNS_SUBNET_SIZE as u64 + 9)),
+        )
+        .with_unassigned_nodes(APP_SUBNET_SIZE as i32)
 }
 
 pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
@@ -134,46 +140,51 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         "created application subnet with ID {}", new_subnet.id
     );
 
-    for unassigned_endpoint in unassigned_endpoints.into_iter() {
-        let new_subnet = new_subnet.clone();
+    let unassigned_endpoint = unassigned_endpoints.into_iter().next().unwrap();
 
-        // [Phase III] install a canister onto that subnet and check that it is
-        // operational
-        block_on(async move {
-            let newly_assigned_endpoint = unassigned_endpoint.recreate_with_subnet(new_subnet);
+    // [Phase III] install a canister onto that subnet and check that it is
+    // operational
+    block_on(async move {
+        let newly_assigned_endpoint = unassigned_endpoint.recreate_with_subnet(new_subnet);
 
-            newly_assigned_endpoint.assert_ready(ctx).await;
+        newly_assigned_endpoint.assert_ready(ctx).await;
 
-            let agent = assert_create_agent(newly_assigned_endpoint.url.as_str()).await;
-            info!(
-                ctx.logger,
-                "successfully created agent for endpoint of an originally unassigned node"
-            );
+        let agent = assert_create_agent(newly_assigned_endpoint.url.as_str()).await;
+        info!(
+            ctx.logger,
+            "successfully created agent for endpoint of an originally unassigned node"
+        );
 
-            let universal_canister = UniversalCanister::new(&agent).await;
-            info!(
-                ctx.logger,
-                "successfully created a universal canister instance"
-            );
+        let universal_canister = UniversalCanister::new(&agent).await;
+        info!(
+            ctx.logger,
+            "successfully created a universal canister instance"
+        );
 
-            const UPDATE_MSG_1: &[u8] =
-                b"This beautiful prose should be persisted for future generations";
+        const UPDATE_MSG_1: &[u8] =
+            b"This beautiful prose should be persisted for future generations";
 
-            universal_canister.store_to_stable(0, UPDATE_MSG_1).await;
-            info!(
-                ctx.logger,
-                "successfully saved message in the universal canister"
-            );
+        universal_canister.store_to_stable(0, UPDATE_MSG_1).await;
+        info!(
+            ctx.logger,
+            "successfully saved message in the universal canister"
+        );
 
-            assert_eq!(
-                universal_canister
-                    .try_read_stable(0, UPDATE_MSG_1.len() as u32)
-                    .await,
-                UPDATE_MSG_1.to_vec(),
-                "could not validate that subnet is healty: universal canister is broken"
-            );
-        })
-    }
+        assert_eq!(
+            universal_canister
+                .try_read_stable(0, UPDATE_MSG_1.len() as u32)
+                .await,
+            UPDATE_MSG_1.to_vec(),
+            "could not validate that subnet is healty: universal canister is broken"
+        );
+    });
+
+    info!(
+        ctx.logger,
+        "Successfully created an app subnet of size {} from an NNS subnet of size {}",
+        APP_SUBNET_SIZE,
+        NNS_SUBNET_SIZE
+    );
 }
 
 fn set<H: Clone + std::cmp::Eq + std::hash::Hash>(data: &[H]) -> HashSet<H> {
