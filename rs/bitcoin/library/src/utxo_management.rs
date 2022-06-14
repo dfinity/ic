@@ -1,46 +1,40 @@
-use crate::address_management::get_btc_canister_id;
-use crate::agent::BitcoinAgent;
-use crate::canister_common::BitcoinCanister;
-use bitcoin::Address;
-use ic_btc_library_types::{
-    AddressNotTracked, BalanceUpdate, BitcoinCanisterGetUtxosError, GetUtxosError, GetUtxosRequest,
-    GetUtxosResponse, Satoshi, Utxo, UtxosUpdate, STABILITY_THRESHOLD,
+use crate::{
+    agent::BitcoinAgent, canister_common::BitcoinCanister, types::from_bitcoin_network,
+    AddressNotTracked, BalanceUpdate, BitcoinCanisterImpl, MinConfirmationsTooHigh, Satoshi, Utxo,
+    UtxosUpdate, STABILITY_THRESHOLD,
 };
-use ic_cdk::{api::call::RejectionCode, call, trap};
+use bitcoin::Address;
+use ic_btc_types::{GetUtxosRequest, GetUtxosResponse, UtxosFilter::MinConfirmations};
+use ic_cdk::{call, export::Principal, trap};
 
 /// Returns the actual UTXOs of the given Bitcoin `address` according to `min_confirmations`.
 // TODO(ER-2579): Add pagination support to `get_utxos` (relying on EXC-1005).
 pub(crate) async fn get_utxos(
+    bitcoin_canister: &BitcoinCanisterImpl,
     address: &Address,
     min_confirmations: u32,
-) -> Result<Vec<Utxo>, GetUtxosError> {
+) -> Result<Vec<Utxo>, MinConfirmationsTooHigh> {
     if min_confirmations > STABILITY_THRESHOLD {
-        return Err(GetUtxosError::MinConfirmationsTooHigh);
+        return Err(MinConfirmationsTooHigh);
     }
-    let res: Result<
-        (Result<GetUtxosResponse, BitcoinCanisterGetUtxosError>,),
-        (RejectionCode, String),
-    > = call(
-        get_btc_canister_id(),
-        "get_utxos",
+    let res: Result<(GetUtxosResponse,), _> = call(
+        Principal::management_canister(),
+        "bitcoin_get_utxos",
         (GetUtxosRequest {
             address: address.to_string(),
-            min_confirmations: Some(min_confirmations),
+            network: from_bitcoin_network(bitcoin_canister.get_network()),
+            filter: Some(MinConfirmations(min_confirmations)),
         },),
     )
     .await;
 
     match res {
         // Return the UTXOs to the caller.
-        Ok((Ok(data),)) => Ok(data.utxos),
-
-        // The call to `get_utxos` returned an error.
-        // Return this error to the caller.
-        Ok((Err(err),)) => Err(GetUtxosError::from(err)),
+        Ok(data) => Ok(data.0.utxos),
 
         // The call to `get_utxos` was rejected for a given reason (e.g. not enough cycles were attached to the call).
         Err((rejection_code, message)) => trap(&format!(
-            "Received a reject from Bitcoin agent.\nRejection Code: {:?}\nMessage: '{}'",
+            "Received a reject from Bitcoin canister.\nRejection Code: {:?}\nMessage: '{}'",
             rejection_code, message
         )),
     }
@@ -109,9 +103,9 @@ pub(crate) async fn get_balance<C: BitcoinCanister>(
     bitcoin_agent: &BitcoinAgent<C>,
     address: &Address,
     min_confirmations: u32,
-) -> Result<Satoshi, GetUtxosError> {
+) -> Result<Satoshi, MinConfirmationsTooHigh> {
     // Get the UTXOs for the given Bitcoin `address` according to `min_confirmations`.
-    let res: Result<Vec<Utxo>, GetUtxosError> =
+    let res: Result<Vec<Utxo>, MinConfirmationsTooHigh> =
         bitcoin_agent.get_utxos(address, min_confirmations).await;
 
     match res {
@@ -154,10 +148,12 @@ pub(crate) async fn get_balance_update<C: BitcoinCanister>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::agent;
-    use crate::canister_mock::{get_init_balance_update, get_init_utxos, get_init_utxos_update};
+    use crate::{
+        agent,
+        canister_mock::{get_init_balance_update, get_init_utxos, get_init_utxos_update},
+        AddressType, BalanceUpdate, OutPoint,
+    };
     use bitcoin::Network;
-    use ic_btc_library_types::{AddressType, BalanceUpdate, OutPoint};
 
     /// Check that `get_utxos` returns the correct address' UTXOs according to `min_confirmations`.
     #[tokio::test]
@@ -213,17 +209,17 @@ mod test {
 
         let added_utxo = Utxo {
             outpoint: OutPoint {
-                tx_id: vec![0; 32],
+                txid: vec![0; 32],
                 vout: 0,
             },
             value: 250_000,
-            height: 1,
-            confirmations: 0,
+            height: STABILITY_THRESHOLD + 1,
         };
         bitcoin_agent
             .bitcoin_canister
             .utxos
             .push(added_utxo.clone());
+        bitcoin_agent.bitcoin_canister.tip_height += 1;
 
         assert_eq!(
             update_state(&mut bitcoin_agent, canister_bitcoin_address),

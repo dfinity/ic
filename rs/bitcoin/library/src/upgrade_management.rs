@@ -1,8 +1,10 @@
-use crate::{BitcoinAgent, BitcoinCanister};
-use bitcoin::{Address, Network};
-use ic_btc_library_types::{AddressUsingPrimitives, BitcoinAgentState, EcdsaPubKey, UtxosState};
-use std::collections::HashMap;
-use std::str::FromStr;
+use crate::{
+    types::{from_bitcoin_network, from_ic_btc_types_network},
+    AddressUsingPrimitives, BitcoinAgent, BitcoinAgentState, BitcoinCanister, EcdsaPubKey,
+    UtxosState,
+};
+use bitcoin::Address;
+use std::{collections::HashMap, str::FromStr};
 
 /// Returns the Bitcoin agent state.
 pub(crate) fn get_state<C: BitcoinCanister>(bitcoin_agent: &BitcoinAgent<C>) -> BitcoinAgentState {
@@ -21,7 +23,7 @@ pub(crate) fn get_state<C: BitcoinCanister>(bitcoin_agent: &BitcoinAgent<C>) -> 
         .collect();
 
     BitcoinAgentState {
-        network: ic_btc_library_types::Network::Regtest,
+        network: from_bitcoin_network(bitcoin_agent.bitcoin_canister.get_network()),
         main_address_type: bitcoin_agent.main_address_type,
         ecdsa_pub_key_addresses,
         utxos_state_addresses,
@@ -49,7 +51,7 @@ pub(crate) fn from_state<C: BitcoinCanister>(
         })
         .collect();
 
-    let bitcoin_canister = C::new(ic_btc_library_types::Network::Regtest);
+    let bitcoin_canister = C::new(bitcoin_agent_state.network);
     BitcoinAgent {
         bitcoin_canister,
         main_address_type: bitcoin_agent_state.main_address_type,
@@ -60,22 +62,21 @@ pub(crate) fn from_state<C: BitcoinCanister>(
 
 /// Returns the `AddressUsingPrimitives` associated with a given `bitcoin::Address`.
 fn get_address_using_primitives(address: &Address) -> AddressUsingPrimitives {
-    (address.to_string(), ic_btc_library_types::Network::Regtest)
+    (address.to_string(), from_bitcoin_network(address.network))
 }
 
 /// Returns the `bitcoin::Address` associated with a given `AddressUsingPrimitives`.
-fn get_address((address_string, _address_network): AddressUsingPrimitives) -> Address {
+fn get_address((address_string, address_network): AddressUsingPrimitives) -> Address {
     let mut address = Address::from_str(&address_string).unwrap();
-    address.network = Network::Regtest;
+    address.network = from_ic_btc_types_network(address_network);
     address
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::agent;
-    use crate::canister_mock::BitcoinCanisterMock;
-    use ic_btc_library_types::AddressType;
+    use crate::{agent, canister_mock::BitcoinCanisterMock, AddressType};
+    use bitcoin::Network;
 
     /// Check that `get_state` and `from_state` return respectively the Bitcoin agent state and the Bitcoin agent associated with the former Bitcoin agent state.
     #[test]

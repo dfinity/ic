@@ -10,7 +10,7 @@ pub type BlockHash = Vec<u8>;
 pub type Height = u32;
 pub type Page = ByteBuf;
 
-#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize)]
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
 pub enum Network {
     Mainnet,
     Testnet,
@@ -26,7 +26,7 @@ pub struct OutPoint {
 }
 
 /// An unspent transaction output.
-#[derive(CandidType, Debug, Deserialize, PartialEq, Clone)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Clone, Hash, Eq)]
 pub struct Utxo {
     pub outpoint: OutPoint,
     pub value: Satoshi,

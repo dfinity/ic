@@ -7,11 +7,12 @@ edition = "2021"
 
 [dependencies]
 bitcoin = "0.28.1"
-ic-btc-library-types = { path = "types" }
 ic-cdk = "0.5.1"
 ic-cdk-macros = "0.5.1"
 serde = "1.0.132"
 async-trait = "0.1.53"
+candid = "0.7.14"
+ic-btc-types = { path = "../types/public" }
 
 [dev-dependencies]
 tokio = { version = "1.17.0", features = ["full"] }

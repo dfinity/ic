@@ -14,7 +14,7 @@
 //!
 //! As mentioned above, the [BitcoinAgent] is stateful. Therefore, it is important to store and load the agent’s state properly in the canister’s life cycle management. This aspect is discussed in detail in [Section 3](#3-life-cycle-management).
 //!
-//! Only working locally in Bitcoin regtest mode is available for the moment. To configure your local environment, follow the additional instructions provided in [Section 4](#4-testing-locally).
+//! While working on the Internet Computer does not require more configuration, working locally does. The additional instructions are provided in [Section 4](#4-testing-locally).
 
 //! # 1. Step-by-step tutorial
 
@@ -32,42 +32,23 @@
 //! cd example_rust/
 //! ```
 
-//! Add the most recent version of the `ic-btc-library` and its dependencies to your `src/example_rust/Cargo.toml` dependencies.
+//! Add the most recent version of the `ic-btc-library` and its dependency to your `src/example_rust/Cargo.toml` dependencies.
 
 //! ```toml
 //! ic-btc-library = "0.1.0"
-//! ic-btc-library-types = "0.1.0"
 //! bitcoin = "0.28.1"
 //! ```
 
-//! Replace the content of `src/example_rust/src/lib.rs` with:
-
-//! ```
-//! use ic_cdk_macros::update;
+//! Replace the content of `src/example_rust/src/lib.rs` with the sample code from [Section 2](#2-sample-code).
 //!
-//! #[update]
-//! # /*
-//! pub async fn main() -> () {
-//! # */
-//! # pub fn main() {
-//!     // Code from Section # 2. Sample Code.
-//! }
-//! ```
-
-//! Only testing locally using Bitcoin regtest network is available for the moment, please follow [testing-locally instructions](#4-testing-locally).
+//! While working on the Internet Computer does not require more configuration, working locally does. The additional instructions are provided in [Section 4](#4-testing-locally).
 //!
 //! Replace the content of `src/example_rust/example_rust.did` with:
 
 //! ```candid
 //! service : {
-//!     "main": () -> ();
+//!     "main": () -> (text, nat64, text);
 //! }
-//! ```
-
-//! Create the example Rust canister.
-
-//! ```bash
-//! dfx canister create example_rust
 //! ```
 
 //! Install `ic-cdk-optimizer` to optimize the output WASM module.
@@ -84,66 +65,87 @@
 //! AR="/usr/local/opt/llvm/bin/llvm-ar" CC="/usr/local/opt/llvm/bin/clang" cargo build --target "wasm32-unknown-unknown" --release
 //! ```
 
+//! To deploy the canister locally.
+
 //! ```bash
 //! dfx deploy example_rust
 //! ```
 
-//! Execute the `main` function.
+//! To deploy the canister on the Internet Computer.
+
+//! ```bash
+//! dfx deploy --network ic
+//! ```
+
+//! Execute the `main` function locally.
 
 //! ```bash
 //! dfx canister call example_rust main
 //! ```
 
-//! The output of `ic_cdk::print` is displayed on the terminal running dfx.
+//! Execute the `main` function on the Internet Computer.
+
+//! ```bash
+//! dfx canister --network ic call example_rust main
+//! ```
+
+//! If you are running the code locally then the output of `ic_cdk::print` is displayed on the terminal running dfx.
 //!
-//! If you are interested in sending bitcoins to the canister you created, [see these instructions](https://github.com/dfinity/bitcoin-developer-preview/tree/master/examples#sending-bitcoin-to-the-example-canister).
+//! If you are interested in sending bitcoins to the canister you created, [see these instructions](#sending-bitcoin-to-the-example-canister).
 
 //! # 2. Sample Code
 
 //! The following code shows how to create a [BitcoinAgent] instance, add a managed address derived from the canister’s public key and get its current balance.
-
 //! ```ignore
-//! use ic_btc_library_types::{AddressType, Network};
+//! use ic_btc_library::{AddressType, Network};
 //! use ic_cdk::print;
 //! # use ic_btc_library::{BitcoinAgent, BitcoinCanister, BitcoinCanisterMock};
 //! # /*
-//! use ic_btc_library::{BitcoinAgent, BitcoinCanister, BitcoinCanisterImpl};
+//! use ic_cdk_macros::update;
+//! use ic_btc_library::{BitcoinAgent, BitcoinCanister, BitcoinCanisterImpl, Satoshi};
 //! # */
 //!
 //! # #[tokio::main]
-//! # async fn main() {
-//! #
-//! let num_confirmations = 6;
+//! # async fn main() -> () {
+//! # /*
+//! #[update]
+//! pub async fn main() -> (String, Satoshi, String) {
+//! # */
+//!     let num_confirmations = 6;
 //!
-//! let mut agent = BitcoinAgent::new(
-//!     // Choose the Bitcoin network your `BitcoinAgent` will use: mainnet, testnet, or regtest.
+//!     let mut agent = BitcoinAgent::new(
+//!         // Choose the Bitcoin network your `BitcoinAgent` will use: mainnet, testnet, or regtest.
+//!         # /*
+//!         BitcoinCanisterImpl::new(Network::Regtest),
+//!         # */
+//!         # BitcoinCanisterMock::new(Network::Regtest),
+//!         &AddressType::P2pkh,
+//!         num_confirmations,
+//!     ).unwrap();
+//!
+//!     // Print the address of the main account and its balance:
+//!     let main_address = agent.get_main_address();
 //!     # /*
-//!     BitcoinCanisterImpl::new(Network::Regtest),
+//!     print(&format!("Main account address: {}", main_address));
+//!     let balance = agent.get_balance(&main_address, num_confirmations).await.unwrap();
+//!     print(&format!("Main account balance: {}", balance));
 //!     # */
-//!     # BitcoinCanisterMock::new(Network::Regtest),
-//!     &AddressType::P2pkh,
-//!     num_confirmations,
-//! ).unwrap();
+//!     # println!("Main account address: {}", main_address);
+//!     # let balance = agent.get_balance(&main_address, num_confirmations).await.unwrap();
+//!     # println!("Main account balance: {}", balance);
 //!
-//! // Print the address of the main account and its balance:
-//! let main_address = agent.get_main_address();
-//! # /*
-//! print(&format!("Main account address: {}", main_address));
-//! let balance = agent.get_balance(&main_address, num_confirmations).await.unwrap();
-//! print(&format!("Main account balance: {}", balance));
-//! # */
-//! # println!("Main account address: {}", main_address);
-//! # let balance = agent.get_balance(&main_address, num_confirmations).await.unwrap();
-//! # println!("Main account balance: {}", balance);
+//!     // Derive an address and print it:
+//!     let derivation_path: Vec<u8> = vec![1];
+//!     let new_address = agent.add_address(&derivation_path).unwrap();
+//!     # /*
+//!     print(&format!("Derived address: {}", new_address));
 //!
-//! // Derive an address and print it:
-//! let derivation_path: Vec<u8> = vec![1];
-//! let new_address = agent.add_address(&derivation_path).unwrap();
-//! # /*
-//! print(&format!("Derived address: {}", new_address));
-//! # */
-//! # println!("Derived address: {}", new_address);
-//! # }
+//!     // If running on the Internet Computer, then `ic_cdk::print` doesn't print anywhere.
+//!     // So to get the output, we return the printed variables.
+//!     (main_address.to_string(), balance, new_address.to_string())
+//!     # */
+//!     # println!("Derived address: {}", new_address);
+//! }
 //! ```
 
 /*
@@ -157,8 +159,7 @@
 //! Given a [BitcoinAgent] instance, it is possible to get updates for a particular address using the function [`get_balance_update`](BitcoinAgent::get_balance_update):
 
 //! ```ignore
-//! # use ic_btc_library_types::{AddressType, Network};
-//! # use ic_btc_library::{BitcoinAgent, BitcoinCanister, BitcoinCanisterMock};
+//! # use ic_btc_library::{AddressType, Network, BitcoinAgent, BitcoinCanister, BitcoinCanisterMock};
 //! #
 //! # #[tokio::main]
 //! # async fn main() {
@@ -181,8 +182,7 @@
 //! This case can be handled using [`peek_balance_update`](BitcoinAgent::peek_balance_update) and [`update_state`](BitcoinAgent::update_state) as follows.
 
 //! ```ignore
-//! # use ic_btc_library_types::{AddressType, Network};
-//! # use ic_btc_library::{BitcoinAgent, BitcoinCanister, BitcoinCanisterMock};
+//! # use ic_btc_library::{AddressType, Network, BitcoinAgent, BitcoinCanister, BitcoinCanisterMock};
 //! #
 //! # #[tokio::main]
 //! # async fn main() {
@@ -219,10 +219,9 @@
 //! The following sample code manages this aspect for a single [BitcoinAgent] instance.
 
 //! ```
-//! use ic_btc_library_types::{BitcoinAgentState, AddressType, Network};
 //! use ic_cdk::storage;
 //! use std::cell::RefCell;
-//! use ic_btc_library::{BitcoinAgent, BitcoinCanister, BitcoinCanisterImpl};
+//! use ic_btc_library::{BitcoinAgentState, AddressType, Network, BitcoinAgent, BitcoinCanister, BitcoinCanisterImpl};
 //! use ic_cdk_macros::{post_upgrade, pre_upgrade};
 //!
 //! thread_local! {
@@ -248,36 +247,100 @@
 //! Note that the functions must be annotated with `#[init]`, `#[pre_upgrade]` and `#[post_upgrade]`.
 
 //! Furthermore the canister developer must enforce that no address is managed by multiple [BitcoinAgent]s.
-//!
+
 //! # 4. Testing locally
+
+//! The [BitcoinAgent] invokes the Bitcoin integration API through the management canister. In order to test the `ic-btc-library` locally, you have to follow the following instructions.
+
+//! # Prerequisites
+
+//! - [Bitcoin Core](https://bitcoin.org/en/download). Mac users are recommended to download the `.tar.gz` version.
 //!
-//! By default the [BitcoinAgent] invokes the Bitcoin integration API through the management canister. In order to test the `ic-btc-library` locally, you have to follow [Getting Started](https://github.com/BenjaminLoison/bitcoin-developer-preview/tree/first_release#getting-started) instructions.
-//! Once done specify the local Bitcoin canister ID to the `ic-btc-library` as follows. You can get it by running `dfx canister id btc`. Implement in `src/example_rust/src/lib.rs` the `init` and `post_upgrade` functions as follows to make the `ic-btc-library` use your local Bitcoin canister.
+//! The first step would be to setup a local Bitcoin network.
+
+//! # Setting up a local Bitcoin network
+
+//! 1. Unpack the `.tar.gz` file.
+
+//! 2. Create a directory named `data` inside the unpacked folder.
+
+//! 3. Create a file called `bitcoin.conf` at the root of the unpacked folder and add the following contents:
+//! ```conf
+//! ## Enable regtest mode. This is required to setup a private Bitcoin network.
+//! regtest=1
+//!
+//! ## Dummy credentials that are required by `bitcoin-cli`.
+//! rpcuser=btc-library
+//! rpcpassword=Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=
+//! rpcauth=btc-library:8555f1162d473af8e1f744aa056fd728$afaf9cb17b8cf0e8e65994d1195e4b3a4348963b08897b4084d210e5ee588bcb
+//! ```
+
+//! 4. Run bitcoind to start the Bitcoin client using the following command:
+//! ```bash
+//! ./bin/bitcoind -conf=$(pwd)/bitcoin.conf -datadir=$(pwd)/data
+//! ```
+
+//! 5. Create a wallet:
+//! ```bash
+//! ./bin/bitcoin-cli -conf=$(pwd)/bitcoin.conf createwallet mywallet
+//! ```
+//! If everything is setup correctly, you should see the following output:
+//! ```bash
+//! {
+//!   "name": "mywallet",
+//!   "warning": ""
+//! }
 
 //! ```
-//! use std::str::FromStr;
-//! use ic_btc_library_types::InitPayload;
-//! use ic_cdk::export::Principal;
-//! use ic_cdk_macros::{init, post_upgrade};
+//! 6. Generate a Bitcoin address and save it in variable for later reuse:
+//! ```bash
+//! export BTC_ADDRESS=$(./bin/bitcoin-cli -conf=$(pwd)/bitcoin.conf getnewaddress)
+//! ```
+//! This will generate a Bitcoin address for your wallet to receive funds.
 //!
-//! fn get_init_payload() -> InitPayload {
-//!     InitPayload {
-//!         // change `BITCOIN_CANISTER_ID` with your Bitcoin canister id.
-//!         bitcoin_canister_id: Principal::from_str("BITCOIN_CANISTER_ID").unwrap(),
-//!     }
-//! }
+//! 7. Mine blocks to receive some bitcoins as a reward.
+//! ```bash
+//! ./bin/bitcoin-cli -conf=$(pwd)/bitcoin.conf generatetoaddress 101 $BTC_ADDRESS
+//! ```
+//! You should see an output that looks similar to, but not exactly like, the following:
+//! ```bash
+//! [
+//!   "1625281b2595b77276903868a0fe2fc31cb0c624e9bdc269e74a3f319ceb48de",
+//!   "1cc5ba7e86fc313333c5448af6c7af44ff249eca3c8b681edc3c275efd3a2d38",
+//!   "1d3c85b674497ba08a48d1b955bee5b4dc4505ffe4e9f49b428153e02e3e0764",
+//!   ...
+//!   "0dfd066985dc001ccc1fe6d7bfa53b7ad4944285dc173615792653bbd52151f1",
+//!   "65975f1cd5809164f73b0702cf326204d8fee8b9669bc6bd510cb221cf09db5c",
+//! ]
+//! ```
+
+//! # Synchronize blocks from bitcoind and create the canister
+
+//! Synchronize blocks from bitcoind with the adapter and replica by executing in `example_rust` folder:
+
+//! ```bash
+//! dfx start --enable-bitcoin --bitcoin-node 127.0.0.1:18444
+//! ```
+
+//! Create the example Rust canister.
+
+//! ```bash
+//! dfx canister create example_rust
+//! ```
+
+//! # Sending bitcoin to the example canister
+
+//! To top up the example canister with bitcoins, run the following:
+
+//! ```bash
+//! ## The canister's BTC address (if using P2PKH address type on regtest Bitcoin network).
+//! export CANISTER_BTC_ADDRESS=mmdoAzumgjbvAJjVGg7fkQmtvDNFd2wjjH
 //!
-//! #[init]
-//! fn init() {
-//!     ic_btc_library::init(get_init_payload());
-//! }
+//! ## Send a transaction that transfers 10 BTC to the canister.
+//! ./bin/bitcoin-cli -conf=$(pwd)/bitcoin.conf -datadir=$(pwd)/data sendtoaddress $CANISTER_BTC_ADDRESS 10 "" "" true true null "unset" null 1.1
 //!
-//! #[post_upgrade]
-//! fn post_upgrade() {
-//!     ic_btc_library::init(get_init_payload());
-//!
-//!     // Remaining post upgrade code, for instance restoring `BitcoinAgent`s (see https://docs.rs/ic-btc-library#3-life-cycle-management).
-//! }
+//! ## Mine 6 blocks that contains the transaction in order to reach provided `min_confirmations`.
+//! ./bin/bitcoin-cli -conf=$(pwd)/bitcoin.conf generatetoaddress 6 $BTC_ADDRESS
 //! ```
 
 pub mod address_management;
@@ -286,10 +349,17 @@ mod canister_common;
 mod canister_implementation;
 #[cfg(test)]
 mod canister_mock;
+mod types;
 mod upgrade_management;
 mod utxo_management;
 
-pub use address_management::{init, post_upgrade};
+pub use ic_btc_types::{GetUtxosError, Network, OutPoint, Satoshi, Utxo};
+pub use types::{
+    AddAddressWithParametersError, AddressNotTracked, AddressType, AddressUsingPrimitives,
+    BalanceUpdate, BitcoinAgentState, DerivationPathTooLong, EcdsaPubKey, MinConfirmationsTooHigh,
+    UtxosState, UtxosUpdate, STABILITY_THRESHOLD,
+};
+
 pub use agent::BitcoinAgent;
 pub use canister_common::BitcoinCanister;
 pub use canister_implementation::BitcoinCanisterImpl;

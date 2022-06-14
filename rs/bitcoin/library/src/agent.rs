@@ -1,14 +1,13 @@
-use crate::address_management::{get_btc_ecdsa_public_key, get_main_address};
-use crate::canister_common::BitcoinCanister;
-use crate::{address_management, upgrade_management, utxo_management};
-use bitcoin::Address;
-use ic_btc_library_types::{
-    AddAddressWithParametersError, AddressNotTracked, AddressType, BalanceUpdate,
-    BitcoinAgentState, DerivationPathTooLong, EcdsaPubKey, GetUtxosError, MinConfirmationsTooHigh,
-    Satoshi, Utxo, UtxosState, UtxosUpdate, STABILITY_THRESHOLD,
+use crate::{
+    address_management,
+    address_management::{get_btc_ecdsa_public_key, get_main_address},
+    canister_common::BitcoinCanister,
+    upgrade_management, utxo_management, AddAddressWithParametersError, AddressNotTracked,
+    AddressType, BalanceUpdate, BitcoinAgentState, DerivationPathTooLong, EcdsaPubKey,
+    MinConfirmationsTooHigh, Satoshi, Utxo, UtxosState, UtxosUpdate, STABILITY_THRESHOLD,
 };
-use std::collections::HashMap;
-use std::error::Error;
+use bitcoin::Address;
+use std::{collections::HashMap, error::Error};
 #[cfg(test)]
 use {crate::canister_mock::BitcoinCanisterMock, bitcoin::Network};
 
@@ -123,7 +122,7 @@ impl<C: BitcoinCanister> BitcoinAgent<C> {
         &self,
         address: &Address,
         min_confirmations: u32,
-    ) -> Result<Vec<Utxo>, GetUtxosError> {
+    ) -> Result<Vec<Utxo>, MinConfirmationsTooHigh> {
         self.bitcoin_canister
             .get_utxos(address, min_confirmations)
             .await
@@ -160,7 +159,7 @@ impl<C: BitcoinCanister> BitcoinAgent<C> {
         &self,
         address: &Address,
         min_confirmations: u32,
-    ) -> Result<Satoshi, GetUtxosError> {
+    ) -> Result<Satoshi, MinConfirmationsTooHigh> {
         utxo_management::get_balance(self, address, min_confirmations).await
     }
 
@@ -192,7 +191,7 @@ pub(crate) fn new_mock(
     main_address_type: &AddressType,
 ) -> BitcoinAgent<BitcoinCanisterMock> {
     BitcoinAgent::new(
-        BitcoinCanisterMock::new(ic_btc_library_types::Network::from(*network)),
+        BitcoinCanisterMock::new(crate::types::from_bitcoin_network(*network)),
         main_address_type,
         0,
     )

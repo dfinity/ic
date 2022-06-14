@@ -1,80 +1,8 @@
 //! Types used to support the candid API.
 
-use ic_cdk::export::{
-    candid::{CandidType, Deserialize},
-    Principal,
-};
-use serde::Serialize;
+use crate::{Network, Satoshi, Utxo};
+use ic_cdk::export::candid::{CandidType, Deserialize};
 use std::collections::{HashMap, HashSet};
-
-pub type Satoshi = u64;
-
-/// Initialization payload of the `ic-btc-library`.
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
-pub struct InitPayload {
-    pub bitcoin_canister_id: Principal,
-}
-
-/// A reference to a transaction output.
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq, Hash)]
-pub struct OutPoint {
-    pub tx_id: Vec<u8>,
-    pub vout: u32,
-}
-
-/// An unspent transaction output.
-#[derive(CandidType, Debug, Deserialize, PartialEq, Clone, Hash, Eq)]
-pub struct Utxo {
-    pub outpoint: OutPoint,
-    pub value: Satoshi,
-    pub height: u32,
-    pub confirmations: u32,
-}
-
-/// A request for getting the UTXOs for a given address.
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
-pub struct GetUtxosRequest {
-    pub address: String,
-    pub min_confirmations: Option<u32>,
-}
-
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
-pub struct GetUtxosResponse {
-    pub utxos: Vec<Utxo>,
-    pub total_count: u32,
-}
-
-/// Errors when requesting a `get_utxos` to the Bitcoin canister.
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
-pub enum BitcoinCanisterGetUtxosError {
-    MalformedAddress,
-}
-
-/// Errors when processing a `get_utxos` request.
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
-pub enum GetUtxosError {
-    MalformedAddress,
-    MinConfirmationsTooHigh,
-}
-
-impl From<BitcoinCanisterGetUtxosError> for GetUtxosError {
-    fn from(bitcoin_canister_get_utxos_error: BitcoinCanisterGetUtxosError) -> Self {
-        match bitcoin_canister_get_utxos_error {
-            BitcoinCanisterGetUtxosError::MalformedAddress => GetUtxosError::MalformedAddress,
-        }
-    }
-}
-
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
-pub struct SendTransactionRequest {
-    pub transaction: Vec<u8>,
-}
-
-/// Errors when requesting a `send_transaction` to the Bitcoin canister.
-#[derive(CandidType, Debug, Deserialize, PartialEq)]
-pub enum SendTransactionError {
-    MalformedTransaction,
-}
 
 /// ECDSA public key and chain code.
 #[derive(CandidType, Debug, Deserialize, PartialEq, Clone)]
@@ -163,7 +91,7 @@ impl UtxosState {
     }
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq, Clone)]
+#[derive(CandidType, Debug, Deserialize, PartialEq)]
 pub struct AddressNotTracked;
 
 /// Represents the last seen state and the unseen state balances for a given `min_confirmations`.
@@ -202,33 +130,21 @@ impl From<UtxosUpdate> for BalanceUpdate {
     }
 }
 
-/// Represents a Bitcoin network which is compatible with Candid.
-#[derive(CandidType, Debug, Deserialize, Serialize, Copy, PartialEq, Clone, Eq, Hash)]
-pub enum Network {
-    Bitcoin,
-    Testnet,
-    Regtest,
-}
-
-impl From<Network> for bitcoin::Network {
-    fn from(network: Network) -> Self {
-        match network {
-            Network::Bitcoin => bitcoin::Network::Bitcoin,
-            Network::Testnet => bitcoin::Network::Testnet,
-            Network::Regtest => bitcoin::Network::Regtest,
-        }
+pub(crate) fn from_bitcoin_network(network: bitcoin::Network) -> Network {
+    match network {
+        bitcoin::Network::Bitcoin => Network::Mainnet,
+        bitcoin::Network::Testnet => Network::Testnet,
+        bitcoin::Network::Regtest => Network::Regtest,
+        // Other cases can't happen see BitcoinCanister::new
+        _ => panic!(),
     }
 }
 
-impl From<bitcoin::Network> for Network {
-    fn from(network: bitcoin::Network) -> Self {
-        match network {
-            bitcoin::Network::Bitcoin => Network::Bitcoin,
-            bitcoin::Network::Testnet => Network::Testnet,
-            bitcoin::Network::Regtest => Network::Regtest,
-            // Other cases can't happen see BitcoinCanister::new
-            _ => panic!(),
-        }
+pub(crate) fn from_ic_btc_types_network(network: Network) -> bitcoin::Network {
+    match network {
+        Network::Mainnet => bitcoin::Network::Bitcoin,
+        Network::Testnet => bitcoin::Network::Testnet,
+        Network::Regtest => bitcoin::Network::Regtest,
     }
 }
 

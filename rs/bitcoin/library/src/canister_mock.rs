@@ -1,21 +1,25 @@
-use crate::canister_common::BitcoinCanister;
+use crate::{
+    canister_common::BitcoinCanister, types::from_ic_btc_types_network, BalanceUpdate,
+    MinConfirmationsTooHigh, OutPoint, Utxo, UtxosUpdate, STABILITY_THRESHOLD,
+};
 use async_trait::async_trait;
 use bitcoin::{Address, Network};
-use ic_btc_library_types::{BalanceUpdate, GetUtxosError, OutPoint, Utxo, UtxosUpdate};
 
 /// The Bitcoin canister mock is used to perform unit tests against the library.
 pub(crate) struct BitcoinCanisterMock {
     pub(crate) utxos: Vec<Utxo>,
     network: Network,
+    pub(crate) tip_height: u32,
 }
 
 #[async_trait]
 impl BitcoinCanister for BitcoinCanisterMock {
     /// Creates a new instance of the Bitcoin canister mock.
-    fn new(network: ic_btc_library_types::Network) -> Self {
+    fn new(network: crate::Network) -> Self {
         Self {
             utxos: get_init_utxos(),
-            network: Network::from(network),
+            network: from_ic_btc_types_network(network),
+            tip_height: STABILITY_THRESHOLD,
         }
     }
 
@@ -30,12 +34,12 @@ impl BitcoinCanister for BitcoinCanisterMock {
         &self,
         _address: &Address,
         min_confirmations: u32,
-    ) -> Result<Vec<Utxo>, GetUtxosError> {
+    ) -> Result<Vec<Utxo>, MinConfirmationsTooHigh> {
         Ok(self
             .utxos
             .clone()
             .into_iter()
-            .filter(|utxo| utxo.confirmations >= min_confirmations)
+            .filter(|utxo| utxo.height <= self.tip_height + 1 - min_confirmations)
             .collect())
     }
 }
@@ -44,12 +48,11 @@ impl BitcoinCanister for BitcoinCanisterMock {
 pub(crate) fn get_init_utxos() -> Vec<Utxo> {
     vec![Utxo {
         outpoint: OutPoint {
-            tx_id: vec![0; 32],
+            txid: vec![0; 32],
             vout: 0,
         },
         value: 250_000,
-        height: 0,
-        confirmations: 1,
+        height: STABILITY_THRESHOLD,
     }]
 }
 
