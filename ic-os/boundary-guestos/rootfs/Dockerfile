@@ -63,8 +63,8 @@ RUN \
 
 # Download icx-proxy.deb 
 RUN \
-    curl -L -O https://github.com/dfinity/icx-proxy/releases/download/rev-11bf43f/icx-proxy.deb && \
-    echo "903993a192b869c5b89036680c1deede2b4aa4f7e2df47610c6e00a53d2c37a5  icx-proxy.deb" | shasum -c
+    curl -L -O https://github.com/dfinity/icx-proxy/releases/download/rev-0cd1a22/icx-proxy.deb && \
+    echo "554270aa9d1a32796eb71d0c0bce85a5c261fc64009eeb72ecab901b2f763424  icx-proxy.deb" | shasum -c
 
 # Download and check service worker
 ARG sw_version
