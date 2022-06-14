@@ -1,0 +1,17 @@
+[Unit]
+Description=Set extra rules for testing domains based on nginxdomain.conf
+After=bootstrap-ic-node.service
+Before=systemd-networkd.target
+Before=nftables.service
+DefaultDependencies=no
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-nft-dev.sh
+
+[Install]
+WantedBy=multi-user.target
