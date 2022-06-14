@@ -13,7 +13,10 @@ use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::{execution_environment::Config, flag_status::FlagStatus};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{CanisterInstallMode, CanisterStatusType, EmptyBlob, InstallCodeArgs, Method};
+use ic_ic00_types::{
+    CanisterInstallMode, CanisterSettingsArgs, CanisterStatusType, EmptyBlob, InstallCodeArgs,
+    Method, Payload, UpdateSettingsArgs,
+};
 use ic_interfaces::execution_environment::{
     AvailableMemory, ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
 };
@@ -3660,4 +3663,45 @@ fn install_code_context_conversion_u128() {
         install_args,
     ))
     .is_err());
+}
+
+#[test]
+fn unfreezing_of_frozen_canister() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
+        .unwrap();
+
+    // Set the freezing theshold high to freeze the canister.
+    let payload = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgs {
+            freezing_threshold: Some(candid::Nat::from(1_000_000_000_000_u64)),
+            ..Default::default()
+        },
+    }
+    .encode();
+    let result = test.subnet_message(Method::UpdateSettings, payload);
+    get_reply(result);
+
+    // Sending an ingress message fails due to the cycles balance.
+    let err = test
+        .ingress(canister_id, "update", wasm().reply().build())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
+
+    // Unfreeze the canister.
+    let payload = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgs {
+            freezing_threshold: Some(candid::Nat::from(0_u64)),
+            ..Default::default()
+        },
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, payload)
+        .unwrap();
+    // Now the canister works again.
+    let result = test.ingress(canister_id, "update", wasm().reply().build());
+    get_reply(result);
 }

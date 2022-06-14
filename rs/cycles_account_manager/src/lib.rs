@@ -375,7 +375,11 @@ impl CyclesAccountManager {
                     }
                 },
                 Ok(Method::UpdateSettings) => match UpdateSettingsArgs::decode(ingress.arg()) {
-                    Ok(record) => Some(record.get_canister_id()),
+                    Ok(_) => {
+                        // Canister settings can be updated for free to allow
+                        // unfreezing of frozen canisters.
+                        None
+                    }
                     Err(err) => {
                         return Err(IngressInductionCostError::InvalidSubnetPayload(
                             err.to_string(),
