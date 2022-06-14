@@ -432,4 +432,11 @@ impl ProofOfDLogEquivalence {
 
         Ok(())
     }
+
+    pub fn curve_type(&self) -> ThresholdEcdsaResult<EccCurveType> {
+        if self.challenge.curve_type() == self.response.curve_type() {
+            return Ok(self.challenge.curve_type());
+        }
+        Err(ThresholdEcdsaError::CurveMismatch)
+    }
 }

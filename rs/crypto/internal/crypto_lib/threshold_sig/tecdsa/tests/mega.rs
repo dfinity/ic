@@ -158,6 +158,58 @@ fn mega_pair_smoke_test() -> Result<(), ThresholdEcdsaError> {
 }
 
 #[test]
+fn mega_should_reject_invalid_pop() -> Result<(), ThresholdEcdsaError> {
+    let curve = EccCurveType::K256;
+
+    let mut rng = Seed::from_bytes(&[42; 32]).into_rng();
+
+    let a_sk = MEGaPrivateKey::generate(curve, &mut rng)?;
+    let b_sk = MEGaPrivateKey::generate(curve, &mut rng)?;
+
+    let a_pk = a_sk.public_key()?;
+    let b_pk = b_sk.public_key()?;
+
+    let ad = b"assoc_data_test";
+
+    let ptext_for_a = EccScalar::random(curve, &mut rng)?;
+    let ptext_for_b = EccScalar::random(curve, &mut rng)?;
+
+    let dealer_index = 0;
+
+    let seed = Seed::from_rng(&mut rng);
+
+    let ctext = MEGaCiphertextSingle::encrypt(
+        seed,
+        &[ptext_for_a, ptext_for_b],
+        &[a_pk, b_pk],
+        dealer_index,
+        ad,
+    )?;
+
+    assert!(ctext.decrypt(ad, dealer_index, 1, &b_sk, &b_pk).is_ok());
+    assert_eq!(
+        ctext.decrypt(b"wrong_ad", dealer_index, 1, &b_sk, &b_pk),
+        Err(ThresholdEcdsaError::InvalidProof)
+    );
+
+    let mut bad_pop_pk = ctext.clone();
+    bad_pop_pk.pop_public_key = ctext.ephemeral_key;
+    assert_eq!(
+        bad_pop_pk.decrypt(ad, dealer_index, 1, &b_sk, &b_pk),
+        Err(ThresholdEcdsaError::InvalidProof)
+    );
+
+    let mut bad_eph_key = ctext;
+    bad_eph_key.ephemeral_key = EccPoint::hash_to_point(curve, b"input", b"dst")?;
+    assert_eq!(
+        bad_eph_key.decrypt(ad, dealer_index, 1, &b_sk, &b_pk),
+        Err(ThresholdEcdsaError::InvalidProof)
+    );
+
+    Ok(())
+}
+
+#[test]
 fn mega_private_key_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
     let curve = EccCurveType::K256;
 
