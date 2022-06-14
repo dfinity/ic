@@ -57,7 +57,7 @@ use ic_types::{
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response, UserQuery,
     },
-    CanisterId, Cycles, NumInstructions, NumMessages, PrincipalId, QueryAllocation,
+    CanisterId, Cycles, NumInstructions, NumMessages, QueryAllocation,
 };
 use std::{
     collections::BTreeMap,
@@ -170,8 +170,11 @@ impl<'a> QueryContext<'a> {
         // get a proper spec for it.
         let cross_canister_query_calls_enabled = self.own_subnet_type == SubnetType::System
             || self.own_subnet_type == SubnetType::VerifiedApplication;
-        let query_kind = if ENABLE_QUERY_OPTIMIZATION || !cross_canister_query_calls_enabled {
-            NonReplicatedQueryKind::Pure
+        let try_pure_query = ENABLE_QUERY_OPTIMIZATION || !cross_canister_query_calls_enabled;
+        let query_kind = if try_pure_query {
+            NonReplicatedQueryKind::Pure {
+                caller: query.source.get(),
+            }
         } else {
             NonReplicatedQueryKind::Stateful {
                 call_origin: call_origin.clone(),
@@ -187,15 +190,14 @@ impl<'a> QueryContext<'a> {
                 old_canister,
                 query.method_name.as_str(),
                 query.method_payload.as_slice(),
-                query.source.get(),
-                query_kind.clone(),
+                query_kind,
                 &measurement_scope,
             )
         };
 
         // An attempt to call another query will result in `ContractViolation`.
         // If that's the case then retry query execution as `Stateful`.
-        if query_kind == NonReplicatedQueryKind::Pure && cross_canister_query_calls_enabled {
+        if try_pure_query && cross_canister_query_calls_enabled {
             if let Err(err) = &result {
                 if err.code() == ErrorCode::CanisterContractViolation {
                     let measurement_scope =
@@ -205,7 +207,6 @@ impl<'a> QueryContext<'a> {
                         old_canister,
                         query.method_name.as_str(),
                         query.method_payload.as_slice(),
-                        query.source.get(),
                         NonReplicatedQueryKind::Stateful { call_origin },
                         &measurement_scope,
                     );
@@ -374,7 +375,6 @@ impl<'a> QueryContext<'a> {
         canister: CanisterState,
         method_name: &str,
         method_payload: &[u8],
-        source: PrincipalId,
         query_kind: NonReplicatedQueryKind,
         measurement_scope: &MeasurementScope,
     ) -> (CanisterState, Result<Option<WasmResult>, UserError>) {
@@ -391,7 +391,6 @@ impl<'a> QueryContext<'a> {
             query_kind,
             method_name,
             method_payload,
-            source,
             canister,
             Some(self.data_certificate.clone()),
             self.state.time(),
@@ -509,7 +508,6 @@ impl<'a> QueryContext<'a> {
             canister,
             request.method_name.as_str(),
             request.method_payload.as_slice(),
-            request.sender.get(),
             NonReplicatedQueryKind::Stateful { call_origin },
             measurement_scope,
         );

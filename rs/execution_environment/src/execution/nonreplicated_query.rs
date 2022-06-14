@@ -7,10 +7,9 @@
 
 use crate::execution::common::{validate_canister, validate_method};
 use crate::{Hypervisor, NonReplicatedQueryKind};
-use ic_base_types::PrincipalId;
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::ExecutionParameters;
-use ic_replicated_state::{CanisterState, NetworkTopology};
+use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
 use ic_system_api::ApiType;
 use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
@@ -22,7 +21,6 @@ pub fn execute_non_replicated_query(
     query_kind: NonReplicatedQueryKind,
     method: &str,
     payload: &[u8],
-    caller: PrincipalId,
     mut canister: CanisterState,
     data_certificate: Option<Vec<u8>>,
     time: Time,
@@ -57,19 +55,29 @@ pub fn execute_non_replicated_query(
     }
 
     let mut preserve_changes = false;
-    let non_replicated_query_kind = match query_kind {
-        NonReplicatedQueryKind::Pure => ic_system_api::NonReplicatedQueryKind::Pure,
+    let (non_replicated_query_kind, caller) = match query_kind {
+        NonReplicatedQueryKind::Pure { caller } => {
+            (ic_system_api::NonReplicatedQueryKind::Pure, caller)
+        }
         NonReplicatedQueryKind::Stateful { call_origin } => {
             preserve_changes = true;
+            let caller = match call_origin {
+                CallOrigin::Query(source) => source.get(),
+                CallOrigin::CanisterQuery(sender, _) => sender.get(),
+                _ => panic!("Unexpected call origin for execute_non_replicated_query"),
+            };
             let call_context_id = canister
                 .system_state
                 .call_context_manager_mut()
                 .unwrap()
                 .new_call_context(call_origin, Cycles::from(0), time);
-            ic_system_api::NonReplicatedQueryKind::Stateful {
-                call_context_id,
-                outgoing_request: None,
-            }
+            (
+                ic_system_api::NonReplicatedQueryKind::Stateful {
+                    call_context_id,
+                    outgoing_request: None,
+                },
+                caller,
+            )
         }
     };
 
