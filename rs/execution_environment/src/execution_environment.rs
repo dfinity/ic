@@ -952,6 +952,7 @@ impl ExecutionEnvironmentImpl {
             config.max_controllers,
             num_cores,
             config.rate_limiting_of_instructions,
+            config.allocatable_compute_capacity_in_percent,
         );
         let canister_manager = CanisterManager::new(
             Arc::clone(&hypervisor),
