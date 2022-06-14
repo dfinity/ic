@@ -20,6 +20,7 @@ pub use execution_environment::{
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
+use ic_base_types::PrincipalId;
 use ic_btc_canister::BitcoinCanister;
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -70,7 +71,7 @@ pub enum QueryExecutionType {
 #[derive(Clone, PartialEq, Eq)]
 pub enum NonReplicatedQueryKind {
     Stateful { call_origin: CallOrigin },
-    Pure,
+    Pure { caller: PrincipalId },
 }
 
 // This struct holds public facing components that are created by Execution.

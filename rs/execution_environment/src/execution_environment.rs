@@ -1436,10 +1436,11 @@ impl ExecutionEnvironmentImpl {
             ExecutionMode::NonReplicated,
         );
         let result = execute_non_replicated_query(
-            NonReplicatedQueryKind::Pure,
+            NonReplicatedQueryKind::Pure {
+                caller: IC_00.get(),
+            },
             &anonymous_query.method_name,
             &anonymous_query.method_payload,
-            IC_00.get(),
             canister,
             None,
             state.time(),

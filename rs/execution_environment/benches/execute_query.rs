@@ -53,10 +53,9 @@ pub fn bench_execute_query(c: &mut Criterion) {
          }| {
             execution_parameters.execution_mode = ExecutionMode::NonReplicated;
             let (_, instructions_left, result) = execute_non_replicated_query(
-                NonReplicatedQueryKind::Pure,
+                NonReplicatedQueryKind::Pure { caller: sender },
                 "test",
                 &[],
-                sender,
                 canister_state,
                 Some(vec![0; 256]),
                 time,
