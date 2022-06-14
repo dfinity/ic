@@ -48,7 +48,31 @@ rules_proto_toolchains()
 load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "splicing_config")
 load("//bazel:external_crates.bzl", "external_crates_repository")
 
-external_crates_repository(name = "crate_index")
+external_crates_repository(
+    name = "crate_index",
+    annotations = {
+        "miracl_core_bls12381": [crate.annotation(
+            rustc_flags = [
+                "-C",
+                "opt-level=3",
+            ],
+        )],
+        "pprof": [crate.annotation(
+            build_script_data = [
+                "@com_google_protobuf//:protoc",
+            ],
+            build_script_env = {
+                "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+            },
+        )],
+        "prost-build": [crate.annotation(
+            build_script_env = {
+                "PROTOC_NO_VENDOR": "1",
+                "PROTOC": "NO_PROTOC_PATH_AT_COMPILE_TIME",
+            },
+        )],
+    },
+)
 
 load("@crate_index//:defs.bzl", "crate_repositories")
 
