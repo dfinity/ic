@@ -1,8 +1,16 @@
 //! Types used to support the candid API.
 
-use crate::{Network, Satoshi, Utxo};
+use crate::{Satoshi, Utxo};
 use ic_cdk::export::candid::{CandidType, Deserialize};
 use std::collections::{HashMap, HashSet};
+
+#[derive(CandidType, Debug, Deserialize, PartialEq, Clone, Eq, Hash)]
+pub enum Network {
+    Mainnet,
+    Testnet,
+    #[cfg(locally)]
+    Regtest,
+}
 
 /// ECDSA public key and chain code.
 #[derive(CandidType, Debug, Deserialize, PartialEq, Clone)]
@@ -130,21 +138,35 @@ impl From<UtxosUpdate> for BalanceUpdate {
     }
 }
 
-pub(crate) fn from_bitcoin_network(network: bitcoin::Network) -> Network {
+pub(crate) fn from_types_network_to_bitcoin_network(network: Network) -> bitcoin::Network {
     match network {
-        bitcoin::Network::Bitcoin => Network::Mainnet,
-        bitcoin::Network::Testnet => Network::Testnet,
-        bitcoin::Network::Regtest => Network::Regtest,
+        Network::Mainnet => bitcoin::Network::Bitcoin,
+        Network::Testnet => bitcoin::Network::Testnet,
+        #[cfg(locally)]
+        Network::Regtest => bitcoin::Network::Regtest,
+    }
+}
+
+pub(crate) fn from_bitcoin_network_to_ic_btc_types_network(
+    network: bitcoin::Network,
+) -> ic_btc_types::Network {
+    match network {
+        bitcoin::Network::Bitcoin => ic_btc_types::Network::Mainnet,
+        bitcoin::Network::Testnet => ic_btc_types::Network::Testnet,
+        bitcoin::Network::Regtest => ic_btc_types::Network::Regtest,
         // Other cases can't happen see BitcoinCanister::new
         _ => panic!(),
     }
 }
 
-pub(crate) fn from_ic_btc_types_network(network: Network) -> bitcoin::Network {
+pub(crate) fn from_bitcoin_network_to_types_network(network: bitcoin::Network) -> Network {
     match network {
-        Network::Mainnet => bitcoin::Network::Bitcoin,
-        Network::Testnet => bitcoin::Network::Testnet,
-        Network::Regtest => bitcoin::Network::Regtest,
+        bitcoin::Network::Bitcoin => Network::Mainnet,
+        bitcoin::Network::Testnet => Network::Testnet,
+        #[cfg(locally)]
+        bitcoin::Network::Regtest => Network::Regtest,
+        // Other cases can't happen see BitcoinCanister::new
+        _ => panic!(),
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::{
-    canister_common::BitcoinCanister, types::from_ic_btc_types_network, utxo_management,
-    MinConfirmationsTooHigh, Utxo,
+    canister_common::BitcoinCanister, types::from_types_network_to_bitcoin_network,
+    utxo_management, MinConfirmationsTooHigh, Utxo,
 };
 use async_trait::async_trait;
 use bitcoin::{Address, Network};
@@ -16,7 +16,7 @@ impl BitcoinCanister for BitcoinCanisterImpl {
     /// Creates a new instance of the real Bitcoin canister.
     fn new(network: crate::Network) -> Self {
         Self {
-            network: from_ic_btc_types_network(network),
+            network: from_types_network_to_bitcoin_network(network),
         }
     }
 

@@ -1,5 +1,5 @@
 use crate::{
-    canister_common::BitcoinCanister, types::from_ic_btc_types_network, BalanceUpdate,
+    canister_common::BitcoinCanister, types::from_types_network_to_bitcoin_network, BalanceUpdate,
     MinConfirmationsTooHigh, OutPoint, Utxo, UtxosUpdate, STABILITY_THRESHOLD,
 };
 use async_trait::async_trait;
@@ -18,7 +18,7 @@ impl BitcoinCanister for BitcoinCanisterMock {
     fn new(network: crate::Network) -> Self {
         Self {
             utxos: get_init_utxos(),
-            network: from_ic_btc_types_network(network),
+            network: from_types_network_to_bitcoin_network(network),
             tip_height: STABILITY_THRESHOLD,
         }
     }
