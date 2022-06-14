@@ -41,7 +41,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common import misc  # noqa
 from common import workload_experiment  # noqa
 
-CANISTER = "memory-test-canister.wasm"
+CANISTER = "memory-test-canister"
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("payload_size", 5000000, "Payload size to pass to memory test canister")
@@ -55,9 +55,7 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
         """Construct experiment 2."""
         super().__init__(num_workload_gen=1)
         for _ in range(FLAGS.num_canisters):
-            self.install_canister(
-                self.target_nodes[0], canister=os.path.join(self.artifacts_path, f"../canisters/{CANISTER}")
-            )
+            self.install_canister(self.target_nodes[0], CANISTER)
 
     def run_experiment_internal(self, config):
         """Run workload generator with the load specified in config."""

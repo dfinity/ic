@@ -1,0 +1,16 @@
+title = "Mixed query + update workload"
+description = "A mixture of query and update workloads running against the counter canister"
+
+[[workload]]
+canister = "counter"
+duration = 300
+rps = 100
+
+[[workload]]
+canister = "memory-test-canister"
+# Start 30s later
+start_delay = 30
+duration = 270
+call_method = "update_copy"
+method = "Update"
+json_payload = '{"size": 5000000}'

@@ -1,3 +1,4 @@
+import codecs
 import os
 import re
 import threading
@@ -16,7 +17,8 @@ class WorkloadDescription(NamedTuple):
     call_method: str
     rps: int
     duration: int
-    payload: str
+    raw_payload: str
+    json_payload: str
     arguments: list
     start_delay: int
     rps_ratio: float
@@ -31,11 +33,12 @@ def workload_description_from_dict(values: list, canister_ids: dict):
     workloads = [
         WorkloadDescription(
             canister_ids=canister_ids.get(value["canister"]),
-            method=None,
-            call_method=None,
-            rps=0,
+            method=value.get("method", None),
+            call_method=value.get("call_method", None),
+            rps=int(value.get("rps", -1)),
             duration=int(value.get("duration", 300)),
-            payload=None,
+            raw_payload=value.get("raw_payload", None),
+            json_payload=value.get("json_payload", None),
             arguments=value.get("arguments", []),
             start_delay=int(value.get("start_delay", 0)),
             rps_ratio=float(value.get("rps_ratio", 1)),
@@ -86,6 +89,9 @@ class Workload(threading.Thread):
     def get_commands(self) -> [str]:
         """Build a list of command line arguments to use for workload generation."""
         num_load_generators = len(self.load_generators)
+        if num_load_generators <= 0:
+            raise Exception("No workload generators registered for the current workload")
+
         rps_per_machine = misc.distribute_load_to_n(self.workload.rps, num_load_generators)
 
         target_list = ",".join(f"http://[{target}]:8080" for target in self.target_machines)
@@ -93,8 +99,12 @@ class Workload(threading.Thread):
         cmd += " " + " ".join(self.workload.arguments)
 
         # Dump worklod generator command in output directory.
-        if self.workload.payload is not None:
-            cmd += " --payload '{}'".format(self.workload.payload.decode("utf-8"))
+        if self.workload.raw_payload is not None:
+            cmd += " --payload '{}'".format(self.workload.raw_payload.decode("utf-8"))
+        if self.workload.json_payload is not None:
+            cmd += " --payload '{}'".format(
+                codecs.encode(self.workload.json_payload.encode("utf-8"), "hex").decode("utf-8")
+            )
         if self.workload.method is not None:
             cmd += " -m {}".format(self.workload.method)
         if self.workload.call_method is not None:

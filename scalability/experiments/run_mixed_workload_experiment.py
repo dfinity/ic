@@ -55,15 +55,21 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
 
         results = {}
         threads = []
+        curr_workload_generator_index = 0
         NUM_MACHINES_PER_WORKLOAD = 1  # TODO - make configurable in toml
-        for wl_idx, wl in enumerate(self.workload_description):
+        for wl in self.workload_description:
             print(wl)
             timeout = max(2 * wl.duration, 300)
             rps = int(config["load_total"] * wl.rps_ratio)
-            wl = wl._replace(rps=rps)
-            load_generators = self.machines[
-                wl_idx * NUM_MACHINES_PER_WORKLOAD : (wl_idx + 1) * NUM_MACHINES_PER_WORKLOAD
-            ]
+            if wl.rps < 0:
+                wl = wl._replace(rps=rps)
+            load_generators = []
+            if len(self.machines) < 1:
+                raise Exception("No machines for load generation, aborting")
+            for _ in range(NUM_MACHINES_PER_WORKLOAD):
+                load_generators.append(self.machines[curr_workload_generator_index])
+                curr_workload_generator_index = (curr_workload_generator_index + 1) % len(self.machines)
+
             print(f"Generating workload for machines {load_generators}")
             load = workload.Workload(
                 load_generators,
@@ -73,6 +79,20 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
                 f_stderr,
                 timeout,
             )
+            commands, _ = load.get_commands()
+            n = 0
+            while True:
+                n += 1
+                try:
+                    filename = os.path.join(self.iter_outdir, f"workload-generator-cmd-{n}")
+                    # Try to open file in exclusive mode
+                    with open(filename, "x") as cmd_file:
+                        for cmd in commands:
+                            cmd_file.write(cmd + "\n")
+                    break
+                except FileExistsError:
+                    print("Failed to open - file already exists")
+
             load.start()
             threads.append(load)
 
