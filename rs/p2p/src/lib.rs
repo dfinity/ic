@@ -173,9 +173,7 @@ pub fn start_p2p(
         &metrics_registry,
         event_handler::ChannelConfig::from(gossip_config),
     ));
-    transport
-        .register_client(event_handler.clone())
-        .expect("transport registration failed");
+    transport.register_client(event_handler.clone());
 
     let p2p_flow_tags = transport_config
         .p2p_flows
