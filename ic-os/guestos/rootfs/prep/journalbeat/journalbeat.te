@@ -100,10 +100,10 @@ require {
 }
 read_files_pattern(journalbeat_t, proc_t, proc_t)
 
-# Journalbeat wants to poke PID 1 (the init process) and read various
-# information from it. There is no justification for needing this,
-# deny and silence resulting audit messages.
-init_dontaudit_read_state(journalbeat_t)
+# Journalbeat wants to read PID-1 (systemd) cgroup for getting
+# network meta data (netinfo.enabled: true).
+allow journalbeat_t init_t:dir search;
+allow journalbeat_t init_t:file { getattr open read };
 
 # Journalbeat wants to get filesystem information for various
 # filesystems. There is no reason why it would need to, deny and
