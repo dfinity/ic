@@ -10,7 +10,7 @@ mod tests;
 use crate::api::{
     CspCreateMEGaKeyError, CspIDkgProtocol, CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner,
 };
-use crate::keygen::mega_key_id;
+use crate::keygen::{commitment_key_id, mega_key_id};
 use crate::secret_key_store::SecretKeyStore;
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_ecdsa::{
@@ -30,16 +30,16 @@ use ic_crypto_internal_types::scope::{ConstScope, Scope};
 use ic_logger::debug;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
-    IDkgVerifyDealingPublicError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    IDkgOpenTranscriptError, IDkgRetainThresholdKeysError, IDkgVerifyComplaintError,
+    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
+    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
 use rand::{CryptoRng, Rng};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub const IDKG_MEGA_SCOPE: Scope = Scope::Const(ConstScope::IDkgMEGaEncryptionKeys);
 pub const IDKG_THRESHOLD_KEYS_SCOPE: Scope = Scope::Const(ConstScope::IDkgThresholdKeys);
@@ -266,6 +266,21 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
                 internal_error: format!("{:?}", e),
             }
         })
+    }
+
+    fn idkg_retain_threshold_keys_if_present(
+        &self,
+        active_keys: &BTreeSet<IDkgTranscriptInternal>,
+    ) -> Result<(), IDkgRetainThresholdKeysError> {
+        debug!(self.logger; crypto.method_name => "idkg_retain_threshold_keys_if_present");
+
+        let active_key_ids = active_keys
+            .iter()
+            .map(|active_key| commitment_key_id(active_key.combined_commitment.commitment()))
+            .collect();
+
+        self.csp_vault
+            .idkg_retain_threshold_keys_if_present(active_key_ids)
     }
 }
 

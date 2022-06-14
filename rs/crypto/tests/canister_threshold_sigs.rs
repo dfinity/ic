@@ -1506,10 +1506,12 @@ fn should_fail_open_transcript_with_a_valid_complaint_but_wrong_transcript() {
     );
 }
 
+// TODO (CRP-1518): Add integration tests for retain_active_transcripts.
 #[test]
 fn should_run_retain_active_transcripts() {
     let crypto_components = temp_crypto_components_for(&[NODE_1]);
-    crypto_for(NODE_1, &crypto_components).retain_active_transcripts(&[]);
+    let result = crypto_for(NODE_1, &crypto_components).retain_active_transcripts(&BTreeSet::new());
+    assert!(result.is_ok());
 }
 
 #[test]

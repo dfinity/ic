@@ -20,7 +20,7 @@ use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_logger::ReplicaLogger;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
-    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
+    IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, KeyId};
@@ -173,6 +173,11 @@ pub trait TarpcCspVault {
         key_id: KeyId,
         transcript: IDkgTranscriptInternal,
     ) -> Result<(), IDkgLoadTranscriptError>;
+
+    // Corresponds to `IDkgProtocolCspVault.idkg_retain_threshold_keys_if_present`
+    async fn idkg_retain_threshold_keys_if_present(
+        active_key_ids: BTreeSet<KeyId>,
+    ) -> Result<(), IDkgRetainThresholdKeysError>;
 
     // Corresponds to `IDkgProtocolCspVault.idkg_gen_mega_key_pair`
     async fn idkg_gen_mega_key_pair(

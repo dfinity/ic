@@ -7,15 +7,15 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 };
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
-    IDkgVerifyDealingPublicError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    IDkgOpenTranscriptError, IDkgRetainThresholdKeysError, IDkgVerifyComplaintError,
+    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
+    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub mod errors;
 pub use errors::*;
@@ -134,6 +134,14 @@ pub trait CspIDkgProtocol {
         opener_index: NodeIndex,
         opening: CommitmentOpening,
     ) -> Result<(), IDkgVerifyOpeningError>;
+
+    /// Retains canister threshold keys identified by `active_keys`, and removes other
+    /// canister threshold keys within the same IDKG threshold keys scope from the
+    /// canister SKS.
+    fn idkg_retain_threshold_keys_if_present(
+        &self,
+        active_keys: &BTreeSet<IDkgTranscriptInternal>,
+    ) -> Result<(), IDkgRetainThresholdKeysError>;
 }
 
 /// Crypto service provider (CSP) client for threshold ECDSA signature share

@@ -2,6 +2,7 @@ use crate::*;
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptOperation};
 use ic_types::NodeIndex;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -38,6 +39,21 @@ impl TryFrom<&IDkgTranscript> for IDkgTranscriptInternal {
 
     fn try_from(idkm_transcript: &IDkgTranscript) -> Result<Self, ThresholdEcdsaError> {
         Self::deserialize(&idkm_transcript.internal_transcript_raw)
+    }
+}
+
+impl PartialOrd for IDkgTranscriptInternal {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for IDkgTranscriptInternal {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.combined_commitment
+            .commitment()
+            .to_bytes()
+            .cmp(&other.combined_commitment.commitment().to_bytes())
     }
 }
 

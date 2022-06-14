@@ -4,9 +4,9 @@
 use ic_base_types::NodeId;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
-    IDkgVerifyDealingPublicError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    IDkgOpenTranscriptError, IDkgRetainThresholdKeysError, IDkgVerifyComplaintError,
+    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
+    IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
@@ -16,7 +16,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A Crypto Component interface to run Interactive-DKG
 /// (for canister threshold signatures).
@@ -183,8 +183,23 @@ pub trait IDkgProtocol {
         openings: &BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
     ) -> Result<(), IDkgLoadTranscriptError>;
 
-    /// Retain only the given transcripts in the local state.
-    fn retain_active_transcripts(&self, active_transcripts: &[IDkgTranscript]);
+    /// Retains only the active canister IDKG threshold keys in the canister SKS.
+    ///
+    /// This:
+    /// * Calculates the key id of the canister IDKG threshold keys from each of the
+    ///   provided transcripts
+    /// * Retains all key ids identified using the transcripts
+    /// * Removes all other canister IDKG threshold keys that may exist
+    ///
+    /// # Errors
+    /// * `IDkgRetainThresholdKeysError::InternalError` if an internal error such as
+    ///   an RPC error communicating with a remote CSP vault occurs
+    /// * `IDkgRetainThresholdKeysError::SerializationError` if a transcript cannot
+    ///   be serialized into a key id
+    fn retain_active_transcripts(
+        &self,
+        active_transcripts: &BTreeSet<IDkgTranscript>,
+    ) -> Result<(), IDkgRetainThresholdKeysError>;
 }
 
 /// A Crypto Component interface to generate ECDSA threshold signature shares.
