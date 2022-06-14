@@ -390,7 +390,7 @@ mkdir -p "$experiment_dir/metrics"
 common_labels="ic=\"$ic\",job=\"replica\",instance=~\"$metricshosts\""
 metric="artifact_pool_consensus_height_stat"
 selector="$metric{$common_labels,type=\"finalization\",pool_type=\"validated\",stat=\"max\"}"
-curl -G "http://prometheus.dfinity.systems:9090/api/v1/query_range" \
+curl -XPOST -G "https://prometheus.testnet.dfinity.network/api/v1/query_range" \
     -fsSL -m 30 --retry 10 --retry-connrefused \
     -o "$experiment_dir/metrics/${metric}_min.json" \
     -H "Accept: application/json" \
@@ -407,7 +407,7 @@ common_labels="ic=\"$ic\",job=\"replica\",instance=~\"$metricshosts\""
 metric="artifact_pool_consensus_height_stat"
 selector="$metric{$common_labels,type=\"finalization\",pool_type=\"validated\",stat=\"max\"}"
 
-curl -G "http://prometheus.dfinity.systems:9090/api/v1/query" \
+curl -XPOST -G "https://prometheus.testnet.dfinity.network/api/v1/query" \
     -o "$experiment_dir/metrics/${metric}_avg_total.json" \
     -fsSL -m 30 --retry 10 --retry-connrefused \
     -H "Accept: application/json" \
@@ -424,7 +424,7 @@ metricshosts=$(jq_load_filtered_urls_for_metrics ".node_index == ${node_indices_
 common_labels="ic=\"$ic\",job=\"replica\",instance=~\"$metricshosts\",status=\"ok\""
 metric="state_sync_duration_seconds_sum"
 selector="$metric{$common_labels}"
-curl -G "http://prometheus.dfinity.systems:9090/api/v1/query" \
+curl -XPOST -G "https://prometheus.testnet.dfinity.network/api/v1/query" \
     -fsSL -m 30 --retry 10 --retry-connrefused \
     -o "$experiment_dir/metrics/${metric}.json" \
     -H "Accept: application/json" \

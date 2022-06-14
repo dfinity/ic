@@ -464,7 +464,7 @@ sure to use a unique port.
 # Note: The port must be different for each deployment. Find used ports in all deployments with:
 # cd testnet
 # grep ic_p8s_service_discovery_metrics_addr= env/*/*host* | awk -F : '{print $1,$NF}' | sort -k2,3n
-ic_p8s_service_discovery_metrics_addr=[2a05:d01c:e2c:a700:dfde:e933:cb63:f106]:8000
+ic_p8s_service_discovery_metrics_addr=[2a05:d01c:d9:2b84:e1df:81b7:9c18:a85b]:8000
 ```
 ## Blueprint
 

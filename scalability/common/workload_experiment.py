@@ -77,7 +77,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
     def get_mainnet_targets(self) -> List[str]:
         """Get target if running in mainnet."""
         # If we want boundary nodes, we can see here:
-        # http://prometheus.dfinity.systems:9090/graph?g0.expr=nginx_up&g0.tab=1&g0.stacked=0&g0.range_input=1h
+        # https://prometheus.testnet.dfinity.network/graph?g0.expr=nginx_up&g0.tab=1&g0.stacked=0&g0.range_input=1h
         r = json.loads(self._get_subnet_info(FLAGS.mainnet_target_subnet_id))
         node_ips = []
         for node_id in r["records"][0]["value"]["membership"]:
@@ -267,7 +267,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
     def __get_mainnet_target(self) -> List[str]:
         """Get target if running in mainnet."""
         # If we want boundary nodes, we can see here:
-        # http://prometheus.dfinity.systems:9090/graph?g0.expr=nginx_up&g0.tab=1&g0.stacked=0&g0.range_input=1h
+        # https://prometheus.testnet.dfinity.network/graph?g0.expr=nginx_up&g0.tab=1&g0.stacked=0&g0.range_input=1h
         r = json.loads(self._get_subnet_info(FLAGS.mainnet_target_subnet_id))
         node_ips = []
         for node_id in r["records"][0]["value"]["membership"]:

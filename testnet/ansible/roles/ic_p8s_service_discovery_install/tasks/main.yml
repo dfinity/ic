@@ -76,8 +76,9 @@
       openssl_bin=$(nix-shell -p openssl --run "which openssl")
       # Extract the directory name for the libssl.so.1.1 library, from the ldd output
       libssl_path=$(dirname "$(ldd "$openssl_bin" | grep "libssl.so.1.1" | awk '{print $3}')")
-      # Set the runtime search path of the binary to the directory containing libssl.so.1.1
-      nix-shell -p patchelf --run "patchelf --set-rpath $libssl_path ic-p8s-service-discovery"
+      ld_lib_path=$(which ls | xargs -n1 ldd | grep "ld-linux-x86-64.so" | awk '{print $3}')
+      # Path the ld and libssl.so.1.1 library paths in the ic-p8s-service-discovery binary
+      nix-shell -p patchelf --run "patchelf --set-rpath $libssl_path --set-interpreter $ld_lib_path ic-p8s-service-discovery"
 
       # if the downloaded binary differs from the current one, overwrite it.
       if ! diff "ic-p8s-service-discovery" "../ic-p8s-service-discovery" >/dev/null; then
