@@ -29,7 +29,6 @@ fn run_tests(validated_args: ValidatedCliRunTestsArgs) -> anyhow::Result<()> {
     apply_filters(
         &mut suite,
         &validated_args.include_pattern,
-        &validated_args.ignore_pattern,
         &validated_args.skip_pattern,
     );
     let system_env = validated_args.working_dir.join(config::SYSTEM_ENV_DIR);
@@ -146,12 +145,7 @@ fn get_hostname() -> Option<String> {
     std::env::var("HOSTNAME").ok()
 }
 
-fn apply_filters(
-    suite: &mut Suite,
-    include: &Option<Regex>,
-    ignore: &Option<Regex>,
-    skip: &Option<Regex>,
-) {
+fn apply_filters(suite: &mut Suite, include: &Option<Regex>, skip: &Option<Regex>) {
     for p in suite.pots.iter_mut() {
         let tests = match &mut p.testset {
             TestSet::Parallel(tests) => tests,
@@ -162,7 +156,7 @@ fn apply_filters(
                 .join(suite.name.clone())
                 .join(p.name.clone())
                 .join(t.name.clone());
-            t.execution_mode = resolve_execution_mode(&format!("{}", path), include, ignore, skip);
+            t.execution_mode = resolve_execution_mode(&format!("{}", path), include, skip);
         }
         // At least one test is qualified for running. A corresponding pot needs to be
         // set up.
@@ -184,7 +178,6 @@ fn apply_filters(
 fn resolve_execution_mode(
     name: &str,
     include: &Option<Regex>,
-    ignore: &Option<Regex>,
     skip: &Option<Regex>,
 ) -> ExecutionMode {
     if let Some(i) = include {
@@ -192,11 +185,6 @@ fn resolve_execution_mode(
             return ExecutionMode::Run;
         }
         return ExecutionMode::Ignore;
-    }
-    if let Some(i) = ignore {
-        if i.is_match(name) {
-            return ExecutionMode::Ignore;
-        }
     }
     if let Some(s) = skip {
         if s.is_match(name) {

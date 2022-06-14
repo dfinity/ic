@@ -107,13 +107,6 @@ used."#
     farm_base_url: Option<Url>,
 
     #[clap(
-        long = "result-file",
-        parse(from_os_str),
-        help = "If set, specifies where to write results of executed tests."
-    )]
-    result_file: Option<PathBuf>,
-
-    #[clap(
         long = "nns-canister-path",
         parse(from_os_str),
         help = r#"Path to directory containing wasm-files of NNS canisters. 
@@ -134,17 +127,9 @@ Required for tests that install NNS canisters."#
     #[clap(
         long = "include-pattern",
         help = r#"If set, only tests matching this regex will be exercised 
-and all others will be ignored. Note: when `include-pattern` is set, 
-`ignore-pattern` and `skip-pattern` are not effective."#
+and all others will be ignored. Note: when `include-pattern` is set, `skip-pattern` is not effective."#
     )]
     include_pattern: Option<String>,
-
-    #[clap(
-        long = "ignore-pattern",
-        help = r#"If set, all tests matching this regex will be ignored, 
-i.e. completely omitted by the framework."#
-    )]
-    ignore_pattern: Option<String>,
 
     #[clap(
         long = "skip-pattern",
@@ -236,7 +221,6 @@ impl RunTestsArgs {
         }
 
         let include_pattern = parse_pattern(self.include_pattern)?;
-        let ignore_pattern = parse_pattern(self.ignore_pattern)?;
         let skip_pattern = parse_pattern(self.skip_pattern)?;
 
         let journalbeat_hosts = parse_journalbeat_hosts(self.journalbeat_hosts)?;
@@ -254,12 +238,10 @@ impl RunTestsArgs {
             boundary_node_img_sha256: self.boundary_node_img_sha256,
             boundary_node_img_url: self.boundary_node_img_url,
             farm_base_url: self.farm_base_url,
-            result_file: self.result_file,
             nns_canister_path,
             artifacts_path,
             suite: self.suite,
             include_pattern,
-            ignore_pattern,
             skip_pattern,
             authorized_ssh_accounts: self.authorized_ssh_accounts,
             journalbeat_hosts,
@@ -296,12 +278,10 @@ pub struct ValidatedCliRunTestsArgs {
     pub boundary_node_img_sha256: String,
     pub boundary_node_img_url: Url,
     pub farm_base_url: Option<Url>,
-    pub result_file: Option<PathBuf>,
     pub nns_canister_path: Option<PathBuf>,
     pub artifacts_path: Option<PathBuf>,
     pub suite: String,
     pub include_pattern: Option<Regex>,
-    pub ignore_pattern: Option<Regex>,
     pub skip_pattern: Option<Regex>,
     pub authorized_ssh_accounts: Option<PathBuf>,
     pub journalbeat_hosts: Vec<String>,
