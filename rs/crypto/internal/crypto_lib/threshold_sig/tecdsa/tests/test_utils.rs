@@ -505,8 +505,6 @@ impl ProtocolRound {
 
         let mut dealings = BTreeMap::new();
 
-        let number_of_receivers = NumberOfNodes::from(setup.receivers as u32);
-
         for (dealer_index, share) in shares.iter().enumerate() {
             let dealing_randomness = Randomness::from(rng.gen::<[u8; 32]>());
             let dealer_index = dealer_index as u32;
@@ -522,23 +520,10 @@ impl ProtocolRound {
             )
             .expect("failed to create dealing");
 
-            let publicly_invalid = publicly_verify_dealing(
-                setup.alg,
-                &dealing,
-                transcript_type,
-                setup.threshold,
-                dealer_index,
-                number_of_receivers,
-                &setup.ad,
-            )
-            .is_err();
-
-            if publicly_invalid {
-                panic!("Created a publicly invalid dealing");
-            }
+            Self::test_public_dealing_verification(setup, &dealing, transcript_type, dealer_index);
 
             for (private_key, public_key, recipient_index) in setup.receiver_info() {
-                let locally_invalid = privately_verify_dealing(
+                let is_locally_valid = privately_verify_dealing(
                     setup.alg,
                     &dealing,
                     &private_key,
@@ -547,11 +532,9 @@ impl ProtocolRound {
                     dealer_index,
                     recipient_index,
                 )
-                .is_err();
+                .is_ok();
 
-                if locally_invalid {
-                    panic!("Created a locally invalid dealing");
-                }
+                assert!(is_locally_valid, "Created a locally invalid dealing");
             }
 
             dealings.insert(dealer_index, dealing);
@@ -605,6 +588,66 @@ impl ProtocolRound {
             *dealing = bad_dealing;
         }
         dealings
+    }
+
+    fn test_public_dealing_verification(
+        setup: &ProtocolSetup,
+        dealing: &IDkgDealingInternal,
+        transcript_type: &IDkgTranscriptOperationInternal,
+        dealer_index: NodeIndex,
+    ) {
+        let number_of_receivers = NumberOfNodes::from(setup.receivers as u32);
+
+        let publicly_invalid = publicly_verify_dealing(
+            setup.alg,
+            dealing,
+            transcript_type,
+            setup.threshold,
+            dealer_index,
+            number_of_receivers,
+            &setup.ad,
+        )
+        .is_err();
+
+        if publicly_invalid {
+            panic!("Created a publicly invalid dealing");
+        }
+
+        // wrong dealer index -> invalid
+        assert!(publicly_verify_dealing(
+            setup.alg,
+            dealing,
+            transcript_type,
+            setup.threshold,
+            dealer_index + 1,
+            number_of_receivers,
+            &setup.ad
+        )
+        .is_err());
+
+        // wrong number of receivers -> invalid
+        assert!(publicly_verify_dealing(
+            setup.alg,
+            dealing,
+            transcript_type,
+            setup.threshold,
+            dealer_index,
+            NumberOfNodes::from(1 + setup.receivers as u32),
+            &setup.ad
+        )
+        .is_err());
+
+        // wrong associated data -> invalid
+        assert!(publicly_verify_dealing(
+            setup.alg,
+            dealing,
+            transcript_type,
+            setup.threshold,
+            dealer_index,
+            number_of_receivers,
+            "wrong ad".as_bytes()
+        )
+        .is_err());
     }
 
     pub fn constant_term(&self) -> EccPoint {
