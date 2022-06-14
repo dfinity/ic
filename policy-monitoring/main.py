@@ -31,7 +31,6 @@ def main():
         "--elasticsearch_endpoint",
         "-es",
         type=str,
-        nargs="*",
         help='The Elasticsearch endpoint used to download the raw logs (e.g., "10.31.129.94:9200").',
     )
     parser.add_argument(
@@ -140,14 +139,14 @@ def main():
         exit(0)
 
     # Read environment variables
-    elasticsearch_endpoint = env.extract_value(args.elasticsearch_endpoint, "ELASTICSEARCH_ENDPOINT")
+    elasticsearch_endpoint = env.extract_value(args.elasticsearch_endpoint, "ELASTICSEARCH_ENDPOINT", secret=False)
     gitlab_token = env.extract_value(args.gitlab_token, "GITLAB_ACCESS_TOKEN")
     slack_token = env.extract_value(args.slack_service_id, "IC_SLACK_POLICY_MONITORING_ALERTS_SERVICE")
     liveness_slack_token = env.extract_value(
         args.slack_liveness_service_id, "IC_SLACK_POLICY_MONITORING_LIVENESS_SERVICE"
     )
     artifacts_location = env.extract_value_with_default(
-        args.artifacts, "MONPOLY_PIPELINE_ARTIFACTS", default="./artifacts"
+        args.artifacts, "MONPOLY_PIPELINE_ARTIFACTS", default="./artifacts", secret=False
     )
 
     signature = env.generate_signature()
@@ -216,11 +215,11 @@ def main():
             def report_es_endpoint(scenario: str, endpoint: str) -> None:
                 eprint(f"Choosing {scenario} Elasticsearch endpoint for mainnet logs: {endpoint}")
 
-            if not elasticsearch_endpoint and not args.mainnet:
-                es_url = "elasticsearch.testnet.dfinity.systems"
-                report_es_endpoint("MAINNET", es_url)
-            elif not elasticsearch_endpoint and args.mainnet:
+            if not elasticsearch_endpoint and args.mainnet:
                 es_url = "elasticsearch.mercury.dfinity.systems"
+                report_es_endpoint("MAINNET", es_url)
+            elif not elasticsearch_endpoint and not args.mainnet:
+                es_url = "elasticsearch.testnet.dfinity.systems"
                 report_es_endpoint("TESTNET", es_url)
             else:
                 es_url = elasticsearch_endpoint
