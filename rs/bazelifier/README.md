@@ -31,3 +31,14 @@ $ bazel run bazelifier -- rs/crypto/Cargo.toml -n -t
 - Can't always distinguish between regular and proc macro dependencies. You may have to move some of the entries, but `bazel` will tell you what to do in such cases.
 - Doesn't run buildifier to format the generated file afterward. You'll have to do it manually, or let `pre-commit` run buildifier automatically.
 - Doesn't modify the workspace file. If a new external dependency is needed, you'll have to do it manually.
+
+## workspaceifier
+
+`workspaceifier` scans all the Cargo.toml files in the repository (given a Cargo.toml that represents a workspace) and generates a `bazel/external_crates.bzl` file.
+
+Usage:
+
+```
+# in the top level rs/ directory
+$ cargo run --bin workspaceifier -- Cargo.toml > ../bazel/external_crates.bzl
+```

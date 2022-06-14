@@ -620,7 +620,9 @@ dependencies = [
  "askama",
  "clap 3.1.18",
  "eyre",
+ "lazy_static",
  "pathdiff",
+ "semver 1.0.9",
  "serde",
  "toml",
 ]
