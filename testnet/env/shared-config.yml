@@ -10,7 +10,7 @@ prometheus:
   vars:
     stage: all
   hosts:
-    prometheus.dfinity.systems:
+    prometheus.testnet.dfinity.network:
 
 data_centers:
   ch1:

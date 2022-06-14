@@ -284,7 +284,7 @@ def get_prometheus(payload):
         raise Exception("Use get_prometheus_range for range queries")
     print("Executing Prometheus query: ", colored(json.dumps(payload, indent=2), "yellow"))
     print(payload["query"].replace("\\\\\\\\", "\\\\"))
-    r = requests.get("http://prometheus.dfinity.systems:9090/api/v1/query", headers=headers, params=payload)
+    r = requests.get("https://prometheus.testnet.dfinity.network/api/v1/query", headers=headers, params=payload)
     return r
 
 
@@ -293,7 +293,7 @@ def get_prometheus_range(payload):
     headers = {"Accept": "application/json"}
 
     print("Executing Prometheus query: ", colored(json.dumps(payload, indent=2), "yellow"))
-    r = requests.get("http://prometheus.dfinity.systems:9090/api/v1/query_range", headers=headers, params=payload)
+    r = requests.get("https://prometheus.testnet.dfinity.network/api/v1/query_range", headers=headers, params=payload)
     return r
 
 

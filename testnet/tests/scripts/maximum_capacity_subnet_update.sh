@@ -247,7 +247,7 @@ query_finalization_rate_and_latency_alert() {
     # Calculate the averages over the large interval.
     # We split into smaller buckets, then apply avg_over_time. The outer avg it
     # to get an aggregate, instead of having values per replica.
-    curl -G "http://prometheus.dfinity.systems:9090/api/v1/query" \
+    curl -XPOST -G "https://prometheus.testnet.dfinity.network/api/v1/query" \
         -o "$experiment_subdir/metrics/${metric}_avg_total.json" \
         -fsSL -m 30 --retry 10 --retry-connrefused \
         -H "Accept: application/json" \
@@ -256,7 +256,7 @@ query_finalization_rate_and_latency_alert() {
 
     # Gather latency alerts from Prometheus
     latency_alert="IC_Replica_CallRequests_ResponseTooSlow"
-    curl -G "http://prometheus.dfinity.systems:9090/api/v1/query_range" \
+    curl -XPOST -G "https://prometheus.testnet.dfinity.network/api/v1/query_range" \
         -o "$experiment_subdir/metrics/${latency_alert}.json" \
         -fsSL -m 30 --retry 10 --retry-connrefused \
         -H "Accept: application/json" \

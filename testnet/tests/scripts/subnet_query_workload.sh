@@ -188,7 +188,7 @@ echo "Querying metrics for: $common_labels"
 metric="artifact_pool_consensus_height_stat"
 selector="$metric{$common_labels,type=\"finalization\",pool_type=\"validated\",stat=\"max\"}"
 for op in min max avg; do
-    curl -G "http://prometheus.dfinity.systems:9090/api/v1/query_range" \
+    curl -XPOST -G "https://prometheus.testnet.dfinity.network/api/v1/query_range" \
         -o "$experiment_dir/metrics/${metric}_${op}.json" \
         -fsSL -m 30 --retry 10 --retry-connrefused \
         -H "Accept: application/json" \
@@ -201,7 +201,7 @@ done
 # Calculate the averages over the large interval.
 # We split into smaller buckets, then apply avg_over_time. The outer avg it
 # to get an aggregate, instead of having values per replica.
-curl -G "http://prometheus.dfinity.systems:9090/api/v1/query" \
+curl -XPOST -G "https://prometheus.testnet.dfinity.network/api/v1/query" \
     -o "$experiment_dir/metrics/${metric}_avg_total.json" \
     -fsSL -m 30 --retry 10 --retry-connrefused \
     -H "Accept: application/json" \
@@ -220,7 +220,7 @@ metric=replica_http_request_duration_seconds
 selector="${metric}_bucket{$common_labels,request_type=\"query\"}"
 # prometheus query_range buckets are based on end time, we use 60s buckets below, so add 60
 offset_starttime="$((starttime + 60))"
-curl -G "http://prometheus.dfinity.systems:9090/api/v1/query_range" \
+curl -XPOST -G "https://prometheus.testnet.dfinity.network/api/v1/query_range" \
     -o "$experiment_dir/metrics/${metric}.json" \
     -fsSL -m 30 --retry 10 --retry-connrefused \
     -H "Accept: application/json" \

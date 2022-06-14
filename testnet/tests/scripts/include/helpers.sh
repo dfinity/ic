@@ -230,7 +230,7 @@ function collect_metrics() {
         # Calculate the averages over the large interval.
         # We split into smaller buckets, then apply avg_over_time. The outer avg it
         # to get an aggregate, instead of having values per replica.
-        curl -G "http://prometheus.dfinity.systems:9090/api/v1/query" \
+        curl -XPOST -G "https://prometheus.testnet.dfinity.network/api/v1/query" \
             -o "$experiment_dir/metrics/${metric}_avg_total.json" \
             -fsSL -m 30 --retry 10 --retry-connrefused \
             -H "Accept: application/json" \

@@ -14,6 +14,7 @@
     state: directory
     group: p8s-scrape
     mode: 0775
+  become: true
   loop:
     - boundary_node_nginx
     - boundary_node_control_plane
