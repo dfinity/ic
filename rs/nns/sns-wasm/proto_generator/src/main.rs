@@ -1,11 +1,14 @@
-use ic_sns_wasm_proto_generator::generate_prost_files;
+use ic_sns_wasm_proto_generator::{generate_prost_files, ProtoPaths};
 use std::path::PathBuf;
 
 fn main() {
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-        .expect("CARGO_MANIFEST_DIR env variable is not defined");
-    let out = PathBuf::from(&manifest_dir).join("../gen");
-    let def = PathBuf::from(&manifest_dir).join("../proto");
+    let manifest_dir = PathBuf::from(
+        std::env::var("CARGO_MANIFEST_DIR")
+            .expect("CARGO_MANIFEST_DIR env variable is not defined"),
+    );
+    let out = &manifest_dir.join("../gen");
+    let sns_wasm_proto = manifest_dir.join("../proto");
+    let base_types_proto = manifest_dir.join("../../../types/base_types/proto");
 
     match std::fs::remove_dir_all(&out) {
         Ok(_) => (),
@@ -16,6 +19,11 @@ fn main() {
             e
         ),
     }
-
-    generate_prost_files(def.as_ref(), out.as_ref());
+    generate_prost_files(
+        ProtoPaths {
+            sns_wasm: &sns_wasm_proto,
+            base_types: &base_types_proto,
+        },
+        out.as_ref(),
+    );
 }

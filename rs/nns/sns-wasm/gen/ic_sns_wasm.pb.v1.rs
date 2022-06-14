@@ -62,6 +62,36 @@ pub struct GetWasmResponse {
     #[prost(message, optional, tag="1")]
     pub wasm: ::core::option::Option<SnsWasm>,
 }
+/// Payload to deploy a new SNS.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeployNewSns {
+}
+/// The response to creating a new SNS.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeployNewSnsResponse {
+    /// The subnet the SNS was deployed to
+    #[prost(message, optional, tag="1")]
+    pub subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// CanisterIds of canisters created by deploy_new_sns
+    #[prost(message, optional, tag="2")]
+    pub canisters: ::core::option::Option<SnsCanisterIds>,
+}
+/// The CanisterIds of the SNS canisters that are created
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SnsCanisterIds {
+    /// PrincipalId of the root canister
+    #[prost(message, optional, tag="1")]
+    pub root: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// PrincipalId of the ledger canister
+    #[prost(message, optional, tag="2")]
+    pub ledger: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// PrincipalId of the governance canister
+    #[prost(message, optional, tag="3")]
+    pub governance: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
 /// The type of canister a particular WASM is intended to be installed on
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

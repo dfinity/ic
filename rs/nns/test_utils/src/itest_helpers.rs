@@ -49,6 +49,7 @@ use ic_nns_gtc::{init::GenesisTokenCanisterInitPayloadBuilder, pb::v1::Gtc};
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
 use ic_nns_handler_root::init::{RootCanisterInitPayload, RootCanisterInitPayloadBuilder};
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
+use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
@@ -614,6 +615,32 @@ pub async fn set_up_universal_canister(runtime: &'_ Runtime) -> Canister<'_> {
         "Installed {} with the universal canister",
         canister.canister_id(),
     );
+    canister
+}
+
+/// Compiles the sns_wasm canister, builds it's initial payload and installs it
+pub async fn install_sns_wasm_canister(
+    canister: &mut Canister<'_>,
+    init_payload: SnsWasmCanisterInitPayload,
+) {
+    let encoded = Encode!(&init_payload).unwrap();
+    install_rust_canister(
+        canister,
+        "nns/sns-wasm",
+        "sns-wasm-canister",
+        &[],
+        Some(encoded),
+    )
+    .await;
+}
+
+/// Creates and installs the sns_wasm canister.
+pub async fn set_up_sns_wasm_canister(
+    runtime: &'_ Runtime,
+    init_payload: SnsWasmCanisterInitPayload,
+) -> Canister<'_> {
+    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
+    install_sns_wasm_canister(&mut canister, init_payload).await;
     canister
 }
 

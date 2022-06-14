@@ -1,6 +1,7 @@
 use candid::{Decode, Encode};
 use canister_test::{PrincipalId, Project, Wasm};
 use dfn_core::CanisterId;
+use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_sns_wasm::pb::v1::add_wasm_response::AddWasmOk;
 use ic_sns_wasm::pb::v1::{
     add_wasm_response, AddWasm, AddWasmResponse, GetWasm, GetWasmResponse, SnsCanisterType, SnsWasm,
@@ -113,7 +114,17 @@ fn test_basic_storage() {
         &[], // features
     );
     // Step 1.b: Build and install canister.
-    let sns_wasm_id = create_canister(&env, wasm, None, None);
+    let sns_wasm_id = create_canister(
+        &env,
+        wasm,
+        Some(
+            Encode!(&SnsWasmCanisterInitPayload {
+                sns_subnet_ids: vec![]
+            })
+            .unwrap(),
+        ),
+        None,
+    );
 
     let sns_wasm = smallest_valid_wasm();
     let expected_hash = sns_wasm.sha256_hash();

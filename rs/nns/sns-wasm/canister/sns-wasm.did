@@ -2,11 +2,22 @@ type AddWasm = record { hash : vec nat8; wasm : opt SnsWasm };
 type AddWasmError = record { error : text };
 type AddWasmOk = record { hash : vec nat8 };
 type AddWasmResponse = record { result : opt Result };
+type DeployNewSnsResponse = record {
+  subnet_id : opt principal;
+  canisters : opt SnsCanisterIds;
+};
 type GetWasm = record { hash : vec nat8 };
 type GetWasmResponse = record { wasm : opt SnsWasm };
 type Result = variant { Ok : AddWasmOk; Error : AddWasmError };
+type SnsCanisterIds = record {
+  root : opt principal;
+  ledger : opt principal;
+  governance : opt principal;
+};
 type SnsWasm = record { wasm : vec nat8; canister_type : int32 };
-service : (null) -> {
+type SnsWasmCanisterInitPayload = record { sns_subnet_ids : vec principal };
+service : (SnsWasmCanisterInitPayload) -> {
   add_wasm : (AddWasm) -> (AddWasmResponse);
+  deploy_new_sns : (record {}) -> (DeployNewSnsResponse);
   get_wasm : (GetWasm) -> (GetWasmResponse) query;
 }

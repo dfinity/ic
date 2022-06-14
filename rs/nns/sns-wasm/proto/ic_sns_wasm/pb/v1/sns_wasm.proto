@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package ic_sns_wasm.pb.v1;
 
+import "ic_base_types/pb/v1/types.proto";
+
 // The type of canister a particular WASM is intended to be installed on
 enum SnsCanisterType {
   SNS_CANISTER_TYPE_UNSPECIFIED = 0;
@@ -49,4 +51,25 @@ message GetWasm {
 // The response for get_wasm, which returns a WASM if it is found, or None.
 message GetWasmResponse {
   SnsWasm wasm = 1;
+}
+
+// Payload to deploy a new SNS.
+message DeployNewSns {}
+
+// The response to creating a new SNS.
+message DeployNewSnsResponse {
+  // The subnet the SNS was deployed to
+  ic_base_types.pb.v1.PrincipalId subnet_id = 1;
+  // CanisterIds of canisters created by deploy_new_sns
+  SnsCanisterIds canisters = 2;
+}
+
+// The CanisterIds of the SNS canisters that are created
+message SnsCanisterIds {
+  // PrincipalId of the root canister
+  ic_base_types.pb.v1.PrincipalId root = 1;
+  // PrincipalId of the ledger canister
+  ic_base_types.pb.v1.PrincipalId  ledger = 2;
+  // PrincipalId of the governance canister
+  ic_base_types.pb.v1.PrincipalId governance = 3;
 }
