@@ -21,10 +21,7 @@ pub trait Transport: Send + Sync {
     /// call the client on events.
     /// Note that a Transport client is another component (e.g., p2p). It should
     /// not be confused with the notion of a client in a client-server communication.
-    fn register_client(
-        &self,
-        async_event_handler: Arc<dyn AsyncTransportEventHandler>,
-    ) -> Result<(), TransportErrorCode>;
+    fn register_client(&self, async_event_handler: Arc<dyn AsyncTransportEventHandler>);
 
     /// Mark the peer as valid neighbor, and set up the transport layer to
     /// exchange messages with the peer. This call would create the
@@ -205,21 +202,6 @@ pub enum TransportErrorCode {
 
     /// Failed to write to socket.
     SocketWriteFailed,
-
-    /// Server socket creation failed.
-    ServerSocketCreateFailed,
-
-    /// Failed to set the address reuse flag on the server socket.
-    ServerSocketAddrReuseFailed,
-
-    /// Failed to set the port reuse flag on the server socket.
-    ServerSocketPortReuseFailed,
-
-    /// Failed to bind to server port.
-    ServerSocketBindFailed,
-
-    /// Failed to listen on the server socket.
-    ServerSocketListenFailed,
 
     /// Failed to convert server listener.
     ServerSocketConversionFailed,

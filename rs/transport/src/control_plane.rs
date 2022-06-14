@@ -778,56 +778,47 @@ impl TransportImpl {
     }
 
     // Sets up the server side socket with the node IP:port
-    fn init_listener(&self, local_addr: &SocketAddr) -> Result<TcpListener, TransportErrorCode> {
+    // Panics in case of unrecoverable error.
+    fn init_listener(&self, local_addr: &SocketAddr) -> TcpListener {
         let socket = if local_addr.is_ipv6() {
             TcpSocket::new_v6()
         } else {
             TcpSocket::new_v4()
         };
-        let socket = match socket {
-            Ok(socket) => socket,
-            Err(e) => {
-                warn!(
-                    every_n_seconds => 30,
-                    self.log,
-                    "ControlPlane::listen(): Failed to create socket: local_addr = {:?}, error = {:?}",
-                    local_addr,
-                    e
-                );
-                return Err(TransportErrorCode::ServerSocketCreateFailed);
-            }
-        };
+        let socket = socket.unwrap_or_else(|err| {
+            panic!(
+                "Failed to create socket: local_addr = {:?}, error = {:?}",
+                local_addr, err
+            )
+        });
 
         // TODO: set reuse flags only for tests if needed
         if socket.set_reuseaddr(true).is_err() {
-            return Err(TransportErrorCode::ServerSocketAddrReuseFailed);
+            panic!(
+                "Failed to set reuseaddr on socket: local_addr = {:?}",
+                local_addr
+            );
         }
 
         if socket.set_reuseport(true).is_err() {
-            return Err(TransportErrorCode::ServerSocketPortReuseFailed);
-        }
-
-        if let Err(e) = socket.bind(*local_addr) {
-            warn!(
-                every_n_seconds => 30,
-                self.log,
-                "ControlPlane::listen(): Failed to bind: local_addr = {:?}, error = {:?}", local_addr, e
+            panic!(
+                "Failed to set reuseport on socket: local_addr = {:?}",
+                local_addr
             );
-            return Err(TransportErrorCode::ServerSocketBindFailed);
         }
 
-        match socket.listen(128) {
-            Ok(listener) => Ok(listener),
-            Err(e) => {
-                warn!(
-                    self.log,
-                    "ControlPlane::listen(): Failed to listen: local_addr = {:?}, error = {:?}",
-                    local_addr,
-                    e
-                );
-                Err(TransportErrorCode::ServerSocketListenFailed)
-            }
-        }
+        socket.bind(*local_addr).unwrap_or_else(|err| {
+            panic!(
+                "Failed to bind on socket: local_addr = {:?}, error = {:?}",
+                local_addr, err
+            )
+        });
+        socket.listen(128).unwrap_or_else(|err| {
+            panic!(
+                "Failed to listen on socket: local_addr = {:?}, error = {:?}",
+                local_addr, err
+            )
+        })
     }
 
     /// Sets up the client side socket with the node IP address
@@ -899,13 +890,10 @@ impl TransportImpl {
     }
 
     /// Initilizes a client
-    pub(crate) fn init_client(
-        &self,
-        event_handler: Arc<dyn AsyncTransportEventHandler>,
-    ) -> Result<(), TransportErrorCode> {
+    pub(crate) fn init_client(&self, event_handler: Arc<dyn AsyncTransportEventHandler>) {
         let mut client_state = self.client_state.write().unwrap();
         if client_state.is_some() {
-            return Err(TransportErrorCode::TransportClientAlreadyRegistered);
+            panic!("Transport client already registered.");
         }
 
         // Creating the listeners requres that we are within a tokio runtime context.
@@ -917,7 +905,7 @@ impl TransportImpl {
             listeners.push((
                 flow_config.flow_tag,
                 flow_config.server_port,
-                self.init_listener(&server_addr)?,
+                self.init_listener(&server_addr),
             ));
         }
 
@@ -932,8 +920,6 @@ impl TransportImpl {
             peer_map: HashMap::new(),
             event_handler,
         });
-
-        Ok(())
     }
 }
 
@@ -1069,9 +1055,7 @@ mod tests {
             let fake_event_handler_1 = Arc::new(FakeEventHandler {
                 connected: connected_1,
             });
-            control_plane_1
-                .register_client(fake_event_handler_1)
-                .expect("register_client");
+            control_plane_1.register_client(fake_event_handler_1);
             let mut node_record_1: NodeRecord = Default::default();
             node_record_1.p2p_flow_endpoints.push(FlowEndpoint {
                 flow_tag: FLOW_TAG_1,
@@ -1088,9 +1072,7 @@ mod tests {
             let fake_event_handler_2 = Arc::new(FakeEventHandler {
                 connected: connected_2,
             });
-            control_plane_2
-                .register_client(fake_event_handler_2)
-                .expect("register_client");
+            control_plane_2.register_client(fake_event_handler_2);
             let mut node_record_2: NodeRecord = Default::default();
             node_record_2.p2p_flow_endpoints.push(FlowEndpoint {
                 flow_tag: FLOW_TAG_2,

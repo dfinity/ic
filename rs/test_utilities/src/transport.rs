@@ -15,7 +15,7 @@ mock! {
         fn register_client(
             &self,
             event_handler: Arc<dyn AsyncTransportEventHandler>,
-        ) -> Result<(), TransportErrorCode>;
+        );
 
         fn start_connections(
             &self,
