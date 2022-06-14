@@ -17,7 +17,8 @@
           NNS_RELEASE_VERSION=$(cargo run -p ic-admin -- --nns-url=https://nns.ic0.app get-subnet 0 | jq -r '.records[0].value.replica_version_id')
           cd -
           # we pass nss version info to build-determinism-*-release jobs
-          echo "NNS_RELEASE_VERSION=$NNS_RELEASE_VERSION" > nns.release.env
+          # we put it under /tmp due to git clean -ffdx within docker-build-ic script
+          echo "NNS_RELEASE_VERSION=$NNS_RELEASE_VERSION" > /tmp/nns.release.env
 
           # fetch and checkout this version
           git fetch origin "$NNS_RELEASE_VERSION"
@@ -57,6 +58,11 @@
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/docker-build-ic/icos" "${CI_JOB_NAME}/guest-os/update-img"
+
+      # collect dotenv
+      if [ -f /tmp/nns.release.env ]; then
+          mv /tmp/nns.release.env .
+      fi
 
 # MR Pipeline
 docker-build-ic:
