@@ -102,7 +102,7 @@ fn get_child_number(child_bytes: &[u8]) -> ChildNumber {
 ///
 /// Each byte string (`blob`) in the `derivation_path` must be a 4-byte
 /// big-endian encoding of an unsigned integer less than 2^31 for non-hardened key derivation.
-fn get_derivation_path(input: &[u8]) -> Vec<Vec<u8>> {
+pub fn get_derivation_path(input: &[u8]) -> Vec<Vec<u8>> {
     // Below there is an example of how indexes changes for each iteration. Each column represents
     // setting a bit in the result:
     //
