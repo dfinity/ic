@@ -350,6 +350,14 @@ impl LedgerData for Ledger {
         self.accounts_overflow_trim_quantity
     }
 
+    fn token_name(&self) -> &str {
+        &self.token_name
+    }
+
+    fn token_symbol(&self) -> &str {
+        &self.token_symbol
+    }
+
     fn balances(&self) -> &Balances<Self::AccountId, HashMap<Self::AccountId, Tokens>> {
         &self.balances
     }

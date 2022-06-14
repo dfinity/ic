@@ -1,0 +1,4 @@
+service : {
+    icrc1_name : () -> (text) query;
+    icrc1_symbol : () -> (text) query;
+}
