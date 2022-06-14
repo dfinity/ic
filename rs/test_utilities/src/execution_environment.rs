@@ -877,6 +877,7 @@ pub struct ExecutionTestBuilder {
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     rate_limiting_of_instructions: bool,
+    allocatable_compute_capacity_in_percent: usize,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -905,6 +906,7 @@ impl Default for ExecutionTestBuilder {
             registry_settings: test_registry_settings(),
             manual_execution: false,
             rate_limiting_of_instructions: false,
+            allocatable_compute_capacity_in_percent: 100,
         }
     }
 }
@@ -1022,6 +1024,16 @@ impl ExecutionTestBuilder {
         }
     }
 
+    pub fn with_allocatable_compute_capacity_in_percent(
+        self,
+        allocatable_compute_capacity_in_percent: usize,
+    ) -> Self {
+        Self {
+            allocatable_compute_capacity_in_percent,
+            ..self
+        }
+    }
+
     pub fn build(self) -> ExecutionTest {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
 
@@ -1076,6 +1088,7 @@ impl ExecutionTestBuilder {
         };
         let config = Config {
             rate_limiting_of_instructions,
+            allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             ..Config::default()
         };
         let hypervisor = Hypervisor::new(

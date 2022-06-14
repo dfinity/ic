@@ -9,11 +9,15 @@ use crate::{
     IngressHistoryWriterImpl,
 };
 use assert_matches::assert_matches;
+use candid::Decode;
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::{execution_environment::Config, flag_status::FlagStatus};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{CanisterInstallMode, CanisterStatusType, EmptyBlob, InstallCodeArgs, Method};
+use ic_ic00_types::{
+    CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusType,
+    CreateCanisterArgs, EmptyBlob, InstallCodeArgs, Method, Payload, UpdateSettingsArgs,
+};
 use ic_interfaces::execution_environment::{
     AvailableMemory, ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
 };
@@ -42,7 +46,7 @@ use ic_test_utilities::{
         ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
         messages::{RequestBuilder, SignedIngressBuilder},
     },
-    universal_canister::{wasm, UNIVERSAL_CANISTER_WASM},
+    universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM},
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -227,6 +231,7 @@ fn canister_manager_config(
         MAX_CONTROLLERS,
         1,
         rate_limiting_of_instructions,
+        100,
     )
 }
 
@@ -3545,4 +3550,215 @@ fn install_code_context_conversion_u128() {
         install_args,
     ))
     .is_err());
+}
+
+#[test]
+fn create_canister_when_compute_capacity_is_oversubscribed() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_allocatable_compute_capacity_in_percent(0)
+        .build();
+    let uc = test.universal_canister().unwrap();
+
+    // Manually set the compute allocation higher to emulate the state after
+    // replica upgrade that decreased compute capacity.
+    test.canister_state_mut(uc)
+        .scheduler_state
+        .compute_allocation = ComputeAllocation::try_from(60).unwrap();
+    *test.canister_state_mut(uc).system_state.balance_mut() = Cycles::new(1_000_000_000_000_000);
+
+    // Create a canister with default settings.
+    let args = CreateCanisterArgs::default();
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args().other_side(args.encode()),
+            test.canister_creation_fee().into_parts(),
+        )
+        .build();
+
+    let result = test.ingress(uc, "update", create_canister);
+    let reply = get_reply(result);
+    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
+
+    // Create a canister with zero compute allocation.
+    let settings = CanisterSettingsArgs {
+        compute_allocation: Some(candid::Nat::from(0_u32)),
+        ..Default::default()
+    };
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+    };
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            test.canister_creation_fee().into_parts(),
+        )
+        .build();
+    let result = test.ingress(uc, "update", create_canister);
+    let reply = get_reply(result);
+    Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
+
+    // Create a canister with compute allocation.
+    let settings = CanisterSettingsArgs {
+        compute_allocation: Some(candid::Nat::from(10_u32)),
+        ..Default::default()
+    };
+    let args = CreateCanisterArgs {
+        settings: Some(settings),
+    };
+    let create_canister = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            Method::CreateCanister,
+            call_args()
+                .other_side(args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            test.canister_creation_fee().into_parts(),
+        )
+        .build();
+    let result = test.ingress(uc, "update", create_canister).unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reject(
+            "Canister requested a compute allocation of 10% which \
+            cannot be satisfied because the Subnet's remaining \
+            compute capacity is 0%"
+                .to_string()
+        )
+    );
+}
+
+#[test]
+fn install_code_when_compute_capacity_is_oversubscribed() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_allocatable_compute_capacity_in_percent(0)
+        .build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+
+    // Manually set the compute allocation higher to emulate the state after
+    // replica upgrade that decreased compute capacity.
+    test.canister_state_mut(canister_id)
+        .scheduler_state
+        .compute_allocation = ComputeAllocation::try_from(60).unwrap();
+
+    // Updating the compute allocation to a higher value fails.
+    let err = test
+        .install_canister_with_allocation(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            Some(61),
+            None,
+        )
+        .unwrap_err();
+    assert_eq!(ErrorCode::SubnetOversubscribed, err.code());
+    assert_eq!(
+        err.description(),
+        "Canister requested a compute allocation of 61% \
+        which cannot be satisfied because the Subnet's \
+        remaining compute capacity is 60%"
+    );
+
+    // Updating the compute allocation to the same value succeeds.
+    test.install_canister_with_allocation(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        Some(60),
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        ComputeAllocation::try_from(60).unwrap(),
+        test.canister_state(canister_id)
+            .scheduler_state
+            .compute_allocation
+    );
+
+    test.uninstall_code(canister_id).unwrap();
+
+    // Updating the compute allocation to a lower value succeeds.
+    test.install_canister_with_allocation(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        Some(59),
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        ComputeAllocation::try_from(59).unwrap(),
+        test.canister_state(canister_id)
+            .scheduler_state
+            .compute_allocation
+    );
+}
+
+#[test]
+fn update_settings_when_compute_capacity_is_oversubscribed() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_allocatable_compute_capacity_in_percent(0)
+        .build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+
+    // Manually set the compute allocation higher to emulate the state after
+    // replica upgrade that decreased compute capacity.
+    test.canister_state_mut(canister_id)
+        .scheduler_state
+        .compute_allocation = ComputeAllocation::try_from(60).unwrap();
+
+    // Updating the compute allocation to a higher value fails.
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgs {
+            compute_allocation: Some(candid::Nat::from(61_u32)),
+            ..Default::default()
+        },
+    };
+    let err = test
+        .subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap_err();
+    assert_eq!(ErrorCode::SubnetOversubscribed, err.code());
+    assert_eq!(
+        err.description(),
+        "Canister requested a compute allocation of 61% \
+        which cannot be satisfied because the Subnet's \
+        remaining compute capacity is 60%"
+    );
+
+    // Updating the compute allocation to the same value succeeds.
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgs {
+            compute_allocation: Some(candid::Nat::from(60_u32)),
+            ..Default::default()
+        },
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+    assert_eq!(
+        ComputeAllocation::try_from(60).unwrap(),
+        test.canister_state(canister_id)
+            .scheduler_state
+            .compute_allocation
+    );
+
+    // Updating the compute allocation to a lower value succeeds.
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgs {
+            compute_allocation: Some(candid::Nat::from(59_u32)),
+            ..Default::default()
+        },
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+    assert_eq!(
+        ComputeAllocation::try_from(59).unwrap(),
+        test.canister_state(canister_id)
+            .scheduler_state
+            .compute_allocation
+    );
 }

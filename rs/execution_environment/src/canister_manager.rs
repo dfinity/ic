@@ -82,6 +82,7 @@ impl CanisterMgrConfig {
         max_controllers: usize,
         num_cores: usize,
         rate_limiting_of_instructions: FlagStatus,
+        allocatable_capacity_in_percent: usize,
     ) -> Self {
         Self {
             subnet_memory_capacity,
@@ -90,7 +91,7 @@ impl CanisterMgrConfig {
             own_subnet_id,
             own_subnet_type,
             max_controllers,
-            compute_capacity: 100 * num_cores as u64,
+            compute_capacity: (num_cores * allocatable_capacity_in_percent.min(100)) as u64,
             rate_limiting_of_instructions,
         }
     }
@@ -375,14 +376,17 @@ impl CanisterManager {
 
         if let Some(compute_allocation) = settings.compute_allocation() {
             let compute_allocation = compute_allocation;
-            if compute_allocation.as_percent() + total_subnet_compute_allocation_used
-                >= self.config.compute_capacity
+            if compute_allocation.as_percent() > 0
+                && compute_allocation.as_percent() + total_subnet_compute_allocation_used
+                    >= self.config.compute_capacity
             {
+                let capped_usage = std::cmp::min(
+                    self.config.compute_capacity,
+                    total_subnet_compute_allocation_used + 1,
+                );
                 return Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {
                     requested: compute_allocation,
-                    available: self.config.compute_capacity
-                        - total_subnet_compute_allocation_used
-                        - 1,
+                    available: self.config.compute_capacity - capped_usage,
                 });
             }
         }
@@ -1449,20 +1453,26 @@ impl CanisterManager {
         if let Some(compute_allocation) = compute_allocation {
             let canister_current_allocation =
                 canister.scheduler_state.compute_allocation.as_percent();
-
-            // current_compute_allocation of this canister will be subtracted from the
-            // total_compute_allocation() of the subnet if the canister's compute_allocation
-            // is changed to the requested_compute_allocation
-            if compute_allocation.as_percent() + total_subnet_compute_allocation_used
-                - canister_current_allocation
-                >= self.config.compute_capacity
-            {
-                return Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {
-                    requested: compute_allocation,
-                    available: self.config.compute_capacity + canister_current_allocation
-                        - total_subnet_compute_allocation_used
-                        - 1,
-                });
+            // Check only the case when compute allocation increases. Other
+            // cases always succeed.
+            if compute_allocation.as_percent() > canister_current_allocation {
+                // current_compute_allocation of this canister will be subtracted from the
+                // total_compute_allocation() of the subnet if the canister's compute_allocation
+                // is changed to the requested_compute_allocation
+                if compute_allocation.as_percent() + total_subnet_compute_allocation_used
+                    - canister_current_allocation
+                    >= self.config.compute_capacity
+                {
+                    let capped_usage = std::cmp::min(
+                        self.config.compute_capacity,
+                        total_subnet_compute_allocation_used + 1,
+                    );
+                    return Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {
+                        requested: compute_allocation,
+                        available: self.config.compute_capacity + canister_current_allocation
+                            - capped_usage,
+                    });
+                }
             }
         }
 

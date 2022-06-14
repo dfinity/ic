@@ -103,6 +103,10 @@ pub struct Config {
     /// If this flag is enabled, then message execution of canisters will be
     /// rate limited based on the number of executed instructions per round.
     pub rate_limiting_of_instructions: FlagStatus,
+
+    /// Specifies the percentage of subnet compute capacity that is allocatable
+    /// by canisters.
+    pub allocatable_compute_capacity_in_percent: usize,
 }
 
 impl Default for Config {
@@ -127,6 +131,8 @@ impl Default for Config {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             rate_limiting_of_heap_delta: FlagStatus::Enabled,
             rate_limiting_of_instructions: FlagStatus::Enabled,
+            // TODO(RUN-211): Increase the allocatable capacity.
+            allocatable_compute_capacity_in_percent: 50,
         }
     }
 }

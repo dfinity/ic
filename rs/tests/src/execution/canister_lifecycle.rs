@@ -962,8 +962,12 @@ pub fn total_compute_allocation_cannot_be_exceeded(
 ) {
     let mut rng = ctx.rng.clone();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    let app_sched_cores =
-        ic_config::subnet_config::SchedulerConfig::application_subnet().scheduler_cores;
+    // See the corresponding field in the execution environment config.
+    let allocatable_compute_capacity_in_percent = 50;
+    let app_sched_cores = ic_config::subnet_config::SchedulerConfig::application_subnet()
+        .scheduler_cores
+        * allocatable_compute_capacity_in_percent
+        / 100;
     const MAX_COMP_ALLOC: Option<u64> = Some(99);
     rt.block_on(async move {
         let mut canister_principals = Vec::new();
