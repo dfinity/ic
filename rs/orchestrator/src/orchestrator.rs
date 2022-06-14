@@ -197,7 +197,7 @@ impl Orchestrator {
         })
     }
 
-    /// Starts three asynchronous tasks:
+    /// Starts two asynchronous tasks:
     ///
     /// 1. One that constantly monitors for a new CUP pointing to a newer
     /// replica version and executes the upgrade to this version if such a
@@ -209,10 +209,6 @@ impl Orchestrator {
     /// new data center is added, orchestrator will generate a new firewall
     /// configuration allowing access from the IP range specified in the DC
     /// record.
-    ///
-    /// 3. Third task tries to update the registry with the iDKG key. Eventually
-    /// once all replicas are updated this functionality should be removed,
-    /// but the plumbing of the adding key mechanism will remain.
     pub fn spawn_tasks(&mut self) {
         async fn upgrade_checks(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
@@ -221,7 +217,7 @@ impl Orchestrator {
             log: ReplicaLogger,
         ) {
             // This timeout is a last resort trying to revive the upgrade monitoring
-            // in case it gets stuck in an unexpected situation for longer than 30 minutes.
+            // in case it gets stuck in an unexpected situation for longer than 15 minutes.
             let timeout = Duration::from_secs(60 * 15);
             while !*exit_signal.read().await {
                 match tokio::time::timeout(timeout, upgrade.check()).await {
