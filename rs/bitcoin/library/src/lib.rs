@@ -280,7 +280,7 @@
 //! }
 //! ```
 
-mod address_management;
+pub mod address_management;
 mod agent;
 mod canister_common;
 mod canister_implementation;

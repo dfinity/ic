@@ -4307,6 +4307,7 @@ dependencies = [
  "candid",
  "dfn_http_metrics",
  "ic-base-types",
+ "ic-btc-library",
  "ic-cdk 0.5.1",
  "ic-cdk-macros",
  "ic-crypto-sha",
