@@ -1,0 +1,54 @@
+start = Block
+
+Tagged<t> = #6.55799(t) ; the CBOR tag
+
+Block = Tagged<BlockContent>
+
+BlockContent = {
+  ;; Parent hash.
+  ;; Only the first block does not have the parent hash.
+  ? phash: Hash,
+
+  ;; Contents of the transaction.
+  tx: TransactionContent,
+
+  ;; IC time at which the ledger constructed the block.
+  ts: Timestamp
+}
+
+MintTx = (
+  op: "mint",
+  to: Account,
+  TxCommon
+)
+
+BurnTx = (
+  op: "burn",
+  from: Account,
+  TxCommon
+)
+
+TransferTx = (
+  op: "xfer",
+  from: Account,
+  to: Account,
+  ? fee: Amount,
+  TxCommon
+)
+
+TransactionContent = {
+  MintTx // BurnTx // TransferTx
+}
+
+TxCommon = (
+  amt: Amount,
+  ? memo: Memo,
+  ts: Timestamp
+)
+
+Account = [1*2 bytes]
+
+Amount = uint
+Hash = bytes
+Memo = uint
+Timestamp = uint
