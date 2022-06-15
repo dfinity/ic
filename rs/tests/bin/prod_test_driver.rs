@@ -446,7 +446,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
     ));
 
     let xnet_slo_3_subnets = message_routing::xnet_slo_test::config_prod_slo_3_subnets();
-    let xnet_slo_150_subnets = message_routing::xnet_slo_test::config_prod_slo_150_subnets();
+    let xnet_slo_120_subnets = message_routing::xnet_slo_test::config_prod_slo_120_subnets();
     m.add_suite(suite(
         "prod_slo",
         vec![
@@ -459,11 +459,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )]),
             ),
             pot(
-                "xnet_slo_150_subnets_pot",
-                xnet_slo_150_subnets.build(),
+                "xnet_slo_120_subnets_pot",
+                xnet_slo_120_subnets.build(),
                 par(vec![t(
-                    "xnet_slo_150_subnets_test",
-                    xnet_slo_150_subnets.test(),
+                    "xnet_slo_120_subnets_test",
+                    xnet_slo_120_subnets.test(),
                 )]),
             ),
         ],

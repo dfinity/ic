@@ -111,8 +111,8 @@ pub fn config_prod_slo_3_subnets() -> Config {
     Config::new(3, 4, Duration::from_secs(1200), 10)
 }
 
-pub fn config_prod_slo_150_subnets() -> Config {
-    Config::new(150, 1, Duration::from_secs(3800), 10) // 3800s = 1h + 200s
+pub fn config_prod_slo_120_subnets() -> Config {
+    Config::new(120, 1, Duration::from_secs(3800), 10) // 3800s = 1h + 200s
 }
 
 pub fn config_hotfix_slo_3_subnets() -> Config {
