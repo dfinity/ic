@@ -81,6 +81,7 @@ pub mod ic0 {
         pub fn stable64_read(dst: u64, offset: u64, size: u64);
         pub fn stable64_write(offset: u64, src: u64, size: u64);
         pub fn time() -> u64;
+        pub fn performance_counter(counter_type: u32) -> u64;
         pub fn canister_cycle_balance() -> u64;
         pub fn canister_cycle_balance128(dst: i32);
         pub fn msg_cycles_available() -> u64;
@@ -249,6 +250,10 @@ pub mod ic0 {
             .duration_since(std::time::SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_nanos() as u64
+    }
+
+    pub unsafe fn performance_counter(_counter_type: u32) -> u64 {
+        wrong_arch("performance_counter")
     }
 
     pub unsafe fn canister_cycle_balance() -> u64 {
@@ -773,6 +778,12 @@ impl From<TokenUnit> for Vec<u8> {
             TokenUnit::Icp => vec![0x01],
         }
     }
+}
+
+/// Returns a deterministic monotonically increasing integer approximating the amount of
+/// work the canister has done since the beginning of the current execution.
+pub fn performance_counter(counter_type: u32) -> u64 {
+    unsafe { ic0::performance_counter(counter_type) }
 }
 
 /// Returns the amount of cycles in the canister's account.
