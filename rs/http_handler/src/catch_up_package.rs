@@ -1,9 +1,10 @@
 //! Module that deals with requests to /_/catch_up_package
 
 use crate::{
+    body::BodyReceiverLayer,
     common,
     types::{to_legacy_request_type, ApiReqType},
-    HttpHandlerMetrics, UNKNOWN_LABEL,
+    EndpointService, HttpHandlerMetrics, UNKNOWN_LABEL,
 };
 use hyper::{Body, Response, StatusCode};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
@@ -13,7 +14,12 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tower::{BoxError, Service};
+use tower::{
+    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, BoxError, Service,
+    ServiceBuilder,
+};
+
+const MAX_CATCH_UP_PACKAGE_CONCURRENT_REQUESTS: usize = 100;
 
 #[derive(Clone)]
 pub(crate) struct CatchUpPackageService {
@@ -22,14 +28,26 @@ pub(crate) struct CatchUpPackageService {
 }
 
 impl CatchUpPackageService {
-    pub(crate) fn new(
+    pub(crate) fn new_service(
         metrics: HttpHandlerMetrics,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-    ) -> Self {
-        Self {
-            metrics,
-            consensus_pool_cache,
-        }
+    ) -> EndpointService {
+        let base_service = BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(GlobalConcurrencyLimitLayer::new(
+                    MAX_CATCH_UP_PACKAGE_CONCURRENT_REQUESTS,
+                ))
+                .service(Self {
+                    metrics,
+                    consensus_pool_cache,
+                }),
+        );
+
+        BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(BodyReceiverLayer::default())
+                .service(base_service),
+        )
     }
 }
 

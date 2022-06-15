@@ -161,17 +161,17 @@ struct HttpHandler {
     registry_client: Arc<dyn RegistryClient>,
     validator_executor: ValidatorExecutor,
 
+    catchup_service: EndpointService,
     dashboard_service: EndpointService,
     status_service: EndpointService,
     read_state_service: EndpointService,
 
-    // External services wrapped by tower::Buffer. It is safe to be
+    // External services with a concurrency limiter. It is safe to be
     // cloned and passed to a single-threaded context.
     query_execution_service: QueryExecutionService,
     ingress_sender: IngressIngestionService,
     ingress_filter: IngressFilterService,
 
-    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     #[allow(dead_code)]
     backup_spool_path: Option<PathBuf>,
     malicious_flags: MaliciousFlags,
@@ -330,6 +330,9 @@ pub fn start_server(
             state_reader_executor.clone(),
         );
 
+        let catchup_service =
+            CatchUpPackageService::new_service(metrics.clone(), consensus_pool_cache);
+
         let http_handler = HttpHandler {
             log: log.clone(),
             subnet_id,
@@ -337,12 +340,12 @@ pub fn start_server(
             validator_executor,
             registry_client,
             status_service,
+            catchup_service,
             dashboard_service,
             read_state_service,
             query_execution_service,
             ingress_sender,
             ingress_filter,
-            consensus_pool_cache,
             backup_spool_path,
             malicious_flags,
             delegation_from_nns,
@@ -591,7 +594,7 @@ async fn make_router(
 ) -> ResponseWithTimer {
     use http::method::Method;
 
-    let query_service = BoxService::new(
+    let query_service = BoxCloneService::new(
         ServiceBuilder::new()
             .layer(BodyReceiverLayer::default())
             .service(QueryService::new(
@@ -605,20 +608,13 @@ async fn make_router(
                 http_handler.malicious_flags.clone(),
             )),
     );
-    let status_service = BoxService::new(http_handler.status_service.clone());
+    let status_service = http_handler.status_service.clone();
 
-    let catch_up_package_service = BoxService::new(
-        ServiceBuilder::new()
-            .layer(BodyReceiverLayer::default())
-            .service(CatchUpPackageService::new(
-                metrics.clone(),
-                http_handler.consensus_pool_cache,
-            )),
-    );
-    let dashboard_service = BoxService::new(http_handler.dashboard_service.clone());
-    let read_state_service = BoxService::new(http_handler.read_state_service.clone());
+    let catch_up_package_service = http_handler.catchup_service.clone();
+    let dashboard_service = http_handler.dashboard_service.clone();
+    let read_state_service = http_handler.read_state_service.clone();
 
-    let call_service = BoxService::new(
+    let call_service = BoxCloneService::new(
         ServiceBuilder::new()
             .layer(BodyReceiverLayer::default())
             .service(CallService::new(
