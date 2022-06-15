@@ -340,14 +340,14 @@ pub(crate) trait SendQueue {
     /// Gets the read end to be passed to the write task.
     /// Returns None if the reader is already in use by a previously created
     /// write task.
-    fn get_reader(&self) -> Box<dyn SendQueueReader + Send + Sync>;
+    fn get_reader(&mut self) -> Box<dyn SendQueueReader + Send + Sync>;
 
     /// Submits a client message for sending to a peer. If the message
     /// cannot be enqueued, the message is returned back to the caller.
     fn enqueue(&self, message: TransportPayload) -> Option<TransportPayload>;
 
     /// Discards enqueued messages and clears the queue.
-    fn clear(&self);
+    fn clear(&mut self);
 }
 
 /// Per-flow: send queue read end

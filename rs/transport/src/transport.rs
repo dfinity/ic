@@ -183,15 +183,15 @@ impl Transport for TransportImpl {
     }
 
     fn clear_send_queues(&self, peer_id: &NodeId) {
-        let client_state = self.client_state.read().unwrap();
-        let client_state = client_state.as_ref().expect("Transport client not found");
+        let mut client_state = self.client_state.write().unwrap();
+        let client_state = client_state.as_mut().expect("Transport client not found");
         let peer_state = client_state
             .peer_map
-            .get(peer_id)
+            .get_mut(peer_id)
             .expect("Transport client not found");
         peer_state
             .flow_map
-            .iter()
+            .iter_mut()
             .for_each(|(_flow_id, flow_state)| {
                 flow_state.send_queue.clear();
             });
