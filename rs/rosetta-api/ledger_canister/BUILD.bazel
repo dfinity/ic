@@ -1,0 +1,125 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("//bazel:prost.bzl", "generated_files_check")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]) + ["//rs/rosetta-api/ledger_canister/protobuf_generator:sources"],
+)
+
+filegroup(
+    name = "protos",
+    srcs = glob(["proto/**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/constants",
+    "//rs/crypto/sha",
+    "//rs/monitoring/metrics_encoder",
+    "//rs/nns/constants",
+    "//rs/protobuf",
+    "//rs/phantom_newtype",
+    "//rs/rosetta-api/ledger_core",
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/dfn_http",
+    "//rs/rust_canisters/dfn_http_metrics",
+    "//rs/rust_canisters/dfn_protobuf",
+    "//rs/rust_canisters/on_wire",
+    "//rs/types/base_types",
+    "//rs/types/ic00_types",
+    "//rs/utils",
+    "@crate_index//:byteorder",
+    "@crate_index//:candid",
+    "@crate_index//:ciborium",
+    "@crate_index//:comparable",
+    "@crate_index//:crc32fast",
+    "@crate_index//:digest",
+    "@crate_index//:hex",
+    "@crate_index//:intmap",
+    "@crate_index//:lazy_static",
+    "@crate_index//:prost",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:serde_cbor",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:prost-derive",
+]
+
+rust_library(
+    name = "ledger_canister",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    crate_name = "ledger_canister",
+    data = [
+        "wasm/ledger-archive-node-canister.wasm",
+    ],
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_env = {
+        # Circular dependency between ledger-canister-wasm and ledger_canister.
+        # Tracked in https://dfinity.atlassian.net/browse/ROSETTA1-299
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "../wasm/ledger-archive-node-canister.wasm",
+    },
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "test_notified",
+    srcs = ["test/notified.rs"],
+    edition = "2018",
+    deps = [
+        ":ledger_canister",
+    ] + DEPENDENCIES,
+)
+
+rust_canister(
+    name = "ledger-canister-wasm",
+    srcs = ["src/main.rs"],
+    data = [
+        "ledger.did",
+    ],
+    edition = "2018",
+    deps = [
+        ":ledger_canister",
+    ] + DEPENDENCIES,
+)
+
+rust_canister(
+    name = "ledger-archive-node-canister-wasm",
+    srcs = ["src/archive_node.rs"],
+    data = [
+        "ledger_archive.did",
+    ],
+    edition = "2018",
+    deps = [
+        ":ledger_canister",
+    ] + DEPENDENCIES,
+)
+
+generated_files_check(
+    name = "check_generated_files",
+    srcs = ["test/check_generated_files.rs"],
+    data = [
+        ":protos",
+        "//rs/types/base_types:protos",
+    ] + glob(["gen/**"]),
+    manifest_dir = "rs/rosetta-api/ledger_canister",
+    deps = [
+        "//rs/rosetta-api/ledger_canister/protobuf_generator:lib",
+        "//rs/test_utilities/compare_dirs",
+        "@crate_index//:tempfile",
+    ],
+)
+
+# TODO: Build wasm/ledger_proxy.wasm with rules motoko
+# Tracked in https://dfinity.atlassian.net/browse/IDX-2368
+
+# TODO: Ledger.mo and Proxy.mo with rules motoko
+# Tracked in https://dfinity.atlassian.net/browse/IDX-2368
