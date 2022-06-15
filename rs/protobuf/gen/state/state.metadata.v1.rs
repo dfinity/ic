@@ -84,6 +84,8 @@ pub struct SignWithEcdsaContext {
     pub batch_time: u64,
     #[prost(bytes="vec", repeated, tag="6")]
     pub derivation_path_vec: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(message, optional, tag="7")]
+    pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::EcdsaKeyId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignWithEcdsaContextTree {

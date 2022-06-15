@@ -1592,6 +1592,7 @@ mod tests {
                 CallbackId::from(0),
                 SignWithEcdsaContext {
                     request: RequestBuilder::new().build(),
+                    key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
                     pseudo_random_id: [0; 32],
                     message_hash: vec![],
                     derivation_path: vec![],
@@ -1671,6 +1672,7 @@ mod tests {
                 CallbackId::from(1),
                 SignWithEcdsaContext {
                     request: RequestBuilder::new().build(),
+                    key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
                     pseudo_random_id: [1; 32],
                     message_hash: vec![],
                     derivation_path: vec![],
@@ -1724,6 +1726,7 @@ mod tests {
                 CallbackId::from(1),
                 SignWithEcdsaContext {
                     request: RequestBuilder::new().build(),
+                    key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
                     pseudo_random_id,
                     message_hash: vec![],
                     derivation_path: vec![],
@@ -2188,6 +2191,7 @@ mod tests {
                 CallbackId::from(1),
                 SignWithEcdsaContext {
                     request: RequestBuilder::new().build(),
+                    key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
                     pseudo_random_id: [1; 32],
                     message_hash: vec![],
                     derivation_path: vec![],
@@ -2202,6 +2206,7 @@ mod tests {
                 CallbackId::from(2),
                 SignWithEcdsaContext {
                     request: RequestBuilder::new().build(),
+                    key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
                     pseudo_random_id: [2; 32],
                     message_hash: vec![],
                     derivation_path: vec![],
