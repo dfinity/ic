@@ -39,6 +39,10 @@ vfat_image(
 vfat_image(
     name = "partition-grub.tar",
     src = ":bootloader-tree.tar",
+    extra_files = {
+        ":grub.cfg": "/boot/grub/grub.cfg:0644",
+        ":grubenv": "/boot/grub/grub:0644",
+    },
     partition_size = "100M",
     subdir = "boot/grub",
     target_compatible_with = [

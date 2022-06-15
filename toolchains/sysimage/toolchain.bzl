@@ -39,16 +39,29 @@ def _vfat_image_impl(ctx):
     tool = ctx.files._build_vfat_image[0]
 
     if len(ctx.files.src) > 0:
-        input_args = ["-i", ctx.files.src[0].path]
+        args = ["-i", ctx.files.src[0].path]
         inputs = [ctx.files.src[0]]
     else:
-        input_args = []
+        args = []
         inputs = []
     out = ctx.actions.declare_file(ctx.label.name)
 
+    args += [
+        "-o",
+        out.path,
+        "-s",
+        ctx.attr.partition_size,
+        "-p",
+        ctx.attr.subdir,
+    ]
+
+    for input_target, install_target in ctx.attr.extra_files.items():
+        args.append(input_target.files.to_list()[0].path + ":" + install_target)
+        inputs += input_target.files.to_list()
+
     ctx.actions.run(
         executable = tool.path,
-        arguments = input_args + ["-o", out.path, "-s", ctx.attr.partition_size, "-p", ctx.attr.subdir],
+        arguments = args,
         inputs = inputs,
         outputs = [out],
         tools = [tool],
@@ -61,6 +74,10 @@ vfat_image = rule(
     attrs = {
         "src": attr.label(
             allow_files = True,
+        ),
+        "extra_files": attr.label_keyed_string_dict(
+            allow_files = True,
+            mandatory = False,
         ),
         "partition_size": attr.string(
             mandatory = True,
