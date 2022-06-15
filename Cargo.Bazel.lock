@@ -1,5 +1,5 @@
 {
-  "checksum": "b17c27766e30e6a8d47ff94427b42034dc55addd94c47f6cd0ff43bcd2cabb54",
+  "checksum": "83d7e0f2c1b4dae3a822276b648f9df2f8c5daec8fb1a8fcd151a601661861d2",
   "crates": {
     "actix-codec 0.5.0": {
       "name": "actix-codec",
@@ -27449,7 +27449,7 @@
               "target": "smallvec"
             },
             {
-              "id": "symbolic-demangle 8.7.3",
+              "id": "symbolic-demangle 8.8.0",
               "target": "symbolic_demangle"
             },
             {
@@ -36692,13 +36692,13 @@
       },
       "license": "BSD-3-Clause"
     },
-    "symbolic-common 8.7.3": {
+    "symbolic-common 8.8.0": {
       "name": "symbolic-common",
-      "version": "8.7.3",
+      "version": "8.8.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/symbolic-common/8.7.3/download",
-          "sha256": "c276d5b296f30f0fb30d2128b6be6f9804be7669f1edef46c4d8c017de4c77c3"
+          "url": "https://crates.io/api/v1/crates/symbolic-common/8.8.0/download",
+          "sha256": "f551f902d5642e58039aee6a9021a61037926af96e071816361644983966f540"
         }
       },
       "targets": [
@@ -36742,17 +36742,17 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "8.7.3"
+        "version": "8.8.0"
       },
       "license": "MIT"
     },
-    "symbolic-demangle 8.7.3": {
+    "symbolic-demangle 8.8.0": {
       "name": "symbolic-demangle",
-      "version": "8.7.3",
+      "version": "8.8.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/symbolic-demangle/8.7.3/download",
-          "sha256": "b096bd4794e4d05584144dc9536a4fde8844da73f84cdb7652ed78b59e37a218"
+          "url": "https://crates.io/api/v1/crates/symbolic-demangle/8.8.0/download",
+          "sha256": "4564ca7b4e6eb14105aa8bbbce26e080f6b5d9c4373e67167ab31f7b86443750"
         }
       },
       "targets": [
@@ -36797,18 +36797,18 @@
               "target": "rustc_demangle"
             },
             {
-              "id": "symbolic-common 8.7.3",
+              "id": "symbolic-common 8.8.0",
               "target": "symbolic_common"
             },
             {
-              "id": "symbolic-demangle 8.7.3",
+              "id": "symbolic-demangle 8.8.0",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "8.7.3"
+        "version": "8.8.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -41675,6 +41675,18 @@
         },
         {
           "Binary": {
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -41689,18 +41701,6 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

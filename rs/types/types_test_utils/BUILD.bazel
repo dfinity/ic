@@ -1,0 +1,23 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "types_test_utils",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_types_test_utils",
+    edition = "2018",
+    deps = [
+        "//rs/types/types",
+        "@crate_index//:proptest",
+        "@crate_index//:strum",
+    ],
+)
