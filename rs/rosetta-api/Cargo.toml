@@ -40,7 +40,7 @@ on_wire = {path = "../rust_canisters/on_wire"}
 prometheus = "0.12.0"
 rand = "0.7"
 reqwest = "0.11.1"
-rusqlite = "0.25.3"
+rusqlite = "~0.25.4"
 serde = "1.0"
 serde_cbor = "0.11"
 serde_derive = "1.0"
