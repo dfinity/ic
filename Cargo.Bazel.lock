@@ -1,5 +1,5 @@
 {
-  "checksum": "5f44d2a915b63103d64423ddb27e415a899a25677d3192a8cd4191909b045c4e",
+  "checksum": "b17c27766e30e6a8d47ff94427b42034dc55addd94c47f6cd0ff43bcd2cabb54",
   "crates": {
     "actix-codec 0.5.0": {
       "name": "actix-codec",
@@ -6081,13 +6081,13 @@
       },
       "license": "MIT"
     },
-    "clap 3.2.2": {
+    "clap 3.2.4": {
       "name": "clap",
-      "version": "3.2.2",
+      "version": "3.2.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/3.2.2/download",
-          "sha256": "8e538f9ee5aa3b3963f09a997035f883677966ed50fce0292611927ce6f6d8c6"
+          "url": "https://crates.io/api/v1/crates/clap/3.2.4/download",
+          "sha256": "6d20de3739b4fb45a17837824f40aa1769cc7655d7a83e68739a77fe7b30c87a"
         }
       },
       "targets": [
@@ -6127,7 +6127,7 @@
           "color",
           "default",
           "derive",
-          "lazy_static",
+          "once_cell",
           "std",
           "strsim",
           "suggestions",
@@ -6152,8 +6152,8 @@
               "target": "indexmap"
             },
             {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
+              "id": "once_cell 1.12.0",
+              "target": "once_cell"
             },
             {
               "id": "strsim 0.10.0",
@@ -6174,23 +6174,23 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "clap_derive 3.2.2",
+              "id": "clap_derive 3.2.4",
               "target": "clap_derive"
             }
           ],
           "selects": {}
         },
-        "version": "3.2.2"
+        "version": "3.2.4"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap_derive 3.2.2": {
+    "clap_derive 3.2.4": {
       "name": "clap_derive",
-      "version": "3.2.2",
+      "version": "3.2.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap_derive/3.2.2/download",
-          "sha256": "a7f98063cac4652f23ccda556b8d04347a7fc4b2cff1f7577cc8c6546e0d8078"
+          "url": "https://crates.io/api/v1/crates/clap_derive/3.2.4/download",
+          "sha256": "026baf08b89ffbd332836002ec9378ef0e69648cbfadd68af7cd398ca5bf98f7"
         }
       },
       "targets": [
@@ -6241,7 +6241,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "3.2.2"
+        "version": "3.2.4"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -10047,7 +10047,7 @@
               "target": "ciborium"
             },
             {
-              "id": "clap 3.2.2",
+              "id": "clap 3.2.4",
               "target": "clap"
             },
             {
@@ -10247,7 +10247,7 @@
               "target": "insta"
             },
             {
-              "id": "intmap 0.7.1",
+              "id": "intmap 0.8.0",
               "target": "intmap"
             },
             {
@@ -18260,13 +18260,13 @@
       },
       "license": "BSD-3-Clause"
     },
-    "intmap 0.7.1": {
+    "intmap 0.8.0": {
       "name": "intmap",
-      "version": "0.7.1",
+      "version": "0.8.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/intmap/0.7.1/download",
-          "sha256": "ae52f28f45ac2bc96edb7714de995cffc174a395fb0abf5bff453587c980d7b9"
+          "url": "https://crates.io/api/v1/crates/intmap/0.8.0/download",
+          "sha256": "86d15c6e521ba2be083db38ab4c0c7df154acb2369d438c051a66cb82baef3d5"
         }
       },
       "targets": [
@@ -18288,8 +18288,20 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": [
+          "serde"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.137",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
         "edition": "2018",
-        "version": "0.7.1"
+        "version": "0.8.0"
       },
       "license": "MIT"
     },
@@ -18892,13 +18904,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "js-sys 0.3.57": {
+    "js-sys 0.3.58": {
       "name": "js-sys",
-      "version": "0.3.57",
+      "version": "0.3.58",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/js-sys/0.3.57/download",
-          "sha256": "671a26f820db17c2a2750743f1dd03bafd15b98c9f30c7c2628c024c05d73397"
+          "url": "https://crates.io/api/v1/crates/js-sys/0.3.58/download",
+          "sha256": "c3fac17f7123a73ca62df411b1bf727ccc805daa070338fda671c86dac1bdc27"
         }
       },
       "targets": [
@@ -18923,14 +18935,14 @@
         "deps": {
           "common": [
             {
-              "id": "wasm-bindgen 0.2.80",
+              "id": "wasm-bindgen 0.2.81",
               "target": "wasm_bindgen"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.57"
+        "version": "0.3.58"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -25458,7 +25470,7 @@
           "selects": {
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "js-sys 0.3.57",
+                "id": "js-sys 0.3.58",
                 "target": "js_sys"
               }
             ]
@@ -25568,7 +25580,7 @@
           "selects": {
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "js-sys 0.3.57",
+                "id": "js-sys 0.3.58",
                 "target": "js_sys"
               }
             ]
@@ -27245,11 +27257,11 @@
           "selects": {
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "wasm-bindgen 0.2.80",
+                "id": "wasm-bindgen 0.2.81",
                 "target": "wasm_bindgen"
               },
               {
-                "id": "web-sys 0.3.57",
+                "id": "web-sys 0.3.58",
                 "target": "web_sys"
               }
             ]
@@ -31692,7 +31704,7 @@
             ],
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "js-sys 0.3.57",
+                "id": "js-sys 0.3.58",
                 "target": "js_sys"
               },
               {
@@ -31700,15 +31712,15 @@
                 "target": "serde_json"
               },
               {
-                "id": "wasm-bindgen 0.2.80",
+                "id": "wasm-bindgen 0.2.81",
                 "target": "wasm_bindgen"
               },
               {
-                "id": "wasm-bindgen-futures 0.4.30",
+                "id": "wasm-bindgen-futures 0.4.31",
                 "target": "wasm_bindgen_futures"
               },
               {
-                "id": "web-sys 0.3.57",
+                "id": "web-sys 0.3.58",
                 "target": "web_sys"
               }
             ],
@@ -31916,7 +31928,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", target_vendor = \"unknown\", target_os = \"unknown\", target_env = \"\"))": [
               {
-                "id": "web-sys 0.3.57",
+                "id": "web-sys 0.3.58",
                 "target": "web_sys"
               }
             ],
@@ -41663,6 +41675,18 @@
         },
         {
           "Binary": {
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
             "srcs": {
@@ -41677,18 +41701,6 @@
           "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -41962,13 +41974,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
     },
-    "wasm-bindgen 0.2.80": {
+    "wasm-bindgen 0.2.81": {
       "name": "wasm-bindgen",
-      "version": "0.2.80",
+      "version": "0.2.81",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasm-bindgen/0.2.80/download",
-          "sha256": "27370197c907c55e3f1a9fbe26f44e937fe6451368324e009cba39e139dc08ad"
+          "url": "https://crates.io/api/v1/crates/wasm-bindgen/0.2.81/download",
+          "sha256": "7c53b543413a17a202f4be280a7e5c62a1c69345f5de525ee64f8cfdbc954994"
         }
       },
       "targets": [
@@ -42014,7 +42026,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "wasm-bindgen 0.2.80",
+              "id": "wasm-bindgen 0.2.81",
               "target": "build_script_build"
             }
           ],
@@ -42024,13 +42036,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasm-bindgen-macro 0.2.80",
+              "id": "wasm-bindgen-macro 0.2.81",
               "target": "wasm_bindgen_macro"
             }
           ],
           "selects": {}
         },
-        "version": "0.2.80"
+        "version": "0.2.81"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -42039,13 +42051,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "wasm-bindgen-backend 0.2.80": {
+    "wasm-bindgen-backend 0.2.81": {
       "name": "wasm-bindgen-backend",
-      "version": "0.2.80",
+      "version": "0.2.81",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasm-bindgen-backend/0.2.80/download",
-          "sha256": "53e04185bfa3a779273da532f5025e33398409573f348985af9a1cbf3774d3f4"
+          "url": "https://crates.io/api/v1/crates/wasm-bindgen-backend/0.2.81/download",
+          "sha256": "5491a68ab4500fa6b4d726bd67408630c3dbe9c4fe7bda16d5c82a1fd8c7340a"
         }
       },
       "targets": [
@@ -42097,24 +42109,24 @@
               "target": "syn"
             },
             {
-              "id": "wasm-bindgen-shared 0.2.80",
+              "id": "wasm-bindgen-shared 0.2.81",
               "target": "wasm_bindgen_shared"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.2.80"
+        "version": "0.2.81"
       },
       "license": "MIT/Apache-2.0"
     },
-    "wasm-bindgen-futures 0.4.30": {
+    "wasm-bindgen-futures 0.4.31": {
       "name": "wasm-bindgen-futures",
-      "version": "0.4.30",
+      "version": "0.4.31",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasm-bindgen-futures/0.4.30/download",
-          "sha256": "6f741de44b75e14c35df886aff5f1eb73aa114fa5d4d00dcd37b5e01259bf3b2"
+          "url": "https://crates.io/api/v1/crates/wasm-bindgen-futures/0.4.31/download",
+          "sha256": "de9a9cec1733468a8c657e57fa2413d2ae2c0129b95e87c5b72b8ace4d13f31f"
         }
       },
       "targets": [
@@ -42143,35 +42155,35 @@
               "target": "cfg_if"
             },
             {
-              "id": "js-sys 0.3.57",
+              "id": "js-sys 0.3.58",
               "target": "js_sys"
             },
             {
-              "id": "wasm-bindgen 0.2.80",
+              "id": "wasm-bindgen 0.2.81",
               "target": "wasm_bindgen"
             }
           ],
           "selects": {
             "cfg(target_feature = \"atomics\")": [
               {
-                "id": "web-sys 0.3.57",
+                "id": "web-sys 0.3.58",
                 "target": "web_sys"
               }
             ]
           }
         },
         "edition": "2018",
-        "version": "0.4.30"
+        "version": "0.4.31"
       },
       "license": "MIT/Apache-2.0"
     },
-    "wasm-bindgen-macro 0.2.80": {
+    "wasm-bindgen-macro 0.2.81": {
       "name": "wasm-bindgen-macro",
-      "version": "0.2.80",
+      "version": "0.2.81",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasm-bindgen-macro/0.2.80/download",
-          "sha256": "17cae7ff784d7e83a2fe7611cfe766ecf034111b49deb850a3dc7699c08251f5"
+          "url": "https://crates.io/api/v1/crates/wasm-bindgen-macro/0.2.81/download",
+          "sha256": "c441e177922bc58f1e12c022624b6216378e5febc2f0533e41ba443d505b80aa"
         }
       },
       "targets": [
@@ -42203,24 +42215,24 @@
               "target": "quote"
             },
             {
-              "id": "wasm-bindgen-macro-support 0.2.80",
+              "id": "wasm-bindgen-macro-support 0.2.81",
               "target": "wasm_bindgen_macro_support"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.2.80"
+        "version": "0.2.81"
       },
       "license": "MIT/Apache-2.0"
     },
-    "wasm-bindgen-macro-support 0.2.80": {
+    "wasm-bindgen-macro-support 0.2.81": {
       "name": "wasm-bindgen-macro-support",
-      "version": "0.2.80",
+      "version": "0.2.81",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasm-bindgen-macro-support/0.2.80/download",
-          "sha256": "99ec0dc7a4756fffc231aab1b9f2f578d23cd391390ab27f952ae0c9b3ece20b"
+          "url": "https://crates.io/api/v1/crates/wasm-bindgen-macro-support/0.2.81/download",
+          "sha256": "7d94ac45fcf608c1f45ef53e748d35660f168490c10b23704c7779ab8f5c3048"
         }
       },
       "targets": [
@@ -42260,28 +42272,28 @@
               "target": "syn"
             },
             {
-              "id": "wasm-bindgen-backend 0.2.80",
+              "id": "wasm-bindgen-backend 0.2.81",
               "target": "wasm_bindgen_backend"
             },
             {
-              "id": "wasm-bindgen-shared 0.2.80",
+              "id": "wasm-bindgen-shared 0.2.81",
               "target": "wasm_bindgen_shared"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.2.80"
+        "version": "0.2.81"
       },
       "license": "MIT/Apache-2.0"
     },
-    "wasm-bindgen-shared 0.2.80": {
+    "wasm-bindgen-shared 0.2.81": {
       "name": "wasm-bindgen-shared",
-      "version": "0.2.80",
+      "version": "0.2.81",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasm-bindgen-shared/0.2.80/download",
-          "sha256": "d554b7f530dee5964d9a9468d95c1f8b8acae4f282807e7d27d4b03099a46744"
+          "url": "https://crates.io/api/v1/crates/wasm-bindgen-shared/0.2.81/download",
+          "sha256": "6a89911bd99e5f3659ec4acf9c4d93b0a90fe4a2a11f15328472058edc5261be"
         }
       },
       "targets": [
@@ -42318,14 +42330,14 @@
         "deps": {
           "common": [
             {
-              "id": "wasm-bindgen-shared 0.2.80",
+              "id": "wasm-bindgen-shared 0.2.81",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.2.80"
+        "version": "0.2.81"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -43468,13 +43480,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "web-sys 0.3.57": {
+    "web-sys 0.3.58": {
       "name": "web-sys",
-      "version": "0.3.57",
+      "version": "0.3.58",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/web-sys/0.3.57/download",
-          "sha256": "7b17e741662c70c8bd24ac5c5b18de314a2c26c32bf8346ee1e6f53de919c283"
+          "url": "https://crates.io/api/v1/crates/web-sys/0.3.58/download",
+          "sha256": "2fed94beee57daf8dd7d51f2b15dc2bcde92d7a72304cdf662a4371008b71b90"
         }
       },
       "targets": [
@@ -43527,18 +43539,18 @@
         "deps": {
           "common": [
             {
-              "id": "js-sys 0.3.57",
+              "id": "js-sys 0.3.58",
               "target": "js_sys"
             },
             {
-              "id": "wasm-bindgen 0.2.80",
+              "id": "wasm-bindgen 0.2.81",
               "target": "wasm_bindgen"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.57"
+        "version": "0.3.58"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -45474,7 +45486,7 @@
     "brotli 3.3.4",
     "brotli-decompressor 2.3.2",
     "cc 1.0.73",
-    "clap 3.2.2",
+    "clap 3.2.4",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",

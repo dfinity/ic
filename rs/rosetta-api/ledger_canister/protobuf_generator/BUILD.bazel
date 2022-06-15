@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:prost.bzl", "protobuf_generator")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "lib",
+    srcs = ["src/lib.rs"],
+    crate_name = "ledger_canister_protobuf_generator",
+    edition = "2018",
+    deps = [
+        "@crate_index//:prost-build",
+    ],
+)
+
+protobuf_generator(
+    name = "protobuf_generator",
+    srcs = ["src/main.rs"],
+    manifest_dir = "rs/rosetta-api/ledger_canister/protobuf_generator",
+    deps = [":lib"],
+)
