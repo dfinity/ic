@@ -259,6 +259,7 @@ impl TryFrom<pb_metadata::SetupInitialDkgContext> for SetupInitialDkgContext {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SignWithEcdsaContext {
     pub request: Request,
+    pub key_id: EcdsaKeyId,
     pub message_hash: Vec<u8>,
     pub derivation_path: Vec<Vec<u8>>,
     pub pseudo_random_id: [u8; 32],
@@ -269,6 +270,7 @@ impl From<&SignWithEcdsaContext> for pb_metadata::SignWithEcdsaContext {
     fn from(context: &SignWithEcdsaContext) -> Self {
         pb_metadata::SignWithEcdsaContext {
             request: Some((&context.request).into()),
+            key_id: Some((&context.key_id).into()),
             message_hash: context.message_hash.to_vec(),
             derivation_path_vec: context.derivation_path.clone(),
             pseudo_random_id: context.pseudo_random_id.to_vec(),
@@ -282,10 +284,12 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
     fn try_from(context: pb_metadata::SignWithEcdsaContext) -> Result<Self, Self::Error> {
         let request: Request =
             try_from_option_field(context.request, "SignWithEcdsaContext::request")?;
+        let key_id = try_from_option_field(context.key_id, "SignWithEcdsaContext::key_id")?;
         Ok(SignWithEcdsaContext {
             message_hash: context.message_hash,
             derivation_path: context.derivation_path_vec,
             request,
+            key_id,
             pseudo_random_id: {
                 if context.pseudo_random_id.len() != 32 {
                     return Err(Self::Error::Other(

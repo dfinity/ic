@@ -506,6 +506,7 @@ mod test {
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, CanisterThresholdSigTestEnvironment,
     };
+    use ic_ic00_types::EcdsaKeyId;
     use ic_logger::replica_logger::no_op_logger;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::*;
     use ic_test_utilities::{
@@ -514,8 +515,8 @@ mod test {
         types::{ids::subnet_test_id, messages::RequestBuilder},
     };
     use ic_types::{crypto::AlgorithmId, messages::CallbackId, Height};
-    use std::collections::BTreeSet;
     use std::convert::TryFrom;
+    use std::{collections::BTreeSet, str::FromStr};
 
     #[test]
     fn test_validate_transcript_refs() {
@@ -691,6 +692,7 @@ mod test {
             CallbackId::from(1),
             SignWithEcdsaContext {
                 request: RequestBuilder::new().build(),
+                key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
                 pseudo_random_id: [1; 32],
                 message_hash: vec![0; 32],
                 derivation_path: vec![],
@@ -701,6 +703,7 @@ mod test {
             CallbackId::from(2),
             SignWithEcdsaContext {
                 request: RequestBuilder::new().build(),
+                key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
                 pseudo_random_id: [2; 32],
                 message_hash: vec![0; 32],
                 derivation_path: vec![],

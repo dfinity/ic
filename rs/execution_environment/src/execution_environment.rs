@@ -650,7 +650,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                 (**request).clone(),
                                 args.message_hash,
                                 args.derivation_path,
-                                &args.key_id,
+                                args.key_id,
                                 registry_settings.max_ecdsa_queue_size,
                                 &mut state,
                                 rng,
@@ -1501,8 +1501,7 @@ impl ExecutionEnvironmentImpl {
         mut request: Request,
         message_hash: Vec<u8>,
         derivation_path: Vec<Vec<u8>>,
-        // TODO EXC-1061: pass key_id to consensus.
-        _key_id: &EcdsaKeyId,
+        key_id: EcdsaKeyId,
         max_queue_size: u32,
         state: &mut ReplicatedState,
         rng: &mut (dyn RngCore + 'static),
@@ -1551,6 +1550,7 @@ impl ExecutionEnvironmentImpl {
             .push_sign_with_ecdsa_request(
                 SignWithEcdsaContext {
                     request,
+                    key_id,
                     message_hash,
                     derivation_path,
                     pseudo_random_id,

@@ -69,6 +69,7 @@ message SignWithEcdsaContext {
     reserved "derivation_path";
     uint64 batch_time = 5;
     repeated bytes derivation_path_vec = 6;
+    registry.crypto.v1.EcdsaKeyId key_id = 7;
 }
 
 message SignWithEcdsaContextTree {
