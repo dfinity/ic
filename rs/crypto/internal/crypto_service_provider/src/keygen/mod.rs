@@ -5,7 +5,7 @@ use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreError};
 use crate::types::{CspPop, CspPublicKey, CspSecretKey};
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey, PolynomialCommitment};
-use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
+use ic_crypto_internal_tls::keygen::{generate_tls_key_pair_der, TlsKeyPairAndCertGenerationError};
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_sha::Sha256;
 use ic_crypto_sha::{Context, DomainSeparationContext};
@@ -42,17 +42,33 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
         Ok(self.csp_vault.gen_key_pair_with_pop(algorithm_id)?)
     }
 
-    fn gen_tls_key_pair(&mut self, node: NodeId, not_after: &str) -> TlsPublicKeyCert {
+    fn gen_tls_key_pair(
+        &mut self,
+        node: NodeId,
+        not_after: &str,
+    ) -> Result<TlsPublicKeyCert, CryptoError> {
         let common_name = &node.get().to_string()[..];
-        let not_after = Asn1Time::from_str_x509(not_after)
-            .expect("invalid X.509 certificate expiration date (not_after)");
+        let not_after_asn1 =
+            Asn1Time::from_str_x509(not_after).map_err(|_| CryptoError::InvalidNotAfterDate {
+                message: "invalid X.509 certificate expiration date (not_after)".to_string(),
+                not_after: not_after.to_string(),
+            })?;
+
         let (cert, secret_key) =
-            generate_tls_key_pair_der(&mut *self.rng_write_lock(), common_name, &not_after);
+            generate_tls_key_pair_der(&mut *self.rng_write_lock(), common_name, &not_after_asn1)
+                .map_err(
+                    |TlsKeyPairAndCertGenerationError::InvalidNotAfterDate { message: e }| {
+                        CryptoError::InvalidNotAfterDate {
+                            message: e,
+                            not_after: not_after.to_string(),
+                        }
+                    },
+                )?;
 
         let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes)
             .expect("generated X509 certificate has malformed DER encoding");
         let _key_id = self.store_tls_secret_key(&x509_pk_cert, secret_key);
-        x509_pk_cert
+        Ok(x509_pk_cert)
     }
 }
 

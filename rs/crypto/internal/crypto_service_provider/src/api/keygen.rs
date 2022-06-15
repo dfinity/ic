@@ -46,11 +46,15 @@ pub trait CspKeyGenerator {
     ///
     /// Returns the public key certificate.
     ///
-    /// # Panics
+    /// # Errors
     /// * if `not_after` is not specified according to RFC 5280 or if
     /// `not_after` is in the past
     /// * if a malformed X509 certificate is generated
-    fn gen_tls_key_pair(&mut self, node_id: NodeId, not_after: &str) -> TlsPublicKeyCert;
+    fn gen_tls_key_pair(
+        &mut self,
+        node_id: NodeId,
+        not_after: &str,
+    ) -> Result<TlsPublicKeyCert, CryptoError>;
 }
 
 /// A trait that allows checking the secret key store for the availability of a

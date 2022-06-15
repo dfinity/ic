@@ -96,6 +96,7 @@ pub enum CspSecretKeyStoreContainsError {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspTlsKeygenError {
+    InvalidNotAfterDate { message: String, not_after: String },
     InternalError { internal_error: String },
 }
 
@@ -400,7 +401,7 @@ pub trait TlsHandshakeCspVault: Send + Sync {
     ///
     /// Returns the key ID of the secret key, and the public key certificate.
     ///
-    /// # Panics
+    /// # Errors
     /// * if `not_after` is not specified according to RFC 5280 or if
     /// `not_after` is in the past
     /// * if a malformed X509 certificate is generated

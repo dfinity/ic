@@ -5,8 +5,8 @@ use crate::types::{CspSecretKey, CspSignature};
 use crate::vault::api::{CspTlsKeygenError, CspTlsSignError, TlsHandshakeCspVault};
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
-use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
 use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
+use ic_crypto_internal_tls::keygen::{generate_tls_key_pair_der, TlsKeyPairAndCertGenerationError};
 use ic_crypto_secrets_containers::{SecretArray, SecretVec};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::KeyId;
@@ -27,10 +27,23 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Tls
         not_after: &str,
     ) -> Result<(KeyId, TlsPublicKeyCert), CspTlsKeygenError> {
         let common_name = &node.get().to_string()[..];
-        let not_after = Asn1Time::from_str_x509(not_after)
-            .expect("invalid X.509 certificate expiration date (not_after)");
+        let not_after_asn1 = Asn1Time::from_str_x509(not_after).map_err(|_| {
+            CspTlsKeygenError::InvalidNotAfterDate {
+                message: "invalid X.509 certificate expiration date (not_after)".to_string(),
+                not_after: not_after.to_string(),
+            }
+        })?;
+
         let (cert, secret_key) =
-            generate_tls_key_pair_der(&mut *self.rng_write_lock(), common_name, &not_after);
+            generate_tls_key_pair_der(&mut *self.rng_write_lock(), common_name, &not_after_asn1)
+                .map_err(
+                    |TlsKeyPairAndCertGenerationError::InvalidNotAfterDate { message: e }| {
+                        CspTlsKeygenError::InvalidNotAfterDate {
+                            message: e,
+                            not_after: not_after.to_string(),
+                        }
+                    },
+                )?;
 
         let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes)
             .expect("generated X509 certificate has malformed DER encoding");

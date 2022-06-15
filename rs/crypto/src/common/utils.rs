@@ -324,6 +324,7 @@ fn generate_committee_signing_keys(crypto_root: &Path) -> PublicKeyProto {
 fn generate_tls_keys(crypto_root: &Path, node: NodeId) -> TlsPublicKeyCert {
     let mut csp = csp_at_root(crypto_root);
     csp.gen_tls_key_pair(node, "99991231235959Z")
+        .expect("error generating TLS key pair")
 }
 
 pub(crate) fn csp_at_root(
