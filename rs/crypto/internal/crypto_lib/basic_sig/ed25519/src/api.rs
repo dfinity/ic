@@ -1,5 +1,6 @@
 //! API for Ed25519 basic signature
 use super::types;
+use ed25519_dalek::ed25519::signature::Signature;
 use ic_crypto_internal_basic_sig_der_utils as der_utils;
 use ic_crypto_secrets_containers::SecretArray;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
@@ -90,6 +91,7 @@ pub fn sign(msg: &[u8], sk: &types::SecretKeyBytes) -> CryptoResult<types::Signa
 /// # Errors
 /// * `MalformedPublicKey` if the public key is malformed
 /// * `SignatureVerification` if the signature is invalid
+/// * `MalformedSignature` if the signature is malformed
 pub fn verify(
     sig: &types::SignatureBytes,
     msg: &[u8],
@@ -102,7 +104,11 @@ pub fn verify(
         key_bytes: Some(pk.0.to_vec()),
         internal_error: e.to_string(),
     })?;
-    let sig = Signature::new(sig.0);
+    let sig = Signature::from_bytes(&sig.0).map_err(|e| CryptoError::MalformedSignature {
+        algorithm: AlgorithmId::Ed25519,
+        sig_bytes: sig.0.to_vec(),
+        internal_error: e.to_string(),
+    })?;
 
     pk.verify(msg, &sig)
         .map_err(|e| CryptoError::SignatureVerification {
