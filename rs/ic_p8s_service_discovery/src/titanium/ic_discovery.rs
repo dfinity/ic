@@ -278,9 +278,9 @@ impl IcServiceDiscovery for IcServiceDiscoveryImpl {
             HOST_NODE_EXPORTER_JOB_NAME => {
                 Box::new(|sockaddr: SocketAddr| guest_to_host_address((set_port(9100))(sockaddr)))
             }
-            NODE_EXPORTER_JOB_NAME => set_port(9100),
-            ORCHESTRATOR_JOB_NAME => set_port(9091),
-            REPLICA_JOB_NAME => set_port(9090),
+            NODE_EXPORTER_JOB_NAME => some_after(set_port(9100)),
+            ORCHESTRATOR_JOB_NAME => some_after(set_port(9091)),
+            REPLICA_JOB_NAME => some_after(set_port(9090)),
             _ => {
                 return Err(IcServiceDiscoveryError::JobNameNotFound {
                     job_name: job_name.to_string(),
@@ -298,12 +298,19 @@ impl IcServiceDiscovery for IcServiceDiscoveryImpl {
 
         Ok(prometheus_target_list
             .into_iter()
-            .map(|target_group| {
-                let targets: BTreeSet<_> = target_group.targets.into_iter().map(&mapping).collect();
-                PrometheusTargetGroup {
-                    targets,
-                    ..target_group
+            .filter_map(|target_group| {
+                let targets: BTreeSet<_> = target_group
+                    .targets
+                    .into_iter()
+                    .filter_map(&mapping)
+                    .collect();
+                if !targets.is_empty() {
+                    return Some(PrometheusTargetGroup {
+                        targets,
+                        ..target_group
+                    });
                 }
+                None
             })
             .collect::<BTreeSet<_>>())
     }
@@ -316,21 +323,28 @@ fn set_port(port: u16) -> Box<dyn Fn(SocketAddr) -> SocketAddr> {
     })
 }
 
+/// Take a function f and return `Some . f`
+fn some_after(
+    f: Box<dyn Fn(SocketAddr) -> SocketAddr>,
+) -> Box<dyn Fn(SocketAddr) -> Option<SocketAddr>> {
+    Box::new(move |s| Some(f(s)))
+}
+
 /// By convention, the first two bytes of the host-part of the replica's IP
 /// address are 0x6801. The corresponding segment for the host is 0x6800.
 ///
 /// (The MAC starts with 0x6a00. The 7'th bit of the first byte is flipped. See
 /// https://en.wikipedia.org/wiki/MAC_address)
-fn guest_to_host_address(sockaddr: SocketAddr) -> SocketAddr {
-    let ip = match sockaddr.ip() {
+fn guest_to_host_address(sockaddr: SocketAddr) -> Option<SocketAddr> {
+    match sockaddr.ip() {
         IpAddr::V6(a) if a.segments()[4] == 0x6801 => {
             let s = a.segments();
             let new_addr = Ipv6Addr::new(s[0], s[1], s[2], s[3], 0x6800, s[5], s[6], s[7]);
-            IpAddr::V6(new_addr)
+            let ip = IpAddr::V6(new_addr);
+            Some(SocketAddr::new(ip, sockaddr.port()))
         }
-        ip => ip,
-    };
-    SocketAddr::new(ip, sockaddr.port())
+        _ip => None,
+    }
 }
 trait MapRegistryClientErr<T> {
     fn map_registry_err(
