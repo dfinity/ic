@@ -65,7 +65,9 @@ impl NodeRegistration {
     /// one of the nns nodes in `nns_node_list`.
     pub(crate) async fn register_node(&mut self) {
         let latest_version = self.registry_client.get_latest_version();
-        if let Err(e) = self.key_handler.check_keys_with_registry(latest_version) {
+        if let Err(e) = tokio::task::block_in_place(|| {
+            self.key_handler.check_keys_with_registry(latest_version)
+        }) {
             warn!(self.log, "Node keys are not setup: {:?}", e);
             self.retry_register_node().await;
             self.touch_eject_file();
@@ -184,7 +186,9 @@ impl NodeRegistration {
     /// try to register it now, but will need to check the registration later.
     pub async fn check_additional_key_registered_otherwise_register(&self) -> bool {
         let registry_version = self.registry_client.get_latest_version();
-        match self.key_handler.check_keys_with_registry(registry_version) {
+        match tokio::task::block_in_place(|| {
+            self.key_handler.check_keys_with_registry(registry_version)
+        }) {
             Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(key)) => {
                 self.try_to_register_additional_key(key).await
             }
@@ -297,7 +301,9 @@ impl NodeRegistration {
 
     fn is_node_registered(&self) -> bool {
         let latest_version = self.registry_client.get_latest_version();
-        match self.key_handler.check_keys_with_registry(latest_version) {
+        match tokio::task::block_in_place(|| {
+            self.key_handler.check_keys_with_registry(latest_version)
+        }) {
             Ok(_) => true,
             Err(e) => {
                 warn!(
