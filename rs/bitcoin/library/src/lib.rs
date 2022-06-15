@@ -353,11 +353,11 @@ mod types;
 mod upgrade_management;
 mod utxo_management;
 
-pub use ic_btc_types::{GetUtxosError, Network, OutPoint, Satoshi, Utxo};
+pub use ic_btc_types::{GetUtxosError, OutPoint, Satoshi, Utxo};
 pub use types::{
     AddAddressWithParametersError, AddressNotTracked, AddressType, AddressUsingPrimitives,
     BalanceUpdate, BitcoinAgentState, DerivationPathTooLong, EcdsaPubKey, MinConfirmationsTooHigh,
-    UtxosState, UtxosUpdate, STABILITY_THRESHOLD,
+    Network, UtxosState, UtxosUpdate, STABILITY_THRESHOLD,
 };
 
 pub use agent::BitcoinAgent;

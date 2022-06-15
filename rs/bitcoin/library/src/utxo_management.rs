@@ -1,7 +1,7 @@
 use crate::{
-    agent::BitcoinAgent, canister_common::BitcoinCanister, types::from_bitcoin_network,
-    AddressNotTracked, BalanceUpdate, BitcoinCanisterImpl, MinConfirmationsTooHigh, Satoshi, Utxo,
-    UtxosUpdate, STABILITY_THRESHOLD,
+    agent::BitcoinAgent, canister_common::BitcoinCanister,
+    types::from_bitcoin_network_to_ic_btc_types_network, AddressNotTracked, BalanceUpdate,
+    BitcoinCanisterImpl, MinConfirmationsTooHigh, Satoshi, Utxo, UtxosUpdate, STABILITY_THRESHOLD,
 };
 use bitcoin::Address;
 use ic_btc_types::{GetUtxosRequest, GetUtxosResponse, UtxosFilter::MinConfirmations};
@@ -22,7 +22,7 @@ pub(crate) async fn get_utxos(
         "bitcoin_get_utxos",
         (GetUtxosRequest {
             address: address.to_string(),
-            network: from_bitcoin_network(bitcoin_canister.get_network()),
+            network: from_bitcoin_network_to_ic_btc_types_network(bitcoin_canister.get_network()),
             filter: Some(MinConfirmations(min_confirmations)),
         },),
     )

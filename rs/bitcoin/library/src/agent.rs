@@ -9,7 +9,10 @@ use crate::{
 use bitcoin::Address;
 use std::{collections::HashMap, error::Error};
 #[cfg(test)]
-use {crate::canister_mock::BitcoinCanisterMock, bitcoin::Network};
+use {
+    crate::{canister_mock::BitcoinCanisterMock, types::from_bitcoin_network_to_types_network},
+    bitcoin::Network,
+};
 
 #[derive(Clone)]
 pub struct BitcoinAgent<C: BitcoinCanister> {
@@ -191,7 +194,7 @@ pub(crate) fn new_mock(
     main_address_type: &AddressType,
 ) -> BitcoinAgent<BitcoinCanisterMock> {
     BitcoinAgent::new(
-        BitcoinCanisterMock::new(crate::types::from_bitcoin_network(*network)),
+        BitcoinCanisterMock::new(from_bitcoin_network_to_types_network(*network)),
         main_address_type,
         0,
     )

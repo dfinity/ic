@@ -1,5 +1,5 @@
 use crate::{
-    types::{from_bitcoin_network, from_ic_btc_types_network},
+    types::{from_bitcoin_network_to_types_network, from_types_network_to_bitcoin_network},
     AddressUsingPrimitives, BitcoinAgent, BitcoinAgentState, BitcoinCanister, EcdsaPubKey,
     UtxosState,
 };
@@ -23,7 +23,9 @@ pub(crate) fn get_state<C: BitcoinCanister>(bitcoin_agent: &BitcoinAgent<C>) -> 
         .collect();
 
     BitcoinAgentState {
-        network: from_bitcoin_network(bitcoin_agent.bitcoin_canister.get_network()),
+        network: from_bitcoin_network_to_types_network(
+            bitcoin_agent.bitcoin_canister.get_network(),
+        ),
         main_address_type: bitcoin_agent.main_address_type,
         ecdsa_pub_key_addresses,
         utxos_state_addresses,
@@ -62,13 +64,16 @@ pub(crate) fn from_state<C: BitcoinCanister>(
 
 /// Returns the `AddressUsingPrimitives` associated with a given `bitcoin::Address`.
 fn get_address_using_primitives(address: &Address) -> AddressUsingPrimitives {
-    (address.to_string(), from_bitcoin_network(address.network))
+    (
+        address.to_string(),
+        from_bitcoin_network_to_types_network(address.network),
+    )
 }
 
 /// Returns the `bitcoin::Address` associated with a given `AddressUsingPrimitives`.
 fn get_address((address_string, address_network): AddressUsingPrimitives) -> Address {
     let mut address = Address::from_str(&address_string).unwrap();
-    address.network = from_ic_btc_types_network(address_network);
+    address.network = from_types_network_to_bitcoin_network(address_network);
     address
 }
 
