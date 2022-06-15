@@ -104,12 +104,19 @@ impl Orchestrator {
             logger.clone(),
         ));
 
-        let crypto = Arc::new(CryptoComponent::new_for_non_replica_process(
-            &config.crypto,
-            Some(tokio::runtime::Handle::current()),
-            registry.get_registry_client(),
-            logger.clone(),
-        ));
+        let crypto = tokio::task::block_in_place({
+            let c_log = logger.clone();
+            let c_registry = registry.clone();
+            let crypto_config = config.crypto.clone();
+            move || {
+                Arc::new(CryptoComponent::new_for_non_replica_process(
+                    &crypto_config,
+                    Some(tokio::runtime::Handle::current()),
+                    c_registry.get_registry_client(),
+                    c_log.clone(),
+                ))
+            }
+        });
 
         let mut registration = NodeRegistration::new(
             logger.clone(),
