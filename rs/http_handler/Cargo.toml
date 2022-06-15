@@ -5,6 +5,7 @@ edition = "2018"
 
 [dependencies]
 askama = "0.11.1"
+byte-unit = "4.0.14"
 hex = "0.4.2"
 http = "0.2.5"
 futures = "0.3.13"

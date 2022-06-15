@@ -1,3 +1,4 @@
+use byte_unit::Byte;
 use futures_util::StreamExt;
 use hyper::{body::HttpBody, Body};
 use std::time::Duration;
@@ -12,10 +13,10 @@ pub enum BodyReceiveError {
 
 pub async fn receive_body_without_timeout(
     mut body: Body,
-    max_request_body_size_bytes: usize,
+    max_request_body_size: Byte,
 ) -> Result<Vec<u8>, BodyReceiveError> {
     let body_size_hint = body.size_hint().lower() as usize;
-    if body_size_hint > max_request_body_size_bytes {
+    if Byte::from(body_size_hint) > max_request_body_size {
         return Err(BodyReceiveError::TooLarge(
             "Value of 'Content-length' header exceeds http body size limit.".to_string(),
         ));
@@ -30,10 +31,10 @@ pub async fn receive_body_without_timeout(
                 )))
             }
             Ok(bytes) => {
-                if received_body.len() + bytes.len() > max_request_body_size_bytes {
+                if Byte::from(received_body.len() + bytes.len()) > max_request_body_size {
                     return Err(BodyReceiveError::TooLarge(format!(
                         "Http body exceeds size limit of {} bytes.",
-                        max_request_body_size_bytes
+                        max_request_body_size
                     )));
                 }
                 received_body.append(&mut bytes.to_vec());
@@ -46,11 +47,11 @@ pub async fn receive_body_without_timeout(
 pub async fn receive_body(
     body: Body,
     max_request_receive_duration: Duration,
-    max_request_body_size_bytes: usize,
+    max_request_body_size: Byte,
 ) -> Result<Vec<u8>, BodyReceiveError> {
     match timeout(
         max_request_receive_duration,
-        receive_body_without_timeout(body, max_request_body_size_bytes),
+        receive_body_without_timeout(body, max_request_body_size),
     )
     .await
     {
@@ -72,7 +73,7 @@ mod tests {
     async fn test_succesfully_parse_small_body() {
         let (mut sender, body) = Body::channel();
         let time_to_wait = Duration::from_secs(5);
-        let max_request_size: usize = 5 * 1024 * 1024;
+        let max_request_size = Byte::from_bytes(5 * 1024 * 1024);
         assert!(sender
             .send_data(bytes::Bytes::from("hello world"))
             .await
@@ -93,7 +94,7 @@ mod tests {
         let (mut sender, body) = Body::channel();
         let chunk_size: usize = 1024;
         let time_to_wait = Duration::from_secs(5);
-        let max_request_size: usize = 5 * 1024 * 1024;
+        let max_request_size = Byte::from_bytes(5 * 1024 * 1024);
         let rand_string: String = thread_rng()
             .sample_iter(&Alphanumeric)
             .take(chunk_size)
@@ -104,7 +105,7 @@ mod tests {
             tokio::task::spawn(
                 async move { receive_body(body, time_to_wait, max_request_size).await },
             );
-        for _i in 0..(max_request_size / chunk_size) {
+        for _i in 0..(max_request_size.get_bytes() / chunk_size as u128) {
             assert!(sender
                 .send_data(bytes::Bytes::from(rand_string.clone()))
                 .await
@@ -130,7 +131,7 @@ mod tests {
     async fn test_time_out_while_waiting_for_a_single_chunk() {
         let (mut sender, body) = Body::channel();
         let time_to_wait = Duration::from_secs(5);
-        let max_request_size: usize = 5 * 1024 * 1024;
+        let max_request_size = Byte::from_bytes(5 * 1024 * 1024);
         let jh =
             tokio::task::spawn(
                 async move { receive_body(body, time_to_wait, max_request_size).await },
@@ -154,7 +155,7 @@ mod tests {
     async fn test_time_out_while_waiting_for_many_chunks() {
         let (mut sender, body) = Body::channel();
         let time_to_wait = Duration::from_secs(5);
-        let max_request_size: usize = 5 * 1024 * 1024;
+        let max_request_size = Byte::from_bytes(5 * 1024 * 1024);
 
         let jh =
             tokio::task::spawn(

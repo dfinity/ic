@@ -1,6 +1,7 @@
 use crate::{
     common::make_plaintext_response, MAX_REQUEST_RECEIVE_DURATION, MAX_REQUEST_SIZE_BYTES,
 };
+use byte_unit::Byte;
 use hyper::{Body, Response, StatusCode};
 use ic_async_utils::{receive_body, BodyReceiveError};
 use std::future::Future;
@@ -11,17 +12,14 @@ use tower::{Layer, Service};
 
 pub(crate) struct BodyReceiverLayer {
     max_request_receive_duration: Duration,
-    max_request_body_size_bytes: usize,
+    max_request_body_size: Byte,
 }
 
 impl BodyReceiverLayer {
-    pub(crate) fn new(
-        max_request_receive_duration: Duration,
-        max_request_body_size_bytes: usize,
-    ) -> Self {
+    pub(crate) fn new(max_request_receive_duration: Duration, max_request_body_size: Byte) -> Self {
         Self {
             max_request_receive_duration,
-            max_request_body_size_bytes,
+            max_request_body_size,
         }
     }
 }
@@ -38,7 +36,7 @@ impl<S> Layer<S> for BodyReceiverLayer {
     fn layer(&self, inner: S) -> Self::Service {
         BodyReceiverService {
             max_request_receive_duration: self.max_request_receive_duration,
-            max_request_body_size_bytes: self.max_request_body_size_bytes,
+            max_request_body_size_bytes: self.max_request_body_size,
             inner,
         }
     }
@@ -47,7 +45,7 @@ impl<S> Layer<S> for BodyReceiverLayer {
 #[derive(Clone)]
 pub(crate) struct BodyReceiverService<S> {
     max_request_receive_duration: Duration,
-    max_request_body_size_bytes: usize,
+    max_request_body_size_bytes: Byte,
     inner: S,
 }
 

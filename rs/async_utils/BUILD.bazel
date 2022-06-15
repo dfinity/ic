@@ -17,6 +17,7 @@ rust_library(
     edition = "2018",
     deps = [
         "@crate_index//:async-stream",
+        "@crate_index//:byte-unit",
         "@crate_index//:futures",
         "@crate_index//:futures-util",
         "@crate_index//:hyper",
