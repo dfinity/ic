@@ -11,7 +11,7 @@ The purpose of the policy is to:
 
 * confine 3rd party code (e.g. journalbeat)
 
-* enforce sandboxing restrictions an WebAssembly execution (work in progress)
+* enforce sandboxing restrictions on WebAssembly execution (work in progress)
 
 * enforce isolation of crypto service provider and its secret keys (work in progress)
 
