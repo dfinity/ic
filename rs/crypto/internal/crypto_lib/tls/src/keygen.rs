@@ -39,6 +39,12 @@ pub enum TlsEd25519CertificateDerBytesParseError {
     CertificateParsingError,
 }
 
+/// The generation of a TLS key pair and X.509 certificate failed.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+pub enum TlsKeyPairAndCertGenerationError {
+    InvalidNotAfterDate { message: String },
+}
+
 /// The raw bytes of a DER-encoded Ed25519 secret key.
 #[derive(Clone, Eq, PartialEq, Zeroize, Deserialize, Serialize)]
 #[zeroize(drop)] // TODO (CRP-1251) Use SecretVec in TlsEd25519CertificateDerBytes instead of Vec
@@ -58,9 +64,12 @@ pub fn generate_tls_key_pair_der<R: Rng + CryptoRng>(
     csprng: &mut R,
     common_name: &str,
     not_after: &Asn1Time,
-) -> (TlsEd25519CertificateDerBytes, TlsEd25519SecretKeyDerBytes) {
-    let (x509_cert, key_pair) = generate_tls_key_pair(csprng, common_name, not_after);
-    der_encode_cert_and_secret_key(&key_pair, x509_cert)
+) -> Result<
+    (TlsEd25519CertificateDerBytes, TlsEd25519SecretKeyDerBytes),
+    TlsKeyPairAndCertGenerationError,
+> {
+    let (x509_cert, key_pair) = generate_tls_key_pair(csprng, common_name, not_after)?;
+    Ok(der_encode_cert_and_secret_key(&key_pair, x509_cert))
 }
 
 /// Generate a key pair and return the certificate and private key.
@@ -68,7 +77,7 @@ pub fn generate_tls_key_pair<R: Rng + CryptoRng>(
     csprng: &mut R,
     common_name: &str,
     not_after: &Asn1Time,
-) -> (X509, PKey<Private>) {
+) -> Result<(X509, PKey<Private>), TlsKeyPairAndCertGenerationError> {
     let serial: [u8; 19] = csprng.gen();
     let key_pair = ed25519_key_pair(csprng);
     let x509_certificate = x509_v3_certificate(
@@ -78,8 +87,8 @@ pub fn generate_tls_key_pair<R: Rng + CryptoRng>(
         not_after,
         // Digest must be null for Ed25519 (see https://www.openssl.org/docs/man1.1.1/man7/Ed25519.html)
         MessageDigest::null(),
-    );
-    (x509_certificate, key_pair)
+    )?;
+    Ok((x509_certificate, key_pair))
 }
 
 fn ed25519_key_pair<R: Rng + CryptoRng>(csprng: &mut R) -> PKey<Private> {
@@ -101,9 +110,13 @@ fn x509_v3_certificate(
     key_pair: &PKey<Private>,
     not_after: &Asn1Time,
     message_digest: MessageDigest,
-) -> X509 {
+) -> Result<X509, TlsKeyPairAndCertGenerationError> {
     let now = Asn1Time::days_from_now(0).expect("unable to create Asn1Time");
-    assert!(not_after > &now, "'not after' date must not be in the past");
+    if not_after <= &now {
+        return Err(TlsKeyPairAndCertGenerationError::InvalidNotAfterDate {
+            message: "'not after' date must not be in the past".to_string(),
+        });
+    }
 
     let mut builder = X509::builder().expect("unable to create builder");
     // note that this sets the version to 3 (zero indexed):
@@ -130,7 +143,7 @@ fn x509_v3_certificate(
     builder
         .sign(key_pair, message_digest)
         .expect("unable to sign");
-    builder.build()
+    Ok(builder.build())
 }
 
 fn der_encode_cert_and_secret_key(

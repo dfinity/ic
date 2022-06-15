@@ -10,6 +10,7 @@ mod keygen {
     use super::*;
     use crate::secret_key_store::test_utils::MockSecretKeyStore;
     use crate::secret_key_store::SecretKeyStoreError;
+    use crate::vault::api::CspTlsKeygenError;
     use crate::vault::local_csp_vault::test_utils::new_csp_vault;
     use crate::vault::local_csp_vault::LocalCspVault;
     use crate::TlsHandshakeCspVault;
@@ -93,25 +94,31 @@ mod keygen {
         test_utils::tls::should_set_cert_not_after_correctly(new_csp_vault());
     }
 
-    // TODO(CRP-1303): reconsider whether `gen_tls_key_pair()` should panic.
     #[test]
-    #[should_panic(expected = "invalid X.509 certificate expiration date (not_after)")]
-    fn should_panic_on_invalid_not_after_date() {
+    fn should_return_error_on_invalid_not_after_date() {
         let csp_vault = new_csp_vault();
-        let _panic = csp_vault.gen_tls_key_pair(
-            node_test_id(test_utils::tls::NODE_1),
-            "invalid_not_after_date",
+        let invalid_not_after = "invalid_not_after_date";
+        let result =
+            csp_vault.gen_tls_key_pair(node_test_id(test_utils::tls::NODE_1), invalid_not_after);
+        assert!(
+            matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
+                if message.eq("invalid X.509 certificate expiration date (not_after)") && not_after.eq(invalid_not_after)
+            )
         );
     }
 
     #[test]
-    #[should_panic(expected = "'not after' date must not be in the past")]
-    fn should_panic_if_not_after_date_is_in_the_past() {
+    fn should_return_error_if_not_after_date_is_in_the_past() {
         let csp_vault = new_csp_vault();
         let date_in_the_past = "20211004235959Z";
 
-        let _panic =
+        let result =
             csp_vault.gen_tls_key_pair(node_test_id(test_utils::tls::NODE_1), date_in_the_past);
+        assert!(
+            matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
+                if message.eq("'not after' date must not be in the past") && not_after.eq(date_in_the_past)
+            )
+        );
     }
 }
 

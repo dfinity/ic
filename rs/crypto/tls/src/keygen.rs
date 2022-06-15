@@ -1,7 +1,7 @@
 //! This module performs TLS keypair generation. It allows to generate an X.509
 //! public key certificate together with its private key.
 use super::*;
-use ic_crypto_internal_tls::keygen::generate_tls_key_pair;
+use ic_crypto_internal_tls::keygen::{generate_tls_key_pair, TlsKeyPairAndCertGenerationError};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use openssl::asn1::Asn1Time;
 use rand::rngs::OsRng;
@@ -36,10 +36,20 @@ pub fn generate_tls_keys(common_name: &str, not_after: &str) -> (TlsPublicKeyCer
     let csprng = &mut OsRng;
     let not_after =
         Asn1Time::from_str_x509(not_after).expect("unable to parse not after as ASN1Time");
-    let (cert, secret_key) = generate_tls_key_pair(csprng, common_name, &not_after);
-    (
-        // We panic here, because we *shouldn't* generate a malformed cert.
-        TlsPublicKeyCert::new_from_x509(cert).expect("Generated X509 certificate is malformed"),
-        TlsPrivateKey::new_from_pkey(secret_key),
-    )
+    let result = generate_tls_key_pair(csprng, common_name, &not_after);
+    match result {
+        Ok((cert, secret_key)) => {
+            (
+                // We panic here, because we *shouldn't* generate a malformed cert.
+                TlsPublicKeyCert::new_from_x509(cert)
+                    .expect("Generated X509 certificate is malformed"),
+                TlsPrivateKey::new_from_pkey(secret_key),
+            )
+        }
+        Err(TlsKeyPairAndCertGenerationError::InvalidNotAfterDate {
+            message: certificate_generation_error_string,
+        }) => {
+            panic!("{:?}", certificate_generation_error_string)
+        }
+    }
 }

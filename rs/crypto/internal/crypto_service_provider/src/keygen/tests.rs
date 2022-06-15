@@ -168,7 +168,9 @@ mod tls {
         let sks = volatile_key_store();
         let mut csp = Csp::of(rng(), sks);
 
-        let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let cert = csp
+            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+            .expect("error generating TLS key pair");
 
         let secret_key = secret_key_from_store(Arc::clone(&csp.csp_vault), cert.as_x509().clone());
         if let CspSecretKey::TlsEd25519(sk_der_bytes) = &secret_key {
@@ -200,7 +202,9 @@ mod tls {
     fn should_return_der_encoded_self_signed_certificate() {
         let mut csp = Csp::of(rng(), volatile_key_store());
 
-        let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let cert = csp
+            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+            .expect("error generating TLS certificate");
 
         let x509_cert = cert.as_x509();
         let public_key = x509_cert.public_key().unwrap();
@@ -212,7 +216,9 @@ mod tls {
     fn should_set_cert_subject_cn_as_node_id() {
         let mut csp = Csp::of(rng(), volatile_key_store());
 
-        let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let cert = csp
+            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+            .expect("error generating TLS certificate");
 
         let x509_cert = cert.as_x509();
         assert_eq!(cn_entries(x509_cert).count(), 1);
@@ -225,7 +231,9 @@ mod tls {
     fn should_use_stable_node_id_string_representation_as_subject_cn() {
         let mut csp = Csp::of(rng(), volatile_key_store());
 
-        let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let cert = csp
+            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+            .expect("error generating TLS certificate");
 
         let subject_cn = cn_entries(cert.as_x509()).next().unwrap();
         assert_eq!(b"w43gn-nurca-aaaaa-aaaap-2ai", subject_cn.data().as_slice());
@@ -235,7 +243,9 @@ mod tls {
     fn should_set_cert_issuer_cn_as_node_id() {
         let mut csp = Csp::of(rng(), volatile_key_store());
 
-        let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let cert = csp
+            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+            .expect("error generating TLS certificate");
 
         let issuer_cn = cert
             .as_x509()
@@ -251,7 +261,9 @@ mod tls {
     fn should_not_set_cert_subject_alt_name() {
         let mut csp = Csp::of(rng(), volatile_key_store());
 
-        let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let cert = csp
+            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+            .expect("error generating TLS certificate");
 
         let subject_alt_names = cert.as_x509().subject_alt_names();
         assert!(subject_alt_names.is_none());
@@ -261,7 +273,9 @@ mod tls {
     fn should_set_random_cert_serial_number() {
         let mut csp = Csp::of(csprng_seeded_with(FIXED_SEED), volatile_key_store());
 
-        let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let cert = csp
+            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+            .expect("error generating TLS certificate");
 
         let cert_serial = cert.as_x509().serial_number().to_bn().unwrap();
         let expected_randomness = csprng_seeded_with(FIXED_SEED).gen::<[u8; 19]>();
@@ -276,7 +290,9 @@ mod tls {
         const SAMPLE_SIZE: usize = 20;
         let mut serial_samples = BTreeSet::new();
         for _i in 0..SAMPLE_SIZE {
-            let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+            let cert = csp
+                .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+                .expect("error generating TLS certificate");
             serial_samples.insert(serial_number(&cert));
         }
         assert_eq!(serial_samples.len(), SAMPLE_SIZE);
@@ -287,26 +303,37 @@ mod tls {
         let mut csp = Csp::of(rng(), volatile_key_store());
         let not_after = NOT_AFTER;
 
-        let cert = csp.gen_tls_key_pair(node_test_id(NODE_1), not_after);
+        let cert = csp
+            .gen_tls_key_pair(node_test_id(NODE_1), not_after)
+            .expect("error generating TLS certificate");
 
         assert!(cert.as_x509().not_after() == Asn1Time::from_str_x509(not_after).unwrap());
     }
 
     #[test]
-    #[should_panic(expected = "invalid X.509 certificate expiration date (not_after)")]
     fn should_panic_on_invalid_not_after_date() {
         let mut csp = Csp::of(rng(), volatile_key_store());
+        let invalid_not_after = "invalid_not_after_date";
 
-        let _panic = csp.gen_tls_key_pair(node_test_id(NODE_1), "invalid_not_after_date");
+        let result = csp.gen_tls_key_pair(node_test_id(NODE_1), invalid_not_after);
+        assert!(
+            matches!(result, Err(CryptoError::InvalidNotAfterDate { message, not_after })
+                if message.eq("invalid X.509 certificate expiration date (not_after)") && not_after.eq(invalid_not_after)
+            )
+        );
     }
 
     #[test]
-    #[should_panic(expected = "'not after' date must not be in the past")]
     fn should_panic_if_not_after_date_is_in_the_past() {
         let mut csp = Csp::of(rng(), volatile_key_store());
         let date_in_the_past = "20211004235959Z";
 
-        let _panic = csp.gen_tls_key_pair(node_test_id(NODE_1), date_in_the_past);
+        let result = csp.gen_tls_key_pair(node_test_id(NODE_1), date_in_the_past);
+        assert!(
+            matches!(result, Err(CryptoError::InvalidNotAfterDate { message, not_after })
+                if message.eq("'not after' date must not be in the past") && not_after.eq(date_in_the_past)
+            )
+        );
     }
 
     fn rng() -> impl CryptoRng + Rng + Clone {

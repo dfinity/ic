@@ -112,7 +112,7 @@ mock! {
             &mut self,
             node: NodeId,
             not_after: &str,
-        ) -> TlsPublicKeyCert;
+        ) -> Result<TlsPublicKeyCert, CryptoError>;
     }
 
     pub trait ThresholdSignatureCspClient {

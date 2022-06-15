@@ -311,6 +311,8 @@ pub enum CryptoError {
     },
     /// Root subnet public key not found at given registry version.
     RootSubnetPublicKeyNotFound { registry_version: RegistryVersion },
+    /// Invalid not-after date specified in certificate generation request.
+    InvalidNotAfterDate { message: String, not_after: String },
     /// Internal error.
     InternalError { internal_error: String },
 }
@@ -544,6 +546,11 @@ impl fmt::Debug for CryptoError {
                 f,
                 "Cannot find root subnet public key at registry version {:?}",
                 registry_version
+            ),
+            CryptoError::InvalidNotAfterDate { message , not_after } => write!(
+                f,
+                "Invalid not_after date specified ({:?}: {:?})",
+                message, not_after
             ),
             CryptoError::InternalError { internal_error } =>
                 write!(f, "Internal error {}", internal_error),
