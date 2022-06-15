@@ -9,7 +9,7 @@ use ic_protobuf::registry::node::v1::NodeRecord;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::{channel, error::TrySendError, Receiver, Sender};
 use tokio::time::Duration;
 use tokio::time::{timeout_at, Instant};
@@ -95,9 +95,9 @@ pub(crate) struct SendQueueImpl {
     /// Size of queue
     queue_size: QueueSize,
 
-    /// A lock is needed around the send/receive end tuples, as they
-    /// need to be updated in sync.
-    channel_ends: RwLock<(SendEnd, Arc<ReceiveEndContainer>)>,
+    // Both the send and receive ends should be updated together.
+    send_end: SendEnd,
+    receive_end: Arc<ReceiveEndContainer>,
 
     /// Error flag
     error: Arc<AtomicBool>,
@@ -122,7 +122,8 @@ impl SendQueueImpl {
             flow_tag: flow_tag.to_string(),
             error: Arc::new(AtomicBool::new(false)),
             queue_size,
-            channel_ends: RwLock::new((send_end, Arc::new(receieve_end_wrapper))),
+            send_end,
+            receive_end: Arc::new(receieve_end_wrapper),
             metrics,
         }
     }
@@ -130,18 +131,17 @@ impl SendQueueImpl {
 
 #[async_trait]
 impl SendQueue for SendQueueImpl {
-    fn get_reader(&self) -> Box<dyn SendQueueReader + Send + Sync> {
+    fn get_reader(&mut self) -> Box<dyn SendQueueReader + Send + Sync> {
         let (send_end, receive_end) = channel(self.queue_size.get());
-        let mut channel_ends = self.channel_ends.write().unwrap();
-        if channel_ends.1.try_update(receive_end).is_ok() {
+        if self.receive_end.try_update(receive_end).is_ok() {
             // Receive end was updated, so update send end as well.
-            channel_ends.0 = send_end;
+            self.send_end = send_end;
         }
 
         let reader = SendQueueReaderImpl {
             flow_label: self.flow_label.clone(),
             flow_tag: self.flow_tag.clone(),
-            receive_end_container: channel_ends.1.clone(),
+            receive_end_container: self.receive_end.clone(),
             cur_receive_end: None,
             error: self.error.clone(),
             metrics: self.metrics.clone(),
@@ -159,8 +159,7 @@ impl SendQueue for SendQueueImpl {
             .with_label_values(&[&self.flow_label, &self.flow_tag])
             .inc_by(message.0.len() as u64);
 
-        let channel_ends = self.channel_ends.read().unwrap();
-        match channel_ends.0.try_send((Instant::now(), message)) {
+        match self.send_end.try_send((Instant::now(), message)) {
             Ok(_) => None,
             Err(TrySendError::Full((_, unsent))) => {
                 self.error.store(true, Ordering::Release);
@@ -181,13 +180,10 @@ impl SendQueue for SendQueueImpl {
         }
     }
 
-    fn clear(&self) {
+    fn clear(&mut self) {
         let (send_end, receive_end) = channel(self.queue_size.get());
-        {
-            let mut channel_ends = self.channel_ends.write().unwrap();
-            channel_ends.0 = send_end;
-            channel_ends.1.update(receive_end);
-        }
+        self.send_end = send_end;
+        self.receive_end.update(receive_end);
         self.metrics
             .queue_clear
             .with_label_values(&[&self.flow_label, &self.flow_tag])
