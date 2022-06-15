@@ -10199,6 +10199,160 @@ fn test_known_neurons() {
     assert_eq!(expected_known_neuron_name_set, gov.known_neuron_name_set);
 }
 
+#[tokio::test]
+async fn distribute_rewards_load_test() {
+    // Step 1: Prepare the world.
+
+    let genesis_timestamp_seconds = 1;
+
+    // We want to have a positive reward purse for this test, and that depends
+    // on the current token supply.
+    let account_id = AccountIdentifier::new(
+        ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
+        None,
+    );
+    let helper = fake::FakeDriver::default().with_ledger_accounts(vec![fake::FakeAccount {
+        id: account_id,
+        amount_e8s: 1_000_000_000_000,
+    }]);
+
+    // Make sure that we begin the test a "long" time after the UNIX epoch.
+    let now = helper.state.lock().unwrap().now;
+    assert!(now > 30 * 24 * 60 * 60);
+
+    // Step 1.1: Craft many neurons.
+    // A number whose only significance is that it is not Protocol Buffers default (i.e. 0.0).
+    let maturity_e8s_equivalent = 3;
+    let neurons = (1000..2000)
+        .map(|id| {
+            let n = Neuron {
+                id: Some(NeuronId { id }),
+                cached_neuron_stake_e8s: 1_000_000_000,
+                maturity_e8s_equivalent,
+                ..Default::default()
+            };
+            assert!(n.voting_power(now) > 0);
+            n
+        })
+        .collect::<Vec<Neuron>>();
+
+    // Step 1.2: Craft many ProposalData objects.
+    let wait_for_quiet_threshold_seconds = 99;
+    let proposal_data_list: Vec<ProposalData> = (5000..6000)
+        .map(|id| {
+            let p = ProposalData {
+                id: Some(ProposalId { id }),
+                proposal: Some(Proposal {
+                    action: Some(proposal::Action::Motion(Motion {
+                        motion_text: "For great justice.".to_string(),
+                    })),
+                    ..Default::default()
+                }),
+                ballots: neurons
+                    .iter()
+                    .map(|n| {
+                        let ballot = Ballot {
+                            vote: Vote::Yes as i32,
+                            voting_power: n.voting_power(now),
+                        };
+
+                        (n.id.as_ref().unwrap().id, ballot)
+                    })
+                    .collect(),
+                ..Default::default()
+            };
+
+            assert_eq!(
+                p.reward_status(now, wait_for_quiet_threshold_seconds),
+                ProposalRewardStatus::ReadyToSettle,
+            );
+
+            p
+        })
+        .collect();
+
+    // Step 1.3: Craft a Governance.
+    let proto = GovernanceProto {
+        genesis_timestamp_seconds,
+        wait_for_quiet_threshold_seconds,
+        short_voting_period_seconds: wait_for_quiet_threshold_seconds,
+
+        proposals: proposal_data_list
+            .iter()
+            .map(|p| (p.id.unwrap().id, p.clone()))
+            .collect(),
+        neurons: neurons
+            .iter()
+            .map(|n| (n.id.as_ref().unwrap().id, n.clone()))
+            .collect(),
+
+        economics: Some(NetworkEconomics {
+            max_proposals_to_keep_per_topic: 9999,
+            ..Default::default()
+        }),
+
+        // Last reward event was a "long time ago".
+        // This should cause rewards to be distributed.
+        latest_reward_event: Some(RewardEvent {
+            day_after_genesis: 1,
+            actual_timestamp_seconds: 1,
+            settled_proposals: vec![],
+            distributed_e8s_equivalent: 0,
+        }),
+
+        ..Default::default()
+    };
+    let mut governance = Governance::new(proto, helper.get_fake_env(), helper.get_fake_ledger());
+    // Prevent gc.
+    governance.latest_gc_timestamp_seconds = now;
+
+    // Step 2: Run code under test.
+    let clock = std::time::Instant::now;
+    let start = clock();
+    governance.run_periodic_tasks().await;
+    let execution_duration_seconds = (clock() - start).as_secs_f64();
+
+    // Step 3: Inspect results. The main thing is to make sure that the code
+    // under test ran within a "reasonable" amount of time. On a 2019 MacBook
+    // Pro, it takes < 1.5 s. The limit is set to > 10x that to hopefully avoid
+    // flakes in CI.
+    assert!(
+        execution_duration_seconds < 5.0,
+        "{}",
+        execution_duration_seconds
+    );
+
+    // Step 3.1: Inspect neurons to make sure they have been rewarded for voting.
+    for (_, neuron) in governance.proto.neurons {
+        assert_ne!(
+            neuron.maturity_e8s_equivalent, maturity_e8s_equivalent,
+            "neuron: {:#?}",
+            neuron,
+        );
+    }
+
+    // Step 3.2: Inspect the latest_reward_event.
+    let reward_event = governance.proto.latest_reward_event.as_ref().unwrap();
+    assert_eq!(
+        reward_event
+            .settled_proposals
+            .iter()
+            .map(|p| p.id)
+            .collect::<HashSet<_>>(),
+        proposal_data_list
+            .iter()
+            .map(|p| p.id.as_ref().unwrap().id)
+            .collect(),
+        "{:#?}",
+        reward_event,
+    );
+    assert_ne!(
+        reward_event.distributed_e8s_equivalent, 0,
+        "{:#?}",
+        reward_event,
+    );
+}
+
 #[test]
 fn test_no_proposal_title_is_invalid() {
     let result = validate_proposal_title(&None);
