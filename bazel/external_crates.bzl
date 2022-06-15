@@ -105,7 +105,7 @@ def external_crates_repository(name, annotations):
                 default_features = False,
             ),
             "byte-unit": crate.spec(
-                version = "^3.1.3",
+                version = "^4.0.14",
             ),
             "byteorder": crate.spec(
                 version = "^1.3.4",

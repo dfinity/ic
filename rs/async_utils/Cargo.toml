@@ -5,6 +5,7 @@ edition = "2018"
 
 [dependencies]
 async-stream = "0.3.2"
+byte-unit = "4.0.14"
 futures = "0.3.13"
 futures-util = "0.3.13"
 hyper = { version = "0.14.16", features = ["full"] }

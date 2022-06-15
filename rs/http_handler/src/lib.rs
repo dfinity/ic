@@ -35,6 +35,7 @@ use crate::{
     types::*,
     validator_executor::ValidatorExecutor,
 };
+use byte_unit::Byte;
 use hyper::{server::conn::Http, Body, Client, Request, Response, StatusCode};
 use ic_async_utils::ObservableCountingSemaphore;
 use ic_config::http_handler::Config;
@@ -118,7 +119,7 @@ const MAX_TCP_PEEK_TIMEOUT_SECS: u64 = 11;
 
 // Request with body size bigger than 'MAX_REQUEST_SIZE_BYTES' will be rejected
 // and appropriate error code will be returned to the user.
-pub(crate) const MAX_REQUEST_SIZE_BYTES: usize = 5 * 1024 * 1024; // 5MB
+pub(crate) const MAX_REQUEST_SIZE_BYTES: Byte = Byte::from_bytes(5 * 1024 * 1024); // 5MB
 
 // If the request body is not received/parsed within
 // 'MAX_REQUEST_RECEIVE_DURATION', then the request will be rejected and

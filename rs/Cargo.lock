@@ -3760,6 +3760,7 @@ name = "ic-async-utils"
 version = "0.8.0"
 dependencies = [
  "async-stream",
+ "byte-unit",
  "bytes",
  "futures",
  "futures-util",
@@ -5442,6 +5443,7 @@ name = "ic-http-handler"
 version = "0.8.0"
 dependencies = [
  "askama",
+ "byte-unit",
  "bytes",
  "futures",
  "futures-util",
