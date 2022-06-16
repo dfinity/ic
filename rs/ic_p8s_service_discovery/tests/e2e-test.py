@@ -92,7 +92,7 @@ class IcP8sDaemonTest(TestCase):
             expected_targets = set("{}:{}".format(item, port) for item in TDB26_TARGET_ADDRS)
             self.assertEqual(targets, expected_targets)
 
-        jobs = [("replica", 9090), ("orchestrator", 9091), ("host_node_exporter", 9100), ("node_exporter", 9100)]
+        jobs = [("replica", 9090), ("orchestrator", 9091), ("node_exporter", 9100)]
         for src in [get_request, self.read_sd_file]:
             for job in jobs:
                 assert_port_matches(get_tdb26_targets(src(job[0])), job[1])
