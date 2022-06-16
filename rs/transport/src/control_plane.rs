@@ -1055,7 +1055,7 @@ mod tests {
             let fake_event_handler_1 = Arc::new(FakeEventHandler {
                 connected: connected_1,
             });
-            control_plane_1.register_client(fake_event_handler_1);
+            control_plane_1.set_event_handler(fake_event_handler_1);
             let mut node_record_1: NodeRecord = Default::default();
             node_record_1.p2p_flow_endpoints.push(FlowEndpoint {
                 flow_tag: FLOW_TAG_1,
@@ -1072,7 +1072,7 @@ mod tests {
             let fake_event_handler_2 = Arc::new(FakeEventHandler {
                 connected: connected_2,
             });
-            control_plane_2.register_client(fake_event_handler_2);
+            control_plane_2.set_event_handler(fake_event_handler_2);
             let mut node_record_2: NodeRecord = Default::default();
             node_record_2.p2p_flow_endpoints.push(FlowEndpoint {
                 flow_tag: FLOW_TAG_2,

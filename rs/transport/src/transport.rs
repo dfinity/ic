@@ -140,7 +140,7 @@ pub fn create_transport(
 /// Trait implementation for
 /// [`Transport`](../../ic_interfaces/transport/trait.Transport.html).
 impl Transport for TransportImpl {
-    fn register_client(&self, event_handler: Arc<dyn AsyncTransportEventHandler>) {
+    fn set_event_handler(&self, event_handler: Arc<dyn AsyncTransportEventHandler>) {
         self.init_client(event_handler)
     }
 
