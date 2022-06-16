@@ -951,8 +951,9 @@ impl ComputeInitialEcdsaDealingsResponse {
 // Export the bitcoin types.
 pub use ic_btc_types::{
     GetBalanceRequest as BitcoinGetBalanceArgs, GetUtxosRequest as BitcoinGetUtxosArgs,
-    Network as BitcoinNetwork,
+    Network as BitcoinNetwork, SendTransactionRequest as BitcoinSendTransactionArgs,
 };
 
 impl Payload<'_> for BitcoinGetBalanceArgs {}
 impl Payload<'_> for BitcoinGetUtxosArgs {}
+impl Payload<'_> for BitcoinSendTransactionArgs {}

@@ -116,9 +116,29 @@ impl From<GetUtxosError> for GetBalanceError {
 pub struct SendTransactionRequest {
     #[serde(with = "serde_bytes")]
     pub transaction: Vec<u8>,
+    pub network: Network,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub enum SendTransactionError {
+    /// Can't deserialize transaction.
     MalformedTransaction,
+    /// Enqueueing a request failed due to full queue to the Bitcoin adapter.
+    QueueFull,
+}
+
+impl std::fmt::Display for SendTransactionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MalformedTransaction => {
+                write!(f, "Can't deserialize transaction because it's malformed.")
+            }
+            Self::QueueFull => {
+                write!(
+                    f,
+                    "Request can not be enqueued because the queue has reached its capacity. Please retry later."
+                )
+            }
+        }
+    }
 }
