@@ -1416,6 +1416,7 @@ fn observe_replicated_state_metrics(
     let mut queues_reservations = 0;
     let mut queues_oversized_requests_extra_bytes = 0;
     let mut canisters_not_in_routing_table = 0;
+    let mut canisters_with_old_open_call_contexts = 0;
     let mut old_call_contexts_count = 0;
 
     state.canisters_iter().for_each(|canister| {
@@ -1452,12 +1453,19 @@ fn observe_replicated_state_metrics(
                 );
             }
             old_call_contexts_count += old_call_contexts.len();
+            if !old_call_contexts.is_empty() {
+                canisters_with_old_open_call_contexts += 1;
+            }
         }
     });
     metrics
         .old_open_call_contexts
         .with_label_values(&[OLD_CALL_CONTEXT_LABEL_ONE_DAY])
         .set(old_call_contexts_count as i64);
+    metrics
+        .canisters_with_old_open_call_contexts
+        .with_label_values(&[OLD_CALL_CONTEXT_LABEL_ONE_DAY])
+        .set(canisters_with_old_open_call_contexts as i64);
     let streams_response_bytes = state
         .metadata
         .streams()

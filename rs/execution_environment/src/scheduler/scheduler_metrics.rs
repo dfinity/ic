@@ -72,6 +72,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) canisters_not_in_routing_table: IntGauge,
     pub(super) canister_install_code_debits: Histogram,
     pub(super) old_open_call_contexts: IntGaugeVec,
+    pub(super) canisters_with_old_open_call_contexts: IntGaugeVec,
     pub(super) canister_invariants: IntCounter,
     pub(super) subnet_memory_usage_invariant: IntCounter,
     pub(super) total_canister_balance: Gauge,
@@ -485,6 +486,11 @@ impl SchedulerMetrics {
             old_open_call_contexts: metrics_registry.int_gauge_vec(
                 "scheduler_old_open_call_contexts",
                 "Number of call contexts that have been open for more than the given age.",
+                &["age"]
+            ),
+            canisters_with_old_open_call_contexts: metrics_registry.int_gauge_vec(
+                "scheduler_canisters_with_old_open_call_contexts",
+                "Number of canisters with call contexts that have been open for more than the given age.",
                 &["age"]
             ),
             canister_invariants: metrics_registry.error_counter(CANISTER_INVARIANT_BROKEN),

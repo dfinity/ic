@@ -3767,7 +3767,7 @@ fn long_open_call_context_is_recorded() {
             ..SchedulerConfig::application_subnet()
         },
         metrics_registry: MetricsRegistry::new(),
-        canister_num: 1,
+        canister_num: 2,
         message_num_per_canister: 0,
     };
     let exec_env = default_exec_env_mock(
@@ -3782,7 +3782,7 @@ fn long_open_call_context_is_recorded() {
     let ingress_history_writer = Arc::new(ingress_history_writer);
 
     let context_creation_time = Time::from_nanos_since_unix_epoch(10);
-    // The round occurs one day after the call context was created so it should
+    // The round occurs one day after the call contexts were created so it should
     // be recorded.
     let round_time = context_creation_time + Duration::from_secs(60 * 60 * 24);
 
@@ -3807,6 +3807,32 @@ fn long_open_call_context_is_recorded() {
                         )
                         .build(),
                 )
+                .with_canister(
+                    CanisterStateBuilder::new()
+                        .with_canister_id(canister_test_id(2))
+                        .with_cycles(1_000_000_000_000_000u64)
+                        .with_call_context(
+                            CallContextBuilder::new()
+                                .with_call_origin(CallOrigin::CanisterUpdate(
+                                    canister_test_id(1),
+                                    CallbackId::from(1),
+                                ))
+                                .with_responded(false)
+                                .with_time(context_creation_time)
+                                .build(),
+                        )
+                        .with_call_context(
+                            CallContextBuilder::new()
+                                .with_call_origin(CallOrigin::CanisterUpdate(
+                                    canister_test_id(0),
+                                    CallbackId::from(2),
+                                ))
+                                .with_responded(false)
+                                .with_time(context_creation_time)
+                                .build(),
+                        )
+                        .build(),
+                )
                 .build();
 
             scheduler.execute_round(
@@ -3823,7 +3849,13 @@ fn long_open_call_context_is_recorded() {
                 fetch_int_gauge_vec(registry, "scheduler_old_open_call_contexts")[&btreemap! {
                     "age".to_string() => "1d".to_string()
                 }],
-                1
+                3
+            );
+            assert_eq!(
+                fetch_int_gauge_vec(registry, "scheduler_canisters_with_old_open_call_contexts")[&btreemap! {
+                    "age".to_string() => "1d".to_string()
+                }],
+                2
             );
         },
         ingress_history_writer,
