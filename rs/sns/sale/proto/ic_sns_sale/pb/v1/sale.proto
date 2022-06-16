@@ -145,6 +145,20 @@ message Sale {
 //
 
 
+message GetCanisterStatusRequest {
+}
+
+message GetCanisterStatusResponse {
+  // Whatever ic0.canister_cycle_balance returns.
+  //
+  // See https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-cycles
+  //
+  // The number of cycles will remain after processing the current message -
+  // whatever refund we end up getting for cycles pre-charged to this message
+  // but didn't end up being used.
+  uint64 canister_cycle_balance = 1;
+}
+
 // TODO: introduce a limits on the number of buyers to include?
 message GetStateRequest {}
 message GetStateResponse {
