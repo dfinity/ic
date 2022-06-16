@@ -34,6 +34,8 @@ prod-generic-test:
     max: 1
     when:
       - always
+  # TODO: VER-1679
+  allow_failure: true
   variables:
     GIT_REVISION: $CI_COMMIT_SHA
   script:
