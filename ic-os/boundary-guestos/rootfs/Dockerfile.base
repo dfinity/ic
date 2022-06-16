@@ -51,12 +51,13 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     liblmdb0 \
     libssl-dev \
     linux-image-virtual-hwe-20.04 \
+    logrotate \
     lshw \
     lvm2 \
     net-tools \
     nftables \
-    nginx=1.21.3-1~focal \
     nginx-module-njs=1.21.3+0.7.0-1~focal \
+    nginx=1.21.3-1~focal \
     opensc \
     openssh-client openssh-server \
     parted \
