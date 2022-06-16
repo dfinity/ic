@@ -11,7 +11,7 @@ default_namespace = "vector"
 
 [sources.nginx_access]
 type = "file"
-include = ["/var/log/nginx/access_json.log"]
+include = ["/var/log/nginx/access_json.log.gz"]
 
 [transforms.nginx_access_json]
 type = "remap"
