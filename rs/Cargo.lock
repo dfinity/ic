@@ -7884,9 +7884,6 @@ name = "ic-transport"
 version = "0.8.0"
 dependencies = [
  "async-trait",
- "bincode",
- "byteorder",
- "bytes",
  "crossbeam-channel 0.5.1",
  "futures",
  "ic-base-types",
@@ -7901,18 +7898,11 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-test-utilities",
- "lazy_static",
- "nix 0.23.0",
- "openssl",
  "phantom_newtype",
  "prometheus 0.12.0",
- "rand 0.7.3",
  "serde",
  "slog",
- "socket2 0.3.19",
- "tempfile",
  "tokio",
- "tokio-openssl",
 ]
 
 [[package]]

@@ -33,14 +33,6 @@ const CONNECT_RETRY_SECONDS: u64 = 3;
 /// Time to wait for the TLS handshake (for both client/server sides)
 const TLS_HANDSHAKE_TIMEOUT_SECONDS: u64 = 30;
 
-/// Connection status values
-#[derive(Debug)]
-enum ConnectStatus {
-    Success(TcpStream),
-    ServerDown,
-    Error(nix::errno::Errno),
-}
-
 /// Implementation for the transport control plane
 impl TransportImpl {
     /// Starts connection to a peer
@@ -551,18 +543,17 @@ impl TransportImpl {
         log: &ReplicaLogger,
     ) -> Result<TcpStream, TransportErrorCode> {
         let client_socket = Self::init_client_socket(local_addr, log)?;
-        match Self::connect_status(client_socket.connect(*peer_addr).await) {
-            ConnectStatus::Success(stream) => Self::set_send_sockopts(stream, log),
-            ConnectStatus::ServerDown => Err(TransportErrorCode::ServerDown),
-            ConnectStatus::Error(err_code) => {
+        match client_socket.connect(*peer_addr).await {
+            Ok(stream) => Self::set_send_sockopts(stream, log),
+            Err(err) => {
                 warn!(
                     log,
                     "ControlPlane::connect_to_server(): local_addr = {:?}, peer_addr = {:?}, error = {:?}",
                     local_addr,
                     peer_addr,
-                    err_code,
+                    err,
                 );
-                Err(TransportErrorCode::ConnectOsError)
+                Err(TransportErrorCode::ConnectToServerError)
             }
         }
     }
@@ -866,21 +857,6 @@ impl TransportImpl {
             ConnectionRole::Server
         } else {
             ConnectionRole::Client
-        }
-    }
-
-    /// Parses the `connect()` result and returns the status
-    fn connect_status(connect_result: std::io::Result<TcpStream>) -> ConnectStatus {
-        if let Ok(stream) = connect_result {
-            return ConnectStatus::Success(stream);
-        }
-        match connect_result.as_ref().err().unwrap().raw_os_error() {
-            Some(err_code) => match nix::errno::from_i32(err_code) {
-                nix::errno::Errno::ECONNREFUSED => ConnectStatus::ServerDown,
-                nix::errno::Errno::EHOSTUNREACH => ConnectStatus::ServerDown,
-                _ => ConnectStatus::Error(nix::errno::from_i32(err_code)),
-            },
-            _ => ConnectStatus::Error(nix::errno::Errno::EINTR),
         }
     }
 
