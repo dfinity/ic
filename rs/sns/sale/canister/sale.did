@@ -13,6 +13,7 @@ type FinalizeSaleResponse = record {
   sweep_sns : opt SweepResult;
   create_neuron : opt SweepResult;
 };
+type GetCanisterStatusResponse = record { canister_cycle_balance : nat64 };
 type GetStateResponse = record { sale : opt Sale; derived : opt DerivedState };
 type Init = record {
   min_participant_icp_e8s : nat64;
@@ -34,6 +35,7 @@ type State = record {
 type SweepResult = record { failure : nat32; skipped : nat32; success : nat32 };
 service : (Init) -> {
   finalize_sale : (record {}) -> (FinalizeSaleResponse);
+  get_canister_status : (record {}) -> (GetCanisterStatusResponse);
   get_state : (record {}) -> (GetStateResponse) query;
   open_sale : (record {}) -> (record {});
   refresh_buyer_tokens : (RefreshBuyerTokensRequest) -> (record {});

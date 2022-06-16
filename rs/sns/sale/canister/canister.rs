@@ -27,9 +27,10 @@ use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
 use ic_sns_sale::pb::v1::{
-    FinalizeSaleRequest, FinalizeSaleResponse, GetStateRequest, GetStateResponse, Init, Lifecycle,
-    OpenSaleRequest, OpenSaleResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
-    RefreshSnsTokensRequest, RefreshSnsTokensResponse, Sale, SweepResult,
+    FinalizeSaleRequest, FinalizeSaleResponse, GetCanisterStatusRequest, GetCanisterStatusResponse,
+    GetStateRequest, GetStateResponse, Init, Lifecycle, OpenSaleRequest, OpenSaleResponse,
+    RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, RefreshSnsTokensRequest,
+    RefreshSnsTokensResponse, Sale, SweepResult,
 };
 use ic_sns_sale::sale::LOG_PREFIX;
 use ledger_canister::DEFAULT_TRANSFER_FEE;
@@ -201,6 +202,43 @@ async fn finalize_sale_(_arg: FinalizeSaleRequest) -> FinalizeSaleResponse {
     }
 }
 
+trait Ic0 {
+    fn canister_cycle_balance(&self) -> u64;
+}
+
+struct ProdIc0 {}
+
+impl ProdIc0 {
+    fn new() -> Self {
+        Self {}
+    }
+}
+
+impl Ic0 for ProdIc0 {
+    fn canister_cycle_balance(&self) -> u64 {
+        dfn_core::api::canister_cycle_balance()
+    }
+}
+
+#[export_name = "canister_query get_canister_status"]
+fn get_canister_status() {
+    over(candid_one, get_canister_status_)
+}
+
+#[candid_method(update, rename = "get_canister_status")]
+fn get_canister_status_(request: GetCanisterStatusRequest) -> GetCanisterStatusResponse {
+    do_get_canister_status(request, &ProdIc0::new())
+}
+
+fn do_get_canister_status(
+    _request: GetCanisterStatusRequest,
+    ic0: &impl Ic0,
+) -> GetCanisterStatusResponse {
+    GetCanisterStatusResponse {
+        canister_cycle_balance: ic0.canister_cycle_balance(),
+    }
+}
+
 // =============================================================================
 // ===               Canister helper & boilerplate methods                   ===
 // =============================================================================
@@ -304,20 +342,45 @@ fn main() {
 #[cfg(any(target_arch = "wasm32", test))]
 fn main() {}
 
-/// A test that fails if the API was updated but the candid definition was not.
-#[test]
-fn check_sale_candid_file() {
-    let governance_did = String::from_utf8(std::fs::read("canister/sale.did").unwrap()).unwrap();
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    // See comments in main above
-    candid::export_service!();
-    let expected = __export_service();
+    /// A test that fails if the API was updated but the candid definition was not.
+    #[test]
+    fn check_sale_candid_file() {
+        let governance_did =
+            String::from_utf8(std::fs::read("canister/sale.did").unwrap()).unwrap();
 
-    if governance_did != expected {
-        panic!(
-            "Generated candid definition does not match canister/sale.did. \
-            Run `cargo run --bin sns-sale-canister > canister/sale.did` in \
-            rs/sns/sale to update canister/sale.did."
-        )
+        // See comments in main above
+        candid::export_service!();
+        let expected = __export_service();
+
+        if governance_did != expected {
+            panic!(
+                "Generated candid definition does not match canister/sale.did. \
+                 Run `cargo run --bin sns-sale-canister > canister/sale.did` in \
+                 rs/sns/sale to update canister/sale.did."
+            )
+        }
+    }
+
+    struct StubIc0 {}
+
+    impl Ic0 for StubIc0 {
+        fn canister_cycle_balance(&self) -> u64 {
+            42
+        }
+    }
+
+    #[test]
+    fn test_get_canister_status() {
+        let response = do_get_canister_status(GetCanisterStatusRequest {}, &StubIc0 {});
+        assert_eq!(
+            response,
+            GetCanisterStatusResponse {
+                canister_cycle_balance: 42
+            }
+        );
     }
 }

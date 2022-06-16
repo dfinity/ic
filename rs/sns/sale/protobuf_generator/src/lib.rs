@@ -36,6 +36,16 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     );
 
     config.type_attribute(
+        "ic_sns_sale.pb.v1.GetCanisterStatusRequest",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+
+    config.type_attribute(
+        "ic_sns_sale.pb.v1.GetCanisterStatusResponse",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+
+    config.type_attribute(
         "ic_sns_sale.pb.v1.OpenSaleRequest",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
