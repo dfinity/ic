@@ -1,5 +1,5 @@
 {
-  "checksum": "83d7e0f2c1b4dae3a822276b648f9df2f8c5daec8fb1a8fcd151a601661861d2",
+  "checksum": "e232dd7a35df4ce1db673814b7a5658a38130bf44605605834ec900845772af0",
   "crates": {
     "actix-codec 0.5.0": {
       "name": "actix-codec",
@@ -6081,13 +6081,13 @@
       },
       "license": "MIT"
     },
-    "clap 3.2.4": {
+    "clap 3.2.5": {
       "name": "clap",
-      "version": "3.2.4",
+      "version": "3.2.5",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/3.2.4/download",
-          "sha256": "6d20de3739b4fb45a17837824f40aa1769cc7655d7a83e68739a77fe7b30c87a"
+          "url": "https://crates.io/api/v1/crates/clap/3.2.5/download",
+          "sha256": "d53da17d37dba964b9b3ecb5c5a1f193a2762c700e6829201e645b9381c99dc7"
         }
       },
       "targets": [
@@ -6174,23 +6174,23 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "clap_derive 3.2.4",
+              "id": "clap_derive 3.2.5",
               "target": "clap_derive"
             }
           ],
           "selects": {}
         },
-        "version": "3.2.4"
+        "version": "3.2.5"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap_derive 3.2.4": {
+    "clap_derive 3.2.5": {
       "name": "clap_derive",
-      "version": "3.2.4",
+      "version": "3.2.5",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap_derive/3.2.4/download",
-          "sha256": "026baf08b89ffbd332836002ec9378ef0e69648cbfadd68af7cd398ca5bf98f7"
+          "url": "https://crates.io/api/v1/crates/clap_derive/3.2.5/download",
+          "sha256": "c11d40217d16aee8508cc8e5fde8b4ff24639758608e5374e731b53f85749fb9"
         }
       },
       "targets": [
@@ -6241,7 +6241,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "3.2.4"
+        "version": "3.2.5"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -10047,7 +10047,7 @@
               "target": "ciborium"
             },
             {
-              "id": "clap 3.2.4",
+              "id": "clap 3.2.5",
               "target": "clap"
             },
             {
@@ -10804,6 +10804,10 @@
             {
               "id": "wasmtime-runtime 0.35.3",
               "target": "wasmtime_runtime"
+            },
+            {
+              "id": "webpki 0.21.4",
+              "target": "webpki"
             },
             {
               "id": "which 4.2.5",
@@ -41675,18 +41679,6 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -41701,6 +41693,18 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -45486,7 +45490,7 @@
     "brotli 3.3.4",
     "brotli-decompressor 2.3.2",
     "cc 1.0.73",
-    "clap 3.2.4",
+    "clap 3.2.5",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",
