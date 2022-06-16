@@ -1,5 +1,5 @@
 {
-  "checksum": "7d7da6e1d1db64789c69e48d3786e5748ac9a378f39289cc4a83f76de905a520",
+  "checksum": "cee577b192cb943d3dc6bf4b98564d35d42ca51d218bb37981825ad773561af5",
   "crates": {
     "cfg-if 1.0.0": {
       "name": "cfg-if",
@@ -241,6 +241,7 @@
       "aarch64-linux-android",
       "aarch64-unknown-linux-gnu",
       "arm-unknown-linux-gnueabi",
+      "armv7-linux-androideabi",
       "armv7-unknown-linux-gnueabi",
       "i686-apple-darwin",
       "i686-linux-android",
