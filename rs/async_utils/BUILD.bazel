@@ -15,6 +15,9 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_async_utils",
     edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:derive_more",
+    ],
     deps = [
         "@crate_index//:async-stream",
         "@crate_index//:byte-unit",
