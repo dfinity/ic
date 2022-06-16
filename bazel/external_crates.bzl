@@ -896,6 +896,13 @@ def external_crates_repository(name, annotations):
             "wasmtime-environ": crate.spec(
                 version = "^0.35.3",
             ),
+            # Note: This does not override transitive crate dependencies.
+            # https://github.com/bazelbuild/rules_rust/issues/1369
+            # Tracked here: https://dfinity.atlassian.net/browse/IDX-2375
+            "webpki": crate.spec(
+                git = "https://github.com/dfinity-lab/webpki",
+                rev = "3e783d8eb46c3f28f4c43f882d9a11f35acb0dab",
+            ),
             "wasmtime-runtime": crate.spec(
                 version = "^0.35.3",
             ),

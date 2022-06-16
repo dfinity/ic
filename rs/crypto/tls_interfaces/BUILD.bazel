@@ -1,0 +1,34 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "tls_interfaces",
+    srcs = [
+        "src/lib.rs",
+    ],
+    crate_name = "ic_crypto_tls_interfaces",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:async-trait",
+    ],
+    visibility = ["//rs/crypto:__subpackages__"],
+    deps = [
+        "//rs/protobuf",
+        "//rs/types/types",
+        "@crate_index//:openssl",
+        "@crate_index//:serde",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-openssl",
+        "@crate_index//:tokio-rustls",
+    ],
+)
+
+# TODO(IC-1207): migrate rust_test when unblocked dependencies.
