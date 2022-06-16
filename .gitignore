@@ -70,6 +70,7 @@ test_report.xml
 
 # IC-OS disk images
 *-os.iso
+*os.img
 *-img.tar.gz
 *-img.tar.zst
 

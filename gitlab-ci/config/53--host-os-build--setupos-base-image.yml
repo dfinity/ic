@@ -1,0 +1,33 @@
+deploy-setup-os-baseimg:
+  extends:
+    - .ubuntu-nix-docker-protected
+    - .rules-protected-branch-manual
+  stage: host-os-build
+  needs: []
+  script:
+   - |
+    set -euo pipefail
+
+    TAG=$(date '+%Y-%m-%d-%H%M')
+
+    docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
+    cd "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
+    docker build -q -t dfinity/setupos-base:"$TAG" -t dfinity/setupos-base:latest -f Dockerfile.base .
+    docker push dfinity/setupos-base:"$TAG"
+
+    echo "Use the image with it's SHA256 DIGEST below for IC-OS Dockerfile"
+    docker inspect --format='{{index .RepoDigests 0}}' dfinity/setupos-base:"$TAG"
+
+build-setup-os-baseimg:
+  extends:
+    - .cargo-build-docker
+    - .rules-dockerfile-base-changes
+  stage: host-os-build
+  needs: []
+  script:
+  - |
+    set -euo pipefail
+
+    TAG=$(date '+%Y-%m-%d-%H%M')
+    cd "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
+    docker build -t dfinity/setupos-base:"$TAG" -t dfinity/setupos-base:latest -f Dockerfile.base .

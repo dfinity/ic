@@ -1,0 +1,12 @@
+[Unit]
+Description=SetupOS install process
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=idle
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setupos.sh
+StandardOutput=file:/dev/tty1
+StandardError=file:/dev/tty1
