@@ -15,7 +15,7 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-pub const FEATURE_ACTIVATED: bool = false;
+pub const FEATURE_ACTIVATED: bool = true;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum DataSource {

@@ -36,7 +36,7 @@ use url::Url;
 const WAIT_TIMEOUT: Duration = Duration::from_secs(60);
 const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 
-pub const FEATURE_ACTIVATED: bool = false;
+pub const FEATURE_ACTIVATED: bool = true;
 
 pub fn config() -> InternetComputer {
     InternetComputer::new()
