@@ -54,7 +54,7 @@ def validate_partition_table(gpt_entries):
             raise RuntimeError("Partition %s start is not aligned to 1MB boundary" % entry["name"])
         if (entry["size"] % 2048) != 0:
             raise RuntimeError("Partition %s size is not aligned to 1MB boundary" % entry["name"])
-        if not entry["type"] in ("U", "L"):
+        if not entry["type"] in ("U", "L", "M"):
             raise RuntimeError("Partition %s has unsupported type" % entry["name"])
         end = entry["start"] + entry["size"]
 
@@ -65,6 +65,8 @@ def generate_sfdisk_script(gpt_entries):
         "U": "C12A7328-F81F-11D2-BA4B-00A0C93EC93B",
         # Linux partition type
         "L": "0FC63DAF-8483-4772-8E79-3D69D8477DE4",
+        # Microsoft basic data
+        "M": "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7",
     }
     lines = ["label: gpt", "label-id: 2B110BB7-CDEC-7D41-B97E-893EDCBE5428"]
     for entry in gpt_entries:

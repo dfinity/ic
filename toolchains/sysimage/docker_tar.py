@@ -286,6 +286,9 @@ def tar_fs(fs, outfile):
 
 def make_argparser():
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-s", "--skip-pull", help="Don't attempt to pull image from dockerhub.", default=False, action="store_true"
+    )
     parser.add_argument("-o", "--output", help="Target (tar) file to write to", type=str)
     parser.add_argument(
         "build_args",
@@ -304,7 +307,8 @@ def main():
     build_args = list(args.build_args)
 
     # Build the docker image.
-    build_args.append("--pull")
+    if not args.skip_pull:
+        build_args.append("--pull")
     if any(
         [
             os.environ.get("CI_JOB_NAME", "").startswith("docker-build-ic"),
