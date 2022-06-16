@@ -342,19 +342,19 @@ impl Sale {
 
         // Recheck total amount of ICP bought after async call.
         let buyer_total_icp_e8s = self.state().buyer_total_icp_e8s();
-        let target_icp_e8s = self.init().target_icp_e8s;
-        if buyer_total_icp_e8s >= target_icp_e8s {
-            if buyer_total_icp_e8s > target_icp_e8s {
+        let max_icp_e8s = self.init().max_icp_e8s;
+        if buyer_total_icp_e8s >= max_icp_e8s {
+            if buyer_total_icp_e8s > max_icp_e8s {
                 println!(
                     "{}WARNING: total amount of ICP bought {} already exceeds the target {}!",
-                    LOG_PREFIX, buyer_total_icp_e8s, target_icp_e8s
+                    LOG_PREFIX, buyer_total_icp_e8s, max_icp_e8s
                 );
             }
             // Nothing we can do for this buyer.
             return Ok(());
         }
         // Subtraction safe because of the preceding if-statement.
-        let max_increment_e8s = target_icp_e8s - buyer_total_icp_e8s;
+        let max_increment_e8s = max_icp_e8s - buyer_total_icp_e8s;
 
         // Check that the minimum amount has been transferred before
         // actually creating an entry for the buyer.
@@ -393,7 +393,7 @@ impl Sale {
         if requested_increment_e8s >= max_increment_e8s {
             println!(
                 "{}LOG: sale has reached ICP target of {}",
-                LOG_PREFIX, target_icp_e8s
+                LOG_PREFIX, max_icp_e8s
             );
         }
         Ok(())
@@ -655,7 +655,7 @@ impl Sale {
     pub fn icp_target_reached(&self) -> bool {
         if let Some(init) = &self.init {
             if let Some(state) = &self.state {
-                return state.buyer_total_icp_e8s() >= init.target_icp_e8s;
+                return state.buyer_total_icp_e8s() >= init.max_icp_e8s;
             }
         }
         false
@@ -721,7 +721,7 @@ impl Init {
         self.token_sale_timestamp_seconds >= 1640995200
             && self.min_participants > 0
             && self.min_participant_icp_e8s > 0
-            && self.target_icp_e8s >= (self.min_participants as u64) * self.min_participant_icp_e8s
+            && self.max_icp_e8s >= (self.min_participants as u64) * self.min_participant_icp_e8s
             && !self.nns_governance_canister_id.is_empty()
             && !self.sns_governance_canister_id.is_empty()
             && !self.sns_ledger_canister_id.is_empty()

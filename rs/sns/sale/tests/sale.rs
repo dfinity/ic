@@ -28,7 +28,7 @@ fn init() -> Init {
         sns_governance_canister_id: SNS_GOVERNANCE_CANISTER_ID.to_string(),
         sns_ledger_canister_id: SNS_LEDGER_CANISTER_ID.to_string(),
         icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
-        target_icp_e8s: 1000000_00000000,
+        max_icp_e8s: 1000000_00000000,
         // 1640995200 = 2022-01-01T00:00:00
         token_sale_timestamp_seconds: 1640995200 + 10,
         min_participants: 3,
