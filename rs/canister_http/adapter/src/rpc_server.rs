@@ -1,11 +1,12 @@
+use byte_unit::Byte;
 use core::convert::TryFrom;
 use http::Uri;
 use hyper::{
-    body,
     client::connect::Connect,
     header::{HeaderMap, ToStrError},
     Body, Client, Method,
 };
+use ic_async_utils::receive_body_without_timeout;
 use ic_canister_http_service::{
     canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
     CanisterHttpSendResponse, HttpHeader,
@@ -16,12 +17,17 @@ use tonic::{Request, Response, Status};
 /// implements RPC
 pub struct CanisterHttp<C: Clone + Connect + Send + Sync + 'static> {
     client: Client<C>,
+    response_size_limit: Byte,
     logger: ReplicaLogger,
 }
 
 impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttp<C> {
-    pub fn new(client: Client<C>, logger: ReplicaLogger) -> Self {
-        Self { client, logger }
+    pub fn new(client: Client<C>, response_size_limit: Byte, logger: ReplicaLogger) -> Self {
+        Self {
+            client,
+            response_size_limit,
+            logger,
+        }
     }
 }
 
@@ -85,14 +91,17 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
                 )
             })?;
 
-        // TODO: replace this with a bounded version with timeout. (NET-882)
-        let body_bytes = body::to_bytes(http_resp).await.map_err(|err| {
-            debug!(self.logger, "Failed to fetch body: {}", err);
-            Status::new(
-                tonic::Code::Unavailable,
-                format!("Failed to fetch body: {}", err),
-            )
-        })?;
+        // We don't need a timeout here because there is a global timeout on the entire request.
+        let body_bytes =
+            receive_body_without_timeout(http_resp.into_body(), self.response_size_limit)
+                .await
+                .map_err(|err| {
+                    debug!(self.logger, "Failed to fetch body: {}", err);
+                    Status::new(
+                        tonic::Code::Unavailable,
+                        format!("Failed to fetch body: {}", err),
+                    )
+                })?;
 
         Ok(Response::new(CanisterHttpSendResponse {
             status,

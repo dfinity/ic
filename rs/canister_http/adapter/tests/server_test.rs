@@ -50,6 +50,100 @@ async fn test_canister_http_server() {
 }
 
 #[tokio::test]
+async fn test_response_limit() {
+    // Check if response with higher than allowed response limit is rejected.
+    let server_config = Config {
+        ..Default::default()
+    };
+    let mock_server = MockServer::start().await;
+    // 2Mb and 1 byte. Will get limitet because 'Content-length' is too large.
+    let payload: Vec<u8> = vec![0u8; server_config.http_request_size_limit_bytes + 1];
+    Mock::given(method("GET"))
+        .and(path("/hello"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(payload))
+        .mount(&mock_server)
+        .await;
+
+    let mut client = spawn_grpc_server(server_config);
+    let request = tonic::Request::new(build_http_canister_request(format!(
+        "{}/hello",
+        &mock_server.uri()
+    )));
+    let response = client.canister_http_send(request).await;
+    assert!(response.is_err());
+    assert_eq!(
+        response.as_ref().unwrap_err().code(),
+        tonic::Code::Unavailable
+    );
+    assert!(response
+        .unwrap_err()
+        .message()
+        .contains(&"header exceeds http body size".to_string()));
+}
+
+#[tokio::test]
+async fn test_request_timeout() {
+    // Test that adapter times out for unresponsive but reachable webpages.
+    let mock_server = MockServer::start().await;
+    // 2Mb and 2 bytes. Will get limitet because 'Content-length' is too large.
+    Mock::given(method("GET"))
+        .and(path("/hello"))
+        // Delay here is higher than request timeout below.
+        .respond_with(ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(10)))
+        .mount(&mock_server)
+        .await;
+
+    let server_config = Config {
+        // Set connect timeout to high value to make sure request timeout is triggered.
+        http_connect_timeout_secs: 6000,
+        http_request_timeout_secs: 3,
+        ..Default::default()
+    };
+    let mut client = spawn_grpc_server(server_config);
+    let request = tonic::Request::new(build_http_canister_request(format!(
+        "{}/hello",
+        &mock_server.uri()
+    )));
+    let response = client.canister_http_send(request).await;
+    assert!(response.is_err());
+    assert_eq!(
+        response.as_ref().unwrap_err().code(),
+        tonic::Code::Cancelled
+    );
+    assert!(response
+        .unwrap_err()
+        .message()
+        .contains(&"Timeout expired".to_string()));
+}
+
+#[tokio::test]
+async fn test_connect_timeout() {
+    // Test that adapter hits connect timeout when connecting to unreachable host.
+    let server_config = Config {
+        http_connect_timeout_secs: 1,
+        // Set to high value to make sure connnect timeout kicks in.
+        http_request_timeout_secs: 6000,
+        ..Default::default()
+    };
+    let mut client = spawn_grpc_server(server_config);
+
+    // Non routable address that causes a connect timeout.
+    let request = tonic::Request::new(build_http_canister_request(
+        "http://10.255.255.1".to_string(),
+    ));
+    let response = client.canister_http_send(request).await;
+    assert!(response.is_err());
+    assert_eq!(
+        response.as_ref().unwrap_err().code(),
+        tonic::Code::Unavailable
+    );
+    assert!(response
+        .unwrap_err()
+        .message()
+        .contains(&"deadline has elapsed".to_string()));
+}
+
+#[tokio::test]
 async fn test_nonascii_header() {
     let mock_server = MockServer::start().await;
     // Create invalid header. Needs unsafe to bypass parsing.

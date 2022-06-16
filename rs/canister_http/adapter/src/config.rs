@@ -2,9 +2,9 @@ use ic_config::logger::Config as LoggerConfig;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-const DEFAULT_HTTP_CONNECT_TIMEOUT_SECS: u64 = 5;
-const DEFAULT_HTTP_REQUEST_TIMEOUT_SECS: u64 = 10;
-const DEFAULT_HTTP_REQUEST_SIZE_LIMIT_BYTES: usize = 10 * 1024 * 1024; // 10Mb
+const DEFAULT_HTTP_CONNECT_TIMEOUT_SECS: u64 = 2;
+const DEFAULT_HTTP_REQUEST_TIMEOUT_SECS: u64 = 3;
+const DEFAULT_HTTP_REQUEST_SIZE_LIMIT_BYTES: usize = 2 * 1024 * 1024; // 2Mb
 
 #[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
 /// The source of the unix domain socket to be used for inter-process

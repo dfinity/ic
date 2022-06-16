@@ -12,6 +12,7 @@ pub use cli::Cli;
 pub use config::{Config, IncomingSource};
 pub use rpc_server::CanisterHttp;
 
+use byte_unit::Byte;
 use futures::Future;
 use futures_core::stream::Stream;
 use hyper::{
@@ -22,6 +23,7 @@ use hyper_socks2::SocksConnector;
 use hyper_tls::HttpsConnector;
 use ic_canister_http_service::canister_http_service_server::CanisterHttpServiceServer;
 use ic_logger::ReplicaLogger;
+use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tonic::transport::{
     server::{Connected, Router},
@@ -37,6 +39,8 @@ impl AdapterServer {
     pub fn new(config: Config, logger: ReplicaLogger, enforce_https: bool) -> Self {
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false);
+        http_connector
+            .set_connect_timeout(Some(Duration::from_secs(config.http_connect_timeout_secs)));
         match &config.socks_proxy {
             Some(url) => {
                 // The proxy connnector requires a the URL scheme to be specified. I.e socks5://
@@ -50,23 +54,32 @@ impl AdapterServer {
                 let mut https_connector = HttpsConnector::new_with_connector(proxy_connector);
                 https_connector.https_only(enforce_https);
                 let https_client = Client::builder().build::<_, hyper::Body>(https_connector);
-                Self::new_with_client(https_client, logger)
+                Self::new_with_client(https_client, config, logger)
             }
             None => {
                 let mut https_connector = HttpsConnector::new_with_connector(http_connector);
                 https_connector.https_only(enforce_https);
                 let https_client = Client::builder().build::<_, hyper::Body>(https_connector);
-                Self::new_with_client(https_client, logger)
+                Self::new_with_client(https_client, config, logger)
             }
         }
     }
 
     fn new_with_client<C: Clone + Connect + Send + Sync + 'static>(
         client: Client<C>,
+        config: Config,
         logger: ReplicaLogger,
     ) -> Self {
-        let canister_http = CanisterHttp::new(client, logger);
-        Self(Server::builder().add_service(CanisterHttpServiceServer::new(canister_http)))
+        let canister_http = CanisterHttp::new(
+            client,
+            Byte::from(config.http_request_size_limit_bytes),
+            logger,
+        );
+        Self(
+            Server::builder()
+                .timeout(Duration::from_secs(config.http_request_timeout_secs))
+                .add_service(CanisterHttpServiceServer::new(canister_http)),
+        )
     }
 
     pub fn serve<S: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static>(

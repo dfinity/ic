@@ -1,10 +1,11 @@
 use byte_unit::Byte;
+use derive_more::Display;
 use futures_util::StreamExt;
 use hyper::{body::HttpBody, Body};
 use std::time::Duration;
 use tokio::time::timeout;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Display)]
 pub enum BodyReceiveError {
     TooLarge(String),
     Timeout(String),

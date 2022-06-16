@@ -8,6 +8,7 @@ edition = "2018"
 [dependencies]
 async-socks5 = "0.5.1"
 async-stream = "0.3.2"
+byte-unit = "4.0.14"
 clap = { version = "3.1.6", features = ["derive"] }
 futures = "0.3.17"
 futures-core = "0.3.21"
