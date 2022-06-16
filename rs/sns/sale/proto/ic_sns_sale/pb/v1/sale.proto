@@ -33,10 +33,10 @@ message Init {
   // amount is achieved, the sale can be triggered immediately,
   // without waiting for the due date (token_sale_timestamp). Must be
   // at least `min_participants * min_participant_icp_e8s`.
-  uint64 target_icp_e8s = 5;
+  uint64 max_icp_e8s = 5;
   
   // The date/time (seconds since Unix epoch) that this sale will end,
-  // i.e., when the swap will take place (unless `target_icp` is
+  // i.e., when the swap will take place (unless `max_icp` is
   // achieved earlier). Must be in the future at the time of canister
   // creation.
   uint64 token_sale_timestamp_seconds = 6;
@@ -126,7 +126,7 @@ message State {
   uint64 sns_token_e8s = 1;
   // Invariant:
   // ```text
-  // state.buyer_total_icp_e8s <= init.target_icp_e8s
+  // state.buyer_total_icp_e8s <= init.max_icp_e8s
   // ```
   map<string, BuyerState> buyers = 2;
   // The current lifecycle state of the sale.

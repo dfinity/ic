@@ -16,12 +16,12 @@ type FinalizeSaleResponse = record {
 type GetStateResponse = record { sale : opt Sale; derived : opt DerivedState };
 type Init = record {
   min_participant_icp_e8s : nat64;
+  max_icp_e8s : nat64;
   min_participants : nat32;
   token_sale_timestamp_seconds : nat64;
   nns_governance_canister_id : text;
   icp_ledger_canister_id : text;
   sns_ledger_canister_id : text;
-  target_icp_e8s : nat64;
   sns_governance_canister_id : text;
 };
 type RefreshBuyerTokensRequest = record { buyer : text };
