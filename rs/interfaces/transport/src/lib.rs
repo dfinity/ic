@@ -215,11 +215,8 @@ pub enum TransportErrorCode {
     /// Failed to set the NO_DELAY option
     SocketNoDelayFailed,
 
-    /// Server not accepting connections on the specified port.
-    ServerDown,
-
-    /// connect() failed with unhandled OS error.
-    ConnectOsError,
+    /// Connecting to a server failed.
+    ConnectToServerError,
 
     /// Duplicate node Ids in node registry.
     RegistryDuplicateNodeId,

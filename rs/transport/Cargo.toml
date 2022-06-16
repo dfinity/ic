@@ -5,9 +5,6 @@ edition = "2018"
 
 [dependencies]
 async-trait = "0.1.36"
-bincode = "1.3.1"
-byteorder = "1.3.4"
-bytes = "1.0.1"
 crossbeam-channel = "0.5.0"
 futures = "0.3.5"
 ic-config = { path = "../config" }
@@ -17,23 +14,16 @@ ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-base-types = { path = "../types/base_types" }
-ic-registry-keys = { path = "../registry/keys" }
-lazy_static = "1.4.0"
-nix = "0.23.0"
-openssl = "0.10.29"
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
-rand = "0.7.3"
 serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
-socket2 = { version = "0.3.19", features = ["reuseport"] }
-tempfile = "3.1.0"
 tokio = { version = "1.15.0", features = ["full"] }
-tokio-openssl = "0.6.1"
 
 [dev-dependencies]
 async-trait = "0.1.36"
 ic-crypto = { path = "../crypto" }
 ic-registry-client-fake = { path = "../registry/fake" }
+ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-test-utilities = { path = "../test_utilities" }
