@@ -1,0 +1,18 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = []
+
+rust_library(
+    name = "gtc_accounts",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_nns_gtc_accounts",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
