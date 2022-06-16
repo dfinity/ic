@@ -303,11 +303,12 @@ where
                         KeyValue::new("socket_addr", socket_addr.to_string()),
                     ]);
 
-                    canister_ops
+                    // Continue probing continuously, even if probing fails
+                    let _ = canister_ops
                         .prober
                         .probe(agent, canister_id)
                         .with_context(_ctx.clone())
-                        .await?;
+                        .await;
 
                     tokio::time::sleep(max(
                         Duration::ZERO,
