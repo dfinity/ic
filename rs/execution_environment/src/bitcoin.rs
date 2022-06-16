@@ -3,7 +3,8 @@ use candid::Encode;
 use ic_btc_canister::state::State as BitcoinCanisterState;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
-    BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, BitcoinNetwork, Method as Ic00Method, Payload,
+    BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, BitcoinNetwork, BitcoinSendTransactionArgs,
+    Method as Ic00Method, Payload,
 };
 use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_replicated_state::ReplicatedState;
@@ -19,15 +20,7 @@ pub fn get_balance(payload: &[u8], state: &mut ReplicatedState) -> Result<Vec<u8
     match BitcoinGetBalanceArgs::decode(payload) {
         Err(err) => Err(candid_error_to_user_error(err)),
         Ok(args) => {
-            if args.network != BitcoinNetwork::Testnet {
-                return Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!(
-                        "The {} API supports only the Testnet network.",
-                        Ic00Method::BitcoinGetBalance
-                    ),
-                ));
-            }
+            verify_network_is_testnet(args.network, Ic00Method::BitcoinGetBalance)?;
 
             let btc_canister_state = BitcoinCanisterState::from(state.take_bitcoin_state());
             let balance_response = ic_btc_canister::get_balance(
@@ -57,15 +50,7 @@ pub fn get_utxos(payload: &[u8], state: &mut ReplicatedState) -> Result<Vec<u8>,
     match BitcoinGetUtxosArgs::decode(payload) {
         Err(err) => Err(candid_error_to_user_error(err)),
         Ok(args) => {
-            if args.network != BitcoinNetwork::Testnet {
-                return Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!(
-                        "The {} API supports only the Testnet network.",
-                        Ic00Method::BitcoinGetBalance
-                    ),
-                ));
-            }
+            verify_network_is_testnet(args.network, Ic00Method::BitcoinGetBalance)?;
 
             let btc_canister_state = BitcoinCanisterState::from(state.take_bitcoin_state());
             let utxos_response =
@@ -98,11 +83,46 @@ pub fn get_current_fee_percentiles(state: &mut ReplicatedState) -> Result<Vec<u8
     Ok(Encode!(&response).unwrap())
 }
 
+/// Handles a `bitcoin_send_transaction` request.
+#[allow(dead_code)] // TODO(EXC-1132): remove after connecting implementation to management canister endpoint.
+pub fn send_transaction(payload: &[u8], state: &mut ReplicatedState) -> Result<(), UserError> {
+    verify_feature_is_enabled(state)?;
+
+    match BitcoinSendTransactionArgs::decode(payload) {
+        Err(err) => Err(candid_error_to_user_error(err)),
+        Ok(args) => {
+            verify_network_is_testnet(args.network, Ic00Method::BitcoinSendTransaction)?;
+
+            let mut btc_canister_state = BitcoinCanisterState::from(state.take_bitcoin_state());
+            let result = ic_btc_canister::send_transaction(&mut btc_canister_state, args);
+            state.put_bitcoin_state(btc_canister_state.into());
+
+            result.map_err(|err| {
+                UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!("{} failed: {}", Ic00Method::BitcoinSendTransaction, err),
+                )
+            })
+        }
+    }
+}
+
 fn verify_feature_is_enabled(state: &mut ReplicatedState) -> Result<(), UserError> {
     if state.metadata.own_subnet_features.bitcoin().status != BitcoinFeatureStatus::Enabled {
         return Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             "The bitcoin API is not enabled on this subnet.",
+        ));
+    }
+
+    Ok(())
+}
+
+fn verify_network_is_testnet(network: BitcoinNetwork, method: Ic00Method) -> Result<(), UserError> {
+    if network != BitcoinNetwork::Testnet {
+        return Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            format!("The {} API supports only the Testnet network.", method),
         ));
     }
 
