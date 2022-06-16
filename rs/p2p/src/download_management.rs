@@ -2203,7 +2203,7 @@ pub mod tests {
             let transport = get_transport(0, hub_access, &logger, rt.handle().clone());
 
             // Context:
-            transport.register_client(Arc::new(new_test_event_handler( MAX_ADVERT_BUFFER, node_test_id(0)).0));
+            transport.set_event_handler(Arc::new(new_test_event_handler( MAX_ADVERT_BUFFER, node_test_id(0)).0));
             let peer_manager = PeerManagerImpl::new(
                 node_test_id(0),
                 p2p_test_setup_logger().root.clone().into(),
@@ -2252,7 +2252,7 @@ pub mod tests {
             let transport = get_transport(0, hub_access, &logger, rt.handle().clone());
 
             // Context
-            transport.register_client(Arc::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)).0));
+            transport.set_event_handler(Arc::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)).0));
             let peer_manager = PeerManagerImpl::new(
                 node_test_id(0),
                 p2p_test_setup_logger().root.clone().into(),

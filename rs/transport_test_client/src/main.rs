@@ -119,7 +119,7 @@ impl TestClient {
             active_flows: active_flows.clone(),
             log: log.clone(),
         });
-        transport.register_client(event_handler.clone());
+        transport.set_event_handler(event_handler.clone());
 
         let prev_node_record = match registry_node_list.iter().position(|n| n.0 == *prev) {
             Some(pos) => registry_node_list[pos].1.clone(),

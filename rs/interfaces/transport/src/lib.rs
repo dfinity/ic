@@ -21,7 +21,7 @@ pub trait Transport: Send + Sync {
     /// call the client on events.
     /// Note that a Transport client is another component (e.g., p2p). It should
     /// not be confused with the notion of a client in a client-server communication.
-    fn register_client(&self, async_event_handler: Arc<dyn AsyncTransportEventHandler>);
+    fn set_event_handler(&self, event_handler: Arc<dyn AsyncTransportEventHandler>);
 
     /// Mark the peer as valid neighbor, and set up the transport layer to
     /// exchange messages with the peer. This call would create the

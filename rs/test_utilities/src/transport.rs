@@ -12,7 +12,7 @@ mock! {
     pub Transport {}
 
     trait Transport {
-        fn register_client(
+        fn set_event_handler(
             &self,
             event_handler: Arc<dyn AsyncTransportEventHandler>,
         );

@@ -177,7 +177,7 @@ impl Hub {
 }
 
 impl Transport for ThreadPort {
-    fn register_client(&self, event_handler: Arc<dyn AsyncTransportEventHandler>) {
+    fn set_event_handler(&self, event_handler: Arc<dyn AsyncTransportEventHandler>) {
         info!(self.log, "Node{} -> Client Registered", self.id);
         let mut client_map = self.client_map.write().unwrap();
         client_map.replace(ClientState { event_handler });
