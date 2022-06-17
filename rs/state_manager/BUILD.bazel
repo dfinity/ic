@@ -1,0 +1,52 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/canonical_state",
+    "//rs/config",
+    "//rs/crypto/hash",
+    "//rs/crypto/sha",
+    "//rs/crypto/tree_hash",
+    "//rs/interfaces",
+    "//rs/interfaces/state_manager",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/protobuf",
+    "//rs/registry/subnet_type",
+    "//rs/replicated_state",
+    "//rs/state_layout",
+    "//rs/sys",
+    "//rs/tree_deserializer",
+    "//rs/types/base_types",
+    "//rs/types/error_types",
+    "//rs/types/types",
+    "//rs/utils",
+    "@crate_index//:bit-vec",
+    "@crate_index//:crossbeam-channel",
+    "@crate_index//:hex",
+    "@crate_index//:parking_lot",
+    "@crate_index//:prometheus",
+    "@crate_index//:prost",
+    "@crate_index//:rand_0_7_3",
+    "@crate_index//:rand_chacha",
+    "@crate_index//:scoped_threadpool",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:slog",
+]
+
+rust_library(
+    name = "state_manager",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_state_manager",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
+
+# Benchmarks blocked on dev dependencies
