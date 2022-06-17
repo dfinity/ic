@@ -7,6 +7,9 @@ edition = "2018"
 
 [dependencies]
 candid = "0.7.4"
+ic-crypto-internal-threshold-sig-bls12381 = { path= "../crypto/internal/crypto_lib/threshold_sig/bls12_381" }
+ic-crypto-internal-types = { path= "../crypto/internal/crypto_lib/types" }
+ic-crypto-tree-hash = { path= "../crypto/tree_hash" }
 ic-config = { path = "../config" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment/" }
@@ -30,6 +33,8 @@ ic-state-layout = { path = "../state_layout" }
 ic-state-manager = { path = "../state_manager" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-types = { path = "../types/types" }
+serde = { version = "1.0.99", features = [ "derive" ] }
+serde_cbor = "0.11.1"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 slog-term = "2.6.0"
 tempfile = "3.1.0"
