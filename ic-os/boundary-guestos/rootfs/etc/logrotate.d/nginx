@@ -17,7 +17,7 @@
 /var/log/nginx/*.log.gz {
     hourly
     missingok
-    rotate 24
+    rotate 6
     notifempty
     create 640 nginx adm
     sharedscripts
