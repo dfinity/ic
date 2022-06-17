@@ -101,9 +101,18 @@ fn main() -> Result<(), Error> {
                 .takes_value(true),
         )
         .arg(
-            Arg::new("join-success")
-                .long("join-success")
-                .help("Notify the host of a successful join request"),
+            Arg::new("notify")
+                .long("notify")
+                .value_name("message")
+                .help("Notify the host with a given message.")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::new("count")
+                .long("count")
+                .value_name("count")
+                .help("Number of times to display when using notify.")
+                .takes_value(true),
         )
         .arg(
             Arg::new("upgrade")
@@ -136,8 +145,9 @@ fn main() -> Result<(), Error> {
         return send_msg_to_host(&format!("set-node-id[{}]", node_id), port);
     }
 
-    if matches.is_present("join-success") {
-        return send_msg_to_host("join-success", port);
+    if let Some(message) = matches.value_of("notify") {
+        let count = matches.value_of("count").unwrap_or("1");
+        return send_msg_to_host(&format!("notify[{}, {}]", count, message), port);
     }
 
     // TODO: Currently `info` is a string of the form `"url sha"`. Instead, we

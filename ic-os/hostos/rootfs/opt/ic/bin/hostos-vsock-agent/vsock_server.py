@@ -45,8 +45,11 @@ class AsyncVsockListener:
                 elif request.startswith("set-node-id"):
                     node_id = request[12:-1]
                     self.vsock_agent.set_node_id(sender_cid, node_id)
-                elif request == "join-success":
-                    task = self.vsock_agent.handle_join_success(sender_cid)
+                elif request == "notify":
+                    data = request[7:-1].split(",", maxsplit=1)
+                    Info = namedtuple("Info", ["count", "message"])
+                    info = Info(data[0], data[1].strip())
+                    task = self.vsock_agent.handle_notify(sender_cid, info)
                 elif request.startswith("upgrade"):
                     data = request[8:-1].split()
                     Info = namedtuple("Info", ["url", "target_hash"])

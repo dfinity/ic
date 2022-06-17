@@ -322,14 +322,13 @@ class VsockAgent:
         cmd = ["sudo", "/opt/ic/bin/setup-hostname.sh", "--type=host"]
         subprocess.check_call(cmd)
 
-    def handle_join_success(self, sender_cid):
-        """Notify of a successful join request."""
+    def handle_notify(self, sender_cid, info):
+        """Notify to the console of the host."""
 
         async def alert():
             with open("/dev/tty1", "w") as tty:
-                for _ in range(20):
-                    tty.write("Join request successful!\n")
-                    tty.write("You may now safely remove the HSM\n\n")
+                for _ in range(info.count):
+                    tty.write("%s\n" % info.message)
                     await asyncio.sleep(2)
 
         logging.info("Notifying a successful join from: %s", sender_cid)
