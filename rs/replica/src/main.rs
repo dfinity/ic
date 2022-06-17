@@ -319,7 +319,6 @@ fn main() -> io::Result<()> {
         root_subnet_id,
         logger.clone(),
         consensus_pool_cache,
-        config.artifact_pool.backup.map(|config| config.spool_path),
         subnet_type,
         malicious_behaviour.malicious_flags.clone(),
     );

@@ -20,7 +20,6 @@ mod types;
 mod validator_executor;
 
 use crate::{
-    body::BodyReceiverLayer,
     call::CallService,
     catch_up_package::CatchUpPackageService,
     common::{get_cors_headers, make_plaintext_response, map_box_error_to_response},
@@ -36,6 +35,7 @@ use crate::{
     validator_executor::ValidatorExecutor,
 };
 use byte_unit::Byte;
+use http::method::Method;
 use hyper::{server::conn::Http, Body, Client, Request, Response, StatusCode};
 use ic_async_utils::ObservableCountingSemaphore;
 use ic_config::http_handler::Config;
@@ -159,22 +159,14 @@ struct HttpHandler {
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
-    validator_executor: ValidatorExecutor,
 
+    call_service: EndpointService,
+    query_service: EndpointService,
     catchup_service: EndpointService,
     dashboard_service: EndpointService,
     status_service: EndpointService,
     read_state_service: EndpointService,
 
-    // External services with a concurrency limiter. It is safe to be
-    // cloned and passed to a single-threaded context.
-    query_execution_service: QueryExecutionService,
-    ingress_sender: IngressIngestionService,
-    ingress_filter: IngressFilterService,
-
-    #[allow(dead_code)]
-    backup_spool_path: Option<PathBuf>,
-    malicious_flags: MaliciousFlags,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     health_status: Arc<RwLock<ReplicaHealthStatus>>,
 }
@@ -274,6 +266,8 @@ pub fn start_server(
     metrics_registry: MetricsRegistry,
     config: Config,
     ingress_filter: IngressFilterService,
+    // ingress_sender and query_execution_service are external services with a concurrency limiter.
+    // It is safe to clone them and pass them to a single-threaded context.
     ingress_sender: IngressIngestionService,
     query_execution_service: QueryExecutionService,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -284,7 +278,6 @@ pub fn start_server(
     nns_subnet_id: SubnetId,
     log: ReplicaLogger,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-    backup_spool_path: Option<PathBuf>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
 ) {
@@ -305,17 +298,36 @@ pub fn start_server(
         let state_reader_executor = StateReaderExecutor::new(state_reader.clone());
         let validator_executor = ValidatorExecutor::new(ingress_verifier, log.clone());
 
+        let call_service = CallService::new_service(
+            log.clone(),
+            metrics.clone(),
+            subnet_id,
+            Arc::clone(&registry_client),
+            validator_executor.clone(),
+            ingress_sender,
+            ingress_filter,
+            malicious_flags.clone(),
+        );
+        let query_service = QueryService::new_service(
+            log.clone(),
+            metrics.clone(),
+            Arc::clone(&health_status),
+            Arc::clone(&delegation_from_nns),
+            validator_executor.clone(),
+            Arc::clone(&registry_client),
+            query_execution_service,
+            malicious_flags.clone(),
+        );
         let read_state_service = ReadStateService::new_service(
             log.clone(),
             metrics.clone(),
             Arc::clone(&health_status),
             Arc::clone(&delegation_from_nns),
             state_reader_executor.clone(),
-            validator_executor.clone(),
+            validator_executor,
             Arc::clone(&registry_client),
-            malicious_flags.clone(),
+            malicious_flags,
         );
-
         let status_service = StatusService::new_service(
             log.clone(),
             config.clone(),
@@ -323,13 +335,11 @@ pub fn start_server(
             state_reader_executor.clone(),
             Arc::clone(&health_status),
         );
-
         let dashboard_service = DashboardService::new_service(
             config.clone(),
             subnet_type,
             state_reader_executor.clone(),
         );
-
         let catchup_service =
             CatchUpPackageService::new_service(metrics.clone(), consensus_pool_cache);
 
@@ -337,17 +347,13 @@ pub fn start_server(
             log: log.clone(),
             subnet_id,
             nns_subnet_id,
-            validator_executor,
             registry_client,
+            call_service,
+            query_service,
             status_service,
             catchup_service,
             dashboard_service,
             read_state_service,
-            query_execution_service,
-            ingress_sender,
-            ingress_filter,
-            backup_spool_path,
-            malicious_flags,
             delegation_from_nns,
             health_status,
         };
@@ -592,42 +598,12 @@ async fn make_router(
     app_layer: AppLayer,
     (req, mut timer): RequestWithTimer,
 ) -> ResponseWithTimer {
-    use http::method::Method;
-
-    let query_service = BoxCloneService::new(
-        ServiceBuilder::new()
-            .layer(BodyReceiverLayer::default())
-            .service(QueryService::new(
-                http_handler.log.clone(),
-                metrics.clone(),
-                Arc::clone(&http_handler.health_status),
-                Arc::clone(&http_handler.delegation_from_nns),
-                http_handler.validator_executor.clone(),
-                Arc::clone(&http_handler.registry_client),
-                http_handler.query_execution_service.clone(),
-                http_handler.malicious_flags.clone(),
-            )),
-    );
+    let call_service = http_handler.call_service.clone();
+    let query_service = http_handler.query_service.clone();
     let status_service = http_handler.status_service.clone();
-
     let catch_up_package_service = http_handler.catchup_service.clone();
     let dashboard_service = http_handler.dashboard_service.clone();
     let read_state_service = http_handler.read_state_service.clone();
-
-    let call_service = BoxCloneService::new(
-        ServiceBuilder::new()
-            .layer(BodyReceiverLayer::default())
-            .service(CallService::new(
-                http_handler.log.clone(),
-                metrics.clone(),
-                http_handler.subnet_id,
-                Arc::clone(&http_handler.registry_client),
-                http_handler.validator_executor.clone(),
-                http_handler.ingress_sender,
-                http_handler.ingress_filter,
-                http_handler.malicious_flags.clone(),
-            )),
-    );
 
     metrics
         .protocol_version_total

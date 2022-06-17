@@ -1,10 +1,11 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
 use crate::{
+    body::BodyReceiverLayer,
     common::{cbor_response, make_plaintext_response},
     types::{to_legacy_request_type, ApiReqType},
     validator_executor::ValidatorExecutor,
-    HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
+    EndpointService, HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
 };
 use futures_util::FutureExt;
 use hyper::{Body, Response, StatusCode};
@@ -22,7 +23,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
-use tower::{BoxError, Service};
+use tower::{util::BoxCloneService, BoxError, Service, ServiceBuilder};
 
 #[derive(Clone)]
 pub(crate) struct QueryService {
@@ -38,7 +39,7 @@ pub(crate) struct QueryService {
 
 impl QueryService {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    pub(crate) fn new_service(
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,
         health_status: Arc<RwLock<ReplicaHealthStatus>>,
@@ -47,8 +48,8 @@ impl QueryService {
         registry_client: Arc<dyn RegistryClient>,
         query_execution_service: QueryExecutionService,
         malicious_flags: MaliciousFlags,
-    ) -> QueryService {
-        Self {
+    ) -> EndpointService {
+        let base_service = BoxCloneService::new(ServiceBuilder::new().service(Self {
             log,
             metrics,
             health_status,
@@ -57,7 +58,12 @@ impl QueryService {
             registry_client,
             query_execution_service,
             malicious_flags,
-        }
+        }));
+        BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(BodyReceiverLayer::default())
+                .service(base_service),
+        )
     }
 }
 
