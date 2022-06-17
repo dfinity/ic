@@ -1,5 +1,6 @@
 // Refs
 :url-execution-round-duration: https://grafana.dfinity.systems/d/YL3jINNGk/execution-metrics?viewPanel=24&orgId=1&from=now-30m&to=now&refresh=1m&var-ic=mercury&var-ic_subnet=All&var-instances=All&var-heatmap_period=$__auto_interval_heatmap_period
+:url-dsm-breakdown: https://grafana.dfinity.systems/d/HEHymkfGz/ic-health?viewPanel=35&orgId=1
 
 = IC_Subnet_SlowFinalization
 ifdef::env-github,env-browser[:outfilesuffix:.adoc]
@@ -64,6 +65,7 @@ To narrow down the issue:
 - Check execution metrics.
   Is the {url-execution-round-duration}[execution round] consistently taking longer than it should based on the expected finalization rate?
   Roughly the execution round shouldn't take more than 1 / finalization_rate in seconds on average.
+  Check the {url-dsm-breakdown}[breakdown across DSM stages] (induction, execution, commit, message routing, etc.) to see where time is being spent.
 
 - Is this during, or shortly after a replica rollout?
   CD tests should have caught this problem at an earlier stage but double check just in case.
