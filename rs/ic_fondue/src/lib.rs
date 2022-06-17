@@ -146,3 +146,20 @@ pub mod mio {
         )
     }
 }
+
+pub mod slack {
+    pub trait Alertable {
+        fn with_alert<T: Into<SlackChannel>>(self, channel: T) -> Self;
+    }
+
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+    pub struct SlackChannel(String);
+
+    impl From<&str> for SlackChannel {
+        fn from(name: &str) -> Self {
+            Self(name.to_string())
+        }
+    }
+}

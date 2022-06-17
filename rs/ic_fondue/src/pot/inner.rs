@@ -452,6 +452,7 @@ pub fn run_isolated_test(man: &IcManager, ctx: &Context, test: IsolatedTest) -> 
         duration,
         result,
         children: vec![],
+        alert_channels: vec![],
     }
 }
 
@@ -480,6 +481,7 @@ pub fn run_composable_tests(
             duration,
             result,
             children: vec![],
+            alert_channels: vec![],
         });
     }
     results

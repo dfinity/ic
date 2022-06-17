@@ -37,10 +37,11 @@ def summarize(root, working_dir, pot_setup_file, verbose, message):
             if message:
                 import notify_slack
 
-                notify_slack.send_message(
-                    message=message.format(p.name),
-                    channel="#test-failure-alerts",
-                )
+                for channel in p.alert_channels:
+                    notify_slack.send_message(
+                        message=message.format(p.name),
+                        channel=channel,
+                    )
 
 
 def pot_summary(p, group_name):
