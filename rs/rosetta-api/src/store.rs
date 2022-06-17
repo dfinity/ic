@@ -6,8 +6,8 @@ use std::sync::Mutex;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
-use ic_ledger_core::block::{EncodedBlock, HashOf};
-use ledger_canister::{AccountIdentifier, BlockHeight, Tokens};
+use ic_ledger_core::block::{BlockType, EncodedBlock, HashOf};
+use ledger_canister::{AccountIdentifier, Block, BlockHeight, Tokens};
 
 use crate::balance_book::BalanceBook;
 use crate::errors::ApiError;
@@ -27,7 +27,7 @@ impl HashedBlock {
         index: BlockHeight,
     ) -> HashedBlock {
         HashedBlock {
-            hash: block.hash(),
+            hash: Block::block_hash(&block),
             block,
             parent_hash,
             index,
