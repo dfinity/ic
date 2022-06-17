@@ -8,9 +8,11 @@ edition = "2018"
 [dependencies]
 candid = "0.7.10"
 ciborium = { git = "https://github.com/enarx/ciborium", rev = "e719537c99b564c3674a56defe53713c702c6f46" }
+hex = "0.4.2"
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { version = "0.5.1" }
 ic-cdk-macros = { version = "0.5.1" }
+ic-crypto-sha = { path = "../../crypto/sha" }
 ic-ledger-core = { path = "../ledger_core" }
 serde = "1.0"
 serde_bytes = "0.11"
@@ -18,6 +20,6 @@ serde_bytes = "0.11"
 [dev-dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }
 cddl = "0.9.0-beta.1"
-hex = "0.4.2"
 ic-state-machine-tests = { path = "../../state_machine_tests" }
+leb128 = "0.2.4"
 proptest = "0.9.4"

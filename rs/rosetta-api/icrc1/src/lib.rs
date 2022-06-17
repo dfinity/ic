@@ -1,3 +1,5 @@
+pub mod hash;
+
 use candid::CandidType;
 use ciborium::tag::Required;
 use ic_base_types::PrincipalId;
@@ -168,8 +170,18 @@ impl LedgerTransaction for Transaction {
     }
 
     fn hash(&self) -> HashOf<Self> {
-        // FIXME
-        HashOf::new([0u8; 32])
+        let mut cbor_bytes = vec![];
+        ciborium::ser::into_writer(self, &mut cbor_bytes)
+            .expect("bug: failed to encode a transaction");
+        hash::hash_cbor(&cbor_bytes)
+            .map(HashOf::new)
+            .unwrap_or_else(|err| {
+                panic!(
+                    "bug: transaction CBOR {} is not hashable: {}",
+                    hex::encode(&cbor_bytes),
+                    err
+                )
+            })
     }
 
     fn apply<S>(&self, balances: &mut Balances<Self::AccountId, S>) -> Result<(), BalanceError>
@@ -219,6 +231,18 @@ impl BlockType for Block {
         let tagged_block: TaggedBlock = ciborium::de::from_reader(&bytes[..])
             .map_err(|e| format!("failed to decode a block: {}", e))?;
         Ok(tagged_block.0)
+    }
+
+    fn block_hash(encoded_block: &EncodedBlock) -> HashOf<EncodedBlock> {
+        hash::hash_cbor(encoded_block.as_slice())
+            .map(HashOf::new)
+            .unwrap_or_else(|err| {
+                panic!(
+                    "bug: encoded block {} is not hashable cbor: {}",
+                    hex::encode(encoded_block.as_slice()),
+                    err
+                )
+            })
     }
 
     fn parent_hash(&self) -> Option<HashOf<EncodedBlock>> {

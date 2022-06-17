@@ -140,8 +140,13 @@ impl LedgerClient {
                     .await?
                     .expect("Blockchain in the ledger canister is empty");
 
-                verify_block_hash(&certification, tip_block.hash(), &root_key, &canister_id)
-                    .map_err(ApiError::internal_error)?;
+                verify_block_hash(
+                    &certification,
+                    Block::block_hash(&tip_block),
+                    &root_key,
+                    &canister_id,
+                )
+                .map_err(ApiError::internal_error)?;
             }
 
             let arg = CandidOne(())
@@ -234,12 +239,12 @@ impl LedgerClient {
                     .await?
                     .expect("Blockchain in the ledger canister is empty");
 
-                if store_genesis.hash != genesis.hash() {
+                if store_genesis.hash != Block::block_hash(&genesis) {
                     let msg = format!(
                         "Genesis block from the store is different than \
                         in the ledger canister. Store hash: {}, canister hash: {}",
                         store_genesis.hash,
-                        genesis.hash()
+                        Block::block_hash(&genesis)
                     );
                     error!("{}", msg);
                     return Err(ApiError::internal_error(msg));
@@ -272,13 +277,13 @@ impl LedgerClient {
                 return Err(ApiError::internal_error(msg));
             }
             let queried_block = queried_block.unwrap();
-            if first_block.hash != queried_block.hash() {
+            if first_block.hash != Block::block_hash(&queried_block) {
                 let msg = format!(
                     "Oldest block snapshot does not match the block on \
                     the blockchain. Index: {}, snapshot hash: {}, canister hash: {}",
                     first_block.index,
                     first_block.hash,
-                    queried_block.hash()
+                    Block::block_hash(&queried_block)
                 );
                 error!("{}", msg);
                 return Err(ApiError::internal_error(msg));

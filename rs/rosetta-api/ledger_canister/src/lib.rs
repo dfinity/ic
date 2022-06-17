@@ -226,6 +226,12 @@ impl BlockType for Block {
         Ok(ProtoBuf::from_bytes(encoded_block.into_vec())?.get())
     }
 
+    fn block_hash(encoded_block: &EncodedBlock) -> HashOf<EncodedBlock> {
+        let mut state = Sha256::new();
+        state.write(encoded_block.as_slice());
+        HashOf::new(state.finish())
+    }
+
     fn parent_hash(&self) -> Option<HashOf<EncodedBlock>> {
         self.parent_hash
     }
@@ -971,7 +977,7 @@ mod tests {
 
         let block_bytes = block.clone().encode();
         println!("block bytes = {:02x?}", block_bytes.0);
-        let block_hash = block_bytes.hash();
+        let block_hash = Block::block_hash(&block_bytes);
         println!("block hash = {}", block_hash);
         let block_decoded = Block::decode(block_bytes).unwrap();
         println!("block decoded = {:#?}", block_decoded);

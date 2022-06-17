@@ -1,7 +1,6 @@
 use crate::timestamp::TimeStamp;
 use candid::types::internal::Type;
 use candid::CandidType;
-use ic_crypto_sha::Sha256;
 use serde::{
     de::{Deserializer, Visitor},
     Deserialize, Serialize, Serializer,
@@ -153,18 +152,16 @@ impl From<Vec<u8>> for EncodedBlock {
 }
 
 impl EncodedBlock {
-    pub fn hash(&self) -> HashOf<Self> {
-        let mut state = Sha256::new();
-        state.write(&self.0);
-        HashOf::new(state.finish())
-    }
-
     pub fn from_vec(bytes: Vec<u8>) -> Self {
         Self(ByteBuf::from(bytes))
     }
 
     pub fn into_vec(self) -> Vec<u8> {
         self.0.to_vec()
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0
     }
 
     pub fn size_bytes(&self) -> usize {
@@ -175,17 +172,57 @@ impl EncodedBlock {
 pub trait BlockType: Sized {
     type Transaction;
 
+    /// Constructs a new block containing the given transaction.
+    ///
+    /// Law:
+    ///
+    /// ```text
+    /// forall PH, TX, TS:
+    ///     from_transaction(PH, TX, TS).parent_hash() = PH
+    ///   ∧ from_transaction(PH, TX, TS).timestamp() = TS
+    /// ```
     fn from_transaction(
         parent_hash: Option<HashOf<EncodedBlock>>,
         tx: Self::Transaction,
         block_timestamp: TimeStamp,
     ) -> Self;
 
+    /// Encodes this block into a binary representation.
+    ///
+    /// NB. the binary representation is not guaranteed to be stable over time.
+    /// I.e., there is no guarantee that
+    ///
+    /// ```text
+    /// forall B: encode(B) == encode(decode(encode(B))).unwrap()
+    /// ```
+    ///
+    /// One practical implication is that we can encode each block at most once before appending it
+    /// to a blockchain.
     fn encode(self) -> EncodedBlock;
 
+    /// Decodes a block from a binary representation.
+    ///
+    /// Law: forall B: decode(encode(B)) == Ok(B)
     fn decode(encoded: EncodedBlock) -> Result<Self, String>;
 
+    /// Returns the hash of the encoded block.
+    ///
+    /// NB. it feels more natural and safe to compute the hash of typed blocks, i.e.,
+    /// define `fn block_hash(&self) -> HashOf<EncodedBlock>`.
+    /// This does not work in practice because the hash is usually defined only on the encoded
+    /// representation, and the encoding is not guaranteed to be stable.
+    ///
+    /// # Panics
+    ///
+    /// This method can panic if the `encoded` block was not obtained
+    /// by calling [encode] on the same block type.
+    fn block_hash(encoded: &EncodedBlock) -> HashOf<EncodedBlock>;
+
+    /// Returns the hash of the parent block.
+    ///
+    /// NB. Only the first block in a chain can miss a parent block hash.
     fn parent_hash(&self) -> Option<HashOf<EncodedBlock>>;
 
+    /// Returns the time at which the ledger constructed this block.
     fn timestamp(&self) -> TimeStamp;
 }

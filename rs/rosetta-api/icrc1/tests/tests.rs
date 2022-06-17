@@ -8,6 +8,7 @@ use ic_ledger_core::{
 use ic_ledger_icrc1::{Account, Block, InitArgs, Operation, Transaction};
 use ic_state_machine_tests::StateMachine;
 use proptest::prelude::*;
+use proptest::test_runner::TestRunner;
 use std::convert::TryFrom;
 
 fn ledger_wasm() -> Vec<u8> {
@@ -118,8 +119,7 @@ fn arb_block() -> impl Strategy<Value = Block> {
 
 // Generate random blocks and check that their CBOR encoding complies with the CDDL spec.
 #[test]
-fn check_block_encoding() {
-    use proptest::test_runner::TestRunner;
+fn block_encoding_agrees_with_the_schema() {
     use std::path::PathBuf;
 
     let block_cddl_path =
@@ -139,6 +139,54 @@ fn check_block_encoding() {
                     e
                 ))
             })
+        })
+        .unwrap();
+}
+// Check that different blocks produce different hashes.
+#[test]
+fn transaction_hashes_are_unique() {
+    let mut runner = TestRunner::default();
+    runner
+        .run(&(arb_transaction(), arb_transaction()), |(lhs, rhs)| {
+            use ic_ledger_core::ledger::LedgerTransaction;
+
+            prop_assume!(lhs != rhs);
+            prop_assert_ne!(lhs.hash(), rhs.hash());
+
+            Ok(())
+        })
+        .unwrap();
+}
+
+// Check that different blocks produce different hashes.
+#[test]
+fn block_hashes_are_unique() {
+    let mut runner = TestRunner::default();
+    runner
+        .run(&(arb_block(), arb_block()), |(lhs, rhs)| {
+            prop_assume!(lhs != rhs);
+
+            let lhs_hash = Block::block_hash(&lhs.encode());
+            let rhs_hash = Block::block_hash(&rhs.encode());
+
+            prop_assert_ne!(lhs_hash, rhs_hash);
+            Ok(())
+        })
+        .unwrap();
+}
+
+// Generate random blocks and check that the block hash is stable.
+#[test]
+fn block_hashes_are_stable() {
+    let mut runner = TestRunner::default();
+    runner
+        .run(&arb_block(), |block| {
+            let encoded_block = block.encode();
+            let hash1 = Block::block_hash(&encoded_block);
+            let decoded = Block::decode(encoded_block).unwrap();
+            let hash2 = Block::block_hash(&decoded.encode());
+            prop_assert_eq!(hash1, hash2);
+            Ok(())
         })
         .unwrap();
 }

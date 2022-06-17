@@ -42,7 +42,10 @@ impl<Wasm: ArchiveCanisterWasm> Default for Blockchain<Wasm> {
 }
 
 impl<Wasm: ArchiveCanisterWasm> Blockchain<Wasm> {
-    pub fn add_block(&mut self, block: impl BlockType) -> Result<BlockHeight, String> {
+    pub fn add_block<B>(&mut self, block: B) -> Result<BlockHeight, String>
+    where
+        B: BlockType,
+    {
         if block.parent_hash() != self.last_hash {
             return Err("Cannot apply block because its parent hash doesn't match.".to_string());
         }
@@ -54,7 +57,7 @@ impl<Wasm: ArchiveCanisterWasm> Blockchain<Wasm> {
         }
         self.last_timestamp = block.timestamp();
         let encoded_block = block.encode();
-        self.last_hash = Some(encoded_block.hash());
+        self.last_hash = Some(B::block_hash(&encoded_block));
         self.blocks.push(encoded_block);
         Ok(self.chain_length().checked_sub(1).unwrap())
     }
