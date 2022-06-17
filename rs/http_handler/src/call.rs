@@ -1,10 +1,11 @@
 //! Module that deals with requests to /api/v2/canister/.../call
 
 use crate::{
+    body::BodyReceiverLayer,
     common::{get_cors_headers, make_plaintext_response, make_response, map_box_error_to_response},
     types::{to_legacy_request_type, ApiReqType},
     validator_executor::ValidatorExecutor,
-    HttpError, HttpHandlerMetrics, IngressFilterService, UNKNOWN_LABEL,
+    EndpointService, HttpError, HttpHandlerMetrics, IngressFilterService, UNKNOWN_LABEL,
 };
 use hyper::{Body, Response, StatusCode};
 use ic_interfaces::registry::RegistryClient;
@@ -25,7 +26,9 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tower::{load_shed::LoadShed, BoxError, Service, ServiceBuilder, ServiceExt};
+use tower::{
+    load_shed::LoadShed, util::BoxCloneService, BoxError, Service, ServiceBuilder, ServiceExt,
+};
 
 #[derive(Clone)]
 pub(crate) struct CallService {
@@ -41,7 +44,7 @@ pub(crate) struct CallService {
 
 impl CallService {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    pub(crate) fn new_service(
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,
         subnet_id: SubnetId,
@@ -50,8 +53,8 @@ impl CallService {
         ingress_sender: IngressIngestionService,
         ingress_filter: IngressFilterService,
         malicious_flags: MaliciousFlags,
-    ) -> Self {
-        Self {
+    ) -> EndpointService {
+        let base_service = BoxCloneService::new(ServiceBuilder::new().service(Self {
             log,
             metrics,
             subnet_id,
@@ -60,7 +63,12 @@ impl CallService {
             ingress_sender,
             ingress_filter: ServiceBuilder::new().load_shed().service(ingress_filter),
             malicious_flags,
-        }
+        }));
+        BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(BodyReceiverLayer::default())
+                .service(base_service),
+        )
     }
 }
 
