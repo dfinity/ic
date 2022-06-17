@@ -583,6 +583,15 @@ pub enum EcdsaMessageHash {
     EcdsaOpening(CryptoHashOf<EcdsaOpening>),
 }
 
+impl EcdsaMessageHash {
+    pub fn dealing_hash(&self) -> Option<CryptoHashOf<SignedIDkgDealing>> {
+        match self {
+            Self::EcdsaSignedDealing(hash) => Some(hash.clone()),
+            _ => None,
+        }
+    }
+}
+
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash, EnumIter,
 )]
@@ -772,7 +781,7 @@ impl From<&EcdsaMessage> for EcdsaMessageAttribute {
                 EcdsaMessageAttribute::EcdsaSignedDealing(dealing.content.transcript_id)
             }
             EcdsaMessage::EcdsaDealingSupport(support) => {
-                EcdsaMessageAttribute::EcdsaDealingSupport(support.content.content.transcript_id)
+                EcdsaMessageAttribute::EcdsaDealingSupport(support.transcript_id)
             }
             EcdsaMessage::EcdsaSigShare(share) => {
                 EcdsaMessageAttribute::EcdsaSigShare(share.requested_height)
