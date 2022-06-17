@@ -3,8 +3,10 @@ use crate::consensus::get_faults_tolerated;
 use crate::crypto::canister_threshold_sig::error::{
     IDkgParamsValidationError, IDkgTranscriptIdError, InitialIDkgDealingsValidationError,
 };
-use crate::crypto::{AlgorithmId, CombinedMultiSigOf, Signed, SignedBytesWithoutDomainSeparator};
-use crate::signature::{BasicSignature, MultiSignature, MultiSignatureShare};
+use crate::crypto::{
+    AlgorithmId, CombinedMultiSigOf, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
+};
+use crate::signature::{BasicSignature, MultiSignatureShare};
 use crate::{Height, NodeId, NumberOfNodes, RegistryVersion};
 use ic_base_types::SubnetId;
 use ic_crypto_internal_types::NodeIndex;
@@ -846,20 +848,21 @@ impl SignedBytesWithoutDomainSeparator for SignedIDkgDealing {
     }
 }
 
-/// TODO: IDkgDealing can be big, consider sending only the signature
-/// as part of the shares
 /// The individual signature share in support of a dealing
-pub type IDkgDealingSupport = Signed<SignedIDkgDealing, MultiSignatureShare<SignedIDkgDealing>>;
-
-/// The multi-signature verified dealing
-pub type VerifiedIdkgDealing = Signed<SignedIDkgDealing, MultiSignature<SignedIDkgDealing>>;
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct IDkgDealingSupport {
+    pub transcript_id: IDkgTranscriptId,
+    pub dealer_id: NodeId,
+    pub dealing_hash: CryptoHashOf<SignedIDkgDealing>,
+    pub sig_share: MultiSignatureShare<SignedIDkgDealing>,
+}
 
 impl Display for IDkgDealingSupport {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}, multi_signer_id = {:?}",
-            self.content, self.signature.signer,
+            "transcript_id = {:?}, dealer_id = {:?}, signer_id = {:?}, dealing_hash = {:?}",
+            self.transcript_id, self.dealer_id, self.sig_share.signer, self.dealing_hash
         )
     }
 }

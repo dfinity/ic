@@ -13,7 +13,9 @@ use ic_types::consensus::{
     ConsensusMessage, FinalizationContent, HashedBlock, NotarizationContent, RandomBeaconContent,
     RandomTapeContent,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    IDkgDealing, IDkgDealingSupport, SignedIDkgDealing,
+};
 use ic_types::crypto::Signed;
 use ic_types::messages::{HttpCanisterUpdate, MessageId, SignedRequestBytes};
 use ic_types::signature::{
@@ -75,7 +77,6 @@ const DOMAIN_ECDSA_MESSAGE: &str = "ic-threshold-ecdsa-message-domain";
 pub(crate) const DOMAIN_IDKG_DEALING: &str = "ic-idkg-dealing-domain";
 pub(crate) const DOMAIN_SIGNED_IDKG_DEALING: &str = "ic-idkg-signed-dealing-domain";
 const DOMAIN_IDKG_DEALING_SUPPORT: &str = "ic-idkg-dealing-support-domain";
-const DOMAIN_VERIFIED_IDKG_DEALING: &str = "ic-idkg-verified-dealing-domain";
 const DOMAIN_ECDSA_TRANSCRIPT: &str = "ic-idkg-transcript-domain";
 const DOMAIN_ECDSA_SIG_SHARE: &str = "ic-threshold-ecdsa-sig-share-domain";
 pub(crate) const DOMAIN_ECDSA_COMPLAINT_CONTENT: &str =
@@ -176,8 +177,7 @@ mod private {
     impl CryptoHashDomainSeal for IDkgDealing {}
 
     impl CryptoHashDomainSeal for SignedIDkgDealing {}
-    impl CryptoHashDomainSeal for Signed<SignedIDkgDealing, MultiSignatureShare<SignedIDkgDealing>> {}
-    impl CryptoHashDomainSeal for Signed<SignedIDkgDealing, MultiSignature<SignedIDkgDealing>> {}
+    impl CryptoHashDomainSeal for IDkgDealingSupport {}
 
     impl CryptoHashDomainSeal for EcdsaTranscript {}
     impl CryptoHashDomainSeal for EcdsaSigShare {}
@@ -419,15 +419,9 @@ impl CryptoHashDomain for SignedIDkgDealing {
     }
 }
 
-impl CryptoHashDomain for Signed<SignedIDkgDealing, MultiSignatureShare<SignedIDkgDealing>> {
+impl CryptoHashDomain for IDkgDealingSupport {
     fn domain(&self) -> String {
         DOMAIN_IDKG_DEALING_SUPPORT.to_string()
-    }
-}
-
-impl CryptoHashDomain for Signed<SignedIDkgDealing, MultiSignature<SignedIDkgDealing>> {
-    fn domain(&self) -> String {
-        DOMAIN_VERIFIED_IDKG_DEALING.to_string()
     }
 }
 

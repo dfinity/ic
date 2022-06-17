@@ -31,7 +31,7 @@ impl EcdsaBlockReaderImpl {
         let tip_ecdsa_payload = if !tip.payload.is_summary() {
             BlockPayload::from(tip.clone().payload).into_data().ecdsa
         } else {
-            None
+            BlockPayload::from(tip.clone().payload).into_summary().ecdsa
         };
         Self {
             chain,
@@ -735,19 +735,23 @@ pub(crate) mod test_utils {
         }
     }
 
-    // Creates a test dealing support
+    // Creates a test dealing and a support for the dealing
     pub(crate) fn create_support(
         transcript_id: IDkgTranscriptId,
         dealer_id: NodeId,
         signer: NodeId,
-    ) -> IDkgDealingSupport {
-        IDkgDealingSupport {
-            content: SignedIDkgDealing {
-                content: create_dealing_content(transcript_id),
-                signature: BasicSignature::fake(dealer_id),
-            },
-            signature: MultiSignatureShare::fake(signer),
-        }
+    ) -> (SignedIDkgDealing, IDkgDealingSupport) {
+        let dealing = SignedIDkgDealing {
+            content: create_dealing_content(transcript_id),
+            signature: BasicSignature::fake(dealer_id),
+        };
+        let support = IDkgDealingSupport {
+            transcript_id,
+            dealer_id,
+            dealing_hash: ic_crypto::crypto_hash(&dealing),
+            sig_share: MultiSignatureShare::fake(signer),
+        };
+        (dealing, support)
     }
 
     // Creates a test signature input
@@ -989,10 +993,9 @@ pub(crate) mod test_utils {
             if let EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealingSupport(support)) =
                 action
             {
-                let dealing = &support.content.idkg_dealing();
-                if dealing.transcript_id == *transcript_id
-                    && support.content.dealer_id() == *dealer_id
-                    && support.signature.signer == NODE_1
+                if support.transcript_id == *transcript_id
+                    && support.dealer_id == *dealer_id
+                    && support.sig_share.signer == NODE_1
                 {
                     return true;
                 }
