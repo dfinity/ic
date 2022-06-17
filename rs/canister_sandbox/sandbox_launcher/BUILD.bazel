@@ -1,0 +1,31 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/canister_sandbox/common",
+    "//rs/types/types",
+    "@crate_index//:nix",
+]
+
+rust_library(
+    name = "sandbox_launcher_lib",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_canister_sandbox_launcher",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
+
+# `sandbox_launcher` executible name referenced by code and other scripts.
+# Therefore reserve that name for the rust binary.
+rust_binary(
+    name = "sandbox_launcher",
+    srcs = ["bin/sandbox_launcher.rs"],
+    edition = "2018",
+    deps = [":sandbox_launcher_lib"],
+)
