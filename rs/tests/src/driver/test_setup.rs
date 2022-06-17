@@ -8,6 +8,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
 
+use super::ic::VmResources;
+
 #[derive(Deserialize, Serialize)]
 pub struct PotSetup {
     pub farm_group_name: String,
@@ -15,6 +17,7 @@ pub struct PotSetup {
     /// TTL.
     pub pot_timeout: Duration,
     pub artifact_path: Option<PathBuf>,
+    pub default_vm_resources: Option<VmResources>,
 }
 
 impl TestEnvAttribute for PotSetup {

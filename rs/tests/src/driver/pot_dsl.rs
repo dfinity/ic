@@ -3,7 +3,7 @@ use std::panic::{catch_unwind, UnwindSafe};
 
 use super::driver_setup::tee_logger;
 use super::farm::HostFeature;
-use super::ic::VmAllocationStrategy;
+use super::ic::{VmAllocationStrategy, VmResources};
 use super::test_env_api::IcHandleConstructor;
 use crate::driver::ic::InternetComputer;
 use crate::driver::test_env::TestEnv;
@@ -25,7 +25,16 @@ pub fn suite(name: &str, pots: Vec<Pot>) -> Suite {
 }
 
 pub fn pot_with_setup<F: PotSetupFn>(name: &str, setup: F, testset: TestSet) -> Pot {
-    Pot::new(name, ExecutionMode::Run, setup, testset, None, None, vec![])
+    Pot::new(
+        name,
+        ExecutionMode::Run,
+        setup,
+        testset,
+        None, // Pot timeout
+        None, // VM allocation strategy
+        None, // default VM resources
+        vec![],
+    )
 }
 
 pub fn pot(name: &str, mut ic: InternetComputer, testset: TestSet) -> Pot {
@@ -86,6 +95,7 @@ pub struct Pot {
     pub testset: TestSet,
     pub pot_timeout: Option<Duration>,
     pub vm_allocation: Option<VmAllocationStrategy>,
+    pub default_vm_resources: Option<VmResources>,
     pub required_host_features: Vec<HostFeature>,
 }
 
@@ -123,6 +133,7 @@ impl Pot {
         config: F,
         testset: TestSet,
         pot_timeout: Option<Duration>,
+        default_vm_resources: Option<VmResources>,
         vm_allocation: Option<VmAllocationStrategy>,
         required_host_features: Vec<HostFeature>,
     ) -> Self {
@@ -133,6 +144,7 @@ impl Pot {
             testset,
             pot_timeout,
             vm_allocation,
+            default_vm_resources,
             required_host_features,
         }
     }
@@ -149,6 +161,16 @@ impl Pot {
 
     pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
         self.required_host_features = required_host_features;
+        self
+    }
+
+    /// Set the VM resources (like number of virtual CPUs and memory) of all
+    /// implicitly constructed nodes.
+    ///
+    /// Setting the VM resources for explicitly constructed nodes
+    /// has to be via `Node::new_with_vm_resources`.
+    pub fn with_default_vm_resources(mut self, default_vm_resources: Option<VmResources>) -> Self {
+        self.default_vm_resources = default_vm_resources;
         self
     }
 }

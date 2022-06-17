@@ -21,8 +21,8 @@ use std::net::{IpAddr, Ipv6Addr};
 use std::path::Path;
 use std::time::Duration;
 
-/// Builder object to declare a topology of an InternetComputer. Used as input
-/// to the IC Manager.
+/// Builder object to declare a topology of an InternetComputer.
+/// Used as input to the IC Manager.
 #[derive(Clone, Debug, Default)]
 pub struct InternetComputer {
     pub initial_version: Option<NodeSoftwareVersion>,
@@ -437,7 +437,7 @@ pub enum VCPUs {}
 pub enum MemoryKiB {}
 
 /// Resources that the VM will use like number of virtual CPUs and memory.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct VmResources {
     pub vcpus: Option<NrOfVCPUs>,
     pub memory_kibibytes: Option<AmountOfMemoryKiB>,

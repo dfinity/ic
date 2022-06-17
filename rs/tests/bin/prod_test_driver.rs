@@ -7,7 +7,7 @@ use ic_tests::driver::cli::{
 use ic_tests::driver::config;
 use ic_tests::driver::driver_setup::{create_driver_context_from_cli, initialize_env, mk_logger};
 use ic_tests::driver::evaluation::{evaluate, generate_suite_execution_contract};
-use ic_tests::driver::ic::VmAllocationStrategy;
+use ic_tests::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources};
 use ic_tests::driver::pot_dsl::*;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::{
@@ -506,7 +506,11 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "network_reliability_test",
                     network_reliability.test(),
                 )]),
-            ),
+            )
+            .with_default_vm_resources(Some(VmResources {
+                vcpus: Some(NrOfVCPUs::new(8)),
+                memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
+            })),
         ],
     ));
 

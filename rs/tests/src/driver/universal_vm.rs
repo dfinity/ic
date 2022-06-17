@@ -21,6 +21,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::os::unix::prelude::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
+
 /// A builder for the initial configuration of a universal VM.
 /// See: https://github.com/dfinity-lab/infra/tree/master/farm/universal-vm
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -88,7 +89,8 @@ impl UniversalVm {
         let pot_setup = PotSetup::read_attribute(env);
         let logger = env.logger();
         let farm = Farm::new(ic_setup.farm_base_url, logger.clone());
-        let res_request = get_resource_request_for_universal_vm(self, &pot_setup.farm_group_name)?;
+        let res_request =
+            get_resource_request_for_universal_vm(self, &pot_setup, &pot_setup.farm_group_name)?;
         let resource_group = allocate_resources(&farm, &res_request)?;
         let vm = resource_group
             .vms
