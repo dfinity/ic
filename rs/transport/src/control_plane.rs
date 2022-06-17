@@ -15,7 +15,7 @@ use crate::types::{
 use crate::utils::{get_flow_ips, get_flow_label, SendQueueImpl};
 use futures::future::{AbortHandle, Abortable, Aborted};
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsReadHalf, TlsWriteHalf};
+use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
 use ic_interfaces_transport::{AsyncTransportEventHandler, FlowId, FlowTag, TransportErrorCode};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
@@ -425,36 +425,29 @@ impl TransportImpl {
         flow_tag: FlowTag,
         local_addr: SocketAddr,
         peer_addr: SocketAddr,
-        tls_reader: TlsReadHalf,
-        tls_writer: TlsWriteHalf,
+        tls_stream: TlsStream,
     ) -> Result<(), TransportErrorCode> {
         // Pass the established connection to the data plane to start IOs.
         let flow_id = FlowId { peer_id, flow_tag };
-        self.on_connect(
-            flow_id,
-            role,
-            peer_addr,
-            Box::new(tls_reader),
-            Box::new(tls_writer),
-        )
-        .await
-        .map_err(|e| {
-            warn!(
-                every_n_seconds => 30,
-                self.log,
-                "ControlPlane::handshake_result(): failed to add flow: \
-                 node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, role = {:?}, \
-                 error = {:?}",
-                self.node_id,
-                local_addr,
-                flow_tag,
-                peer_id,
-                peer_addr,
-                Self::connection_role(&self.node_id, &peer_id),
+        self.on_connect(flow_id, role, peer_addr, tls_stream)
+            .await
+            .map_err(|e| {
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "ControlPlane::handshake_result(): failed to add flow: \
+                     node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, role = {:?}, \
+                     error = {:?}",
+                    self.node_id,
+                    local_addr,
+                    flow_tag,
+                    peer_id,
+                    peer_addr,
+                    Self::connection_role(&self.node_id, &peer_id),
+                    e
+                );
                 e
-            );
-            e
-        })
+            })
     }
 
     /// Retries to establish a connection
@@ -542,7 +535,16 @@ impl TransportImpl {
         peer_addr: &SocketAddr,
         log: &ReplicaLogger,
     ) -> Result<TcpStream, TransportErrorCode> {
-        let client_socket = Self::init_client_socket(local_addr, log)?;
+        let client_socket = Self::init_client_socket(local_addr).map_err(|err| {
+            warn!(
+                every_n_seconds => 30,
+                log,
+                "ControlPlane::connect(): Failed to init client socket: local_addr = {:?}, error = {:?}",
+                local_addr,
+                err
+            );
+            TransportErrorCode::InitClientSocketFailed
+        })?;
         match client_socket.connect(*peer_addr).await {
             Ok(stream) => Self::set_send_sockopts(stream, log),
             Err(err) => {
@@ -639,28 +641,24 @@ impl TransportImpl {
             return Err(TransportErrorCode::TimeoutExpired);
         }
 
-        let (tls_stream, authenticated_peer) = match ret.unwrap() {
-            Ok((tls_stream, peer_id)) => (tls_stream.split(), peer_id),
-            Err(e) => {
-                self.control_plane_metrics
-                    .tcp_server_handshake_failed
-                    .with_label_values(&[&flow_tag.to_string()])
-                    .inc();
-                warn!(
-                    every_n_seconds => 30,
-                    self.log,
-                    "ControlPlane::tls_server_handshake() failed: node = {:?}/{:?}, \
-                     flow_tag = {:?}, peer_addr = {:?}, error = {:?}",
-                    self.node_id,
-                    local_addr,
-                    flow_tag,
-                    peer_addr,
-                    e
-                );
-                return Err(TransportErrorCode::PeerTlsInfoNotFound);
-            }
-        };
-        let (tls_reader, tls_writer) = tls_stream;
+        let (tls_stream, authenticated_peer) = ret.unwrap().map_err(|e| {
+            self.control_plane_metrics
+                .tcp_server_handshake_failed
+                .with_label_values(&[&flow_tag.to_string()])
+                .inc();
+            warn!(
+                every_n_seconds => 30,
+                self.log,
+                "ControlPlane::tls_server_handshake() failed: node = {:?}/{:?}, \
+                 flow_tag = {:?}, peer_addr = {:?}, error = {:?}",
+                self.node_id,
+                local_addr,
+                flow_tag,
+                peer_addr,
+                e
+            );
+            TransportErrorCode::PeerTlsInfoNotFound
+        })?;
         let peer_id = match authenticated_peer {
             AuthenticatedPeer::Node(node_id) => node_id,
             AuthenticatedPeer::Cert(_) => {
@@ -683,8 +681,7 @@ impl TransportImpl {
             flow_tag,
             local_addr,
             peer_addr,
-            tls_reader,
-            tls_writer,
+            tls_stream,
         )
         .await
         .map(|_| {
@@ -727,28 +724,25 @@ impl TransportImpl {
             return Err(TransportErrorCode::TimeoutExpired);
         }
 
-        let (tls_reader, tls_writer) =
-            ret.unwrap()
-                .map(|tls_stream| tls_stream.split())
-                .map_err(|e| {
-                    self.control_plane_metrics
-                        .tcp_client_handshake_failed
-                        .with_label_values(&[&flow_tag.to_string()])
-                        .inc();
-                    warn!(
-                        every_n_seconds => 30,
-                        self.log,
-                        "ControlPlane::tls_client_handshake(): failed \
-                         node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, error = {:?}",
-                        self.node_id,
-                        local_addr,
-                        flow_tag,
-                        peer_id,
-                        peer_addr,
-                        e
-                    );
-                    TransportErrorCode::PeerTlsInfoNotFound
-                })?;
+        let tls_stream = ret.unwrap().map_err(|e| {
+            self.control_plane_metrics
+                .tcp_client_handshake_failed
+                .with_label_values(&[&flow_tag.to_string()])
+                .inc();
+            warn!(
+                every_n_seconds => 30,
+                self.log,
+                "ControlPlane::tls_client_handshake(): failed \
+                 node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, error = {:?}",
+                self.node_id,
+                local_addr,
+                flow_tag,
+                peer_id,
+                peer_addr,
+                e
+            );
+            TransportErrorCode::PeerTlsInfoNotFound
+        })?;
 
         self.process_handshake_result(
             peer_id,
@@ -756,8 +750,7 @@ impl TransportImpl {
             flow_tag,
             local_addr,
             peer_addr,
-            tls_reader,
-            tls_writer,
+            tls_stream,
         )
         .await
         .map(|_| {
@@ -770,84 +763,27 @@ impl TransportImpl {
 
     // Sets up the server side socket with the node IP:port
     // Panics in case of unrecoverable error.
-    fn init_listener(&self, local_addr: &SocketAddr) -> TcpListener {
+    fn init_listener(local_addr: &SocketAddr) -> std::io::Result<TcpListener> {
         let socket = if local_addr.is_ipv6() {
-            TcpSocket::new_v6()
+            TcpSocket::new_v6()?
         } else {
-            TcpSocket::new_v4()
+            TcpSocket::new_v4()?
         };
-        let socket = socket.unwrap_or_else(|err| {
-            panic!(
-                "Failed to create socket: local_addr = {:?}, error = {:?}",
-                local_addr, err
-            )
-        });
-
-        // TODO: set reuse flags only for tests if needed
-        if socket.set_reuseaddr(true).is_err() {
-            panic!(
-                "Failed to set reuseaddr on socket: local_addr = {:?}",
-                local_addr
-            );
-        }
-
-        if socket.set_reuseport(true).is_err() {
-            panic!(
-                "Failed to set reuseport on socket: local_addr = {:?}",
-                local_addr
-            );
-        }
-
-        socket.bind(*local_addr).unwrap_or_else(|err| {
-            panic!(
-                "Failed to bind on socket: local_addr = {:?}, error = {:?}",
-                local_addr, err
-            )
-        });
-        socket.listen(128).unwrap_or_else(|err| {
-            panic!(
-                "Failed to listen on socket: local_addr = {:?}, error = {:?}",
-                local_addr, err
-            )
-        })
+        socket.set_reuseaddr(true)?;
+        socket.set_reuseport(true)?;
+        socket.bind(*local_addr)?;
+        socket.listen(128)
     }
 
     /// Sets up the client side socket with the node IP address
-    fn init_client_socket(
-        local_addr: &SocketAddr,
-        log: &ReplicaLogger,
-    ) -> Result<TcpSocket, TransportErrorCode> {
+    fn init_client_socket(local_addr: &SocketAddr) -> std::io::Result<TcpSocket> {
         let socket = if local_addr.is_ipv6() {
-            TcpSocket::new_v6()
+            TcpSocket::new_v6()?
         } else {
-            TcpSocket::new_v4()
+            TcpSocket::new_v4()?
         };
-        let socket = match socket {
-            Ok(socket) => socket,
-            Err(e) => {
-                warn!(
-                    every_n_seconds => 30,
-                    log,
-                    "ControlPlane::connect(): Failed to create socket: local_addr = {:?}, error = {:?}",
-                    local_addr,
-                    e
-                );
-                return Err(TransportErrorCode::ClientSocketCreateFailed);
-            }
-        };
-        match socket.bind(*local_addr) {
-            Ok(()) => Ok(socket),
-            Err(e) => {
-                warn!(
-                    every_n_seconds => 30,
-                    log,
-                    "ControlPlane::connect(): Failed to bind(): local_addr = {:?}, error = {:?}",
-                    local_addr,
-                    e
-                );
-                Err(TransportErrorCode::ClientSocketBindFailed)
-            }
-        }
+        socket.bind(*local_addr)?;
+        Ok(socket)
     }
 
     /// Returns our role wrt the peer connection
@@ -881,7 +817,12 @@ impl TransportImpl {
             listeners.push((
                 flow_config.flow_tag,
                 flow_config.server_port,
-                self.init_listener(&server_addr),
+                Self::init_listener(&server_addr).unwrap_or_else(|err| {
+                    panic!(
+                        "Failed to init listener: local_addr = {:?}, error = {:?}",
+                        server_addr, err
+                    )
+                }),
             ));
         }
 

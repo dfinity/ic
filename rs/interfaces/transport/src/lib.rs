@@ -206,11 +206,8 @@ pub enum TransportErrorCode {
     /// Failed to convert server listener.
     ServerSocketConversionFailed,
 
-    /// Client socket creation failed.
-    ClientSocketCreateFailed,
-
-    /// Client socket bind failed.
-    ClientSocketBindFailed,
+    /// Client socket init failed.
+    InitClientSocketFailed,
 
     /// Failed to set the NO_DELAY option
     SocketNoDelayFailed,

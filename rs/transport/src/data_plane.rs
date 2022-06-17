@@ -25,7 +25,7 @@ use crate::{
         TRANSPORT_HEADER_SIZE,
     },
 };
-use ic_crypto_tls_interfaces::{TlsReadHalf, TlsWriteHalf};
+use ic_crypto_tls_interfaces::{TlsReadHalf, TlsStream, TlsWriteHalf};
 use ic_interfaces_transport::{
     AsyncTransportEventHandler, FlowId, TransportErrorCode, TransportPayload, TransportStateChange,
 };
@@ -484,16 +484,22 @@ impl TransportImpl {
         flow_id: FlowId,
         role: ConnectionRole,
         peer_addr: SocketAddr,
-        reader: Box<TlsReadHalf>,
-        writer: Box<TlsWriteHalf>,
+        tls_stream: TlsStream,
     ) -> Result<(), TransportErrorCode> {
-        self.on_connect_setup(flow_id, role, peer_addr, reader, writer)?
-            // Notify the client that peer flow is up.
-            .state_changed(TransportStateChange::PeerFlowUp(FlowId {
-                peer_id: flow_id.peer_id,
-                flow_tag: flow_id.flow_tag,
-            }))
-            .await;
+        let (tls_reader, tls_writer) = tls_stream.split();
+        self.on_connect_setup(
+            flow_id,
+            role,
+            peer_addr,
+            Box::new(tls_reader),
+            Box::new(tls_writer),
+        )?
+        // Notify the client that peer flow is up.
+        .state_changed(TransportStateChange::PeerFlowUp(FlowId {
+            peer_id: flow_id.peer_id,
+            flow_tag: flow_id.flow_tag,
+        }))
+        .await;
         Ok(())
     }
 }
