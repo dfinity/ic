@@ -562,6 +562,10 @@ def external_crates_repository(name, annotations):
             "quote": crate.spec(
                 version = "^1.0",
             ),
+            "rand-0_4_6": crate.spec(
+                package = "rand",
+                version = "^0.4.6",
+            ),
             "rand-0_7_3": crate.spec(
                 package = "rand",
                 version = "^0.7.3",

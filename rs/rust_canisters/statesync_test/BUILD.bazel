@@ -1,0 +1,31 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/dfn_json",
+    "@crate_index//:lazy_static",
+    "@crate_index//:mersenne_twister",
+    "@crate_index//:rand_0_4_6",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+]
+
+MACRO_DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_macro",
+]
+
+rust_binary(
+    name = "statesync_test",
+    srcs = glob(["src/**"]),
+    crate_name = "statesync_test",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)

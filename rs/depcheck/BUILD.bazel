@@ -1,0 +1,27 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "@crate_index//:cargo_metadata",
+]
+
+rust_library(
+    name = "depcheck",
+    srcs = glob(["src/**"]),
+    crate_name = "depcheck",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "debcheck_bin",
+    srcs = ["src/main.rs"],
+    edition = "2018",
+    deps = [":depcheck"] + DEPENDENCIES,
+)

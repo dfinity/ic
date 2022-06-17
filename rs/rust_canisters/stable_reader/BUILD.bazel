@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "@crate_index//:byteorder",
+]
+
+rust_library(
+    name = "stable_reader",
+    srcs = glob(["src/**"]),
+    crate_name = "stable_reader",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
