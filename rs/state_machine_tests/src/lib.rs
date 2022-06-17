@@ -1,4 +1,10 @@
 use ic_config::subnet_config::{SubnetConfig, SubnetConfigs};
+use ic_crypto_internal_threshold_sig_bls12381::api::{
+    combine_signatures, combined_public_key, keygen, sign_message,
+};
+use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
+use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::ExecutionServices;
@@ -6,6 +12,7 @@ use ic_ic00_types::{self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Pay
 pub use ic_ic00_types::{CanisterInstallMode, CanisterSettingsArgs};
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
+    crypto::Signable,
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::MessageRouting,
     registry::RegistryClient,
@@ -36,6 +43,12 @@ use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
+use ic_types::consensus::certification::CertificationContent;
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
+pub use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
+use ic_types::crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signed};
+use ic_types::messages::Certificate;
+use ic_types::signature::ThresholdSignature;
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload},
     consensus::certification::Certification,
@@ -43,7 +56,7 @@ use ic_types::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress, UserQuery,
     },
     time::{current_time_and_expiry_time, UNIX_EPOCH},
-    Height, NodeId, Randomness, RegistryVersion,
+    CryptoHashOfPartialState, Height, NodeId, NumberOfNodes, Randomness, RegistryVersion,
 };
 pub use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -51,6 +64,7 @@ pub use ic_types::{
     time::Time,
     CanisterId, CryptoHashOfState, PrincipalId, SubnetId, UserId,
 };
+use serde::Serialize;
 use std::convert::TryFrom;
 use std::fmt;
 use std::path::Path;
@@ -128,9 +142,20 @@ fn make_single_node_registry(
     (data_provider, registry_client)
 }
 
+/// Convert an object into CBOR binary.
+fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
+    let mut ser = serde_cbor::Serializer::new(Vec::new());
+    ser.self_describe().expect("Could not write magic tag.");
+    r.serialize(&mut ser).expect("Serialization failed.");
+    ser.into_inner()
+}
+
 /// Represents a replicated state machine detached from the network layer that
 /// can be used to test this part of the stack in isolation.
 pub struct StateMachine {
+    subnet_id: SubnetId,
+    public_key: ThresholdSigPublicKey,
+    secret_key: SecretKeyBytes,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     registry_client: Arc<FakeRegistryClient>,
     state_manager: Arc<StateManagerImpl>,
@@ -268,7 +293,22 @@ impl StateMachine {
             Arc::clone(&registry_client) as _,
         );
 
+        // fixed seed to keep tests reproducible
+        let seed: [u8; 32] = [
+            3, 5, 31, 46, 53, 66, 100, 101, 109, 121, 126, 129, 133, 152, 163, 165, 167, 186, 198,
+            203, 206, 208, 211, 216, 229, 232, 233, 236, 242, 244, 246, 250,
+        ];
+
+        let (public_coefficients, secret_key_bytes) =
+            keygen(Randomness::from(seed), NumberOfNodes::new(1), &[true; 1]).unwrap();
+        let public_key = ThresholdSigPublicKey::from(CspThresholdSigPublicKey::from(
+            combined_public_key(&public_coefficients).unwrap(),
+        ));
+
         Self {
+            subnet_id,
+            secret_key: secret_key_bytes.get(0).unwrap().unwrap(),
+            public_key,
             registry_data_provider,
             registry_client,
             state_manager,
@@ -373,6 +413,11 @@ impl StateMachine {
                 .unwrap()
                 .as_nanos() as u64,
         ));
+    }
+
+    /// Returns the root key of the state machine.
+    pub fn root_key(&self) -> ThresholdSigPublicKey {
+        self.public_key
     }
 
     /// Blocks until the hash of the latest state is computed.
@@ -642,6 +687,28 @@ impl StateMachine {
         method: impl ToString,
         method_payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
+        if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
+            let state_hashes = self.state_manager.list_state_hashes_to_certify();
+            let (height, hash) = state_hashes.last().unwrap();
+            self.state_manager
+                .deliver_state_certification(self.certify_hash(height, hash));
+        }
+
+        let path = SubTree(flatmap! {
+            Label::from("canister") => SubTree(
+                flatmap! {
+                    Label::from(receiver) => SubTree(
+                        flatmap!(Label::from("certified_data") => LabeledTree::Leaf(()))
+                    )
+                }),
+            Label::from("time") => LabeledTree::Leaf(())
+        });
+        let (state, tree, certification) = self.state_manager.read_certified_state(&path).unwrap();
+        let data_certificate = into_cbor(&Certificate {
+            tree,
+            signature: Blob(certification.signed.signature.signature.get().0),
+            delegation: None,
+        });
         self.query_handler.query(
             UserQuery {
                 receiver,
@@ -651,9 +718,38 @@ impl StateMachine {
                 ingress_expiry: 0,
                 nonce: None,
             },
-            self.state_manager.get_latest_state().take(),
-            Vec::new(),
+            state,
+            data_certificate,
         )
+    }
+
+    fn certify_hash(&self, height: &Height, hash: &CryptoHashOfPartialState) -> Certification {
+        let signature_bytes = Some(
+            sign_message(
+                CertificationContent::new(hash.clone())
+                    .as_signed_bytes()
+                    .as_slice(),
+                &self.secret_key,
+            )
+            .unwrap(),
+        );
+        let signature = combine_signatures(&[signature_bytes], NumberOfNodes::new(1)).unwrap();
+        let combined_sig = CombinedThresholdSigOf::from(CombinedThresholdSig(signature.0.to_vec()));
+        Certification {
+            height: *height,
+            signed: Signed {
+                content: CertificationContent { hash: hash.clone() },
+                signature: ThresholdSignature {
+                    signature: combined_sig,
+                    signer: NiDkgId {
+                        dealer_subnet: self.subnet_id,
+                        target_subnet: NiDkgTargetSubnet::Local,
+                        start_block_height: *height,
+                        dkg_tag: NiDkgTag::LowThreshold,
+                    },
+                },
+            },
+        }
     }
 
     /// Returns the module hash of the specified canister.
