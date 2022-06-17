@@ -415,6 +415,16 @@ impl StateMachine {
         ));
     }
 
+    /// Returns the current state machine time.
+    pub fn time(&self) -> SystemTime {
+        SystemTime::UNIX_EPOCH + Duration::from_nanos(self.time.get().as_nanos_since_unix_epoch())
+    }
+
+    /// Advances the state machine time by the given amount.
+    pub fn advance_time(&self, amount: Duration) {
+        self.set_time(self.time() + amount);
+    }
+
     /// Returns the root key of the state machine.
     pub fn root_key(&self) -> ThresholdSigPublicKey {
         self.public_key
