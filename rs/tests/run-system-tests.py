@@ -251,7 +251,7 @@ def main(
         ARTIFACT_DIR = os.path.join(base_path, ARTIFACT_DIR)
     is_merge_request = CI_PARENT_PIPELINE_SOURCE == "merge_request_event"
     is_honeycomb_push = not is_local_run
-    is_slack_test_failure_notify = not is_local_run and CI_PIPELINE_SOURCE == "schedule"
+    is_slack_test_failure_notify = not is_local_run
     is_slack_timeout_notify = not is_local_run and CI_JOB_NAME == "system-tests-hourly"
     # End set variables.
 

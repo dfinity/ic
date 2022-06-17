@@ -1,6 +1,7 @@
 use clap::Parser;
 use ic_fondue::pot::execution::TestResult;
 use ic_fondue::result::{propagate_children_results_to_parents, TestResultNode};
+use ic_fondue::slack::Alertable;
 use ic_tests::driver::cli::{
     CliArgs, DriverSubCommand, ValidatedCliProcessTestsArgs, ValidatedCliRunTestsArgs,
 };
@@ -615,7 +616,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )]),
             )
         ],
-    ));
+    ).with_alert("test-failure-alerts"));
 
     // The tests in this suite require canisters to be build prior to
     // running the tests which is why we separate it out.

@@ -32,18 +32,25 @@ pub fn generate_suite_execution_contract(suite: &Suite) -> TestSuiteContract {
             tests_results_for_pot.push(TestSuiteContract {
                 name: test.name.clone(),
                 is_skipped,
+                alert_channels: vec![],
                 children: vec![],
             });
         }
         pot_results.push(TestSuiteContract {
             name: pot.name.clone(),
             is_skipped: false,
+            alert_channels: if pot.alert_channels.is_empty() {
+                suite.alert_channels.clone()
+            } else {
+                pot.alert_channels.clone()
+            },
             children: tests_results_for_pot,
         })
     }
     TestSuiteContract {
         name: suite.name.clone(),
         is_skipped: false,
+        alert_channels: vec![],
         children: pot_results,
     }
 }

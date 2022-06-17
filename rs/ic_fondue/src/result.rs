@@ -1,5 +1,5 @@
 #![allow(clippy::ptr_arg)]
-use crate::pot::PotResult;
+use crate::{pot::PotResult, slack::SlackChannel};
 use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
@@ -22,6 +22,7 @@ impl ExecutionResult {
                     duration: test.duration,
                     result: test.result,
                     children: vec![],
+                    alert_channels: test.alert_channels,
                 })
                 .collect()
         };
@@ -41,6 +42,7 @@ impl ExecutionResult {
                     duration: pot.duration,
                     result,
                     children: pot.result.map_or(vec![], to_test_result),
+                    alert_channels: vec![],
                 }
             })
             .collect();
@@ -51,6 +53,7 @@ impl ExecutionResult {
             duration: Instant::now() - started_at,
             children,
             result,
+            alert_channels: vec![],
         }
     }
 
@@ -138,6 +141,7 @@ impl CompletedPot {
 pub struct TestSuiteContract {
     pub name: String,
     pub is_skipped: bool,
+    pub alert_channels: Vec<SlackChannel>,
     pub children: Vec<TestSuiteContract>,
 }
 
@@ -151,6 +155,7 @@ pub struct TestResultNode {
     pub duration: Duration,
     pub result: TestResult,
     pub children: Vec<TestResultNode>,
+    pub alert_channels: Vec<SlackChannel>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -174,6 +179,7 @@ impl Default for TestResultNode {
             duration: Duration::default(),
             result: TestResult::Skipped,
             children: vec![],
+            alert_channels: vec![],
         }
     }
 }
@@ -193,6 +199,7 @@ impl From<&TestSuiteContract> for TestResultNode {
                 .map(|child| TestResultNode::from(child))
                 .collect(),
             result,
+            alert_channels: contract.alert_channels.clone(),
             ..Default::default()
         }
     }

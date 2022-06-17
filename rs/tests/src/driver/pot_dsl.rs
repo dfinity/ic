@@ -9,6 +9,7 @@ use crate::driver::ic::InternetComputer;
 use crate::driver::test_env::TestEnv;
 use ic_fondue::ic_manager::IcHandle;
 use ic_fondue::pot::{Context, FondueTestFn};
+use ic_fondue::slack::{Alertable, SlackChannel};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -21,7 +22,11 @@ impl<T: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static> SysTestFn for T {}
 
 pub fn suite(name: &str, pots: Vec<Pot>) -> Suite {
     let name = name.to_string();
-    Suite { name, pots }
+    Suite {
+        name,
+        pots,
+        alert_channels: vec![],
+    }
 }
 
 pub fn pot_with_setup<F: PotSetupFn>(name: &str, setup: F, testset: TestSet) -> Pot {
@@ -87,6 +92,7 @@ pub struct Pot {
     pub pot_timeout: Option<Duration>,
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub required_host_features: Vec<HostFeature>,
+    pub alert_channels: Vec<SlackChannel>,
 }
 
 // In order to evaluate this function in a catch_unwind(), we need to take
@@ -134,6 +140,7 @@ impl Pot {
             pot_timeout,
             vm_allocation,
             required_host_features,
+            alert_channels: vec![],
         }
     }
 
@@ -167,6 +174,21 @@ pub struct Test {
 pub struct Suite {
     pub name: String,
     pub pots: Vec<Pot>,
+    pub alert_channels: Vec<SlackChannel>,
+}
+
+impl Alertable for Suite {
+    fn with_alert<T: Into<SlackChannel>>(mut self, channel: T) -> Self {
+        self.alert_channels.push(channel.into());
+        self
+    }
+}
+
+impl Alertable for Pot {
+    fn with_alert<T: Into<SlackChannel>>(mut self, channel: T) -> Self {
+        self.alert_channels.push(channel.into());
+        self
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
