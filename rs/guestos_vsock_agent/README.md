@@ -9,4 +9,4 @@ At the moment the following commands are supported:
 - `detach-hsm` - Request to disconnect the HSM from this VM.
 - `upgrade` - Request that the HostOS applies the given update.
 - `set-node-id` - Request that the host add node information to hostname.
-- `join-success` - Request that the HostOS notifies operator of a successful network join.
+- `notify` - Request that the HostOS notifies operator with the given message, count number of times.

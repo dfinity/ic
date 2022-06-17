@@ -75,6 +75,7 @@ impl NodeRegistration {
 
     // postcondition: we are registered with the NNS
     async fn retry_register_node(&mut self) {
+        UtilityCommand::notify_host("Starting node registration.", 1);
         let nns_urls_col = loop {
             match self.collect_nns_urls().await {
                 Ok(urls) => break urls,
@@ -85,6 +86,7 @@ impl NodeRegistration {
             }
         };
         let mut nns_urls = nns_urls_col.iter().cycle();
+        UtilityCommand::notify_host("Attaching HSM.", 1);
         let sign_cmd = |msg: &[u8]| {
             UtilityCommand::try_to_attach_hsm();
             let res = UtilityCommand::sign_message(msg.to_vec(), None, None, None)
@@ -117,6 +119,7 @@ impl NodeRegistration {
         };
         // we have the public key
 
+        UtilityCommand::notify_host("Sending add_node request.", 1);
         while !self.is_node_registered() {
             let sender = Sender::ExternalHsm {
                 pub_key: hsm_pub_key.clone(),
@@ -139,7 +142,10 @@ impl NodeRegistration {
             tokio::time::sleep(Duration::from_secs(2)).await;
         }
 
-        UtilityCommand::notify_host_success();
+        UtilityCommand::notify_host(
+            "Join request successful!\nYou may now safely remove the HSM.",
+            20,
+        );
     }
 
     fn assemble_add_node_message(&self) -> AddNodePayload {

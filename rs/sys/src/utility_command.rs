@@ -175,9 +175,9 @@ impl UtilityCommand {
         }
     }
 
-    /// Notify the host that we have successfully made a join request, if the
-    /// VSOCK_AGENT_PATH binary exists. Ignore any errors in the execution.
-    pub fn notify_host_success() {
+    /// Ask the host to notify to the console, if the VSOCK_AGENT_PATH binary
+    /// exists. Ignore any errors in the execution.
+    pub fn notify_host(message: &str, count: u8) {
         if let Ok(metadata) = std::fs::metadata(VSOCK_AGENT_PATH) {
             let permissions = metadata.permissions();
             if permissions.mode() & 0o111 != 0 {
@@ -185,7 +185,10 @@ impl UtilityCommand {
                 // Once we finish migration to the Ubuntu-based IC-OS and the Vsock-based HSM
                 // sharing, we'll want to know if this command failed.
                 let _ = StdCommand::new(VSOCK_AGENT_PATH)
-                    .arg("--join-success")
+                    .arg("--notify")
+                    .arg(message)
+                    .arg("--count")
+                    .arg(&count.to_string())
                     .status();
             }
         }

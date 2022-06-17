@@ -19,6 +19,7 @@ use ic_metrics_exporter::MetricsRuntimeImpl;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::node_operator::NodeOperatorRegistry;
 use ic_registry_replicator::RegistryReplicator;
+use ic_sys::utility_command::UtilityCommand;
 use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
 use slog_async::AsyncGuard;
 use std::net::SocketAddr;
@@ -77,6 +78,7 @@ impl Orchestrator {
             logger,
             "Orchestrator started: version={}, config={:?}", replica_version, config
         );
+        UtilityCommand::notify_host("Orchestrator started.", 1);
 
         let registry_replicator = Arc::new(RegistryReplicator::new_from_config(
             logger.clone(),
