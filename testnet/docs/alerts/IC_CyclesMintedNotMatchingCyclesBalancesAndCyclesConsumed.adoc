@@ -1,0 +1,26 @@
+= IC_CyclesMintedNotMatchingCyclesBalancesAndCyclesConsumed
+:icons: font
+ifdef::env-github,env-browser[:outfilesuffix:.adoc]
+:url-subnet-cycles-balance: https://grafana.dfinity.systems/d/GWlsOrn7z/execution-metrics-2-0?viewPanel=138&orgId=1&from=now-1h&to=now
+:url-subnet-cycles-consumed: https://grafana.dfinity.systems/d/GWlsOrn7z/execution-metrics-2-0?viewPanel=139&orgId=1&from=now-1h&to=now
+
+== Triggered by
+
+The total cycles minted differ _a lot_ from the sum of total canister balance + total cycles consumed across all subnets.
+
+== Impact
+
+This can mean that cycles are created out of thin air instead of minted or that too many cycles are minted or that too many cycles are consumed.
+
+== Possible causes (non-exhaustive)
+
+* A bug can result in one of the involved metrics not being updated properly.
+* A bug can result in a canister receiving more cycles than it should (e.g. via a refund) or allowing it to create cycles out of thin air.
+
+== Troubleshooting and remediation
+
+- Check whether there have been recent changes in the network (either the replica or CMC) that could affect the integrity of the metrics.
+
+- Check the individual metrics contributing to the alert to identify where the difference is coming from. Likely one of them is the main contributor to the difference observed. E.g. check the {url-subnet-cycles-balance}[subnet cycles balance] or {url-subnet-cycles-consumed}[subnet cycles consumed] for outliers.
+
+- Escalate to the execution team to investigate further.
