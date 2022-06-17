@@ -1,0 +1,21 @@
+load("@rules_rust//rust:defs.bzl", "rust_proc_macro")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "@crate_index//:quote",
+    "@crate_index//:syn",
+]
+
+rust_proc_macro(
+    name = "test_utils_macros",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_nns_test_utils_macros",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)

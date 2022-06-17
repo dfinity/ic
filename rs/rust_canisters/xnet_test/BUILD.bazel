@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_core",
+    "@crate_index//:candid",
+    "@crate_index//:rand_0_7_3",
+    "@crate_index//:rand_pcg",
+    "@crate_index//:serde",
+]
+
+rust_library(
+    name = "xnet_test",
+    srcs = glob(["src/**"]),
+    crate_name = "xnet_test",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
+
+rust_doc_test(
+    name = "xnet_test_doc_test",
+    crate = ":xnet_test",
+)

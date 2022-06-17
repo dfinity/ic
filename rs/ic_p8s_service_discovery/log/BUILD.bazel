@@ -1,0 +1,38 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/elastic_common_schema",
+    "@crate_index//:chrono",
+    "@crate_index//:gflags",
+    "@crate_index//:serde",
+    "@crate_index//:slog",
+    "@crate_index//:slog-async",
+    "@crate_index//:strum",
+    "@crate_index//:thiserror",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+    "@crate_index//:gflags-derive",
+]
+
+rust_library(
+    name = "log",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_p8s_service_discovery_log",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_doc_test(
+    name = "log_doc_test",
+    crate = ":log",
+)
