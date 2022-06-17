@@ -75,11 +75,11 @@ pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
 //    If you change this number please adjust other constants as well.
 const NUMBER_OF_EXECUTION_THREADS: usize = 4;
 
-/// Initial estimate of the an ECDSA signature fee is set to the maximum number
-/// of instructions in a round because it will take at least one round to
-/// generate the signature.
-/// TODO(EXC-1004): Change this value based on benchmarks.
-pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(7 * B as u128);
+/// 10B cycles corresponds to 1 SDR cent. Assuming we can create 1 signature per
+/// second, that would come to  26k SDR per month if we spent the whole time
+/// creating signatures. At 13 nodes and 2k SDR per node per month this would
+/// cover the cost of the subnet.
+pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone)]
