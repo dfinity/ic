@@ -44,13 +44,13 @@ use crate::util::{
 };
 
 const NNS_SUBNET_SIZE: usize = 40;
-const APP_SUBNET_SIZE: usize = 37; // f*4 +1 with f = 12
+const APP_SUBNET_SIZE: usize = 34; // f*3+1 with f=11
 
 pub fn config() -> InternetComputer {
     InternetComputer::new()
         .add_subnet(
             Subnet::fast(SubnetType::System, NNS_SUBNET_SIZE)
-                .with_dkg_interval_length(Height::from(NNS_SUBNET_SIZE as u64 + 9)),
+                .with_dkg_interval_length(Height::from(NNS_SUBNET_SIZE as u64 * 2)),
         )
         .with_unassigned_nodes(APP_SUBNET_SIZE as i32)
 }
