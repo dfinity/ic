@@ -255,17 +255,19 @@ impl PayloadBuilderMetrics {
     }
 }
 
+/// Metrics for a consensus validator.
 pub struct ValidatorMetrics {
-    pub time_to_receive_block: HistogramVec,
-    pub duplicate_artifact: IntCounterVec,
-    pub validation_duration: HistogramVec,
-    pub dkg_validator: IntCounterVec,
+    pub(crate) time_to_receive_block: HistogramVec,
+    pub(crate) duplicate_artifact: IntCounterVec,
+    pub(crate) validation_duration: HistogramVec,
+    pub(crate) dkg_validator: IntCounterVec,
     // Used to sum the values within a single validator run
     dkg_time_per_validator_run: RwLock<f64>,
     ecdsa_time_per_validator_run: RwLock<f64>,
 }
 
 impl ValidatorMetrics {
+    /// The constructor creates a [`ValidatorMetrics`] instance.
     pub fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
             time_to_receive_block: metrics_registry.histogram_vec(
@@ -300,7 +302,7 @@ impl ValidatorMetrics {
         }
     }
 
-    pub fn observe_block(&self, pool_reader: &PoolReader, proposal: &BlockProposal) {
+    pub(crate) fn observe_block(&self, pool_reader: &PoolReader, proposal: &BlockProposal) {
         let rank = proposal.rank().0 as usize;
         if rank < RANKS_TO_RECORD.len() {
             if let Some(start_time) = pool_reader.get_round_start_time(proposal.height()) {
@@ -319,12 +321,12 @@ impl ValidatorMetrics {
         }
     }
 
-    pub fn add_to_dkg_time_per_validator_run(&self, elapsed_time: f64) {
+    pub(crate) fn add_to_dkg_time_per_validator_run(&self, elapsed_time: f64) {
         let mut dkg_time = self.dkg_time_per_validator_run.write().unwrap();
         *dkg_time += elapsed_time;
     }
 
-    pub fn observe_and_reset_dkg_time_per_validator_run(&self) {
+    pub(crate) fn observe_and_reset_dkg_time_per_validator_run(&self) {
         let mut dkg_time = self.dkg_time_per_validator_run.write().unwrap();
         self.validation_duration
             .with_label_values(&["DkgPerRun"])
@@ -332,7 +334,7 @@ impl ValidatorMetrics {
         *dkg_time = 0.0;
     }
 
-    pub fn add_to_ecdsa_time_per_validator_run(&self, elapsed_time: f64) {
+    pub(crate) fn add_to_ecdsa_time_per_validator_run(&self, elapsed_time: f64) {
         let mut ecdsa_time = self.ecdsa_time_per_validator_run.write().unwrap();
         *ecdsa_time += elapsed_time;
     }

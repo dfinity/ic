@@ -1,21 +1,19 @@
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::BACKUP_GROUP_SIZE;
-use ic_consensus::consensus::pool_reader::PoolReader;
+use ic_consensus::consensus::{dkg_key_manager::DkgKeyManager, pool_reader::PoolReader};
 use ic_consensus_message::ConsensusMessageHashable;
 use ic_interfaces::{
-    certification::{Verifier, VerifierError},
+    artifact_pool::UnvalidatedArtifact,
     consensus_pool::{ChangeAction, MutableConsensusPool},
     crypto::MultiSigVerifier,
     registry::RegistryClient,
     time_source::SysTimeSource,
-    validation::ValidationResult,
 };
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     consensus::{
-        certification::Certification, BlockProposal, CatchUpPackage, Finalization, Notarization,
-        RandomBeacon, RandomTape,
+        BlockProposal, CatchUpPackage, Finalization, Notarization, RandomBeacon, RandomTape,
     },
     Height, RegistryVersion, SubnetId,
 };
@@ -28,6 +26,9 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
+
+use crate::player::ReplayError;
+use crate::validator::{InvalidArtifact, ReplayValidator};
 
 // A set of backup artifacts corresponding to a single height.
 pub(super) struct HeightArtifacts {
@@ -66,6 +67,8 @@ pub(crate) enum ExitPoint {
     /// We restored all artifacts before a block with the certified height in
     /// the validation context higher than the last state height.
     StateBehind(Height),
+    /// Can't proceed because artifact validation failed after the given height.
+    ValidationIncomplete(Height),
 }
 
 /// Deserialize the CUP at the given height and inserts it into the pool.
@@ -164,8 +167,11 @@ pub(crate) fn deserialize_consensus_artifacts(
     height_to_batches: &mut BTreeMap<Height, HeightArtifacts>,
     subnet_id: SubnetId,
     latest_state_height: Height,
+    validator: &ReplayValidator,
+    dkg_manager: &mut DkgKeyManager,
+    invalid_artifacts: &mut Vec<InvalidArtifact>,
 ) -> ExitPoint {
-    let time_source = SysTimeSource::new();
+    let time_source = validator.get_timesource();
     let mut last_cup_height: Option<Height> = None;
     let crypto =
         ic_crypto::CryptoComponentFatClient::new_for_verification_only(registry_client.clone());
@@ -203,6 +209,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         let registry_version = pool_reader
             .registry_version(height)
             .expect("Cannot retrieve the registry version from the pool");
+        let last_finalized_height = pool_reader.get_finalized_height();
 
         let mut finalized_block_hash = None;
         // We should never insert more than one finalization, because it breaks a lot of
@@ -327,26 +334,40 @@ pub(crate) fn deserialize_consensus_artifacts(
             );
         }
 
-        assert!(
-            artifacts
-                .iter()
-                .filter(|v| matches!(
-                    v,
-                    ic_types::artifact::ConsensusMessage::BlockProposal(_)
-                        | ic_types::artifact::ConsensusMessage::CatchUpPackage(_)
-                        | ic_types::artifact::ConsensusMessage::CatchUpPackageShare(_)
-                ))
-                .all(|v| v.check_integrity()),
-            "The integrity of all artifacts is ensured"
-        );
+        artifacts.into_iter().for_each(|message| {
+            pool.insert(UnvalidatedArtifact {
+                message,
+                peer_id: validator.replica_cfg.node_id,
+                timestamp: time_source.get_relative_time(),
+            })
+        });
 
-        pool.apply_changes(
-            &time_source,
-            artifacts
-                .into_iter()
-                .map(ChangeAction::AddToValidated)
-                .collect(),
-        );
+        // If we are adding a new finalization this round, artifacts should be validated
+        // up until the new height, else we stay at the last finalized height
+        let target_height = if finalized_block_hash.is_some() {
+            height
+        } else {
+            last_finalized_height
+        };
+        // call validator, which moves artifacts to validated or removes invalid
+        let mut invalid = match validator.validate(pool, dkg_manager, target_height) {
+            Ok(artifacts) => artifacts,
+            Err(ReplayError::ValidationIncomplete(h, _)) => {
+                return ExitPoint::ValidationIncomplete(h)
+            }
+            other => panic!("Unexpected failure during validation: {:?}", other),
+        };
+        invalid.iter().for_each(|i| match i.get_file_name() {
+            Some(name) => {
+                assert!(
+                    path.join(&name).exists(),
+                    "Path to invalid artifact doesn't exist."
+                );
+                println!("Invalid artifact detected: {:?}", path.join(name));
+            }
+            None => println!("Failed to get path for invalid artifact: {:?}", i),
+        });
+        invalid_artifacts.append(&mut invalid);
 
         // If we just inserted a height_artifacts, which finalizes the last seen CUP
         // height, we need to deliver all batches before we insert the cup.
@@ -364,19 +385,4 @@ pub(crate) fn deserialize_consensus_artifacts(
 
 fn deserialization_error(height: Height) -> String {
     format!("Couldn't deserialize artifacts at height {:?}", height)
-}
-
-// A mock we're using to instantiate the StateManager. Since we're not verifying
-// any certifications during the backup, we can use a mocked verifier.
-pub(crate) struct MockVerifier {}
-
-impl Verifier for MockVerifier {
-    fn validate(
-        &self,
-        _subnet_id: SubnetId,
-        _certification: &Certification,
-        _registry_version: RegistryVersion,
-    ) -> ValidationResult<VerifierError> {
-        Ok(())
-    }
 }
