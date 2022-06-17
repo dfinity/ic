@@ -29,7 +29,9 @@ use std::rc::Rc;
 mod backup;
 pub mod cmd;
 pub mod ingress;
+mod mocks;
 pub mod player;
+mod validator;
 
 /// Replays the past blocks and creates a checkpoint of the latest state.
 /// # An example of how to set the arguments
@@ -152,7 +154,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                 Ok(state_params) => {
                     if let Some(SubCommand::UpdateRegistryLocalStore) = subcmd {
                         player.update_registry_local_store();
-                        Ok(player.get_latest_state_params(None))
+                        Ok(player.get_latest_state_params(None, Vec::new()))
                     } else {
                         Ok(state_params)
                     }

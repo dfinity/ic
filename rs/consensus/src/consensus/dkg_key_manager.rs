@@ -122,7 +122,8 @@ impl DkgKeyManager {
         manager
     }
 
-    pub(crate) fn on_state_change(&mut self, pool_reader: &PoolReader<'_>) {
+    /// Check and load new transcripts from the latest finalized DKG summary or from a CUP.
+    pub fn on_state_change(&mut self, pool_reader: &PoolReader<'_>) {
         // Check and load new transcripts from the latest finalized DKG summary or from
         // a CUP. Note, we keep track of transcripts being loaded and do not
         // load them more than once.

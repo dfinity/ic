@@ -1,4 +1,8 @@
-use crate::backup;
+use crate::{
+    backup,
+    mocks::MockVerifier,
+    validator::{InvalidArtifact, ReplayValidator},
+};
 use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
@@ -76,6 +80,7 @@ pub struct StateParams {
     pub height: Height,
     pub hash: String,
     pub registry_version: RegistryVersion,
+    pub invalid_artifacts: Vec<InvalidArtifact>,
 }
 
 #[derive(Clone, Debug)]
@@ -84,6 +89,8 @@ pub enum ReplayError {
     StateDivergence(Height),
     /// Can't proceed because an upgrade was detected.
     UpgradeDetected(StateParams),
+    /// Can't proceed because artifact validation failed after the given height.
+    ValidationIncomplete(Height, Vec<InvalidArtifact>),
 }
 
 pub type ReplayResult = Result<StateParams, ReplayError>;
@@ -92,8 +99,9 @@ pub type ReplayResult = Result<StateParams, ReplayError>;
 /// environment to replay past blocks.
 pub struct Player {
     state_manager: Arc<StateManagerImpl>,
-    message_routing: MessageRoutingImpl,
+    message_routing: Arc<dyn MessageRouting>,
     consensus_pool: Option<ConsensusPoolImpl>,
+    validator: Option<ReplayValidator>,
     http_query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     certification_pool: Option<CertificationPoolImpl>,
@@ -178,14 +186,9 @@ impl Player {
             log.clone(),
         );
 
-        println!("Setting default replica version {}", replica_version);
-        if ReplicaVersion::set_default_version(replica_version.clone()).is_err() {
-            println!("Failed to set default replica version");
-        }
-
         let mut player = Player::new_with_params(
             cfg,
-            Arc::new(backup::MockVerifier {}),
+            Arc::new(MockVerifier {}),
             registry,
             subnet_id,
             Some(pool),
@@ -205,7 +208,6 @@ impl Player {
         let metrics_registry = MetricsRegistry::new();
         let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
 
-        let mut replica_version = Default::default();
         let consensus_pool = if cfg.artifact_pool.consensus_pool_path.exists() {
             let mut artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool.clone());
             // We don't want to modify the original consensus pool during the subnet
@@ -215,21 +217,21 @@ impl Player {
                 UncachedConsensusPoolImpl::new(artifact_pool_config, log.clone()),
                 MetricsRegistry::new(),
             );
-            // Use the replica version from the finalized tip in the pool.
-            replica_version = PoolReader::new(&consensus_pool)
-                .get_finalized_tip()
-                .version()
-                .clone();
             Some(consensus_pool)
         } else {
             None
         };
 
-        println!("Using replica version {}", replica_version);
+        let replica_version = if let Some(pool) = &consensus_pool {
+            // Use the replica version from the finalized tip in the pool.
+            PoolReader::new(pool).get_finalized_tip().version().clone()
+        } else {
+            Default::default()
+        };
 
         Player::new_with_params(
             cfg,
-            Arc::new(backup::MockVerifier {}),
+            Arc::new(MockVerifier {}),
             registry,
             subnet_id,
             consensus_pool,
@@ -252,6 +254,11 @@ impl Player {
         log: ReplicaLogger,
         _async_log_guard: AsyncGuard,
     ) -> Self {
+        println!("Setting default replica version {}", replica_version);
+        if ReplicaVersion::set_default_version(replica_version.clone()).is_err() {
+            println!("Failed to set default replica version");
+        }
+
         let subnet_type = get_subnet_type(
             registry.as_ref(),
             subnet_id,
@@ -295,32 +302,43 @@ impl Player {
             Arc::clone(&cycles_account_manager),
             Arc::clone(&state_manager) as Arc<_>,
         );
-        let message_routing = MessageRoutingImpl::new(
+        let message_routing = Arc::new(MessageRoutingImpl::new(
             state_manager.clone(),
             state_manager.clone(),
             execution_service.ingress_history_writer.clone(),
             execution_service.scheduler,
-            cfg.hypervisor,
+            cfg.hypervisor.clone(),
             cycles_account_manager,
             subnet_id,
             &metrics_registry,
             log.clone(),
             registry.clone(),
-        );
-        let certification_pool = if consensus_pool.is_some() {
-            Some(CertificationPoolImpl::new(
-                ArtifactPoolConfig::from(cfg.artifact_pool),
+        ));
+        let certification_pool = consensus_pool.as_ref().map(|_| {
+            CertificationPoolImpl::new(
+                ArtifactPoolConfig::from(cfg.artifact_pool.clone()),
                 log.clone(),
-                metrics_registry,
-            ))
-        } else {
-            None
-        };
+                metrics_registry.clone(),
+            )
+        });
+
+        let validator = consensus_pool.as_ref().map(|pool| {
+            ReplayValidator::new(
+                cfg,
+                subnet_id,
+                pool.get_cache().clone(),
+                registry.clone(),
+                state_manager.clone(),
+                message_routing.clone(),
+                log.clone(),
+            )
+        });
 
         Player {
             state_manager,
             message_routing,
             consensus_pool,
+            validator,
             http_query_handler: execution_service.sync_query_handler,
             ingress_history_reader: execution_service.ingress_history_reader,
             certification_pool,
@@ -352,6 +370,7 @@ impl Player {
     /// batch height but not advance finalized block height in consensus
     /// pool.
     pub fn replay<F: FnMut(&Player, Time) -> Vec<SignedIngress>>(&self, extra: F) -> ReplayResult {
+        let mut invalid_artifacts = Vec::new();
         if let (Some(consensus_pool), Some(certification_pool)) =
             (&self.consensus_pool, &self.certification_pool)
         {
@@ -359,6 +378,7 @@ impl Player {
                 Err(ReplayError::UpgradeDetected(_)) | Ok(_) => {}
                 other => other?,
             };
+
             let pool_reader = &PoolReader::new(consensus_pool);
             let finalized_height = pool_reader.get_finalized_height();
             let target_height = Some(
@@ -368,8 +388,22 @@ impl Player {
                         .unwrap_or_else(|| finalized_height),
                 ),
             );
+
+            // Validate artifacts in temporary pool
+            if let Some(validator) = self.validator.as_ref() {
+                invalid_artifacts.append(&mut validator.validate_in_tmp_pool(
+                    consensus_pool,
+                    self.get_latest_cup().cup,
+                    target_height.unwrap(),
+                )?);
+            }
+            if !invalid_artifacts.is_empty() {
+                println!("Invalid artifacts:");
+                invalid_artifacts.iter().for_each(|a| println!("{:?}", a));
+            }
+
             let last_batch_height =
-                self.deliver_batches(&self.message_routing, pool_reader, target_height);
+                self.deliver_batches(self.message_routing.as_ref(), pool_reader, target_height);
             self.wait_for_state(last_batch_height);
             // We only want to persist the checkpoint after the latest batch.
             self.state_manager.remove_states_below(last_batch_height);
@@ -389,8 +423,11 @@ impl Player {
             println!("All blocks successfully replayed.");
         }
 
-        let (latest_context_time, extra_batch_delivery) =
-            self.deliver_extra_batch(&self.message_routing, self.consensus_pool.as_ref(), extra);
+        let (latest_context_time, extra_batch_delivery) = self.deliver_extra_batch(
+            self.message_routing.as_ref(),
+            self.consensus_pool.as_ref(),
+            extra,
+        );
 
         if let Some((last_batch_height, msg_ids)) = extra_batch_delivery {
             self.wait_for_state(last_batch_height);
@@ -410,7 +447,8 @@ impl Player {
             }
         }
 
-        let state_params = self.get_latest_state_params(Some(latest_context_time));
+        let state_params =
+            self.get_latest_state_params(Some(latest_context_time), invalid_artifacts);
         println!("Latest registry version: {}", state_params.registry_version);
         Ok(state_params)
     }
@@ -447,7 +485,11 @@ impl Player {
     /// * In case a `latest_context_time` is given (i.a. when adding extra ingress), get the latest
     ///   version by querying the registry canister using the time as ingress expiry
     /// * Otherwise, query the registry client
-    pub fn get_latest_state_params(&self, latest_context_time: Option<Time>) -> StateParams {
+    pub fn get_latest_state_params(
+        &self,
+        latest_context_time: Option<Time>,
+        invalid_artifacts: Vec<InvalidArtifact>,
+    ) -> StateParams {
         // If we are not replaying NNS subnet, this query will fail.
         // If it fails, we'll query registry client for latest version instead.
         let registry_version = if let Some(time) = latest_context_time {
@@ -475,6 +517,7 @@ impl Player {
             height,
             hash,
             registry_version,
+            invalid_artifacts,
         }
     }
 
@@ -759,6 +802,13 @@ impl Player {
         );
         // Assert consistent initial state
         self.verify_latest_cup()?;
+
+        let mut dkg_manager = self
+            .validator
+            .as_ref()
+            .unwrap()
+            .new_key_manager(&PoolReader::new(self.consensus_pool.as_ref().unwrap()));
+        let mut invalid_artifacts = Vec::new();
         // We start with the specified height and restore heights until we run out of
         // heights on the backup spool or bump into a newer replica version.
         loop {
@@ -768,10 +818,13 @@ impl Player {
                 &mut height_to_batches,
                 self.subnet_id,
                 self.state_manager.latest_state_height(),
+                self.validator.as_ref().unwrap(),
+                &mut dkg_manager,
+                &mut invalid_artifacts,
             );
 
             let last_batch_height = self.deliver_batches(
-                &self.message_routing,
+                self.message_routing.as_ref(),
                 &PoolReader::new(self.consensus_pool.as_ref().unwrap()),
                 self.replay_target_height.map(Height::from),
             );
@@ -779,7 +832,7 @@ impl Player {
             if let Some(height) = target_height {
                 if last_batch_height >= height {
                     println!("Target height {} reached.", height);
-                    return Ok(self.get_latest_state_params(None));
+                    return Ok(self.get_latest_state_params(None, invalid_artifacts));
                 }
             }
 
@@ -820,7 +873,13 @@ impl Player {
                         "Restored the state at the height {:?}",
                         self.state_manager.latest_state_height()
                     );
-                    return Ok(self.get_latest_state_params(None));
+                    return Ok(self.get_latest_state_params(None, invalid_artifacts));
+                }
+                backup::ExitPoint::ValidationIncomplete(last_validated_height) => {
+                    return Err(ReplayError::ValidationIncomplete(
+                        last_validated_height,
+                        invalid_artifacts,
+                    ));
                 }
             }
         }
@@ -831,7 +890,7 @@ impl Player {
     // all states below the last CUP.
     fn assert_consistency_and_clean_up(&mut self) -> Result<StateParams, ReplayError> {
         self.verify_latest_cup()?;
-        let params = self.get_latest_state_params(None);
+        let params = self.get_latest_state_params(None, Vec::new());
         let pool = self.consensus_pool.as_mut().expect("no consensus_pool");
         let cache = pool.get_cache();
         let purge_height = cache.catch_up_package().height();
@@ -911,7 +970,7 @@ impl Player {
                     replica_version, last_cup.height()
                 );
                 return Err(ReplayError::UpgradeDetected(
-                    self.get_latest_state_params(None),
+                    self.get_latest_state_params(None, Vec::new()),
                 ));
             }
             _ => {}

@@ -21,10 +21,12 @@ mod random_beacon_maker;
 mod random_tape_maker;
 mod share_aggregator;
 pub mod utils;
-mod validator;
+pub mod validator;
 
+pub use block_maker::SubnetRecords;
 pub use crypto::ConsensusCrypto;
 pub use membership::Membership;
+pub use metrics::ValidatorMetrics;
 
 #[cfg(test)]
 pub(crate) mod mocks;
@@ -34,7 +36,7 @@ use crate::consensus::{
     catchup_package_maker::CatchUpPackageMaker,
     dkg_key_manager::DkgKeyManager,
     finalizer::Finalizer,
-    metrics::{ConsensusGossipMetrics, ConsensusMetrics, ValidatorMetrics},
+    metrics::{ConsensusGossipMetrics, ConsensusMetrics},
     notary::Notary,
     payload_builder::PayloadBuilderImpl,
     pool_reader::PoolReader,

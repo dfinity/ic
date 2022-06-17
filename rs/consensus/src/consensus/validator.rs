@@ -1,4 +1,6 @@
 #![allow(clippy::try_err)]
+//! This module encapsulates functions required for validating consensus
+//! artifacts.
 
 use crate::{
     consensus::{
@@ -511,6 +513,9 @@ fn get_min_validated_ranks(
         .collect()
 }
 
+/// Validator holds references to components required for artifact validation.
+/// It implements validation functions for all consensus artifacts which are
+/// called by `on_state_change` in round-robin manner.
 pub struct Validator {
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
@@ -528,6 +533,7 @@ pub struct Validator {
 
 impl Validator {
     #[allow(clippy::too_many_arguments)]
+    /// The constructor creates a new [`Validator`] instance.
     pub fn new(
         replica_config: ReplicaConfig,
         membership: Arc<Membership>,
@@ -557,6 +563,10 @@ impl Validator {
         }
     }
 
+    /// Invoke each artifact validation function in order.
+    /// Return the first non-empty [ChangeSet] as returned by a function.
+    /// Otherwise return an empty [ChangeSet] if all functions return
+    /// empty.
     pub fn on_state_change(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
         trace!(self.log, "on_state_change");
         let validate_finalization = || self.validate_finalizations(pool_reader);
