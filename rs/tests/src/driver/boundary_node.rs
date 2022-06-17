@@ -26,6 +26,7 @@ use reqwest::Url;
 use slog::info;
 use ssh2::Session;
 
+// The following default values are the same as for replica nodes
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(4);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
 
@@ -84,17 +85,25 @@ impl BoundaryNode {
     }
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
-        let ic_setup = IcSetup::read_attribute(env);
-        let pot_setup = PotSetup::read_attribute(env);
         let logger = env.logger();
+        let pot_setup = PotSetup::read_attribute(env);
+        let ic_setup = IcSetup::read_attribute(env);
         let farm = Farm::new(ic_setup.farm_base_url, logger.clone());
 
         let create_vm_req = CreateVmRequest::new(
             self.name.clone(),
-            self.vm_resources.vcpus.unwrap_or(DEFAULT_VCPUS_PER_VM),
-            self.vm_resources
-                .memory_kibibytes
-                .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM),
+            self.vm_resources.vcpus.unwrap_or_else(|| {
+                pot_setup
+                    .default_vm_resources
+                    .and_then(|vm_resources| vm_resources.vcpus)
+                    .unwrap_or(DEFAULT_VCPUS_PER_VM)
+            }),
+            self.vm_resources.memory_kibibytes.unwrap_or_else(|| {
+                pot_setup
+                    .default_vm_resources
+                    .and_then(|vm_resources| vm_resources.memory_kibibytes)
+                    .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM)
+            }),
             match &self.boot_image {
                 None => {
                     let url = ic_setup.boundary_node_img_url;
