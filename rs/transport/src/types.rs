@@ -9,7 +9,6 @@ use ic_logger::ReplicaLogger;
 use phantom_newtype::{AmountOf, Id};
 
 use async_trait::async_trait;
-use futures::future::AbortHandle;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::{self, Debug, Formatter};
@@ -17,6 +16,7 @@ use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock, Weak};
 use tokio::runtime::Handle;
+use tokio::task::JoinHandle;
 use tokio::time::Duration;
 
 /// A tag for the server port
@@ -133,7 +133,7 @@ pub(crate) struct ClientState {
 /// State about the server ports we are listening on
 pub(crate) struct ServerPortState {
     /// Handle to the accept task for this port
-    pub accept_task: AbortHandle,
+    pub accept_task: JoinHandle<()>,
 }
 
 impl Drop for ServerPortState {
@@ -216,7 +216,7 @@ pub(crate) struct Connecting {
     pub peer_addr: SocketAddr,
 
     /// The connecting task handle
-    pub connecting_task: AbortHandle,
+    pub connecting_task: JoinHandle<()>,
 }
 
 /// Info about a flow in ConnectionState::Connected
@@ -225,10 +225,10 @@ pub(crate) struct Connected {
     pub peer_addr: SocketAddr,
 
     /// The read task handle
-    pub read_task: AbortHandle,
+    pub read_task: JoinHandle<()>,
 
     /// The write task handle
-    pub write_task: AbortHandle,
+    pub write_task: JoinHandle<()>,
 
     /// Our role
     pub role: ConnectionRole,
@@ -371,7 +371,7 @@ mod tests {
     use super::*;
 
     fn connecting_state() -> ConnectionState {
-        let (connecting_task, _) = AbortHandle::new_pair();
+        let connecting_task = tokio::task::spawn(async {});
         ConnectionState::Connecting(Connecting {
             peer_addr: "127.0.0.1:8080".parse().unwrap(),
             connecting_task,
@@ -379,8 +379,8 @@ mod tests {
     }
 
     fn connected_state(role: ConnectionRole) -> ConnectionState {
-        let (read_task, _) = AbortHandle::new_pair();
-        let (write_task, _) = AbortHandle::new_pair();
+        let read_task = tokio::task::spawn(async {});
+        let write_task = tokio::task::spawn(async {});
         ConnectionState::Connected(Connected {
             peer_addr: "127.0.0.1:8080".parse().unwrap(),
             read_task,
@@ -401,8 +401,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_connection_state_machine_listening() {
+    #[tokio::test]
+    async fn test_connection_state_machine_listening() {
         let state = ConnectionState::Listening;
         let expected = vec![
             (ConnectionState::Listening, false),
@@ -413,8 +413,8 @@ mod tests {
         verify_state_transitions(state, expected);
     }
 
-    #[test]
-    fn test_connection_state_machine_connecting() {
+    #[tokio::test]
+    async fn test_connection_state_machine_connecting() {
         let state = connecting_state();
         let expected = vec![
             (ConnectionState::Listening, false),
@@ -425,8 +425,8 @@ mod tests {
         verify_state_transitions(state, expected);
     }
 
-    #[test]
-    fn test_connection_state_machine_connected() {
+    #[tokio::test]
+    async fn test_connection_state_machine_connected() {
         let state = connected_state(ConnectionRole::Server);
         let expected = vec![
             (ConnectionState::Listening, true),

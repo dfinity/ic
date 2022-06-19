@@ -31,7 +31,6 @@ use ic_interfaces_transport::{
 };
 use ic_logger::warn;
 
-use futures::future::{AbortHandle, Abortable, Aborted};
 use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
@@ -414,7 +413,7 @@ impl TransportImpl {
         let send_queue_reader = flow_state.send_queue.get_reader();
         let metrics_cl = self.data_plane_metrics.clone();
         let weak_self = self.weak_self.read().unwrap().clone();
-        let write_task = async move {
+        let write_task = self.tokio_runtime.spawn(async move {
             Self::flow_write_task(
                 flow_id_cl,
                 flow_label_cl,
@@ -424,14 +423,14 @@ impl TransportImpl {
                 weak_self,
             )
             .await;
-        };
+        });
 
         let flow_id_cl = flow_id;
         let flow_label_cl = flow_state.flow_label.clone();
         let event_handler_cl = event_handler.clone();
         let metrics_cl = self.data_plane_metrics.clone();
         let weak_self = self.weak_self.read().unwrap().clone();
-        let read_task = async move {
+        let read_task = self.tokio_runtime.spawn(async move {
             Self::flow_read_task(
                 flow_id_cl,
                 flow_label_cl,
@@ -441,37 +440,12 @@ impl TransportImpl {
                 weak_self,
             )
             .await;
-        };
-
-        // Spawn the tasks with abort handles so tasks can be aborted if needed.
-        let (write_abort_handle, abort_registration) = AbortHandle::new_pair();
-        let log_cl = self.log.clone();
-        let flow_id_cl = flow_id;
-        self.tokio_runtime.spawn(async move {
-            if let Err(Aborted) = Abortable::new(write_task, abort_registration).await {
-                warn!(
-                    log_cl,
-                    "DataPlane:: Send task aborted: flow = {:?}", flow_id_cl
-                );
-            }
-        });
-
-        let (read_abort_handle, abort_registration) = AbortHandle::new_pair();
-        let log_cl = self.log.clone();
-        let flow_id_cl = flow_id;
-        self.tokio_runtime.spawn(async move {
-            if let Err(Aborted) = Abortable::new(read_task, abort_registration).await {
-                warn!(
-                    log_cl,
-                    "DataPlane:: Receive task aborted: flow = {:?}", flow_id_cl
-                );
-            }
         });
 
         let connected_state = Connected {
             peer_addr,
-            read_task: read_abort_handle,
-            write_task: write_abort_handle,
+            read_task,
+            write_task,
             role,
         };
         flow_state.update(ConnectionState::Connected(connected_state));

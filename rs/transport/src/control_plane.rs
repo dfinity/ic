@@ -13,7 +13,6 @@ use crate::types::{
     ServerPort, ServerPortState, TransportImpl,
 };
 use crate::utils::{get_flow_ips, get_flow_label, SendQueueImpl};
-use futures::future::{AbortHandle, Abortable, Aborted};
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
 use ic_interfaces_transport::{AsyncTransportEventHandler, FlowId, FlowTag, TransportErrorCode};
@@ -25,6 +24,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
+use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
 /// Time to wait before retrying an unsuccessful connection attempt
@@ -218,11 +218,11 @@ impl TransportImpl {
     }
 
     /// Starts the async task to accept the incoming TcpStreams in server mode.
-    fn spawn_accept_task(&self, flow_tag: FlowTag, tcp_listener: TcpListener) -> AbortHandle {
+    fn spawn_accept_task(&self, flow_tag: FlowTag, tcp_listener: TcpListener) -> JoinHandle<()> {
         let weak_self = self.weak_self.read().unwrap().clone();
         let tokio_runtime = self.tokio_runtime.clone();
         let metrics = self.control_plane_metrics.clone();
-        let accept_task = async move {
+        self.tokio_runtime.spawn(async move {
             let local_addr = match tcp_listener.local_addr() {
                 Ok(addr) => addr,
                 _ => return,
@@ -277,19 +277,7 @@ impl TransportImpl {
                     }
                 }
             }
-        };
-
-        let (abort_handle, abort_registration) = AbortHandle::new_pair();
-        let log_cl = self.log.clone();
-        self.tokio_runtime.spawn(async move {
-            if let Err(Aborted) = Abortable::new(accept_task, abort_registration).await {
-                warn!(
-                    log_cl,
-                    "ControlPlane: accept task aborted: flow_tag = {:?}", flow_tag,
-                );
-            }
-        });
-        abort_handle
+        })
     }
 
     /// Spawn a task that tries to connect to a peer (forever, or until
@@ -301,11 +289,11 @@ impl TransportImpl {
         peer_id: NodeId,
         peer_ip: IpAddr,
         server_port: ServerPort,
-    ) -> AbortHandle {
+    ) -> JoinHandle<()> {
         let node_ip = self.node_ip;
         let weak_self = self.weak_self.read().unwrap().clone();
         let metrics = self.control_plane_metrics.clone();
-        let connect_task = async move {
+        self.tokio_runtime.spawn(async move {
             let local_addr = SocketAddr::new(node_ip, 0);
             let peer_addr = SocketAddr::new(peer_ip, server_port.get());
 
@@ -397,21 +385,7 @@ impl TransportImpl {
                     }
                 }
             }
-        };
-
-        let (abort_handle, abort_registration) = AbortHandle::new_pair();
-        let log_cl = self.log.clone();
-        self.tokio_runtime.spawn(async move {
-            if let Err(Aborted) = Abortable::new(connect_task, abort_registration).await {
-                warn!(
-                    log_cl,
-                    "ControlPlane: connect task aborted: flow_tag = {:?}, peer_id = {:?}",
-                    flow_tag,
-                    peer_id
-                );
-            }
-        });
-        abort_handle
+        })
     }
 
     /// Handles the handshake completion during connection establishment (both
