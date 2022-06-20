@@ -2084,3 +2084,46 @@ fn execute_response_with_trapping_cleanup() {
         ExecResult::ResponseResult(_) | ExecResult::Empty => panic!("Wrong execution result."),
     }
 }
+
+#[test]
+fn ecdsa_signature_queue_fills_up() {
+    let fee = 1_000_000;
+    let payment = 2_000_000;
+    let ecdsa_key = make_key("secp256k1");
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .with_own_subnet_id(subnet_test_id(1))
+        .with_nns_subnet_id(subnet_test_id(2))
+        .with_ecdsa_signature_fee(fee)
+        .with_ecdsa_key(ecdsa_key.clone())
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    let esda_args = ic00::SignWithECDSAArgs {
+        message_hash: [1; 32].to_vec(),
+        derivation_path: vec![],
+        key_id: ecdsa_key,
+    };
+    let run = wasm()
+        .call_with_cycles(
+            ic00::IC_00,
+            Method::SignWithECDSA,
+            call_args()
+                .other_side(esda_args.encode())
+                .on_reject(wasm().reject_message().reject()),
+            (0, payment),
+        )
+        .build();
+
+    for _i in 0..1_004 {
+        test.ingress_raw(canister_id, "update", run.clone());
+    }
+    let result = test.ingress(canister_id, "update", run).unwrap();
+
+    assert_eq!(
+        result,
+        WasmResult::Reject(
+            "sign_with_ecdsa request could not be handled, the ECDSA signature queue is full."
+                .to_string()
+        )
+    );
+}
