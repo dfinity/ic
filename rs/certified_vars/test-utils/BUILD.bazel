@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/tree_hash",
+    "//rs/crypto/utils/threshold_sig_der",
+    "//rs/interfaces",
+    "//rs/types/types",
+    "@crate_index//:leb128",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
+]
+
+rust_library(
+    name = "test-utils",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_certified_vars_test_utils",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)

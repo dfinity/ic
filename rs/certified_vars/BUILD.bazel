@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "sources",
-    srcs = glob(["**"]),
+    srcs = glob(["**"]) + ["//rs/certified_vars/test-utils:sources"],
 )
 
 rust_library(
