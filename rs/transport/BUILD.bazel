@@ -11,24 +11,26 @@ filegroup(
 )
 
 rust_library(
-    name = "tls_interfaces",
-    srcs = [
-        "src/lib.rs",
-    ],
-    crate_name = "ic_crypto_tls_interfaces",
+    name = "transport",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_transport",
     edition = "2018",
     proc_macro_deps = [
         "@crate_index//:async-trait",
     ],
     deps = [
+        "//rs/config",
+        "//rs/crypto/tls_interfaces",
+        "//rs/interfaces/transport",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/phantom_newtype",
         "//rs/protobuf",
-        "//rs/types/types",
-        "@crate_index//:openssl",
+        "//rs/types/base_types",
+        "@crate_index//:crossbeam-channel",
+        "@crate_index//:prometheus",
         "@crate_index//:serde",
+        "@crate_index//:slog",
         "@crate_index//:tokio",
-        "@crate_index//:tokio-openssl",
-        "@crate_index//:tokio-rustls",
     ],
 )
-
-# TODO(IC-1207): migrate rust_test when unblocked dependencies.
