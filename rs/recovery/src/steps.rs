@@ -1,4 +1,4 @@
-use crate::admin_helper::{AdminHelper, IcAdmin};
+use crate::admin_helper::IcAdmin;
 use crate::command_helper::{exec_cmd, pipe_all};
 use crate::error::{RecoveryError, RecoveryResult};
 use crate::file_sync_helper::{remove_dir, rsync, write_file};
@@ -618,7 +618,6 @@ impl Step for CreateTarsStep {
 pub struct UploadCUPAndTar {
     pub recovery: Recovery,
     pub logger: Logger,
-    pub admin_helper: AdminHelper,
     pub subnet_id: SubnetId,
     pub upload_node: Option<IpAddr>,
     pub require_confirmation: bool,
@@ -750,12 +749,12 @@ impl Step for UploadCUPAndTar {
 
 pub struct DownloadRegistryStoreStep {
     pub logger: Logger,
-    pub admin_binary: PathBuf,
     pub node_ip: IpAddr,
     pub original_nns_id: SubnetId,
     pub work_dir: PathBuf,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
+    pub recovery: Recovery,
 }
 
 impl Step for DownloadRegistryStoreStep {
@@ -778,18 +777,12 @@ impl Step for DownloadRegistryStoreStep {
             self.key_file.clone(),
         );
 
-        let nns_url = Recovery::get_nns_endpoint(self.node_ip)?;
-        let admin_helper = AdminHelper::new(self.admin_binary.clone(), nns_url, None);
-
         info!(
             self.logger,
             "Waiting until subnet with original NNS id is up."
         );
         for i in 0..50 {
-            if let Err(e) = Recovery::exec_admin_cmd(
-                &self.logger,
-                &admin_helper.get_subnet_command(self.original_nns_id),
-            ) {
+            if let Err(e) = self.recovery.get_member_ips(self.original_nns_id) {
                 info!(self.logger, "Try {}: {}", i, e);
             } else {
                 info!(self.logger, "Found subnet with original NNS id!");

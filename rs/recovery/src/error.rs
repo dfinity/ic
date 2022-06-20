@@ -16,6 +16,7 @@ pub enum RecoveryError {
     CommandError(Option<i32>, String),
     OutputError(String),
     DownloadError(String, FileDownloadError),
+    UnexpectedError(String),
     StepSkipped,
 }
 
@@ -60,6 +61,9 @@ impl fmt::Display for RecoveryError {
             }
             RecoveryError::DownloadError(msg, e) => {
                 write!(f, "Download error, message: {:?}, error: {:?}", msg, e)
+            }
+            RecoveryError::UnexpectedError(msg) => {
+                write!(f, "Unexpected error, message: {:?}", msg)
             }
             RecoveryError::StepSkipped => {
                 write!(f, "Recovery step skipped.")
