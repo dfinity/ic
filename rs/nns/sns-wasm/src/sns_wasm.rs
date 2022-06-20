@@ -2,9 +2,12 @@ use crate::canister_api::CanisterApi;
 use crate::pb::hash_to_hex_string;
 use crate::pb::v1::add_wasm_response::{AddWasmError, AddWasmOk};
 use crate::pb::v1::{
-    add_wasm_response, AddWasm, AddWasmResponse, DeployNewSns, DeployNewSnsResponse, GetWasm,
-    GetWasmResponse, SnsCanisterIds, SnsCanisterType, SnsWasm,
+    add_wasm_response, AddWasm, AddWasmResponse, DeployNewSns, DeployNewSnsResponse, DeployedSns,
+    GetWasm, GetWasmResponse, ListDeployedSnses, ListDeployedSnsesResponse, SnsCanisterIds,
+    SnsCanisterType, SnsWasm,
 };
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_types::{Cycles, SubnetId};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -18,6 +21,8 @@ pub struct SnsWasmCanister {
     wasm_storage: SnsWasmStorage,
     /// Allowed subnets for SNS's to be installed
     sns_subnet_ids: Vec<SubnetId>,
+    /// Stored deployed_sns instances
+    deployed_sns_list: Vec<DeployedSns>,
 }
 
 impl SnsWasmCanister {
@@ -54,6 +59,16 @@ impl SnsWasmCanister {
         AddWasmResponse { result }
     }
 
+    /// Returns a list of Deployed SNS root CanisterId's and the subnet they were deployed to.
+    pub fn list_deployed_snses(
+        &self,
+        _list_sns_payload: ListDeployedSnses,
+    ) -> ListDeployedSnsesResponse {
+        ListDeployedSnsesResponse {
+            instances: self.deployed_sns_list.clone(),
+        }
+    }
+
     /// Deploys a new SNS based on the parameters of the payload
     pub async fn deploy_new_sns(
         thread_safe_sns: &'static LocalKey<RefCell<SnsWasmCanister>>,
@@ -65,6 +80,15 @@ impl SnsWasmCanister {
 
         let canisters = Self::create_sns_canisters(canister_api, subnet_id).await;
 
+        thread_safe_sns.with(|sns_canister| {
+            sns_canister
+                .borrow_mut()
+                .deployed_sns_list
+                .push(DeployedSns {
+                    root_canister_id: canisters.root,
+                })
+        });
+
         DeployNewSnsResponse {
             subnet_id: Some(subnet_id.get()),
             canisters: Some(canisters),
@@ -75,7 +99,6 @@ impl SnsWasmCanister {
         canister_api: &impl CanisterApi,
         subnet_id: SubnetId,
     ) -> SnsCanisterIds {
-        println!("Making the canisters");
         // TODO error handling
         // TODO where do we get these cycles?
         let this_canister_id = canister_api.local_canister_id().get();
@@ -165,10 +188,11 @@ impl SnsWasmStorage {
 mod test {
     use crate::canister_api::CanisterApi;
     use crate::pb::hash_to_hex_string;
-    use crate::pb::v1::add_wasm_response::{AddWasmError, AddWasmOk};
     use crate::pb::v1::{
-        add_wasm_response, AddWasm, DeployNewSns, DeployNewSnsResponse, GetWasm, SnsCanisterIds,
-        SnsCanisterType,
+        add_wasm_response,
+        add_wasm_response::{AddWasmError, AddWasmOk},
+        AddWasm, DeployNewSns, DeployNewSnsResponse, DeployedSns, GetWasm, ListDeployedSnses,
+        ListDeployedSnsesResponse, SnsCanisterIds, SnsCanisterType,
     };
     use crate::sns_wasm::{SnsWasm, SnsWasmCanister, SnsWasmStorage};
     use async_trait::async_trait;
@@ -182,6 +206,7 @@ mod test {
     struct TestCanisterApi {
         canisters_created: Arc<Mutex<u64>>,
     }
+
     #[async_trait]
     impl CanisterApi for TestCanisterApi {
         fn local_canister_id(&self) -> CanisterId {
@@ -411,5 +436,53 @@ mod test {
                 })
             }
         );
+    }
+
+    #[tokio::test]
+    async fn test_deploy_new_sns_records_root_canisters() {
+        let test_id = subnet_test_id(1);
+        let canister_api = new_canister_api();
+        thread_local! {
+            static CANISTER_WRAPPER: RefCell<SnsWasmCanister> = RefCell::new(new_wasm_canister()) ;
+        }
+
+        CANISTER_WRAPPER.with(|c| {
+            c.borrow_mut().set_sns_subnets(vec![test_id]);
+        });
+
+        let root_canister_1 =
+            SnsWasmCanister::deploy_new_sns(&CANISTER_WRAPPER, &canister_api, DeployNewSns {})
+                .await
+                .canisters
+                .unwrap()
+                .root
+                .unwrap();
+
+        let root_canister_2 =
+            SnsWasmCanister::deploy_new_sns(&CANISTER_WRAPPER, &canister_api, DeployNewSns {})
+                .await
+                .canisters
+                .unwrap()
+                .root
+                .unwrap();
+
+        assert_ne!(root_canister_1, root_canister_2);
+
+        let known_deployments_response = CANISTER_WRAPPER
+            .with(|canister| canister.borrow().list_deployed_snses(ListDeployedSnses {}));
+
+        assert_eq!(
+            known_deployments_response,
+            ListDeployedSnsesResponse {
+                instances: vec![
+                    DeployedSns {
+                        root_canister_id: Some(root_canister_1),
+                    },
+                    DeployedSns {
+                        root_canister_id: Some(root_canister_2),
+                    },
+                ],
+            },
+        )
     }
 }

@@ -73,3 +73,18 @@ message SnsCanisterIds {
   // PrincipalId of the governance canister
   ic_base_types.pb.v1.PrincipalId governance = 3;
 }
+
+// Message to list deployed sns instances
+message ListDeployedSnses {}
+
+// Response to list_deployed_snses
+message ListDeployedSnsesResponse {
+  // the deployed instances
+  repeated DeployedSns instances = 1;
+}
+
+// A deployed SNS root_canister_id
+message DeployedSns {
+  // PrincipalId of the root canister of the sns
+  ic_base_types.pb.v1.PrincipalId root_canister_id = 1;
+}
