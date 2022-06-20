@@ -439,7 +439,7 @@ pub fn test_threshold_ecdsa_signature_same_subnet(handle: IcHandle, ctx: &ic_fon
             .unwrap();
         let signature = get_signature(
             &message_hash,
-            Cycles::from(7_000_000_000u64),
+            ECDSA_SIGNATURE_FEE,
             make_key(KEY_ID1),
             &uni_can,
             ctx,
