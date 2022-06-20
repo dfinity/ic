@@ -29,6 +29,7 @@ use ic_protobuf::registry::{
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdIdProto;
 use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_client_helpers::subnet::SubnetListRegistry;
 use ic_registry_keys::{
     make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
 };
@@ -62,11 +63,13 @@ pub use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::MessageId,
     time::Time,
-    CanisterId, CryptoHashOfState, PrincipalId, SubnetId, UserId,
+    CanisterId, CryptoHashOfState, Cycles, PrincipalId, SubnetId, UserId,
 };
 use serde::Serialize;
+pub use slog::Level;
 use std::fmt;
 use std::path::Path;
+use std::str::FromStr;
 use std::string::ToString;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
@@ -216,8 +219,15 @@ impl StateMachine {
     ) -> Self {
         use slog::Drain;
 
+        let log_level = std::env::var("RUST_LOG")
+            .map(|level| Level::from_str(&level).unwrap())
+            .unwrap_or_else(|_| Level::Warning);
+
         let decorator = slog_term::PlainSyncDecorator::new(slog_term::TestStdoutWriter);
-        let drain = slog_term::FullFormat::new(decorator).build().fuse();
+        let drain = slog_term::FullFormat::new(decorator)
+            .build()
+            .filter_level(log_level)
+            .fuse();
         let logger = slog::Logger::root(drain, slog::o!());
         let replica_logger: ReplicaLogger = logger.into();
 
@@ -614,12 +624,20 @@ impl StateMachine {
 
     /// Creates a new canister and returns the canister principal.
     pub fn create_canister(&self, settings: Option<CanisterSettingsArgs>) -> CanisterId {
+        self.create_canister_with_cycles(Cycles::new(0), settings)
+    }
+
+    pub fn create_canister_with_cycles(
+        &self,
+        cycles: Cycles,
+        settings: Option<CanisterSettingsArgs>,
+    ) -> CanisterId {
         let wasm_result = self
             .execute_ingress(
                 ic00::IC_00,
                 ic00::Method::ProvisionalCreateCanisterWithCycles,
                 ic00::ProvisionalCreateCanisterWithCyclesArgs {
-                    amount: Some(candid::Nat::from(0)),
+                    amount: Some(candid::Nat::from(cycles.get())),
                     settings,
                 }
                 .encode(),
@@ -893,5 +911,12 @@ impl StateMachine {
         self.registry_client.update_to_latest_version();
 
         assert_eq!(next_version, self.registry_client.get_latest_version());
+    }
+
+    pub fn get_subnet_ids(&self) -> Vec<SubnetId> {
+        self.registry_client
+            .get_subnet_ids(self.registry_client.get_latest_version())
+            .unwrap()
+            .unwrap()
     }
 }

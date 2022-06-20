@@ -92,6 +92,27 @@ pub struct SnsCanisterIds {
     #[prost(message, optional, tag="3")]
     pub governance: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
+/// Message to list deployed sns instances
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListDeployedSnses {
+}
+/// Response to list_deployed_snses
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListDeployedSnsesResponse {
+    /// the deployed instances
+    #[prost(message, repeated, tag="1")]
+    pub instances: ::prost::alloc::vec::Vec<DeployedSns>,
+}
+/// A deployed SNS root_canister_id
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeployedSns {
+    /// PrincipalId of the root canister of the sns
+    #[prost(message, optional, tag="1")]
+    pub root_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
 /// The type of canister a particular WASM is intended to be installed on
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

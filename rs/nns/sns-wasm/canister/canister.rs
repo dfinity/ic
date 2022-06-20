@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use dfn_core::{over, over_async, over_init};
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_ic00_types::{CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, Method};
@@ -8,6 +10,7 @@ use ic_sns_wasm::canister_api::CanisterApi;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasm, AddWasmResponse, DeployNewSns, DeployNewSnsResponse, GetWasm, GetWasmResponse,
+    ListDeployedSnses, ListDeployedSnsesResponse,
 };
 use ic_sns_wasm::sns_wasm::SnsWasmCanister;
 use ic_types::{CanisterId, Cycles};
@@ -130,6 +133,16 @@ fn deploy_new_sns() {
 #[candid_method(update, rename = "deploy_new_sns")]
 async fn deploy_new_sns_(deploy_new_sns: DeployNewSns) -> DeployNewSnsResponse {
     SnsWasmCanister::deploy_new_sns(&SNS_WASM, &canister_api(), deploy_new_sns).await
+}
+
+#[export_name = "canister_query list_deployed_snses"]
+fn list_deployed_snses() {
+    over(candid_one, list_deployed_snses_)
+}
+
+#[candid_method(query, rename = "list_deployed_snses")]
+fn list_deployed_snses_(request: ListDeployedSnses) -> ListDeployedSnsesResponse {
+    SNS_WASM.with(|sns_wasm| sns_wasm.borrow().list_deployed_snses(request))
 }
 
 /// This makes this Candid service self-describing, so that for example Candid

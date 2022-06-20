@@ -30,6 +30,9 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     std_ic_sns_type_attr(&mut config, "DeployNewSns");
     std_ic_sns_type_attr(&mut config, "DeployNewSnsResponse");
     std_ic_sns_type_attr(&mut config, "SnsCanisterIds");
+    std_ic_sns_type_attr(&mut config, "ListDeployedSnses");
+    std_ic_sns_type_attr(&mut config, "ListDeployedSnsesResponse");
+    std_ic_sns_type_attr(&mut config, "DeployedSns");
 
     config
         .compile_protos(&proto_files, &[proto.base_types, proto.sns_wasm])
