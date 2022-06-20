@@ -1,0 +1,39 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
+    "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/protobuf",
+    "//rs/types/base_types",
+    "@crate_index//:base64",
+    "@crate_index//:ed25519-dalek",
+    "@crate_index//:simple_asn1",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "basic_sig",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_crypto_utils_basic_sig",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "basic_sig_test",
+    crate = ":basic_sig",
+    deps = ["@crate_index//:hex"],
+)
