@@ -135,8 +135,13 @@ impl DeployArgs {
 }
 
 fn main() {
-    let args = CliArgs::try_parse_from(std::env::args())
-        .unwrap_or_else(|e| panic!("Illegal arguments: {}", e));
+    let args = match CliArgs::try_parse_from(std::env::args()) {
+        Ok(args) => args,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
 
     match args.sub_command {
         SubCommand::Deploy(args) => deploy(args),
