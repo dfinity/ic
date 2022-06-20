@@ -58,16 +58,38 @@ pub struct GetUtxosResponse {
 }
 
 /// Errors when processing a `get_utxos` request.
-#[derive(CandidType, Debug, Deserialize, PartialEq, Clone, Copy)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Clone)]
 pub enum GetUtxosError {
     MalformedAddress,
     MinConfirmationsTooLarge { given: u32, max: u32 },
+    UnknownTipBlockHash { tip_block_hash: BlockHash },
+    MalformedPage { err: String },
 }
 
 impl std::fmt::Display for GetUtxosError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Format the error in the same way we format `GetBalanceError`.
-        GetBalanceError::from(*self).fmt(f)
+        match self {
+            Self::MalformedAddress => {
+                write!(f, "Malformed address.")
+            }
+            Self::MinConfirmationsTooLarge { given, max } => {
+                write!(
+                    f,
+                    "The requested min_confirmations is too large. Given: {}, max supported: {}",
+                    given, max
+                )
+            }
+            Self::UnknownTipBlockHash { tip_block_hash } => {
+                write!(
+                    f,
+                    "The provided tip block hash {:?} is unknown.",
+                    tip_block_hash
+                )
+            }
+            Self::MalformedPage { err } => {
+                write!(f, "The provided page is malformed {}", err)
+            }
+        }
     }
 }
 
@@ -78,7 +100,7 @@ pub struct GetBalanceRequest {
     pub min_confirmations: Option<u32>,
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq, Clone, Copy)]
+#[derive(CandidType, Debug, Deserialize, PartialEq, Clone)]
 pub enum GetBalanceError {
     MalformedAddress,
     MinConfirmationsTooLarge { given: u32, max: u32 },
@@ -96,17 +118,6 @@ impl std::fmt::Display for GetBalanceError {
                     "The requested min_confirmations is too large. Given: {}, max supported: {}",
                     given, max
                 )
-            }
-        }
-    }
-}
-
-impl From<GetUtxosError> for GetBalanceError {
-    fn from(err: GetUtxosError) -> Self {
-        match err {
-            GetUtxosError::MalformedAddress => Self::MalformedAddress,
-            GetUtxosError::MinConfirmationsTooLarge { given, max } => {
-                Self::MinConfirmationsTooLarge { given, max }
             }
         }
     }

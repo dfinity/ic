@@ -111,6 +111,50 @@ pub fn blockchains(block_tree: &BlockTree) -> Vec<BlockChain> {
     tips
 }
 
+/// Returns a `BlockChain` starting from the anchor and ending with the `tip`.
+///
+/// If the `tip` doesn't exist in the tree, `None` is returned.
+pub fn get_chain_with_tip<'a, 'b>(
+    block_tree: &'a BlockTree,
+    tip: &'b BlockHash,
+) -> Option<BlockChain<'a>> {
+    // Compute the chain in reverse order, as that's more efficient, and then
+    // reverse it to get the answer in the correct order.
+    get_chain_with_tip_reverse(block_tree, tip).map(|mut chain| {
+        // Safe to unwrap as the `chain` would contain at least the root of the
+        // `BlockTree` it was produced from.
+        // This would be the first block since the chain is in reverse order.
+        let first = chain.pop().unwrap();
+        // Reverse the chain to get the list of `successors` in the right order.
+        chain.reverse();
+        BlockChain {
+            first,
+            successors: chain,
+        }
+    })
+}
+
+// Do a depth-first search to find the blockchain that ends with the given `tip`.
+// For performance reasons, the list is returned in the reverse order, starting
+// from `tip` and ending with `anchor`.
+fn get_chain_with_tip_reverse<'a, 'b>(
+    block_tree: &'a BlockTree,
+    tip: &'b BlockHash,
+) -> Option<Vec<&'a Block>> {
+    if block_tree.root.block_hash() == *tip {
+        return Some(vec![&block_tree.root]);
+    }
+
+    for child in block_tree.children.iter() {
+        if let Some(mut chain) = get_chain_with_tip_reverse(child, tip) {
+            chain.push(&block_tree.root);
+            return Some(chain);
+        }
+    }
+
+    None
+}
+
 /// Returns the depth of the tree.
 pub fn depth(block_tree: &BlockTree) -> u32 {
     if block_tree.children.is_empty() {
@@ -199,5 +243,78 @@ mod test {
         }
 
         assert_eq!(depth(&block_tree), 1);
+    }
+
+    #[test]
+    fn chain_with_tip_no_forks() {
+        let mut blocks = vec![BlockBuilder::genesis().build()];
+        for i in 1..10 {
+            blocks.push(BlockBuilder::with_prev_header(blocks[i - 1].header).build())
+        }
+
+        let mut block_tree = BlockTree::new(blocks[0].clone());
+
+        for block in blocks.iter() {
+            extend(&mut block_tree, block.clone()).unwrap();
+        }
+
+        for (i, block) in blocks.iter().enumerate() {
+            // Fetch the blockchain with the `block` as tip.
+            let chain = get_chain_with_tip(&block_tree, &block.block_hash())
+                .unwrap()
+                .into_chain();
+
+            // The first block should be the genesis block.
+            assert_eq!(chain[0], &blocks[0]);
+            // The last block should be the expected tip.
+            assert_eq!(chain.last().unwrap(), &block);
+
+            // The length of the chain should grow as the requested tip gets deeper.
+            assert_eq!(chain.len(), i + 1);
+
+            // All blocks should be correctly chained to one another.
+            for i in 1..chain.len() {
+                assert_eq!(chain[i - 1].block_hash(), chain[i].header.prev_blockhash)
+            }
+        }
+    }
+
+    #[test]
+    fn chain_with_tip_multiple_forks() {
+        let mut blocks = vec![BlockBuilder::genesis().build()];
+        let mut block_tree = BlockTree::new(blocks[0].clone());
+
+        let num_forks = 5;
+        for _ in 0..num_forks {
+            for i in 1..10 {
+                blocks.push(BlockBuilder::with_prev_header(blocks[i - 1].header).build())
+            }
+
+            for block in blocks.iter() {
+                extend(&mut block_tree, block.clone()).unwrap();
+            }
+
+            for (i, block) in blocks.iter().enumerate() {
+                // Fetch the blockchain with the `block` as tip.
+                let chain = get_chain_with_tip(&block_tree, &block.block_hash())
+                    .unwrap()
+                    .into_chain();
+
+                // The first block should be the genesis block.
+                assert_eq!(chain[0], &blocks[0]);
+                // The last block should be the expected tip.
+                assert_eq!(chain.last().unwrap(), &block);
+
+                // The length of the chain should grow as the requested tip gets deeper.
+                assert_eq!(chain.len(), i + 1);
+
+                // All blocks should be correctly chained to one another.
+                for i in 1..chain.len() {
+                    assert_eq!(chain[i - 1].block_hash(), chain[i].header.prev_blockhash)
+                }
+            }
+
+            blocks = vec![blocks[0].clone()];
+        }
     }
 }

@@ -38,7 +38,7 @@ fn main() {
 
             println!(
                 "{:#?}",
-                ic_btc_canister::store::get_utxos(&state, address_str, 0)
+                ic_btc_canister::store::get_utxos(&state, address_str, 0, None, None)
                     .unwrap()
                     .utxos
                     .into_iter()

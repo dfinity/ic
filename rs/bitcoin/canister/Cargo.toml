@@ -21,6 +21,7 @@ lazy_static = "1.4.0"
 prometheus = { version = "0.12.0", features = [ "process" ] }
 prost = "0.10.4"
 serde = "1.0.132"
+serde_bytes = "0.11"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
 stable-structures = { path = "../../stable-structures" }
 
@@ -40,4 +41,5 @@ ic-btc-test-utils = { path = "../test-utils" }
 bitcoin = {version = "0.28.1", features = ["rand"]} # needed for generating secp256k1 keys.
 clap = {version = "3.1.9", features = ["derive"]}
 maplit = "1.0.2"
+proptest = "0.9.4"
 tempfile = "3.2.0"

@@ -1,8 +1,55 @@
 //! Types that are private to the crate.
 use crate::state::UTXO_KEY_SIZE;
-use bitcoin::{hashes::Hash, OutPoint, Script, TxOut, Txid};
+use bitcoin::{hashes::Hash, BlockHash, OutPoint, Script, TxOut, Txid};
 use ic_btc_types::{Address, Height};
 use std::convert::TryInto;
+
+/// Used to signal the cut-off point for returning chunked UTXOs results.
+pub struct Page {
+    pub tip_block_hash: BlockHash,
+    pub outpoint: OutPoint,
+}
+
+impl Page {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        vec![
+            self.tip_block_hash.to_vec(),
+            OutPoint::to_bytes(&self.outpoint),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    }
+
+    pub fn from_bytes(mut bytes: Vec<u8>) -> Result<Self, String> {
+        // The first 32 bytes represent the encoded `BlockHash`, the remaining the encoded `OutPoint`.
+        let outpoint_offset = 32;
+        let outpoint_bytes = bytes.split_off(outpoint_offset);
+        let tip_block_hash = BlockHash::from_hash(
+            Hash::from_slice(&bytes)
+                .map_err(|err| format!("Could not parse tip block hash: {}", err))?,
+        );
+        Ok(Page {
+            tip_block_hash,
+            outpoint: outpoint_from_bytes(outpoint_bytes)?,
+        })
+    }
+}
+
+fn outpoint_from_bytes(bytes: Vec<u8>) -> Result<OutPoint, String> {
+    if bytes.len() != 36 {
+        return Err(format!("Invalid length {} != 36 for outpoint", bytes.len()));
+    }
+    let txid = Txid::from_hash(
+        Hash::from_slice(&bytes[..32]).map_err(|err| format!("Could not parse txid: {}", err))?,
+    );
+    let vout = u32::from_le_bytes(
+        bytes[32..36]
+            .try_into()
+            .map_err(|err| format!("Could not parse vout: {}", err))?,
+    );
+    Ok(OutPoint { txid, vout })
+}
 
 /// A trait with convencience methods for storing an element into a stable structure.
 pub trait Storable {
