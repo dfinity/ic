@@ -1,3 +1,4 @@
+pub mod endpoints;
 pub mod hash;
 
 use candid::CandidType;
@@ -8,7 +9,7 @@ use ic_ledger_core::{
     balances::{BalanceError, Balances, BalancesStore},
     block::{BlockHeight, BlockType, EncodedBlock, HashOf},
     blockchain::Blockchain,
-    ledger::{LedgerData, LedgerTransaction, TransactionInfo},
+    ledger::{apply_transaction, LedgerData, LedgerTransaction, TransactionInfo},
     timestamp::TimeStamp,
     tokens::Tokens,
 };
@@ -17,6 +18,7 @@ use serde_bytes::ByteBuf;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::convert::TryFrom;
+use std::fmt;
 use std::time::Duration;
 
 const TRANSACTION_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
@@ -33,6 +35,24 @@ pub type Subaccount = [u8; 32];
 pub struct Account {
     pub of: PrincipalId,
     pub subaccount: Option<Subaccount>,
+}
+
+impl fmt::Display for Account {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.subaccount {
+            None => write!(f, "{}", self.of),
+            Some(subaccount) => write!(f, "({}, {})", self.of, hex::encode(&subaccount[..])),
+        }
+    }
+}
+
+impl From<PrincipalId> for Account {
+    fn from(of: PrincipalId) -> Self {
+        Self {
+            of,
+            subaccount: None,
+        }
+    }
 }
 
 fn ser_compact_account<S>(acc: &Account, s: S) -> Result<S::Ok, S::Error>
@@ -201,6 +221,36 @@ impl LedgerTransaction for Transaction {
     }
 }
 
+impl Transaction {
+    pub fn mint(to: Account, amount: Tokens, created_at_time: TimeStamp) -> Self {
+        Self {
+            operation: Operation::Mint {
+                to,
+                amount: amount.get_e8s(),
+            },
+            created_at_time: created_at_time.as_nanos_since_unix_epoch(),
+        }
+    }
+
+    pub fn transfer(
+        from: Account,
+        to: Account,
+        amount: Tokens,
+        fee: Tokens,
+        created_at_time: TimeStamp,
+    ) -> Self {
+        Self {
+            operation: Operation::Transfer {
+                from,
+                to,
+                amount: amount.get_e8s(),
+                fee: fee.get_e8s(),
+            },
+            created_at_time: created_at_time.as_nanos_since_unix_epoch(),
+        }
+    }
+}
+
 #[derive(
     Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
 )]
@@ -280,6 +330,7 @@ impl ArchiveCanisterWasm for Icrc1ArchiveWasm {
 #[derive(Deserialize, CandidType, Clone, Debug, PartialEq)]
 pub struct InitArgs {
     pub minting_account: Account,
+    pub initial_balances: Vec<(Account, u64)>,
     pub transfer_fee: Tokens,
     pub token_name: String,
     pub token_symbol: String,
@@ -304,12 +355,14 @@ impl Ledger {
     pub fn from_init_args(
         InitArgs {
             minting_account,
+            initial_balances,
             transfer_fee,
             token_name,
             token_symbol,
         }: InitArgs,
+        now: TimeStamp,
     ) -> Self {
-        Self {
+        let mut ledger = Self {
             balances: LedgerBalances::default(),
             blockchain: Blockchain::default(),
             transactions_by_hash: BTreeMap::new(),
@@ -318,7 +371,20 @@ impl Ledger {
             transfer_fee,
             token_symbol,
             token_name,
+        };
+
+        for (account, balance) in initial_balances.into_iter() {
+            apply_transaction(
+                &mut ledger,
+                Transaction::mint(account.clone(), Tokens::from_e8s(balance), now),
+                now,
+            )
+            .unwrap_or_else(|err| {
+                panic!("failed to mint {} e8s to {}: {:?}", balance, account, err)
+            });
         }
+
+        ledger
     }
 }
 
@@ -391,4 +457,14 @@ impl LedgerData for Ledger {
     }
 
     fn on_purged_transaction(&mut self, _height: BlockHeight) {}
+}
+
+impl Ledger {
+    pub fn minting_account(&self) -> &Account {
+        &self.minting_account
+    }
+
+    pub fn transfer_fee(&self) -> Tokens {
+        self.transfer_fee
+    }
 }
