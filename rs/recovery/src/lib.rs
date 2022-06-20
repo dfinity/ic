@@ -6,12 +6,13 @@
 //! reproducable) description of the step, as well as its potential automatic
 //! execution.
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
-use candid::Deserialize;
 use command_helper::{exec_cmd, pipe_all};
 use error::{RecoveryError, RecoveryResult};
 use file_sync_helper::{create_dir, download_binary, read_dir};
-use ic_base_types::{CanisterId, NodeId, PrincipalId};
+use ic_base_types::{CanisterId, NodeId};
 use ic_cup_explorer::get_catchup_content;
+use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
+use ic_registry_nns_data_provider::create_nns_data_provider;
 use ic_replay::cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand};
 use ic_replay::player::StateParams;
 use ic_types::messages::HttpStatusResponse;
@@ -246,21 +247,6 @@ impl Recovery {
         ssh_helper.can_connect()
     }
 
-    /// Query the current NNS for the subnet record of
-    /// the given subnet, log the output.
-    pub fn get_subnet(&self, subnet_id: SubnetId) -> RecoveryResult<()> {
-        Recovery::exec_admin_cmd(
-            &self.logger,
-            &self.admin_helper.get_subnet_command(subnet_id),
-        )
-    }
-
-    /// Query the IC topology as determined by the
-    /// current NNS, log the output.
-    pub fn get_topology(&self) -> RecoveryResult<()> {
-        Recovery::exec_admin_cmd(&self.logger, &self.admin_helper.get_topology_command())
-    }
-
     // Execute an `ic-admin` command, log the output.
     fn exec_admin_cmd(logger: &Logger, ic_admin_cmd: &IcAdmin) -> RecoveryResult<()> {
         let mut cmd = AdminHelper::to_system_command(ic_admin_cmd);
@@ -272,65 +258,49 @@ impl Recovery {
 
     /// Lookup IP addresses of all members of the given subnet
     pub fn get_member_ips(&self, subnet_id: SubnetId) -> RecoveryResult<Vec<IpAddr>> {
-        #[derive(Deserialize)]
-        struct Membership {
-            membership: Vec<String>,
-        }
-        #[derive(Deserialize)]
-        struct Record {
-            value: Membership,
-        }
-        #[derive(Deserialize)]
-        struct SubnetRecords {
-            records: Vec<Record>,
-        }
-        let mut cmd =
-            AdminHelper::to_system_command(&self.admin_helper.get_subnet_command(subnet_id));
-        let bytes = &cmd
-            .output()
-            .map_err(|e| RecoveryError::cmd_error(&cmd, None, e.to_string()))?
-            .stdout;
-        serde_json::from_slice::<SubnetRecords>(bytes)
-            .map_err(|e| {
-                RecoveryError::invalid_output_error(format!("Failed to parse JSON: {}", e))
-            })?
-            .records[0]
-            .value
-            .membership
-            .iter()
-            .map(|s| {
-                let principal = PrincipalId::from_str(s).map_err(|err| {
-                    RecoveryError::invalid_output_error(format!(
-                        "Could not parse node id: {}, {}",
-                        s, err
-                    ))
-                })?;
-                let id = NodeId::from(principal);
-                let ip = self.get_ip_of_node(&id);
-                info!(self.logger, "Node id = {}, ip = {:?}", id, &ip);
-                ip
+        use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
+        let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime");
+        let result = rt
+            .block_on(async {
+                let nns_data_provider = create_nns_data_provider(
+                    tokio::runtime::Handle::current(),
+                    vec![self.admin_helper.nns_url.clone()],
+                    None,
+                );
+                let registry_client = RegistryClientImpl::new(nns_data_provider, None);
+                registry_client
+                    .poll_once()
+                    .expect("couldn't poll the registry");
+                let version = registry_client.get_latest_version();
+                match registry_client.get_node_ids_on_subnet(subnet_id, version) {
+                    Ok(Some(node_ids)) => Ok(node_ids
+                        .into_iter()
+                        .filter_map(|node_id| {
+                            registry_client
+                                .get_transport_info(node_id, version)
+                                .unwrap_or_default()
+                        })
+                        .collect::<Vec<_>>()),
+                    other => Err(format!(
+                        "no node ids found in the registry for subnet_id={}: {:?}",
+                        subnet_id, other
+                    )),
+                }
             })
-            .collect::<RecoveryResult<Vec<IpAddr>>>()
-    }
-
-    /// Lookup IP of the given node
-    pub fn get_ip_of_node(&self, node_id: &NodeId) -> RecoveryResult<IpAddr> {
-        let get_node = AdminHelper::to_system_command(&self.admin_helper.get_node_command(node_id));
-        let mut tail = Command::new("tail");
-        tail.arg("-n1");
-        let mut sed = Command::new("sed");
-        sed.arg("-e").arg(r#"s/^.* ip_addr: "\([^"]*\)".*$/\1/"#);
-        pipe_all(&mut [get_node, tail, sed]).and_then(|res| {
-            let ip_string = res.ok_or_else(|| {
-                RecoveryError::invalid_output_error("Empty node IP record".to_string())
-            })?;
-            ip_string.trim().parse::<IpAddr>().map_err(|err| {
-                RecoveryError::invalid_output_error(format!(
-                    "Could not parse node IP: {}, {}",
-                    node_id, err
-                ))
+            .map_err(|err| RecoveryError::UnexpectedError(err))?;
+        result
+            .into_iter()
+            .filter_map(|node_record| {
+                node_record.http.map(|http| {
+                    http.ip_addr.parse().map_err(|err| {
+                        RecoveryError::UnexpectedError(format!(
+                            "couldn't parse ip address from the registry: {:?}",
+                            err
+                        ))
+                    })
+                })
             })
-        })
+            .collect()
     }
 
     /// Return a [DownloadIcStateStep] downloading the ic_state of the given
@@ -821,7 +791,6 @@ impl Recovery {
         UploadCUPAndTar {
             recovery: self.clone(),
             logger: self.logger.clone(),
-            admin_helper: self.admin_helper.clone(),
             subnet_id,
             upload_node,
             work_dir: self.work_dir.clone(),
@@ -855,12 +824,12 @@ impl Recovery {
     ) -> impl Step {
         DownloadRegistryStoreStep {
             logger: self.logger.clone(),
-            admin_binary: self.admin_helper.binary.clone(),
             node_ip: download_node,
             original_nns_id,
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
+            recovery: self.clone(),
         }
     }
 

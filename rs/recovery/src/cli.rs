@@ -266,10 +266,9 @@ pub fn print_summary(logger: &Logger, args: &RecoveryArgs, subnet_id: SubnetId) 
 
 pub fn print_height_info(logger: &Logger, recovery: &Recovery, subnet_id: SubnetId) {
     info!(logger, "Select a node with highest finalization height:");
-    if let Ok(heights) = recovery.get_node_heights_from_metrics(subnet_id) {
-        info!(logger, "{:#?}", heights);
-    } else {
-        warn!(logger, "Failed to query height info.");
+    match recovery.get_node_heights_from_metrics(subnet_id) {
+        Ok(heights) => info!(logger, "{:#?}", heights),
+        Err(err) => warn!(logger, "Failed to query height info: {:?}", err),
     }
 }
 

@@ -222,26 +222,6 @@ impl AdminHelper {
         ic_admin
     }
 
-    pub fn get_node_command(&self, node_id: &NodeId) -> IcAdmin {
-        let mut ic_admin = self.get_ic_admin_cmd_base(&None);
-        ic_admin.push("get-node".to_string());
-        ic_admin.push(node_id.to_string());
-        ic_admin
-    }
-
-    pub fn get_subnet_command(&self, subnet_id: SubnetId) -> IcAdmin {
-        let mut ic_admin = self.get_ic_admin_cmd_base(&None);
-        ic_admin.push("get-subnet".to_string());
-        ic_admin.push(subnet_id.to_string());
-        ic_admin
-    }
-
-    pub fn get_topology_command(&self) -> IcAdmin {
-        let mut ic_admin = self.get_ic_admin_cmd_base(&None);
-        ic_admin.push("get-topology".to_string());
-        ic_admin
-    }
-
     pub fn to_system_command(ic_admin: &IcAdmin) -> Command {
         let mut cmd = Command::new(&ic_admin[0]);
         cmd.args(ic_admin[1..].iter().map(|s| s.replace('\"', "")));
