@@ -43,6 +43,7 @@ use ic_types::{
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::{convert::TryFrom, sync::Arc};
 use tempfile::TempDir;
@@ -161,7 +162,7 @@ fn execute_get_balance(
             state,
             MAX_NUM_INSTRUCTIONS,
             &mut mock_random_number_generator(),
-            &None,
+            &BTreeMap::new(),
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             &test_registry_settings(),
         )
@@ -211,7 +212,7 @@ fn execute_get_utxos(
             state,
             MAX_NUM_INSTRUCTIONS,
             &mut mock_random_number_generator(),
-            &None,
+            &BTreeMap::new(),
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             &test_registry_settings(),
         )
@@ -273,7 +274,7 @@ fn execute_get_current_fee_percentiles(
             state,
             MAX_NUM_INSTRUCTIONS,
             &mut mock_random_number_generator(),
-            &None,
+            &BTreeMap::new(),
             MAX_SUBNET_AVAILABLE_MEMORY.clone(),
             &test_registry_settings(),
         )

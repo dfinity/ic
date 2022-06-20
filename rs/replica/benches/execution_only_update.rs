@@ -24,8 +24,8 @@ use ic_types::{
     Randomness, RegistryVersion,
 };
 use ic_types::{messages::MessageId, replica_config::ReplicaConfig, CanisterId};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
+use std::{collections::BTreeMap, sync::Arc};
 
 const HELLO_WORLD: &str = r#"
             (module
@@ -115,7 +115,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             ..BatchPayload::default()
         },
         randomness: Randomness::from([0; 32]),
-        ecdsa_subnet_public_key: None,
+        ecdsa_subnet_public_keys: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: mock_time(),
         consensus_responses: vec![],

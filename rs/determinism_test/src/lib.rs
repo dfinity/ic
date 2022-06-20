@@ -21,7 +21,7 @@ use ic_types::{
     CanisterId, CryptoHashOfState, Randomness, RegistryVersion,
 };
 use setup::setup;
-use std::{convert::TryFrom, sync::Arc, thread::sleep, time::Duration};
+use std::{collections::BTreeMap, convert::TryFrom, sync::Arc, thread::sleep, time::Duration};
 use wabt::wat2wasm;
 
 fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -> Batch {
@@ -33,7 +33,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             ..BatchPayload::default()
         },
         randomness: Randomness::from([0; 32]),
-        ecdsa_subnet_public_key: None,
+        ecdsa_subnet_public_keys: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
         consensus_responses: vec![],
@@ -49,7 +49,7 @@ fn build_batch_with_full_state_hash(message_routing: &dyn MessageRouting) -> Bat
             ..BatchPayload::default()
         },
         randomness: Randomness::from([0; 32]),
-        ecdsa_subnet_public_key: None,
+        ecdsa_subnet_public_keys: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
         consensus_responses: vec![],

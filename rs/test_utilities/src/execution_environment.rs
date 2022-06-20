@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::{collections::BTreeSet, convert::TryFrom};
 
@@ -35,6 +35,8 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CallContext, CanisterState, ExecutionState, InputQueueType, ReplicatedState,
 };
+use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
+use ic_types::crypto::AlgorithmId;
 use ic_types::Time;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -94,6 +96,7 @@ pub struct ExecutionTest {
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     caller_canister_id: Option<CanisterId>,
+    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
 
     // The actual implementation.
     exec_env: ExecutionEnvironmentImpl,
@@ -639,7 +642,7 @@ impl ExecutionTest {
             state,
             self.install_code_instruction_limit,
             &mut mock_random_number_generator(),
-            &None,
+            &self.ecdsa_subnet_public_keys,
             self.subnet_available_memory.clone(),
             &self.registry_settings,
         );
@@ -1068,13 +1071,26 @@ impl ExecutionTestBuilder {
         if let Some(ecdsa_signature_fee) = self.ecdsa_signature_fee {
             config.ecdsa_signature_fee = ecdsa_signature_fee;
         }
-        if let Some(ecdsa_key) = self.ecdsa_key {
+        if let Some(ecdsa_key) = &self.ecdsa_key {
             state
                 .metadata
                 .network_topology
                 .ecdsa_keys
-                .insert(ecdsa_key, vec![self.own_subnet_id]);
+                .insert(ecdsa_key.clone(), vec![self.own_subnet_id]);
         }
+        let ecdsa_subnet_public_keys = self
+            .ecdsa_key
+            .into_iter()
+            .map(|key| {
+                (
+                    key,
+                    MasterEcdsaPublicKey {
+                        algorithm_id: AlgorithmId::Secp256k1,
+                        public_key: b"abababab".to_vec(),
+                    },
+                )
+            })
+            .collect();
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             self.instruction_limit,
             self.subnet_type,
@@ -1138,6 +1154,7 @@ impl ExecutionTestBuilder {
             metrics_registry,
             ingress_history_writer,
             manual_execution: self.manual_execution,
+            ecdsa_subnet_public_keys,
         }
     }
 }

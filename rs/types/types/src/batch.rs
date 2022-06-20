@@ -18,6 +18,7 @@ use super::{
 };
 use crate::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_btc_types_internal::BitcoinAdapterResponse;
+use ic_ic00_types::EcdsaKeyId;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryInto};
 
@@ -34,7 +35,7 @@ pub struct Batch {
     /// A source of randomness for processing the Batch.
     pub randomness: Randomness,
     /// The ECDSA public key of the subnet.
-    pub ecdsa_subnet_public_key: Option<MasterEcdsaPublicKey>,
+    pub ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
     /// The version of the registry to be referenced when processing the batch.
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.
