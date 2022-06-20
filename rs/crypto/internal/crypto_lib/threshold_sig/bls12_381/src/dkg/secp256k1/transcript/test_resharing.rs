@@ -5,8 +5,8 @@ use crate::dkg::secp256k1::test_fixtures::{
 use crate::types::public_coefficients::conversions::pub_key_bytes_from_pub_coeff_bytes;
 use proptest::prelude::*;
 use rand::Rng;
+use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
 
 fn test_reshared_transcript_is_compatible_with_previous_combined_signatures(seed: [u8; 32]) {
     let mut rng = ChaChaRng::from_seed(seed);

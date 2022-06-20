@@ -2,8 +2,8 @@
 use crate::ni_dkg::groth20_bls12_381::types::BTENode;
 use ic_types::{NumberOfNodes, Randomness};
 use rand::seq::IteratorRandom;
+use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
 
 #[cfg(test)]
 mod tests;

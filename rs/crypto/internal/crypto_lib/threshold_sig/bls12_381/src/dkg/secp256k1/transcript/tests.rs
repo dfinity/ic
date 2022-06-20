@@ -11,8 +11,8 @@ use ic_types::Randomness;
 use proptest::collection::vec as prop_vec;
 use proptest::prelude::*;
 use rand::Rng;
+use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
 use std::convert::TryInto;
 
 #[derive(Debug)]
@@ -222,7 +222,7 @@ proptest! {
         let mut rng = ChaChaRng::from_seed(fixture.seed.get());
         let num_verified_responses =  fixture.verified_responses.len();
         while fixture.num_verified_responses() + NumberOfNodes::from(2) > fixture.threshold * 2 {
-            fixture.verified_responses[rng.gen_range(0, num_verified_responses)] = None;
+            fixture.verified_responses[rng.gen_range(0..num_verified_responses)] = None;
         }
 
         assert!(fixture.transcript().is_err(), "Expected to fail with threshold {} and {} responses", fixture.threshold, fixture.num_verified_responses());

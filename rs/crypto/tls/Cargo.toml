@@ -11,7 +11,7 @@ ic-crypto-internal-tls = { path = "../internal/crypto_lib/tls" }
 openssl = "0.10.29"
 tokio = { version = "1.15.0", features = ["net", "io-util"] }
 tokio-openssl = "0.6.0"
-rand = "0.7.3"
+rand = "0.8"
 thiserror = "1"
 
 [dev-dependencies]

@@ -12,7 +12,7 @@ ic-crypto-internal-basic-sig-der-utils = { path = "../../internal/crypto_lib/bas
 ic-crypto-internal-basic-sig-ed25519 = { path = "../../internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
 simple_asn1 = "0.5.4"
-ed25519-dalek = "1.0.1"
+ed25519-consensus = "2.0.1"
 
 [dev-dependencies]
 hex = "0.4.2"

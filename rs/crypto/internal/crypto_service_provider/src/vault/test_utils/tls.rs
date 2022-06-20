@@ -252,6 +252,6 @@ fn ed25519_csp_pubkey_from_tls_pubkey_cert(public_key_cert: &TlsPublicKeyCert) -
 
 fn random_message() -> Vec<u8> {
     let mut rng = thread_rng();
-    let msg_len: usize = rng.gen_range(0, 1024);
+    let msg_len: usize = rng.gen_range(0..1024);
     (0..msg_len).map(|_| rng.gen::<u8>()).collect()
 }

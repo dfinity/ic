@@ -50,8 +50,8 @@ pub struct StateWithThresholdKey {
 }
 impl StateWithThresholdKey {
     pub fn random(rng: &mut ChaChaRng) -> Self {
-        let threshold = NumberOfNodes::from(rng.gen_range(1_u32, 10_u32));
-        let num_signatories = NumberOfNodes::from(rng.gen_range(threshold.get(), 10_u32));
+        let threshold = NumberOfNodes::from(rng.gen_range(1_u32..10_u32));
+        let num_signatories = NumberOfNodes::from(rng.gen_range(threshold.get()..10_u32));
         let eligibility = vec![true; num_signatories.get() as usize];
         let (public_coefficients, secret_keys): (
             PublicCoefficientsBytes,
@@ -128,7 +128,7 @@ impl StateWithEphemeralKeys {
     pub fn random(mut rng: &mut ChaChaRng, initial_state: StateWithThresholdKey) -> Self {
         let dkg_id = random_dkg_id(&mut rng);
         let num_dealers = initial_state.num_signatories;
-        let num_receivers = NumberOfNodes::from(rng.gen_range(1, 10_u32));
+        let num_receivers = NumberOfNodes::from(rng.gen_range(1..10_u32));
         let dealer_ephemeral_keys = (0..num_dealers.get())
             .map(|dealer_index| {
                 Some(ephemeral_key_set_from_tuple(create_ephemeral(
@@ -185,14 +185,13 @@ impl StateWithResharedDealings {
             initial_state.threshold.get() <= num_dealers.get(),
             "Insufficient dealers to reshare threshold key."
         );
-        let num_dealers = NumberOfNodes::from(
-            rng.gen_range(initial_state.threshold.get(), num_dealers.get() + 1),
-        );
+        let num_dealers =
+            NumberOfNodes::from(rng.gen_range(initial_state.threshold.get()..=num_dealers.get()));
         let new_threshold = {
             let new_threshold = 5;
             let new_threshold = std::cmp::min(new_threshold, (num_receivers.get() + 1) / 2);
             let new_threshold = std::cmp::min(new_threshold, num_dealers.get());
-            NumberOfNodes::from(rng.gen_range(1, new_threshold + 1))
+            NumberOfNodes::from(rng.gen_range(1..=new_threshold))
         };
         let dealer_indices: Vec<NodeIndex> = (0..initial_state.num_signatories.get())
             .choose_multiple(&mut rng, num_dealers.get() as usize);

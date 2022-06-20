@@ -10,9 +10,9 @@ use crate::dkg::secp256k1::types::{
 use ic_types::IDkgId;
 use ic_types_test_utils::arbitrary as arbitrary_types;
 use proptest::prelude::*;
+use rand::SeedableRng;
 use rand::{CryptoRng, Rng};
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
 use std::convert::TryFrom;
 
 proptest! {

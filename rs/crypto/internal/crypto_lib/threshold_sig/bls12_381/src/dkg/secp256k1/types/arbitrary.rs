@@ -2,8 +2,8 @@ use super::*;
 use crate::dkg::secp256k1::ephemeral_key::create_ephemeral;
 use ic_types_test_utils::arbitrary as arbitrary_types;
 use proptest::prelude::*;
+use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
 
 mod tests;
 

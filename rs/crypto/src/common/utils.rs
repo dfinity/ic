@@ -14,7 +14,7 @@ use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::crypto::v1::{AlgorithmId as AlgorithmIdProto, X509PublicKeyCert};
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use ic_types::NodeId;
-use rand_core::OsRng;
+use rand::rngs::OsRng;
 use std::path::Path;
 use std::sync::Arc;
 

@@ -6,7 +6,7 @@
 use crate::common::utils::csp_at_root;
 use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
 use ic_crypto_internal_csp::Csp;
-use rand_core::OsRng;
+use rand::rngs::OsRng;
 use std::str::FromStr;
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter, EnumString};

@@ -547,7 +547,7 @@ pub fn set_of_nodes(ids: &[u64]) -> BTreeSet<NodeId> {
 }
 
 fn random_registry_version() -> RegistryVersion {
-    RegistryVersion::new(thread_rng().gen_range(1, u32::MAX) as u64)
+    RegistryVersion::new(thread_rng().gen_range(1..u32::MAX) as u64)
 }
 
 fn random_transcript_id() -> IDkgTranscriptId {
@@ -649,7 +649,7 @@ pub fn corrupt_idkg_dealing<R: CryptoRng + RngCore>(
     if receivers.is_empty() {
         return Err(CorruptIDkgDealingError::NoReceivers);
     }
-    let receiver = receivers[rng.gen_range(0, receivers.len())];
+    let receiver = receivers[rng.gen_range(0..receivers.len())];
     let node_index = transcript_params.receivers().position(*receiver).unwrap();
 
     let randomness = ic_types::Randomness::from(rng.gen::<[u8; 32]>());

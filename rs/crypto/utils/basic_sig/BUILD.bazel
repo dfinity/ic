@@ -14,7 +14,7 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/types/base_types",
     "@crate_index//:base64",
-    "@crate_index//:ed25519-dalek",
+    "@crate_index//:ed25519-consensus",
     "@crate_index//:simple_asn1",
 ]
 

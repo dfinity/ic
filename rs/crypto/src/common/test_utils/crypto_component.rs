@@ -4,8 +4,8 @@ use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities::types::ids::node_test_id;
+use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use rand_core::SeedableRng;
 use std::sync::Arc;
 
 const NODE_ID: u64 = 42;

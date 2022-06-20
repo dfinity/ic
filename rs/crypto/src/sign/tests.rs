@@ -21,6 +21,7 @@ use ic_types::messages::MessageId;
 use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
 use openssl::sha::sha256;
+use rand::thread_rng;
 
 pub const KEY_ID_1: [u8; 32] = [0u8; 32];
 pub const KEY_ID_2: [u8; 32] = [1u8; 32];
@@ -248,7 +249,6 @@ pub fn request_id_signature_and_public_key_with_domain_separator(
     request_id: &MessageId,
     algorithm_id: AlgorithmId,
 ) -> (BasicSigOf<MessageId>, UserPublicKey) {
-    use ed25519_dalek::Signer;
     let bytes_to_sign = {
         let mut buf = vec![];
         buf.extend_from_slice(domain_separator);
@@ -269,13 +269,10 @@ pub fn request_id_signature_and_public_key_with_domain_separator(
                 )
             }
             AlgorithmId::Ed25519 => {
-                let ed25519_keypair = {
-                    let mut rng = OsRng::default();
-                    ed25519_dalek::Keypair::generate(&mut rng)
-                };
+                let signing_key = ed25519_consensus::SigningKey::new(thread_rng());
                 (
-                    ed25519_keypair.public.to_bytes().to_vec(),
-                    ed25519_keypair.sign(&bytes_to_sign).to_bytes().to_vec(),
+                    signing_key.verification_key().to_bytes().to_vec(),
+                    signing_key.sign(&bytes_to_sign).to_bytes().to_vec(),
                 )
             }
             _ => panic!["unexpected algorithm id {:?}", algorithm_id],

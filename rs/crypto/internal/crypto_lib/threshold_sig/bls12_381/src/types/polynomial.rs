@@ -4,7 +4,7 @@
 
 use bls12_381::Scalar;
 use ff::Field;
-use rand_core::RngCore;
+use rand::RngCore;
 use std::iter;
 use zeroize::Zeroize;
 

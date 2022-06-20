@@ -1,8 +1,8 @@
 //! Tests for bls operations
 use super::*;
 use crate::random_bls12_381_scalar;
+use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
 
 /// Verifies that G1 points are unchanged by serialisation followed by
 /// deserialisation

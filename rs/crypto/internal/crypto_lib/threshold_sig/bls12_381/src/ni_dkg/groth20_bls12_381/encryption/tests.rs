@@ -1,8 +1,7 @@
 #![allow(clippy::unwrap_used)]
 //! Tests for the CLib NiDKG forward secure encryption
-pub use rand::Rng;
+pub use rand::{Rng, RngCore, SeedableRng};
 pub use rand_chacha::ChaChaRng;
-pub use rand_core::{RngCore, SeedableRng};
 pub use std::collections::BTreeMap;
 
 mod internal_types {

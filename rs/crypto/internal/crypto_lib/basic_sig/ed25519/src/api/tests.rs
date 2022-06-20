@@ -3,8 +3,8 @@ mod keygen {
 
     use crate::{keypair_from_rng, public_key_from_der};
     use ic_crypto_internal_test_vectors::unhex::hex_to_32_bytes;
+    use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
-    use rand_core::SeedableRng;
 
     #[test]
     fn should_correctly_generate_ed25519_keys() {

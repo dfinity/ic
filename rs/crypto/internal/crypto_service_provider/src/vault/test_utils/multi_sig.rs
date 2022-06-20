@@ -57,7 +57,7 @@ pub fn should_multi_sign_and_verify_with_generated_key(csp_vault: Arc<dyn CspVau
         .expect("failed to generate keys");
 
     let mut rng = thread_rng();
-    let msg_len: usize = rng.gen_range(0, 1024);
+    let msg_len: usize = rng.gen_range(0..1024);
     let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
 
     let verifier = multi_sig_verifier();

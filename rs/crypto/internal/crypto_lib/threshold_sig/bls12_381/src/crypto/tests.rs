@@ -17,8 +17,8 @@ use proptest::prelude::*;
 use proptest::std_facade::HashSet;
 use rand::seq::IteratorRandom;
 use rand::Rng;
+use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
 use std::ops::{AddAssign, SubAssign};
 
 pub mod util {

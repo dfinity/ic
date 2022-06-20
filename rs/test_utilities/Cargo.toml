@@ -6,7 +6,7 @@ edition = "2018"
 [dependencies]
 async-trait = "0.1.36"
 bincode = "1.2.1"
-ed25519-dalek = "1.0.1"
+ed25519-consensus = "2.0.1"
 hex-literal = "0.2.1"
 ic-base-types = { path = "../types/base_types" }
 ic-btc-types-internal = { path = "../bitcoin/types/internal" }
@@ -60,9 +60,8 @@ nix = "0.23.0"
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 proptest = "0.9.4"
-rand = "0.7.3"
-rand_chacha = "0.2.2"
-rand_core = "0.5.1"
+rand = "0.8"
+rand_chacha = "0.3"
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_cbor = "0.11.1"
 slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }

@@ -232,8 +232,8 @@ pub fn test_threshold_scheme_with_basic_keygen(
     message: &[u8],
 ) {
     let mut rng = ChaChaRng::from_seed(seed.get());
-    let threshold = NumberOfNodes::from(rng.gen_range(0, 10));
-    let number_of_signers = NumberOfNodes::from(rng.gen_range(0, 10));
+    let threshold = NumberOfNodes::from(rng.gen_range(0..10));
+    let number_of_signers = NumberOfNodes::from(rng.gen_range(0..10));
     println!(
         "--- threshold: {}, number_of_signers: {}",
         threshold, number_of_signers

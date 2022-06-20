@@ -42,8 +42,8 @@ use std::sync::Arc;
 
 #[test]
 fn should_fail_create_dealing_if_registry_missing_mega_pubkey() {
-    let subnet_size = thread_rng().gen_range(1, 10) + 1;
-    let mut env = CanisterThresholdSigTestEnvironment::new(subnet_size - 1);
+    let subnet_size = thread_rng().gen_range(1..10);
+    let mut env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let new_node_id = random_node_id_excluding(&env.crypto_components.keys().cloned().collect());
     let crypto_not_in_registry =
@@ -63,7 +63,7 @@ fn should_fail_create_dealing_if_registry_missing_mega_pubkey() {
 
 #[test]
 fn should_fail_create_dealing_if_node_isnt_a_dealer() {
-    let subnet_size = thread_rng().gen_range(1, 10);
+    let subnet_size = thread_rng().gen_range(1..10);
     let mut env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -83,7 +83,7 @@ fn should_fail_create_dealing_if_node_isnt_a_dealer() {
 
 #[test]
 fn should_fail_create_reshare_dealing_if_transcript_isnt_loaded() {
-    let subnet_size = thread_rng().gen_range(1, 10);
+    let subnet_size = thread_rng().gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let initial_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -113,7 +113,7 @@ fn should_fail_create_reshare_dealing_if_transcript_isnt_loaded() {
 
 #[test]
 fn should_fail_create_transcript_without_enough_dealings() {
-    let subnet_size = thread_rng().gen_range(1, 30);
+    let subnet_size = thread_rng().gen_range(1..30);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -144,7 +144,7 @@ fn should_fail_create_transcript_without_enough_dealings() {
 
 #[test]
 fn should_fail_create_transcript_with_mislabeled_dealers() {
-    let subnet_size = thread_rng().gen_range(1, 10);
+    let subnet_size = thread_rng().gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -175,7 +175,7 @@ fn should_fail_create_transcript_with_mislabeled_dealers() {
 
 #[test]
 fn should_fail_create_transcript_with_signature_by_disallowed_receiver() {
-    let subnet_size = thread_rng().gen_range(2, 10); // Need enough to be able to remove one
+    let subnet_size = thread_rng().gen_range(2..10); // Need enough to be able to remove one
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -214,7 +214,7 @@ fn should_fail_create_transcript_with_signature_by_disallowed_receiver() {
 }
 #[test]
 fn should_fail_create_transcript_without_enough_signatures() {
-    let subnet_size = thread_rng().gen_range(4, 10); // Needs to be enough for >=1 signature
+    let subnet_size = thread_rng().gen_range(4..10); // Needs to be enough for >=1 signature
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -280,7 +280,7 @@ fn should_fail_create_transcript_without_enough_signatures() {
 
 #[test]
 fn should_fail_create_transcript_with_bad_signature() {
-    let subnet_size = thread_rng().gen_range(1, 10);
+    let subnet_size = thread_rng().gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -315,7 +315,7 @@ fn should_fail_create_transcript_with_bad_signature() {
 
 #[test]
 fn should_return_ok_from_load_transcript_if_not_a_receiver() {
-    let subnet_size = thread_rng().gen_range(1, 10);
+    let subnet_size = thread_rng().gen_range(1..10);
     let mut env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -336,7 +336,7 @@ fn should_return_ok_from_load_transcript_if_not_a_receiver() {
 
 #[test]
 fn should_run_load_transcript_successfully_if_already_loaded() {
-    let subnet_size = thread_rng().gen_range(1, 10);
+    let subnet_size = thread_rng().gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -354,7 +354,7 @@ fn should_run_load_transcript_successfully_if_already_loaded() {
 
 #[test]
 fn should_load_transcript_without_returning_complaints() {
-    let subnet_size = thread_rng().gen_range(1, 10);
+    let subnet_size = thread_rng().gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -369,14 +369,14 @@ fn should_load_transcript_without_returning_complaints() {
 #[test]
 fn should_return_valid_and_correct_complaints_on_load_transcript_with_invalid_dealings() {
     let rng = &mut thread_rng();
-    let subnet_size = rng.gen_range(1, 10);
+    let subnet_size = rng.gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
     let mut transcript = run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
     let loader_id = random_receiver_id(&params);
 
-    let num_of_dealings_to_corrupt = rng.gen_range(1, transcript.verified_dealings.len() + 1);
+    let num_of_dealings_to_corrupt = rng.gen_range(1..=transcript.verified_dealings.len());
     let dealing_indices_to_corrupt: Vec<NodeIndex> = transcript
         .verified_dealings
         .iter()
@@ -417,7 +417,7 @@ fn should_return_valid_and_correct_complaints_on_load_transcript_with_invalid_de
 #[test]
 fn should_fail_to_verify_complaint_against_wrong_complainer_id() {
     let rng = &mut thread_rng();
-    let subnet_size = rng.gen_range(2, 6);
+    let subnet_size = rng.gen_range(2..6);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -463,7 +463,7 @@ fn should_fail_to_verify_complaint_against_wrong_complainer_id() {
 /// in the final transcript.
 fn should_fail_to_verify_complaint_with_wrong_dealer_id() {
     let rng = &mut thread_rng();
-    let subnet_size = rng.gen_range(4, 6);
+    let subnet_size = rng.gen_range(4..6);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -524,7 +524,7 @@ fn should_fail_to_verify_complaint_with_wrong_internal_complaint() {
     let rng = &mut thread_rng();
     let num_of_dealings_to_corrupt = 2;
 
-    let subnet_size = rng.gen_range(4, 6);
+    let subnet_size = rng.gen_range(4..6);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -578,7 +578,7 @@ fn should_fail_to_verify_complaint_with_wrong_internal_complaint() {
 
 #[test]
 fn should_run_idkg_successfully_for_random_dealing() {
-    let subnet_size = thread_rng().gen_range(1, 10);
+    let subnet_size = thread_rng().gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -590,7 +590,7 @@ fn should_run_idkg_successfully_for_random_dealing() {
 
 #[test]
 fn should_run_idkg_successfully_for_reshare_of_random_dealing() {
-    let subnet_size = thread_rng().gen_range(1, 10);
+    let subnet_size = thread_rng().gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let initial_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -613,7 +613,7 @@ fn should_run_idkg_successfully_for_reshare_of_random_dealing() {
 
 #[test]
 fn should_run_idkg_successfully_for_reshare_of_unmasked_dealing() {
-    let subnet_size = thread_rng().gen_range(1, 10);
+    let subnet_size = thread_rng().gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let initial_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -642,7 +642,7 @@ fn should_run_idkg_successfully_for_reshare_of_unmasked_dealing() {
 
 #[test]
 fn should_run_idkg_successfully_for_multiplication_of_dealings() {
-    let subnet_size = thread_rng().gen_range(1, 10);
+    let subnet_size = thread_rng().gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let masked_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -686,7 +686,7 @@ fn should_run_idkg_successfully_for_multiplication_of_dealings() {
 
 #[test]
 fn should_include_the_expected_number_of_dealings_in_a_transcript() {
-    let subnet_size = thread_rng().gen_range(1, 10);
+    let subnet_size = thread_rng().gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let random_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -737,7 +737,7 @@ fn should_include_the_expected_number_of_dealings_in_a_transcript() {
 
 #[test]
 fn should_create_quadruple_successfully_with_new_key() {
-    let subnet_size = thread_rng().gen_range(1, 10);
+    let subnet_size = thread_rng().gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -748,7 +748,7 @@ fn should_create_quadruple_successfully_with_new_key() {
 fn should_create_signature_share_successfully_with_new_key() {
     let mut rng = thread_rng();
 
-    let subnet_size = rng.gen_range(1, 10);
+    let subnet_size = rng.gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -786,7 +786,7 @@ fn should_create_signature_share_successfully_with_new_key() {
 fn should_fail_create_signature_if_not_receiver() {
     let mut rng = thread_rng();
 
-    let subnet_size = rng.gen_range(1, 10);
+    let subnet_size = rng.gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -825,7 +825,7 @@ fn should_fail_create_signature_if_not_receiver() {
 fn should_fail_create_signature_share_without_any_transcripts_loaded() {
     let mut rng = thread_rng();
 
-    let subnet_size = rng.gen_range(1, 10);
+    let subnet_size = rng.gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     // This allows the `inputs` to be accepted by `sign_share`,
@@ -846,7 +846,7 @@ fn should_fail_create_signature_share_without_any_transcripts_loaded() {
 fn should_fail_create_signature_share_without_kappa_times_lambda_loaded() {
     let mut rng = thread_rng();
 
-    let subnet_size = rng.gen_range(1, 10);
+    let subnet_size = rng.gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -906,7 +906,7 @@ fn should_fail_create_signature_share_without_kappa_times_lambda_loaded() {
 fn should_fail_create_signature_share_without_key_times_lambda_loaded() {
     let mut rng = thread_rng();
 
-    let subnet_size = rng.gen_range(1, 10);
+    let subnet_size = rng.gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -966,7 +966,7 @@ fn should_fail_create_signature_share_without_key_times_lambda_loaded() {
 fn should_verify_sig_share_successfully() {
     let mut rng = thread_rng();
 
-    let subnet_size = rng.gen_range(1, 10);
+    let subnet_size = rng.gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -1008,7 +1008,7 @@ fn should_verify_sig_share_successfully() {
 fn should_combine_sig_shares_successfully() {
     let mut rng = thread_rng();
 
-    let subnet_size = rng.gen_range(1, 10);
+    let subnet_size = rng.gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -1060,7 +1060,7 @@ fn should_combine_sig_shares_successfully() {
 fn should_verify_sig_shares_and_combined_sig_successfully() {
     let mut rng = thread_rng();
 
-    let subnet_size = rng.gen_range(1, 10);
+    let subnet_size = rng.gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -1155,7 +1155,7 @@ fn should_verify_sig_shares_and_combined_sig_successfully() {
 fn should_fail_combine_sig_shares_with_insufficient_shares() {
     let mut rng = thread_rng();
 
-    let subnet_size = rng.gen_range(1, 10);
+    let subnet_size = rng.gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -1212,7 +1212,7 @@ fn should_verify_combined_sig_successfully() {
     use ic_crypto_internal_basic_sig_ecdsa_secp256k1 as ecdsa_secp256k1;
     let mut rng = thread_rng();
 
-    let subnet_size = rng.gen_range(1, 10);
+    let subnet_size = rng.gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -1280,7 +1280,7 @@ fn should_verify_combined_sig_successfully() {
 fn should_return_ecdsa_public_key() {
     let mut rng = thread_rng();
 
-    let subnet_size = rng.gen_range(1, 10);
+    let subnet_size = rng.gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -1295,7 +1295,7 @@ fn should_return_ecdsa_public_key() {
 fn should_derive_equal_ecdsa_public_keys() {
     let mut rng = thread_rng();
 
-    let subnet_size = rng.gen_range(1, 10);
+    let subnet_size = rng.gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -1323,7 +1323,7 @@ fn should_derive_equal_ecdsa_public_keys() {
 fn should_derive_differing_ecdsa_public_keys() {
     let mut rng = thread_rng();
 
-    let subnet_size = rng.gen_range(1, 10);
+    let subnet_size = rng.gen_range(1..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
@@ -1926,7 +1926,7 @@ fn environment_with_transcript_and_complaint() -> (
     // removing all but collection threshold # of dealings, at least
     // one dealing remains to corrupt
 
-    let subnet_size = rng.gen_range(4, 10);
+    let subnet_size = rng.gen_range(4..10);
     let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);

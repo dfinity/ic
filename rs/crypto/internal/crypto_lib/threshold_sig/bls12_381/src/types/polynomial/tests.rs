@@ -5,8 +5,8 @@ mod basic_functionality {
     use super::*;
     use ic_crypto_internal_bls12381_common::fr_to_bytes;
     use proptest::prelude::*;
+    use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
-    use rand_core::SeedableRng;
 
     #[test]
     fn test_polynomial_from_rng_produces_same_poly_from_same_seed() {

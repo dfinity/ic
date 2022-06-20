@@ -15,7 +15,6 @@ use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, UserPublic
 use ic_types::messages::MessageId;
 use ic_types::{NodeId, RegistryVersion};
 
-use ed25519_dalek::Signer;
 use openssl::bn::BigNumContext;
 use openssl::ec::{EcGroup, EcKey};
 use openssl::ecdsa::EcdsaSig;
@@ -23,7 +22,6 @@ use openssl::nid::Nid;
 use openssl::sha::sha256;
 
 use rand::prelude::*;
-use rand_core::OsRng;
 use std::sync::Arc;
 
 const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(3);
@@ -237,13 +235,13 @@ fn request_id_signature_from_random_keypair(
         buf
     };
 
-    let mut rng = OsRng::default();
+    let mut rng = thread_rng();
 
     let (signature_bytes, public_key_bytes) = match algorithm_id {
         AlgorithmId::Ed25519 => {
-            let keypair = ed25519_dalek::Keypair::generate(&mut rng);
-            let signature_bytes = keypair.sign(&bytes_to_sign).to_bytes().to_vec();
-            let public_key_bytes = keypair.public.to_bytes().to_vec();
+            let signing_key = ed25519_consensus::SigningKey::new(&mut rng);
+            let signature_bytes = signing_key.sign(&bytes_to_sign).to_bytes().to_vec();
+            let public_key_bytes = signing_key.verification_key().to_bytes().to_vec();
             (signature_bytes, public_key_bytes)
         }
         AlgorithmId::EcdsaP256 => generate_ecdsa_key_and_sig(Nid::X9_62_PRIME256V1, &bytes_to_sign),
@@ -285,14 +283,17 @@ fn generate_ecdsa_key_and_sig(curve_name: Nid, bytes_to_sign: &[u8]) -> (Vec<u8>
     (signature_bytes, public_key_bytes)
 }
 
-fn generate_rsa_key_and_sig(rng: &mut OsRng, bytes_to_sign: &[u8]) -> (Vec<u8>, Vec<u8>) {
+fn generate_rsa_key_and_sig<R: Rng + CryptoRng>(
+    rng: &mut R,
+    bytes_to_sign: &[u8],
+) -> (Vec<u8>, Vec<u8>) {
     use ic_crypto_internal_basic_sig_rsa_pkcs1 as basic_sig_rsa;
     use ic_crypto_sha::Sha256;
-    use rsa::{Hash, PaddingScheme, PublicKeyParts, RSAPrivateKey};
+    use rsa::{Hash, PaddingScheme, PublicKeyParts, RsaPrivateKey};
 
     let bitlength = 2048; // minimum allowed
 
-    let priv_key = RSAPrivateKey::new(rng, bitlength).expect("failed to generate RSA key");
+    let priv_key = RsaPrivateKey::new(rng, bitlength).expect("failed to generate RSA key");
 
     let pub_key_bytes = basic_sig_rsa::RsaPublicKey::from_components(
         &priv_key.to_public_key().e().to_bytes_be(),

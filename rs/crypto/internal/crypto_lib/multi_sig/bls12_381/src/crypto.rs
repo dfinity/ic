@@ -45,8 +45,8 @@ pub fn hash_public_key_to_g1(public_key: &[u8]) -> G1Projective {
 // RNG, then use this to generate a uniform random element.
 #[cfg(test)]
 pub fn keypair_from_seed(seed: [u64; 4]) -> (SecretKey, PublicKey) {
+    use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
-    use rand_core::SeedableRng;
     let mut seed_as_u8: [u8; 32] = [0; 32];
     for i in 0..4 {
         let bs = seed[i].to_be_bytes();

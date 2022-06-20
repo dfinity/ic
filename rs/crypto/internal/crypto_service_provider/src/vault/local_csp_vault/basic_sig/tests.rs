@@ -86,7 +86,7 @@ fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
         .expect("failed to generate threshold sig keys");
     let key_id = key_ids[0].expect("threshold sig key not generated");
 
-    let msg_len: usize = rng.gen_range(0, 1024);
+    let msg_len: usize = rng.gen_range(0..1024);
     let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
 
     let result = csp_vault.sign(AlgorithmId::Ed25519, &msg, key_id);

@@ -12,8 +12,8 @@ use ic_types::{NodeIndex, NumberOfNodes, Randomness};
 use ic_types_test_utils::arbitrary as arbitrary_types;
 use proptest::prelude::*;
 use rand::seq::IteratorRandom;
+use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
 use std::convert::{TryFrom, TryInto};
 
 /// Indicates that the parameters provided to a test don't yield a valid test.
