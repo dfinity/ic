@@ -4,8 +4,8 @@ use ic_types::{NodeIndex, NumberOfNodes, Randomness};
 use openssl::sha::sha256;
 use rand::rngs::StdRng;
 use rand::Rng;
+use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
 
 pub fn main(args: &[String]) -> Result<(), (String, i32)> {
     match args {

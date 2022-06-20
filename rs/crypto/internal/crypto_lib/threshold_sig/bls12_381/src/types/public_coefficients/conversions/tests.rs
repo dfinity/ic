@@ -4,8 +4,8 @@ use super::super::arbitrary::arbitrary_public_coefficient_bytes;
 use super::*;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use proptest::prelude::*;
+use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
 
 /// Demonstrates that size error conversion works without panicking
 #[test]

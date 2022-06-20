@@ -1,8 +1,8 @@
 use super::*;
 use libsecp256k1::curve::Scalar;
 use proptest::prelude::*;
+use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
 
 impl From<u32> for EphemeralSecretKey {
     fn from(number: u32) -> EphemeralSecretKey {

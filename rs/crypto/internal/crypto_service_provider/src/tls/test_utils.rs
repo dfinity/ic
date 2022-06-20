@@ -7,9 +7,8 @@ use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_test_utils::tls::x509_certificates::private_key_to_der;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use openssl::pkey::{PKey, Private};
-use rand::Rng;
+use rand::{CryptoRng, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
-use rand_core::{CryptoRng, SeedableRng};
 
 pub fn tls_secret_key(private_key: &PKey<Private>) -> CspSecretKey {
     tls_secret_key_with_bytes(private_key_to_der(private_key))

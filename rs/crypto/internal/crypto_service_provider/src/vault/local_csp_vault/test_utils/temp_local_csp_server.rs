@@ -3,7 +3,7 @@
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_logger::replica_logger::no_op_logger;
-use rand_core::OsRng;
+use rand::rngs::OsRng;
 use std::sync::Arc;
 use tempfile::TempDir;
 

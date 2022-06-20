@@ -7,8 +7,8 @@ use crate::types::{
 use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_96_bytes};
 use ic_types::crypto::CryptoResult;
 use proptest::prelude::*;
+use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use rand_core::SeedableRng;
 
 /// This test checks that the functionality is consistent; the values are
 /// not "correct" but they must never change.

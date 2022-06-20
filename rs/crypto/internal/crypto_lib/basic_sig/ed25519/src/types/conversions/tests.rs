@@ -1,8 +1,8 @@
 mod secretkeybytes {
     use crate::api::keypair_from_rng;
     use crate::types::SecretKeyBytes;
+    use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
-    use rand_core::SeedableRng;
     use std::time::SystemTime;
 
     #[test]

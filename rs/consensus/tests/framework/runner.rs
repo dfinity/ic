@@ -299,7 +299,7 @@ impl ConsensusRunnerConfig {
         for (key, value) in std::env::vars() {
             if key.eq_ignore_ascii_case("num_nodes") {
                 if value.eq_ignore_ascii_case("random") {
-                    num_nodes = rng.gen_range(1, 20);
+                    num_nodes = rng.gen_range(1..20);
                 } else {
                     num_nodes = value
                         .parse()
@@ -316,11 +316,9 @@ impl ConsensusRunnerConfig {
         let mut config = Self::default();
         config.num_nodes = num_nodes;
         config.random_seed = random_seed;
-        config.num_rounds = rng.gen_range(10, 101);
-        config.degree = rng.gen_range(
-            std::cmp::min(5, config.num_nodes / 2),
-            std::cmp::min(config.num_nodes, 20),
-        );
+        config.num_rounds = rng.gen_range(10..101);
+        config.degree = rng
+            .gen_range(std::cmp::min(5, config.num_nodes / 2)..std::cmp::min(config.num_nodes, 20));
         config.reset_strategies();
         config
     }
@@ -329,8 +327,8 @@ impl ConsensusRunnerConfig {
     fn reset_strategies(&mut self) {
         let mut rng = ChaChaRng::seed_from_u64(self.random_seed);
         let (mut executions, mut deliveries) = self.strategies(&mut rng);
-        self.execution = executions.remove(rng.gen_range(0, executions.len()));
-        self.delivery = deliveries.remove(rng.gen_range(0, deliveries.len()));
+        self.execution = executions.remove(rng.gen_range(0..executions.len()));
+        self.delivery = deliveries.remove(rng.gen_range(0..deliveries.len()));
     }
 
     fn strategies<R: Rng>(&self, rng: &mut R) -> Strategies {

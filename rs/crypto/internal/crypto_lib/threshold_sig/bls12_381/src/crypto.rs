@@ -15,8 +15,8 @@ use ic_types::{
     NodeIndex, NumberOfNodes, Randomness,
 };
 use pairing::Engine;
+use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
 use std::convert::TryFrom;
 use std::ops::AddAssign;
 

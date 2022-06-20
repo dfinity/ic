@@ -10,7 +10,7 @@ use ic_types::{
     time::current_time_and_expiry_time,
     CanisterId, PrincipalId, Time, UserId,
 };
-use rand_core::OsRng;
+use rand::thread_rng;
 use std::convert::TryFrom;
 
 /// A simple ingress message builder.
@@ -160,14 +160,9 @@ impl SignedIngressBuilder {
 
     /// Create keypair, set sender and signature accordingly
     pub fn sign_for_randomly_generated_sender(mut self) -> Self {
-        use ed25519_dalek::Signer;
-        // create key pair
-        let ed25519_keypair = {
-            // use `ChaChaRng::seed_from_u64` for deterministic keys
-            let mut rng = OsRng::default();
-            ed25519_dalek::Keypair::generate(&mut rng)
-        };
-        let sender_pubkey = ed25519_public_key_to_der(ed25519_keypair.public.to_bytes().to_vec());
+        let signing_key = ed25519_consensus::SigningKey::new(thread_rng());
+        let sender_pubkey =
+            ed25519_public_key_to_der(signing_key.verification_key().to_bytes().to_vec());
         self.sender_pubkey = Some(sender_pubkey.clone());
         self.update.sender = Blob(
             UserId::from(PrincipalId::new_self_authenticating(&sender_pubkey))
@@ -181,7 +176,7 @@ impl SignedIngressBuilder {
             buf.extend_from_slice(message_id.as_bytes());
             buf
         };
-        self.sender_sig = Some(ed25519_keypair.sign(&bytes_to_sign).to_bytes().to_vec());
+        self.sender_sig = Some(signing_key.sign(&bytes_to_sign).to_bytes().to_vec());
         self
     }
 

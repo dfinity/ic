@@ -5,8 +5,8 @@ use crate::types::PublicKey;
 use bls12_381::G2Projective;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use proptest::prelude::*;
+use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
 
 fn test_resharing_dealing(seed: [u8; 32]) {
     let mut rng = ChaChaRng::from_seed(seed);

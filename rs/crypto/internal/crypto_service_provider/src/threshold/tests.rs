@@ -242,8 +242,8 @@ pub mod util {
     ///   to signing and verification.
     pub fn test_threshold_scheme_with_basic_keygen(seed: Randomness, message: &[u8]) {
         let mut rng = ChaChaRng::from_seed(seed.get());
-        let threshold = NumberOfNodes::from(rng.gen_range(0, 10));
-        let number_of_signers = NumberOfNodes::from(rng.gen_range(0, 10));
+        let threshold = NumberOfNodes::from(rng.gen_range(0..10));
+        let number_of_signers = NumberOfNodes::from(rng.gen_range(0..10));
 
         let mut csp = {
             let key_store = TempSecretKeyStore::new();

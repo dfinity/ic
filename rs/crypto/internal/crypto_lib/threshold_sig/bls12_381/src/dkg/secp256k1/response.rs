@@ -10,8 +10,8 @@ use crate::dkg::secp256k1::types::{
     EphemeralPublicKeyBytes, EphemeralSecretKey, EphemeralSecretKeyBytes,
 };
 use ic_types::{IDkgId, NodeIndex, Randomness};
+use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng;
 use std::collections::btree_map::BTreeMap;
 use std::convert::TryFrom;
 

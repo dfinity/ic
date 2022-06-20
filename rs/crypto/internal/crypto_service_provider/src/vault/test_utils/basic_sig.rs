@@ -41,7 +41,7 @@ pub fn should_sign_and_verify_with_generated_ed25519_key_pair(csp_vault: Arc<dyn
     };
 
     let mut rng = thread_rng();
-    let msg_len: usize = rng.gen_range(0, 1024);
+    let msg_len: usize = rng.gen_range(0..1024);
     let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
 
     let sign_result = csp_vault.sign(AlgorithmId::Ed25519, &msg, key_id);

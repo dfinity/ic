@@ -11,8 +11,8 @@ use ic_crypto_internal_test_vectors::unhex::hex_to_48_bytes;
 mod stability {
     use super::*;
     use crate::types::PublicKeyBytes;
+    use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
-    use rand_core::SeedableRng;
 
     #[test]
     fn message_to_g1() {
@@ -43,8 +43,8 @@ mod basic_functionality {
     use ic_crypto_internal_bls12381_common::g1_to_bytes;
     use proptest::prelude::*;
     use proptest::std_facade::HashSet;
+    use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
-    use rand_core::SeedableRng;
 
     // Slow tests
     proptest! {
