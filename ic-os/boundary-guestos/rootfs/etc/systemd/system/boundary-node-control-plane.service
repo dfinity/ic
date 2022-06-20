@@ -2,7 +2,7 @@
 Description=Boundary Node Control Plane
 After=syslog.target
 After=bootstrap-ic-node.service
-After=ic-router-control-plane-watcher
+After=ic-router-control-plane-watcher.service
 Requires=bootstrap-ic-node.service
 
 [Service]
