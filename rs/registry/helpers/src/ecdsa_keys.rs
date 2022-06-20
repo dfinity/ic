@@ -10,16 +10,19 @@ use ic_types::{subnet_id_try_from_protobuf, RegistryVersion, SubnetId};
 
 use crate::deserialize_registry_value;
 
-/// A trait that exposes which subnets are responsible for each ECDSA key.
+/// A trait that exposes which subnets are enabled to sign for each ECDSA key.
 pub trait EcdsaKeysRegistry {
-    fn get_ecdsa_keys(
+    /// Get a map from ECDSA key ID -> list of subnets enabled to sign with the
+    /// key.  ECDSA keys which have no signing subnets are not included in the
+    /// result.
+    fn get_ecdsa_signing_subnets(
         &self,
         version: RegistryVersion,
     ) -> RegistryClientResult<BTreeMap<EcdsaKeyId, Vec<SubnetId>>>;
 }
 
 impl<T: RegistryClient + ?Sized> EcdsaKeysRegistry for T {
-    fn get_ecdsa_keys(
+    fn get_ecdsa_signing_subnets(
         &self,
         version: RegistryVersion,
     ) -> RegistryClientResult<BTreeMap<EcdsaKeyId, Vec<SubnetId>>> {
@@ -34,7 +37,9 @@ impl<T: RegistryClient + ?Sized> EcdsaKeysRegistry for T {
                 subnets.push(subnet_id_try_from_protobuf(subnet_proto)?);
             }
             let key_id = get_ecdsa_key_id_from_signing_subnet_list_key(&registry_key)?;
-            result.insert(key_id, subnets);
+            if !subnets.is_empty() {
+                result.insert(key_id, subnets);
+            }
         }
         Ok(Some(result))
     }
