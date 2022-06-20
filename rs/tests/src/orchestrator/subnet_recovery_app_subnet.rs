@@ -305,14 +305,6 @@ pub fn test(env: TestEnv) {
         );
     }
 
-    env.topology_snapshot().unassigned_nodes().for_each(|n| {
-        assert_assigned_replica_version(&n, &working_version, env.logger());
-        info!(
-            logger,
-            "Healthy upgrade of unassigned node {} to {}", n.node_id, working_version
-        );
-    });
-
     info!(logger, "Ensure the old message is still readable");
     assert!(block_on(can_read_msg(
         &logger,
