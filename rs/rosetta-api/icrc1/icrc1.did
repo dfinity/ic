@@ -1,4 +1,36 @@
+type BlockIndex = nat64;
+type Subaccount = blob;
+
+type Account = record {
+    of: principal;
+    subaccout: opt Subaccount;
+};
+
+type TransferArg = record {
+    from_subaccount: opt Subaccount;
+    to_principal: principal;
+    to_subaccount: opt Subaccount;
+    amount: nat64;
+};
+
+type TransferError = variant {
+    BadFee : record { expected_fee: nat64 };
+    InsufficientFunds : record { balance: nat64 };
+    TxTooOld : record { allowed_window_nanos: nat64 };
+    TxCreatedInFuture;
+    TxThrottled;
+    TxDuplicate : record { duplicate_of: BlockIndex };
+    GenericError : record { error_code : nat64; message : text };
+};
+
+type TransferResult = variant {
+    Ok : BlockIndex;
+    Err : TransferError;
+};
+
 service : {
     icrc1_name : () -> (text) query;
     icrc1_symbol : () -> (text) query;
+    icrc1_balanceOf : (Account) -> (nat64) query;
+    icrc1_transfer : (TransferArg) -> (TransferResult);
 }
