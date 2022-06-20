@@ -539,9 +539,9 @@ impl BatchProcessorImpl {
             .unwrap_or_default();
         let nns_subnet_id = self.get_nns_subnet_id(registry_version);
 
-        let ecdsa_keys = self
+        let ecdsa_signing_subnets = self
             .registry
-            .get_ecdsa_keys(registry_version)?
+            .get_ecdsa_signing_subnets(registry_version)?
             .unwrap_or_default();
 
         Ok(NetworkTopology {
@@ -549,7 +549,7 @@ impl BatchProcessorImpl {
             routing_table: Arc::new(routing_table),
             nns_subnet_id,
             canister_migrations: Arc::new(canister_migrations),
-            ecdsa_keys,
+            ecdsa_signing_subnets,
         })
     }
 

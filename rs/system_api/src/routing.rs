@@ -159,12 +159,12 @@ fn route_ecdsa_message(
             }
         },
         None => {
-            if let Some(subnet_id) = network_topology.ecdsa_subnets(key_id).get(0) {
+            if let Some(subnet_id) = network_topology.ecdsa_signing_subnets(key_id).get(0) {
                 Ok(*subnet_id)
             } else {
                 Err(ResolveDestinationError::MethodNotFound(format!(
-                    "requested ECDSA key: {}, existing keys: {:?}",
-                    key_id, network_topology.ecdsa_keys
+                    "requested ECDSA key: {}, existing keys with signing enabled: {:?}",
+                    key_id, network_topology.ecdsa_signing_subnets
                 )))
             }
         }
@@ -197,7 +197,7 @@ mod tests {
     fn network_with_ecdsa_subnets() -> NetworkTopology {
         let subnet_id0 = subnet_test_id(0);
         NetworkTopology {
-            ecdsa_keys: btreemap! {
+            ecdsa_signing_subnets: btreemap! {
                 key_id() => vec![subnet_id0],
             },
             subnets: btreemap! {
@@ -264,7 +264,7 @@ mod tests {
             .unwrap_err(),
             ResolveDestinationError::MethodNotFound(err) => assert_eq!(
                 err,
-                format!("requested ECDSA key: {}, existing keys: {{}}", key_id())
+                format!("requested ECDSA key: {}, existing keys with signing enabled: {{}}", key_id())
             )
         )
     }
@@ -350,7 +350,7 @@ mod tests {
         .unwrap_err(),
         ResolveDestinationError::MethodNotFound(err) => assert_eq!(
                 err,
-                format!("requested ECDSA key: {}, existing keys: {{}}", key_id())
+                format!("requested ECDSA key: {}, existing keys with signing enabled: {{}}", key_id())
             )
         )
     }

@@ -44,7 +44,7 @@ message NetworkTopology {
     registry.routing_table.v1.RoutingTable routing_table = 2;
     types.v1.SubnetId nns_subnet_id = 3;
     registry.routing_table.v1.CanisterMigrations canister_migrations = 4;
-    repeated EcdsaKeyEntry ecdsa_keys = 5;
+    repeated EcdsaKeyEntry ecdsa_signing_subnets = 5;
 }
 
 message SetupInitialDkgContext {

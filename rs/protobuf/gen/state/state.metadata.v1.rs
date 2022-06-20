@@ -52,7 +52,7 @@ pub struct NetworkTopology {
     #[prost(message, optional, tag="4")]
     pub canister_migrations: ::core::option::Option<super::super::super::registry::routing_table::v1::CanisterMigrations>,
     #[prost(message, repeated, tag="5")]
-    pub ecdsa_keys: ::prost::alloc::vec::Vec<EcdsaKeyEntry>,
+    pub ecdsa_signing_subnets: ::prost::alloc::vec::Vec<EcdsaKeyEntry>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetupInitialDkgContext {

@@ -279,11 +279,14 @@ fn empty_network_topology() {
         routing_table: Arc::new(RoutingTable::default()),
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(42),
-        ecdsa_keys: Default::default(),
+        ecdsa_signing_subnets: Default::default(),
     };
 
     assert_eq!(network_topology.bitcoin_testnet_subnets(), vec![]);
-    assert_eq!(network_topology.ecdsa_subnets(&make_key_id()), vec![]);
+    assert_eq!(
+        network_topology.ecdsa_signing_subnets(&make_key_id()),
+        vec![]
+    );
 }
 
 #[test]
@@ -320,7 +323,7 @@ fn network_topology_bitcoin_testnet_subnets() {
         routing_table: Arc::new(RoutingTable::default()),
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(42),
-        ecdsa_keys: Default::default(),
+        ecdsa_signing_subnets: Default::default(),
     };
 
     assert_eq!(
@@ -337,12 +340,15 @@ fn network_topology_ecdsa_subnets() {
         routing_table: Arc::new(RoutingTable::default()),
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(42),
-        ecdsa_keys: btreemap! {
+        ecdsa_signing_subnets: btreemap! {
             key.clone() => vec![subnet_test_id(1)],
         },
     };
 
-    assert_eq!(network_topology.ecdsa_subnets(&key), &[subnet_test_id(1)]);
+    assert_eq!(
+        network_topology.ecdsa_signing_subnets(&key),
+        &[subnet_test_id(1)]
+    );
 }
 
 /// Test fixture that will produce an ingress status of type completed or failed,

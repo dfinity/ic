@@ -1075,7 +1075,7 @@ impl ExecutionTestBuilder {
             state
                 .metadata
                 .network_topology
-                .ecdsa_keys
+                .ecdsa_signing_subnets
                 .insert(ecdsa_key.clone(), vec![self.own_subnet_id]);
         }
         let ecdsa_subnet_public_keys = self
