@@ -15,8 +15,14 @@ pub struct AddressUtxoSet<'a> {
     // A reference to the (full) underlying UTXO set.
     full_utxo_set: &'a UtxoSet,
 
-    // Added UTXOs that are not present in the underlying UTXO set.
-    added_utxos: BTreeMap<OutPoint, (TxOut, Height)>,
+    // Added UTXOs that are not present in the underlying UTXO set indexed by
+    // their encoded `OutPoint`.
+    //
+    // Note that we use the encoded form of `Outpoint` to match with the data
+    // that's stored in the `StableBtreeMap` and be able to have consistent
+    // ordering between the two when combining the results for a `get_utxos`
+    // response.
+    added_utxos: BTreeMap<Vec<u8>, (TxOut, Height)>,
 
     // Removed UTXOs that are still present in the underlying UTXO set.
     removed_utxos: BTreeMap<OutPoint, (TxOut, Height)>,
@@ -46,9 +52,13 @@ impl<'a> AddressUtxoSet<'a> {
         }
 
         for input in &tx.input {
-            if self.added_utxos.get(&input.previous_output).is_some() {
+            if self
+                .added_utxos
+                .get(&input.previous_output.to_bytes())
+                .is_some()
+            {
                 // Remove a UTXO that was previously added.
-                self.added_utxos.remove(&input.previous_output);
+                self.added_utxos.remove(&input.previous_output.to_bytes());
                 return;
             }
 
@@ -79,7 +89,7 @@ impl<'a> AddressUtxoSet<'a> {
                 assert!(
                     self.added_utxos
                         .insert(
-                            OutPoint::new(tx.txid(), vout as u32),
+                            OutPoint::new(tx.txid(), vout as u32).to_bytes(),
                             (output.clone(), height),
                         )
                         .is_none(),
@@ -89,12 +99,12 @@ impl<'a> AddressUtxoSet<'a> {
         }
     }
 
-    pub fn into_vec(self) -> Vec<Utxo> {
+    pub fn into_vec(mut self, offset: Option<OutPoint>) -> Vec<Utxo> {
         // Retrieve all the UTXOs of the address from the underlying UTXO set.
         let mut set: BTreeSet<_> = self
             .full_utxo_set
             .address_to_outpoints
-            .range(self.address.to_bytes(), None)
+            .range(self.address.to_bytes(), offset.map(|x| x.to_bytes()))
             .map(|(k, _)| {
                 let (_, _, outpoint) = <(AddressStr, Height, OutPoint)>::from_bytes(k);
                 let (txout, height) = self
@@ -107,14 +117,18 @@ impl<'a> AddressUtxoSet<'a> {
             })
             .collect();
 
-        // Include all the newly added UTXOs for that address.
-        for (outpoint, (txout, height)) in self.added_utxos {
+        // Include all the newly added UTXOs for that address that are "after" the optional offset.
+        let added_utxos = match offset {
+            Some(offset) => self.added_utxos.split_off(&offset.to_bytes()),
+            None => self.added_utxos,
+        };
+        for (outpoint, (txout, height)) in added_utxos {
             if let Some(address) =
                 Address::from_script(&txout.script_pubkey, self.full_utxo_set.network)
             {
                 if address.to_string() == self.address {
                     assert!(
-                        set.insert((outpoint, txout, height)),
+                        set.insert((OutPoint::from_bytes(outpoint), txout, height)),
                         "Cannot overwrite existing outpoint"
                     );
                 }
@@ -126,10 +140,7 @@ impl<'a> AddressUtxoSet<'a> {
                 Address::from_script(&txout.script_pubkey, self.full_utxo_set.network)
             {
                 if address.to_string() == self.address {
-                    assert!(
-                        set.remove(&(outpoint, txout, height)),
-                        "Outpoint must exist."
-                    );
+                    set.remove(&(outpoint, txout, height));
                 }
             }
         }
@@ -180,7 +191,7 @@ mod test {
 
         // Address should have that data.
         assert_eq!(
-            address_utxo_set.into_vec(),
+            address_utxo_set.into_vec(None),
             vec![Utxo {
                 outpoint: PublicOutPoint {
                     txid: coinbase_tx.txid().to_vec(),
@@ -227,14 +238,14 @@ mod test {
         address_utxo_set.insert_tx(&tx, 1);
 
         // Address should have that data.
-        assert_eq!(address_utxo_set.into_vec(), vec![]);
+        assert_eq!(address_utxo_set.into_vec(None), vec![]);
 
         let mut address_2_utxo_set = AddressUtxoSet::new(address_2.to_string(), &utxo_set);
         address_2_utxo_set.insert_tx(&coinbase_tx, 0);
         address_2_utxo_set.insert_tx(&tx, 1);
 
         assert_eq!(
-            address_2_utxo_set.into_vec(),
+            address_2_utxo_set.into_vec(None),
             vec![Utxo {
                 outpoint: PublicOutPoint {
                     txid: tx.txid().to_vec(),

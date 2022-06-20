@@ -1,5 +1,5 @@
 use crate::blocktree::{self, BlockChain, BlockDoesNotExtendTree};
-use bitcoin::Block;
+use bitcoin::{Block, BlockHash};
 use ic_replicated_state::bitcoin_state::UnstableBlocks;
 
 /// Pops the `anchor` block iff ∃ a child `C` of the `anchor` block that
@@ -105,6 +105,16 @@ pub fn get_blocks(blocks: &UnstableBlocks) -> Vec<&Block> {
         .into_iter()
         .flat_map(|bc| bc.into_chain())
         .collect()
+}
+
+/// Returns a blockchain starting from the anchor and ending with the `tip`.
+///
+/// If the `tip` doesn't exist in the tree, `None` is returned.
+pub fn get_chain_with_tip<'a, 'b>(
+    blocks: &'a UnstableBlocks,
+    tip: &'b BlockHash,
+) -> Option<BlockChain<'a>> {
+    blocktree::get_chain_with_tip(&blocks.tree, tip)
 }
 
 #[cfg(test)]

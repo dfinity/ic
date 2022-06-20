@@ -1,7 +1,13 @@
-use crate::{blocktree::BlockDoesNotExtendTree, state::State, unstable_blocks, utxoset};
-use bitcoin::{Address, Block, Txid};
-use ic_btc_types::{GetBalanceError, GetUtxosError, GetUtxosResponse, Height, Satoshi, Utxo};
+use crate::{
+    blocktree::{BlockChain, BlockDoesNotExtendTree},
+    state::State,
+    types::Page,
+    unstable_blocks, utxoset,
+};
+use bitcoin::{hashes::Hash, Address, Block, OutPoint, Txid};
+use ic_btc_types::{GetBalanceError, GetUtxosError, GetUtxosResponse, Height, Satoshi};
 use lazy_static::lazy_static;
+use serde_bytes::ByteBuf;
 use std::str::FromStr;
 
 lazy_static! {
@@ -21,42 +27,102 @@ pub fn get_balance(
     // The maximum number of bitcoins is 2.1 * 10^7, which is 2.1* 10^15 satoshis.
     // That is well below the max value of a `u64`.
     let mut balance = 0;
-    for utxo in get_utxos(state, address, min_confirmations)?.utxos {
-        balance += utxo.value;
-    }
+    match get_utxos(state, address, min_confirmations, None, None) {
+        Ok(res) => {
+            for utxo in res.utxos {
+                balance += utxo.value;
+            }
 
-    Ok(balance)
+            Ok(balance)
+        }
+        Err(err) => match err {
+            GetUtxosError::MalformedAddress => Err(GetBalanceError::MalformedAddress),
+            GetUtxosError::MinConfirmationsTooLarge { given, max } => {
+                Err(GetBalanceError::MinConfirmationsTooLarge { given, max })
+            }
+            err => unreachable!("Got unexpected error: {}", err),
+        },
+    }
 }
 
 /// Returns the set of UTXOs for a given bitcoin address.
+///
 /// Transactions with confirmations < `min_confirmations` are not considered.
+///
+/// If the optional `page` is set, then it will be used to return the next chunk
+/// of UTXOs starting from that page reference.
+///
+/// The optional `utxo_limit` restricts the number of UTXOs that can be included
+/// in the response in case there are too many UTXOs for this address and they
+/// cannot fit in a single response. A `page` reference will be returned along
+/// the list of UTXOs in this case that can be used in a subsequent request
+/// to retrieve the remaining UTXOs.
 pub fn get_utxos(
     state: &State,
     address: &str,
     min_confirmations: u32,
+    page: Option<Vec<u8>>,
+    utxo_limit: Option<usize>,
+) -> Result<GetUtxosResponse, GetUtxosError> {
+    match page {
+        // A page was provided in the request, so we should use it as a basis
+        // to compute the next chunk of UTXOs to be returned.
+        Some(page) => {
+            let Page {
+                tip_block_hash,
+                outpoint,
+            } = Page::from_bytes(page).map_err(|err| GetUtxosError::MalformedPage { err })?;
+            let chain =
+                unstable_blocks::get_chain_with_tip(&state.unstable_blocks, &tip_block_hash)
+                    .ok_or(GetUtxosError::UnknownTipBlockHash {
+                        tip_block_hash: tip_block_hash.to_vec(),
+                    })?;
+            get_utxos_from_chain(
+                state,
+                address,
+                min_confirmations,
+                chain,
+                Some(outpoint),
+                utxo_limit,
+            )
+        }
+        // No specific page was provided, so we use the main chain for computing UTXOs.
+        None => {
+            let chain = unstable_blocks::get_main_chain(&state.unstable_blocks);
+            get_utxos_from_chain(state, address, min_confirmations, chain, None, utxo_limit)
+        }
+    }
+}
+
+fn get_utxos_from_chain(
+    state: &State,
+    address: &str,
+    min_confirmations: u32,
+    chain: BlockChain,
+    offset: Option<OutPoint>,
+    utxo_limit: Option<usize>,
 ) -> Result<GetUtxosResponse, GetUtxosError> {
     if Address::from_str(address).is_err() {
         return Err(GetUtxosError::MalformedAddress);
     }
 
-    let main_chain = unstable_blocks::get_main_chain(&state.unstable_blocks);
-    if main_chain.len() < min_confirmations as usize {
+    if chain.len() < min_confirmations as usize {
         return Err(GetUtxosError::MinConfirmationsTooLarge {
             given: min_confirmations,
-            max: main_chain.len() as u32,
+            max: chain.len() as u32,
         });
     }
 
     let mut address_utxos = utxoset::get_utxos(&state.utxos, address);
-    let main_chain_height = state.height + (main_chain.len() as u32) - 1;
+    let chain_height = state.height + (chain.len() as u32) - 1;
 
-    let mut tip_block_hash = main_chain.first().block_hash();
+    let mut tip_block_hash = chain.first().block_hash();
     let mut tip_block_height = state.height;
 
     // Apply unstable blocks to the UTXO set.
-    for (i, block) in main_chain.into_chain().iter().enumerate() {
+    for (i, block) in chain.into_chain().iter().enumerate() {
         let block_height = state.height + (i as u32);
-        let confirmations = main_chain_height - block_height + 1;
+        let confirmations = chain_height - block_height + 1;
 
         if confirmations < min_confirmations {
             // The block has fewer confirmations than requested.
@@ -72,13 +138,42 @@ pub fn get_utxos(
         tip_block_height = block_height;
     }
 
-    let utxos: Vec<Utxo> = address_utxos.into_vec();
+    let all_utxos = address_utxos.into_vec(offset);
+    let mut next_page = None;
+
+    let utxos = match utxo_limit {
+        // No specific limit set, we should return all utxos.
+        None => all_utxos,
+        // There's some limit, so use it to chunk up the UTXOs if they don't fit.
+        Some(utxo_limit) => {
+            let (utxos_to_return, rest) =
+                all_utxos.split_at(all_utxos.len().min(utxo_limit as usize));
+
+            if !rest.is_empty() {
+                next_page = Some(
+                    Page {
+                        tip_block_hash,
+                        outpoint: OutPoint {
+                            txid: Txid::from_hash(
+                                Hash::from_slice(&rest[0].outpoint.txid)
+                                    .expect("Txid must be valid"),
+                            ),
+                            vout: rest[0].outpoint.vout,
+                        },
+                    }
+                    .to_bytes(),
+                );
+            }
+
+            utxos_to_return.to_vec()
+        }
+    };
 
     Ok(GetUtxosResponse {
         utxos,
         tip_block_hash: tip_block_hash.to_vec(),
         tip_height: tip_block_height,
-        next_page: None,
+        next_page: next_page.map(ByteBuf::from),
     })
 }
 
@@ -119,7 +214,8 @@ mod test {
     use bitcoin::{consensus::Decodable, Address, BlockHash, Network, PublicKey};
     use byteorder::{LittleEndian, ReadBytesExt};
     use ic_btc_test_utils::{BlockBuilder, TransactionBuilder};
-    use ic_btc_types::OutPoint;
+    use ic_btc_types::{OutPoint, Utxo};
+    use proptest::prelude::*;
     use std::fs::File;
     use std::str::FromStr;
     use std::{collections::HashMap, io::BufReader, path::PathBuf};
@@ -278,7 +374,7 @@ mod test {
 
         // Assert that the UTXOs of address 1 are present.
         assert_eq!(
-            get_utxos(&state, &address_1.to_string(), 0),
+            get_utxos(&state, &address_1.to_string(), 0, None, None),
             Ok(block_0_utxos.clone())
         );
 
@@ -295,7 +391,7 @@ mod test {
 
         // address 2 should now have the UTXO while address 1 has no UTXOs.
         assert_eq!(
-            get_utxos(&state, &address_2.to_string(), 0),
+            get_utxos(&state, &address_2.to_string(), 0, None, None),
             Ok(GetUtxosResponse {
                 utxos: vec![Utxo {
                     outpoint: OutPoint {
@@ -312,7 +408,7 @@ mod test {
         );
 
         assert_eq!(
-            get_utxos(&state, &address_1.to_string(), 0),
+            get_utxos(&state, &address_1.to_string(), 0, None, None),
             Ok(GetUtxosResponse {
                 utxos: vec![],
                 tip_block_hash: block_1.block_hash().to_vec(),
@@ -335,7 +431,7 @@ mod test {
         // Because block 1 and block 1' contest with each other, neither of them are included
         // in the UTXOs. Only the UTXOs of block 0 are returned.
         assert_eq!(
-            get_utxos(&state, &address_2.to_string(), 0),
+            get_utxos(&state, &address_2.to_string(), 0, None, None),
             Ok(GetUtxosResponse {
                 utxos: vec![],
                 tip_block_hash: block_0.block_hash().to_vec(),
@@ -344,7 +440,7 @@ mod test {
             })
         );
         assert_eq!(
-            get_utxos(&state, &address_3.to_string(), 0),
+            get_utxos(&state, &address_3.to_string(), 0, None, None),
             Ok(GetUtxosResponse {
                 utxos: vec![],
                 tip_block_hash: block_0.block_hash().to_vec(),
@@ -353,7 +449,7 @@ mod test {
             })
         );
         assert_eq!(
-            get_utxos(&state, &address_1.to_string(), 0),
+            get_utxos(&state, &address_1.to_string(), 0, None, None),
             Ok(block_0_utxos)
         );
 
@@ -371,7 +467,7 @@ mod test {
 
         // Address 1 has no UTXOs since they were spent on the main chain.
         assert_eq!(
-            get_utxos(&state, &address_1.to_string(), 0),
+            get_utxos(&state, &address_1.to_string(), 0, None, None),
             Ok(GetUtxosResponse {
                 utxos: vec![],
                 tip_block_hash: block_2_prime.block_hash().to_vec(),
@@ -380,7 +476,7 @@ mod test {
             })
         );
         assert_eq!(
-            get_utxos(&state, &address_2.to_string(), 0),
+            get_utxos(&state, &address_2.to_string(), 0, None, None),
             Ok(GetUtxosResponse {
                 utxos: vec![],
                 tip_block_hash: block_2_prime.block_hash().to_vec(),
@@ -389,7 +485,7 @@ mod test {
             })
         );
         assert_eq!(
-            get_utxos(&state, &address_3.to_string(), 0),
+            get_utxos(&state, &address_3.to_string(), 0, None, None),
             Ok(GetUtxosResponse {
                 utxos: vec![],
                 tip_block_hash: block_2_prime.block_hash().to_vec(),
@@ -399,7 +495,7 @@ mod test {
         );
         // The funds are now with address 4.
         assert_eq!(
-            get_utxos(&state, &address_4.to_string(), 0),
+            get_utxos(&state, &address_4.to_string(), 0, None, None),
             Ok(GetUtxosResponse {
                 utxos: vec![Utxo {
                     outpoint: OutPoint {
@@ -443,7 +539,7 @@ mod test {
         );
 
         assert_eq!(
-            get_utxos(&state, "1PgZsaGjvssNCqHHisshLoCFeUjxPhutTh", 0),
+            get_utxos(&state, "1PgZsaGjvssNCqHHisshLoCFeUjxPhutTh", 0, None, None),
             Ok(GetUtxosResponse {
                 utxos: vec![Utxo {
                     outpoint: OutPoint {
@@ -475,7 +571,7 @@ mod test {
             Ok(500000000)
         );
         assert_eq!(
-            get_utxos(&state, "12tGGuawKdkw5NeDEzS3UANhCRa1XggBbK", 0),
+            get_utxos(&state, "12tGGuawKdkw5NeDEzS3UANhCRa1XggBbK", 0, None, None),
             Ok(GetUtxosResponse {
                 utxos: vec![Utxo {
                     outpoint: OutPoint {
@@ -521,7 +617,7 @@ mod test {
         );
 
         assert_eq!(
-            get_utxos(&state, "1K791w8Y1CXwyG3zAf9EzpoZvpYH8Z2Rro", 6),
+            get_utxos(&state, "1K791w8Y1CXwyG3zAf9EzpoZvpYH8Z2Rro", 6, None, None),
             Ok(GetUtxosResponse {
                 utxos: vec![Utxo {
                     outpoint: OutPoint {
@@ -603,7 +699,7 @@ mod test {
 
             // Expect an empty UTXO set.
             assert_eq!(
-                get_utxos(&state, &address_1.to_string(), 1),
+                get_utxos(&state, &address_1.to_string(), 1, None, None),
                 Ok(GetUtxosResponse {
                     utxos: vec![Utxo {
                         outpoint: OutPoint {
@@ -619,7 +715,7 @@ mod test {
                 })
             );
             assert_eq!(
-                get_utxos(&state, &address_1.to_string(), 2),
+                get_utxos(&state, &address_1.to_string(), 2, None, None),
                 Err(GetUtxosError::MinConfirmationsTooLarge { given: 2, max: 1 })
             );
         }
@@ -669,7 +765,7 @@ mod test {
 
             // Address 1 should have no UTXOs at zero confirmations.
             assert_eq!(
-                get_utxos(&state, &address_1.to_string(), 0),
+                get_utxos(&state, &address_1.to_string(), 0, None, None),
                 Ok(GetUtxosResponse {
                     utxos: vec![],
                     tip_block_hash: block_1.block_hash().to_vec(),
@@ -677,6 +773,161 @@ mod test {
                     next_page: None,
                 })
             );
+        }
+    }
+
+    #[test]
+    fn get_utxos_for_address_with_many_of_them_respects_utxo_limit() {
+        for network in [
+            Network::Bitcoin,
+            Network::Regtest,
+            Network::Testnet,
+            Network::Signet,
+        ]
+        .iter()
+        {
+            // Generate an address.
+            let address = {
+                let secp = Secp256k1::new();
+                let mut rng = OsRng::new().unwrap();
+                Address::p2pkh(&PublicKey::new(secp.generate_keypair(&mut rng).1), *network)
+            };
+
+            let num_transactions = 10;
+            let mut transactions = vec![];
+            for i in 0..num_transactions {
+                transactions.push(
+                    TransactionBuilder::coinbase()
+                        .with_output(&address, (i + 1) * 10)
+                        .build(),
+                );
+            }
+
+            let mut block_builder = BlockBuilder::genesis();
+            for transaction in transactions.iter() {
+                block_builder = block_builder.with_transaction(transaction.clone());
+            }
+            let block_0 = block_builder.build();
+            let state = State::new(2, *network, block_0.clone());
+            let tip_block_hash = block_0.block_hash();
+
+            let utxo_set = get_utxos(&state, &address.to_string(), 0, None, None)
+                .unwrap()
+                .utxos;
+
+            // Only some UTXOs can be included given that we use a utxo limit.
+            let response = get_utxos(
+                &state,
+                &address.to_string(),
+                0,
+                None,
+                // Allow 3 UTXOs to be returned.
+                Some(3),
+            )
+            .unwrap();
+
+            assert_eq!(response.utxos.len(), 3);
+            assert!(response.utxos.len() < utxo_set.len());
+            assert_eq!(response.tip_block_hash, tip_block_hash.clone().to_vec());
+            assert_eq!(response.tip_height, 0);
+            assert!(response.next_page.is_some());
+
+            // A bigger limit allows more UTXOs to be included in a single response.
+            let response = get_utxos(
+                &state,
+                &address.to_string(),
+                0,
+                None,
+                // Allow 4 UTXOs to be returned.
+                Some(4),
+            )
+            .unwrap();
+
+            assert_eq!(response.utxos.len(), 4);
+            assert!(response.utxos.len() < utxo_set.len());
+            assert_eq!(response.tip_block_hash, tip_block_hash.clone().to_vec());
+            assert_eq!(response.tip_height, 0);
+            assert!(response.next_page.is_some());
+
+            // A very big limit will result in the same as requesting UTXOs without any limit.
+            let response = get_utxos(&state, &address.to_string(), 0, None, Some(1000)).unwrap();
+
+            assert_eq!(response.utxos.len(), num_transactions as usize);
+            assert_eq!(response.utxos.len(), utxo_set.len());
+            assert_eq!(response.tip_block_hash, tip_block_hash.clone().to_vec());
+            assert_eq!(response.tip_height, 0);
+            assert!(response.next_page.is_none());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn get_utxos_with_pagination_is_consistent_with_no_pagination(
+            network in prop_oneof![
+                Just(Network::Bitcoin),
+                Just(Network::Testnet),
+                Just(Network::Regtest),
+                Just(Network::Signet)
+            ],
+            num_transactions in 1..200u64,
+            utxo_limit in prop_oneof![
+                Just(10),
+                Just(20),
+                Just(50),
+                Just(100),
+            ],
+        ) {
+            // Generate an address.
+            let address = {
+                let secp = Secp256k1::new();
+                let mut rng = OsRng::new().unwrap();
+                Address::p2pkh(&PublicKey::new(secp.generate_keypair(&mut rng).1), network)
+            };
+
+            let mut transactions = vec![];
+            for i in 0..num_transactions {
+                transactions.push(
+                    TransactionBuilder::coinbase()
+                        .with_output(&address, (i + 1) * 10)
+                        .build()
+                )
+            }
+
+            let mut block_builder = BlockBuilder::genesis();
+            for transaction in transactions.iter() {
+                block_builder = block_builder.with_transaction(transaction.clone());
+            }
+            let block_0 = block_builder.build();
+            let state = State::new(2, network, block_0);
+
+            // Get UTXO set without any pagination...
+            let utxo_set = get_utxos(&state, &address.to_string(), 0, None, None)
+                .unwrap()
+                .utxos;
+
+            // also get UTXO set with pagination until there are no
+            // more pages returned...
+            let mut utxos_chunked = vec![];
+            let mut page = None;
+            loop {
+                let response = get_utxos(
+                    &state,
+                    &address.to_string(),
+                    0,
+                    page,
+                    Some(utxo_limit),
+                )
+                .unwrap();
+                utxos_chunked.extend(response.utxos);
+                if response.next_page.is_none() {
+                    break;
+                } else {
+                    page = response.next_page.map(|x| x.to_vec());
+                }
+            }
+
+            // and compare the two results.
+            assert_eq!(utxo_set, utxos_chunked);
         }
     }
 }

@@ -136,7 +136,7 @@ mod test {
 
             assert_eq!(utxo.utxos.len(), 1);
             assert_eq!(
-                get_utxos(&utxo, &address.to_string()).into_vec(),
+                get_utxos(&utxo, &address.to_string()).into_vec(None),
                 vec![ic_btc_types::Utxo {
                     outpoint: ic_btc_types::OutPoint {
                         txid: coinbase_tx.txid().to_vec(),
@@ -209,7 +209,7 @@ mod test {
             }];
 
             assert_eq!(
-                get_utxos(&utxo, &address_1.to_string()).into_vec(),
+                get_utxos(&utxo, &address_1.to_string()).into_vec(None),
                 expected
             );
             assert_eq!(
@@ -232,9 +232,12 @@ mod test {
                 .build();
             insert_tx(&mut utxo, &tx, 1);
 
-            assert_eq!(get_utxos(&utxo, &address_1.to_string()).into_vec(), vec![]);
             assert_eq!(
-                get_utxos(&utxo, &address_2.to_string()).into_vec(),
+                get_utxos(&utxo, &address_1.to_string()).into_vec(None),
+                vec![]
+            );
+            assert_eq!(
+                get_utxos(&utxo, &address_2.to_string()).into_vec(None),
                 vec![ic_btc_types::Utxo {
                     outpoint: ic_btc_types::OutPoint {
                         txid: tx.txid().to_vec(),
