@@ -102,7 +102,7 @@ impl StateMachine for StateMachineImpl {
         let state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
-            batch.ecdsa_subnet_public_key,
+            batch.ecdsa_subnet_public_keys,
             ExecutionRound::from(batch.batch_number.get()),
             execution_round_type,
             registry_settings,

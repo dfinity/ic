@@ -1,9 +1,12 @@
+use candid::Encode;
 use canister_test::{Canister, Runtime};
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
-use ic_ic00_types::EcdsaKeyId;
+use ic_ic00_types::{ECDSAPublicKeyArgs, EcdsaKeyId, Method as Ic00Method};
 use ic_nns_common::registry::encode_or_panic;
-use ic_nns_test_utils::itest_helpers::{set_up_registry_canister, set_up_universal_canister};
+use ic_nns_test_utils::itest_helpers::{
+    set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
+};
 use ic_nns_test_utils::registry::get_value_or_panic;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
@@ -27,6 +30,7 @@ use registry_canister::mutations::node_management::do_add_node::{
 };
 use std::convert::TryFrom;
 use std::sync::Arc;
+use std::time::Duration;
 
 // Test helpers
 pub async fn get_subnet_list_record(registry: &Canister<'_>) -> SubnetListRecord {
@@ -226,4 +230,36 @@ pub async fn get_cup_contents(
         make_catch_up_package_contents_key(subnet_id).as_bytes(),
     )
     .await
+}
+
+/// Requests an ECDSA public key several times until it succeeds.
+pub async fn wait_for_ecdsa_setup(
+    runtime: &Runtime,
+    calling_canister: &Canister<'_>,
+    key_id: &EcdsaKeyId,
+) {
+    let public_key_request = ECDSAPublicKeyArgs {
+        canister_id: None,
+        derivation_path: vec![],
+        key_id: key_id.clone(),
+    };
+    let mut public_key_result = None;
+    for i in 0..100 {
+        public_key_result = Some(
+            try_call_via_universal_canister(
+                calling_canister,
+                &runtime.get_management_canister(),
+                &Ic00Method::ECDSAPublicKey.to_string(),
+                Encode!(&public_key_request).unwrap(),
+            )
+            .await,
+        );
+        println!("Response: {:?}", public_key_result);
+        if public_key_result.as_ref().unwrap().is_ok() {
+            break;
+        }
+        println!("Waiting for public key... {}", i);
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    public_key_result.unwrap().unwrap();
 }

@@ -39,6 +39,7 @@ use ic_types::{
     CanisterId, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
 };
 use slog::{Drain, Logger};
+use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -317,7 +318,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             ..BatchPayload::default()
         },
         randomness: Randomness::from([0; 32]),
-        ecdsa_subnet_public_key: None,
+        ecdsa_subnet_public_keys: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
         consensus_responses: vec![],

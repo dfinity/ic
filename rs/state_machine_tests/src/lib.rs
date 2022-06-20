@@ -65,12 +65,12 @@ pub use ic_types::{
     CanisterId, CryptoHashOfState, PrincipalId, SubnetId, UserId,
 };
 use serde::Serialize;
-use std::convert::TryFrom;
 use std::fmt;
 use std::path::Path;
 use std::string::ToString;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
+use std::{collections::BTreeMap, convert::TryFrom};
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
@@ -373,7 +373,7 @@ impl StateMachine {
                 ..BatchPayload::default()
             },
             randomness: Randomness::from([0; 32]),
-            ecdsa_subnet_public_key: None,
+            ecdsa_subnet_public_keys: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
             time: self.time.get(),
             consensus_responses: vec![],

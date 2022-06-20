@@ -3,6 +3,7 @@ use crate::{
     routing::demux::MockDemux, routing::stream_builder::MockStreamBuilder,
     state_machine::StateMachineImpl,
 };
+use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::execution_environment::Scheduler;
 use ic_interfaces_state_manager::StateManager;
 use ic_metrics::MetricsRegistry;
@@ -31,7 +32,7 @@ mock! {
             &self,
             state: ic_replicated_state::ReplicatedState,
             randomness: ic_types::Randomness,
-            ecdsa_subnet_public_key: Option<MasterEcdsaPublicKey>,
+            ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
             current_round: ExecutionRound,
             current_round_type: ExecutionRoundType,
             registry_settings: &RegistryExecutionSettings,
@@ -84,7 +85,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .with(
             always(),
             eq(provided_batch.randomness),
-            eq(provided_batch.ecdsa_subnet_public_key.clone()),
+            eq(provided_batch.ecdsa_subnet_public_keys.clone()),
             eq(round),
             eq(round_type),
             eq(test_registry_settings()),

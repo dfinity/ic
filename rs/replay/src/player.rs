@@ -65,6 +65,7 @@ use ic_types::{
 use serde::{Deserialize, Serialize};
 use slog_async::AsyncGuard;
 use std::{
+    collections::BTreeMap,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -612,7 +613,7 @@ impl Player {
             payload: BatchPayload::default(),
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
-            ecdsa_subnet_public_key: None,
+            ecdsa_subnet_public_keys: BTreeMap::new(),
             registry_version,
             time,
             consensus_responses: Vec::new(),

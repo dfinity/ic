@@ -201,14 +201,9 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
             // get some nodes for our tests
             let (init_mutate, mut node_ids) = prepare_registry_with_nodes(5);
 
-            // We wil be requesting 2 keys when creating the subnet
             let key_1 = EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: "foo-bar".to_string(),
-            };
-            let key_2 = EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "bar-baz".to_string(),
             };
 
             let subnet_to_recover_nodes = vec![node_ids.pop().unwrap()];
@@ -216,7 +211,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                 get_subnet_holding_ecdsa_keys(&[key_1.clone()], subnet_to_recover_nodes.clone());
 
             // Here we discover the IC's subnet ID (from our test harness)
-            // and then modify it to hold 2 keys and sign for one of them
+            // and then modify it to hold the key and sign for it.
             let mut subnet_list_record = decode_registry_value::<SubnetListRecord>(
                 fake_client
                     .get_value(
@@ -252,7 +247,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
             );
             subnet_record.ecdsa_config = Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 1,
-                key_ids: vec![(&key_2).into(), (&key_1).into()],
+                key_ids: vec![(&key_1).into()],
                 max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
             });
 
@@ -292,28 +287,12 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                 mutations,
             };
 
-            // We set our subnet_to_recover as the signing_subnet for key_1, but we will recover key2
-            // to ensure that it is properly removed from the subnet.
-            // can assert that after we update the subnet to have the other key it no longer can
-            let ecdsa_signing_subnets_key_1_mutate = RegistryAtomicMutateRequest {
+            let ecdsa_signing_subnets_mutate = RegistryAtomicMutateRequest {
                 preconditions: vec![],
                 mutations: vec![insert(
                     make_ecdsa_signing_subnet_list_key(&key_1),
                     encode_or_panic(&EcdsaSigningSubnetList {
                         subnets: vec![subnet_id_into_protobuf(subnet_to_recover_subnet_id)],
-                    }),
-                )],
-            };
-            // TODO - remove this after routing bug in route_ecdsa_message is fixed
-            // Currently an EcdsaKeyRequest not pointing at a specific subnet fails if signing
-            // is not enabled for the key in question on some subnet, even though the only requirement
-            // is that a subnet holds the key being requested
-            let ecdsa_signing_subnets_key_2_mutate = RegistryAtomicMutateRequest {
-                preconditions: vec![],
-                mutations: vec![insert(
-                    make_ecdsa_signing_subnet_list_key(&key_2),
-                    encode_or_panic(&EcdsaSigningSubnetList {
-                        subnets: vec![subnet_id_into_protobuf(system_subnet_id)],
                     }),
                 )],
             };
@@ -326,8 +305,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                     init_mutate,
                     add_subnets_mutate,
                     modify_base_subnet_mutate,
-                    ecdsa_signing_subnets_key_1_mutate,
-                    ecdsa_signing_subnets_key_2_mutate,
+                    ecdsa_signing_subnets_mutate,
                 ],
             )
             .await;
@@ -351,8 +329,8 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                 ecdsa_config: Some(EcdsaInitialConfig {
                     quadruples_to_create_in_advance: 1,
                     keys: vec![EcdsaKeyRequest {
-                        key_id: key_2.clone(),
-                        subnet_id: None,
+                        key_id: key_1.clone(),
+                        subnet_id: Some(system_subnet_id.get()),
                     }],
                     max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
                 }),
@@ -377,7 +355,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                 dealings[0_usize].key_id,
                 Some(pbEcdsaKeyId {
                     curve: pbEcdsaCurve::Secp256k1.into(),
-                    name: "bar-baz".to_string(),
+                    name: "foo-bar".to_string(),
                 })
             );
 
@@ -393,11 +371,198 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                 key_ids[0_usize],
                 pbEcdsaKeyId {
                     curve: pbEcdsaCurve::Secp256k1.into(),
-                    name: "bar-baz".to_string(),
+                    name: "foo-bar".to_string(),
                 }
             );
 
-            // Check ecdsa_signing_subnets_list for key_1 doesn't contain subnet any more
+            // Check ecdsa_signing_subnets_list for key_1 is just the new subnet
+            let ecdsa_signing_subnet_list = ecdsa_signing_subnet_list(&registry, &key_1).await;
+            assert_eq!(
+                ecdsa_signing_subnet_list,
+                EcdsaSigningSubnetList {
+                    subnets: vec![subnet_id_into_protobuf(subnet_to_recover_subnet_id)]
+                }
+            )
+        },
+    );
+}
+
+#[test]
+fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
+    let ic_config = get_ic_config();
+    let (config, _tmpdir) = Config::temp_config();
+    let subnet_config = ic_config::subnet_config::SubnetConfig::default_system_subnet();
+    canister_test_with_config_async(
+        config,
+        subnet_config,
+        ic_config,
+        |local_runtime| async move {
+            let data_provider = local_runtime.registry_data_provider.clone();
+            let fake_client = local_runtime.registry_client.clone();
+
+            let runtime = Runtime::Local(local_runtime);
+            // get some nodes for our tests
+            let (init_mutate, mut node_ids) = prepare_registry_with_nodes(5);
+
+            let key_1 = EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "foo-bar".to_string(),
+            };
+
+            let subnet_to_recover_nodes = vec![node_ids.pop().unwrap()];
+            let subnet_to_recover =
+                get_subnet_holding_ecdsa_keys(&[key_1.clone()], subnet_to_recover_nodes.clone());
+
+            // Here we discover the IC's subnet ID (from our test harness)
+            // and then modify it to hold the key and sign for it.
+            let mut subnet_list_record = decode_registry_value::<SubnetListRecord>(
+                fake_client
+                    .get_value(
+                        &make_subnet_list_record_key(),
+                        fake_client.get_latest_version(),
+                    )
+                    .unwrap()
+                    .unwrap(),
+            );
+
+            let subnet_to_recover_subnet_id = subnet_test_id(1003);
+
+            subnet_list_record
+                .subnets
+                .push(subnet_to_recover_subnet_id.get().into_vec());
+
+            let subnet_principals = subnet_list_record
+                .subnets
+                .iter()
+                .map(|record| PrincipalId::try_from(record).unwrap())
+                .collect::<Vec<_>>();
+            let system_subnet_principal = subnet_principals.get(0).unwrap();
+
+            let system_subnet_id = SubnetId::new(*system_subnet_principal);
+            let mut subnet_record = decode_registry_value::<SubnetRecord>(
+                fake_client
+                    .get_value(
+                        &make_subnet_record_key(system_subnet_id),
+                        fake_client.get_latest_version(),
+                    )
+                    .unwrap()
+                    .unwrap(),
+            );
+            subnet_record.ecdsa_config = Some(EcdsaConfig {
+                quadruples_to_create_in_advance: 1,
+                key_ids: vec![(&key_1).into()],
+                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+            });
+
+            let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
+                mutations: vec![upsert(
+                    make_subnet_record_key(system_subnet_id),
+                    encode_or_panic(&subnet_record),
+                )],
+                preconditions: vec![],
+            };
+
+            // Add the subnet we are recovering holding requested keys
+            // Note, because these mutations are also synced with underlying IC registry, they
+            // need a CUP
+            let mutations = vec![
+                upsert(
+                    make_subnet_record_key(subnet_to_recover_subnet_id).into_bytes(),
+                    encode_or_panic(&subnet_to_recover),
+                ),
+                upsert(
+                    make_subnet_list_record_key().into_bytes(),
+                    encode_or_panic(&subnet_list_record),
+                ),
+                insert(
+                    make_crypto_threshold_signing_pubkey_key(subnet_to_recover_subnet_id)
+                        .as_bytes(),
+                    encode_or_panic(&vec![]),
+                ),
+                insert(
+                    make_catch_up_package_contents_key(subnet_to_recover_subnet_id).as_bytes(),
+                    encode_or_panic(&dummy_cup_for_subnet(subnet_to_recover_nodes)),
+                ),
+            ];
+
+            let add_subnets_mutate = RegistryAtomicMutateRequest {
+                preconditions: vec![],
+                mutations,
+            };
+
+            // Enable signing with the recovering subnet - we will later check that
+            // this subnet is removed from the signing subnet list.
+            let ecdsa_signing_subnets_mutate = RegistryAtomicMutateRequest {
+                preconditions: vec![],
+                mutations: vec![insert(
+                    make_ecdsa_signing_subnet_list_key(&key_1),
+                    encode_or_panic(&EcdsaSigningSubnetList {
+                        subnets: vec![subnet_id_into_protobuf(subnet_to_recover_subnet_id)],
+                    }),
+                )],
+            };
+
+            let registry = setup_registry_synced_with_fake_client(
+                &runtime,
+                fake_client,
+                data_provider,
+                vec![
+                    init_mutate,
+                    add_subnets_mutate,
+                    modify_base_subnet_mutate,
+                    ecdsa_signing_subnets_mutate,
+                ],
+            )
+            .await;
+
+            // Then we need to ensure the CUP for our subnet under test
+            // does not contain the ecdsa_initializations, since we will be asserting those were added
+            let before_recover_cup_contents =
+                get_cup_contents(&registry, subnet_to_recover_subnet_id).await;
+            assert_eq!(before_recover_cup_contents.ecdsa_initializations.len(), 0);
+
+            // Install the universal canister in place of the governance canister
+            let fake_governance_canister = set_up_universal_canister_as_governance(&runtime).await;
+
+            let payload = RecoverSubnetPayload {
+                subnet_id: subnet_to_recover_subnet_id.get(),
+                height: 10,
+                time_ns: 1200,
+                state_hash: vec![10, 20, 30],
+                replacement_nodes: None,
+                registry_store_uri: None,
+                ecdsa_config: Some(EcdsaInitialConfig {
+                    quadruples_to_create_in_advance: 1,
+                    keys: vec![],
+                    max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                }),
+            };
+
+            // When we recover a subnet with specified ecdsa_keys
+            try_call_via_universal_canister(
+                &fake_governance_canister,
+                &registry,
+                "recover_subnet",
+                Encode!(&payload).unwrap(),
+            )
+            .await
+            .unwrap();
+
+            let cup_contents = get_cup_contents(&registry, subnet_to_recover_subnet_id).await;
+
+            // Check EcdsaInitializations
+            let dealings = &cup_contents.ecdsa_initializations;
+            assert_eq!(dealings.len(), 0);
+
+            // Check EcdsaConfig is correctly updated
+            let subnet_record = get_subnet_record(&registry, subnet_to_recover_subnet_id).await;
+            let ecdsa_config = subnet_record.ecdsa_config.unwrap();
+            assert_eq!(ecdsa_config.max_queue_size, DEFAULT_ECDSA_MAX_QUEUE_SIZE);
+
+            let key_ids = ecdsa_config.key_ids;
+            assert_eq!(key_ids.len(), 0);
+
+            // Check ecdsa_signing_subnets_list for key_1 is empty now.
             let ecdsa_signing_subnet_list = ecdsa_signing_subnet_list(&registry, &key_1).await;
             assert_eq!(
                 ecdsa_signing_subnet_list,
@@ -406,6 +571,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
         },
     );
 }
+
 pub async fn ecdsa_signing_subnet_list(
     registry: &Canister<'_>,
     key_id: &EcdsaKeyId,

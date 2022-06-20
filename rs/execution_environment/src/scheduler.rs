@@ -10,7 +10,9 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto::prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{CanisterStatusType, InstallCodeArgs, Method as Ic00Method, Payload as _};
+use ic_ic00_types::{
+    CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method as Ic00Method, Payload as _,
+};
 use ic_interfaces::execution_environment::{
     AvailableMemory, ExecutionRoundType, RegistryExecutionSettings,
 };
@@ -866,7 +868,7 @@ impl Scheduler for SchedulerImpl {
         &self,
         mut state: ReplicatedState,
         randomness: Randomness,
-        ecdsa_subnet_public_key: Option<MasterEcdsaPublicKey>,
+        ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
         current_round: ExecutionRound,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
@@ -967,7 +969,7 @@ impl Scheduler for SchedulerImpl {
                     state,
                     self.config.max_instructions_per_message,
                     &mut csprng,
-                    &ecdsa_subnet_public_key,
+                    &ecdsa_subnet_public_keys,
                     subnet_available_memory.clone(),
                     registry_settings,
                 );
@@ -1005,7 +1007,7 @@ impl Scheduler for SchedulerImpl {
                     state,
                     instructions_limit_per_message,
                     &mut csprng,
-                    &ecdsa_subnet_public_key,
+                    &ecdsa_subnet_public_keys,
                     subnet_available_memory.clone(),
                     registry_settings,
                 );

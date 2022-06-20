@@ -116,7 +116,7 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -182,7 +182,7 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -203,7 +203,7 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -259,7 +259,7 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -280,7 +280,7 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::CheckpointRound,
                 &test_registry_settings(),
@@ -296,7 +296,7 @@ fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -356,7 +356,7 @@ fn canister_gets_heap_delta_rate_limited() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -377,7 +377,7 @@ fn canister_gets_heap_delta_rate_limited() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(2),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -441,7 +441,7 @@ fn inner_loop_stops_when_no_instructions_consumed() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -511,7 +511,7 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -995,7 +995,7 @@ fn test_message_limit_from_message_overhead() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -1121,7 +1121,7 @@ fn test_multiple_iterations_of_inner_loop() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -1231,7 +1231,7 @@ fn canister_can_run_for_multiple_iterations() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -1287,7 +1287,7 @@ fn validate_consumed_instructions_metric() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -1382,7 +1382,7 @@ fn only_charge_for_allocation_after_specified_duration() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -1396,7 +1396,7 @@ fn only_charge_for_allocation_after_specified_duration() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -1450,7 +1450,7 @@ fn dont_execute_any_canisters_if_not_enough_cycles() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -1539,7 +1539,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -1609,7 +1609,7 @@ fn can_execute_messages_with_just_enough_cycles() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -1684,7 +1684,7 @@ fn execute_only_canisters_with_messages() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -1769,7 +1769,7 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -1842,7 +1842,7 @@ fn can_fully_execute_canisters_deterministically_until_out_of_cycles() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -1913,7 +1913,7 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -2017,7 +2017,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -2085,7 +2085,7 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -2153,7 +2153,7 @@ fn execute_heartbeat_before_messages() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -2225,7 +2225,7 @@ fn execute_multiple_heartbeats() {
                 state = scheduler.execute_round(
                     state,
                     Randomness::from([0; 32]),
-                    None,
+                    BTreeMap::new(),
                     ExecutionRound::from(1),
                     ExecutionRoundType::OrdinaryRound,
                     &test_registry_settings(),
@@ -2476,7 +2476,7 @@ fn can_record_metrics_for_a_round() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -2631,7 +2631,7 @@ fn heap_delta_rate_limiting_metrics_recorded() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(2),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -2726,7 +2726,7 @@ fn heap_delta_rate_limiting_disabled() {
         scheduler.execute_round(
             state,
             Randomness::from([0; 32]),
-            None,
+            BTreeMap::new(),
             ExecutionRound::from(2),
             ExecutionRoundType::OrdinaryRound,
             &test_registry_settings(),
@@ -2834,7 +2834,7 @@ fn requested_method_does_not_exist() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 round,
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -2910,7 +2910,7 @@ fn stopping_canisters_are_stopped_when_they_are_ready() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -3004,7 +3004,7 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
             state = scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -3129,7 +3129,7 @@ fn execution_round_metrics_are_recorded() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -3391,7 +3391,7 @@ fn heartbeat_metrics_are_recorded() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -3482,7 +3482,7 @@ fn execution_round_does_not_too_early() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(1),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -3838,7 +3838,7 @@ fn long_open_call_context_is_recorded() {
             scheduler.execute_round(
                 state,
                 Randomness::from([0; 32]),
-                None,
+                BTreeMap::new(),
                 ExecutionRound::from(4),
                 ExecutionRoundType::OrdinaryRound,
                 &test_registry_settings(),
@@ -4043,7 +4043,7 @@ proptest! {
                 scheduler.execute_round(
                     state.clone(),
                     Randomness::from([0; 32]),
-                    None,
+                    BTreeMap::new(),
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
                     ExecutionRoundType::OrdinaryRound,
                     &test_registry_settings(),
@@ -4093,7 +4093,7 @@ proptest! {
                 let new_state1 = scheduler.execute_round(
                     state.clone(),
                     Randomness::from([0; 32]),
-                    None,
+                    BTreeMap::new(),
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
                     ExecutionRoundType::OrdinaryRound,
                     &test_registry_settings(),
@@ -4101,7 +4101,7 @@ proptest! {
                 let new_state2 = scheduler.execute_round(
                     state.clone(),
                     Randomness::from([0; 32]),
-                    None,
+                    BTreeMap::new(),
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
                     ExecutionRoundType::OrdinaryRound,
                     &test_registry_settings(),
@@ -4161,7 +4161,7 @@ proptest! {
                         scheduler.execute_round(
                             state,
                             Randomness::from([0; 32]),
-                            None,
+                            BTreeMap::new(),
                             ExecutionRound::from(round),
                             ExecutionRoundType::OrdinaryRound,
                             &test_registry_settings(),
@@ -4217,7 +4217,7 @@ proptest! {
                 let state = scheduler.execute_round(
                     state.clone(),
                     Randomness::from([0; 32]),
-                    None,
+                    BTreeMap::new(),
                     ExecutionRound::from(LAST_ROUND_MAX + 1),
                     ExecutionRoundType::OrdinaryRound,
                     &test_registry_settings(),

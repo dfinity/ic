@@ -131,7 +131,7 @@ pub fn deliver_batches(
                             None => return None,
                         };
                         match block_reader.transcript(&transcript_ref) {
-                            Ok(transcript) =>  get_tecdsa_master_public_key(&transcript).ok(),
+                            Ok(transcript) =>  get_tecdsa_master_public_key(&transcript).ok().map(|public_key| (ecdsa.key_transcript.key_id.clone(), public_key)),
                             Err(err) => {
                                 warn!(
                                     log,
@@ -156,7 +156,7 @@ pub fn deliver_batches(
                         BlockPayload::from(block.payload).into_data().batch
                     },
                     randomness,
-                    ecdsa_subnet_public_key,
+                    ecdsa_subnet_public_keys: ecdsa_subnet_public_key.into_iter().collect(),
                     registry_version: block.context.registry_version,
                     time: block.context.time,
                     consensus_responses,

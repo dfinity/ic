@@ -1519,6 +1519,7 @@ fn compute_initial_ecdsa_dealings_sender_on_nns() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
         .with_ecdsa_signature_fee(0)
+        .with_ecdsa_key(make_key("secp256k1"))
         .build();
 
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
@@ -1548,6 +1549,7 @@ fn compute_initial_ecdsa_dealings_sender_not_on_nns() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(other_subnet, other_canister)
         .with_ecdsa_signature_fee(0)
+        .with_ecdsa_key(make_key("secp256k1"))
         .build();
 
     let node_ids = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
@@ -1573,10 +1575,7 @@ fn compute_initial_ecdsa_dealings_sender_not_on_nns() {
     );
 }
 
-// TODO EXC-1060: After supporting multiple keys, execution will know which key_ids are
-// supported and can send the correct rejection message.
 #[test]
-#[ignore]
 fn compute_initial_ecdsa_dealings_with_unknown_key() {
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
@@ -1604,7 +1603,11 @@ fn compute_initial_ecdsa_dealings_with_unknown_key() {
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        "key_id must be \"secp256k1\"".to_string()
+        format!(
+            "Subnet {} does not hold ECDSA key {}.",
+            own_subnet,
+            make_key("foo")
+        ),
     )
 }
 

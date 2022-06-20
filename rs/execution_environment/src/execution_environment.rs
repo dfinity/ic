@@ -65,6 +65,7 @@ use ic_types::{
 #[cfg(test)]
 use mockall::automock;
 use rand::RngCore;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::{convert::Into, convert::TryFrom, sync::Arc};
 use strum::ParseError;
@@ -119,7 +120,7 @@ pub trait ExecutionEnvironment: Sync + Send {
         state: ReplicatedState,
         instructions_limit: NumInstructions,
         rng: &mut (dyn RngCore + 'static),
-        ecdsa_subnet_public_key: &Option<MasterEcdsaPublicKey>,
+        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
         subnet_available_memory: SubnetAvailableMemory,
         registry_settings: &RegistryExecutionSettings,
     ) -> (ReplicatedState, NumInstructions);
@@ -247,7 +248,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         mut state: ReplicatedState,
         instructions_limit: NumInstructions,
         rng: &mut (dyn RngCore + 'static),
-        ecdsa_subnet_public_key: &Option<MasterEcdsaPublicKey>,
+        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
         subnet_available_memory: SubnetAvailableMemory,
         registry_settings: &RegistryExecutionSettings,
     ) -> (ReplicatedState, NumInstructions) {
@@ -645,17 +646,29 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
 
                     let res = match SignWithECDSAArgs::decode(payload) {
                         Err(err) => Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
-                        Ok(args) => self
-                            .sign_with_ecdsa(
-                                (**request).clone(),
-                                args.message_hash,
-                                args.derivation_path,
-                                args.key_id,
-                                registry_settings.max_ecdsa_queue_size,
-                                &mut state,
-                                rng,
-                            )
-                            .map_or_else(|err| Some((Err(err), msg.take_cycles())), |()| None),
+                        Ok(args) => {
+                            match get_master_ecdsa_public_key(
+                                ecdsa_subnet_public_keys,
+                                self.own_subnet_id,
+                                &args.key_id,
+                            ) {
+                                Err(err) => Some((Err(err), msg.take_cycles())),
+                                Ok(_) => self
+                                    .sign_with_ecdsa(
+                                        (**request).clone(),
+                                        args.message_hash,
+                                        args.derivation_path,
+                                        args.key_id,
+                                        registry_settings.max_ecdsa_queue_size,
+                                        &mut state,
+                                        rng,
+                                    )
+                                    .map_or_else(
+                                        |err| Some((Err(err), msg.take_cycles())),
+                                        |()| None,
+                                    ),
+                            }
+                        }
                     };
                     (res, instructions_limit)
                 }
@@ -677,10 +690,9 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                     RequestOrIngress::Request(_request) => {
                             match ECDSAPublicKeyArgs::decode(payload) {
                                 Err(err) => Some(Err(candid_error_to_user_error(err))),
-                                Ok(args) => match ecdsa_subnet_public_key {
-                                    None => Some(Err(UserError::new(ErrorCode::CanisterRejectedMessage,
-                                              "Subnet ECDSA public key is not yet available.".to_string()))),
-                                    Some(pubkey) => {
+                                Ok(args) => match get_master_ecdsa_public_key(ecdsa_subnet_public_keys, self.own_subnet_id, &args.key_id) {
+                                    Err(err) => Some(Err(err)),
+                                    Ok(pubkey) => {
                                       let canister_id = match args.canister_id {
                                         Some(id) => id.into(),
                                         None => *msg.sender(),
@@ -713,12 +725,17 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                             match ComputeInitialEcdsaDealingsArgs::decode(payload) {
                                 Err(err) => Some(candid_error_to_user_error(err)),
                                 Ok(args) => {
-                                    self.compute_initial_ecdsa_dealings(
-                                        &mut state,
-                                        msg.sender(),
-                                        args,
-                                        request)
-                                        .map_or_else(Some, |()| None)
+                                    match get_master_ecdsa_public_key(ecdsa_subnet_public_keys,
+                                            self.own_subnet_id,
+                                            &args.key_id) {
+                                        Err(err) => Some(err),
+                                        Ok(_) => self.compute_initial_ecdsa_dealings(
+                                            &mut state,
+                                            msg.sender(),
+                                            args,
+                                            request)
+                                            .map_or_else(Some, |()| None)
+                                    }
                                 }
                             }
                     }
@@ -1620,5 +1637,19 @@ fn get_canister_mut(
             ErrorCode::CanisterNotFound,
             format!("Canister {} not found.", &canister_id),
         )),
+    }
+}
+
+fn get_master_ecdsa_public_key<'a>(
+    ecdsa_subnet_public_keys: &'a BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    subnet_id: SubnetId,
+    key_id: &EcdsaKeyId,
+) -> Result<&'a MasterEcdsaPublicKey, UserError> {
+    match ecdsa_subnet_public_keys.get(key_id) {
+        None => Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            format!("Subnet {} does not hold ECDSA key {}.", subnet_id, key_id),
+        )),
+        Some(master_key) => Ok(master_key),
     }
 }

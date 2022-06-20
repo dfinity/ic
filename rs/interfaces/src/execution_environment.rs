@@ -4,6 +4,7 @@ mod errors;
 pub use errors::{CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
+use ic_ic00_types::EcdsaKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -17,8 +18,8 @@ use ic_types::{
     ComputeAllocation, Cycles, ExecutionRound, Height, NumInstructions, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
-use std::ops;
 use std::sync::{Arc, RwLock};
+use std::{collections::BTreeMap, ops};
 use std::{convert::Infallible, fmt};
 use tower::{limit::ConcurrencyLimit, util::BoxCloneService};
 
@@ -923,7 +924,7 @@ pub trait Scheduler: Send {
         &self,
         state: Self::State,
         randomness: Randomness,
-        ecdsa_subnet_public_key: Option<MasterEcdsaPublicKey>,
+        ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
         current_round: ExecutionRound,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
