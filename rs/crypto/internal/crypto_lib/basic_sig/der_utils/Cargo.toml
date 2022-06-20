@@ -5,7 +5,7 @@ edition = "2018"
 
 [dependencies]
 hex = "0.4.2"
-simple_asn1 = "0.5.4"
+simple_asn1 = "0.6.1"
 ic-types = { path = "../../../../../types/types" }
 
 [dev-dependencies]

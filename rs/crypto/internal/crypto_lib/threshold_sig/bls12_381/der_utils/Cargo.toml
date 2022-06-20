@@ -5,4 +5,4 @@ edition = "2018"
 description = "Internal utils for serializing threshold signatures to DER with minimal dependencies"
 
 [dependencies]
-simple_asn1 = "0.5.4"
+simple_asn1 = "0.6.1"

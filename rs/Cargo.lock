@@ -4669,7 +4669,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "serde_json",
- "simple_asn1 0.5.4",
+ "simple_asn1 0.6.1",
  "slog",
  "strum 0.23.0",
  "strum_macros 0.23.1",
@@ -4713,7 +4713,7 @@ dependencies = [
  "hex",
  "ic-crypto-internal-test-vectors",
  "ic-types 0.8.0",
- "simple_asn1 0.5.4",
+ "simple_asn1 0.6.1",
 ]
 
 [[package]]
@@ -4733,7 +4733,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "simple_asn1 0.5.4",
+ "simple_asn1 0.6.1",
  "strum 0.23.0",
  "zeroize",
 ]
@@ -4754,7 +4754,7 @@ dependencies = [
  "proptest-derive",
  "serde",
  "serde_bytes",
- "simple_asn1 0.5.4",
+ "simple_asn1 0.6.1",
  "strum 0.23.0",
  "zeroize",
 ]
@@ -4791,7 +4791,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "serde",
  "serde_cbor",
- "simple_asn1 0.5.4",
+ "simple_asn1 0.6.1",
  "strum 0.23.0",
  "wycheproof",
  "zeroize",
@@ -4816,7 +4816,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "simple_asn1 0.5.4",
+ "simple_asn1 0.6.1",
 ]
 
 [[package]]
@@ -4832,7 +4832,7 @@ dependencies = [
  "rsa 0.4.0",
  "serde",
  "serde_json",
- "simple_asn1 0.5.4",
+ "simple_asn1 0.6.1",
 ]
 
 [[package]]
@@ -4912,7 +4912,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
- "simple_asn1 0.5.4",
+ "simple_asn1 0.6.1",
  "slog",
  "strum 0.23.0",
  "strum_macros 0.23.1",
@@ -5059,7 +5059,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "serde_json",
- "simple_asn1 0.5.4",
+ "simple_asn1 0.6.1",
  "strum_macros 0.23.1",
  "zeroize",
 ]
@@ -5068,7 +5068,7 @@ dependencies = [
 name = "ic-crypto-internal-threshold-sig-bls12381-der"
 version = "0.8.0"
 dependencies = [
- "simple_asn1 0.5.4",
+ "simple_asn1 0.6.1",
 ]
 
 [[package]]
@@ -5309,7 +5309,7 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-types",
  "ic-protobuf",
- "simple_asn1 0.5.4",
+ "simple_asn1 0.6.1",
 ]
 
 [[package]]
@@ -6169,7 +6169,7 @@ dependencies = [
  "rand_core 0.5.1",
  "serde",
  "sha3 0.9.1",
- "simple_asn1 0.5.4",
+ "simple_asn1 0.6.1",
  "tempfile",
 ]
 

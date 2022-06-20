@@ -11,7 +11,7 @@ ic-base-types = { path = "../../../types/base_types" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../../internal/crypto_lib/basic_sig/der_utils" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "../../internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
-simple_asn1 = "0.5.4"
+simple_asn1 = "0.6.1"
 ed25519-consensus = "2.0.1"
 
 [dev-dependencies]
