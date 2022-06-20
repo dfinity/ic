@@ -312,11 +312,7 @@ async fn create_and_initialize_node_canister<W: ArchiveCanisterWasm>(
 
     print("[archive] calling install_code()");
 
-    // We don't inspect the result here because according to MW the install canister
-    // code returns an error even after successfully installing the code. We check
-    // the existence of the canister immediately afterwards, so it doesn't really
-    // matter.
-    let _ = spawn::install_code(
+    let () = spawn::install_code(
         node_canister_id,
         W::archive_wasm().into_owned(),
         dfn_candid::Candid((
@@ -325,7 +321,14 @@ async fn create_and_initialize_node_canister<W: ArchiveCanisterWasm>(
             Some(node_max_memory_size_bytes),
         )),
     )
-    .await;
+    .await
+    .map_err(|(reject_code, message)| {
+        FailedToArchiveBlocks(format!(
+            "install_code failed; reject_code={}, message={}",
+            reject_code.unwrap_or(0),
+            message
+        ))
+    })?;
 
     print(format!(
         "[archive] setting controller_id for archive node: {}",
