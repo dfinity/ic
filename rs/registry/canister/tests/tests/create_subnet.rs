@@ -8,18 +8,14 @@ use ic_nns_test_utils::{
     },
     registry::invariant_compliant_mutation_as_atomic_req,
 };
-use ic_protobuf::registry::crypto::v1::{
-    EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as pbEcdsaKeyId, EcdsaSigningSubnetList,
-};
+use ic_protobuf::registry::crypto::v1::{EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as pbEcdsaKeyId};
 use std::convert::TryFrom;
 
 use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetListRecord, SubnetRecord};
-use ic_registry_keys::{
-    make_ecdsa_signing_subnet_list_key, make_subnet_list_record_key, make_subnet_record_key,
-};
+use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_subnet_features::{SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, upsert};
+use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
 
 use ic_types::p2p::{
     MAX_ARTIFACT_STREAMS_PER_PEER, MAX_CHUNK_SIZE, MAX_CHUNK_WAIT_MS, MAX_DUPLICITY,
@@ -38,7 +34,7 @@ use crate::test_helpers::{
 };
 use assert_matches::assert_matches;
 use canister_test::Runtime;
-use ic_base_types::{subnet_id_into_protobuf, PrincipalId, SubnetId};
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_config::Config;
 use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
 use ic_interfaces::registry::RegistryClient;
@@ -270,29 +266,11 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_unspecified_subnet() {
                 preconditions: vec![],
             };
 
-            // TODO - remove this after routing bug in route_ecdsa_message is fixed
-            // Currently an EcdsaKeyRequest not pointing at a specific subnet fails if signing
-            // is not enabled for the key in question on some subnet, even though the only requirement
-            // is that a subnet holds the key being requested
-            let ecdsa_signing_subnets_mutate = RegistryAtomicMutateRequest {
-                preconditions: vec![],
-                mutations: vec![insert(
-                    make_ecdsa_signing_subnet_list_key(&key_1),
-                    encode_or_panic(&EcdsaSigningSubnetList {
-                        subnets: vec![subnet_id_into_protobuf(system_subnet_id)],
-                    }),
-                )],
-            };
-
             let registry = setup_registry_synced_with_fake_client(
                 &runtime,
                 fake_client.clone(),
                 data_provider,
-                vec![
-                    init_mutate,
-                    modify_base_subnet_mutate,
-                    ecdsa_signing_subnets_mutate,
-                ],
+                vec![init_mutate, modify_base_subnet_mutate],
             )
             .await;
 
@@ -430,29 +408,11 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_specified_subnet() {
                 preconditions: vec![],
             };
 
-            // TODO - remove this after routing bug in route_ecdsa_message is fixed
-            // Currently an EcdsaKeyRequest not pointing at a specific subnet fails if signing
-            // is not enabled for the key in question on some subnet, even though the only requirement
-            // is that a subnet holds the key being requested
-            let ecdsa_signing_subnets_mutate = RegistryAtomicMutateRequest {
-                preconditions: vec![],
-                mutations: vec![insert(
-                    make_ecdsa_signing_subnet_list_key(&key_1),
-                    encode_or_panic(&EcdsaSigningSubnetList {
-                        subnets: vec![subnet_id_into_protobuf(system_subnet_id)],
-                    }),
-                )],
-            };
-
             let registry = setup_registry_synced_with_fake_client(
                 &runtime,
                 fake_client.clone(),
                 data_provider,
-                vec![
-                    init_mutate,
-                    modify_base_subnet_mutate,
-                    ecdsa_signing_subnets_mutate,
-                ],
+                vec![init_mutate, modify_base_subnet_mutate],
             )
             .await;
 
