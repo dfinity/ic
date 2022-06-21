@@ -5838,16 +5838,14 @@ dependencies = [
 name = "ic-ledger-core"
 version = "0.8.0"
 dependencies = [
+ "async-trait",
  "candid",
- "dfn_candid",
- "dfn_core",
  "hex",
  "ic-base-types",
  "ic-constants",
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-utils 0.8.0",
- "on_wire",
  "serde",
  "serde_bytes",
 ]
@@ -5856,6 +5854,7 @@ dependencies = [
 name = "ic-ledger-icrc1"
 version = "0.8.0"
 dependencies = [
+ "async-trait",
  "candid",
  "canister-test",
  "cddl",
@@ -8684,6 +8683,7 @@ checksum = "884e2677b40cc8c339eaefcb701c32ef1fd2493d71118dc0ca4b6a736c93bd67"
 name = "ledger-canister"
 version = "0.8.0"
 dependencies = [
+ "async-trait",
  "byteorder",
  "candid",
  "canister-test",

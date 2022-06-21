@@ -3,6 +3,7 @@ use crate::{
     balances::{BalanceError, Balances, BalancesStore},
     block::{BlockHeight, BlockType, EncodedBlock, HashOf},
     blockchain::Blockchain,
+    runtime::Runtime,
     timestamp::TimeStamp,
     tokens::Tokens,
 };
@@ -39,6 +40,7 @@ pub trait LedgerTransaction: Sized {
 pub trait LedgerData {
     type AccountId: std::hash::Hash + Ord + Eq + Clone;
     type ArchiveWasm: ArchiveCanisterWasm;
+    type Runtime: Runtime;
     type Block: BlockType<Transaction = Self::Transaction>;
     type Transaction: LedgerTransaction<AccountId = Self::AccountId> + Ord + Clone;
 
@@ -74,8 +76,8 @@ pub trait LedgerData {
     fn balances(&self) -> &Balances<Self::AccountId, HashMap<Self::AccountId, Tokens>>;
     fn balances_mut(&mut self) -> &mut Balances<Self::AccountId, HashMap<Self::AccountId, Tokens>>;
 
-    fn blockchain(&self) -> &Blockchain<Self::ArchiveWasm>;
-    fn blockchain_mut(&mut self) -> &mut Blockchain<Self::ArchiveWasm>;
+    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm>;
+    fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm>;
 
     fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockHeight>;
     fn transactions_by_hash_mut(&mut self)

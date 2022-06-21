@@ -1,6 +1,8 @@
+pub mod cdk_runtime;
 pub mod endpoints;
 pub mod hash;
 
+use crate::cdk_runtime::CdkRuntime;
 use candid::CandidType;
 use ciborium::tag::Required;
 use ic_base_types::PrincipalId;
@@ -339,7 +341,7 @@ pub struct InitArgs {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Ledger {
     balances: LedgerBalances,
-    blockchain: Blockchain<Icrc1ArchiveWasm>,
+    blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
 
     minting_account: Account,
 
@@ -390,6 +392,7 @@ impl Ledger {
 
 impl LedgerData for Ledger {
     type AccountId = Account;
+    type Runtime = CdkRuntime;
     type ArchiveWasm = Icrc1ArchiveWasm;
     type Transaction = Transaction;
     type Block = Block;
@@ -430,11 +433,11 @@ impl LedgerData for Ledger {
         &mut self.balances
     }
 
-    fn blockchain(&self) -> &Blockchain<Self::ArchiveWasm> {
+    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm> {
         &self.blockchain
     }
 
-    fn blockchain_mut(&mut self) -> &mut Blockchain<Self::ArchiveWasm> {
+    fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm> {
         &mut self.blockchain
     }
 

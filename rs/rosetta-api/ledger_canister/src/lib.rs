@@ -25,6 +25,7 @@ use std::sync::RwLock;
 use std::time::Duration;
 
 pub mod account_identifier;
+mod dfn_runtime;
 #[rustfmt::skip]
 #[allow(clippy::all)]
 #[path = "../gen/ic_ledger.pb.v1.rs"]
@@ -34,6 +35,7 @@ mod validate_endpoints;
 pub use account_identifier::{AccountIdentifier, Subaccount};
 pub use validate_endpoints::{tokens_from_proto, tokens_into_proto};
 
+use crate::dfn_runtime::DfnRuntime;
 use dfn_core::api::now;
 use ic_ledger_core::blockchain::Blockchain;
 
@@ -292,7 +294,7 @@ impl Default for TransferFee {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Ledger {
     pub balances: LedgerBalances,
-    pub blockchain: Blockchain<IcpLedgerArchiveWasm>,
+    pub blockchain: Blockchain<DfnRuntime, IcpLedgerArchiveWasm>,
     // A cap on the maximum number of accounts
     pub maximum_number_of_accounts: usize,
     // When maximum number of accounts is exceeded, a specified number of
@@ -332,6 +334,7 @@ pub struct Ledger {
 
 impl LedgerData for Ledger {
     type AccountId = AccountIdentifier;
+    type Runtime = DfnRuntime;
     type ArchiveWasm = IcpLedgerArchiveWasm;
     type Transaction = Transaction;
     type Block = Block;
@@ -372,11 +375,11 @@ impl LedgerData for Ledger {
         &mut self.balances
     }
 
-    fn blockchain(&self) -> &Blockchain<Self::ArchiveWasm> {
+    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm> {
         &self.blockchain
     }
 
-    fn blockchain_mut(&mut self) -> &mut Blockchain<Self::ArchiveWasm> {
+    fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm> {
         &mut self.blockchain
     }
 
