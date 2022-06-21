@@ -17,9 +17,7 @@ ARG BASE_IMAGE=
 # - Construct the actual target image (SetupOS root filesystem)
 #
 
-# XXX TODO: Until this is pushed, please build the image locally
-# FROM $BASE_IMAGE
-FROM dfinity/setupos-base:local
+FROM $BASE_IMAGE
 
 RUN mkdir -p /config \
              /data \

@@ -256,9 +256,8 @@ function assemble_and_populate_image() {
     echo "${VERSION}" >"${TMP_DIR}/version.txt"
     touch -t ${TOUCH_TIMESTAMP} ${TMP_DIR}/version.txt
 
-    # XXX Temporarily skip pull until image has been pushed
-    "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/boot-tree.tar" --skip-pull "${BASE_DIR}/bootloader"
-    "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/rootfs-tree.tar" --skip-pull -- --build-arg BASE_IMAGE="${BASE_IMAGE}" "${BASE_DIR}/rootfs"
+    "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/boot-tree.tar" "${BASE_DIR}/bootloader"
+    "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/rootfs-tree.tar" -- --build-arg BASE_IMAGE="${BASE_IMAGE}" "${BASE_DIR}/rootfs"
     "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-esp.tar" -s 100M -p boot/efi -i "${TMP_DIR}/boot-tree.tar"
     "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-grub.tar" -s 100M -p boot/grub -i "${TMP_DIR}/boot-tree.tar" \
         "${BASE_DIR}/bootloader/grub.cfg:/boot/grub/grub.cfg:644" \
