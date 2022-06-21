@@ -14,7 +14,7 @@ use crate::types::{
 };
 use crate::utils::{get_flow_ips, get_flow_label, SendQueueImpl};
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
+use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer};
 use ic_interfaces_transport::{AsyncTransportEventHandler, FlowId, FlowTag, TransportErrorCode};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
@@ -388,42 +388,6 @@ impl TransportImpl {
         })
     }
 
-    /// Handles the handshake completion during connection establishment (both
-    /// server/client sides). Does the validation, sets up the connection state
-    /// and spawns the read task for the connection.
-    #[allow(clippy::too_many_arguments)]
-    async fn process_handshake_result(
-        &self,
-        peer_id: NodeId,
-        role: ConnectionRole,
-        flow_tag: FlowTag,
-        local_addr: SocketAddr,
-        peer_addr: SocketAddr,
-        tls_stream: TlsStream,
-    ) -> Result<(), TransportErrorCode> {
-        // Pass the established connection to the data plane to start IOs.
-        let flow_id = FlowId { peer_id, flow_tag };
-        self.on_connect(flow_id, role, peer_addr, tls_stream)
-            .await
-            .map_err(|e| {
-                warn!(
-                    every_n_seconds => 30,
-                    self.log,
-                    "ControlPlane::handshake_result(): failed to add flow: \
-                     node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, role = {:?}, \
-                     error = {:?}",
-                    self.node_id,
-                    local_addr,
-                    flow_tag,
-                    peer_id,
-                    peer_addr,
-                    Self::connection_role(&self.node_id, &peer_id),
-                    e
-                );
-                e
-            })
-    }
-
     /// Retries to establish a connection
     pub(crate) fn retry_connection(&self, flow_id: &FlowId) -> Result<(), TransportErrorCode> {
         warn!(
@@ -649,7 +613,9 @@ impl TransportImpl {
                 return Err(TransportErrorCode::PeerTlsInfoNotFound);
             }
         };
-        self.process_handshake_result(
+
+        // Pass the established connection to the data plane to start IOs.
+        self.on_connect(
             peer_id,
             ConnectionRole::Server,
             flow_tag,
@@ -718,7 +684,8 @@ impl TransportImpl {
             TransportErrorCode::PeerTlsInfoNotFound
         })?;
 
-        self.process_handshake_result(
+        // Pass the established connection to the data plane to start IOs.
+        self.on_connect(
             peer_id,
             ConnectionRole::Client,
             flow_tag,

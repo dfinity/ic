@@ -111,7 +111,7 @@ pub(crate) struct TransportImpl {
 }
 
 /// Our role in a connection
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub(crate) enum ConnectionRole {
     /// We connect to the peer as a client
     Client,

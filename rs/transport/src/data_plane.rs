@@ -25,12 +25,13 @@ use crate::{
         TRANSPORT_HEADER_SIZE,
     },
 };
+use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::{TlsReadHalf, TlsStream, TlsWriteHalf};
 use ic_interfaces_transport::{
-    AsyncTransportEventHandler, FlowId, TransportErrorCode, TransportPayload, TransportStateChange,
+    AsyncTransportEventHandler, FlowId, FlowTag, TransportErrorCode, TransportPayload,
+    TransportStateChange,
 };
 use ic_logger::warn;
-
 use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
@@ -455,19 +456,39 @@ impl TransportImpl {
     /// Handle peer connection
     pub(crate) async fn on_connect(
         &self,
-        flow_id: FlowId,
+        peer_id: NodeId,
         role: ConnectionRole,
+        flow_tag: FlowTag,
+        local_addr: SocketAddr,
         peer_addr: SocketAddr,
         tls_stream: TlsStream,
     ) -> Result<(), TransportErrorCode> {
         let (tls_reader, tls_writer) = tls_stream.split();
+        let flow_id = FlowId { peer_id, flow_tag };
         self.on_connect_setup(
             flow_id,
             role,
             peer_addr,
             Box::new(tls_reader),
             Box::new(tls_writer),
-        )?
+        )
+        .map_err(|e| {
+            warn!(
+                every_n_seconds => 30,
+                self.log,
+                "ControlPlane::handshake_result(): failed to add flow: \
+                 node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, role = {:?}, \
+                 error = {:?}",
+                self.node_id,
+                local_addr,
+                flow_id.flow_tag,
+                flow_id.peer_id,
+                peer_addr,
+                role,
+                e
+            );
+            e
+        })?
         // Notify the client that peer flow is up.
         .state_changed(TransportStateChange::PeerFlowUp(FlowId {
             peer_id: flow_id.peer_id,
