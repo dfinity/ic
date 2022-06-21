@@ -20,11 +20,6 @@ cd "$ROOT_DIR"/ic-os/setupos
 mkdir -p "$BUILD_OUT" "$BUILD_TMP"
 echo "$VERSION" >"${BUILD_TMP}/version.txt"
 
-# XXX Temporarily build docker image
-cd rootfs
-docker build -f Dockerfile.base -t dfinity/setupos-base:local .
-cd ..
-
 if [ -z "$CI_JOB_ID" ]; then
     ./scripts/build-disk-image.sh "-o=${BUILD_TMP}/disk.img" "-v=$VERSION" "--host-os=./hostos/disk-img/host-disk-img.tar.gz" "--guest-os=./guestos/disk-img/disk-img.tar.gz"
     tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
