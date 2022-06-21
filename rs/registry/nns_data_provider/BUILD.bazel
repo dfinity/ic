@@ -1,0 +1,43 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/canister_client",
+    "//rs/certified_vars",
+    "//rs/crypto/tree_hash",
+    "//rs/crypto/utils/threshold_sig",
+    "//rs/interfaces",
+    "//rs/nns/constants",
+    "//rs/protobuf",
+    "//rs/registry/proto",
+    "//rs/registry/transport",
+    "//rs/tree_deserializer",
+    "//rs/types/types",
+    "//rs/utils",
+    "@crate_index//:bytes",
+    "@crate_index//:chrono",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-tls",
+    "@crate_index//:lazy_static",
+    "@crate_index//:prost",
+    "@crate_index//:rand_0_7_3",
+    "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+]
+
+rust_library(
+    name = "nns_data_provider",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_registry_nns_data_provider",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)

@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/crypto/sha",
+    "//rs/rosetta-api/ledger_core",
+    "//rs/types/base_types",
+    "@crate_index//:candid",
+    "@crate_index//:ciborium",
+    "@crate_index//:hex",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+]
+
+MACRO_DEPENDENCIES = ["@crate_index//:ic-cdk-macros"]
+
+rust_library(
+    name = "icrc1",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_ledger_icrc1",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+# Disabled due to https://github.com/bazelbuild/rules_rust/issues/1233
+# rust_doc_test(
+#     name = "icrc1_doc_test",
+#     crate = ":icrc1",
+# )
