@@ -2,6 +2,7 @@ use ic_canister_sandbox_replica_controller::sandboxed_execution_controller::Sand
 use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_embedders::wasm_executor::WasmExecutionResult;
 use ic_embedders::{wasm_executor::WasmExecutor, WasmExecutionInput, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::CanisterStatusType;
@@ -759,16 +760,19 @@ impl Hypervisor {
         let static_system_state =
             SandboxSafeSystemState::new(&system_state, *self.cycles_account_manager);
 
-        let (output, execution_state, system_state_changes) =
+        let (execution_state, execution_result) =
             if let Some(sandbox_executor) = self.sandbox_executor.as_ref() {
-                sandbox_executor.process(WasmExecutionInput {
-                    api_type,
-                    sandbox_safe_system_state: static_system_state,
-                    canister_current_memory_usage,
-                    execution_parameters,
-                    func_ref,
-                    execution_state,
-                })
+                SandboxedExecutionController::process(
+                    sandbox_executor,
+                    WasmExecutionInput {
+                        api_type,
+                        sandbox_safe_system_state: static_system_state,
+                        canister_current_memory_usage,
+                        execution_parameters,
+                        func_ref,
+                        execution_state,
+                    },
+                )
             } else {
                 self.wasm_executor.process(WasmExecutionInput {
                     api_type,
@@ -779,6 +783,14 @@ impl Hypervisor {
                     execution_state,
                 })
             };
+        let (output, system_state_changes) = match execution_result {
+            WasmExecutionResult::Finished(output, system_state_changes) => {
+                (output, system_state_changes)
+            }
+            WasmExecutionResult::Paused(_) => {
+                unreachable!("DTS is not enabled yet.");
+            }
+        };
         self.metrics.observe(api_type_str, &output);
         system_state_changes.apply_changes(
             &mut system_state,
@@ -787,5 +799,45 @@ impl Hypervisor {
             &self.log,
         );
         (output, execution_state, system_state)
+    }
+
+    /// Executes the given WebAssembly function with deterministic time slicing.
+    /// TODO(RUN-232): Change all callers of `execute()` to call `execute_dts()`
+    /// and rename `execute_dts()` to `execute()`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn execute_dts(
+        &self,
+        api_type: ApiType,
+        system_state: SystemState,
+        canister_current_memory_usage: NumBytes,
+        execution_parameters: ExecutionParameters,
+        func_ref: FuncRef,
+        execution_state: ExecutionState,
+    ) -> (ExecutionState, WasmExecutionResult) {
+        let static_system_state =
+            SandboxSafeSystemState::new(&system_state, *self.cycles_account_manager);
+
+        if let Some(sandbox_executor) = self.sandbox_executor.as_ref() {
+            SandboxedExecutionController::process(
+                sandbox_executor,
+                WasmExecutionInput {
+                    api_type,
+                    sandbox_safe_system_state: static_system_state,
+                    canister_current_memory_usage,
+                    execution_parameters,
+                    func_ref,
+                    execution_state,
+                },
+            )
+        } else {
+            self.wasm_executor.process(WasmExecutionInput {
+                api_type,
+                sandbox_safe_system_state: static_system_state,
+                canister_current_memory_usage,
+                execution_parameters,
+                func_ref,
+                execution_state,
+            })
+        }
     }
 }

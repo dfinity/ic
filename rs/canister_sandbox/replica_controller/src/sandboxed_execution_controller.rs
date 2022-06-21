@@ -1,14 +1,18 @@
 use ic_canister_sandbox_common::controller_launcher_service::ControllerLauncherService;
 use ic_canister_sandbox_common::launcher_service::LauncherService;
-use ic_canister_sandbox_common::protocol::id::{MemoryId, WasmId};
+use ic_canister_sandbox_common::protocol::id::{ExecId, MemoryId, WasmId};
 use ic_canister_sandbox_common::protocol::sbxsvc::MemorySerialization;
 use ic_canister_sandbox_common::protocol::structs::SandboxExecInput;
 use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_canister_sandbox_common::{protocol, rpc};
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_embedders::wasm_executor::get_wasm_reserved_pages;
+use ic_embedders::wasm_executor::{
+    get_wasm_reserved_pages, PausedWasmExecution, WasmExecutionResult,
+};
 use ic_embedders::WasmExecutionInput;
-use ic_interfaces::execution_environment::{HypervisorResult, InstanceStats, WasmExecutionOutput};
+use ic_interfaces::execution_environment::{
+    HypervisorResult, InstanceStats, SubnetAvailableMemory, WasmExecutionOutput,
+};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
@@ -317,6 +321,78 @@ struct SandboxProcessStats {
     status: SandboxProcessStatus,
 }
 
+// Represent a paused sandbox execution.
+struct PausedSandboxExecution {
+    canister_id: CanisterId,
+    sandbox_process: Arc<SandboxProcess>,
+    exec_id: ExecId,
+    next_wasm_memory_id: MemoryId,
+    next_stable_memory_id: MemoryId,
+    initial_num_instructions_left: NumInstructions,
+    api_type_label: &'static str,
+    controller: Arc<SandboxedExecutionController>,
+}
+
+impl std::fmt::Debug for PausedSandboxExecution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PausedSandboxExecution")
+            .field("canister_id", &self.canister_id)
+            .field("exec_id", &self.exec_id)
+            .field("api_type_label", &self.api_type_label)
+            .finish()
+    }
+}
+
+impl PausedWasmExecution for PausedSandboxExecution {
+    fn resume(
+        self: Box<Self>,
+        execution_state: ExecutionState,
+        subnet_available_memory: SubnetAvailableMemory,
+    ) -> (ExecutionState, WasmExecutionResult) {
+        // Create channel through which we will receive the execution
+        // output from closure (running by IPC thread at end of
+        // execution).
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let sandbox_process = Arc::clone(&self.sandbox_process);
+        self.sandbox_process
+            .execution_states
+            .register_execution_with_id(self.exec_id, move |exec_id, result| {
+                sandbox_process
+                    .history
+                    .record(format!("Completion(exec_id={})", exec_id));
+                tx.send(result).unwrap();
+            });
+
+        self.sandbox_process
+            .history
+            .record(format!("ResumeExecution(exec_id={}", self.exec_id,));
+        self.sandbox_process
+            .sandbox_service
+            .resume_execution(protocol::sbxsvc::ResumeExecutionRequest {
+                exec_id: self.exec_id,
+            })
+            .on_completion(|_| {});
+        // Wait for completion.
+        let result = rx.recv().unwrap();
+        SandboxedExecutionController::process_completion(
+            &self.controller,
+            self.canister_id,
+            execution_state,
+            result,
+            self.next_wasm_memory_id,
+            self.next_stable_memory_id,
+            self.initial_num_instructions_left,
+            self.api_type_label,
+            subnet_available_memory,
+            self.sandbox_process,
+        )
+    }
+
+    fn abort(self: Box<Self>) {
+        todo!()
+    }
+}
+
 /// Manages sandboxed processes, forwards requests to the appropriate
 /// process.
 pub struct SandboxedExecutionController {
@@ -519,16 +595,16 @@ impl SandboxedExecutionController {
     }
 
     pub fn process(
-        &self,
+        self: &Arc<Self>,
         WasmExecutionInput {
             api_type,
             sandbox_safe_system_state,
             canister_current_memory_usage,
             execution_parameters,
             func_ref,
-            mut execution_state,
+            execution_state,
         }: WasmExecutionInput,
-    ) -> (WasmExecutionOutput, ExecutionState, SystemStateChanges) {
+    ) -> (ExecutionState, WasmExecutionResult) {
         // TODO(EXC-868): Adjust this assertion once the execution environment
         // supports deterministic time slicing with sandbox.
         assert_eq!(
@@ -557,16 +633,18 @@ impl SandboxedExecutionController {
                 Ok((wasm_id, compile_count)) => (wasm_id, compile_count),
                 Err(err) => {
                     return (
-                        WasmExecutionOutput {
-                            wasm_result: Err(err),
-                            num_instructions_left: NumInstructions::from(0),
-                            instance_stats: InstanceStats {
-                                accessed_pages: 0,
-                                dirty_pages: 0,
-                            },
-                        },
                         execution_state,
-                        SystemStateChanges::default(),
+                        WasmExecutionResult::Finished(
+                            WasmExecutionOutput {
+                                wasm_result: Err(err),
+                                num_instructions_left: NumInstructions::from(0),
+                                instance_stats: InstanceStats {
+                                    accessed_pages: 0,
+                                    dirty_pages: 0,
+                                },
+                            },
+                            SystemStateChanges::default(),
+                        ),
                     );
                 }
             };
@@ -648,7 +726,33 @@ impl SandboxedExecutionController {
             .sandboxed_execution_replica_execute_finish_duration
             .with_label_values(&[api_type_label])
             .start_timer();
+        Self::process_completion(
+            self,
+            canister_id,
+            execution_state,
+            result,
+            next_wasm_memory_id,
+            next_stable_memory_id,
+            initial_num_instructions_left,
+            api_type_label,
+            subnet_available_memory,
+            sandbox_process,
+        )
+    }
 
+    #[allow(clippy::too_many_arguments)]
+    fn process_completion(
+        self: &Arc<Self>,
+        canister_id: CanisterId,
+        mut execution_state: ExecutionState,
+        result: CompletionResult,
+        next_wasm_memory_id: MemoryId,
+        next_stable_memory_id: MemoryId,
+        initial_num_instructions_left: NumInstructions,
+        api_type_label: &'static str,
+        subnet_available_memory: SubnetAvailableMemory,
+        sandbox_process: Arc<SandboxProcess>,
+    ) -> (ExecutionState, WasmExecutionResult) {
         let mut exec_output = match result {
             CompletionResult::Paused => {
                 // TODO(863): Propagate the paused result to the callers of `process()`.
@@ -714,6 +818,7 @@ impl SandboxedExecutionController {
 
                 execution_state.exported_globals = state_modifications.globals;
 
+                // TODO(RUN-230): Remove this after subnet available memory is simplified.
                 // Unconditionally update the subnet available memory.
                 // This value is actually a shared value under a RwLock, and the non-sandbox
                 // workflow involves directly updating the value. So failed executions are
@@ -736,7 +841,10 @@ impl SandboxedExecutionController {
             .with_label_values(&[api_type_label])
             .observe(exec_output.execute_run_duration.as_secs_f64());
 
-        (exec_output.wasm, execution_state, system_state_changes)
+        (
+            execution_state,
+            WasmExecutionResult::Finished(exec_output.wasm, system_state_changes),
+        )
     }
 
     pub fn create_execution_state(
