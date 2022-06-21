@@ -97,6 +97,33 @@ pub struct ExecuteMessageResult {
     pub heap_delta: NumBytes,
 }
 
+/// Represent a paused execution that can be resumed or aborted.
+pub trait PausedExecution: std::fmt::Debug {
+    /// Resumes a paused execution.
+    /// It takes:
+    /// - the canister state,
+    /// - system parameters that can change while the execution is in progress,
+    /// - helpers.
+    ///
+    /// If the execution finishes, then it returns the new canister state and
+    /// the result of the execution.
+    /// TODO(RUN-231): Add paused execution to `ExecuteMessageResult` to support
+    /// the other case.
+    fn resume(
+        self: Box<Self>,
+        canister: CanisterState,
+        subnet_available_memory: SubnetAvailableMemory,
+        network_topology: &NetworkTopology,
+        hypervisor: &Hypervisor,
+        cycles_account_manager: &CyclesAccountManager,
+        log: &ReplicaLogger,
+    ) -> ExecuteMessageResult;
+
+    /// Aborts the paused execution.
+    /// TODO(RUN-75): Add parameters and the return type.
+    fn abort(self: Box<Self>);
+}
+
 /// ExecutionEnvironment is the component responsible for executing messages
 /// on the IC.
 #[cfg_attr(test, automock)]

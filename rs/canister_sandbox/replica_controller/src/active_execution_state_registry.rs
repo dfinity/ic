@@ -72,13 +72,21 @@ impl ActiveExecutionStateRegistry {
         F: FnOnce(ExecId, CompletionResult) + Send + Sync + 'static,
     {
         let exec_id = ExecId::new();
+        self.register_execution_with_id(exec_id, completion);
+        exec_id
+    }
+
+    /// Registers an execution with the given id.
+    pub fn register_execution_with_id<F>(&self, exec_id: ExecId, completion: F)
+    where
+        F: FnOnce(ExecId, CompletionResult) + Send + Sync + 'static,
+    {
         let completion = Box::new(completion);
         let state = ActiveExecutionState {
             completion: Some(Box::new(completion)),
         };
         let mut mut_states = self.states.lock().unwrap();
         mut_states.insert(exec_id, state);
-        exec_id
     }
 
     /// Removes the given [`ExecId`] and returns its [`CompletionFunction`].

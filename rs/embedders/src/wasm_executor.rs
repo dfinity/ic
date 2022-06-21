@@ -21,7 +21,7 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
     ExecutionParameters, HypervisorError, HypervisorResult, InstanceStats,
-    OutOfInstructionsHandler, SystemApi, WasmExecutionOutput,
+    OutOfInstructionsHandler, SubnetAvailableMemory, SystemApi, WasmExecutionOutput,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
@@ -99,6 +99,36 @@ impl WasmExecutorMetrics {
             ),
         }
     }
+}
+
+/// Represents a paused WebAssembly execution that can be resumed or aborted.
+pub trait PausedWasmExecution: std::fmt::Debug {
+    /// Resumes the paused execution.
+    /// It takes the execution state before this execution has started and
+    /// the current subnet available memory.
+    /// If the execution finishes, then it returns the new execution state and
+    /// the result of the execution.
+    /// Otherwise, it returns the original execution state and an opaque object
+    /// representing the paused exectiuon.
+    fn resume(
+        self: Box<Self>,
+        execution_state: ExecutionState,
+        subnet_available_memory: SubnetAvailableMemory,
+    ) -> (ExecutionState, WasmExecutionResult);
+
+    /// Aborts the paused execution.
+    /// TODO(RUN-75): Add parameters and the return type.
+    fn abort(self: Box<Self>);
+}
+
+/// The result of WebAssembly execution with deterministic time slicing.
+/// If the execution is finished, then it contains the result of the execution
+/// and the delta of state changes.
+/// Otherwise, it contains an opaque object representing the paused execution.
+#[allow(clippy::large_enum_variant)]
+pub enum WasmExecutionResult {
+    Finished(WasmExecutionOutput, SystemStateChanges),
+    Paused(Box<dyn PausedWasmExecution>),
 }
 
 /// An executor that can process any message (query or not).
@@ -207,7 +237,7 @@ impl WasmExecutor {
             func_ref,
             mut execution_state,
         }: WasmExecutionInput,
-    ) -> (WasmExecutionOutput, ExecutionState, SystemStateChanges) {
+    ) -> (ExecutionState, WasmExecutionResult) {
         // This function is called when canister sandboxing is disabled.
         // Since deterministic time slicing works only with sandboxing,
         // it must also be disabled and the execution limits must match.
@@ -221,16 +251,18 @@ impl WasmExecutor {
             Ok(embedder_cache) => embedder_cache,
             Err(err) => {
                 return (
-                    WasmExecutionOutput {
-                        wasm_result: Err(err),
-                        num_instructions_left: NumInstructions::from(0),
-                        instance_stats: InstanceStats {
-                            accessed_pages: 0,
-                            dirty_pages: 0,
-                        },
-                    },
                     execution_state,
-                    sandbox_safe_system_state.changes(),
+                    WasmExecutionResult::Finished(
+                        WasmExecutionOutput {
+                            wasm_result: Err(err),
+                            num_instructions_left: NumInstructions::from(0),
+                            instance_stats: InstanceStats {
+                                accessed_pages: 0,
+                                dirty_pages: 0,
+                            },
+                        },
+                        sandbox_safe_system_state.changes(),
+                    ),
                 )
             }
         };
@@ -268,7 +300,10 @@ impl WasmExecutor {
         };
         let system_state_changes = system_api.into_system_state_changes();
 
-        (wasm_execution_output, execution_state, system_state_changes)
+        (
+            execution_state,
+            WasmExecutionResult::Finished(wasm_execution_output, system_state_changes),
+        )
     }
 
     pub fn create_execution_state(
