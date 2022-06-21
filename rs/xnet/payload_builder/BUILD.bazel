@@ -1,0 +1,46 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "payload_builder",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_xnet_payload_builder",
+    edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        "//rs/canonical_state",
+        "//rs/constants",
+        "//rs/crypto/tls_interfaces",
+        "//rs/crypto/tree_hash",
+        "//rs/interfaces",
+        "//rs/interfaces/state_manager",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/protobuf",
+        "//rs/registry/helpers",
+        "//rs/registry/keys",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "//rs/xnet/hyper",
+        "//rs/xnet/uri",
+        "@crate_index//:hyper",
+        "@crate_index//:prometheus",
+        "@crate_index//:rand_0_7_3",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
