@@ -3,10 +3,8 @@
 # Build steps:
 # - `docker build -t dfinity/boundaryos-base:<tag> -f Dockerfile.base .`
 # - `docker push/pull dfinity/boundaryos-base:<tag>`
-#
-# First build stage:
-# - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
-# - Install and cache upstream packages from built-in Ubuntu repositories
+# - `docker build -t dfinity/boundaryos-base-snp:<tag> --build-arg CPU_SUPPORT="snp" -f Dockerfile.base
+# - `docker push/pull dfinity/boundaryos-base-snp:<tag>`
 
 # NOTE! If you edit this file, you will need to perform the following
 # operations to get your changes deployed.
@@ -15,6 +13,34 @@
 # 2. On the next hourly master pipeline (Run post-merge tests), click the "deploy-guest-os-baseimg" job
 # 3. Note the sha256 and update the sha256 reference in the neighboring Dockerfiles.
 
+# AMD SEV-SNP support version and sha256
+ARG snp_tag=sev-snp-release-2022-06-01
+ARG snp_sha=d61ed4419c2e98925e28ccc6e55dbb0b2c5d4b1c
+ARG snp_kernel_version=5.17.0-rc6-snp-guest-dfa5ba8348e4
+ARG snp_kernel_pkg=linux-image-${snp_kernel_version}_${snp_kernel_version}-1_amd64.deb
+
+# First build stage:
+# - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
+# - Install and cache upstream packages from built-in Ubuntu repositories
+FROM ubuntu:20.04 AS download
+
+ENV TZ=UTC
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
+    ca-certificates \
+    curl \
+    perl
+
+WORKDIR /tmp
+
+# Download SNP support
+ARG snp_tag
+ARG snp_sha
+ARG snp_kernel_pkg
+RUN curl -L -O https://github.com/dfinity/AMDSEV/releases/download/${snp_tag}/${snp_kernel_pkg} && \
+    echo "${snp_sha}  ${snp_kernel_pkg}" | shasum -c
+
+# Second build stage: build the actual Base Image
 FROM ubuntu:20.04
 
 ENV TZ=UTC
@@ -75,3 +101,36 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     usbutils \
     vim \
     zstd
+
+WORKDIR /tmp
+
+# For the common image, just use common to use the default kernel of Ubuntu
+# For the SEV-SNP image, use "snp"  -- this can
+# be set via docker build args (see above).
+ARG CPU_SUPPORT=common
+
+# Copy AMD SEV-SNP kernel support
+ARG snp_tag
+ARG snp_kernel_pkg
+COPY --from=download /tmp/${snp_kernel_pkg} /tmp/${snp_kernel_pkg}
+
+# Install AMD SEV-SNP kernel support
+ARG CPU_SUPPORT
+ARG snp_tag
+ARG snp_kernel_version
+ARG snp_kernel_pkg
+RUN \
+    echo "CPU_SUPPORT: ${CPU_SUPPORT}" && \
+    if [ "${CPU_SUPPORT}" = "snp" ] ; then \
+		dpkg -i /tmp/${snp_kernel_pkg} && \
+		# Create initrd for the new kernel
+		update-initramfs -b /boot -c -k ${snp_kernel_version} && \
+		# Create soft link for vmlinuz and initrd.img pointing to the updated images
+		unlink /boot/vmlinuz && \
+		unlink /boot/initrd.img && \
+		ln -s /boot/vmlinuz-${snp_kernel_version}/boot/vmlinuz && \
+		ln -s /boot/initrd.img-${snp_kernel_version}/boot/initrd.img ; \
+     fi
+
+# Cleanup
+RUN rm /tmp/${snp_kernel_pkg}
