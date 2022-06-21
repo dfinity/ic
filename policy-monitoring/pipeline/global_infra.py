@@ -16,9 +16,9 @@ class GlobalInfra:
         pass
 
     prefixes: Optional[List[ipaddress.IPv6Network]]
-    known_hosts: Set[str]
-    host_addr_to_node_id_map: Dict[str, str]
-    node_id_to_host_map: Dict[str, str]
+    known_hosts: Set[ipaddress.IPv6Address]
+    host_addr_to_node_id_map: Dict[ipaddress.IPv6Address, str]
+    node_id_to_host_map: Dict[str, ipaddress.IPv6Address]
     original_subnet_types: Dict[str, str]
     in_subnet_relations: Dict[str, List[Tuple[int, str]]]
     original_subnet_membership: Dict[str, str]
@@ -40,8 +40,8 @@ class GlobalInfra:
             # Process all replica docs' node_id / subnet data
             unix_ts, node_id, subnet_id, subnet_id_type = (
                 doc.unix_ts(),
-                doc.get_node_id(),
-                doc.get_subnet_id(),
+                doc.get_host_principal(),
+                doc.get_subnet_principal(),
                 doc.get_subnet_type(),
             )
 
@@ -69,28 +69,25 @@ class GlobalInfra:
                 self.prefixes = doc.get_ipv6_prefixes()
 
             host_addr = doc.host_addr()
-            if host_addr:
-                self.known_hosts.add(host_addr)
+            self.known_hosts.add(host_addr)
 
             # Compute host_addr_to_node_id_map
-            if node_id and host_addr is not None:  # FIXME https://dfinity.atlassian.net/browse/NODE-519
-                if host_addr in self.host_addr_to_node_id_map:
-                    old_node_id = self.host_addr_to_node_id_map[host_addr]
-                    assert old_node_id == node_id, (
-                        f"Host {str(host_addr)} is mapped to more than one"
-                        f" node ID, e.g., {old_node_id} and {node_id}"
-                    )
-                else:
-                    self.host_addr_to_node_id_map[host_addr] = node_id
+            if host_addr in self.host_addr_to_node_id_map:
+                old_node_id = self.host_addr_to_node_id_map[host_addr]
+                assert (
+                    old_node_id == node_id
+                ), f"Host {str(host_addr)} is mapped to more than one node ID, e.g., {old_node_id} and {node_id}"
+            else:
+                self.host_addr_to_node_id_map[host_addr] = node_id
 
-        if False and not self.prefixes:  # FIXME https://dfinity.atlassian.net/browse/NODE-519
+        if not self.prefixes:
             raise GlobalInfra.Error(
                 "Cannot find data center prefixes in ORCH logs. Consider downloading more ES logs.\n"
             )
 
         self.node_id_to_host_map = {node_id: host_addr for host_addr, node_id in self.host_addr_to_node_id_map.items()}
 
-    def get_host_dc(self, host_ip_str: str) -> ipaddress.IPv6Network:
+    def get_host_dc(self, host_ip_str: ipaddress.IPv6Address) -> ipaddress.IPv6Network:
         """Maps host_ip to data center mask"""
         assert self.prefixes is not None, "cannot call GlobalInfra.host_dc() as self.prefixes is None"
         host_ip = ipaddress.IPv6Address(host_ip_str)
@@ -99,10 +96,10 @@ class GlobalInfra:
                 return prefix
         raise KeyError("Could not identify data center for host %d" % host_ip)
 
-    def is_known_host(self, host_addr: str) -> bool:
+    def is_known_host(self, host_addr: ipaddress.IPv6Address) -> bool:
         return host_addr in self.known_hosts
 
-    def get_host_ip_addr(self, node_id: str) -> str:
+    def get_host_ip_addr(self, node_id: str) -> ipaddress.IPv6Address:
         """Returns host_ipv6 based on node_id"""
         return self.node_id_to_host_map[node_id]
 
@@ -141,7 +138,7 @@ class GlobalInfra:
                         dcs[prefix] = set([host_ipv6])
         return dcs
 
-    def get_host_addr_to_node_id_mapping(self) -> Dict[str, str]:
+    def get_host_addr_to_node_id_mapping(self) -> Dict[ipaddress.IPv6Address, str]:
         return self.host_addr_to_node_id_map
 
     def to_dict(self) -> Dict[str, Any]:

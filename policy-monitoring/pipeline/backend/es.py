@@ -221,8 +221,6 @@ class Es:
         self, indices: List[str], tag: str, page_size=20, window_minutes: Optional[int] = None
     ) -> Iterator:
 
-        # TODO: use [window_minutes] to form a query, e.g.:
-        # https://stackoverflow.com/questions/26791412/elasticsearch-date-range
         if self.mainnet:
             assert_with_trace(window_minutes is not None, "[window_minutes] must be specified since Es.mainnet is true")
             query = Es._time_slice_query(window_minutes)

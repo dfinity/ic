@@ -3,6 +3,7 @@ import json
 import re
 import sys
 from datetime import datetime
+from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -49,21 +50,37 @@ class EsDoc:
         """Returns unique ID of an ES index document"""
         return self.repr["_id"]
 
-    def host(self) -> Dict[str, str]:
+    def host(self) -> Dict[str, Any]:
         return self.repr["_source"]["host"]
 
-    def host_addr(self) -> Optional[str]:
+    @staticmethod
+    def _parse_ip_address(addr: str) -> ipaddress.IPv6Address:
+        ip = addr[3:] if addr.startswith("ip6") else addr
+        return ipaddress.IPv6Address(ip.replace("-", ":"))
+
+    def host_addr(self) -> ipaddress.IPv6Address:
         host = self.host()
-        if "ip" not in host:
-            return None
-        addr = host["ip"]
-        if addr.startswith("ip6"):
-            # E.g. ip62001-4d78-40d-0-5000-51ff-fe05-3b52
-            return addr[3:].replace("-", ":")
-        elif addr.startswith("ip4"):
-            return addr[3:].replace("-", ".")
+        assert "ip" in host, "host address not found"
+        addr_field = host["ip"]
+        if isinstance(addr_field, list):
+            ext_addrs = [addr for addr in addr_field if not self._parse_ip_address(addr).is_link_local]
+            if len(ext_addrs) > 1:
+                sys.stderr.write(
+                    f"WARNING: multiple non-link-local addresses specified for host: {', '.join(ext_addrs)}"
+                )
+            addr = ext_addrs[0]
         else:
-            return addr
+            assert isinstance(addr_field, str), f"host.ip has unexpected type: {str(type(addr_field))}"
+            addr = addr_field
+        return self._parse_ip_address(addr)
+
+    def get_host_principal(self) -> str:
+        host = self.host()
+        assert "hostname" in host, "host principal not found"
+        principal = host["hostname"]
+        assert isinstance(principal, str), f"host.hostname has unexpected type: {str(type(principal))}"
+        assert principal != "", "expected principal; got empty string"
+        return principal
 
     def message(self) -> str:
         return self.repr["_source"]["message"]
@@ -243,7 +260,7 @@ class ReplicaDoc(EsDoc):
         le = self._log_entry()
         return le["crate_"], le["module"]
 
-    def get_subnet_id(self) -> str:
+    def get_subnet_principal(self) -> str:
         le = self._log_entry()
         return le["subnet_id"]
 

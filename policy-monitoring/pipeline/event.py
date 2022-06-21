@@ -91,7 +91,7 @@ class OriginallyInSubnetPreambleEvent(InfraEvent):
 
     def compile_params(self) -> Iterable[Tuple[str, ...]]:
         in_subnet_rel = self.infra.get_original_subnet_membership()
-        return list(map(lambda p: (p[0], self.infra.get_host_ip_addr(p[0]), p[1]), in_subnet_rel.items()))
+        return list(map(lambda p: (p[0], str(self.infra.get_host_ip_addr(p[0])), p[1]), in_subnet_rel.items()))
 
 
 class RebootEvent(InfraEvent):
@@ -105,16 +105,8 @@ class RebootEvent(InfraEvent):
             return []
         else:
             host_addr = self.doc.host_addr()
-            if host_addr is None or host_addr in ["localhost", "blank"]:
-                # FIXME
-                return [
-                    (
-                        str(host_addr),
-                        str(host_addr),
-                    )
-                ]
             if not self.infra.is_known_host(host_addr):
-                raise GlobalInfra.Error(f"cannot map host {host_addr} to data center\n")
+                raise GlobalInfra.Error(f"cannot map host {str(host_addr)} to data center\n")
             data_center_prefix = self.infra.get_host_dc(host_addr)
             return [(str(host_addr), str(data_center_prefix))]
 
@@ -182,7 +174,9 @@ class RegistryNodeRemovedEvent(RegistryNodeEvent):
         if params_iter is None:
             return []
         else:
-            return list(map(lambda params: (params.node_id, self.infra.get_host_ip_addr(params.node_id)), params_iter))
+            return list(
+                map(lambda params: (params.node_id, str(self.infra.get_host_ip_addr(params.node_id))), params_iter)
+            )
 
 
 class RegistryNodeAddedEvent(RegistryNodeEvent):
@@ -198,7 +192,7 @@ class RegistryNodeAddedEvent(RegistryNodeEvent):
                 map(
                     lambda params: (
                         params.node_id,
-                        self.infra.get_host_ip_addr(params.node_id),
+                        str(self.infra.get_host_ip_addr(params.node_id)),
                         params.subnet_id,
                     ),
                     params_iter,
@@ -249,8 +243,8 @@ class NodeMembershipEvent(ReplicaEvent):
         else:
             return [
                 (
-                    self.doc.get_node_id(),
-                    self.doc.get_subnet_id(),
+                    self.doc.get_host_principal(),
+                    self.doc.get_subnet_principal(),
                     str(params.node_id),  # NOT the ID of the event reported node
                 )
             ]
@@ -268,7 +262,7 @@ class ValidatedBlockProposalEvent(ReplicaEvent):
         if not params:
             return []
         else:
-            return [(self.doc.get_node_id(), self.doc.get_subnet_id(), params.block_hash)]
+            return [(self.doc.get_host_principal(), self.doc.get_subnet_principal(), params.block_hash)]
 
 
 class DeliverBatchEvent(ReplicaEvent):
@@ -282,8 +276,8 @@ class DeliverBatchEvent(ReplicaEvent):
         else:
             return [
                 (
-                    self.doc.get_node_id(),
-                    self.doc.get_subnet_id(),
+                    self.doc.get_host_principal(),
+                    self.doc.get_subnet_principal(),
                     str(params.block_hash),
                 )
             ]
@@ -300,8 +294,8 @@ class ConsensusFinalizedEvent(ReplicaEvent):
         else:
             return [
                 (
-                    self.doc.get_node_id(),
-                    self.doc.get_subnet_id(),
+                    self.doc.get_host_principal(),
+                    self.doc.get_subnet_principal(),
                     str(int(params.is_state_available)),
                     str(int(params.is_key_available)),
                 )
@@ -317,7 +311,7 @@ class MoveBlockProposalEvent(ReplicaEvent):
         if not params:
             return []
         else:
-            return [(self.doc.get_node_id(), self.doc.get_subnet_id(), params.block_hash, params.signer)]
+            return [(self.doc.get_host_principal(), self.doc.get_subnet_principal(), params.block_hash, params.signer)]
 
 
 class ControlePlaneAcceptErrorEvent(ReplicaEvent):
@@ -395,8 +389,7 @@ class ReplicaDivergedEvent(ReplicaEvent):
         if not params:
             return []
         else:
-            # FIXME: support height parameter
-            return [(self.doc.get_node_id(), self.doc.get_subnet_id(), str(params.height))]
+            return [(self.doc.get_host_principal(), self.doc.get_subnet_principal(), str(params.height))]
 
 
 class CupShareProposedEvent(ReplicaEvent):
@@ -408,8 +401,7 @@ class CupShareProposedEvent(ReplicaEvent):
         if not params:
             return []
         else:
-            # FIXME: support height parameter
-            return [(self.doc.get_node_id(), self.doc.get_subnet_id(), str(params.height))]
+            return [(self.doc.get_host_principal(), self.doc.get_subnet_principal(), str(params.height))]
 
 
 class FinalizedEvent(ReplicaEvent):
@@ -423,8 +415,8 @@ class FinalizedEvent(ReplicaEvent):
         else:
             return [
                 (
-                    self.doc.get_node_id(),
-                    self.doc.get_subnet_id(),
+                    self.doc.get_host_principal(),
+                    self.doc.get_subnet_principal(),
                     str(params.height),
                     params.hash,
                     params.replica_version,
@@ -441,4 +433,4 @@ class UnusualLogEvent(ReplicaEvent):
         if not params:
             return []
         else:
-            return [(self.doc.get_node_id(), self.doc.get_subnet_id(), params.level, params.message)]
+            return [(self.doc.get_host_principal(), self.doc.get_subnet_principal(), params.level, params.message)]

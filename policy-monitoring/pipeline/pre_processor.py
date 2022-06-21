@@ -303,28 +303,27 @@ class UniversalPreProcessor(DeclarativePreProcessor):
                 ]
             ),
         },
-        # FIXME The following two policies are disabled due to https://dfinity.atlassian.net/browse/NODE-519
-        # "unauthorized_connections": {
-        #     "preambles": frozenset([]),
-        #     "dependencies": frozenset(
-        #         [
-        #             "ControlPlane_accept_error",
-        #             "ControlPlane_accept_aborted",
-        #             "ControlPlane_spawn_accept_task",
-        #             "ControlPlane_tls_server_handshake_failed",
-        #             "registry__node_added_to_subnet",
-        #             "registry__node_removed_from_subnet",
-        #         ]
-        #     ),
-        # },
-        # "reboot_count": {
-        #     "preambles": frozenset([]),
-        #     "dependencies": frozenset(
-        #         [
-        #             "reboot",
-        #         ]
-        #     ),
-        # },
+        "unauthorized_connections": {
+            "preambles": frozenset([]),
+            "dependencies": frozenset(
+                [
+                    "ControlPlane_accept_error",
+                    "ControlPlane_accept_aborted",
+                    "ControlPlane_spawn_accept_task",
+                    "ControlPlane_tls_server_handshake_failed",
+                    "registry__node_added_to_subnet",
+                    "registry__node_removed_from_subnet",
+                ]
+            ),
+        },
+        "reboot_count": {
+            "preambles": frozenset([]),
+            "dependencies": frozenset(
+                [
+                    "reboot",
+                ]
+            ),
+        },
         "finalization_consistency": {
             "preambles": frozenset([]),
             "dependencies": frozenset(
