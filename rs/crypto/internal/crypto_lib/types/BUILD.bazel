@@ -1,13 +1,12 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
-
 filegroup(
     name = "sources",
     srcs = glob(
         ["**"],
         exclude = ["target/**"],
     ),
+    visibility = ["//visibility:public"],
 )
 
 rust_library(
@@ -17,6 +16,11 @@ rust_library(
     edition = "2018",
     proc_macro_deps = [
         "@crate_index//:strum_macros",
+    ],
+    visibility = [
+        "//rs/certified_vars/test-utils:__pkg__",
+        "//rs/crypto:__subpackages__",
+        "//rs/types/types:__pkg__",
     ],
     deps = [
         "//rs/phantom_newtype",
