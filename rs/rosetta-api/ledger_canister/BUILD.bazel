@@ -47,6 +47,7 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
     "@crate_index//:prost-derive",
 ]
 

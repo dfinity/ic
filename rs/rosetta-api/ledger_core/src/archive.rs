@@ -1,8 +1,7 @@
-use crate::{block::EncodedBlock, spawn};
-use candid::CandidType;
-use dfn_core::api::print;
+use crate::{block::EncodedBlock, runtime::Runtime, spawn};
+use candid::{CandidType, Encode};
 use ic_base_types::CanisterId;
-use ic_ic00_types::{Method, IC_00};
+use ic_ic00_types::IC_00;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::VecDeque;
@@ -31,7 +30,9 @@ pub struct ArchiveOptions {
 /// A scope guard for block archiving.
 /// It sets archivating flag to true on the archive when constructed and disables the flag
 /// when dropped.
-pub struct ArchivingGuard<W: ArchiveCanisterWasm>(Arc<RwLock<Option<Archive<W>>>>);
+pub struct ArchivingGuard<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
+    Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
+);
 
 pub enum ArchivingGuardError {
     /// There is no archive to lock, the archiving is disabled.
@@ -40,8 +41,10 @@ pub enum ArchivingGuardError {
     AlreadyArchiving,
 }
 
-impl<W: ArchiveCanisterWasm> ArchivingGuard<W> {
-    pub fn new(archive: Arc<RwLock<Option<Archive<W>>>>) -> Result<Self, ArchivingGuardError> {
+impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> ArchivingGuard<Rt, Wasm> {
+    pub fn new(
+        archive: Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
+    ) -> Result<Self, ArchivingGuardError> {
         let mut archive_guard = archive.write().expect("failed to obtain archive lock");
         match archive_guard.as_mut() {
             Some(archive) => {
@@ -59,7 +62,7 @@ impl<W: ArchiveCanisterWasm> ArchivingGuard<W> {
     }
 }
 
-impl<W: ArchiveCanisterWasm> Drop for ArchivingGuard<W> {
+impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Drop for ArchivingGuard<Rt, Wasm> {
     fn drop(&mut self) {
         inspect_archive(&self.0, |archive| {
             archive.archiving_in_progress = false;
@@ -74,7 +77,7 @@ pub trait ArchiveCanisterWasm {
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(bound = "")]
-pub struct Archive<Wasm: ArchiveCanisterWasm> {
+pub struct Archive<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
     // List of Archive Nodes
     nodes: Vec<CanisterId>,
 
@@ -119,10 +122,10 @@ pub struct Archive<Wasm: ArchiveCanisterWasm> {
     archiving_in_progress: bool,
 
     #[serde(skip)]
-    _marker: PhantomData<Wasm>,
+    _marker: PhantomData<(Rt, Wasm)>,
 }
 
-impl<W: ArchiveCanisterWasm> Archive<W> {
+impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Archive<Rt, Wasm> {
     pub fn new(options: ArchiveOptions) -> Self {
         Self {
             nodes: vec![],
@@ -161,9 +164,9 @@ impl<W: ArchiveCanisterWasm> Archive<W> {
 /// Grabs a write lock on the archive and executes a synchronous function under the lock.
 /// Use this function exclusively in this module to make sure that you do not keep the archive
 /// locked between async calls.
-fn inspect_archive<R, W: ArchiveCanisterWasm>(
-    archive: &Arc<RwLock<Option<Archive<W>>>>,
-    f: impl FnOnce(&mut Archive<W>) -> R,
+fn inspect_archive<R, Rt: Runtime, Wasm: ArchiveCanisterWasm>(
+    archive: &Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
+    f: impl FnOnce(&mut Archive<Rt, Wasm>) -> R,
 ) -> R {
     let mut archive_guard = archive
         .write()
@@ -179,12 +182,12 @@ fn inspect_archive<R, W: ArchiveCanisterWasm>(
 /// Sends the blocks to an archive canister (creating new archive canister if necessary).
 /// On success, returns the number of blocks archived (equal to blocks.len()).
 /// On failure, returns the number of successfully archived blocks and a description of the error.
-pub async fn send_blocks_to_archive<W: ArchiveCanisterWasm>(
-    archive: Arc<RwLock<Option<Archive<W>>>>,
+pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
+    archive: Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
     mut blocks: VecDeque<EncodedBlock>,
     max_ledger_msg_size_bytes: usize,
 ) -> Result<usize, (usize, FailedToArchiveBlocks)> {
-    print("[archive] send_blocks_to_archive(): start");
+    Rt::print("[archive] send_blocks_to_archive(): start");
 
     let max_chunk_size = inspect_archive(&archive, |archive| {
         archive
@@ -194,7 +197,7 @@ pub async fn send_blocks_to_archive<W: ArchiveCanisterWasm>(
 
     let mut num_sent_blocks = 0usize;
     while !blocks.is_empty() {
-        print(format!(
+        Rt::print(format!(
             "[archive] send_blocks_to_archive(): number of blocks remaining: {}",
             blocks.len()
         ));
@@ -212,7 +215,7 @@ pub async fn send_blocks_to_archive<W: ArchiveCanisterWasm>(
             return Err((num_sent_blocks, FailedToArchiveBlocks("empty chunk".into())));
         }
 
-        print(format!(
+        Rt::print(format!(
                 "[archive] appending blocks to node {:?}. number of blocks that fit: {}, remaining blocks to archive: {}",
                 node_canister_id.get(),
                 first_blocks.len(),
@@ -226,18 +229,11 @@ pub async fn send_blocks_to_archive<W: ArchiveCanisterWasm>(
             if chunk.is_empty() {
                 return Err((num_sent_blocks, FailedToArchiveBlocks("empty chunk".into())));
             }
-            print(format!(
+            Rt::print(format!(
                 "[archive] calling append_blocks() with a chunk of size {}",
                 chunk_len
             ));
-            match dfn_core::api::call_with_cleanup(
-                node_canister_id,
-                "append_blocks",
-                dfn_candid::candid_one,
-                chunk,
-            )
-            .await
-            {
+            match Rt::call(node_canister_id, "append_blocks", 0, (chunk,)).await {
                 Ok(()) => num_sent_blocks += chunk_len as usize,
                 Err((_, msg)) => return Err((num_sent_blocks, FailedToArchiveBlocks(msg))),
             };
@@ -270,22 +266,22 @@ pub async fn send_blocks_to_archive<W: ArchiveCanisterWasm>(
                 archive.nodes_block_ranges.get(node_index).cloned().unwrap()
             });
 
-            print(format!(
+            Rt::print(format!(
                 "[archive] archive node [{}] block heights {:?}",
                 node_index, heights
             ));
         }
     }
 
-    print("[archive] send_blocks_to_archive() done");
+    Rt::print("[archive] send_blocks_to_archive() done");
     Ok(num_sent_blocks)
 }
 
 // Helper function to create a canister and install the node Wasm bytecode.
-async fn create_and_initialize_node_canister<W: ArchiveCanisterWasm>(
-    archive: &Arc<RwLock<Option<Archive<W>>>>,
+async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
+    archive: &Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
 ) -> Result<(CanisterId, usize, usize), FailedToArchiveBlocks> {
-    print("[archive] calling create_canister()");
+    Rt::print("[archive] calling create_canister()");
 
     let (
         cycles_for_archive_creation,
@@ -306,39 +302,39 @@ async fn create_and_initialize_node_canister<W: ArchiveCanisterWasm>(
         )
     });
 
-    let node_canister_id: CanisterId = spawn::create_canister(cycles_for_archive_creation)
+    let node_canister_id: CanisterId = spawn::create_canister::<Rt>(cycles_for_archive_creation)
         .await
-        .map_err(|e| FailedToArchiveBlocks(format!("{:?} {}", e.0, e.1)))?;
+        .map_err(|(code, msg)| FailedToArchiveBlocks(format!("{} {}", code, msg)))?;
 
-    print("[archive] calling install_code()");
+    Rt::print("[archive] calling install_code()");
 
-    let () = spawn::install_code(
+    let () = spawn::install_code::<Rt>(
         node_canister_id,
-        W::archive_wasm().into_owned(),
-        dfn_candid::Candid((
-            dfn_core::api::id(),
-            node_block_height_offset,
-            Some(node_max_memory_size_bytes),
-        )),
+        Wasm::archive_wasm().into_owned(),
+        Encode!(
+            &Rt::id(),
+            &node_block_height_offset,
+            &Some(node_max_memory_size_bytes)
+        )
+        .unwrap(),
     )
     .await
     .map_err(|(reject_code, message)| {
         FailedToArchiveBlocks(format!(
             "install_code failed; reject_code={}, message={}",
-            reject_code.unwrap_or(0),
-            message
+            reject_code, message
         ))
     })?;
 
-    print(format!(
+    Rt::print(format!(
         "[archive] setting controller_id for archive node: {}",
         controller_id
     ));
 
-    let res: Result<(), (Option<i32>, String)> = dfn_core::api::call_with_cleanup(
+    let res: Result<(), (i32, String)> = Rt::call(
         IC_00,
-        &Method::SetController.to_string(),
-        dfn_candid::candid_multi_arity,
+        "set_controller",
+        0,
         (ic_ic00_types::SetControllerArgs::new(
             node_canister_id,
             controller_id.into(),
@@ -348,9 +344,8 @@ async fn create_and_initialize_node_canister<W: ArchiveCanisterWasm>(
 
     res.map_err(|(code, msg)| {
         let s = format!(
-            "Setting controller of archive node failed with code {}: {:?}",
-            code.unwrap_or_default(),
-            msg
+            "Setting controller of archive node failed with code {}: {}",
+            code, msg
         );
         FailedToArchiveBlocks(s)
     })?;
@@ -360,22 +355,17 @@ async fn create_and_initialize_node_canister<W: ArchiveCanisterWasm>(
         archive.last_node_index()
     });
 
-    let remaining_capacity: usize = dfn_core::api::call_with_cleanup(
-        node_canister_id,
-        "remaining_capacity",
-        dfn_candid::candid_one,
-        (),
-    )
-    .await
-    .map_err(|(_, msg)| FailedToArchiveBlocks(msg))?;
+    let (remaining_capacity,): (usize,) = Rt::call(node_canister_id, "remaining_capacity", 0, ())
+        .await
+        .map_err(|(_, msg)| FailedToArchiveBlocks(msg))?;
 
     Ok((node_canister_id, node_index, remaining_capacity))
 }
 
 /// Helper function to find the CanisterId of the node that can accept
 /// blocks, or create one, and find how many blocks can be accepted.
-async fn node_and_capacity<W: ArchiveCanisterWasm>(
-    archive: &Arc<RwLock<Option<Archive<W>>>>,
+async fn node_and_capacity<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
+    archive: &Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
     needed: usize,
 ) -> Result<(CanisterId, usize, usize), FailedToArchiveBlocks> {
     let last_node_canister_id: Option<CanisterId> =
@@ -384,10 +374,10 @@ async fn node_and_capacity<W: ArchiveCanisterWasm>(
     match last_node_canister_id {
         // Not a single archive node exists. Create one.
         None => {
-            print("[archive] creating the first archive node");
+            Rt::print("[archive] creating the first archive node");
             let (node_canister_id, node_index, remaining_capacity) =
                 create_and_initialize_node_canister(archive).await?;
-            print(format!(
+            Rt::print(format!(
                 "[archive] node canister id: {}, index: {}",
                 node_canister_id, node_index
             ));
@@ -397,26 +387,23 @@ async fn node_and_capacity<W: ArchiveCanisterWasm>(
         // Some archive node exists. Use it, or, if already full, create a
         // new node.
         Some(last_node_canister_id) => {
-            let remaining_capacity: usize = dfn_core::api::call_with_cleanup(
-                last_node_canister_id,
-                "remaining_capacity",
-                dfn_candid::candid,
-                (),
-            )
-            .await
-            .map_err(|(_, msg)| FailedToArchiveBlocks(msg))?;
+            let (remaining_capacity,): (usize,) =
+                Rt::call(last_node_canister_id, "remaining_capacity", 0, ())
+                    .await
+                    .map_err(|(_, msg)| FailedToArchiveBlocks(msg))?;
+
             if remaining_capacity < needed {
-                print("[archive] last node is full. creating a new archive node");
+                Rt::print("[archive] last node is full. creating a new archive node");
                 let (node_canister_id, node_index, remaining_capacity) =
                     create_and_initialize_node_canister(archive).await?;
-                print(format!(
+                Rt::print(format!(
                     "[archive] node canister id: {}, index: {}",
                     node_canister_id, node_index
                 ));
                 Ok((node_canister_id, node_index, remaining_capacity))
             } else {
                 let node_index = inspect_archive(archive, |archive| archive.last_node_index());
-                print(format!(
+                Rt::print(format!(
                     "[archive] reusing existing last node {} with index {} and capacity {}",
                     last_node_canister_id, node_index, remaining_capacity
                 ));

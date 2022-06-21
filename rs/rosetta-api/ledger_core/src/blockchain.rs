@@ -1,6 +1,7 @@
 use crate::{
     archive::{Archive, ArchiveCanisterWasm},
     block::{BlockHeight, BlockType, EncodedBlock, HashOf},
+    runtime::Runtime,
     timestamp::TimeStamp,
 };
 use serde::{Deserialize, Serialize};
@@ -11,7 +12,7 @@ use std::sync::{Arc, RwLock};
 /// Stores a chain of transactions with their metadata
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(bound = "")]
-pub struct Blockchain<Wasm: ArchiveCanisterWasm> {
+pub struct Blockchain<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
     pub blocks: Vec<EncodedBlock>,
     pub last_hash: Option<HashOf<EncodedBlock>>,
 
@@ -23,13 +24,13 @@ pub struct Blockchain<Wasm: ArchiveCanisterWasm> {
     /// by the canister upgrade procedure.
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
     #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-    pub archive: Arc<RwLock<Option<Archive<Wasm>>>>,
+    pub archive: Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
 
     /// How many blocks have been sent to the archive
     pub num_archived_blocks: u64,
 }
 
-impl<Wasm: ArchiveCanisterWasm> Default for Blockchain<Wasm> {
+impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Default for Blockchain<Rt, Wasm> {
     fn default() -> Self {
         Self {
             blocks: vec![],
@@ -41,7 +42,7 @@ impl<Wasm: ArchiveCanisterWasm> Default for Blockchain<Wasm> {
     }
 }
 
-impl<Wasm: ArchiveCanisterWasm> Blockchain<Wasm> {
+impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Blockchain<Rt, Wasm> {
     pub fn add_block<B>(&mut self, block: B) -> Result<BlockHeight, String>
     where
         B: BlockType,
