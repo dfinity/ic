@@ -19,15 +19,15 @@ use ic_replicated_state::{
     CanisterState, ReplicatedState, Stream,
 };
 use ic_test_utilities::{
-    metrics::{
-        fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter, fetch_int_counter_vec,
-        fetch_int_gauge_vec, metric_vec, nonzero_values, HistogramStats, MetricVec,
-    },
     state::{new_canister_state, register_callback},
     types::ids::{user_test_id, SUBNET_12, SUBNET_23, SUBNET_27},
     types::messages::{RequestBuilder, ResponseBuilder},
     types::xnet::{StreamHeaderBuilder, StreamSliceBuilder},
     with_test_replica_logger,
+};
+use ic_test_utilities_metrics::{
+    fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter, fetch_int_counter_vec,
+    fetch_int_gauge_vec, metric_vec, nonzero_values, HistogramStats, MetricVec,
 };
 use ic_types::{
     messages::{CallbackId, Payload, Request, MAX_RESPONSE_COUNT_BYTES},

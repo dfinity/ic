@@ -209,6 +209,7 @@ members = [
   "test_utilities",
   "test_utilities/artifact_pool",
   "test_utilities/compare_dirs",
+  "test_utilities/metrics",
   "test_utilities/registry",
   "tests",
   "tests/test_canisters/http_counter",

@@ -18,9 +18,6 @@ use ic_replicated_state::metadata_state::Stream;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
     crypto::fake_tls_handshake::FakeTlsHandshake,
-    metrics::{
-        fetch_histogram_stats, fetch_histogram_vec_count, metric_vec, HistogramStats, MetricVec,
-    },
     mock_time,
     state::{arb_stream, arb_stream_slice},
     types::ids::{
@@ -28,6 +25,9 @@ use ic_test_utilities::{
         SUBNET_5,
     },
     with_test_replica_logger,
+};
+use ic_test_utilities_metrics::{
+    fetch_histogram_stats, fetch_histogram_vec_count, metric_vec, HistogramStats, MetricVec,
 };
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_types::{

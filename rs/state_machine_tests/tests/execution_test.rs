@@ -413,3 +413,20 @@ fn compressed_canisters_support() {
     let val = env.query(canister_id, "read", vec![]).unwrap().bytes();
     assert_eq!(to_int(val), 1);
 }
+
+#[test]
+fn test_state_machine_consumes_instructions() {
+    let env = StateMachine::new();
+
+    assert_eq!(env.instructions_consumed(), 0.0);
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+
+    let consumed = env.instructions_consumed();
+    assert!(
+        consumed >= 1000.0,
+        "Expected the state machine to consume at least 1000 instructions, got {:?}",
+        consumed
+    );
+}

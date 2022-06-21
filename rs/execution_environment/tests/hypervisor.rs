@@ -11,15 +11,13 @@ use ic_replicated_state::{
     testing::CanisterQueuesTesting, ExportedFunctions, Global, PageIndex,
 };
 use ic_sys::PAGE_SIZE;
+use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities::execution_environment::{
     assert_empty_reply, check_ingress_status, get_reply, wasm_compilation_cost,
     wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use ic_test_utilities::{
-    assert_utils::assert_balance_equals,
-    metrics::{fetch_histogram_stats, HistogramStats},
-};
+use ic_test_utilities_metrics::{fetch_histogram_stats, HistogramStats};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
     ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, methods::WasmMethod,

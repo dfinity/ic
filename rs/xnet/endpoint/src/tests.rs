@@ -5,15 +5,15 @@ use ic_protobuf::{messaging::xnet::v1 as pb, proxy::ProtoProxy};
 use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
 use ic_test_utilities::{
     crypto::fake_tls_handshake::FakeTlsHandshake,
-    metrics::{
-        fetch_histogram_stats, fetch_histogram_vec_count, metric_vec, HistogramStats, MetricVec,
-    },
     state_manager::FakeStateManager,
     types::{
         ids::{canister_test_id, SUBNET_6, SUBNET_7},
         messages::RequestBuilder,
     },
     with_test_replica_logger,
+};
+use ic_test_utilities_metrics::{
+    fetch_histogram_stats, fetch_histogram_vec_count, metric_vec, HistogramStats, MetricVec,
 };
 use ic_test_utilities_registry::MockRegistryClient;
 use ic_types::{messages::CallbackId, xnet::StreamIndexedQueue, Height, SubnetId};

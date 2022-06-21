@@ -5491,6 +5491,7 @@ dependencies = [
  "ic-sys",
  "ic-system-api",
  "ic-test-utilities",
+ "ic-test-utilities-metrics",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "ic-wasm-types",
@@ -5890,6 +5891,7 @@ dependencies = [
  "ic-replicated-state",
  "ic-state-layout",
  "ic-test-utilities",
+ "ic-test-utilities-metrics",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "lazy_static",
@@ -6379,6 +6381,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replica-setup-ic-network",
  "ic-test-utilities",
+ "ic-test-utilities-metrics",
  "ic-test-utilities-registry",
  "ic-types 0.8.0",
  "linked-hash-map",
@@ -6633,6 +6636,7 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-registry-transport",
  "ic-test-utilities",
+ "ic-test-utilities-metrics",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "prometheus 0.12.0",
@@ -7632,6 +7636,7 @@ dependencies = [
  "ic-replicated-state",
  "ic-state-layout",
  "ic-state-manager",
+ "ic-test-utilities-metrics",
  "ic-test-utilities-registry",
  "ic-types 0.8.0",
  "libflate",
@@ -7676,6 +7681,7 @@ dependencies = [
  "ic-state-layout",
  "ic-sys",
  "ic-test-utilities",
+ "ic-test-utilities-metrics",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "ic-wasm-types",
@@ -7852,7 +7858,6 @@ dependencies = [
  "mockall 0.7.2",
  "nix 0.23.0",
  "phantom_newtype",
- "prometheus 0.12.0",
  "proptest 0.9.6",
  "rand 0.7.3",
  "rand_chacha 0.2.2",
@@ -7873,6 +7878,14 @@ dependencies = [
 [[package]]
 name = "ic-test-utilities-compare-dirs"
 version = "0.8.0"
+
+[[package]]
+name = "ic-test-utilities-metrics"
+version = "0.8.0"
+dependencies = [
+ "ic-metrics",
+ "prometheus 0.12.0",
+]
 
 [[package]]
 name = "ic-test-utilities-registry"
@@ -8189,6 +8202,7 @@ dependencies = [
  "ic-registry-keys",
  "ic-replicated-state",
  "ic-test-utilities",
+ "ic-test-utilities-metrics",
  "ic-test-utilities-registry",
  "ic-types 0.8.0",
  "ic-xnet-hyper",
@@ -8243,6 +8257,7 @@ dependencies = [
  "ic-replicated-state",
  "ic-state-manager",
  "ic-test-utilities",
+ "ic-test-utilities-metrics",
  "ic-test-utilities-registry",
  "ic-types 0.8.0",
  "ic-xnet-hyper",

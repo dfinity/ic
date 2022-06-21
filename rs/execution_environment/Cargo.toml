@@ -58,6 +58,7 @@ iai = "0.1"
 ic-btc-test-utils = { path = "../bitcoin/test-utils" }
 ic-btc-types = { path = "../bitcoin/types/public" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-wasm-types = { path = "../types/wasm_types" }
 libflate = "1.1.2"
 maplit = "1.0.2"

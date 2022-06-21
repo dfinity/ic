@@ -16,7 +16,6 @@ use ic_test_utilities::{
     crypto::fake_tls_handshake::FakeTlsHandshake,
     crypto::CryptoReturningOk,
     message_routing::FakeMessageRouting,
-    metrics::fetch_int_gauge,
     p2p::*,
     port_allocation::allocate_ports,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
@@ -25,6 +24,7 @@ use ic_test_utilities::{
     types::ids::{node_test_id, subnet_test_id},
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
+use ic_test_utilities_metrics::fetch_int_gauge;
 use ic_types::{consensus::catchup::CUPWithOriginalProtobuf, replica_config::ReplicaConfig};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
