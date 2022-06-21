@@ -56,7 +56,7 @@ function setup_domain_name() {
         echo "\$DOMAIN or \$TLD variable not set. Nginx won't be configured. " 1>&2
         exit 1
     fi
-    DOMAIN_ESCAPED=${DOMAIN_ESCAPED//\./\\.}
+    DOMAIN_ESCAPED=${DOMAIN//\./\\.}
 
     pushd /etc/nginx/conf.d
     for filename in ./001-mainnet-nginx.conf ./002-rosetta-nginx.conf ./999-test-ic-nginx.conf.exclude; do
