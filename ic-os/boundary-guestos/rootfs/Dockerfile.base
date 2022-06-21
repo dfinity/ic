@@ -34,7 +34,6 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     ca-certificates \
     checkpolicy \
     chrony \
-    cron \
     cryptsetup \
     curl \
     dante-server \

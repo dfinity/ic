@@ -1,0 +1,6 @@
+[Unit]
+Description=Restart journalbeat
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart journalbeat
