@@ -10,3 +10,6 @@ pub const TEST_RESULT_FILE: &str = "test_execution_result.json";
 pub const TEST_SUITE_RESULT_FILE: &str = "test-results.json";
 // Name of the system environment directory.
 pub const SYSTEM_ENV_DIR: &str = "system_env";
+// Test owner channels
+pub const TEST_FAILURE_CHANNEL: &str = "test-failure-alerts";
+pub const ENG_TESTING_CHANNEL: &str = "eng-testing";

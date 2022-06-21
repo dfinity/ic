@@ -5,7 +5,7 @@ use ic_fondue::slack::Alertable;
 use ic_tests::driver::cli::{
     CliArgs, DriverSubCommand, ValidatedCliProcessTestsArgs, ValidatedCliRunTestsArgs,
 };
-use ic_tests::driver::config;
+use ic_tests::driver::config::{self, ENG_TESTING_CHANNEL, TEST_FAILURE_CHANNEL};
 use ic_tests::driver::driver_setup::{create_driver_context_from_cli, initialize_env, mk_logger};
 use ic_tests::driver::evaluation::{evaluate, generate_suite_execution_contract};
 use ic_tests::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources};
@@ -579,7 +579,9 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "basic_health_pot_single_host",
                     basic_health_test::config_single_host,
                     par(vec![sys_t("basic_health_test", basic_health_test::test)]),
-                ),
+                )
+                .with_alert(TEST_FAILURE_CHANNEL)
+                .with_alert(ENG_TESTING_CHANNEL),
                 pot_with_setup(
                     "node_reassignment_pot",
                     orchestrator::node_reassignment_test::config,
@@ -613,7 +615,9 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "workload_counter_canister_test",
                         workload_counter_canister_test::short_test,
                     )]),
-                ),
+                )
+                .with_alert(TEST_FAILURE_CHANNEL)
+                .with_alert(ENG_TESTING_CHANNEL),
                 pot_with_setup(
                     "nns_backup_pot",
                     orchestrator::nns_backup::config,
@@ -624,7 +628,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
             ],
         )
-        .with_alert("test-failure-alerts"),
+        .with_alert(TEST_FAILURE_CHANNEL),
     );
 
     // The tests in this suite require canisters to be build prior to
