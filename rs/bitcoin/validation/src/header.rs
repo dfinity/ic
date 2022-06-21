@@ -34,7 +34,7 @@ pub enum ValidateHeaderError {
 
 pub trait HeaderStore {
     /// Retrieves the header from the store.
-    fn get_header(&self, hash: &BlockHash) -> Option<(&BlockHeader, BlockHeight)>;
+    fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)>;
     /// Retrieves the current height of the block chain.
     fn get_height(&self) -> BlockHeight;
     /// Retrieves the initial hash the store starts from.
@@ -77,7 +77,7 @@ pub fn validate_header(
         return Err(ValidateHeaderError::InvalidPoWForHeaderTarget);
     }
 
-    let target = get_next_target(network, store, prev_header, prev_height, header);
+    let target = get_next_target(network, store, &prev_header, prev_height, header);
     if let Err(err) = header.validate_pow(&target) {
         match err {
             bitcoin::Error::BlockBadProofOfWork => println!("bad proof of work"),
@@ -137,7 +137,7 @@ fn is_header_within_one_year_of_tip(prev_height: BlockHeight, chain_height: Bloc
 /// "Reject if timestamp is the median time of the last 11 blocks or before"
 fn is_timestamp_valid(store: &impl HeaderStore, header: &BlockHeader) -> bool {
     let mut times = vec![];
-    let mut current_header = header;
+    let mut current_header = *header;
     let initial_hash = store.get_initial_hash();
     for _ in 0..11 {
         if let Some((prev_header, _)) = store.get_header(&current_header.prev_blockhash) {
@@ -221,7 +221,7 @@ fn find_next_difficulty_in_chain(
     let pow_limit_bits = pow_limit_bits(network);
     match network {
         Network::Testnet | Network::Regtest => {
-            let mut current_header = prev_header;
+            let mut current_header = *prev_header;
             let mut current_height = prev_height;
             let mut current_hash = prev_header.block_hash();
             let initial_header_hash = store.get_initial_hash();
@@ -267,7 +267,7 @@ fn compute_next_difficulty(
     }
 
     // Computing the last header with height multiple of 2016
-    let mut current_header = prev_header;
+    let mut current_header = *prev_header;
     for _i in 0..(DIFFICULTY_ADJUSTMENT_INTERVAL - 1) {
         if let Some((header, _)) = store.get_header(&current_header.prev_blockhash) {
             current_header = header;
@@ -371,10 +371,10 @@ mod test {
     }
 
     impl HeaderStore for SimpleHeaderStore {
-        fn get_header(&self, hash: &BlockHash) -> Option<(&BlockHeader, BlockHeight)> {
+        fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)> {
             self.headers
                 .get(hash)
-                .map(|stored| (&stored.header, stored.height))
+                .map(|stored| (stored.header, stored.height))
         }
 
         fn get_height(&self) -> BlockHeight {

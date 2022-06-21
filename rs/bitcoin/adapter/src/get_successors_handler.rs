@@ -5,11 +5,13 @@ use std::{
 
 use bitcoin::{Block, BlockHash, BlockHeader, Network};
 use ic_btc_validation::is_beyond_last_checkpoint;
-use ic_logger::{error, ReplicaLogger};
 use tokio::sync::{mpsc::Sender, Mutex};
 use tonic::{Code, Status};
 
-use crate::{common::BlockHeight, config::Config, BlockchainManagerRequest, BlockchainState};
+use crate::{
+    blockchainstate::CachedHeader, common::BlockHeight, config::Config, BlockchainManagerRequest,
+    BlockchainState,
+};
 
 const ONE_MB: usize = 1_024 * 1_024;
 
@@ -46,7 +48,6 @@ pub struct GetSuccessorsHandler {
     state: Arc<Mutex<BlockchainState>>,
     command_sender: Sender<BlockchainManagerRequest>,
     network: Network,
-    logger: ReplicaLogger,
 }
 
 impl GetSuccessorsHandler {
@@ -56,13 +57,11 @@ impl GetSuccessorsHandler {
         config: &Config,
         state: Arc<Mutex<BlockchainState>>,
         command_sender: Sender<BlockchainManagerRequest>,
-        logger: ReplicaLogger,
     ) -> Self {
         Self {
             state,
             command_sender,
             network: config.network,
-            logger,
         }
     }
 
@@ -103,7 +102,6 @@ impl GetSuccessorsHandler {
                 &request.anchor,
                 &request.processed_block_hashes,
                 &blocks,
-                &self.logger,
             );
             GetSuccessorsResponse { blocks, next }
         };
@@ -148,13 +146,19 @@ fn get_successor_blocks(
     let mut successor_blocks = vec![];
     // Block hashes that should be looked at in subsequent breadth-first searches.
     let mut response_block_size: usize = 0;
-    let mut queue: VecDeque<BlockHash> = state.get_children(anchor).into_iter().collect();
+    let mut queue: VecDeque<CachedHeader> = state
+        .get_cached_header(anchor)
+        .map(|c| c.children.lock().clone())
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
 
     // Compute the blocks by starting a breadth-first search.
-    while let Some(node) = queue.pop_front() {
-        if !seen.contains(&node) {
+    while let Some(cached_header) = queue.pop_front() {
+        let block_hash = cached_header.header.block_hash();
+        if !seen.contains(&block_hash) {
             // Retrieve the block from the cache.
-            match state.get_block(&node) {
+            match state.get_block(&block_hash) {
                 Some(block) => {
                     let block_size = block.size();
                     if response_block_size == 0
@@ -176,8 +180,7 @@ fn get_successor_blocks(
             }
         }
 
-        let children = state.get_children(&node);
-        queue.extend(children);
+        queue.extend(cached_header.children.lock().clone());
     }
 
     successor_blocks
@@ -189,39 +192,29 @@ fn get_next_headers(
     anchor: &BlockHash,
     processed_block_hashes: &[BlockHash],
     blocks: &[Block],
-    logger: &ReplicaLogger,
 ) -> Vec<BlockHeader> {
     let seen: HashSet<BlockHash> = processed_block_hashes
         .iter()
         .copied()
         .chain(blocks.iter().map(|b| b.block_hash()))
         .collect();
-    let mut queue: VecDeque<BlockHash> = state.get_children(anchor).into_iter().collect();
+    let mut queue: VecDeque<CachedHeader> = state
+        .get_cached_header(anchor)
+        .map(|c| c.children.lock().clone())
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
     let mut next_headers = vec![];
-    while let Some(node) = queue.pop_front() {
+    while let Some(cached_header) = queue.pop_front() {
         if next_headers.len() >= MAX_NEXT_BLOCK_HEADERS_LENGTH {
             break;
         }
 
-        match state.get_cached_header(&node) {
-            Some(cached) => {
-                if !seen.contains(&cached.header.block_hash()) {
-                    next_headers.push(cached.header);
-                }
-            }
-            None => {
-                // Missing header, something has gone very wrong.
-                error!(
-                    logger,
-                    "[ADAPTER-BUG] Missing header cache entry for block hash: {:?}. This should never happen.",
-                    node
-                );
-                break;
-            }
+        let block_hash = cached_header.header.block_hash();
+        if !seen.contains(&block_hash) {
+            next_headers.push(cached_header.header);
         }
-
-        let children = state.get_children(&node);
-        queue.extend(children);
+        queue.extend(cached_header.children.lock().clone());
     }
     next_headers
 }
@@ -242,7 +235,6 @@ mod test {
     use std::sync::Arc;
 
     use bitcoin::Network;
-    use ic_logger::replica_logger::no_op_logger;
     use tokio::sync::{mpsc::channel, Mutex};
 
     use crate::{
@@ -265,7 +257,6 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
-            no_op_logger(),
         );
         // Set up the following chain:
         // |--> 1'---> 2'
@@ -373,7 +364,6 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
-            no_op_logger(),
         );
         // Set up the following chain:
         // 0 -> 1 ---> 2 ---> 3 -> 4
@@ -416,7 +406,6 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
-            no_op_logger(),
         );
 
         // Set up the following chain:
@@ -464,7 +453,6 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
-            no_op_logger(),
         );
         // Set up the following chain:
         // |-> 1'
@@ -536,7 +524,6 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
-            no_op_logger(),
         );
         // Set up the following chain:
         // |-> 1'
@@ -628,7 +615,6 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
-            no_op_logger(),
         );
         // Generate a blockchain with one large block.
         let large_blocks = generate_large_block_blockchain(genesis_hash, genesis.header.time, 1);
@@ -690,7 +676,6 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
-            no_op_logger(),
         );
 
         let main_chain = generate_headers(genesis_hash, genesis.header.time, 5, &[]);

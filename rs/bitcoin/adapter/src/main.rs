@@ -35,12 +35,8 @@ pub async fn main() {
 
     let adapter_state = AdapterState::new(config.idle_seconds);
     let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config)));
-    let get_successors_handler = GetSuccessorsHandler::new(
-        &config,
-        blockchain_state.clone(),
-        blockchain_manager_tx,
-        logger.clone(),
-    );
+    let get_successors_handler =
+        GetSuccessorsHandler::new(&config, blockchain_state.clone(), blockchain_manager_tx);
 
     // TODO: we should NOT have an unbounded channel for buffering TransactionManagerRequests.
     let (transaction_manager_tx, transaction_manager_rx) = channel(10);
