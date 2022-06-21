@@ -1,0 +1,30 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "metrics_exporter",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_metrics_exporter",
+    edition = "2018",
+    deps = [
+        "//rs/config",
+        "//rs/crypto/tls_interfaces",
+        "//rs/interfaces",
+        "//rs/monitoring/metrics",
+        "//rs/types/types",
+        "@crate_index//:hyper",
+        "@crate_index//:prometheus",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
