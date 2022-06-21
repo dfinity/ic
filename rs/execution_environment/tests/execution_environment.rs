@@ -20,7 +20,6 @@ use ic_test_utilities::{
     execution_environment::{
         assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
     },
-    metrics::{fetch_histogram_vec_count, metric_vec},
     mock_time,
     types::{
         ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
@@ -28,6 +27,7 @@ use ic_test_utilities::{
     },
     universal_canister::{call_args, wasm},
 };
+use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES;
 use ic_types::{
     canister_http::CanisterHttpMethod,

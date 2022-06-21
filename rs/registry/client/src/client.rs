@@ -616,7 +616,7 @@ mod tests {
     }
     #[cfg(test)]
     mod metrics {
-        use ic_test_utilities::metrics::fetch_int_gauge;
+        use ic_test_utilities_metrics::fetch_int_gauge;
 
         use super::*;
 

@@ -22,9 +22,6 @@ use ic_test_utilities::execution_environment::test_registry_settings;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     history::MockIngressHistory,
-    metrics::{
-        fetch_histogram_stats, fetch_int_counter, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
-    },
     mock_time,
     state::{
         arb_replicated_state, get_initial_state, get_initial_system_subnet_state,
@@ -36,6 +33,9 @@ use ic_test_utilities::{
         messages::{RequestBuilder, SignedIngressBuilder},
     },
     with_test_replica_logger,
+};
+use ic_test_utilities_metrics::{
+    fetch_histogram_stats, fetch_int_counter, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
 };
 use ic_types::messages::{CallContextId, Payload, Response, StopCanisterContext};
 use ic_types::methods::{Callback, SystemMethod, WasmClosure};

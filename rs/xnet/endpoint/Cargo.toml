@@ -29,6 +29,7 @@ ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 maplit = "1.0.2"
 prost = "0.10.4"

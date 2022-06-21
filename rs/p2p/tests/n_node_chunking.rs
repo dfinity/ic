@@ -7,7 +7,7 @@
 //!
 //! Note that most of the logic is driven by a test artifact manager.
 
-use ic_test_utilities::metrics::fetch_int_counter;
+use ic_test_utilities_metrics::fetch_int_counter;
 use std::time::Duration;
 
 pub mod framework;

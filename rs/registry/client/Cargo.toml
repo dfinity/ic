@@ -35,4 +35,5 @@ url = { version = "2.1.1", features = ["serde"] }
 assert_matches = "1.3.0"
 ic-registry-proto-data-provider = { path = "../proto_data_provider" }
 ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
 tempfile = "3.0"

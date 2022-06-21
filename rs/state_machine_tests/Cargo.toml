@@ -31,6 +31,7 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-layout = { path = "../state_layout" }
 ic-state-manager = { path = "../state_manager" }
+ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-types = { path = "../types/types" }
 serde = { version = "1.0.99", features = [ "derive" ] }

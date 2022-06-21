@@ -41,6 +41,7 @@ use ic_registry_routing_table::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
+use ic_test_utilities_metrics::fetch_histogram_stats;
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
@@ -163,6 +164,7 @@ pub struct StateMachine {
     registry_client: Arc<FakeRegistryClient>,
     state_manager: Arc<StateManagerImpl>,
     message_routing: MessageRoutingImpl,
+    metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
     _runtime: Runtime,
@@ -324,6 +326,7 @@ impl StateMachine {
             state_manager,
             ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
+            metrics_registry,
             query_handler: execution_services.sync_query_handler,
             _runtime: runtime,
             state_dir,
@@ -413,6 +416,17 @@ impl StateMachine {
             started_at.elapsed(),
             self.state_manager.latest_state_height(),
         )
+    }
+
+    /// Returns the total number of Wasm instructions this state machine consumed in replicated
+    /// message execution (ingress messages, inter-canister messages, and heartbeats).
+    pub fn instructions_consumed(&self) -> f64 {
+        fetch_histogram_stats(
+            &self.metrics_registry,
+            "scheduler_instructions_consumed_per_round",
+        )
+        .map(|stats| stats.sum)
+        .unwrap_or(0.0)
     }
 
     /// Sets the time that the state machine will use for executing next

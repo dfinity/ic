@@ -11,7 +11,6 @@ pub mod execution_environment;
 pub mod history;
 pub mod ingress_selector;
 pub mod message_routing;
-pub mod metrics;
 pub mod notification;
 pub mod p2p;
 pub mod port_allocation;

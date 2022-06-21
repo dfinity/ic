@@ -1,0 +1,8 @@
+[package]
+name = "ic-test-utilities-metrics"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+ic-metrics = { path = "../../monitoring/metrics" }
+prometheus = { version = "0.12.0", features = [ "process" ] }

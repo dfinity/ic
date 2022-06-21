@@ -17,7 +17,6 @@ use ic_state_manager::{BitcoinPageMap, DirtyPageMap, PageMapType, StateManagerIm
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
-    metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels},
     mock_time,
     state::{arb_stream, arb_stream_slice, canister_ids},
     types::{
@@ -26,6 +25,7 @@ use ic_test_utilities::{
     },
     with_test_replica_logger,
 };
+use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
 use ic_types::{
     artifact::{Priority, StateSyncArtifactId, StateSyncAttribute},
     chunkable::ChunkId,

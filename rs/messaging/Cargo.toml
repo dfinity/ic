@@ -33,6 +33,7 @@ slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "rel
 
 [dev-dependencies]
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 mockall = "0.7.2"

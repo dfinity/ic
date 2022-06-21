@@ -36,6 +36,7 @@ ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-state-manager = { path = "../../state_manager" }
 ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 maplit = "1.0.2"
 mockall = "0.7.2"
