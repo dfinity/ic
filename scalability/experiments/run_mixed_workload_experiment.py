@@ -2,7 +2,7 @@
 """
 Purpose: Measure IC performance give a complex workload.
 
-The workload configuration to use is being read from a seperate workload descriptin file.
+The workload configuration to use is being read from a seperate workload description file.
 """
 import os
 import shutil
@@ -136,6 +136,8 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
                     f"{d.get('start_delay', 0)}s for {d.get('duration', '')}s"
                     for d in self.raw_description["workload"]
                 ],
+                "description": self.raw_description["description"],
+                "title": self.raw_description["title"],
             },
             datapoints,
             "base requests / s",
