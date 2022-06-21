@@ -11,14 +11,15 @@ systemd
 systemd-sysv
 systemd-journal-remote
 
-# Required system setup tools XXX TODO
+# Required system setup tools
 attr
 ca-certificates
 curl
+ethtool
 efibootmgr
 faketime
-fdisk
 gdisk
+ipmitool
 iproute2
 jq
 less
