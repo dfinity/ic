@@ -8441,9 +8441,9 @@ dependencies = [
 
 [[package]]
 name = "intmap"
-version = "0.8.0"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86d15c6e521ba2be083db38ab4c0c7df154acb2369d438c051a66cb82baef3d5"
+checksum = "b357564d111300f8a33b79e06795235529a627a1f7078d2b1db7f7dcdf032874"
 dependencies = [
  "serde",
 ]

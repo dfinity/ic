@@ -300,7 +300,7 @@ pub struct Ledger {
     accounts_overflow_trim_quantity: usize,
     pub minting_account_id: Option<AccountIdentifier>,
     // This is a set of blockheights that have been notified
-    #[serde(default = "IntMap::new")]
+    #[serde(default)]
     pub blocks_notified: IntMap<()>,
     /// How long transactions are remembered to detect duplicates.
     pub transaction_window: Duration,
