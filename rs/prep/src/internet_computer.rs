@@ -225,9 +225,6 @@ pub struct IcConfig {
     /// The initial set of SSH public keys to populate the registry with, to
     /// give "readonly" access to all unassigned nodes.
     pub ssh_readonly_access_to_unassigned_nodes: Vec<String>,
-
-    /// Disables the setup of iDKG keys for the nodes of the network
-    pub no_idkg_key: bool,
 }
 
 #[derive(Error, Debug)]
@@ -320,7 +317,6 @@ impl IcConfig {
             initial_node_operator,
             initial_node_provider,
             ssh_readonly_access_to_unassigned_nodes,
-            no_idkg_key: false,
         }
     }
 

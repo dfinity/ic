@@ -93,7 +93,7 @@ pub fn init_ic(
         for node in &subnet.nodes {
             let node_index = next_node_index;
             next_node_index += 1;
-            nodes.insert(node_index, node_to_config(node, ic.no_idkg_key));
+            nodes.insert(node_index, node_to_config(node));
         }
 
         ic_topology.insert_subnet(
@@ -125,14 +125,11 @@ pub fn init_ic(
     for node in &ic.unassigned_nodes {
         let node_index = next_node_index;
         next_node_index += 1;
-        ic_topology.insert_unassigned_node(
-            node_index as NodeIndex,
-            node_to_config(node, ic.no_idkg_key),
-        );
+        ic_topology.insert_unassigned_node(node_index as NodeIndex, node_to_config(node));
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    let mut ic_config = IcConfig::new(
+    let ic_config = IcConfig::new(
         working_dir.path(),
         ic_topology,
         Some(initial_replica.replica_version),
@@ -150,7 +147,6 @@ pub fn init_ic(
         ic.node_provider,
         ic.ssh_readonly_access_to_unassigned_nodes.clone(),
     );
-    ic_config.no_idkg_key = ic.no_idkg_key;
 
     Ok(ic_config.initialize().expect("can't fail"))
 }
@@ -303,7 +299,7 @@ pub fn create_config_disk_image(
     Ok(())
 }
 
-fn node_to_config(node: &Node, no_idkg_key: bool) -> NodeConfiguration {
+fn node_to_config(node: &Node) -> NodeConfiguration {
     let ipv6_addr = IpAddr::V6(node.ipv6.expect("missing ip_addr"));
     let public_api = SocketAddr::new(ipv6_addr, AddrType::PublicApi.into());
     let xnet_api = SocketAddr::new(ipv6_addr, AddrType::Xnet.into());
@@ -321,7 +317,6 @@ fn node_to_config(node: &Node, no_idkg_key: bool) -> NodeConfiguration {
         prometheus_metrics: vec![prometheus_addr.into()],
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,
-        no_idkg_key,
         secret_key_store: node.secret_key_store.clone(),
     }
 }
