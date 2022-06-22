@@ -1,5 +1,6 @@
 use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::error::{OrchestratorError, OrchestratorResult};
+use crate::metrics::OrchestratorMetrics;
 use crate::registry_helper::RegistryHelper;
 use crate::replica_process::ReplicaProcess;
 use ic_http_utils::file_downloader::FileDownloader;
@@ -13,10 +14,15 @@ use ic_registry_replicator::RegistryReplicator;
 use ic_types::consensus::{CatchUpPackage, HasHeight};
 use ic_types::{Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::exit;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
 use tokio::process::Command;
+
+const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 
 /// Provides function to continuously check the Registry to determine if this
 /// node should upgrade to a new release package, and if so, downloads and
@@ -35,12 +41,14 @@ pub(crate) struct Upgrade {
     node_id: NodeId,
     /// The replica version that is prepared by 'prepare_upgrade' to upgrade to.
     prepared_upgrade_version: Option<ReplicaVersion>,
+    orchestrator_data_directory: Option<PathBuf>,
 }
 
 impl Upgrade {
     #[allow(clippy::too_many_arguments)]
     pub(crate) async fn new(
         registry: Arc<RegistryHelper>,
+        metrics: Arc<OrchestratorMetrics>,
         replica_process: Arc<Mutex<ReplicaProcess>>,
         cup_provider: Arc<CatchUpPackageProvider>,
         replica_version: ReplicaVersion,
@@ -50,7 +58,12 @@ impl Upgrade {
         registry_replicator: Arc<RegistryReplicator>,
         release_content_dir: PathBuf,
         logger: ReplicaLogger,
+        orchestrator_data_directory: Option<PathBuf>,
     ) -> Self {
+        if let Err(e) = report_reboot_time(&orchestrator_data_directory, metrics.clone()) {
+            warn!(logger, "Cannot report the reboot time: {}", e);
+        }
+
         let value = Self {
             registry,
             replica_process,
@@ -63,6 +76,7 @@ impl Upgrade {
             registry_replicator,
             logger,
             prepared_upgrade_version: None,
+            orchestrator_data_directory,
         };
         value.confirm_boot().await;
         value
@@ -290,6 +304,12 @@ impl Upgrade {
         // If we ever retry this function, it means we encountered an issue somewhere.
         // To be safe, we should re-do all the steps.
         self.prepared_upgrade_version = None;
+
+        // Save the time of triggering the reboot if a path is provided.
+        if let Err(e) = persist_time_of_triggering_reboot(&self.orchestrator_data_directory) {
+            warn!(self.logger, "Cannot persist the time of reboot: {}", e);
+        }
+
         // We could successfuly unpack the file above, so we do not need the image anymore.
         std::fs::remove_file(self.image_path())
             .map_err(|e| OrchestratorError::IoError("Couldn't delete the image".to_string(), e))?;
@@ -593,4 +613,43 @@ fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
     );
     let error = exec::Command::new(&args[0]).args(&args[1..]).exec();
     OrchestratorError::ExecError(PathBuf::new(), error)
+}
+
+fn get_reboot_time_file_path(
+    orchestrator_data_directory: &Option<PathBuf>,
+) -> Result<PathBuf, String> {
+    match orchestrator_data_directory {
+        Some(dir) => Ok(dir.join(REBOOT_TIME_FILENAME)),
+        None => Err("`orchestrator_data_directory` is not provided".to_string()),
+    }
+}
+
+fn persist_time_of_triggering_reboot(
+    orchestrator_data_directory: &Option<PathBuf>,
+) -> Result<(), String> {
+    let path = get_reboot_time_file_path(orchestrator_data_directory)?;
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?;
+    let mut file = std::fs::File::create(path).map_err(|e| e.to_string())?;
+    file.write_all(now.as_secs().to_string().as_bytes())
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn report_reboot_time(
+    orchestrator_data_directory: &Option<PathBuf>,
+    metrics: Arc<OrchestratorMetrics>,
+) -> Result<(), String> {
+    let path = get_reboot_time_file_path(orchestrator_data_directory)?;
+
+    let content = std::fs::read(path).map_err(|e| e.to_string())?;
+    let text = std::str::from_utf8(&content).map_err(|e| e.to_string())?;
+    let then = Duration::new(u64::from_str(text).map_err(|e| e.to_string())?, 0);
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?;
+    let elapsed_time = now - then;
+    metrics.reboot_duration.set(elapsed_time.as_secs() as i64);
+    Ok(())
 }

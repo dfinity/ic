@@ -149,9 +149,19 @@ impl Orchestrator {
             logger.clone(),
         ));
 
+        let (metrics, _metrics_runtime) = Self::get_metrics(
+            metrics_addr,
+            &slog_logger,
+            &metrics_registry,
+            registry.get_registry_client(),
+            crypto.clone(),
+        );
+        let metrics = Arc::new(metrics);
+
         let upgrade = Some(
             Upgrade::new(
                 Arc::clone(&registry),
+                Arc::clone(&metrics),
                 replica_process,
                 cup_provider,
                 replica_version,
@@ -161,18 +171,10 @@ impl Orchestrator {
                 registry_replicator,
                 args.replica_binary_dir.clone(),
                 logger.clone(),
+                args.orchestrator_data_directory.clone(),
             )
             .await,
         );
-
-        let (metrics, _metrics_runtime) = Self::get_metrics(
-            metrics_addr,
-            &slog_logger,
-            &metrics_registry,
-            registry.get_registry_client(),
-            crypto.clone(),
-        );
-        let metrics = Arc::new(metrics);
 
         let firewall_deprecated = Some(FirewallDeprecated::new(
             Arc::clone(&registry),

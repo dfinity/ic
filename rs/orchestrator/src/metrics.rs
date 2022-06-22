@@ -10,6 +10,7 @@ pub struct OrchestratorMetrics {
     pub datacenter_registry_version: IntGauge,
     pub ssh_access_registry_version: IntGauge,
     pub firewall_registry_version: IntGauge,
+    pub reboot_duration: IntGauge,
 }
 
 impl OrchestratorMetrics {
@@ -34,6 +35,10 @@ impl OrchestratorMetrics {
             firewall_registry_version: metrics_registry.int_gauge(
                 "firewall_registry_version",
                 "Latest registry version used for firewall configuration",
+            ),
+            reboot_duration: metrics_registry.int_gauge(
+                "reboot_duration_seconds",
+                "The time it took for the node to reboot",
             ),
         }
     }
