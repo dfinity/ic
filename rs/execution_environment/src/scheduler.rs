@@ -1558,7 +1558,7 @@ fn get_instructions_limit_for_subnet_message(
             | BitcoinGetBalance
             | BitcoinGetUtxos
             | BitcoinSendTransaction
-            | BitcoinGetCurrentFees
+            | BitcoinGetCurrentFeePercentiles
             | ProvisionalCreateCanisterWithCycles
             | ProvisionalTopUpCanister => config.max_instructions_per_message,
             InstallCode => match InstallCodeArgs::decode(payload) {

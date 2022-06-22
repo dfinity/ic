@@ -107,7 +107,7 @@ pub(super) fn resolve_destination(
         Ok(Ic00Method::BitcoinGetBalance)
         | Ok(Ic00Method::BitcoinGetUtxos)
         | Ok(Ic00Method::BitcoinSendTransaction)
-        | Ok(Ic00Method::BitcoinGetCurrentFees) => {
+        | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => {
             // TODO(EXC-939): Route requests across all the bitcoin subnets, not only
             // the first subnet.
             Ok(*network_topology

@@ -409,7 +409,7 @@ impl CyclesAccountManager {
                 | Ok(Method::BitcoinGetBalance)
                 | Ok(Method::BitcoinGetUtxos)
                 | Ok(Method::BitcoinSendTransaction)
-                | Ok(Method::BitcoinGetCurrentFees) => {
+                | Ok(Method::BitcoinGetCurrentFeePercentiles) => {
                     return Err(IngressInductionCostError::SubnetMethodNotAllowed);
                 }
                 Err(_) => {

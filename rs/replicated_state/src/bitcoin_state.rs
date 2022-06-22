@@ -258,6 +258,16 @@ impl BitcoinState {
         }
     }
 
+    pub fn network(&self) -> BitcoinNetwork {
+        match self.utxo_set.network {
+            Network::Bitcoin => BitcoinNetwork::Mainnet,
+            Network::Testnet => BitcoinNetwork::Testnet,
+            Network::Regtest => BitcoinNetwork::Regtest,
+            // TODO(EXC-1096): Use the `BitcoinNetwork` enum exclusively to avoid this panic.
+            Network::Signet => unreachable!("Network cannot be signet"),
+        }
+    }
+
     /// Returns an iterator over the existing requests to the Bitcoin Adapter.
     pub fn adapter_requests_iter(
         &self,
