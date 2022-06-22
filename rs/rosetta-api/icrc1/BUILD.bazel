@@ -19,7 +19,10 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
 ]
 
-MACRO_DEPENDENCIES = ["@crate_index//:ic-cdk-macros"]
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+    "@crate_index//:ic-cdk-macros",
+]
 
 rust_library(
     name = "icrc1",
