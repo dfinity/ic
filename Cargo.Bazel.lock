@@ -1,5 +1,5 @@
 {
-  "checksum": "1b6b908f10fee93f51d05effa14057563e3b42934aad015bea61f6a98a9dc8b9",
+  "checksum": "da8deab6f5d4aefd7529f8576de7d66338ab7f56bf05189e98e6bafb795036cd",
   "crates": {
     "actix-codec 0.5.0": {
       "name": "actix-codec",
@@ -10314,7 +10314,7 @@
               "target": "insta"
             },
             {
-              "id": "intmap 0.8.0",
+              "id": "intmap 1.1.0",
               "target": "intmap"
             },
             {
@@ -18409,13 +18409,13 @@
       },
       "license": "BSD-3-Clause"
     },
-    "intmap 0.8.0": {
+    "intmap 1.1.0": {
       "name": "intmap",
-      "version": "0.8.0",
+      "version": "1.1.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/intmap/0.8.0/download",
-          "sha256": "86d15c6e521ba2be083db38ab4c0c7df154acb2369d438c051a66cb82baef3d5"
+          "url": "https://crates.io/api/v1/crates/intmap/1.1.0/download",
+          "sha256": "b357564d111300f8a33b79e06795235529a627a1f7078d2b1db7f7dcdf032874"
         }
       },
       "targets": [
@@ -18450,7 +18450,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.8.0"
+        "version": "1.1.0"
       },
       "license": "MIT"
     },

@@ -27,7 +27,7 @@ ic-ledger-core = { path = "../ledger_core" }
 ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
 ic-nns-constants = {path = "../../nns/constants" }
 ic-utils = { path = "../../utils" }
-intmap = { version = "0.8.0", features = ["serde"] }
+intmap = { version = "1.1.0", features = ["serde"] }
 lazy_static = "1.4.0"
 on_wire = {path = "../../rust_canisters/on_wire"}
 phantom_newtype = { path = "../../phantom_newtype" }

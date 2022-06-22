@@ -336,7 +336,7 @@ def external_crates_repository(name, annotations):
                 version = "^1.8.0",
             ),
             "intmap": crate.spec(
-                version = "^0.8.0",
+                version = "^1.1.0",
                 features = ["serde"],
             ),
             "ipnet": crate.spec(
