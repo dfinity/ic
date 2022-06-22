@@ -220,15 +220,6 @@ pub struct IDkgDealing {
     #[prost(bytes="vec", tag="2")]
     pub raw_dealing: ::prost::alloc::vec::Vec<u8>,
 }
-/// TODO: to be removed after initial dealings are migrated to use
-/// signed dealings.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IDkgDealingTuple {
-    #[prost(message, optional, tag="1")]
-    pub dealer: ::core::option::Option<super::super::super::types::v1::NodeId>,
-    #[prost(message, optional, tag="2")]
-    pub dealing: ::core::option::Option<IDkgDealing>,
-}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgSignedDealingTuple {
     #[prost(message, optional, tag="1")]

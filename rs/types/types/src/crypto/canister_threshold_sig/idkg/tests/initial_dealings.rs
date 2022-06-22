@@ -4,20 +4,20 @@ use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::{
     mock_unmasked_transcript_type, random_transcript_id,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
-    IDkgDealing, IDkgTranscriptId, IDkgTranscriptOperation, InitialIDkgDealings,
+    IDkgDealing, IDkgTranscriptId, IDkgTranscriptOperation, InitialIDkgDealings, SignedIDkgDealing,
 };
+use crate::crypto::{BasicSig, BasicSigOf};
+use crate::signature::BasicSignature;
 use crate::NodeId;
 use ic_crypto_test_utils_canister_threshold_sigs::{node_id, set_of_nodes};
-use std::collections::BTreeMap;
-
-// TODO(CRP-1403): Add tests for successful creation of initial dealings.
+use std::collections::BTreeSet;
 
 #[test]
 fn should_not_create_initial_dealings_with_wrong_operation() {
     let dealers = set_of_nodes(&[1, 2, 3]);
 
     let random_params = create_params_for_dealers(&dealers, IDkgTranscriptOperation::Random);
-    let initial_dealings_for_random = InitialIDkgDealings::new(random_params, BTreeMap::new());
+    let initial_dealings_for_random = InitialIDkgDealings::new(random_params, Vec::new());
 
     // Random transcript creation not enabled for XNet resharing
     assert_eq!(
@@ -32,8 +32,7 @@ fn should_not_create_initial_dealings_with_wrong_operation() {
         IDkgTranscriptOperation::ReshareOfMasked(masked_transcript.clone()),
     );
 
-    let initial_dealings_for_reshare_unmasked =
-        InitialIDkgDealings::new(masked_params, BTreeMap::new());
+    let initial_dealings_for_reshare_unmasked = InitialIDkgDealings::new(masked_params, Vec::new());
 
     // Reshare masked transcript not enabled for XNet resharing
     assert_eq!(
@@ -50,7 +49,7 @@ fn should_not_create_initial_dealings_with_wrong_operation() {
     );
 
     let initial_dealings_for_product =
-        InitialIDkgDealings::new(unmasked_times_masked_params, BTreeMap::new());
+        InitialIDkgDealings::new(unmasked_times_masked_params, Vec::new());
 
     // Unmasked times masked transcript creation not enabled for XNet resharing
     assert_eq!(
@@ -72,7 +71,7 @@ fn should_not_create_initial_dealings_with_insufficient_dealings() {
         IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
     );
 
-    let insufficient_dealers: Vec<u64> = vec![0, 1, 3, 4];
+    let insufficient_dealers = set_of_nodes(&[0, 1, 3, 4]);
 
     let insufficient_len = insufficient_dealers.len();
     let collection_threshold = params
@@ -83,8 +82,8 @@ fn should_not_create_initial_dealings_with_insufficient_dealings() {
     // `insufficient_dealers` should be less than the initial dealings collection threshold
     assert!(insufficient_len < collection_threshold as usize);
 
-    let insufficient_dealings = mock_dealings(params.transcript_id, &insufficient_dealers);
-    let initial_dealings = InitialIDkgDealings::new(params.clone(), insufficient_dealings);
+    let insufficient_dealings = mock_signed_dealings(params.transcript_id, &insufficient_dealers);
+    let initial_dealings = InitialIDkgDealings::new(params, insufficient_dealings);
 
     assert_eq!(
         initial_dealings.unwrap_err(),
@@ -93,17 +92,113 @@ fn should_not_create_initial_dealings_with_insufficient_dealings() {
             dealings_count: insufficient_len as u32
         }
     );
+}
 
-    let sufficient_dealers = vec![1, 2, 3, 5, 6];
+#[test]
+fn should_create_initial_dealings_with_sufficient_dealings() {
+    let dealers = set_of_nodes(&(0..7).collect::<Vec<_>>());
+
+    // Transcript to be reshared
+    let unmasked_transcript =
+        mock_transcript(Some(dealers.clone()), mock_unmasked_transcript_type());
+
+    let params = create_params_for_dealers(
+        &dealers,
+        IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
+    );
+
+    let collection_threshold = params
+        .unverified_dealings_collection_threshold()
+        .unwrap()
+        .get();
+
+    let sufficient_dealers = set_of_nodes(&[0, 1, 2, 3, 5, 6]);
+    let sufficient_len = sufficient_dealers.len();
+
+    // `sufficient_dealers` should be no less than the initial dealings collection threshold
+    assert!(sufficient_len > collection_threshold as usize);
+
+    let dealings = mock_signed_dealings(params.transcript_id, &sufficient_dealers);
+    let initial_dealings = InitialIDkgDealings::new(params, dealings);
+    assert!(initial_dealings.is_ok());
+    // The initial dealings should contain a minimum number of dealings
+    assert_eq!(
+        initial_dealings.unwrap().dealings.len(),
+        collection_threshold as usize
+    );
+}
+
+#[test]
+fn should_create_initial_dealings_with_minimum_dealings() {
+    let dealers = set_of_nodes(&(0..7).collect::<Vec<_>>());
+
+    // Transcript to be reshared
+    let unmasked_transcript =
+        mock_transcript(Some(dealers.clone()), mock_unmasked_transcript_type());
+
+    let params = create_params_for_dealers(
+        &dealers,
+        IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
+    );
+    let collection_threshold = params
+        .unverified_dealings_collection_threshold()
+        .unwrap()
+        .get();
+
+    let min_dealers = set_of_nodes(&[0, 1, 2, 3, 6]);
+    let min_dealers_len = min_dealers.len();
+
+    // `min_dealers` should contain collection threshold many dealings.
+    assert_eq!(min_dealers_len, collection_threshold as usize);
+
+    let dealings = mock_signed_dealings(params.transcript_id, &min_dealers);
+    let initial_dealings = InitialIDkgDealings::new(params, dealings);
+    assert!(initial_dealings.is_ok());
+    // The initial dealings should contain a minimum number of dealings
+    assert_eq!(initial_dealings.unwrap().dealings.len(), min_dealers_len);
+}
+
+#[test]
+fn should_not_include_multiple_dealings_from_the_same_dealer() {
+    let dealers = set_of_nodes(&(0..7).collect::<Vec<_>>());
+
+    // Transcript to be reshared
+    let unmasked_transcript =
+        mock_transcript(Some(dealers.clone()), mock_unmasked_transcript_type());
+
+    let params = create_params_for_dealers(
+        &dealers,
+        IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
+    );
+
+    let collection_threshold = params
+        .unverified_dealings_collection_threshold()
+        .unwrap()
+        .get();
+
+    let sufficient_dealers = set_of_nodes(&[0, 1, 2, 3, 5]);
     let sufficient_len = sufficient_dealers.len();
 
     // `sufficient_dealers` should be no less than the initial dealings collection threshold
     assert!(sufficient_len >= collection_threshold as usize);
 
-    let dealings = mock_dealings(params.transcript_id, &sufficient_dealers);
-    let initial_dealings = InitialIDkgDealings::new(params, dealings);
+    let mut dealings = mock_signed_dealings(params.transcript_id, &sufficient_dealers);
+    let mut duplicate = dealings[0].clone();
+    let duplicate_dealer = duplicate.dealer_id();
+    duplicate.content.internal_dealing_raw = "Different dealing from the same dealer"
+        .to_string()
+        .into_bytes();
+    assert_ne!(dealings[0], duplicate);
+    dealings.push(duplicate);
 
-    assert!(initial_dealings.is_ok());
+    let res = InitialIDkgDealings::new(params, dealings);
+
+    assert_eq!(
+        res.unwrap_err(),
+        InitialIDkgDealingsValidationError::MultipleDealingsFromSameDealer {
+            node_id: duplicate_dealer
+        }
+    );
 }
 
 #[test]
@@ -122,7 +217,7 @@ fn should_not_create_initial_dealings_with_wrong_dealers() {
     // Node 100 is not part of the dealers
     assert!(dealers.get(&node_id(100)).is_none());
 
-    let sufficient_dealers = vec![1, 2, 3, 4, 100];
+    let sufficient_dealers = set_of_nodes(&[1, 2, 3, 4, 100]);
     let sufficient_len = sufficient_dealers.len();
     let collection_threshold = params
         .unverified_dealings_collection_threshold()
@@ -132,7 +227,7 @@ fn should_not_create_initial_dealings_with_wrong_dealers() {
     // `sufficient_dealers` should be no less than the initial dealings collection threshold
     assert!(sufficient_len >= collection_threshold as usize);
 
-    let dealings = mock_dealings(params.transcript_id, &sufficient_dealers);
+    let dealings = mock_signed_dealings(params.transcript_id, &sufficient_dealers);
     let initial_dealings = InitialIDkgDealings::new(params, dealings);
 
     assert_eq!(
@@ -156,7 +251,7 @@ fn should_not_create_initial_dealings_with_mismatching_transcript_id() {
         IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
     );
 
-    let sufficient_dealers = vec![1, 2, 3, 14, 18];
+    let sufficient_dealers = set_of_nodes(&[1, 2, 3, 14, 18]);
     let sufficient_len = sufficient_dealers.len();
     let collection_threshold = params
         .unverified_dealings_collection_threshold()
@@ -170,7 +265,7 @@ fn should_not_create_initial_dealings_with_mismatching_transcript_id() {
 
     assert_ne!(params.transcript_id, wrong_transcript_id);
 
-    let dealings = mock_dealings(wrong_transcript_id, &sufficient_dealers);
+    let dealings = mock_signed_dealings(wrong_transcript_id, &sufficient_dealers);
     let initial_dealings = InitialIDkgDealings::new(params, dealings);
 
     assert_eq!(
@@ -179,19 +274,24 @@ fn should_not_create_initial_dealings_with_mismatching_transcript_id() {
     );
 }
 
-fn mock_dealings(
+fn mock_signed_dealings(
     transcript_id: IDkgTranscriptId,
-    dealers: &[u64],
-) -> BTreeMap<NodeId, IDkgDealing> {
-    let mut dealings = BTreeMap::new();
-
-    for &i in dealers {
-        let node_id = node_id(i);
-        let dealing = IDkgDealing {
-            transcript_id,
-            internal_dealing_raw: vec![],
+    dealers: &BTreeSet<NodeId>,
+) -> Vec<SignedIDkgDealing> {
+    let mut dealings = Vec::new();
+    for node_id in dealers {
+        let signed_dealing = SignedIDkgDealing {
+            content: IDkgDealing {
+                transcript_id,
+                internal_dealing_raw: format!("Dummy raw dealing for dealer {}", node_id)
+                    .into_bytes(),
+            },
+            signature: BasicSignature {
+                signature: BasicSigOf::new(BasicSig(vec![])),
+                signer: *node_id,
+            },
         };
-        dealings.insert(node_id, dealing);
+        dealings.push(signed_dealing);
     }
     dealings
 }

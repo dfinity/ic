@@ -528,47 +528,72 @@ impl IDkgTranscriptParams {
 
 /// Initial params and dealings for a set of receivers assigned to a different subnet.
 /// Only dealings intended for resharing an unmasked transcript can be included in InitialIDkgDealings.
-/// TODO: change this this to signed dealings: https://dfinity.atlassian.net/browse/CON-782.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct InitialIDkgDealings {
     params: IDkgTranscriptParams,
-    dealings: BTreeMap<NodeId, IDkgDealing>,
+    dealings: Vec<SignedIDkgDealing>,
 }
 
 impl InitialIDkgDealings {
-    /// Creates an initial set of dealings for receivers on a different subnet.
+    /// Creates an initial set of dealings for receivers on a different subnet with exactly
+    /// `params.unverified_dealings_collection_threshold()` dealings, which is the minimum number
+    /// required by the receiving subnet to complete the IDKG protocol successfully.
+    /// The initial dealings contain at most one dealing from every dealer.
     ///
     /// A `InitialIDkgDealings` can only be created if the following invariants hold:
-    /// * The `params.operation_type` is `IDkgTranscriptOperation::ReshareOfUnmasked`, otherwise the error `InitialIDkgDealingsValidationError::InvalidTranscriptOperation` is returned.
-    /// * The dealings are from nodes in `params.dealers`, otherwise the error `InitialIDkgDealingsValidationError::DealerNotAllowed` is returned.
-    /// * The dealings are for the transcript `params.transcript_id`, otherwise the error `InitialIDkgDealingsValidationError::MismatchingDealing` is returned.
-    /// * The number of dealings is greater than `params.unverified_dealings_collection_threshold`, otherwise the error `InitialIDkgDealingsValidationError::UnsatisfiedCollectionThreshold` is returned.
+    /// * The `params.operation_type` is `IDkgTranscriptOperation::ReshareOfUnmasked`, otherwise
+    ///   the error variant `InvalidTranscriptOperation` is returned.
+    /// * The dealings are from nodes in `params.dealers`, otherwise the error variant
+    ///  `DealerNotAllowed` is returned.
+    /// * The dealings are for the transcript `params.transcript_id`, otherwise the error variant
+    ///   `MismatchingDealing` is returned.
+    /// * Only one dealing is provided from each dealer, otherwise the error variant
+    ///   `MultipleDealingsFromSameDealer` is returned.
+    /// * There are at least `params.unverified_dealings_collection_threshold()` dealings from
+    ///   distinct dealers, otherwise the error variant `UnsatisfiedCollectionThreshold` is returned.
     pub fn new(
         params: IDkgTranscriptParams,
-        dealings: BTreeMap<NodeId, IDkgDealing>,
+        dealings: Vec<SignedIDkgDealing>,
     ) -> Result<Self, InitialIDkgDealingsValidationError> {
         match params.unverified_dealings_collection_threshold() {
             Some(threshold) => {
-                if dealings.len() < threshold.get() as usize {
+                let mut dealings_map = BTreeMap::new();
+                for dealing in &dealings {
+                    if params.dealer_index(dealing.dealer_id()).is_none() {
+                        return Err(InitialIDkgDealingsValidationError::DealerNotAllowed {
+                            node_id: dealing.dealer_id(),
+                        });
+                    }
+                    if dealing.idkg_dealing().transcript_id != params.transcript_id {
+                        return Err(InitialIDkgDealingsValidationError::MismatchingDealing);
+                    }
+                    if dealings_map.insert(dealing.dealer_id(), dealing).is_some() {
+                        return Err(
+                            InitialIDkgDealingsValidationError::MultipleDealingsFromSameDealer {
+                                node_id: dealing.dealer_id(),
+                            },
+                        );
+                    }
+                }
+                let min_dealings: Vec<SignedIDkgDealing> = dealings_map
+                    .into_values()
+                    .take(threshold.get() as usize)
+                    .cloned()
+                    .collect();
+
+                if min_dealings.len() < threshold.get() as usize {
                     return Err(
                         InitialIDkgDealingsValidationError::UnsatisfiedCollectionThreshold {
                             threshold: threshold.get(),
-                            dealings_count: dealings.len() as u32,
+                            dealings_count: min_dealings.len() as u32,
                         },
                     );
                 }
-                for (&dealer, dealing) in &dealings {
-                    if params.dealer_index(dealer).is_none() {
-                        return Err(InitialIDkgDealingsValidationError::DealerNotAllowed {
-                            node_id: dealer,
-                        });
-                    }
-                    if dealing.transcript_id != params.transcript_id {
-                        return Err(InitialIDkgDealingsValidationError::MismatchingDealing);
-                    }
-                }
 
-                Ok(Self { params, dealings })
+                Ok(Self {
+                    params,
+                    dealings: min_dealings,
+                })
             }
             None => Err(InitialIDkgDealingsValidationError::InvalidTranscriptOperation),
         }
@@ -577,7 +602,7 @@ impl InitialIDkgDealings {
     pub fn params(&self) -> IDkgTranscriptParams {
         self.params.clone()
     }
-    pub fn dealings(&self) -> BTreeMap<NodeId, IDkgDealing> {
+    pub fn dealings(&self) -> Vec<SignedIDkgDealing> {
         self.dealings.clone()
     }
 }

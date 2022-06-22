@@ -461,7 +461,7 @@ pub(crate) mod test_utils {
 
     pub(crate) struct TestEcdsaTranscriptBuilder {
         transcripts: Mutex<BTreeMap<IDkgTranscriptId, IDkgTranscript>>,
-        dealings: Mutex<BTreeMap<IDkgTranscriptId, BTreeMap<NodeId, IDkgDealing>>>,
+        dealings: Mutex<BTreeMap<IDkgTranscriptId, Vec<SignedIDkgDealing>>>,
     }
 
     impl TestEcdsaTranscriptBuilder {
@@ -486,7 +486,7 @@ pub(crate) mod test_utils {
         pub(crate) fn add_dealings(
             &self,
             transcript_id: IDkgTranscriptId,
-            dealings: BTreeMap<NodeId, IDkgDealing>,
+            dealings: Vec<SignedIDkgDealing>,
         ) {
             self.dealings
                 .lock()
@@ -510,7 +510,7 @@ pub(crate) mod test_utils {
         fn get_validated_dealings(
             &self,
             transcript_id: IDkgTranscriptId,
-        ) -> BTreeMap<NodeId, IDkgDealing> {
+        ) -> Vec<SignedIDkgDealing> {
             self.dealings
                 .lock()
                 .unwrap()

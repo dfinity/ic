@@ -36,6 +36,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_replicated_state::ReplicatedState;
+use ic_types::crypto::canister_threshold_sig::idkg::SignedIDkgDealing;
 use ic_types::{
     batch::ValidationContext,
     consensus::{ecdsa, ecdsa::EcdsaBlockReader, Block, BlockPayload, HasHeight},
@@ -44,11 +45,11 @@ use ic_types::{
             IDkgVerifyDealingPublicError, IDkgVerifyTranscriptError,
             ThresholdEcdsaVerifyCombinedSignatureError,
         },
-        idkg::{IDkgDealing, IDkgTranscript, IDkgTranscriptId},
+        idkg::{IDkgTranscript, IDkgTranscriptId},
         ThresholdEcdsaCombinedSignature,
     },
     registry::RegistryClientError,
-    Height, NodeId, RegistryVersion, SubnetId,
+    Height, RegistryVersion, SubnetId,
 };
 use std::collections::BTreeMap;
 
@@ -348,7 +349,7 @@ pub fn validate_data_payload(
 
 struct CachedBuilder {
     transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
-    dealings: BTreeMap<IDkgTranscriptId, BTreeMap<NodeId, IDkgDealing>>,
+    dealings: BTreeMap<IDkgTranscriptId, Vec<SignedIDkgDealing>>,
     signatures: Vec<(ecdsa::RequestId, ThresholdEcdsaCombinedSignature)>,
 }
 
@@ -357,10 +358,7 @@ impl EcdsaTranscriptBuilder for CachedBuilder {
         self.transcripts.get(&transcript_id).cloned()
     }
 
-    fn get_validated_dealings(
-        &self,
-        transcript_id: IDkgTranscriptId,
-    ) -> BTreeMap<NodeId, IDkgDealing> {
+    fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
         self.dealings
             .get(&transcript_id)
             .cloned()
@@ -426,7 +424,7 @@ fn validate_reshare_dealings(
     block_reader: &dyn EcdsaBlockReader,
     prev_payload: &ecdsa::EcdsaPayload,
     curr_payload: &ecdsa::EcdsaPayload,
-) -> Result<BTreeMap<IDkgTranscriptId, BTreeMap<NodeId, IDkgDealing>>, EcdsaValidationError> {
+) -> Result<BTreeMap<IDkgTranscriptId, Vec<SignedIDkgDealing>>, EcdsaValidationError> {
     use PermanentError::*;
     let mut new_reshare_agreement = BTreeMap::new();
     for (request, dealings) in curr_payload.xnet_reshare_agreements.iter() {
@@ -449,9 +447,9 @@ fn validate_reshare_dealings(
                     .translate(block_reader)
                     .map_err(PermanentError::from)?;
                 let dealings = dealings.dealings();
-                for (node_id, dealing) in dealings.iter() {
+                for dealing in dealings.iter() {
                     crypto
-                        .verify_dealing_public(&param, *node_id, dealing)
+                        .verify_dealing_public(&param, dealing.dealer_id(), dealing.idkg_dealing())
                         .map_err(PermanentError::from)?;
                 }
                 new_dealings.insert(transcript_id, dealings);
