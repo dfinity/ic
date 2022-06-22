@@ -2,6 +2,7 @@ pub mod balance_book;
 pub mod certification;
 pub mod convert;
 pub mod errors;
+pub mod ledger_blocks_sync;
 pub mod ledger_client;
 pub mod models;
 pub mod request;
