@@ -1,0 +1,348 @@
+= IC guest OS SELinux policy
+
+The effective SELinux policy consists of the upstream reference
+policy plus a number of local policy modules. The changes relative
+to the reference policy can be categorized into:
+
+* fixes to the reference policy: there are minor version mismatches
+between policy shipped in Ubuntu and affected software packages.
+This requires some amendments to fix a few policy oversights.
+
+* fixes specific to our build: reference policy assumes that a
+system is booted "permissive" followed by +restorecon+ to set
+up filesystem labels. Since we build a pre-labeled filesystem
+with our +file_contexts+ and a different toolchain, some context
+amendments need to be made.
+
+* configuration-specific adaptations: the way we operate our
+system (service configurations, certain file locations, use
+of boot-time created +/var+ filesystem etc.)
+has specific requirements not covered in reference policy
+
+* confinement for third-party software: we run certain
+software that is neither upstream linux nor dfinity-produced.
+In order to mitigate security risks from these, they are
+confined using the security policy.
+
+* policy for the IC software stack: policy describing and
+allowing operation of the IC software stack
+
+The architecture of the latter is described in great
+detail in the xref:ic-policy-structure[IC security policy structure] section.
+
+== Policy modules
+
+This section gives an overview of the organisation of
+security policy modules (to be found in +ic/ic-os/guestos/rootfs/prep+).
+
+=== +systemd-fixes+ and +misc-fixes+
+
+Fixes for version issues between reference policy and Ubuntu
+software packages.
+
+=== +fscontext-fixes+
+
+Our build uses +make_ext4fs+ to build the root filesystem
+instead of the more commonly assumed +restorecon + mkfs.ext4+
+combination. The tools have a slightly different interpretation
+of the +file_contexts+ relating to symbolic links as well as
+user home directories.
+
+Additionally, our system creates certain directories only at
+runtime. Upstream policy assumes that the directories exist
+before enforcement is turned on, but our system is booted
+straight into SELinux enforcement mode.
+
+=== +setup-var+
+
+The +/var+ filesystem is set up at boot, using an existing +/var+
+filesystem tree contained in the root filesystem as "template".
+This makes it necessary for the fs creation utility to read all
+labels contained in this template directory.
+
+=== +journalbeat+
+
+Policy to confine the +journalbeat+ 3rd party software.
+
+=== +node_exporter+
+
+Policy to confine the +node_exporter+ 3rd party software.
+
+=== +manageboot+
+
+This contains policy for the +manageboot+ utility (responsible
+for applying system upgrades).
+
+The architecture of all IC-related policy modules is described
+in detail in the xref:ic-policy-structure[IC security policy structure] section.
+
+=== +ic-node+
+
+This contains policy for +orchestrator+, +replica+ as well
+as +canister_sandbox+. This module should be split up into
+more focused sub-modules.
+
+The architecture of all IC-related policy modules is described
+in detail in the xref:ic-policy-structure[IC security policy structure] section.
+
+[[ic-policy-structure]]
+== IC security policy structure
+
+The policy aims to structure the system as follows:
+
+* +orchestrator+ has the following security profile:
+** talk to NNs, manage registry, use crypto
+** indiscriminately manage IC data
+** launch +replica+
+** launch +manageboot+ to apply system upgrades
+** generate +nftables+ rules file
+** update ssh keys of all user accounts
+** talk to HSM
+
+* +replica+ has the following security profile:
+** talk to NNS, manage registry, use crypto
+** indiscriminately manage IC data
+** launch canister sandbox
+** manage (inspect, kill, ...) canister sandbox processes
+** exchange data with canister sandbox, pass files to canister sandbox
+
+* +manageboot+ has the following security profile:
+** transition to root user, acquire system management capabilities
+** read upgrade images, write them to disk partitions
+** reboot the system
+
+* +canister_sandbox+ has the following security profile:
+** compile and execute webassembly code
+** exchange data with replica
+** can only use data files received from replica
+** severely restricted system interaction
+** different sandbox processes cannot interact
+
+The following sections describe how these objectives are mapped
+to the security policy:
+
+=== Security labels
+
+The security labels used by the policy are as follows:
+
+* +ic_data_t+: This label is applied to the directories +/var/lib/ic/backup+ and
++/var/lib/ic/data+ as well as the files and directories below it. It
+represents the persistently stored payload data of the IC
+(pagemaps, checkpoints, ...) as well as backup files.
+
+* +ic_crypto_store_t+: This label is applied to the directory +/var/lib/ic/crypto+
+as well as the files and directories below it.
+It represents the data managed by the crypto subsystem. At present there
+is no distinction between "private" and "public" key material, futher
+refinement is required to eventually apply more restrictive policy to
+private key material.
+
+* +ic_var_run_t+: This label is applied to the hierarchy rooted at +/run/ic-node+
+(but parts below it have more specific labels). This directory is used to
+host certain runtime-generated configuration files and also serves as an
+"exchange pad" between several services.
+
+* +ic_replica_conffile_t+: This label is applied to the directory
++/run/ic-node/config+ and files below it. The runtime-generated
++ic.json5+ will be placed in this directory (and receive same label).
+
+* +ic_nftables_ruleset_t+: This label is applied to the directory
++ic/run/ic-node/nftables-ruleset+ and files below it. The +nftable+
+rules file generated +orchestrator+ and read by the +nftables+
+tool will be placed here.
+
+* +ic_orchestrator_exec_t+: This label is applied to the orchestrator
+_binary_ file located at +/opt/ic/bin/orchestrator+. Its purpose is
+to trigger transition into the +ic_orchestrator_t+ domain when executed.
+
+* +ic_orchestrator_t+: this label is carried by the orchestrator
+_process_ when it is running. All permissions that the orchestrator
+service needs are attached to this label.
+
+* +ic_replica_exec_t+: This label is applied to the replica _binary_
+file located at +/opt/ic/bin/replica+. Its purpose is
+to trigger transition into the +ic_replica_t+ domain when executed.
+
+* +ic_replica_t+: This label is applied to the replica _process_
+when it is running. All permissions that the replica service needs
+to have are attached to this label. The +sandbox_launcher+ process will
+also be started by replica as a subprocess and run within the
++ic_replica_t+ domain. Additionally, various +memfd+
+files as well as communication sockets used in talking to sandbox
+will carry this label (this is likely subject to change in order
+to declutter the heavily overloaded role of the +ic_replica_t+
+domain).
+
+* +ic_canister_sandbox_exec_t+: This label is applied to the canister_sandbox
+_binary_ file located at +/opt/ic/bin/canister_sandbox+. Its purpose is
+to trigger transition into the +ic_canister_sandbox_t+ domain when executed.
+
+* +ic_canister_sandbox_t+: This label is applied to the canister
+sandbox _processes_ while they are running.
+
+* +ic_manageboot_exec_t+: This label is applied to the manageboot
+_binary_ file located at +/opt/ic/bin/manageboot+. Its purpose is
+to trigger transition into the +ic_manageboot_t+ domain when executed.
+
+* +ic_manageboot_t+: This label is applied to the manageboot _process_
+while it is running.
+
+* +ic_manageboot_sudo_t+: This label is intermittently applied to
+the +sudo+ process that manageboot executes in order to attain
+more privileges. Its only  use is to identify and facilitate
+back the switch to the +ic_manageboot_t+ label after the sudo
+utility has set up privileges.
+
+=== Sandboxing security objectives
+
+==== Desired system security
+
+===== Allowed sandbox operations
+
+* *execute its own binary*: must be able to run its own binary, includes capacity to load dependent shared libraries etc
+* *manage own resources*: needs memory for heap, some system scheduler interactions
+* *communication with replica*: communicate with replica through inherited unix domain socket descriptor
+* *communication with logging*: send log messages; presently goes directly to init, needs to be mux’ed by replica
+* *mmap read/write canister state files*: allow to memory map the canister state files, read and write pages, enlarge files and deallocate pages
+* *mmap read-only checkpoint files*: perform read-only mmap of checkpoint file pages
+* *dynamically generate code*: turn wasm code into native code, make it executable
+
+===== Critically disallowed sandbox operations
+
+* *interact with other sandbox processes*: per security model, a canister sandbox may neither inspect nor otherwise interfere with other canister sandbox processes
+* *control replica*: sandbox processes may not exert control over replica besides communication via permitted channels
+other system interaction
+
+===== Operations of system components on sandbox processes
+
+* *monitoring by replica*: replica wants to monitor memory usage & health of sandbox processes
+* *managing by replica*: replica wants to be able to kill sandbox processes (and later perform resource management, e.g. setting memory limits)
+* *unconfined management*: unconfined admin domain should be able to manage processes normally (get information, kill them etc.)
+* *deny unnecessary system interactions*: all other system components should also be prevented from initiating interaction with sandbox processes to protect against ill-understood side effects
+
+==== Implemented system security policy
+
+===== Allowed sandbox operations
+
+*execute own binary*:
+
+This requires access to various files in +/etc+, +/usr+, dynamic linker as well as reading its own binary code.
+These accesses are considered harmless because they only allow reading data that is statically built into the image and
+therefore do not reveal any information about the system besides what is publicly knowable anyways.
+
+_Side effects_: May read binaries and/or shared libraries on the system, may read linker state. This is harmless because the entire content of the root filesystem is publicly known. Besides, the root filesystem is read-only and integrity-protected.
+
+*Manage own resources*
+
+Allow to get own scheduler information (implicitly called by rust runtime), allow read null file (stdin is re-routed from /dev/null, need access to it).
+
+_Side effects_: getting scheduler information does not only allow to get scheduler information about _own_ process,
+but of all processes within same security domain (other sandboxes). There is no secret information in this
+(the scheduler settings are not changable anyways), but it could be "abused" to probe the pid space for
+other sandbox processes. This may allow to learn about the _existence_ of other sandbox processes and
+their pid, but does not grant any interaction capability. It is not clear whether the +getsched+ call
+is needed at all, could probably just safely be denied.
+
+Disallow certain other pointless information probing done by rust runtime (+cgroups+).
+
+*communication with replica*
+
+Allow to use inherited file descriptor
+
+_Side effects_: Formally, this allows communicating using any unix socket created by replica. However, the sandbox cannot get access to any other socket than the one voluntarily passed by replica, so replica is in full control of what socket is granted access to. So this is safe for as long as replica is trusted. For additional security, the socket could be explicitly labelled using its very own label to distinguish it from other sockets (+setsockcreateconn+). This would prevent usability of any other socket to which access was granted by accident.
+
+*communication with logging*
+
+Logging is presently performed by passthrough of stderr from parent process(es). This means that sandbox will actually directly communicate with the log collector.
+
+_Side effects_: This allows directly sending data to the log system. It bypasses replica, it may lead to confusion in log system (because sandbox can generate logs that “look” as if they originated from replica itself).
+
+*mmap read/write canister state files*
+
+These are memfd/tmpfs files prepared by replica (thus living in +ic_replica_t+ for now, but could be made more specific).
+
+_Side effects_: Formally it allows sandbox to read/write arbitrary state files set up by replica (even those of other canisters). However,
+sandbox cannot actively _open_ any of these files. It can in fact only access files through descriptors that are passed by replica. So
+replica is the ultimate arbiter on which files of this type are made accessible to each sandbox process. Additionally, this allows
+calling ftruncate on the state files. If replica has these files mmapped concurrently, then any access to a page that has been truncated
+will result in SIGBUS. This allows crashing the replica through sandbox.
+
+*mmap read-only checkpoint files*
+
+These are the checkpoint files labelled +ic_data_t+ (but could be made more specific).
+
+_Side effects_: Formally it allows sandbox to read arbitrary checkpoint files (even those of other canisters). However,
+sandbox cannot actively _open_ any of these files. It can in fact only access files through descriptors that are passed by replica. So
+replica is the ultimate arbiter on which files of this type are made accessible to each sandbox process.
+
+*dynamically generate code*
+
+Allow to flip the "executable" bit on anonymous memory pages.
+
+_Side effects_: If an attacker manages to find a sandbox escape, they can place an executable exploit payload as “data” into the canister, then mprotect(PROT_EXEC) this range, and jump into it. This simplifies getting useful exploit payloads into the system and directly executing it. The particular risk is that this allows getting all kinds of special instructions / code sequences used for further exploits into the system. Without this capability, attackers would be limited to devices that are part of compiled code already, or that can be generated through compiled wasm code. The latter normally includes critical operations such as rdtsc or clflush used in high-precision timing side channel attacks.
+
+===== Critically disallowed sandbox operations
+
+*interact with other sandbox processes*
+
+Normally, rust runtime tries to inspect process information via /proc/self. However this access would also allow to access similar information about all other sandbox processes since they are in the same security domain. While there are other mechanisms to isolate this, outright denial of /proc access also accomplishes the isolation:
+
+_Side effect_: The process will receive an EPERM return on certain accesses that do not happen under unconfined (non-sandboxed) process
+operation. The runtime ignores these errors and proceeds.
+
+*control replica*
+
+No rule allows explicitly affecting replica process, everything is implicit through communication channels and shared resources.
+other system interaction
+
+*other system interaction*
+
+Rust runtime tries to obtain system information that is not essential to sandbox activity (reading sysfs, reading only CPUs). This is harmless,
+but there is no reason why it is needed.
+
+===== Operations of system components on sandbox processes
+
+*monitoring by replica*
+
+Replica wants to read the /proc files of the canister sandbox processes to obtain memory usage and other information.
+
+_Side effects_: None, no other files in system will carry this label.
+
+*managing by replica*
+
+Replica can terminate sandbox processes.
+
+_Side effects_: None
+
+*unconfined management*
+
+Unconfined admin domain should be allowed to interact with processes normally. This includes both the “admin” user, its “sudo root” aspect as well as the init domain.
+
+*allow logging system to obtain process information*
+
+When sandbox sends logs (and they go directly to log system), journald tries to find out some information about the process
+sending it. This is helpful in logs and rather harmless, so allow it.
+
+===== Security goal violations
+
+Presently, the security policy as implemented allows some interactions that are not as desired:
+
+Allowing getsched on ic_canister_sandbox_t domain may allow to learn about “existence” of other sandbox processes (by probing pid space). No other information can be obtained through this mechanism. While this does not appear to be harmful, it should be investigated whether the underlying interaction can simply also be denied.
+Calling +ftruncate+ on the memory state files allows reducing file size. If replica has these files mapped concurrently and accesses the affected pages, it will by terminated via SIGBUS. This interaction cannot presently be prevented by policy, requires some more investigation and/or other mechanism to be put into place (e.g. not use the files in memory-mapped inside replica).
+
+*Remedies for the ftruncate problem*
+
+* different software architecture that does not require replica to mmap anymore
+** in principle it would not need to mmap, it only needs to deal with memory contents at checkpoint time. It might as well read because the data is processed only once
+* various ways to revoke “write” access before critical points in time
+* adding capability to deny “ftruncate”
+* use memfd truncate sealing support, but that also requires some architecture changes because expanding memory area requires sandbox/replica ipc
+
+Downside of memfd is (uncontrolled) default label of +ic_replica_t+ which overloads the
+meaning of this type. It would be preferred to have different labels on the memfd files
+shared with sandbox, investigation into ways to apply different label to memfd files:
+
+* not found a way to use implicit labeling with memfd, so explicit code hooks are required
+* +setfscreateconn+ has been tested and does _not_ work
+* however +fsetfileconn+ has been demonstrated working
+* no solution implemented yet, instead allow mmap of arbitrary +replica_t+ files for now
