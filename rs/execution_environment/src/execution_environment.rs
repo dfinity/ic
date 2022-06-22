@@ -809,18 +809,25 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             }
 
             Ok(Ic00Method::BitcoinGetBalance) => {
-                let res = crate::bitcoin::get_balance(payload, &mut state);
-                (Some((res, msg.take_cycles())), instructions_limit)
+                let cycles = msg.take_cycles();
+                let res = crate::bitcoin::get_balance(msg.method_payload(), &mut state, cycles);
+                (Some(res), instructions_limit)
             }
 
             Ok(Ic00Method::BitcoinGetUtxos) => {
-                let res = crate::bitcoin::get_utxos(payload, &mut state);
-                (Some((res, msg.take_cycles())), instructions_limit)
+                let cycles = msg.take_cycles();
+                let res = crate::bitcoin::get_utxos(msg.method_payload(), &mut state, cycles);
+                (Some(res), instructions_limit)
             }
 
             Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => {
-                let res = crate::bitcoin::get_current_fee_percentiles(payload, &mut state);
-                (Some((res, msg.take_cycles())), instructions_limit)
+                let cycles = msg.take_cycles();
+                let res = crate::bitcoin::get_current_fee_percentiles(
+                    msg.method_payload(),
+                    &mut state,
+                    cycles,
+                );
+                (Some(res), instructions_limit)
             }
 
             Ok(Ic00Method::BitcoinSendTransaction) | Err(ParseError::VariantNotFound) => {
