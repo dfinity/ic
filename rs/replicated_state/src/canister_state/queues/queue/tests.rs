@@ -1,9 +1,11 @@
 use super::*;
 use ic_test_utilities::types::{
+    arbitrary,
     ids::{canister_test_id, message_test_id, user_test_id},
     messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
 };
 use ic_types::{messages::RequestOrResponse, QueueIndex};
+use proptest::prelude::*;
 
 #[test]
 fn input_queue_constructor_test() {
@@ -230,30 +232,6 @@ fn output_queue_push_to_full_queue_fails() {
     );
 }
 
-/// Test that values returned from pop are increasing by 1.
-#[test]
-fn output_queue_pop_returns_incrementing_indices() {
-    // First fill up the queue.
-    let capacity: usize = 4;
-    let mut output_queue = OutputQueue::new(capacity);
-    let mut msgs_list = VecDeque::new();
-    for _ in 0..capacity {
-        let req = RequestBuilder::default().build();
-        msgs_list.push_back(RequestOrResponse::from(req.clone()));
-        output_queue.push_request(req.into()).unwrap();
-    }
-
-    for expected_index in 0..capacity {
-        let (actual_index, queue_msg) = output_queue.pop().unwrap();
-        let list_msg = msgs_list.pop_front().unwrap();
-        assert_eq!(QueueIndex::from(expected_index as u64), actual_index);
-        assert_eq!(list_msg, queue_msg);
-    }
-
-    assert_eq!(None, msgs_list.pop_front());
-    assert_eq!(None, output_queue.pop());
-}
-
 #[test]
 #[should_panic(expected = "called `Result::unwrap()` on an `Err` value")]
 fn output_push_into_reserved_slot_fails() {
@@ -273,6 +251,108 @@ fn output_queue_available_slots_is_correct() {
     output_queue.reserve_slot().unwrap();
     assert_eq!(output_queue.available_slots(), 0);
     assert!(output_queue.check_has_slot().is_err())
+}
+
+prop_compose! {
+    /// Generator for an arbitrary Option<RequestOrResponse>.
+    fn arb_request_or_response_or_none(
+    ) (rand in 0..1000,
+       rr in arbitrary::request_or_response()
+    ) -> Option<RequestOrResponse> {
+        if rand<=666 {
+            Some(rr)
+        } else {
+            None
+        }
+    }
+}
+
+prop_compose! {
+    /// Generator for an arbitrary OutputQueue.
+    fn arb_output_queue(max_slots_reserved: usize,
+                        max_messages: usize,
+    ) (excess_capacity in 0..=100_usize,
+       num_slots_reserved in 0..=max_slots_reserved,
+       rrv in prop::collection::vec(arb_request_or_response_or_none(), 0..=max_messages),
+       rr in arbitrary::request_or_response(),
+       starting_index in 0..=100_u64,
+    ) -> OutputQueue {
+        let mut queue = QueueWithReservation::<Option<RequestOrResponse>> {
+            capacity: num_slots_reserved + rrv.len() + excess_capacity,
+            num_slots_reserved,
+            queue: rrv.into_iter().collect(),
+        };
+        if !queue.queue.is_empty() {
+            queue.queue.pop_front();
+            queue.queue.push_front(Some(rr));
+        }
+        OutputQueue {
+            queue,
+            ind: QueueIndex::from(starting_index)
+        }
+    }
+}
+
+proptest! {
+    #[test]
+    /// Proptest for invariants on output queues.
+    /// Checks the invariant 'always Some at the front' and
+    /// 'indices are always increasing', as well as that the final
+    /// index has increased by the initial length of the queue when
+    /// compared to the initial index.
+    fn output_queue_invariants_hold(
+        mut q in arb_output_queue(5,10),
+    ) {
+        let initial_len = q.queue.queue.len();
+        let initial_index = q.ind;
+
+        let mut last_index = None;
+        while q.num_messages()>0 {
+            // Head is always Some(_).
+            assert!(q.queue.queue.front().unwrap().is_some());
+
+            // Indices are strictly increasing.
+            let (index, msg_ref) = q.peek().unwrap();
+            if let Some(last_index) = last_index {
+                assert!(index > last_index);
+            }
+            last_index = Some(index);
+
+            // Second peek() returns what the first peek returned.
+            assert_eq!((index, msg_ref), q.peek().unwrap());
+
+            // pop() returns what peek() returned.
+            assert_eq!((index, msg_ref.clone()), q.pop().unwrap());
+        }
+        assert_eq!((q.ind - initial_index).get(), initial_len as u64);
+    }
+
+    #[test]
+    /// Proptest for arbitrary output queues to check whether
+    /// the conversion to and from for protobuf versions works.
+    fn output_queue_roundtrip_conversions(
+        mut q in arb_output_queue(super::super::DEFAULT_QUEUE_CAPACITY/10,
+                                  super::super::DEFAULT_QUEUE_CAPACITY/10),
+    ) {
+        q.queue.capacity = super::super::DEFAULT_QUEUE_CAPACITY;
+        let proto_queue: pb_queues::InputOutputQueue = (&q).into();
+        let cmpq: OutputQueue = proto_queue.try_into().expect("bad conversion");
+
+        assert_eq!(q, cmpq);
+    }
+}
+
+#[test]
+fn output_queue_decode_with_none_head_fails() {
+    let mut q = OutputQueue::new(super::super::DEFAULT_QUEUE_CAPACITY);
+    for _ in 0..2 {
+        q.push_request(RequestBuilder::default().build().into())
+            .unwrap();
+    }
+    q.queue.queue.front_mut().unwrap().take();
+
+    let proto_queue: pb_queues::InputOutputQueue = (&q).into();
+    assert!(TryInto::<OutputQueue>::try_into(proto_queue).is_err());
 }
 
 #[test]
