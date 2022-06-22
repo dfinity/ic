@@ -36,7 +36,6 @@ ic-logger = { path = "../../../monitoring/logger" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" }
 ic-utils = { path = "../../../utils" }
-lazy_static = "1.4.0"
 openssl = "0.10.38"
 parking_lot = "0.11.1"
 prost = "0.10.4"
@@ -58,12 +57,12 @@ tokio-util = "0.6.8"
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
-hex = "0.4.2"
 ic-crypto-internal-csp-test-utils = { path = "../csp_test_utils" }
 ic-crypto-internal-csp-protobuf-generator = { path = "./protobuf_generator" }
 ic-crypto-test-utils = { path = "../../test_utils" }
 ic-test-utilities-compare-dirs = { path = "../../../test_utilities/compare_dirs" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
+lazy_static = "1.4.0"
 mockall = "0.7.2"
 proptest = "0.9.4"
 proptest-derive = "0.1.0"

@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs/crypto:__subpackages__"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+    visibility = ["//visibility:public"],
+)
+
+rust_library(
+    name = "csp_test_utils",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_internal_csp_test_utils",
+    edition = "2018",
+    deps = [
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/internal/crypto_service_provider",
+        "//rs/crypto/internal/test_vectors",
+        "//rs/monitoring/logger",
+        "//rs/types/types",
+        "//rs/types/types_test_utils",
+        "@crate_index//:mockall",
+        "@crate_index//:proptest",
+        "@crate_index//:rand_0_7_3",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+    ],
+)
