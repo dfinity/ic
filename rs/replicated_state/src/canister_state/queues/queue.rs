@@ -30,7 +30,7 @@ struct QueueWithReservation<T: std::clone::Clone> {
     num_slots_reserved: usize,
 }
 
-impl<T: std::clone::Clone + CountBytes> QueueWithReservation<T> {
+impl<T: std::clone::Clone> QueueWithReservation<T> {
     fn new(capacity: usize) -> Self {
         let queue = VecDeque::new();
 
@@ -98,7 +98,7 @@ impl<T: std::clone::Clone + CountBytes> QueueWithReservation<T> {
         self.queue.front()
     }
 
-    /// Number of actual messages in the queue.
+    /// Number of slots used in output queues.
     fn num_messages(&self) -> usize {
         self.queue.len()
     }
@@ -111,47 +111,83 @@ impl<T: std::clone::Clone + CountBytes> QueueWithReservation<T> {
     /// Calculates the sum of the given stat across all enqueued messages.
     ///
     /// Time complexity: O(num_messages).
-    fn calculate_stat_sum(&self, stat: fn(&T) -> usize) -> usize {
-        self.queue.iter().map(|msg| stat(msg)).sum::<usize>()
+    fn calculate_stat_sum(&self, stat: impl Fn(&T) -> usize) -> usize {
+        self.queue.iter().map(stat).sum::<usize>()
     }
 }
 
 impl From<&QueueWithReservation<RequestOrResponse>> for Vec<pb_queues::RequestOrResponse> {
-    fn from(item: &QueueWithReservation<RequestOrResponse>) -> Self {
-        item.queue.iter().map(|rr| rr.into()).collect()
+    fn from(q: &QueueWithReservation<RequestOrResponse>) -> Self {
+        q.queue.iter().map(|rr| rr.into()).collect()
     }
+}
+
+impl From<&QueueWithReservation<Option<RequestOrResponse>>> for Vec<pb_queues::RequestOrResponse> {
+    fn from(q: &QueueWithReservation<Option<RequestOrResponse>>) -> Self {
+        q.queue
+            .iter()
+            .map(|opt| match opt {
+                Some(rr) => rr.into(),
+                None => pb_queues::RequestOrResponse { r: None },
+            })
+            .collect()
+    }
+}
+
+/// Validates that the queue capacity is `DEFAULT_QUEUE_CAPACITY`; and that
+/// the queue (items plus reservations) is not over capacity.
+fn check_size(q: &pb_queues::InputOutputQueue) -> Result<(), ProxyDecodeError> {
+    if q.capacity != super::DEFAULT_QUEUE_CAPACITY as u64 {
+        return Err(ProxyDecodeError::Other(format!(
+            "QueueWithReservation: capacity {}, expecting {}",
+            q.capacity,
+            super::DEFAULT_QUEUE_CAPACITY
+        )));
+    }
+    if q.capacity < q.queue.len() as u64 + q.num_slots_reserved {
+        return Err(ProxyDecodeError::Other(format!(
+            "QueueWithReservation: message count ({}) + reserved slots ({}) > capacity ({})",
+            q.queue.len(),
+            q.num_slots_reserved,
+            q.capacity,
+        )));
+    }
+    Ok(())
 }
 
 impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<RequestOrResponse> {
     type Error = ProxyDecodeError;
 
-    fn try_from(item: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
-        if item.capacity != super::DEFAULT_QUEUE_CAPACITY as u64 {
-            return Err(ProxyDecodeError::Other(format!(
-                "QueueWithReservation: capacity {}, expecting {}",
-                item.capacity,
-                super::DEFAULT_QUEUE_CAPACITY
-            )));
-        }
-        if item.capacity < item.queue.len() as u64 + item.num_slots_reserved {
-            return Err(ProxyDecodeError::Other(format!(
-                "QueueWithReservation: message count ({}) + reserved slots ({}) > capacity ({})",
-                item.queue.len(),
-                item.num_slots_reserved,
-                item.capacity,
-            )));
-        }
-
-        let queue = item
-            .queue
-            .into_iter()
-            .map(|rr| rr.try_into())
-            .collect::<Result<VecDeque<_>, _>>()?;
-
+    fn try_from(q: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
+        check_size(&q)?;
         Ok(QueueWithReservation {
-            queue,
+            num_slots_reserved: q.num_slots_reserved as usize,
             capacity: super::DEFAULT_QUEUE_CAPACITY,
-            num_slots_reserved: item.num_slots_reserved as usize,
+            queue: q
+                .queue
+                .into_iter()
+                .map(|rr| rr.try_into())
+                .collect::<Result<VecDeque<_>, _>>()?,
+        })
+    }
+}
+
+impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<Option<RequestOrResponse>> {
+    type Error = ProxyDecodeError;
+
+    fn try_from(q: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
+        check_size(&q)?;
+        Ok(QueueWithReservation {
+            num_slots_reserved: q.num_slots_reserved as usize,
+            capacity: super::DEFAULT_QUEUE_CAPACITY,
+            queue: q
+                .queue
+                .into_iter()
+                .map(|rr| match rr.r {
+                    None => Ok(None),
+                    Some(_) => rr.try_into().map(Some),
+                })
+                .collect::<Result<VecDeque<_>, _>>()?,
         })
     }
 }
@@ -246,12 +282,12 @@ impl InputQueue {
 }
 
 impl From<&InputQueue> for pb_queues::InputOutputQueue {
-    fn from(item: &InputQueue) -> Self {
+    fn from(q: &InputQueue) -> Self {
         Self {
-            queue: (&item.queue).into(),
-            ind: item.ind.get(),
-            capacity: item.queue.capacity as u64,
-            num_slots_reserved: item.queue.num_slots_reserved as u64,
+            queue: (&q.queue).into(),
+            ind: q.ind.get(),
+            capacity: q.queue.capacity as u64,
+            num_slots_reserved: q.queue.num_slots_reserved as u64,
         }
     }
 }
@@ -259,10 +295,10 @@ impl From<&InputQueue> for pb_queues::InputOutputQueue {
 impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
     type Error = ProxyDecodeError;
 
-    fn try_from(item: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
+    fn try_from(q: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
         Ok(Self {
-            ind: item.ind.into(),
-            queue: item.try_into()?,
+            ind: q.ind.into(),
+            queue: q.try_into()?,
         })
     }
 }
@@ -271,9 +307,17 @@ impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
 /// on the number of messages it can store.  There is also a `QueueIndex` which
 /// can be used effectively as a sequence number for the next message popped out
 /// of the queue.
+///
+/// Uses 'Option<_>' items so that requests can be dropped from anywhere in
+/// the queue, i.e. replaced with 'None'. They will keep their place in the queue
+/// until they reach the front, where they will be discarded.
+///
+/// Additionally, an invariant is imposed such that there is always 'Some' at the
+/// front. This is ensured when a message is popped off the queue by also popping
+/// any subsequent 'None' items.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct OutputQueue {
-    queue: QueueWithReservation<RequestOrResponse>,
+    queue: QueueWithReservation<Option<RequestOrResponse>>,
     ind: QueueIndex,
 }
 
@@ -297,8 +341,8 @@ impl OutputQueue {
         &mut self,
         msg: Arc<Request>,
     ) -> Result<(), (StateError, Arc<Request>)> {
-        if let Err((err, RequestOrResponse::Request(msg))) =
-            self.queue.push(RequestOrResponse::Request(msg))
+        if let Err((err, Some(RequestOrResponse::Request(msg)))) =
+            self.queue.push(Some(RequestOrResponse::Request(msg)))
         {
             return Err((err, msg));
         }
@@ -307,7 +351,7 @@ impl OutputQueue {
 
     pub(super) fn push_response(&mut self, msg: Arc<Response>) {
         self.queue
-            .push_into_reserved_slot(RequestOrResponse::Response(msg))
+            .push_into_reserved_slot(Some(RequestOrResponse::Response(msg)))
             .unwrap();
     }
 
@@ -315,12 +359,21 @@ impl OutputQueue {
         self.queue.reserve_slot()
     }
 
+    /// Pops a message off the queue and returns it.
+    ///
+    /// Ensures there is always a 'Some' at the front.
     pub(crate) fn pop(&mut self) -> Option<(QueueIndex, RequestOrResponse)> {
         match self.queue.pop() {
             None => None,
             Some(msg) => {
-                let ret = Some((self.ind, msg));
+                let ret = Some((self.ind, msg.unwrap()));
                 self.ind.inc_assign();
+
+                while let Some(None) = self.queue.peek() {
+                    self.queue.pop();
+                    self.ind.inc_assign();
+                }
+
                 ret
             }
         }
@@ -329,10 +382,12 @@ impl OutputQueue {
     /// Returns the message that `pop` would have returned, without removing it
     /// from the queue.
     pub(crate) fn peek(&self) -> Option<(QueueIndex, &RequestOrResponse)> {
-        self.queue.peek().map(|msg| (self.ind, msg))
+        self.queue
+            .peek()
+            .map(|msg| (self.ind, msg.as_ref().unwrap()))
     }
 
-    /// Number of actual messages in the queue
+    /// Number of slots used in output queues
     pub fn num_messages(&self) -> usize {
         self.queue.num_messages()
     }
@@ -345,7 +400,7 @@ impl OutputQueue {
     /// Returns the amount of cycles contained in the queue.
     pub(super) fn cycles_in_queue(&self) -> Cycles {
         let mut total_cycles = Cycles::zero();
-        for msg in self.queue.queue.iter() {
+        for msg in self.queue.queue.iter().flatten() {
             total_cycles += msg.cycles();
         }
         total_cycles
@@ -355,6 +410,8 @@ impl OutputQueue {
     ///
     /// Time complexity: O(num_messages).
     pub(super) fn calculate_stat_sum(&self, stat: fn(&RequestOrResponse) -> usize) -> usize {
+        let stat =
+            |item: &Option<RequestOrResponse>| if let Some(item) = item { stat(item) } else { 0 };
         self.queue.calculate_stat_sum(stat)
     }
 }
@@ -368,12 +425,12 @@ impl std::iter::Iterator for OutputQueue {
 }
 
 impl From<&OutputQueue> for pb_queues::InputOutputQueue {
-    fn from(item: &OutputQueue) -> Self {
+    fn from(q: &OutputQueue) -> Self {
         Self {
-            queue: (&item.queue).into(),
-            ind: item.ind.get(),
-            capacity: item.queue.capacity as u64,
-            num_slots_reserved: item.queue.num_slots_reserved as u64,
+            queue: (&q.queue).into(),
+            ind: q.ind.get(),
+            capacity: q.queue.capacity as u64,
+            num_slots_reserved: q.queue.num_slots_reserved as u64,
         }
     }
 }
@@ -381,11 +438,13 @@ impl From<&OutputQueue> for pb_queues::InputOutputQueue {
 impl TryFrom<pb_queues::InputOutputQueue> for OutputQueue {
     type Error = ProxyDecodeError;
 
-    fn try_from(item: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
-        Ok(Self {
-            ind: item.ind.into(),
-            queue: item.try_into()?,
-        })
+    fn try_from(q: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
+        let ind: QueueIndex = q.ind.into();
+        let queue: QueueWithReservation<Option<RequestOrResponse>> = q.try_into()?;
+        match queue.peek() {
+            Some(None) => Err(ProxyDecodeError::MissingField("Front may not be None.")),
+            _ => Ok(Self { ind, queue }),
+        }
     }
 }
 
