@@ -4,7 +4,7 @@ use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_ledger_core::{
     block::BlockHeight,
-    ledger::{apply_transaction, LedgerData, LedgerTransaction},
+    ledger::{apply_transaction, LedgerAccess, LedgerData, LedgerTransaction},
     timestamp::TimeStamp,
     tokens::Tokens,
 };
@@ -18,28 +18,27 @@ thread_local! {
     static LEDGER: RefCell<Option<Ledger>> = RefCell::new(None);
 }
 
-fn with_ledger<F, R>(f: F) -> R
-where
-    F: FnOnce(&Ledger) -> R,
-{
-    LEDGER.with(|cell| {
-        f(cell
-            .borrow()
-            .as_ref()
-            .expect("ledger state not initialized"))
-    })
-}
+struct Access;
+impl LedgerAccess for Access {
+    type Ledger = Ledger;
 
-fn with_ledger_mut<F, R>(f: F) -> R
-where
-    F: FnOnce(&mut Ledger) -> R,
-{
-    LEDGER.with(|cell| {
-        f(cell
-            .borrow_mut()
-            .as_mut()
-            .expect("ledger state not initialized"))
-    })
+    fn with_ledger<R>(f: impl FnOnce(&Ledger) -> R) -> R {
+        LEDGER.with(|cell| {
+            f(cell
+                .borrow()
+                .as_ref()
+                .expect("ledger state not initialized"))
+        })
+    }
+
+    fn with_ledger_mut<R>(f: impl FnOnce(&mut Ledger) -> R) -> R {
+        LEDGER.with(|cell| {
+            f(cell
+                .borrow_mut()
+                .as_mut()
+                .expect("ledger state not initialized"))
+        })
+    }
 }
 
 #[init]
@@ -50,7 +49,7 @@ fn init(args: InitArgs) {
 
 #[pre_upgrade]
 fn pre_upgrade() {
-    with_ledger(|ledger| ciborium::ser::into_writer(ledger, StableWriter::default()))
+    Access::with_ledger(|ledger| ciborium::ser::into_writer(ledger, StableWriter::default()))
         .expect("failed to encode ledger state");
 }
 
@@ -67,25 +66,25 @@ fn post_upgrade() {
 #[query]
 #[candid_method(query)]
 fn icrc1_symbol() -> String {
-    with_ledger(|ledger| ledger.token_symbol().to_string())
+    Access::with_ledger(|ledger| ledger.token_symbol().to_string())
 }
 
 #[query]
 #[candid_method(query)]
 fn icrc1_name() -> String {
-    with_ledger(|ledger| ledger.token_name().to_string())
+    Access::with_ledger(|ledger| ledger.token_name().to_string())
 }
 
 #[query(name = "icrc1_balanceOf")]
 #[candid_method(query, rename = "icrc1_balanceOf")]
 fn icrc1_balance_of(account: Account) -> u64 {
-    with_ledger(|ledger| ledger.balances().account_balance(&account).get_e8s())
+    Access::with_ledger(|ledger| ledger.balances().account_balance(&account).get_e8s())
 }
 
 #[update]
 #[candid_method(update)]
 fn icrc1_transfer(arg: TransferArg) -> Result<BlockHeight, TransferError> {
-    with_ledger_mut(|ledger| {
+    Access::with_ledger_mut(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
         let from_account = Account {
             of: PrincipalId::from(ic_cdk::api::caller()),

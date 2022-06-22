@@ -9,7 +9,7 @@ use ic_base_types::CanisterId;
 use ic_ledger_core::{
     archive::{Archive, ArchiveOptions},
     block::{BlockType, EncodedBlock},
-    ledger::find_block_in_archive,
+    ledger::{archive_blocks, find_block_in_archive, LedgerAccess},
     timestamp::TimeStamp,
 };
 use ledger_canister::*;
@@ -185,7 +185,8 @@ async fn send(
     // Don't put anything that could ever trap after this call or people using this
     // endpoint. If something did panic the payment would appear to fail, but would
     // actually succeed on chain.
-    archive_blocks().await;
+    let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
+    archive_blocks::<Access>(max_msg_size).await;
     Ok(height)
 }
 
@@ -488,62 +489,19 @@ fn pre_upgrade() {
         .expect("failed to write ledger state to stable memory");
 }
 
-/// Upon reaching a `trigger_threshold` we will archive `num_blocks`.
-/// This really should be an action on the ledger canister, but since we don't
-/// want to hold a mutable lock on the whole ledger while we're archiving, we
-/// split this method up into the parts that require async (this function) and
-/// the parts that require a lock (Ledger::get_blocks_for_archiving).
-async fn archive_blocks() {
-    use ic_ledger_core::archive::{
-        send_blocks_to_archive, ArchivingGuard, ArchivingGuardError, FailedToArchiveBlocks,
-    };
+struct Access;
 
-    let archive_arc = {
+impl LedgerAccess for Access {
+    type Ledger = Ledger;
+
+    fn with_ledger<R>(f: impl FnOnce(&Self::Ledger) -> R) -> R {
         let ledger_guard = LEDGER.try_read().expect("Failed to get ledger read lock");
-        ledger_guard.blockchain.archive.clone()
-    };
-
-    // NOTE: this guard will prevent another logical thread to start the archiving process.
-    let _archiving_guard = match ArchivingGuard::new(Arc::clone(&archive_arc)) {
-        Ok(guard) => guard,
-        Err(ArchivingGuardError::NoArchive) => {
-            return; // Archiving not enabled
-        }
-        Err(ArchivingGuardError::AlreadyArchiving) => {
-            print("Ledger is currently archiving. Skipping archive_blocks()");
-            return;
-        }
-    };
-
-    let blocks_to_archive = {
-        let ledger_guard = LEDGER.try_read().expect("Failed to get ledger read lock");
-        let archive_guard = ledger_guard.blockchain.archive.read().unwrap();
-        let archive = archive_guard.as_ref().unwrap();
-
-        ledger_guard
-            .get_blocks_for_archiving(archive.trigger_threshold, archive.num_blocks_to_archive)
-    };
-
-    if blocks_to_archive.is_empty() {
-        return;
+        f(&*ledger_guard)
     }
 
-    let num_blocks = blocks_to_archive.len();
-    print(format!("[ledger] archiving {} blocks", num_blocks,));
-
-    let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
-    let res = send_blocks_to_archive(archive_arc, blocks_to_archive, max_msg_size).await;
-
-    let mut ledger = LEDGER.write().expect("Failed to get ledger write lock");
-    match res {
-        Ok(num_sent_blocks) => ledger.remove_archived_blocks(num_sent_blocks),
-        Err((num_sent_blocks, FailedToArchiveBlocks(err))) => {
-            ledger.remove_archived_blocks(num_sent_blocks);
-            print(format!(
-                "[ledger] Archiving failed. Archived {} out of {} blocks. Error {}",
-                num_sent_blocks, num_blocks, err
-            ));
-        }
+    fn with_ledger_mut<R>(f: impl FnOnce(&mut Self::Ledger) -> R) -> R {
+        let mut ledger = LEDGER.write().expect("Failed to get ledger write lock");
+        f(&mut *ledger)
     }
 }
 

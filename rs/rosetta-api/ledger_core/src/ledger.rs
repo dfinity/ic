@@ -37,6 +37,24 @@ pub trait LedgerTransaction: Sized {
         S: Default + BalancesStore<Self::AccountId>;
 }
 
+pub trait LedgerAccess {
+    type Ledger: LedgerData;
+
+    /// Executes a function on a ledger reference.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `f` tries to call `with_ledger` or `with_ledger_mut` recurvively.
+    fn with_ledger<R>(f: impl FnOnce(&Self::Ledger) -> R) -> R;
+
+    /// Executes a function on a mutable ledger reference.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `f` tries to call `with_ledger` or `with_ledger_mut` recurvively.
+    fn with_ledger_mut<R>(f: impl FnOnce(&mut Self::Ledger) -> R) -> R;
+}
+
 pub trait LedgerData {
     type AccountId: std::hash::Hash + Ord + Eq + Clone;
     type ArchiveWasm: ArchiveCanisterWasm;
@@ -307,4 +325,65 @@ fn select_accounts_to_trim<L: LedgerData>(ledger: &L) -> Vec<(Tokens, L::Account
     }
 
     to_trim.into_vec()
+}
+
+/// Asynchronously archives a suffix of the locally available blockchain.
+///
+/// NOTE: only one archiving task can run at each point in time.
+/// If archiving is already in process, this function returns immediately.
+pub async fn archive_blocks<LA: LedgerAccess>(max_message_size: usize) {
+    use crate::archive::{
+        send_blocks_to_archive, ArchivingGuard, ArchivingGuardError, FailedToArchiveBlocks,
+    };
+    use std::sync::Arc;
+
+    fn print<LA: LedgerAccess>(msg: &str) {
+        <<<LA as LedgerAccess>::Ledger as LedgerData>::Runtime as Runtime>::print(msg);
+    }
+
+    let archive_arc = LA::with_ledger(|ledger| ledger.blockchain().archive.clone());
+
+    // NOTE: this guard will prevent another logical thread to start the archiving process.
+    let _archiving_guard = match ArchivingGuard::new(Arc::clone(&archive_arc)) {
+        Ok(guard) => guard,
+        Err(ArchivingGuardError::NoArchive) => {
+            return; // Archiving not enabled
+        }
+        Err(ArchivingGuardError::AlreadyArchiving) => {
+            print::<LA>("[ledger] ledger is currently archiving, skipping archive_blocks()");
+            return;
+        }
+    };
+
+    let blocks_to_archive = LA::with_ledger(|ledger| {
+        let archive_guard = ledger.blockchain().archive.read().unwrap();
+        let archive = archive_guard.as_ref().unwrap();
+        ledger
+            .blockchain()
+            .get_blocks_for_archiving(archive.trigger_threshold, archive.num_blocks_to_archive)
+    });
+
+    if blocks_to_archive.is_empty() {
+        return;
+    }
+
+    let num_blocks = blocks_to_archive.len();
+    print::<LA>(&format!("[ledger] archiving {} blocks", num_blocks));
+
+    let result = send_blocks_to_archive(archive_arc, blocks_to_archive, max_message_size).await;
+
+    LA::with_ledger_mut(|ledger| match result {
+        Ok(num_sent_blocks) => ledger
+            .blockchain_mut()
+            .remove_archived_blocks(num_sent_blocks),
+        Err((num_sent_blocks, FailedToArchiveBlocks(err))) => {
+            ledger
+                .blockchain_mut()
+                .remove_archived_blocks(num_sent_blocks);
+            print::<LA>(&format!(
+                "[ledger] archived only {} out of {} blocks; error: {}",
+                num_sent_blocks, num_blocks, err
+            ));
+        }
+    });
 }
