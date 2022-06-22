@@ -1,0 +1,54 @@
+= IC guest OS SELinux build process
+
+== Build of the policy
+
+The policy consists of the _reference policy_ available in upstream
+Ubuntu plus some additionally built and loaded modules. The policy
+is put onto the target system by installing the +selinux-policy-default+
+package during the docker system build. This will implicitly
+set everything up such that the policy is activated when
+the kernel is booted using correct boot arguments
+(+security=selinux+ +selinux=1+).
+
+Additional policy modules are built using the Makefile supplied
+by the SELinux distribution (see +ic/ic-os/guestos/rootfs/prep/prep.sh+).
+The linked policy is produced by inserting the modules into
+the policy state that exists after installation of the
+baseline packages. Crucially, this step as implemented currently
+therefore needs to be done from _inside_ the target system. This
+is accomplished by running the requisite steps inside a docker
+container whose contents will become the target system.
+
+There are some filesystem / directory entry ordering issues
+affecting build determinism using the standard module build
+setup. See +ic/ic-os/guestos/rootfs/prep/prep.sh+ how this
+issue is being addressed.
+
+The result of this process is two-fold:
+
+* the built system is set up to boot using the correct policy
+
+* the built system contains a +file_contexts+ description that still needs to be applied to the filesystems
+
+== Filesystem labeling
+
+The root filesystem is set up in such a way that it contains correctly
+computed labels at boot time already (since root filesystem is made
+read only, this is actually a necessity). To accomplish this,
+the +make_ext4fs+ tool is used to build the filesystem with
+labels derived from +/etc/selinux/default/contexts/files/file_contexts+
+as per security policy for the system.
+
+For the other partitions and filesystems used, their labeling is
+managed dynamically at runtime:
+
+* the +/var+ partition is created together with the first boot
+  of the system and is wiped on upgrades. It is labeled once
+  initially on creation
+
+* +/boot/grub+, +/boot/efi+ are labeled as per their filesystem type (vfat);
+  this is then accounted for in the policy
+
+* persistent data stores are labeled per file using +restorecon+
+  on every boot -- except for the +backup+ partition where the
+  context for its entire contents is set at mount time
