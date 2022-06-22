@@ -50,7 +50,6 @@ use maplit::btreemap;
 
 use crate::types::messages::{RequestBuilder, SignedIngressBuilder};
 use crate::{crypto::mock_random_number_generator, mock_time, types::messages::IngressBuilder};
-use ic_execution_environment::execution::response::ExecutionCyclesRefund;
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
 
@@ -557,11 +556,11 @@ impl ExecutionTest {
         &mut self,
         canister_id: CanisterId,
         response: Response,
-    ) -> (ExecutionCyclesRefund, ExecutionResponse) {
+    ) -> (NumInstructions, ExecutionResponse) {
         let mut state = self.state.take().unwrap();
         let canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
-        let (execution_cycles_refund, result) = self.exec_env.execute_canister_response(
+        let result = self.exec_env.execute_canister_response(
             canister,
             Arc::new(response),
             self.instruction_limit,
@@ -578,7 +577,7 @@ impl ExecutionTest {
         );
         state.put_canister_state(result.canister);
         self.state = Some(state);
-        (execution_cycles_refund, result.response)
+        (result.num_instructions_left, result.response)
     }
 
     // A low-level helper to send subnet messages to the IC management canister.

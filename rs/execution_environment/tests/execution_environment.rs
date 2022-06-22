@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use ic_base_types::NumSeconds;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_execution_environment::{execution::response::ExecutionCyclesRefund, ExecutionResponse};
+use ic_execution_environment::ExecutionResponse;
 use ic_ic00_types::{
     self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2,
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, EmptyBlob, HttpMethod, Method,
@@ -1764,9 +1764,8 @@ fn execute_response_with_incorrect_canister_status() {
     );
 
     // Execute response when canister status is not Running.
-    let (refund_cycles, exec_result) = test.execute_response(canister_id, response);
-    assert_eq!(refund_cycles, ExecutionCyclesRefund::No);
-    assert_eq!(exec_result, ExecutionResponse::Empty);
+    let (_, result) = test.execute_response(canister_id, response);
+    assert_matches!(result, ExecutionResponse::Empty);
 }
 
 #[test]
@@ -1791,9 +1790,8 @@ fn execute_response_with_unknown_callback_id() {
     }
 
     // Execute response when callback id cannot be found.
-    let (refund_cycles, exec_result) = test.execute_response(canister_id, response);
-    assert_eq!(refund_cycles, ExecutionCyclesRefund::No);
-    assert_eq!(exec_result, ExecutionResponse::Empty);
+    let (_, result) = test.execute_response(canister_id, response);
+    assert_matches!(result, ExecutionResponse::Empty);
 }
 
 #[test]
@@ -1824,24 +1822,25 @@ fn execute_response_refunds_cycles() {
         .originator_reply_callback(CallbackId::from(1))
         .refund(Cycles::new(2) * cycles_sent)
         .build();
+    let response_payload_size = response.payload_size_bytes();
 
+    // Execute response.
+    let balance_before = test.canister_state(a_id).system_state.balance();
+    let (num_instructions_left, _) = test.execute_response(a_id, response);
+    let balance_after = test.canister_state(a_id).system_state.balance();
+
+    // The balance is equivalent to the amount of cycles before executing`execute_response`
+    // plus the unaccepted cycles (no more the cycles sent via request),
+    // the execution cost refund and the refunded transmission fee.
     // Compute the response transmission refund.
     let mgr = test.cycles_account_manager();
     let response_transmission_refund =
         mgr.xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
-    mgr.xnet_call_bytes_transmitted_fee(response.payload_size_bytes());
-
-    // Execute response.
-    let balance_before = test.canister_state(a_id).system_state.balance();
-    test.execute_response(a_id, response);
-    let balance_after = test.canister_state(a_id).system_state.balance();
-
-    // The balance is equivalent to the amount of cycles before executing`execute_response`
-    // plus the unaccepted cycles (no more the cycles sent via request)
-    // and the refunded transmission fee.
+    mgr.xnet_call_bytes_transmitted_fee(response_payload_size);
+    let execution_refund = mgr.convert_instructions_to_cycles(num_instructions_left);
     assert_eq!(
         balance_after,
-        balance_before + cycles_sent + response_transmission_refund
+        balance_before + cycles_sent + response_transmission_refund + execution_refund
     );
 }
 
@@ -1888,9 +1887,8 @@ fn execute_response_when_call_context_deleted() {
         .is_deleted());
 
     // Execute response with deleted call context.
-    let (refund_cycles, exec_result) = test.execute_response(a_id, response);
-    assert_eq!(refund_cycles, ExecutionCyclesRefund::Yes);
-    assert_eq!(exec_result, ExecutionResponse::Empty);
+    let (_, result) = test.execute_response(a_id, response);
+    assert_matches!(result, ExecutionResponse::Empty);
 }
 
 #[test]
@@ -1930,9 +1928,8 @@ fn execute_response_successfully() {
         .is_deleted(),);
 
     // Execute response returns successfully.
-    let (refund_cycles, exec_result) = test.execute_response(a_id, response);
-    assert_eq!(refund_cycles, ExecutionCyclesRefund::Yes);
-    match exec_result {
+    let (_, result) = test.execute_response(a_id, response);
+    match result {
         ExecutionResponse::Ingress((_, ingress_status)) => {
             let user_id = ingress_status.user_id().unwrap();
             assert_eq!(
@@ -1945,7 +1942,7 @@ fn execute_response_successfully() {
                 }
             );
         }
-        ExecutionResponse::Request(_) | ExecutionResponse::Empty => {
+        ExecutionResponse::Request(_) | ExecutionResponse::Paused(_) | ExecutionResponse::Empty => {
             panic!("Wrong execution result")
         }
     }
@@ -1979,9 +1976,8 @@ fn execute_response_traps() {
         .build();
 
     // Execute response returns failed status due to trap.
-    let (refund_cycles, exec_result) = test.execute_response(a_id, response);
-    assert_eq!(refund_cycles, ExecutionCyclesRefund::Yes);
-    match exec_result {
+    let (_, result) = test.execute_response(a_id, response);
+    match result {
         ExecutionResponse::Ingress((_, ingress_status)) => {
             let user_id = ingress_status.user_id().unwrap();
             assert_eq!(
@@ -1996,7 +1992,7 @@ fn execute_response_traps() {
                 }
             );
         }
-        ExecutionResponse::Request(_) | ExecutionResponse::Empty => {
+        ExecutionResponse::Request(_) | ExecutionResponse::Paused(_) | ExecutionResponse::Empty => {
             panic!("Wrong execution result.")
         }
     }
@@ -2035,9 +2031,8 @@ fn execute_response_with_trapping_cleanup() {
         .build();
 
     // Execute response returns failed status due to trap.
-    let (refund_cycles, exec_result) = test.execute_response(a_id, response);
-    assert_eq!(refund_cycles, ExecutionCyclesRefund::Yes);
-    match exec_result {
+    let (_, result) = test.execute_response(a_id, response);
+    match result {
         ExecutionResponse::Ingress((_, ingress_status)) => {
             let user_id = ingress_status.user_id().unwrap();
             let err_trapped = Box::new(HypervisorError::CalledTrap(String::new()));
@@ -2057,7 +2052,7 @@ fn execute_response_with_trapping_cleanup() {
                 }
             );
         }
-        ExecutionResponse::Request(_) | ExecutionResponse::Empty => {
+        ExecutionResponse::Request(_) | ExecutionResponse::Paused(_) | ExecutionResponse::Empty => {
             panic!("Wrong execution result.")
         }
     }
