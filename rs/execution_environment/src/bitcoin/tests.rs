@@ -1,13 +1,13 @@
 use crate::{ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor, IngressHistoryWriterImpl};
-use bitcoin::{Address, Network};
+use bitcoin::{blockdata::constants::genesis_block, Address, Network};
 use candid::Encode;
 use ic_btc_test_utils::{random_p2pkh_address, BlockBuilder, TransactionBuilder};
 use ic_btc_types::{GetUtxosResponse, OutPoint, Satoshi, Utxo, UtxosFilter};
 use ic_config::execution_environment;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    self as ic00, BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, BitcoinNetwork, Method,
-    Payload as Ic00Payload,
+    self as ic00, BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
+    BitcoinNetwork, Method, Payload as Ic00Payload,
 };
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_interfaces::{execution_environment::AvailableMemory, messages::CanisterInputMessage};
@@ -241,6 +241,7 @@ fn execute_get_current_fee_percentiles(
     exec_env: &ExecutionEnvironmentImpl,
     bitcoin_feature: &str,
     bitcoin_state: BitcoinState,
+    network: BitcoinNetwork,
     expected_payload: Payload,
 ) {
     let mut state = ReplicatedStateBuilder::new()
@@ -261,7 +262,8 @@ fn execute_get_current_fee_percentiles(
             RequestBuilder::new()
                 .sender(canister_test_id(0))
                 .receiver(ic00::IC_00)
-                .method_name(Method::BitcoinGetCurrentFees)
+                .method_name(Method::BitcoinGetCurrentFeePercentiles)
+                .method_payload(BitcoinGetCurrentFeePercentilesArgs { network }.encode())
                 .build()
                 .into(),
             InputQueueType::RemoteSubnet,
@@ -804,6 +806,7 @@ fn get_current_fee_percentiles_rejects_if_feature_not_enabled() {
             &exec_env,
             "None", // Bitcoin feature is disabled.
             BitcoinState::default(),
+            BitcoinNetwork::Testnet,
             Payload::Reject(RejectContext {
                 code: RejectCode::CanisterReject,
                 message: String::from("The bitcoin API is not enabled on this subnet."),
@@ -852,7 +855,53 @@ fn get_current_fee_percentiles_succeeds() {
             &exec_env,
             "bitcoin_testnet", // Bitcoin testnet is enabled.
             bitcoin_state,
+            BitcoinNetwork::Testnet,
             Payload::Data(Encode!(&vec![millisatoshi_per_byte; 100]).unwrap()),
+        );
+    });
+}
+
+#[test]
+fn get_current_fee_percentiles_different_network_fails() {
+    with_setup(SubnetType::Application, |exec_env, _, _, _| {
+        // Request to get_current_fee_percentiles with the network parameter set to the
+        // bitcoin mainnet while the underlying state is for the bitcoin testnet.
+        // Should be rejected.
+        let bitcoin_state = BitcoinState::from(ic_btc_canister::state::State::new(
+            0,
+            Network::Testnet,
+            genesis_block(Network::Testnet),
+        ));
+
+        execute_get_current_fee_percentiles(
+            &exec_env,
+            "bitcoin_testnet", // Bitcoin testnet is enabled.
+            bitcoin_state,
+            BitcoinNetwork::Mainnet,
+            Payload::Reject(RejectContext {
+                code: RejectCode::CanisterReject,
+                message: String::from("bitcoin_get_current_fee_percentiles failed: Received request for mainnet but the subnet supports testnet")
+            }),
+        );
+
+        // Request to get_current_fee_percentiles with the network parameter set to the
+        // bitcoin testnet while the underlying state is for the bitcoin mainnet.
+        // Should be rejected.
+        let bitcoin_state = BitcoinState::from(ic_btc_canister::state::State::new(
+            0,
+            Network::Bitcoin,
+            genesis_block(Network::Bitcoin),
+        ));
+
+        execute_get_current_fee_percentiles(
+            &exec_env,
+            "bitcoin_mainnet", // Bitcoin mainnet is enabled.
+            bitcoin_state,
+            BitcoinNetwork::Testnet,
+            Payload::Reject(RejectContext {
+                code: RejectCode::CanisterReject,
+                message: String::from("bitcoin_get_current_fee_percentiles failed: Received request for testnet but the subnet supports mainnet")
+            }),
         );
     });
 }

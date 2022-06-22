@@ -818,8 +818,8 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 (Some((res, msg.take_cycles())), instructions_limit)
             }
 
-            Ok(Ic00Method::BitcoinGetCurrentFees) => {
-                let res = crate::bitcoin::get_current_fee_percentiles(&mut state);
+            Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => {
+                let res = crate::bitcoin::get_current_fee_percentiles(payload, &mut state);
                 (Some((res, msg.take_cycles())), instructions_limit)
             }
 

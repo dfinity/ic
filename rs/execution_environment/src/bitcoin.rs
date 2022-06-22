@@ -3,8 +3,8 @@ use candid::Encode;
 use ic_btc_canister::state::State as BitcoinCanisterState;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
-    BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, BitcoinNetwork, BitcoinSendTransactionArgs,
-    Method as Ic00Method, Payload,
+    BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
+    BitcoinNetwork, BitcoinSendTransactionArgs, Method as Ic00Method, Payload,
 };
 use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_replicated_state::ReplicatedState;
@@ -70,17 +70,38 @@ pub fn get_utxos(payload: &[u8], state: &mut ReplicatedState) -> Result<Vec<u8>,
 }
 
 /// Handles a `get_current_fee_percentiles` request.
-pub fn get_current_fee_percentiles(state: &mut ReplicatedState) -> Result<Vec<u8>, UserError> {
+pub fn get_current_fee_percentiles(
+    payload: &[u8],
+    state: &mut ReplicatedState,
+) -> Result<Vec<u8>, UserError> {
     verify_feature_is_enabled(state)?;
 
-    let btc_canister_state = BitcoinCanisterState::from(state.take_bitcoin_state());
-    let response = ic_btc_canister::get_current_fee_percentiles(
-        &btc_canister_state,
-        NUMBER_OF_TRANSACTIONS_FOR_CALCULATING_FEES,
-    );
-    state.put_bitcoin_state(btc_canister_state.into());
+    match BitcoinGetCurrentFeePercentilesArgs::decode(payload) {
+        Err(err) => Err(candid_error_to_user_error(err)),
+        Ok(args) => {
+            // Verify that the request is for the expected network.
+            if args.network != state.bitcoin().network() {
+                return Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "{} failed: Received request for {} but the subnet supports {}",
+                        Ic00Method::BitcoinGetCurrentFeePercentiles,
+                        args.network,
+                        state.bitcoin().network()
+                    ),
+                ));
+            }
 
-    Ok(Encode!(&response).unwrap())
+            let btc_canister_state = BitcoinCanisterState::from(state.take_bitcoin_state());
+            let response = ic_btc_canister::get_current_fee_percentiles(
+                &btc_canister_state,
+                NUMBER_OF_TRANSACTIONS_FOR_CALCULATING_FEES,
+            );
+            state.put_bitcoin_state(btc_canister_state.into());
+
+            Ok(Encode!(&response).unwrap())
+        }
+    }
 }
 
 /// Handles a `bitcoin_send_transaction` request.

@@ -17,6 +17,16 @@ pub enum Network {
     Regtest,
 }
 
+impl std::fmt::Display for Network {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Mainnet => write!(f, "mainnet"),
+            Self::Testnet => write!(f, "testnet"),
+            Self::Regtest => write!(f, "regtest"),
+        }
+    }
+}
+
 /// A reference to a transaction output.
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq, Hash)]
 pub struct OutPoint {
@@ -64,6 +74,12 @@ pub enum GetUtxosError {
     MinConfirmationsTooLarge { given: u32, max: u32 },
     UnknownTipBlockHash { tip_block_hash: BlockHash },
     MalformedPage { err: String },
+}
+
+/// A request for getting the current fee percentiles.
+#[derive(CandidType, Debug, Deserialize, PartialEq)]
+pub struct GetCurrentFeePercentilesRequest {
+    pub network: Network,
 }
 
 impl std::fmt::Display for GetUtxosError {

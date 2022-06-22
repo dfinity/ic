@@ -341,7 +341,7 @@ impl CanisterManager {
             Ok(Ic00Method::BitcoinGetBalance)
                 | Ok(Ic00Method::BitcoinGetUtxos)
                 | Ok(Ic00Method::BitcoinSendTransaction)
-                | Ok(Ic00Method::BitcoinGetCurrentFees) => only_canisters_allowed(),
+                | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => only_canisters_allowed(),
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
             | Ok(Ic00Method::ProvisionalTopUpCanister) => {

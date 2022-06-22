@@ -44,7 +44,7 @@ pub enum Method {
     BitcoinGetBalance,
     BitcoinGetUtxos,
     BitcoinSendTransaction,
-    BitcoinGetCurrentFees,
+    BitcoinGetCurrentFeePercentiles,
 
     // These methods are added for the Mercury I release.
     // They should be removed afterwards.
@@ -950,10 +950,13 @@ impl ComputeInitialEcdsaDealingsResponse {
 
 // Export the bitcoin types.
 pub use ic_btc_types::{
-    GetBalanceRequest as BitcoinGetBalanceArgs, GetUtxosRequest as BitcoinGetUtxosArgs,
-    Network as BitcoinNetwork, SendTransactionRequest as BitcoinSendTransactionArgs,
+    GetBalanceRequest as BitcoinGetBalanceArgs,
+    GetCurrentFeePercentilesRequest as BitcoinGetCurrentFeePercentilesArgs,
+    GetUtxosRequest as BitcoinGetUtxosArgs, Network as BitcoinNetwork,
+    SendTransactionRequest as BitcoinSendTransactionArgs,
 };
 
 impl Payload<'_> for BitcoinGetBalanceArgs {}
 impl Payload<'_> for BitcoinGetUtxosArgs {}
 impl Payload<'_> for BitcoinSendTransactionArgs {}
+impl Payload<'_> for BitcoinGetCurrentFeePercentilesArgs {}
