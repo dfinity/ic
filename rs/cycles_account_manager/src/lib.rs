@@ -707,7 +707,12 @@ impl CyclesAccountManager {
         }
     }
 
-    fn convert_instructions_to_cycles(&self, num_instructions: NumInstructions) -> Cycles {
+    /// Converts `num_instructions` in `Cycles`.
+    ///
+    /// Note that this function is made public to facilitate some logistic in
+    /// tests.
+    #[doc(hidden)]
+    pub fn convert_instructions_to_cycles(&self, num_instructions: NumInstructions) -> Cycles {
         self.config.ten_update_instructions_execution_fee
             * Cycles::from(num_instructions.get() / 10)
     }

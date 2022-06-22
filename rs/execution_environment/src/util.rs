@@ -69,7 +69,7 @@ pub fn process_result(
             result.canister.push_output_response(response.into());
             None
         }
-        ExecutionResponse::Empty => None,
+        ExecutionResponse::Empty | ExecutionResponse::Paused(_) => None,
     };
     (
         result.canister,

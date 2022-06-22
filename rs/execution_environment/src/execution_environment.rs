@@ -1,4 +1,3 @@
-use crate::execution::response::ExecutionCyclesRefund;
 use crate::execution::{
     heartbeat::execute_heartbeat, nonreplicated_query::execute_non_replicated_query,
     response::execute_response,
@@ -73,10 +72,11 @@ use strum::ParseError;
 /// or `ic0.msg_reject()` System API functions.
 /// If the execution failed or did not call these System API functions,
 /// then the response is empty.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum ExecutionResponse {
     Ingress((MessageId, IngressStatus)),
     Request(Response),
+    Paused(Box<dyn PausedExecution>),
     Empty,
 }
 
@@ -870,7 +870,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
     ) -> ExecuteMessageResult {
         let req = match msg {
             CanisterInputMessage::Response(response) => {
-                let (should_refund_remaining_cycles, mut result) = self.execute_canister_response(
+                return self.execute_canister_response(
                     canister,
                     response,
                     instructions_limit,
@@ -878,16 +878,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                     network_topology,
                     subnet_available_memory,
                 );
-
-                if should_refund_remaining_cycles == ExecutionCyclesRefund::Yes {
-                    // Refund the canister with any cycles left after message execution.
-                    self.cycles_account_manager.refund_execution_cycles(
-                        &mut result.canister.system_state,
-                        result.num_instructions_left,
-                        instructions_limit,
-                    );
-                }
-                return result;
             }
             CanisterInputMessage::Request(request) => RequestOrIngress::Request(request),
             CanisterInputMessage::Ingress(ingress) => RequestOrIngress::Ingress(ingress),
@@ -1167,7 +1157,7 @@ impl ExecutionEnvironmentImpl {
         time: Time,
         network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
-    ) -> (ExecutionCyclesRefund, ExecuteMessageResult) {
+    ) -> ExecuteMessageResult {
         let execution_parameters = self.execution_parameters(
             &canister,
             instruction_limit,
