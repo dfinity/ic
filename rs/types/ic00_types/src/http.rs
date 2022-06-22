@@ -5,6 +5,7 @@ use serde::Serialize;
 /// Struct used for encoding/decoding
 /// `(http_request : (record {
 //     url : text;
+//     max_response_bytes: opt nat64;
 //     headers : vec http_header;
 //     method : variant { get };
 //     body : opt blob;
@@ -13,6 +14,7 @@ use serde::Serialize;
 #[derive(CandidType, Deserialize, Debug)]
 pub struct CanisterHttpRequestArgs {
     pub url: String,
+    pub max_response_bytes: Option<u64>,
     pub headers: Vec<HttpHeader>,
     pub body: Option<Vec<u8>>,
     pub http_method: HttpMethod,

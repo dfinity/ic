@@ -95,6 +95,7 @@ message CanisterHttpRequestContext {
     HttpMethod http_method = 8;
     uint64 time = 6;
     repeated HttpHeader headers = 7;
+    optional uint64 max_response_bytes = 9;
     
     reserved 5;
 }

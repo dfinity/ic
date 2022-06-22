@@ -397,6 +397,7 @@ mod tests {
                     .sender(CanisterId::from(1))
                     .build(),
                 url: "http://notused.com".to_string(),
+                max_response_bytes: None,
                 headers: Vec::new(),
                 body: None,
                 http_method: CanisterHttpMethod::GET,
