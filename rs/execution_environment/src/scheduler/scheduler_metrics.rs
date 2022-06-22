@@ -55,10 +55,10 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_subnet_queue: ScopedMetrics,
     pub(super) round_scheduling_duration: Histogram,
     pub(super) round_inner: ScopedMetrics,
+    pub(super) round_inner_heartbeat_overhead_duration: Histogram,
     pub(super) round_inner_iteration: ScopedMetrics,
     pub(super) round_inner_iteration_prep: Histogram,
     pub(super) round_inner_iteration_thread: ScopedMetrics,
-    pub(super) round_inner_iteration_thread_heartbeat: ScopedMetrics,
     pub(super) round_inner_iteration_thread_message: ScopedMetrics,
     pub(super) round_inner_iteration_fin: Histogram,
     pub(super) round_inner_iteration_fin_induct: Histogram,
@@ -66,7 +66,6 @@ pub(super) struct SchedulerMetrics {
     pub(super) round_finalization_stop_canisters: Histogram,
     pub(super) round_finalization_ingress: Histogram,
     pub(super) round_finalization_charge: Histogram,
-    pub(super) execution_round_failed_heartbeat_executions: IntCounter,
     pub(super) canister_heap_delta_debits: Histogram,
     pub(super) heap_delta_rate_limited_canisters_per_round: Histogram,
     pub(super) canisters_not_in_routing_table: IntGauge,
@@ -340,6 +339,11 @@ impl SchedulerMetrics {
                     metrics_registry,
                 ),
             },
+            round_inner_heartbeat_overhead_duration: duration_histogram(
+                "execution_round_inner_heartbeat_overhead_duration_seconds",
+                "The duration of iterating canisters to prepare/remove heartbeat tasks",
+                metrics_registry,
+            ),
             round_inner_iteration: ScopedMetrics {
                 duration: duration_histogram(
                     "execution_round_inner_iteration_duration_seconds",
@@ -379,26 +383,6 @@ impl SchedulerMetrics {
                     "execution_round_inner_iteration_thread_messages",
                     "The number of messages executed in a thread spawned \
                           by an iteration of an inner round",
-                    metrics_registry,
-                ),
-            },
-            round_inner_iteration_thread_heartbeat: ScopedMetrics {
-                duration: duration_histogram(
-                    "execution_round_inner_iteration_thread_heartbeat_duration_seconds",
-                    "The duration of executing a heartbeat in a thread \
-                          spawned by an iteration of an inner round",
-                    metrics_registry,
-                ),
-                instructions: instructions_histogram(
-                    "execution_round_inner_iteration_thread_heartbeat_instructions",
-                    "The number of instructions executed in a heartbeat \
-                          in a thread spawned by an iteration of an inner round",
-                    metrics_registry,
-                ),
-                messages: messages_histogram(
-                    "execution_round_inner_iteration_thread_heartbeat_messages",
-                    "The number of messages executed in a heartbeat in a \
-                          thread spawned by an iteration of an inner round",
                     metrics_registry,
                 ),
             },
@@ -455,10 +439,6 @@ impl SchedulerMetrics {
                 "The duration of charging for resources during execution \
                       round finalization in seconds.",
                 metrics_registry,
-            ),
-            execution_round_failed_heartbeat_executions: metrics_registry.int_counter(
-                "execution_round_failed_heartbeat_executions",
-                "Total number of heartbeat executions that completed in error",
             ),
             canister_heap_delta_debits: metrics_registry.histogram(
                 "scheduler_canister_heap_delta_debits",

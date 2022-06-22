@@ -265,6 +265,7 @@ mod tests {
             exports: ExportedFunctions::new(BTreeSet::new()),
             metadata: WasmMetadata::new(metadata),
             last_executed_round: ExecutionRound::from(0),
+            task_queue: Default::default(),
         };
         canister_state.execution_state = Some(execution_state);
 

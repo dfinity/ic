@@ -9,7 +9,7 @@ use ic_types::{methods::WasmMethod, ExecutionRound, NumBytes};
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::{
     collections::BTreeSet,
@@ -319,6 +319,18 @@ impl SandboxMemoryHandle {
     }
 }
 
+/// Represents a task that needs to be executed before processing canister
+/// inputs. Currently the only task is a heartbeat task.
+/// DTS will add the following tasks:
+/// - PausedExecution(..)
+/// - AbortedExecution(CanisterInputMessage)
+/// - PausedInstallCode(..)
+/// - AbortedInstallCode(CanisterInputMessage)
+#[derive(Clone, Debug)]
+pub enum ExecutionTask {
+    Heartbeat,
+}
+
 /// The part of the canister state that can be accessed during execution
 ///
 /// Note that execution state is used to track ephemeral information.
@@ -375,6 +387,10 @@ pub struct ExecutionState {
     /// Round number at which canister executed
     /// update type operation.
     pub last_executed_round: ExecutionRound,
+
+    /// Tasks to execute before processing input messages.
+    /// Currently the task queue is empty outside of execution rounds.
+    pub task_queue: VecDeque<ExecutionTask>,
 }
 
 // We have to implement it by hand as embedder_cache can not be compared for
@@ -418,6 +434,7 @@ impl ExecutionState {
             exported_globals,
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
+            task_queue: Default::default(),
         }
     }
 

@@ -2372,9 +2372,6 @@ fn can_record_metrics_single_scheduler_thread() {
             mock_time(),
             *SUBNET_AVAILABLE_MEMORY,
             network_topology,
-            HeartbeatHandling::Execute {
-                only_track_system_errors: true,
-            },
             &measurement_scope,
         );
 
@@ -3339,11 +3336,11 @@ fn heartbeat_metrics_are_recorded() {
         },
         metrics_registry: MetricsRegistry::new(),
         canister_num: 2,
-        message_num_per_canister: 1,
+        message_num_per_canister: 0,
     };
     let mut exec_env = default_exec_env_mock(
         &scheduler_test_fixture,
-        2,
+        0,
         NumInstructions::from(1),
         NumBytes::new(0),
     );
@@ -3369,7 +3366,7 @@ fn heartbeat_metrics_are_recorded() {
         });
     let exec_env = Arc::new(exec_env);
 
-    let ingress_history_writer = default_ingress_history_writer_mock(2);
+    let ingress_history_writer = default_ingress_history_writer_mock(0);
     let ingress_history_writer = Arc::new(ingress_history_writer);
     scheduler_test(
         &scheduler_test_fixture,
@@ -3400,7 +3397,7 @@ fn heartbeat_metrics_are_recorded() {
                 2,
                 scheduler
                     .metrics
-                    .round_inner_iteration_thread_heartbeat
+                    .round_inner_iteration_thread_message
                     .instructions
                     .get_sample_count(),
             );
@@ -3408,7 +3405,7 @@ fn heartbeat_metrics_are_recorded() {
                 200,
                 scheduler
                     .metrics
-                    .round_inner_iteration_thread_heartbeat
+                    .round_inner_iteration_thread_message
                     .instructions
                     .get_sample_sum() as u64,
             );
@@ -3416,7 +3413,7 @@ fn heartbeat_metrics_are_recorded() {
                 2,
                 scheduler
                     .metrics
-                    .round_inner_iteration_thread_heartbeat
+                    .round_inner_iteration_thread_message
                     .messages
                     .get_sample_count(),
             );
@@ -3424,17 +3421,10 @@ fn heartbeat_metrics_are_recorded() {
                 2,
                 scheduler
                     .metrics
-                    .round_inner_iteration_thread_heartbeat
+                    .round_inner_iteration_thread_message
                     .messages
                     .get_sample_sum() as u64,
             );
-            assert_eq!(
-                1,
-                scheduler
-                    .metrics
-                    .execution_round_failed_heartbeat_executions
-                    .get()
-            )
         },
         ingress_history_writer,
         exec_env,

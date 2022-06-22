@@ -11,7 +11,7 @@ pub mod testing {
 }
 pub use bitcoin_state::{BitcoinState, BitcoinStateError};
 pub use canister_state::{
-    execution_state::Memory,
+    execution_state::{ExecutionTask, Memory},
     num_bytes_try_from,
     system_state::{
         memory_required_to_push_request, CallContext, CallContextAction, CallContextManager,

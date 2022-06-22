@@ -6,7 +6,7 @@ mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{CanisterStatus, SystemState};
-use crate::{InputQueueType, StateError};
+use crate::{ExecutionTask, InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::messages::CanisterInputMessage;
@@ -181,6 +181,26 @@ impl CanisterState {
     /// See `SystemState::has_input` for documentation.
     pub fn has_input(&self) -> bool {
         self.system_state.has_input()
+    }
+
+    /// Returns the first task from the task queue.  
+    pub fn pop_task(&mut self) -> Option<ExecutionTask> {
+        self.execution_state
+            .as_mut()
+            .and_then(|es| es.task_queue.pop_front())
+    }
+
+    /// Returns true if the canister has a task to execute.  
+    pub fn has_task(&self) -> bool {
+        self.execution_state
+            .as_ref()
+            .map(|es| !es.task_queue.is_empty())
+            .unwrap_or(false)
+    }
+
+    /// Returns true if the canister has a task or an input message to execute.  
+    pub fn is_active(&self) -> bool {
+        self.has_task() || self.has_input()
     }
 
     /// Returns true if there is at least one message in the canister's output
