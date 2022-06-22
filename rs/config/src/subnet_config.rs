@@ -131,13 +131,6 @@ pub struct SchedulerConfig {
     /// specific information about the message is logged as a warn.
     pub max_message_duration_before_warn_in_seconds: f64,
 
-    /// Indicates whether we want to limit tracking of heartbeat errors to
-    /// system level errors. Generally this should be `false` for system subnets
-    /// because we should monitor all errors in the system subnets, but should
-    /// be `true` for other subnets because we don't want to raise alerts for
-    /// errors in user code.
-    pub only_track_system_heartbeat_errors: bool,
-
     /// Denotes how much heap delta each canister is allowed to generate per
     /// round. Canisters may go over this limit in a single round, but will
     /// then not run for several rounds until they are back under the allowed
@@ -165,7 +158,6 @@ impl SchedulerConfig {
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
-            only_track_system_heartbeat_errors: true,
             heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
             install_code_rate_limit: MAX_INSTRUCTIONS_PER_MESSAGE,
         }
@@ -185,7 +177,6 @@ impl SchedulerConfig {
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION * SYSTEM_SUBNET_FACTOR,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
-            only_track_system_heartbeat_errors: false,
             // This limit should be high enough (1000T) to effectively disable
             // rate-limiting for the system subnets.
             heap_delta_rate_limit: NumBytes::from(1_000_000_000_000_000),
@@ -209,7 +200,6 @@ impl SchedulerConfig {
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
-            only_track_system_heartbeat_errors: true,
             heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
             install_code_rate_limit: MAX_INSTRUCTIONS_PER_MESSAGE,
         }

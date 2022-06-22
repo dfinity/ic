@@ -12,6 +12,8 @@ pub(crate) struct ExecutionEnvironmentMetrics {
 
     /// Critical error for responses above the maximum allowed size.
     response_cycles_refund_error: IntCounter,
+
+    pub execution_round_failed_heartbeat_executions: IntCounter,
 }
 
 impl ExecutionEnvironmentMetrics {
@@ -29,6 +31,10 @@ impl ExecutionEnvironmentMetrics {
             ),
             response_cycles_refund_error: metrics_registry
                 .error_counter(CRITICAL_ERROR_RESPONSE_CYCLES_REFUND),
+            execution_round_failed_heartbeat_executions: metrics_registry.int_counter(
+                "execution_round_failed_heartbeat_executions",
+                "Total number of heartbeat executions that resulted in an error",
+            ),
         }
     }
 

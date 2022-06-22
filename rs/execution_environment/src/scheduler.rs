@@ -1,8 +1,8 @@
 use crate::{
     canister_manager::{uninstall_canister, InstallCodeContext},
-    execution_environment::ExecutionEnvironment,
+    execution_environment::{execute_canister, ExecuteCanisterResult, ExecutionEnvironment},
     metrics::MeasurementScope,
-    util::{self, process_responses, process_result},
+    util::{self, process_responses},
 };
 use ic_btc_canister::BitcoinCanister;
 use ic_config::flag_status::FlagStatus;
@@ -23,8 +23,8 @@ use ic_interfaces::{
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    bitcoin_state::BitcoinState, canister_state::QUEUE_INDEX_NONE, CanisterState, InputQueueType,
-    NetworkTopology, ReplicatedState,
+    bitcoin_state::BitcoinState, canister_state::QUEUE_INDEX_NONE, CanisterState, ExecutionTask,
+    InputQueueType, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
@@ -34,30 +34,17 @@ use ic_types::{
     NumBytes, NumInstructions, Randomness, SubnetId, Time,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
-use lazy_static::lazy_static;
 use num_rational::Ratio;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
     str::FromStr,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
+    sync::Arc,
 };
 
 mod scheduler_metrics;
 use scheduler_metrics::*;
-
-lazy_static! {
-    /// Track how many heartbeat errors have been encountered so that we can
-    /// restrict logging to a sample of them.
-    static ref HEARTBEAT_ERROR_COUNT: AtomicU64 = AtomicU64::new(0);
-}
-
-/// How often heartbeat errors should be logged to avoid overloading the logs.
-const LOG_ONE_HEARTBEAT_OUT_OF: u64 = 100;
 
 #[cfg(test)]
 pub(crate) mod tests;
@@ -98,28 +85,6 @@ pub(crate) struct SchedulerImpl {
     thread_pool: RefCell<scoped_threadpool::Pool>,
     rate_limiting_of_heap_delta: FlagStatus,
     rate_limiting_of_instructions: FlagStatus,
-}
-
-/// Indicates whether the heartbeat method of a canister should be run on not and
-/// how errors should be tracked.
-///
-/// An execution round consists of multiple iterations. The heartbeat should
-/// run only in the first iteration.
-/// Additionally, all errors should be tracked on system subnets, but on other
-/// subnets only system errors should be tracked.
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-enum HeartbeatHandling {
-    Execute { only_track_system_errors: bool },
-    Skip,
-}
-
-impl HeartbeatHandling {
-    pub fn should_execute_heartbeat(&self) -> bool {
-        match self {
-            Self::Execute { .. } => true,
-            Self::Skip => false,
-        }
-    }
 }
 
 /// Orders the canisters and updates their accumulated priorities according to
@@ -259,7 +224,6 @@ impl FilteredCanisters {
 fn filter_canisters(
     ordered_canister_ids: &[CanisterId],
     canisters: &BTreeMap<CanisterId, CanisterState>,
-    heartbeat_handling: HeartbeatHandling,
     heap_delta_rate_limit: NumBytes,
     rate_limiting_of_heap_delta: FlagStatus,
 ) -> (Vec<CanisterId>, BTreeSet<CanisterId>) {
@@ -275,10 +239,7 @@ fn filter_canisters(
             if !is_under_limit {
                 rate_limited_ids.insert(**canister_id);
             }
-            (canister.has_input()
-                || (heartbeat_handling.should_execute_heartbeat()
-                    && canister.exports_heartbeat_method()))
-                && is_under_limit
+            canister.is_active() && is_under_limit
         })
         .cloned()
         .collect();
@@ -363,6 +324,23 @@ impl SchedulerImpl {
         let mut total_instructions_consumed = NumInstructions::from(0);
         let mut total_heap_delta = NumBytes::from(0);
 
+        // Add `Heartbeat` tasks to be executed before input messages.
+        {
+            let _timer = self
+                .metrics
+                .round_inner_heartbeat_overhead_duration
+                .start_timer();
+            for canister in state.canisters_iter_mut() {
+                if canister.exports_heartbeat_method() {
+                    if let Some(execution_state) = canister.execution_state.as_mut() {
+                        execution_state
+                            .task_queue
+                            .push_back(ExecutionTask::Heartbeat);
+                    }
+                }
+            }
+        }
+
         // Start iteration loop
         let mut state = loop {
             let measurement_scope =
@@ -372,15 +350,6 @@ impl SchedulerImpl {
             let mut loop_config = self.config.clone();
             loop_config.max_instructions_per_round -= total_instructions_consumed;
 
-            // We execute heartbeat methods only in the first iteration.
-            let heartbeat_handling = if is_first_iteration {
-                HeartbeatHandling::Execute {
-                    only_track_system_errors: self.config.only_track_system_heartbeat_errors,
-                }
-            } else {
-                HeartbeatHandling::Skip
-            };
-
             // Record subnet available memory before taking out the canisters.
             let subnet_available_memory = self.exec_env.subnet_available_memory(&state);
             let canisters = state.take_canister_states();
@@ -388,7 +357,6 @@ impl SchedulerImpl {
             let (active_canister_ids, rate_limited_canister_ids) = filter_canisters(
                 ordered_canister_ids,
                 &canisters,
-                heartbeat_handling,
                 self.config.heap_delta_rate_limit,
                 self.rate_limiting_of_heap_delta,
             );
@@ -423,7 +391,6 @@ impl SchedulerImpl {
                 state.time(),
                 subnet_available_memory / self.config.scheduler_cores as i64,
                 Arc::new(state.metadata.network_topology.clone()),
-                heartbeat_handling,
                 &measurement_scope,
             );
 
@@ -467,6 +434,22 @@ impl SchedulerImpl {
             is_first_iteration = false;
             drop(finalization_timer);
         }; // end iteration loop.
+
+        {
+            let _timer = self
+                .metrics
+                .round_inner_heartbeat_overhead_duration
+                .start_timer();
+            // Remove all remaining `Heartbeat` tasks because they will be added
+            // again in the next round.
+            for canister in state.canisters_iter_mut() {
+                if let Some(execution_state) = canister.execution_state.as_mut() {
+                    execution_state.task_queue.retain(|task| match task {
+                        ExecutionTask::Heartbeat => false,
+                    });
+                }
+            }
+        }
 
         // We only export metrics for "executable" canisters to ensure that the metrics
         // are not polluted by canisters that haven't had any messages for a long time.
@@ -525,7 +508,6 @@ impl SchedulerImpl {
         time: Time,
         subnet_available_memory: AvailableMemory,
         network_topology: Arc<NetworkTopology>,
-        heartbeat_handling: HeartbeatHandling,
         measurement_scope: &MeasurementScope,
     ) -> (
         Vec<CanisterState>,
@@ -582,7 +564,6 @@ impl SchedulerImpl {
                         time,
                         subnet_available_memory.into(),
                         network_topology,
-                        heartbeat_handling,
                         logger,
                         rate_limiting_of_heap_delta,
                     );
@@ -1218,7 +1199,6 @@ fn execute_canisters_on_thread(
     time: Time,
     subnet_available_memory: SubnetAvailableMemory,
     network_topology: Arc<NetworkTopology>,
-    heartbeat_handling: HeartbeatHandling,
     logger: ReplicaLogger,
     rate_limiting_of_heap_delta: FlagStatus,
 ) -> ExecutionThreadResult {
@@ -1246,70 +1226,10 @@ fn execute_canisters_on_thread(
             continue;
         }
 
-        // Run heartbeat before processing the messages. Otherwise, if there are many
-        // messages, we may reach the instruction limit before running heartbeat.
-        if let HeartbeatHandling::Execute {
-            only_track_system_errors,
-        } = heartbeat_handling
-        {
-            if canister.exports_heartbeat_method() {
-                let measurement_scope = MeasurementScope::nested(
-                    &metrics.round_inner_iteration_thread_heartbeat,
-                    &measurement_scope,
-                );
-                let timer = metrics.msg_execution_duration.start_timer();
-                let (new_canister, num_instructions_left, result) = exec_env
-                    .execute_canister_heartbeat(
-                        canister,
-                        canister_execution_limits.instruction_limit_per_message,
-                        Arc::clone(&network_topology),
-                        time,
-                        subnet_available_memory.clone(),
-                    );
-                let heap_delta = match result {
-                    Ok(heap_delta) => heap_delta,
-                    Err(err) => {
-                        if only_track_system_errors || err.is_system_error() {
-                            let log_count = HEARTBEAT_ERROR_COUNT.fetch_add(1, Ordering::SeqCst);
-                            if log_count % LOG_ONE_HEARTBEAT_OUT_OF == 0 {
-                                info!(
-                                    logger,
-                                    "Error executing heartbeat on canister {} with failure `{}`",
-                                    new_canister.canister_id(),
-                                    err;
-                                    messaging.canister_id => new_canister.canister_id().to_string(),
-                                );
-                            }
-                            metrics.execution_round_failed_heartbeat_executions.inc();
-                        }
-                        NumBytes::from(0)
-                    }
-                };
-                let instructions_consumed =
-                    canister_execution_limits.instruction_limit_per_message - num_instructions_left;
-                measurement_scope.add(instructions_consumed, NumMessages::from(1));
-                observe_instructions_consumed_per_message(
-                    &logger,
-                    &metrics,
-                    &new_canister,
-                    instructions_consumed,
-                    canister_execution_limits.instruction_limit_per_message,
-                );
-                canister = new_canister;
-                total_instructions_executed += instructions_consumed;
-                total_messages_executed.inc_assign();
-                total_heap_delta += heap_delta;
-                if rate_limiting_of_heap_delta == FlagStatus::Enabled {
-                    canister.scheduler_state.heap_delta_debit += heap_delta;
-                }
-                drop(timer);
-            }
-        }
-
         // Process all messages of the canister until
-        // - either its input queue is empty.
+        // - it has not tasks and input messages to execute
         // - or the instruction limit is reached.
-        while canister.has_input() {
+        while canister.is_active() {
             if total_instructions_executed + canister_execution_limits.instruction_limit_per_message
                 > canister_execution_limits.total_instruction_limit
             {
@@ -1323,19 +1243,24 @@ fn execute_canisters_on_thread(
                 &metrics.round_inner_iteration_thread_message,
                 &measurement_scope,
             );
-            let message = canister.pop_input().unwrap();
-            let msg_info = message.to_string();
             let timer = metrics.msg_execution_duration.start_timer();
-            let result = exec_env.execute_canister_message(
+
+            let ExecuteCanisterResult {
+                canister: new_canister,
+                num_instructions_left,
+                heap_delta,
+                ingress_status,
+                description,
+            } = execute_canister(
+                exec_env,
                 canister,
                 canister_execution_limits.instruction_limit_per_message,
-                message,
-                time,
                 Arc::clone(&network_topology),
+                time,
                 subnet_available_memory.clone(),
             );
-            let (new_canister, num_instructions_left, heap_delta, ingress) = process_result(result);
-            ingress_results.extend(ingress);
+            ingress_results.extend(ingress_status);
+
             let instructions_consumed =
                 canister_execution_limits.instruction_limit_per_message - num_instructions_left;
             measurement_scope.add(instructions_consumed, NumMessages::from(1));
@@ -1361,7 +1286,7 @@ fn execute_canisters_on_thread(
                 warn!(
                     logger,
                     "Finished executing message type {:?} on canister {:?} after {:?} seconds",
-                    msg_info,
+                    description.unwrap_or_default(),
                     canister.canister_id(),
                     msg_execution_duration;
                     messaging.canister_id => canister.canister_id().to_string(),

@@ -475,6 +475,7 @@ pub fn initial_execution_state() -> ExecutionState {
         exports: ExportedFunctions::new(BTreeSet::new()),
         metadata: wasm_metadata,
         last_executed_round: ExecutionRound::from(0),
+        task_queue: Default::default(),
     }
 }
 

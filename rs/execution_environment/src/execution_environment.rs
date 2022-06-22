@@ -2,6 +2,7 @@ use crate::execution::{
     heartbeat::execute_heartbeat, nonreplicated_query::execute_non_replicated_query,
     response::execute_response,
 };
+use crate::util::process_result;
 use crate::{
     canister_manager::{
         CanisterManager, CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
@@ -42,6 +43,7 @@ use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::ExecutionTask;
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{
         EcdsaDealingsContext, SetupInitialDkgContext, SignWithEcdsaContext,
@@ -60,13 +62,26 @@ use ic_types::{
     },
     CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId, Time,
 };
+use lazy_static::lazy_static;
 #[cfg(test)]
 use mockall::automock;
 use rand::RngCore;
 use std::collections::BTreeMap;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::{convert::Into, convert::TryFrom, sync::Arc};
 use strum::ParseError;
+
+lazy_static! {
+    /// Track how many heartbeat errors have been encountered so that we can
+    /// restrict logging to a sample of them.
+    static ref HEARTBEAT_ERROR_COUNT: AtomicU64 = AtomicU64::new(0);
+}
+
+/// How often heartbeat errors should be logged to avoid overloading the logs.
+const LOG_ONE_HEARTBEAT_OUT_OF: u64 = 100;
+/// How many first heartbeat messages to log unconditionally.
+const LOG_FIRST_N_HEARTBEAT: u64 = 50;
 
 /// The response of the executed message created by the `ic0.msg_reply()`
 /// or `ic0.msg_reject()` System API functions.
@@ -923,7 +938,7 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             subnet_available_memory,
             ExecutionMode::Replicated,
         );
-        execute_heartbeat(
+        let (canister, num_instructions_left, result) = execute_heartbeat(
             canister,
             network_topology,
             execution_parameters,
@@ -932,7 +947,28 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             &self.hypervisor,
             &self.cycles_account_manager,
         )
-        .into_parts()
+        .into_parts();
+        if let Err(err) = &result {
+            // We should monitor all errors in the system subnets and only
+            // system errors on other subnets.
+            if self.hypervisor.subnet_type() == SubnetType::System || err.is_system_error() {
+                // We could improve the rate limiting using some kind of exponential backoff.
+                let log_count = HEARTBEAT_ERROR_COUNT.fetch_add(1, Ordering::SeqCst);
+                if log_count < LOG_FIRST_N_HEARTBEAT || log_count % LOG_ONE_HEARTBEAT_OUT_OF == 0 {
+                    warn!(
+                        self.log,
+                        "Error executing heartbeat on canister {} with failure `{}`",
+                        canister.canister_id(),
+                        err;
+                        messaging.canister_id => canister.canister_id().to_string(),
+                    );
+                }
+                self.metrics
+                    .execution_round_failed_heartbeat_executions
+                    .inc();
+            }
+        }
+        (canister, num_instructions_left, result)
     }
 
     fn max_canister_memory_size(&self) -> NumBytes {
@@ -1652,6 +1688,81 @@ fn get_canister_mut(
             ErrorCode::CanisterNotFound,
             format!("Canister {} not found.", &canister_id),
         )),
+    }
+}
+
+/// The result of `execute_canister()`.
+pub struct ExecuteCanisterResult {
+    pub canister: CanisterState,
+    pub num_instructions_left: NumInstructions,
+    pub heap_delta: NumBytes,
+    pub ingress_status: Option<(MessageId, IngressStatus)>,
+    // The description of the executed task or message.
+    pub description: Option<String>,
+}
+
+/// Executes either a single task from the task queue of the canister or a
+/// single input message if there is no task.
+pub fn execute_canister(
+    exec_env: &dyn ExecutionEnvironment,
+    mut canister: CanisterState,
+    instructions_limit: NumInstructions,
+    network_topology: Arc<NetworkTopology>,
+    time: Time,
+    subnet_available_memory: SubnetAvailableMemory,
+) -> ExecuteCanisterResult {
+    if !canister.is_active() {
+        return ExecuteCanisterResult {
+            canister,
+            num_instructions_left: instructions_limit,
+            heap_delta: NumBytes::from(0),
+            ingress_status: None,
+            description: None,
+        };
+    }
+    match canister.pop_task() {
+        Some(task) => match task {
+            ExecutionTask::Heartbeat => {
+                let (canister, num_instructions_left, result) = exec_env
+                    .execute_canister_heartbeat(
+                        canister,
+                        instructions_limit,
+                        network_topology,
+                        time,
+                        subnet_available_memory,
+                    );
+                let heap_delta = result.unwrap_or_else(|_| NumBytes::from(0));
+                ExecuteCanisterResult {
+                    canister,
+                    num_instructions_left,
+                    heap_delta,
+                    ingress_status: None,
+                    description: Some("heartbeat".to_string()),
+                }
+            }
+        },
+        None => {
+            let message = canister.pop_input().unwrap();
+            let msg_info = message.to_string();
+
+            let result = exec_env.execute_canister_message(
+                canister,
+                instructions_limit,
+                message,
+                time,
+                network_topology,
+                subnet_available_memory,
+            );
+            let (canister, num_instructions_left, heap_delta, ingress_status) =
+                process_result(result);
+            ExecuteCanisterResult {
+                canister,
+                num_instructions_left,
+                heap_delta,
+                ingress_status,
+                description: Some(msg_info),
+            }
+        }
     }
 }
 
