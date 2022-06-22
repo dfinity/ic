@@ -16,11 +16,24 @@ use std::{fmt::Debug, sync::Arc};
 /// Therefore, Transport hides these semantics from the components above it
 /// (which are called 'Transport clients').
 pub trait Transport: Send + Sync {
-    /// Register the given Transport client, providing an event handler with the
-    /// corresponding implementation of the required callbacks for Transport to
-    /// call the client on events.
-    /// Note that a Transport client is another component (e.g., p2p). It should
-    /// not be confused with the notion of a client in a client-server communication.
+    /// Sets an event handler object that is called when a new message is received.
+    /// It is important to call this method before `start_connections`, otherwise,
+    /// a panic may occur due to the missing `event_handler`.
+    ///
+    /// Alternatives considered:
+    ///     1. Event handler instance per connection instead per Transport object.
+    ///        Having different event handlers per connection/peer implies peers are not equal.
+    ///     2. Use a pull model for delivering message to the Transport `client`.
+    ///        In this context the Transport `client` is the service/library that consumes the
+    ///        received messages.
+    ///        One way to implement this is to return channel receiver(s) when a connection
+    ///        is established. Then the client can pull the receiver(s) to consume messages.
+    ///        Using a pull model gives us less flexibility:
+    ///             a) can't have custom logic like filtering, load shedding, queueing,
+    ///                rate-limitting, etc. before messages are deliver to the client
+    ///             b) complicated concurrent processing, because messages are fanned in into
+    ///                a single channel that the client uses to receive them
+    ///                (channel receivers require exclusive access to receive a message)
     fn set_event_handler(&self, event_handler: Arc<dyn AsyncTransportEventHandler>);
 
     /// Mark the peer as valid neighbor, and set up the transport layer to
