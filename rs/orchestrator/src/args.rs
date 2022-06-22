@@ -54,6 +54,11 @@ pub struct OrchestratorArgs {
     /// Print the DC ID where the current replica is located.
     #[clap(long)]
     pub dc_id: bool,
+
+    /// The path to directory that is dedicated to data specific to the orchstrator.
+    /// If not provided, the relevant data are not persisted to the disk.
+    #[clap(long, parse(from_os_str))]
+    pub(crate) orchestrator_data_directory: Option<PathBuf>,
 }
 
 impl OrchestratorArgs {
