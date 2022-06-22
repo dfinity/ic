@@ -5,7 +5,7 @@ use ic_protobuf::bitcoin::v1;
 use ic_replicated_state::page_map::PersistenceError;
 use ic_replicated_state::{
     bitcoin_state::{
-        AdapterQueues, BitcoinState as ReplicatedBitcoinState, UnstableBlocks,
+        AdapterQueues, BitcoinState as ReplicatedBitcoinState, FeePercentilesCache, UnstableBlocks,
         UtxoSet as ReplicatedUtxoSet,
     },
     page_map::PageMap,
@@ -28,6 +28,9 @@ pub struct State {
 
     // Queues used to communicate with the adapter.
     pub adapter_queues: AdapterQueues,
+
+    // Cache for the current fee percentiles.
+    pub fee_percentiles_cache: Option<FeePercentilesCache>,
 }
 
 impl State {
@@ -42,6 +45,7 @@ impl State {
             utxos: UtxoSet::new(network),
             unstable_blocks: UnstableBlocks::new(stability_threshold, genesis_block),
             adapter_queues: AdapterQueues::default(),
+            fee_percentiles_cache: None,
         }
     }
 
@@ -95,6 +99,7 @@ impl State {
             ),
             unstable_blocks: UnstableBlocks::try_from(proto_state.unstable_blocks.unwrap())
                 .unwrap(),
+            fee_percentiles_cache: None,
         })
     }
 }
@@ -130,6 +135,7 @@ impl From<ReplicatedBitcoinState> for State {
                     0,
                 ),
             },
+            fee_percentiles_cache: state.fee_percentiles_cache,
         }
     }
 }
@@ -167,6 +173,7 @@ impl From<State> for ReplicatedBitcoinState {
                     .into_page_map(),
                 network: state.utxos.network,
             },
+            fee_percentiles_cache: state.fee_percentiles_cache,
         }
     }
 }

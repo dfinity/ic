@@ -1,6 +1,6 @@
 use crate::page_map::PageMap;
-use bitcoin::{blockdata::constants::genesis_block, Block, Network, OutPoint, TxOut};
-use ic_btc_types::Network as BitcoinNetwork;
+use bitcoin::{blockdata::constants::genesis_block, Block, BlockHash, Network, OutPoint, TxOut};
+use ic_btc_types::{MillisatoshiPerByte, Network as BitcoinNetwork};
 use ic_btc_types_internal::{
     BitcoinAdapterRequest, BitcoinAdapterRequestWrapper, BitcoinAdapterResponse,
 };
@@ -223,6 +223,7 @@ pub struct BitcoinState {
     pub utxo_set: UtxoSet,
     pub unstable_blocks: UnstableBlocks,
     pub stable_height: u32,
+    pub fee_percentiles_cache: Option<FeePercentilesCache>,
 }
 
 impl Default for BitcoinState {
@@ -245,6 +246,7 @@ impl BitcoinState {
                 }),
             ),
             stable_height: 0,
+            fee_percentiles_cache: None,
         }
     }
 
@@ -255,6 +257,7 @@ impl BitcoinState {
             utxo_set: UtxoSet::new(network),
             unstable_blocks: UnstableBlocks::default(),
             stable_height: 0,
+            fee_percentiles_cache: None,
         }
     }
 
@@ -391,6 +394,15 @@ impl TryFrom<pb_bitcoin::UnstableBlocks> for UnstableBlocks {
             )?)?,
         })
     }
+}
+
+/// Cache for storing last calculated fee percentiles
+///
+/// Stores last tip block hash and fee percentiles associated with it.
+#[derive(Default, Clone, Debug, PartialEq)]
+pub struct FeePercentilesCache {
+    pub tip_block_hash: BlockHash,
+    pub fee_percentiles: Vec<MillisatoshiPerByte>,
 }
 
 #[cfg(test)]
