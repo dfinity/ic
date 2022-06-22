@@ -217,9 +217,6 @@ pub struct NodeConfiguration {
     /// The principal id of the node operator that operates this node.
     pub node_operator_principal_id: Option<PrincipalId>,
 
-    /// Disables the setup of iDKG keys for the nodes of the network
-    pub no_idkg_key: bool,
-
     /// If set, the specified secret key store will be used. Ohterwise, a new
     /// one will be created when initializing the internet computer.
     ///
@@ -391,7 +388,6 @@ impl NodeConfiguration {
         use prost::Message;
         let node_id = sks.node_id;
         let node_pks = NodePublicKeys::decode(sks.node_pks.as_slice()).unwrap();
-        let no_idkg_key = self.no_idkg_key;
         Ok(InitializedNode {
             node_id,
             pk_committee_signing: node_pks.committee_signing_pk.unwrap(),
@@ -400,12 +396,7 @@ impl NodeConfiguration {
             node_path: PathBuf::from(node_path.as_ref()),
             node_config: self,
             dkg_dealing_encryption_pubkey: node_pks.dkg_dealing_encryption_pk.unwrap(),
-            // TODO(NNS1-1197): Re-enable when nodes are provisioned for threshold ECDSA subnets
-            idkg_mega_encryption_pubkey: if no_idkg_key {
-                None
-            } else {
-                node_pks.idkg_dealing_encryption_pk
-            },
+            idkg_mega_encryption_pubkey: node_pks.idkg_dealing_encryption_pk,
         })
     }
 }
@@ -473,7 +464,6 @@ mod node_configuration {
             p2p_num_flows: 2,
             p2p_start_flow_tag: 12,
             node_operator_principal_id: None,
-            no_idkg_key: false,
             secret_key_store: None,
         };
 
