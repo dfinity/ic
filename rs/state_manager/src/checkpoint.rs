@@ -605,6 +605,7 @@ fn load_bitcoin_state<P: ReadPolicy>(
             utxos_large: bitcoin_state_bits.utxos_large,
             address_outpoints,
         },
+        fee_percentiles_cache: None,
     })
 }
 

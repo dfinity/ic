@@ -12,6 +12,9 @@ use ic_types::Cycles;
 
 // A number of last transactions in a block chain to calculate fee percentiles.
 // Assumed to be ~10'000 transactions to cover the last ~4-10 blocks.
+//
+// Note: number of transactions is supposed to be constant, because `get_current_fee_percentiles` cache
+// does not support `number_of_transactions` multiple values.
 const NUMBER_OF_TRANSACTIONS_FOR_CALCULATING_FEES: u32 = 10_000;
 
 const GET_BALANCE_FEE: Cycles = Cycles::new(100_000_000);
@@ -114,9 +117,10 @@ pub fn get_current_fee_percentiles(
                     // Verify that the request is for the expected network.
                     verify_network(args.network, state.bitcoin().network())?;
 
-                    let btc_canister_state = BitcoinCanisterState::from(state.take_bitcoin_state());
+                    let mut btc_canister_state =
+                        BitcoinCanisterState::from(state.take_bitcoin_state());
                     let response = ic_btc_canister::get_current_fee_percentiles(
-                        &btc_canister_state,
+                        &mut btc_canister_state,
                         NUMBER_OF_TRANSACTIONS_FOR_CALCULATING_FEES,
                     );
                     state.put_bitcoin_state(btc_canister_state.into());

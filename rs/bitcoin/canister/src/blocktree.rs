@@ -44,6 +44,16 @@ impl<'a> BlockChain<'a> {
         self.first
     }
 
+    pub fn tip(&self) -> &'a Block {
+        match self.successors.last() {
+            None => {
+                // The chain consists of only one block, and that is the tip.
+                self.first
+            }
+            Some(tip) => tip,
+        }
+    }
+
     /// Consumes this `BlockChain` and returns the entire chain of blocks.
     pub fn into_chain(self) -> Vec<&'a Block> {
         let mut chain = vec![self.first];

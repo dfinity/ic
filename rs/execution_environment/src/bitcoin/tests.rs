@@ -900,3 +900,228 @@ fn get_current_fee_percentiles_different_network_fails() {
         );
     });
 }
+
+#[test]
+fn get_current_fee_percentiles_cache() {
+    with_setup(SubnetType::Application, |exec_env, _, _, _| {
+        let initial_balance: Satoshi = 1_000;
+        let pay: Satoshi = 1;
+        let fee_0: Satoshi = 2;
+        let change_0 = initial_balance - pay - fee_0;
+        let payment = Cycles::new(150_000_000);
+        let refund = Cycles::new(50_000_000); // 150M - 100M in fees = refund of 50M
+
+        // Build ReplicatedState with a fake transaction that includes a fee.
+        // Create 2 blocks with 2 transactions:
+        // - genesis block receives initial balance on address_1
+        // - the next block sends a payment to address_2 with a fee, a change is returned to address_1.
+        let btc_network = BitcoinNetwork::Testnet;
+        let network = Network::Testnet;
+        let address_1 = random_p2pkh_address(network);
+        let address_2 = random_p2pkh_address(network);
+        // Coinbase transaction (no fee): address_1 receives initial amount.
+        let coinbase_tx = TransactionBuilder::coinbase()
+            .with_output(&address_1, initial_balance)
+            .build();
+        let block_0 = BlockBuilder::genesis()
+            .with_transaction(coinbase_tx.clone())
+            .build();
+        // Transaction sends payment from address_1 to address_2 and return fee to address_1.
+        let tx_0 = TransactionBuilder::new()
+            .with_input(bitcoin::OutPoint::new(coinbase_tx.txid(), 0))
+            .with_output(&address_1, change_0)
+            .with_output(&address_2, pay)
+            .build();
+        let block_1 = BlockBuilder::with_prev_header(block_0.header)
+            .with_transaction(tx_0.clone())
+            .build();
+        // Insert blocks into the state.
+        // TODO: debug why it does not work with stability_threshold == 0.
+        let mut btc_canister_state = ic_btc_canister::state::State::new(1_000, network, block_0);
+        ic_btc_canister::store::insert_block(&mut btc_canister_state, block_1.clone()).unwrap();
+
+        // Build a replicated state.
+        let mut state = ReplicatedStateBuilder::new()
+            .with_subnet_id(subnet_test_id(1))
+            .with_canister(
+                CanisterStateBuilder::new()
+                    .with_canister_id(canister_test_id(0))
+                    .build(),
+            )
+            .with_subnet_features(SubnetFeatures::from_str("bitcoin_testnet").unwrap())
+            .with_bitcoin_state(BitcoinState::from(btc_canister_state))
+            .build();
+
+        // Check fee percentiles cache is empty before executing the request.
+        let bitcoin_state = state.take_bitcoin_state();
+        assert!(bitcoin_state.fee_percentiles_cache.is_none());
+        state.put_bitcoin_state(bitcoin_state);
+
+        // Execute request to calculate current fee percentiles.
+        state
+            .subnet_queues_mut()
+            .push_input(
+                QUEUE_INDEX_NONE,
+                RequestBuilder::new()
+                    .sender(canister_test_id(0))
+                    .receiver(ic00::IC_00)
+                    .method_name(Method::BitcoinGetCurrentFeePercentiles)
+                    .method_payload(
+                        BitcoinGetCurrentFeePercentilesArgs {
+                            network: btc_network,
+                        }
+                        .encode(),
+                    )
+                    .payment(payment)
+                    .build()
+                    .into(),
+                InputQueueType::RemoteSubnet,
+            )
+            .unwrap();
+        let mut state = exec_env
+            .execute_subnet_message(
+                state.subnet_queues_mut().pop_input().unwrap(),
+                state,
+                MAX_NUM_INSTRUCTIONS,
+                &mut mock_random_number_generator(),
+                &BTreeMap::new(),
+                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                &test_registry_settings(),
+            )
+            .0;
+
+        // Check values in the cache match the response payload.
+        let millisatoshi_per_byte_0 = (1_000 * fee_0) / (tx_0.size() as u64);
+        let expected_values_0 = vec![millisatoshi_per_byte_0; 100];
+        let expected_payload_0 = Payload::Data(Encode!(&expected_values_0).unwrap());
+        let subnet_id = subnet_test_id(1);
+        assert_eq!(
+            state
+                .subnet_queues_mut()
+                .pop_canister_output(&canister_test_id(0))
+                .unwrap()
+                .1,
+            ResponseBuilder::new()
+                .originator(canister_test_id(0))
+                .respondent(CanisterId::new(subnet_id.get()).unwrap())
+                .response_payload(expected_payload_0)
+                .refund(refund)
+                .build()
+                .into()
+        );
+
+        // Check fee percentiles cache is NOT empty.
+        let bitcoin_state = state.take_bitcoin_state();
+        let cache = &bitcoin_state.fee_percentiles_cache;
+        assert!(cache.is_some());
+        let cache = cache.as_ref().unwrap();
+        assert_eq!(cache.tip_block_hash, block_1.block_hash());
+        assert_eq!(cache.fee_percentiles, expected_values_0);
+        state.put_bitcoin_state(bitcoin_state);
+
+        // Make another request without any changes (same bitcoin main chain).
+        state
+            .subnet_queues_mut()
+            .push_input(
+                QUEUE_INDEX_NONE,
+                RequestBuilder::new()
+                    .sender(canister_test_id(0))
+                    .receiver(ic00::IC_00)
+                    .method_name(Method::BitcoinGetCurrentFeePercentiles)
+                    .method_payload(
+                        BitcoinGetCurrentFeePercentilesArgs {
+                            network: btc_network,
+                        }
+                        .encode(),
+                    )
+                    .payment(payment)
+                    .build()
+                    .into(),
+                InputQueueType::RemoteSubnet,
+            )
+            .unwrap();
+        let mut state = exec_env
+            .execute_subnet_message(
+                state.subnet_queues_mut().pop_input().unwrap(),
+                state,
+                MAX_NUM_INSTRUCTIONS,
+                &mut mock_random_number_generator(),
+                &BTreeMap::new(),
+                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                &test_registry_settings(),
+            )
+            .0;
+
+        // Check fee percentiles cache DID NOT change.
+        let bitcoin_state = state.take_bitcoin_state();
+        let cache = &bitcoin_state.fee_percentiles_cache;
+        assert!(cache.is_some());
+        let cache = cache.as_ref().unwrap();
+        assert_eq!(cache.tip_block_hash, block_1.block_hash());
+        assert_eq!(cache.fee_percentiles, expected_values_0);
+        state.put_bitcoin_state(bitcoin_state);
+
+        // Add another transaction to bitcoin main chain with a different fee to ensure fees cache changed.
+        let fee_1 = 2 * fee_0; // Fee is different from the previous one.
+        let change_1 = change_0 - pay - fee_1;
+        let tx_1 = TransactionBuilder::new()
+            .with_input(bitcoin::OutPoint::new(tx_0.txid(), 0))
+            .with_output(&address_1, change_1)
+            .with_output(&address_2, pay)
+            .build();
+        let block_2 = BlockBuilder::with_prev_header(block_1.header)
+            .with_transaction(tx_1.clone())
+            .build();
+        let mut btc_canister_state =
+            ic_btc_canister::state::State::from(state.take_bitcoin_state());
+        ic_btc_canister::store::insert_block(&mut btc_canister_state, block_2.clone()).unwrap();
+        state.put_bitcoin_state(btc_canister_state.into());
+
+        // Make request to get current fees.
+        state
+            .subnet_queues_mut()
+            .push_input(
+                QUEUE_INDEX_NONE,
+                RequestBuilder::new()
+                    .sender(canister_test_id(0))
+                    .receiver(ic00::IC_00)
+                    .method_name(Method::BitcoinGetCurrentFeePercentiles)
+                    .method_payload(
+                        BitcoinGetCurrentFeePercentilesArgs {
+                            network: btc_network,
+                        }
+                        .encode(),
+                    )
+                    .payment(payment)
+                    .build()
+                    .into(),
+                InputQueueType::RemoteSubnet,
+            )
+            .unwrap();
+        let mut state = exec_env
+            .execute_subnet_message(
+                state.subnet_queues_mut().pop_input().unwrap(),
+                state,
+                MAX_NUM_INSTRUCTIONS,
+                &mut mock_random_number_generator(),
+                &BTreeMap::new(),
+                MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+                &test_registry_settings(),
+            )
+            .0;
+
+        // Check fee percentiles cache DID change and consist of two different fee values.
+        let millisatoshi_per_byte_1 = (1_000 * fee_1) / (tx_1.size() as u64);
+        let mut expected_values_1 = Vec::new();
+        expected_values_1.extend_from_slice(&vec![millisatoshi_per_byte_0; 50]);
+        expected_values_1.extend_from_slice(&vec![millisatoshi_per_byte_1; 50]);
+
+        let bitcoin_state = state.take_bitcoin_state();
+        let cache = &bitcoin_state.fee_percentiles_cache;
+        assert!(cache.is_some());
+        let cache = cache.as_ref().unwrap();
+        assert_eq!(cache.tip_block_hash, block_2.block_hash());
+        assert_eq!(cache.fee_percentiles, expected_values_1);
+        state.put_bitcoin_state(bitcoin_state);
+    });
+}

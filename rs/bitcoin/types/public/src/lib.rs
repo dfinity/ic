@@ -6,6 +6,7 @@ use serde_bytes::ByteBuf;
 
 pub type Address = String;
 pub type Satoshi = u64;
+pub type MillisatoshiPerByte = u64;
 pub type BlockHash = Vec<u8>;
 pub type Height = u32;
 pub type Page = ByteBuf;
