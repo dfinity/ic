@@ -352,6 +352,7 @@ pub mod test {
                 let request = CanisterHttpRequestContext {
                     request: ic_test_utilities::types::messages::RequestBuilder::new().build(),
                     url: "".to_string(),
+                    max_response_bytes: None,
                     headers: vec![],
                     body: None,
                     http_method: CanisterHttpMethod::GET,
@@ -486,6 +487,7 @@ pub mod test {
                 let request = CanisterHttpRequestContext {
                     request: ic_test_utilities::types::messages::RequestBuilder::new().build(),
                     url: "".to_string(),
+                    max_response_bytes: None,
                     headers: vec![],
                     body: None,
                     http_method: CanisterHttpMethod::GET,

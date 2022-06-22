@@ -1430,6 +1430,7 @@ fn execute_canister_http_request() {
     let transform_method_name = Some("transform".to_string());
     let args = CanisterHttpRequestArgs {
         url: url.clone(),
+        max_response_bytes: None,
         headers: Vec::new(),
         body: None,
         http_method: HttpMethod::GET,
@@ -1474,6 +1475,7 @@ fn execute_canister_http_request_disabled() {
     let transform_method_name = Some("transform".to_string());
     let args = CanisterHttpRequestArgs {
         url,
+        max_response_bytes: None,
         headers: Vec::new(),
         body: None,
         http_method: HttpMethod::GET,

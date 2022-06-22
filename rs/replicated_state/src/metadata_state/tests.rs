@@ -238,6 +238,7 @@ fn subnet_call_contexts_deserialization() {
             .receiver(canister_test_id(2))
             .build(),
         url: url.clone(),
+        max_response_bytes: None,
         headers: Vec::new(),
         body: None,
         http_method: CanisterHttpMethod::GET,

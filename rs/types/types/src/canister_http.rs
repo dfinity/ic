@@ -17,13 +17,16 @@
 //! [`CanisterHttpResponseProof`]. Together with the content, this artifact forms the [`CanisterHttpResponseWithConsensus`],
 //! which is the artifact we can include into the block to prove consensus on the response.
 
+use crate::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
 use crate::{
     crypto::{CryptoHashOf, Signed},
     messages::{CallbackId, RejectContext, Request},
     signature::*,
     CanisterId, CountBytes, RegistryVersion, Time,
 };
-use ic_error_types::RejectCode;
+use ic_base_types::NumBytes;
+use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::system_metadata::v1 as pb_metadata,
@@ -40,6 +43,7 @@ pub type CanisterHttpRequestId = CallbackId;
 pub struct CanisterHttpRequestContext {
     pub request: Request,
     pub url: String,
+    pub max_response_bytes: Option<NumBytes>,
     pub headers: Vec<CanisterHttpHeader>,
     pub body: Option<Vec<u8>>,
     pub http_method: CanisterHttpMethod,
@@ -52,6 +56,9 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
         pb_metadata::CanisterHttpRequestContext {
             request: Some((&context.request).into()),
             url: context.url.clone(),
+            max_response_bytes: context
+                .max_response_bytes
+                .map(|max_response_bytes| max_response_bytes.get()),
             headers: context
                 .headers
                 .clone()
@@ -80,6 +87,7 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
         Ok(CanisterHttpRequestContext {
             request,
             url: context.url,
+            max_response_bytes: context.max_response_bytes.map(NumBytes::from),
             headers: context
                 .headers
                 .into_iter()
@@ -101,6 +109,80 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
             transform_method_name: context.transform_method_name.map(From::from),
             time: Time::from_nanos_since_unix_epoch(context.time),
         })
+    }
+}
+
+impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestContext {
+    type Error = CanisterHttpRequestContextError;
+
+    fn try_from(input: (Time, &Request, CanisterHttpRequestArgs)) -> Result<Self, Self::Error> {
+        let (time, request, args) = input;
+
+        let max_response_bytes = match args.max_response_bytes {
+            Some(max_response_bytes) => {
+                if max_response_bytes > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 {
+                    Err(CanisterHttpRequestContextError::MaxResponseBytes(
+                        InvalidMaxResponseBytes {
+                            min: 0,
+                            max: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+                            given: max_response_bytes,
+                        },
+                    ))
+                } else {
+                    Ok(Some(NumBytes::from(max_response_bytes)))
+                }
+            }
+            None => Ok(None),
+        }?;
+
+        Ok(CanisterHttpRequestContext {
+            request: request.clone(),
+            url: args.url,
+            max_response_bytes,
+            headers: args
+                .headers
+                .clone()
+                .into_iter()
+                .map(|h| CanisterHttpHeader {
+                    name: h.name,
+                    value: h.value,
+                })
+                .collect(),
+            body: args.body,
+            http_method: match args.http_method {
+                HttpMethod::GET => CanisterHttpMethod::GET,
+            },
+            transform_method_name: args.transform_method_name,
+            time,
+        })
+    }
+}
+
+/// The error that occurs when an end-user specifies an invalid
+/// [`max_response_bytes`].
+pub struct InvalidMaxResponseBytes {
+    min: u64,
+    max: u64,
+    given: u64,
+}
+
+/// Errors that can occur when converting from (time, request, [`CanisterHttpRequestArgs`]) to
+/// an [`CanisterHttpRequestContext`].
+pub enum CanisterHttpRequestContextError {
+    MaxResponseBytes(InvalidMaxResponseBytes),
+}
+
+impl From<CanisterHttpRequestContextError> for UserError {
+    fn from(err: CanisterHttpRequestContextError) -> Self {
+        match err {
+            CanisterHttpRequestContextError::MaxResponseBytes(err) => UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "max_response_bytes expected to be in the range [{}..{}], got {}",
+                    err.min, err.max, err.given
+                ),
+            ),
+        }
     }
 }
 

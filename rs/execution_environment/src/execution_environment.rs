@@ -25,10 +25,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs, CanisterStatusType,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
-    ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, HttpMethod, InstallCodeArgs,
-    Method as Ic00Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs,
-    UpdateSettingsArgs, IC_00,
+    ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallCodeArgs, Method as Ic00Method,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_interfaces::execution_environment::{
     AvailableMemory, CanisterOutOfCyclesError, RegistryExecutionSettings,
@@ -52,7 +51,7 @@ use ic_replicated_state::{
 };
 use ic_types::messages::MessageId;
 use ic_types::{
-    canister_http::{CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequestContext},
+    canister_http::CanisterHttpRequestContext,
     crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey},
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -567,31 +566,23 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                 Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
                                 instructions_limit,
                             ),
-                            Ok(args) => {
-                                state
-                                    .metadata
-                                    .subnet_call_context_manager
-                                    .push_http_request(CanisterHttpRequestContext {
-                                        request: (**request).clone(),
-                                        url: args.url,
-                                        headers: args
-                                            .headers
-                                            .clone()
-                                            .into_iter()
-                                            .map(|h| CanisterHttpHeader {
-                                                name: h.name,
-                                                value: h.value,
-                                            })
-                                            .collect(),
-                                        body: args.body,
-                                        http_method: match args.http_method {
-                                            HttpMethod::GET => CanisterHttpMethod::GET,
-                                        },
-                                        transform_method_name: args.transform_method_name,
-                                        time: state.time(),
-                                    });
-                                (None, instructions_limit)
-                            }
+                            Ok(args) => match CanisterHttpRequestContext::try_from((
+                                state.time(),
+                                request.as_ref(),
+                                args,
+                            )) {
+                                Err(err) => (
+                                    Some((Err(err.into()), msg.take_cycles())),
+                                    instructions_limit,
+                                ),
+                                Ok(canister_http_request_context) => {
+                                    state
+                                        .metadata
+                                        .subnet_call_context_manager
+                                        .push_http_request(canister_http_request_context);
+                                    (None, instructions_limit)
+                                }
+                            },
                         }
                     }
                     RequestOrIngress::Ingress(_) => {

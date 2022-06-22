@@ -117,6 +117,8 @@ pub struct CanisterHttpRequestContext {
     pub time: u64,
     #[prost(message, repeated, tag="7")]
     pub headers: ::prost::alloc::vec::Vec<HttpHeader>,
+    #[prost(uint64, optional, tag="9")]
+    pub max_response_bytes: ::core::option::Option<u64>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpRequestContextTree {
