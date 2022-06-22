@@ -40,6 +40,7 @@ use ic_types::crypto::{
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoResult, IndividualMultiSig,
     IndividualMultiSigOf, ThresholdSigShare, ThresholdSigShareOf, UserPublicKey,
 };
+use ic_types::signature::BasicSignature;
 use ic_types::*;
 use ic_types::{NodeId, RegistryVersion};
 use rand::{rngs::StdRng, RngCore, SeedableRng};
@@ -317,14 +318,21 @@ pub fn dummy_sig_inputs_for_tests(caller: PrincipalId) -> ThresholdEcdsaSigInput
 pub fn mock_dealings(
     transcript_id: IDkgTranscriptId,
     dealers: &BTreeSet<NodeId>,
-) -> BTreeMap<NodeId, IDkgDealing> {
-    let mut dealings = BTreeMap::new();
+) -> Vec<SignedIDkgDealing> {
+    let mut dealings = Vec::new();
     for node_id in dealers {
-        let dealing = IDkgDealing {
-            transcript_id,
-            internal_dealing_raw: format!("Dummy raw dealing for dealer {}", node_id).into_bytes(),
+        let signed_dealing = SignedIDkgDealing {
+            content: IDkgDealing {
+                transcript_id,
+                internal_dealing_raw: format!("Dummy raw dealing for dealer {}", node_id)
+                    .into_bytes(),
+            },
+            signature: BasicSignature {
+                signature: BasicSigOf::new(BasicSig(vec![])),
+                signer: *node_id,
+            },
         };
-        dealings.insert(*node_id, dealing);
+        dealings.push(signed_dealing);
     }
     dealings
 }

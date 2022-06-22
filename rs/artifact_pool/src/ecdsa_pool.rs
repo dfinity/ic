@@ -25,8 +25,6 @@ use ic_types::consensus::ecdsa::{
 };
 use ic_types::consensus::BlockPayload;
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
-use ic_types::crypto::{BasicSig, BasicSigOf};
-use ic_types::signature::BasicSignature;
 
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -253,26 +251,15 @@ impl EcdsaPoolImpl {
         let initial_dealings = initial_dealings.as_ref().unwrap();
 
         let mut change_set = Vec::new();
-        for (dealer_id, dealing) in initial_dealings.dealings().iter() {
+        for signed_dealing in initial_dealings.dealings().iter() {
             info!(
                 self.log,
                 "add_initial_dealings(): dealer: {:?}, transcript_id = {:?}",
-                dealer_id,
-                dealing.transcript_id,
+                signed_dealing.dealer_id(),
+                signed_dealing.idkg_dealing().transcript_id,
             );
-            let signed_dealing = SignedIDkgDealing {
-                // Fake the basic signature. This should be fine as we
-                // are adding to the validated pool, which happens after
-                // the signature validation. The signature won't be validated
-                // again.
-                signature: BasicSignature {
-                    signature: BasicSigOf::new(BasicSig(vec![])),
-                    signer: *dealer_id,
-                },
-                content: dealing.clone(),
-            };
             change_set.push(EcdsaChangeAction::AddToValidated(
-                EcdsaMessage::EcdsaSignedDealing(signed_dealing),
+                EcdsaMessage::EcdsaSignedDealing(signed_dealing.clone()),
             ));
         }
         self.apply_changes(change_set);

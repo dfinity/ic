@@ -208,13 +208,6 @@ message IDkgDealing {
   bytes raw_dealing = 2;   // serialised InternalRawDealing
 }
 
-// TODO: to be removed after initial dealings are migrated to use
-// signed dealings.
-message IDkgDealingTuple {
-  types.v1.NodeId dealer = 1;
-  IDkgDealing dealing = 2;
-}
-
 message IDkgSignedDealingTuple {
   types.v1.NodeId dealer = 1;
   IDkgDealing dealing = 2;

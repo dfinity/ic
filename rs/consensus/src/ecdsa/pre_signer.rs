@@ -993,10 +993,7 @@ pub(crate) trait EcdsaTranscriptBuilder {
 
     /// Returns the validated dealings for the given transcript Id from
     /// the ECDSA pool
-    fn get_validated_dealings(
-        &self,
-        transcript_id: IDkgTranscriptId,
-    ) -> BTreeMap<NodeId, IDkgDealing>;
+    fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing>;
 }
 
 pub(crate) struct EcdsaTranscriptBuilderImpl<'a> {
@@ -1195,12 +1192,12 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
     }
 
     /// Helper to get the validated dealings.
-    fn validated_dealings(&self, transcript_id: IDkgTranscriptId) -> BTreeMap<NodeId, IDkgDealing> {
-        let mut ret = BTreeMap::new();
+    fn validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
+        let mut ret = Vec::new();
         for (_, signed_dealing) in self.ecdsa_pool.validated().signed_dealings() {
             let dealing = signed_dealing.idkg_dealing();
             if dealing.transcript_id == transcript_id {
-                ret.insert(signed_dealing.dealer_id(), dealing.clone());
+                ret.push(signed_dealing.clone());
             }
         }
         ret
@@ -1221,10 +1218,7 @@ impl<'a> EcdsaTranscriptBuilder for EcdsaTranscriptBuilderImpl<'a> {
         )
     }
 
-    fn get_validated_dealings(
-        &self,
-        transcript_id: IDkgTranscriptId,
-    ) -> BTreeMap<NodeId, IDkgDealing> {
+    fn get_validated_dealings(&self, transcript_id: IDkgTranscriptId) -> Vec<SignedIDkgDealing> {
         timed_call(
             "get_validated_dealings",
             || self.validated_dealings(transcript_id),

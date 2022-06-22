@@ -16,7 +16,6 @@ use ic_base_types::{
 use ic_protobuf::registry::subnet::v1::DealerTuple as DealerTupleProto;
 use ic_protobuf::registry::subnet::v1::ExtendedDerivationPath as ExtendedDerivationPathProto;
 use ic_protobuf::registry::subnet::v1::IDkgDealing as IDkgDealingProto;
-use ic_protobuf::registry::subnet::v1::IDkgDealingTuple as IDkgDealingTupleProto;
 use ic_protobuf::registry::subnet::v1::IDkgSignedDealingTuple as IDkgSignedDealingTupleProto;
 use ic_protobuf::registry::subnet::v1::IDkgTranscript as IDkgTranscriptProto;
 use ic_protobuf::registry::subnet::v1::IDkgTranscriptId as IDkgTranscriptIdProto;
@@ -65,15 +64,7 @@ impl From<&InitialIDkgDealings> for InitialIDkgDealingsProto {
         let signed_dealings = initial_dealings
             .dealings()
             .iter()
-            .map(|(dealer_id, idkg_dealing)| {
-                // TODO: change to use signed dealings.
-                let unsigned_proto = idkg_dealing_tuple_proto(dealer_id, idkg_dealing);
-                IDkgSignedDealingTupleProto {
-                    dealer: unsigned_proto.dealer,
-                    dealing: unsigned_proto.dealing,
-                    signature: vec![], // Dummy signature
-                }
-            })
+            .map(|signed_dealing| signed_idkg_dealing_tuple_proto(signed_dealing))
             .collect();
         InitialIDkgDealingsProto {
             version: CURRENT_INITIAL_IDKG_DEALINGS_VERSION,
@@ -93,7 +84,7 @@ impl TryFrom<&InitialIDkgDealingsProto> for InitialIDkgDealings {
             },
         )?;
         let params = idkg_transcript_params_struct(params_proto)?;
-        let dealings = initial_dealings_map(&proto.signed_dealings)?;
+        let dealings = initial_dealings_vec(&proto.signed_dealings)?;
         InitialIDkgDealings::new(params, dealings)
     }
 }
@@ -386,20 +377,6 @@ fn idkg_transcript_struct(
     })
 }
 
-fn idkg_dealing_tuple_proto(
-    dealer_id: &NodeId,
-    idkg_dealing: &IDkgDealing,
-) -> IDkgDealingTupleProto {
-    let dealing = IDkgDealingProto {
-        transcript_id: Some(idkg_transcript_id_proto(&idkg_dealing.transcript_id)),
-        raw_dealing: idkg_dealing.internal_dealing_raw.clone(),
-    };
-    IDkgDealingTupleProto {
-        dealer: Some(node_id_into_protobuf(*dealer_id)),
-        dealing: Some(dealing),
-    }
-}
-
 fn signed_idkg_dealing_tuple_proto(
     signed_dealing: &SignedIDkgDealing,
 ) -> IDkgSignedDealingTupleProto {
@@ -431,28 +408,6 @@ fn verified_idkg_dealing_proto(
             &signed_dealing.signed_dealing,
         )),
     }
-}
-
-fn idkg_dealing_struct(
-    maybe_proto: &Option<IDkgDealingTupleProto>,
-) -> Result<IDkgDealing, InitialIDkgDealingsValidationError> {
-    let proto =
-        maybe_proto
-            .as_ref()
-            .ok_or(InitialIDkgDealingsValidationError::DeserializationError {
-                error: "Missing IDkgDealingTuple.".to_string(),
-            })?;
-    let dealing_proto =
-        proto
-            .dealing
-            .as_ref()
-            .ok_or(InitialIDkgDealingsValidationError::DeserializationError {
-                error: "Missing IDkgDealing.".to_string(),
-            })?;
-    Ok(IDkgDealing {
-        transcript_id: idkg_transcript_id_struct(&dealing_proto.transcript_id)?,
-        internal_dealing_raw: dealing_proto.raw_dealing.clone(),
-    })
 }
 
 fn signed_idkg_dealing_struct(
@@ -508,19 +463,13 @@ fn verified_dealings_map(
     Ok(result)
 }
 
-fn initial_dealings_map(
+fn initial_dealings_vec(
     dealing_tuple_protos: &[IDkgSignedDealingTupleProto],
-) -> Result<BTreeMap<NodeId, IDkgDealing>, InitialIDkgDealingsValidationError> {
-    let mut result = BTreeMap::new();
+) -> Result<Vec<SignedIDkgDealing>, InitialIDkgDealingsValidationError> {
+    let mut result = Vec::new();
     for proto in dealing_tuple_protos.iter() {
-        // TODO: change to use signed dealings.
-        let unsigned_proto = IDkgDealingTupleProto {
-            dealer: proto.dealer.clone(),
-            dealing: proto.dealing.clone(),
-        };
-        let dealer_id = node_id_struct(&proto.dealer)?;
-        let dealing = idkg_dealing_struct(&Some(unsigned_proto))?;
-        result.insert(dealer_id, dealing);
+        let signed_dealing = signed_idkg_dealing_struct(&Some(proto.clone()))?;
+        result.push(signed_dealing);
     }
     Ok(result)
 }
