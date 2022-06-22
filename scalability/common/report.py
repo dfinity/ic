@@ -1,4 +1,6 @@
 import json
+import sys
+from statistics import mean
 
 from common.misc import mean_or_minus_one
 from termcolor import colored
@@ -63,6 +65,22 @@ class EvaluatedSummaries:
             self.num_success,
             self.num_fail,
         )
+
+    def get_latencies(self):
+        if self.num_success > 0:
+            t_median = mean(self.t_median)
+            t_average = max(self.t_average)
+            t_max = max(self.t_max)
+            t_min = max(self.t_min)
+            p99 = self.percentiles[99]
+        else:
+            t_median = sys.float_info.max
+            t_average = sys.float_info.max
+            t_max = sys.float_info.max
+            t_min = sys.float_info.max
+            p99 = sys.float_info.max
+
+        return (t_median, t_average, t_max, t_min, p99)
 
     def get_success_rate_histograms(self):
         # Aggregate historgram of successful requests
