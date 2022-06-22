@@ -145,6 +145,21 @@ system-tests-pre-master:
   variables:
     SUITE_NAME: "pre_master"
 
+create-subnet-pre-master:
+  extends: .system-tests
+  variables:
+    SUITE_NAME: "create_subnet_pre_master"
+
+boundary-nodes-pre-master:
+  extends: .system-tests
+  variables:
+    SUITE_NAME: "boundary_nodes_pre_master"
+
+tecdsa-pre-master:
+  extends: .system-tests
+  variables:
+    SUITE_NAME: "tecdsa_pre_master"
+
 rosetta-pre-master:
   extends: .system-tests
   variables:

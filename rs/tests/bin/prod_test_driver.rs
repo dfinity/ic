@@ -199,6 +199,63 @@ fn get_test_suites() -> HashMap<String, Suite> {
     let mut m = HashMap::new();
 
     m.add_suite(suite(
+        "create_subnet_pre_master",
+        vec![pot(
+            "create_subnet",
+            nns_tests::create_subnet::config(),
+            par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
+        )],
+    ));
+
+    m.add_suite(suite(
+        "boundary_nodes_pre_master",
+        vec![pot_with_setup(
+            "boundary_nodes_pot",
+            boundary_nodes_integration::boundary_nodes::config,
+            par(vec![
+                sys_t(
+                    "boundary_nodes_test",
+                    boundary_nodes_integration::boundary_nodes::test,
+                ),
+                sys_t(
+                    "boundary_nodes_nginx_test",
+                    boundary_nodes_integration::boundary_nodes::nginx_test,
+                ),
+            ]),
+        )],
+    ));
+
+    m.add_suite(suite(
+        "tecdsa_pre_master",
+        vec![
+            pot(
+                "tecdsa_add_nodes_pot",
+                tecdsa::tecdsa_add_nodes_test::config(),
+                par(vec![t(
+                    "test_tecdsa_add_nodes",
+                    tecdsa::tecdsa_add_nodes_test::test,
+                )]),
+            ),
+            pot(
+                "tecdsa_remove_nodes_pot",
+                tecdsa::tecdsa_remove_nodes_test::config(),
+                par(vec![t(
+                    "test_tecdsa_remove_nodes",
+                    tecdsa::tecdsa_remove_nodes_test::test,
+                )]),
+            ),
+            pot_with_setup(
+                "tecdsa_signature_life_cycle",
+                tecdsa::tecdsa_signature_test::config_without_ecdsa_on_nns,
+                seq(vec![t(
+                    "test_threshold_ecdsa_life_cycle",
+                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_life_cycle,
+                )]),
+            ),
+        ],
+    ));
+
+    m.add_suite(suite(
         "pre_master",
         vec![
             pot_with_setup(
@@ -233,6 +290,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     sys_t("basic_http", http_from_canister::basic_http::test),
                 ]),
             ),*/
+            /*
             pot_with_setup(
                 "boundary_nodes_pot",
                 boundary_nodes_integration::boundary_nodes::config,
@@ -247,6 +305,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     ),
                 ]),
             ),
+             */
             pot(
                 "firewall_pot",
                 networking::firewall::config(),
@@ -260,11 +319,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 networking::firewall_priority::config(),
                 par(vec![t("firewall_priority", networking::firewall_priority::override_firewall_rules_with_priority)]),
             ),
+            /*
             pot(
                 "create_subnet",
                 nns_tests::create_subnet::config(),
                 par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
             ),
+             */
             execution::upgraded_pots::general_execution_pot(),
             execution::upgraded_pots::cycles_restrictions_pot(),
             execution::upgraded_pots::inter_canister_queries(),
@@ -429,6 +490,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     ),
                 ]),
             ),
+            /*
             pot(
                 "tecdsa_add_nodes_pot",
                 tecdsa::tecdsa_add_nodes_test::config(),
@@ -485,6 +547,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_nns_without_cycles,
                 )])
             ),
+             */
         ],
     ));
 
@@ -623,6 +686,38 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "nns_backup_test",
                         orchestrator::nns_backup::test,
                     )]),
+                ),
+                pot_with_setup(
+                    "tecdsa_signature_same_subnet_pot",
+                    tecdsa::tecdsa_signature_test::config,
+                    seq(vec![t(
+                        "test_threshold_ecdsa_signature_same_subnet",
+                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_same_subnet,
+                    )])
+                ),
+                pot_with_setup(
+                    "tecdsa_signature_from_other_subnet_pot",
+                    tecdsa::tecdsa_signature_test::config,
+                    seq(vec![t(
+                        "test_threshold_ecdsa_signature_from_other_subnet",
+                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_other_subnet,
+                    )])
+                ),
+                pot_with_setup(
+                    "tecdsa_signature_fails_without_cycles_pot",
+                    tecdsa::tecdsa_signature_test::config,
+                    seq(vec![t(
+                        "test_threshold_ecdsa_signature_fails_without_cycles",
+                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_fails_without_cycles,
+                    )])
+                ),
+                pot_with_setup(
+                    "tecdsa_signature_from_nns_without_cycles_pot",
+                    tecdsa::tecdsa_signature_test::config,
+                    seq(vec![t(
+                        "test_threshold_ecdsa_signature_from_nns_without_cycles",
+                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_nns_without_cycles,
+                    )])
                 ),
             ],
         )
