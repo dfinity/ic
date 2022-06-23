@@ -4,7 +4,7 @@ use http::StatusCode;
 use hyper::{client::HttpConnector, Client};
 use ic_canister_http_adapter::{AdapterServer, Config};
 use ic_canister_http_service::{
-    canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest, HttpHeader,
+    canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest, HttpMethod,
 };
 use ic_logger::replica_logger::no_op_logger;
 use std::convert::TryFrom;
@@ -37,10 +37,74 @@ async fn test_canister_http_server() {
     // Spawn grpc server and return client.
     let mut client = spawn_grpc_server(server_config);
 
-    let request = tonic::Request::new(build_http_canister_request(format!(
-        "{}/hello",
-        &mock_server.uri()
-    )));
+    let request = tonic::Request::new(CanisterHttpSendRequest {
+        url: format!("{}/hello", &mock_server.uri()),
+        headers: Vec::new(),
+        method: HttpMethod::Get as i32,
+        body: "hello".to_string().as_bytes().to_vec(),
+    });
+    let response = client.canister_http_send(request).await;
+    assert!(response.is_ok());
+    assert_eq!(
+        response.unwrap().into_inner().status,
+        StatusCode::OK.as_u16() as u32
+    );
+}
+
+#[tokio::test]
+async fn test_canister_http_server_post() {
+    // Setup local mock server.
+    let mock_server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/hello"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&mock_server)
+        .await;
+
+    let server_config = Config {
+        ..Default::default()
+    };
+    // Spawn grpc server and return client.
+    let mut client = spawn_grpc_server(server_config);
+
+    let request = tonic::Request::new(CanisterHttpSendRequest {
+        url: format!("{}/hello", &mock_server.uri()),
+        headers: Vec::new(),
+        method: HttpMethod::Post as i32,
+        body: "hello".to_string().as_bytes().to_vec(),
+    });
+
+    let response = client.canister_http_send(request).await;
+    assert!(response.is_ok());
+    assert_eq!(
+        response.unwrap().into_inner().status,
+        StatusCode::OK.as_u16() as u32
+    );
+}
+
+#[tokio::test]
+async fn test_canister_http_server_head() {
+    // Setup local mock server.
+    let mock_server = MockServer::start().await;
+    Mock::given(method("HEAD"))
+        .and(path("/hello"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&mock_server)
+        .await;
+
+    let server_config = Config {
+        ..Default::default()
+    };
+    // Spawn grpc server and return client.
+    let mut client = spawn_grpc_server(server_config);
+
+    let request = tonic::Request::new(CanisterHttpSendRequest {
+        url: format!("{}/hello", &mock_server.uri()),
+        headers: Vec::new(),
+        method: HttpMethod::Head as i32,
+        body: "hello".to_string().as_bytes().to_vec(),
+    });
+
     let response = client.canister_http_send(request).await;
     assert!(response.is_ok());
     assert_eq!(
@@ -65,10 +129,12 @@ async fn test_response_limit() {
         .await;
 
     let mut client = spawn_grpc_server(server_config);
-    let request = tonic::Request::new(build_http_canister_request(format!(
-        "{}/hello",
-        &mock_server.uri()
-    )));
+    let request = tonic::Request::new(CanisterHttpSendRequest {
+        url: format!("{}/hello", &mock_server.uri()),
+        headers: Vec::new(),
+        method: HttpMethod::Get as i32,
+        body: "hello".to_string().as_bytes().to_vec(),
+    });
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
     assert_eq!(
@@ -100,10 +166,12 @@ async fn test_request_timeout() {
         ..Default::default()
     };
     let mut client = spawn_grpc_server(server_config);
-    let request = tonic::Request::new(build_http_canister_request(format!(
-        "{}/hello",
-        &mock_server.uri()
-    )));
+    let request = tonic::Request::new(CanisterHttpSendRequest {
+        url: format!("{}/hello", &mock_server.uri()),
+        headers: Vec::new(),
+        method: HttpMethod::Get as i32,
+        body: "hello".to_string().as_bytes().to_vec(),
+    });
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
     assert_eq!(
@@ -128,9 +196,12 @@ async fn test_connect_timeout() {
     let mut client = spawn_grpc_server(server_config);
 
     // Non routable address that causes a connect timeout.
-    let request = tonic::Request::new(build_http_canister_request(
-        "http://10.255.255.1".to_string(),
-    ));
+    let request = tonic::Request::new(CanisterHttpSendRequest {
+        url: "http://10.255.255.1".to_string(),
+        headers: Vec::new(),
+        method: HttpMethod::Head as i32,
+        body: "hello".to_string().as_bytes().to_vec(),
+    });
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
     assert_eq!(
@@ -163,10 +234,12 @@ async fn test_nonascii_header() {
     };
     let mut client = spawn_grpc_server(server_config);
 
-    let request = tonic::Request::new(build_http_canister_request(format!(
-        "{}/hello",
-        &mock_server.uri()
-    )));
+    let request = tonic::Request::new(CanisterHttpSendRequest {
+        url: format!("{}/hello", &mock_server.uri()),
+        headers: Vec::new(),
+        method: HttpMethod::Get as i32,
+        body: "hello".to_string().as_bytes().to_vec(),
+    });
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
 }
@@ -179,7 +252,12 @@ async fn test_missing_protocol() {
     };
     let mut client = spawn_grpc_server(server_config);
 
-    let request = tonic::Request::new(build_http_canister_request("127.0.0.1".to_string()));
+    let request = tonic::Request::new(CanisterHttpSendRequest {
+        url: "127.0.0.1".to_string(),
+        headers: Vec::new(),
+        method: HttpMethod::Get as i32,
+        body: "hello".to_string().as_bytes().to_vec(),
+    });
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
 }
@@ -195,7 +273,12 @@ async fn test_bad_socks() {
     // Spawn grpc server and return client.
     let mut client = spawn_grpc_server(server_config);
 
-    let request = tonic::Request::new(build_http_canister_request("https://127.0.0.1".to_string()));
+    let request = tonic::Request::new(CanisterHttpSendRequest {
+        url: "https://127.0.0.1".to_string(),
+        headers: Vec::new(),
+        method: HttpMethod::Get as i32,
+        body: "hello".to_string().as_bytes().to_vec(),
+    });
 
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
@@ -222,10 +305,12 @@ async fn test_socks() {
         spawn_socks5_server("127.0.0.1:8088".to_string()).await;
     });
 
-    let request = tonic::Request::new(build_http_canister_request(format!(
-        "{}/hello",
-        &mock_server.uri()
-    )));
+    let request = tonic::Request::new(CanisterHttpSendRequest {
+        url: format!("{}/hello", &mock_server.uri()),
+        headers: Vec::new(),
+        method: HttpMethod::Get as i32,
+        body: "hello".to_string().as_bytes().to_vec(),
+    });
     let response = client.canister_http_send(request).await;
     assert!(response.is_ok());
 }
@@ -271,20 +356,6 @@ async fn test_socks_fallback() {
         .await
         .unwrap();
     assert!(response.status() == 200);
-}
-
-// TODO: increase functionality of this function (NET-883)
-fn build_http_canister_request(url: String) -> CanisterHttpSendRequest {
-    let headers = vec![HttpHeader {
-        name: "User-Agent".to_string(),
-        value: "test".to_string(),
-    }];
-
-    CanisterHttpSendRequest {
-        url,
-        body: "".to_string().into_bytes(),
-        headers,
-    }
 }
 
 async fn spawn_socks5_server(listen_addr: String) {

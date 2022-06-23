@@ -9,7 +9,7 @@ use hyper::{
 use ic_async_utils::receive_body_without_timeout;
 use ic_canister_http_service::{
     canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
-    CanisterHttpSendResponse, HttpHeader,
+    CanisterHttpSendResponse, HttpHeader, HttpMethod,
 };
 use ic_logger::{debug, ReplicaLogger};
 use tonic::{Request, Response, Status};
@@ -47,6 +47,23 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
             )
         })?;
 
+        let method = HttpMethod::from_i32(req.method)
+            .ok_or_else(|| {
+                Status::new(
+                    tonic::Code::InvalidArgument,
+                    "Failed to get HTTP method".to_string(),
+                )
+            })
+            .and_then(|method| match method {
+                HttpMethod::Get => Ok(Method::GET),
+                HttpMethod::Post => Ok(Method::POST),
+                HttpMethod::Head => Ok(Method::HEAD),
+                _ => Err(Status::new(
+                    tonic::Code::InvalidArgument,
+                    format!("Unsupported HTTP method {:?}", method),
+                )),
+            })?;
+
         // Build Http Request.
         let mut http_req = hyper::Request::new(Body::from(req.body));
         let headers: HeaderMap =
@@ -59,7 +76,7 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
                     )
                 })?;
         *http_req.headers_mut() = headers;
-        *http_req.method_mut() = Method::GET;
+        *http_req.method_mut() = method;
         *http_req.uri_mut() = uri;
 
         let http_resp = self.client.request(http_req).await.map_err(|err| {

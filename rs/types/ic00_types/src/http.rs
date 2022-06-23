@@ -39,6 +39,8 @@ impl Payload<'_> for HttpHeader {}
 #[derive(Clone, Debug, PartialEq, CandidType, Eq, Hash, Serialize, Deserialize)]
 pub enum HttpMethod {
     GET,
+    POST,
+    HEAD,
 }
 
 /// Represents the response for a canister http request.
