@@ -1,18 +1,20 @@
 use std::{
     collections::BTreeMap,
+    convert::TryFrom,
     path::{Path, PathBuf},
 };
 
+use ic_ic00_types::EcdsaKeyId;
 use ic_protobuf::registry::{
-    crypto::v1::PublicKey,
+    crypto::v1::{EcdsaSigningSubnetList, PublicKey},
     subnet::v1::{CatchUpPackageContents, SubnetRecord},
 };
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
-    make_subnet_record_key,
+    make_ecdsa_signing_subnet_list_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::{RegistryVersion, SubnetId};
+use ic_types::{subnet_id_into_protobuf, RegistryVersion, SubnetId};
 
 use crate::{node::InitializedNode, util::write_registry_entry};
 use crate::{
@@ -86,6 +88,23 @@ impl InitializedSubnet {
                 version,
                 self.subnet_threshold_signing_public_key.clone(),
             );
+
+            // set subnet ecdsa signing key
+            if let Some(ecdsa_config) = &self.subnet_config.ecdsa_config {
+                for key_id in ecdsa_config.key_ids.iter() {
+                    let key_id = EcdsaKeyId::try_from(key_id.clone())
+                        .unwrap_or_else(|err| panic!("Invalid key_id {}", err));
+                    write_registry_entry(
+                        data_provider,
+                        subnet_path.as_path(),
+                        make_ecdsa_signing_subnet_list_key(&key_id).as_ref(),
+                        version,
+                        EcdsaSigningSubnetList {
+                            subnets: vec![subnet_id_into_protobuf(subnet_id)],
+                        },
+                    );
+                }
+            }
         }
 
         for init_node in self.initialized_nodes.values() {

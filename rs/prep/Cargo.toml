@@ -11,6 +11,7 @@ chrono = "0.4.19"
 fs_extra = "1.2.0"
 ic-crypto = { path = "../crypto" }
 ic-config = { path = "../config" }
+ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-protobuf = { path = "../protobuf" }

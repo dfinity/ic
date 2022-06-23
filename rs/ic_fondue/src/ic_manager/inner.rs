@@ -318,6 +318,7 @@ impl IcManager {
                     subnet.max_instructions_per_round,
                     subnet.max_instructions_per_install_code,
                     subnet.features.clone(),
+                    None,
                     subnet.max_number_of_canisters,
                     subnet.ssh_readonly_access.clone(),
                     subnet.ssh_backup_access.clone(),
