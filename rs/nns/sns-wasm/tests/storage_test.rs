@@ -5,7 +5,7 @@ use ic_nns_test_utils::sns_wasm::smallest_valid_wasm;
 use ic_nns_test_utils::state_test_helpers::create_canister;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_sns_wasm::pb::v1::add_wasm_response::AddWasmOk;
-use ic_sns_wasm::pb::v1::{add_wasm_response, AddWasmResponse};
+use ic_sns_wasm::pb::v1::{add_wasm_response, AddWasmResponse, SnsVersion};
 use ic_state_machine_tests::StateMachine;
 
 #[test]
@@ -50,4 +50,13 @@ fn test_basic_storage() {
     let get_wasm_response = sns_wasm::get_wasm(&machine, sns_wasm_id, &expected_hash);
     assert!(get_wasm_response.wasm.is_some());
     assert_eq!(expected_hash, get_wasm_response.wasm.unwrap().sha256_hash());
+
+    // Assert the upgrade path was also updated
+    let next_version_response =
+        sns_wasm::get_next_sns_version(&machine, sns_wasm_id, SnsVersion::default().into());
+    let expected_next_version = SnsVersion {
+        governance_wasm_hash: expected_hash.to_vec(),
+        ..Default::default()
+    };
+    assert_eq!(next_version_response, expected_next_version.into());
 }

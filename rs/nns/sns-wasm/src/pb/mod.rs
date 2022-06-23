@@ -1,4 +1,6 @@
-use crate::pb::v1::SnsWasm;
+use crate::pb::v1::{
+    GetNextSnsVersionRequest, GetNextSnsVersionResponse, SnsCanisterType, SnsVersion, SnsWasm,
+};
 use ic_crypto_sha::Sha256;
 use std::fmt::Write;
 
@@ -26,5 +28,38 @@ impl SnsWasm {
     pub fn sha256_string(&self) -> String {
         let bytes = self.sha256_hash();
         hash_to_hex_string(&bytes)
+    }
+
+    /// Return the SnsCanisterType if it's valid, else return an error
+    pub fn checked_sns_canister_type(&self) -> Result<SnsCanisterType, String> {
+        match SnsCanisterType::from_i32(self.canister_type) {
+            None => Err(
+                "Invalid value for SnsWasm::canister_type.  See documentation for valid values"
+                    .to_string(),
+            ),
+            Some(canister_type) => {
+                if canister_type == SnsCanisterType::Unspecified {
+                    Err("SnsWasm::canister_type cannot be 'Unspecified' (0).".to_string())
+                } else {
+                    Ok(canister_type)
+                }
+            }
+        }
+    }
+}
+
+impl From<SnsVersion> for GetNextSnsVersionRequest {
+    fn from(version: SnsVersion) -> GetNextSnsVersionRequest {
+        GetNextSnsVersionRequest {
+            current_version: Some(version),
+        }
+    }
+}
+
+impl From<SnsVersion> for GetNextSnsVersionResponse {
+    fn from(version: SnsVersion) -> GetNextSnsVersionResponse {
+        GetNextSnsVersionResponse {
+            next_version: Some(version),
+        }
     }
 }
