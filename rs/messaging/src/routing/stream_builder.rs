@@ -74,7 +74,6 @@ const LABEL_VALUE_TYPE_RESPONSE: &str = "response";
 const LABEL_VALUE_STATUS_SUCCESS: &str = "success";
 const LABEL_VALUE_STATUS_CANISTER_NOT_FOUND: &str = "canister_not_found";
 const LABEL_VALUE_STATUS_PAYLOAD_TOO_LARGE: &str = "payload_too_large";
-const LABEL_VALUE_STATUS_INVALID_CYCLE_TRANSFER: &str = "invalid_cycle_transfer";
 
 const CRITICAL_ERROR_INFINITE_LOOP: &str = "mr_stream_builder_infinite_loop";
 const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "mr_stream_builder_payload_too_large";
@@ -306,7 +305,6 @@ impl StreamBuilderImpl {
 
         let mut requests_to_reject = Vec::new();
         let mut oversized_requests = Vec::new();
-        let mut invalid_cycle_transfer_requests = Vec::new();
 
         let mut output_iter = state.output_into_iter();
         let mut last_output_size = usize::MAX;
@@ -354,31 +352,8 @@ impl StreamBuilderImpl {
                     let mut msg = validated_next(&mut output_iter, (queue_id, queue_index, &msg));
 
                     // Reject messages with oversized payloads, as they may
-                    // cause streams to permanently stall. Also reject messages
-                    // which send cycles from Application to VerifiedApplication
-                    // subnets to prevent dispersion of counterfeit cycles.
+                    // cause streams to permanently stall.
                     match msg {
-                        // Reject requests that send cycles from Application to
-                        // VerifiedApplication subnets.
-                        RequestOrResponse::Request(req)
-                            if sends_cycles_from_app_to_verified_app(
-                                self.subnet_id,
-                                dst_net_id,
-                                &req,
-                                &subnet_types,
-                            ) =>
-                        {
-                            warn!(
-                                self.log, "Canister {} on Application subnet cannot send cycles to canister {} on Verified Application subnet",
-                                req.sender, req.receiver
-                            );
-                            self.observe_message_type_status(
-                                LABEL_VALUE_TYPE_REQUEST,
-                                LABEL_VALUE_STATUS_INVALID_CYCLE_TRANSFER,
-                            );
-                            invalid_cycle_transfer_requests.push(req);
-                        }
-
                         // Remote request above the payload size limit.
                         RequestOrResponse::Request(req)
                             if dst_net_id != self.subnet_id
@@ -478,17 +453,6 @@ impl StreamBuilderImpl {
         }
         drop(output_iter);
 
-        for req in invalid_cycle_transfer_requests {
-            let sender = req.sender;
-            let receiver = req.receiver;
-            self.reject_local_request(
-                &mut state,
-                &req,
-                RejectCode::CanisterError,
-                format!("Canister {} violated contract: Canisters on Application subnets cannot send cycles to canister {} on a Verified Application subnet", sender, receiver),
-            );
-        }
-
         for req in requests_to_reject {
             let dst_canister_id = req.receiver;
             self.reject_local_request(
@@ -556,20 +520,5 @@ impl StreamBuilderImpl {
 impl StreamBuilder for StreamBuilderImpl {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState {
         self.build_streams_impl(state, MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES)
-    }
-}
-
-fn sends_cycles_from_app_to_verified_app(
-    source_subnet: SubnetId,
-    destination_subnet: SubnetId,
-    request: &Request,
-    subnet_types: &BTreeMap<SubnetId, SubnetType>,
-) -> bool {
-    if source_subnet != destination_subnet {
-        subnet_types.get(&destination_subnet) == Some(&SubnetType::VerifiedApplication)
-            && subnet_types.get(&source_subnet) == Some(&SubnetType::Application)
-            && !request.payment.is_zero()
-    } else {
-        false
     }
 }

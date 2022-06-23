@@ -214,16 +214,10 @@ pub fn cycles_restrictions_pot() -> Pot {
     pot(
         "cycles_restriction_pot",
         execution::config_system_verified_application_subnets(),
-        par(vec![
-            t(
-                "cannot_send_cycles_from_application_to_verified_subnets",
-                execution::cycles_transfer::cannot_send_cycles_from_application_to_verified_subnets,
-            ),
-            t(
-                "controller_and_controllee_on_different_subnets",
-                execution::canister_lifecycle::controller_and_controllee_on_different_subnets,
-            ),
-        ]),
+        par(vec![t(
+            "controller_and_controllee_on_different_subnets",
+            execution::canister_lifecycle::controller_and_controllee_on_different_subnets,
+        )]),
     )
 }
 
