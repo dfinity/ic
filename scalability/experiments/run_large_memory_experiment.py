@@ -73,7 +73,6 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
             [self.machines[0] for _ in range(FLAGS.num_canisters)],
             self.target_nodes,
             load,
-            outdir=self.iter_outdir,
             payload=codecs.encode(json.dumps({"size": config["payload_size"]}).encode("utf-8"), "hex"),
             method="Update" if self.use_updates else "Query",
             call_method=call_method,
@@ -85,7 +84,7 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
         print(f"🚀  ... failure rate for {load} rps was {r.failure_rate} median latency is {t_median}")
         return r
 
-    def run_iterations(self, datapoints=None):
+    def run_iterations(self, iterations=None):
         """Run heavy memory experiment in defined iterations."""
         self.start_experiment()
 
@@ -103,7 +102,7 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
 
         while run:
 
-            load_total = datapoints[iteration]
+            load_total = iterations[iteration]
             iteration += 1
 
             rps.append(load_total)
@@ -150,7 +149,7 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
                 failure_rate,
                 workload_experiment.STOP_FAILURE_RATE,
                 iteration,
-                len(datapoints),
+                len(iterations),
             )
 
             # Write summary file in each iteration including experiment specific data.
@@ -189,5 +188,5 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
 if __name__ == "__main__":
     misc.parse_command_line_args()
     exp = LargeMemoryExperiment()
-    datapoints = [FLAGS.target_rps]
-    exp.run_iterations(datapoints)
+    iterations = [FLAGS.target_rps]
+    exp.run_iterations(iterations)

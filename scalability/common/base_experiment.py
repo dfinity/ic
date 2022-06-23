@@ -26,6 +26,7 @@ import gflags
 from common import ansible
 from common import flamegraphs
 from common import machine_failure
+from common import misc
 from common import prometheus
 from common import ssh
 from termcolor import colored
@@ -61,6 +62,8 @@ class BaseExperiment:
 
     def __init__(self, request_type="query"):
         """Init."""
+        misc.parse_command_line_args()
+
         self.cached_topologies = {}
         self.artifacts_path = FLAGS.artifacts_path
         self.__load_artifacts()

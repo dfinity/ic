@@ -10,12 +10,6 @@ import run_gossip_experiment  # noqa
 
 FLAGS = gflags.FLAGS
 
-gflags.DEFINE_integer("increment_rps", 20, "Increment of requests per second per round.")
-gflags.DEFINE_integer("initial_rps", 100, "Starting number for requests per second.")
-gflags.DEFINE_integer(
-    "max_rps", 2000, "Maximum requests per second to be sent. Experiment will wrap up beyond this number."
-)
-
 # Maximum failure rate and median query duration limit to consider
 # for rps to choose as rps_max. If failure rate or latency is higher,
 # continue running the benchmark, but do not consider this RPS

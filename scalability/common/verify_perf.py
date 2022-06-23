@@ -1,15 +1,30 @@
 """
 Verifies performance of a benchmark run result in JSON file.
+IMPORTANT: This script is only expected to be used for spot runs, not any experiments that go beyond
+single iteration, due to the open experimental nature of those runs. For spot runs, this script is expected
+to be called before the notify_dashboard.py script, so the threshold numbers used to validate results
+in this script are passed to dashboard as markers.
 
-Calling format: verify_perf.py
+Calling format: verify_perf.py --base_dir {} --git_revision {} --timestamp {} --median_latency_threshold {}
 
 Expected JSON format:
 {
-    "metric": "throughput",
-    "is_update": "true",
-    "actual": "860"
+    "experiment_details": {
+        "rps_max": 3.850419,
+        "is_update": true,
+        "target_load": 50,
+        "t_median": 120,
+        "failure_rate": 0
+    }
 }
 
+Output JSON format:  The incoming JSON file + below additions
+{
+    "is_success": true,
+    "experiment_details": {
+        "median_threshold_latency": 180
+    }
+}
 """
 import json
 import os

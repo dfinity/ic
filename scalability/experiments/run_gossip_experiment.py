@@ -43,7 +43,7 @@ class GossipExperiment(workload_experiment.WorkloadExperiment):
         """Run a bit of a workload with the new subnet size."""
         arguments = config["arguments"] if "arguments" in config else []
         duration = config["duration"] if "duration" in config else 300
-        load = config["load_total"] if "load_total" in config else 50
+        load = FLAGS.target_rps
 
         members = self.get_subnet_members(FLAGS.subnet_to_grow)
         loadhosts = [self.get_node_ip_address(n) for n in members]
@@ -53,7 +53,6 @@ class GossipExperiment(workload_experiment.WorkloadExperiment):
             self.machines,
             loadhosts,
             load,
-            outdir=self.iter_outdir,
             arguments=arguments,
             duration=duration,
         )
@@ -152,7 +151,7 @@ class GossipExperiment(workload_experiment.WorkloadExperiment):
                 {
                     "total_requests": total_requests,
                     "subnet_sizes": subnet_sizes,
-                    "subnet_size_max": subnet_size_max,
+                    "rps_max": subnet_size_max,
                     "num_succ_per_iteration": num_succ_per_iteration,
                     "success_rate": "{:.2f}".format((num_success / total_requests) * 100),
                     "failure_rate": "{:.2f}".format(failure_rate * 100),

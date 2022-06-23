@@ -29,15 +29,11 @@ gflags.DEFINE_integer("num_canisters_per_subnet", 5, "Number of canisters per su
 
 # Configuration for load
 gflags.DEFINE_integer("payload_size", 1024, "Payload size for Xnet messages")
-gflags.DEFINE_integer("initial_rate", 500, "Initial total rate at which to send Xnet messages")
-gflags.DEFINE_integer("rate_increment", 250, "Increment for total rate in each iteration")
-gflags.DEFINE_integer("max_iterations", 25, "Maximum number of iterations")
-
 gflags.DEFINE_float("max_error_rate", 0.05, "Maximum number of failed Xnet messages accepted per iteration.")
 gflags.DEFINE_float("max_seq_errors", 0.0, "Maximum number of sequence errors to accept for iteration.")
 gflags.DEFINE_float("min_send_rate", 0.3, "Minimum send rate accepted for success of iteration.")
 gflags.DEFINE_integer("target_latency_secs", 40, "Targeted latency of Xnet requests.")
-
+gflags.DEFINE_integer("target_rps", 500, "Target total rate at which to send Xnet messages.")
 gflags.DEFINE_integer(
     "tests_first_subnet_index",
     1,
@@ -314,43 +310,39 @@ class XnetExperiment(base_experiment.BaseExperiment):
 
 
 if __name__ == "__main__":
-    misc.parse_command_line_args()
-
     exp = XnetExperiment()
-    exp.init()
 
     exp.start_experiment()
 
-    max_capacity = None
+    total_rate = FLAGS.target_rps
+    subnet_to_subnet_rate = int(math.ceil(FLAGS.target_rps / (exp.num_subnets - 1)))
+    canister_to_subnet_rate = int(math.ceil(subnet_to_subnet_rate / FLAGS.num_canisters_per_subnet))
+    print(
+        f"🚀 Running with total rate of {total_rate} ({subnet_to_subnet_rate} per subnet, {canister_to_subnet_rate} per canister)"
+    )
 
-    for i in range(FLAGS.max_iterations):
+    config = {
+        "duration": FLAGS.iter_duration,
+        "payload_size": FLAGS.payload_size,
+        "num_subnets": exp.num_subnets,
+        "total_rate": total_rate,
+        "subnet_to_subnet_rate": subnet_to_subnet_rate,
+        "canister_to_subnet_rate": canister_to_subnet_rate,
+    }
 
-        total_rate = FLAGS.initial_rate + i * FLAGS.rate_increment
-        subnet_to_subnet_rate = int(math.ceil(total_rate / (exp.num_subnets - 1)))
-        canister_to_subnet_rate = int(math.ceil(subnet_to_subnet_rate / FLAGS.num_canisters_per_subnet))
-        print(
-            f"🚀 Running iteration {i} with total rate of {total_rate} ({subnet_to_subnet_rate} per subnet, {canister_to_subnet_rate} per canister)"
-        )
+    metrics = exp.run_experiment(config)
+    output = exp.run_accepted(metrics, config)
 
-        config = {
-            "duration": FLAGS.iter_duration,
-            "payload_size": FLAGS.payload_size,
-            "num_subnets": exp.num_subnets,
-            "total_rate": total_rate,
-            "subnet_to_subnet_rate": subnet_to_subnet_rate,
-            "canister_to_subnet_rate": canister_to_subnet_rate,
-        }
-
-        metrics = exp.run_experiment(config)
-
-        if exp.run_accepted(metrics, config):
-            max_capacity = total_rate
-
+    # TODO: Add metrics to experiment output.
     exp.write_summary_file(
         "run_xnet_experiment",
         {
-            "rps": [FLAGS.payload_size],
-            "max_capacity": max_capacity,
+            "rps": total_rate,
+            "rps_max": total_rate,
+            "target_load": FLAGS.target_rps,
+            "t_median": 0,  # TODO correction
+            "failure_rate": 0,  # TODO correction
+            "is_update": True,
         },
         [FLAGS.payload_size],
         "payload size [bytes]",
