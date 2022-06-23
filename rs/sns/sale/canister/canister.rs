@@ -14,6 +14,7 @@ TODO - OPTIONAL / SEMI-REQUIRED
 
  */
 
+use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid_one, CandidOne};
 use dfn_core::CanisterId;
@@ -26,14 +27,14 @@ use ic_nervous_system_common::ledger::{Ledger, LedgerCanister};
 use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
+use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse};
 use ic_sns_sale::pb::v1::{
     FinalizeSaleRequest, FinalizeSaleResponse, GetCanisterStatusRequest, GetCanisterStatusResponse,
-    GetStateRequest, GetStateResponse, Init, Lifecycle, OpenSaleRequest, OpenSaleResponse,
+    GetStateRequest, GetStateResponse, Init, OpenSaleRequest, OpenSaleResponse,
     RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, RefreshSnsTokensRequest,
-    RefreshSnsTokensResponse, Sale, SweepResult,
+    RefreshSnsTokensResponse, Sale,
 };
-use ic_sns_sale::sale::LOG_PREFIX;
-use ledger_canister::DEFAULT_TRANSFER_FEE;
+use ic_sns_sale::sale::{CanisterCallError, SnsGovernanceClient, LOG_PREFIX};
 
 use std::str::FromStr;
 
@@ -123,7 +124,8 @@ fn refresh_sns_tokens() {
 #[candid_method(update, rename = "refresh_sns_tokens")]
 async fn refresh_sns_tokens_(_: RefreshSnsTokensRequest) -> RefreshSnsTokensResponse {
     println!("{}refresh_sns_tokens", LOG_PREFIX);
-    match sale_mut().refresh_sns_token_e8s(id(), &ledger_stub()).await {
+    let ledger_factory = &create_real_ledger;
+    match sale_mut().refresh_sns_token_e8s(id(), ledger_factory).await {
         Ok(()) => RefreshSnsTokensResponse {},
         Err(msg) => panic!("{}", msg),
     }
@@ -144,8 +146,9 @@ async fn refresh_buyer_tokens_(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTo
     } else {
         PrincipalId::from_str(&arg.buyer).unwrap()
     };
+    let ledger_factory = &create_real_ledger;
     match sale_mut()
-        .refresh_buyer_token_e8s(p, id(), &ledger_stub())
+        .refresh_buyer_token_e8s(p, id(), ledger_factory)
         .await
     {
         Ok(()) => RefreshBuyerTokensResponse {},
@@ -153,53 +156,49 @@ async fn refresh_buyer_tokens_(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTo
     }
 }
 
+struct RealSnsGovernanceClient {
+    canister_id: CanisterId,
+}
+
+impl RealSnsGovernanceClient {
+    fn new(canister_id: CanisterId) -> Self {
+        Self { canister_id }
+    }
+}
+
+#[async_trait]
+impl SnsGovernanceClient for RealSnsGovernanceClient {
+    async fn manage_neuron(
+        &mut self,
+        request: ManageNeuron,
+    ) -> Result<ManageNeuronResponse, CanisterCallError> {
+        dfn_core::api::call(
+            self.canister_id,
+            "manage_neuron",
+            dfn_candid::candid_one,
+            request,
+        )
+        .await
+        .map_err(CanisterCallError::from)
+    }
+}
+
+/// See Sale.finalize.
 #[export_name = "canister_update finalize_sale"]
 fn finalize_sale() {
     over_async(candid_one, finalize_sale_)
 }
 
-/// TODO: Actually try to create neurons.
+/// See Sale.finalize.
 #[candid_method(update, rename = "finalize_sale")]
 async fn finalize_sale_(_arg: FinalizeSaleRequest) -> FinalizeSaleResponse {
-    let lifecycle = sale().state().lifecycle();
-    assert!(
-        lifecycle == Lifecycle::Committed || lifecycle == Lifecycle::Aborted,
-        "Sale can only be finalized in the committed or aborted states - was {:?}",
-        lifecycle
-    );
-    let sweep_icp = Some(
-        sale_mut()
-            .sweep_icp(DEFAULT_TRANSFER_FEE, &ledger_stub())
-            .await,
-    );
-    if lifecycle != Lifecycle::Committed {
-        return FinalizeSaleResponse {
-            sweep_icp,
-            sweep_sns: None,
-            create_neuron: None,
-        };
-    }
-    let sweep_sns = Some(
-        sale_mut()
-            .sweep_sns(DEFAULT_TRANSFER_FEE, &ledger_stub())
-            .await,
-    );
-    let (skipped, ps) = sale().principals_for_create_neuron();
-    let mut failure = 0;
-    for p in ps {
-        // TODO: Is there an interface akin to `Ledger` for SNS Governance?
-        println!("TODO: create neuron for {}", p);
-        failure += 1;
-    }
-    FinalizeSaleResponse {
-        sweep_icp,
-        sweep_sns,
-        create_neuron: Some(SweepResult {
-            success: 0,
-            failure,
-            skipped,
-        }),
-    }
+    // Helpers.
+    let mut sns_governance_client = RealSnsGovernanceClient::new(sale().init().sns_governance());
+    let ledger_factory = create_real_ledger;
+
+    sale_mut()
+        .finalize(&mut sns_governance_client, ledger_factory)
+        .await
 }
 
 trait Ic0 {
@@ -258,8 +257,16 @@ fn now_seconds() -> u64 {
         .as_secs()
 }
 
-fn ledger_stub() -> impl Fn(CanisterId) -> Box<dyn Ledger> {
-    |x| Box::new(LedgerCanister::new(x))
+/// Returns a function that (when passed the canister ID of a presumptive
+/// Ledger) returns a Ledger implementation suitable for use in
+/// production. I.e. calls out to another canister.
+///
+/// This function is a "Ledger factory" in that you call this, and a Ledger
+/// object is returned. What distinguishes this from other possible Ledger
+/// factories is that this produces objects that are suitable for use in
+/// production.
+fn create_real_ledger(id: CanisterId) -> Box<dyn Ledger> {
+    Box::new(LedgerCanister::new(id))
 }
 
 #[export_name = "canister_init"]

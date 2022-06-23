@@ -35,6 +35,7 @@ ic-nervous-system-common = {path = "../../nervous_system/common"}
 ic-nervous-system-common-test-keys = {path = "../../nervous_system/common/test_keys"}
 ic-nervous-system-root = {path = "../../nervous_system/root"}
 ic-protobuf = { path = "../../protobuf" }
+ic-sns-governance = { path = "../governance" }
 lazy_static = "1.4.0"
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 on_wire = { path = "../../rust_canisters/on_wire" }
@@ -68,6 +69,4 @@ ic-sns-sale-protobuf-generator = { path = "./protobuf_generator" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister", features = ["test"] }
 futures = "0.3.13"
 maplit = "1.0.2"
-
-[features]
-test = ["ic-base-types/test", "ledger-canister/test"]
+tokio = { version = "1.15.0", features = [ "full" ] }

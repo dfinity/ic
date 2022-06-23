@@ -1,12 +1,16 @@
-use crate::pb::v1::{BuyerState, DerivedState, Init, Lifecycle, Sale, State, SweepResult};
+use crate::pb::v1::{
+    BuyerState, DerivedState, FinalizeSaleResponse, Init, Lifecycle, Sale, State, SweepResult,
+};
+use async_trait::async_trait;
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
 
 use ic_nervous_system_common::ledger::{self, Ledger};
+use ic_sns_governance::pb::v1::{manage_neuron, ManageNeuron, ManageNeuronResponse};
 
 use std::str::FromStr;
 
-use ledger_canister::{AccountIdentifier, Subaccount};
+use ledger_canister::{AccountIdentifier, Subaccount, DEFAULT_TRANSFER_FEE};
 
 use ledger_canister::Tokens;
 
@@ -22,6 +26,26 @@ pub enum TransferResult {
     Success(u64),
     /// The operation failed with an error message.
     Failure(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CanisterCallError {
+    code: Option<i32>,
+    message: String,
+}
+
+impl From<(Option<i32>, String)> for CanisterCallError {
+    fn from((code, message): (Option<i32>, String)) -> Self {
+        Self { code, message }
+    }
+}
+
+#[async_trait]
+pub trait SnsGovernanceClient {
+    async fn manage_neuron(
+        &mut self,
+        request: ManageNeuron,
+    ) -> Result<ManageNeuronResponse, CanisterCallError>;
 }
 
 /**
@@ -458,6 +482,85 @@ impl Sale {
         } else {
             TransferResult::Failure(format!("Principal {} not found", principal))
         }
+    }
+
+    /// Distributes funds, and if the sale was successful, creates neurons. Returns
+    /// a summary of (sub)actions that were performed.
+    ///
+    /// If the sale is not over yet, panics.
+    ///
+    /// If sale was successful (i.e. it is in the Lifecycle::Committed phase), then
+    /// ICP is sent to the SNS governance canister, and SNS tokens are sent to SNS
+    /// neuron ledger accounts (i.e. subaccounts of SNS governance for the principal
+    /// that funded the neuron).
+    ///
+    /// If the sale ended unsuccessfully (i.e. it is in the Lifecycle::Aborted
+    /// phase), then ICP is send back to the buyers.
+    pub async fn finalize(
+        &mut self,
+        sns_governance_client: &mut impl SnsGovernanceClient,
+        ledger_factory: impl Fn(CanisterId) -> Box<dyn Ledger>,
+    ) -> FinalizeSaleResponse {
+        let lifecycle = self.state().lifecycle();
+        assert!(
+            lifecycle == Lifecycle::Committed || lifecycle == Lifecycle::Aborted,
+            "Sale can only be finalized in the committed or aborted states - was {:?}",
+            lifecycle
+        );
+        let sweep_icp = self.sweep_icp(DEFAULT_TRANSFER_FEE, &ledger_factory).await;
+        if lifecycle != Lifecycle::Committed {
+            return FinalizeSaleResponse {
+                sweep_icp: Some(sweep_icp),
+                sweep_sns: None,
+                create_neuron: None,
+            };
+        }
+
+        let sweep_sns = self.sweep_sns(DEFAULT_TRANSFER_FEE, &ledger_factory).await;
+
+        // Claim neurons.
+        let create_neuron = self.claim_neurons(sns_governance_client).await;
+
+        FinalizeSaleResponse {
+            sweep_icp: Some(sweep_icp),
+            sweep_sns: Some(sweep_sns),
+            create_neuron: Some(create_neuron),
+        }
+    }
+
+    async fn claim_neurons(
+        &self,
+        sns_governance_client: &mut impl SnsGovernanceClient,
+    ) -> SweepResult {
+        let (skipped, princpal_ids) = self.principals_for_create_neuron();
+        let mut result = SweepResult {
+            success: 0,
+            failure: 0,
+            skipped,
+        };
+
+        for p in princpal_ids {
+            // Claim SNS neuron that we just funded (or at least tried to).
+            let request = ManageNeuron {
+                subaccount: vec![],
+                command: Some(manage_neuron::Command::ClaimOrRefresh(
+                    manage_neuron::ClaimOrRefresh {
+                        by: Some(manage_neuron::claim_or_refresh::By::MemoAndController(
+                            manage_neuron::claim_or_refresh::MemoAndController {
+                                controller: Some(p),
+                                memo: 0,
+                            },
+                        )),
+                    },
+                )),
+            };
+            match sns_governance_client.manage_neuron(request).await {
+                Ok(_response) => result.success += 1,
+                Err(_err) => result.failure += 1,
+            }
+        }
+
+        result
     }
 
     /// In state 'committed' or 'aborted'. Transfer ICP tokens from
