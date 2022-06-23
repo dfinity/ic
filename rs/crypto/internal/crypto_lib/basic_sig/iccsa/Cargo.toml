@@ -15,7 +15,7 @@ ic-types = { path = "../../../../../types/types" }
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_bytes = "0.11"
 serde_cbor = "0.11"
-simple_asn1 = "0.5.4"
+simple_asn1 = "0.6.1"
 
 [dev-dependencies]
 # TODO (CRP-912) Replace ic-crypto with ic-crypto-utils-threshold-sig

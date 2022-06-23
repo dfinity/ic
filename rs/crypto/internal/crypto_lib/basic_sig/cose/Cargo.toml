@@ -10,7 +10,7 @@ ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "../rsa_pkcs1" }
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_cbor = "0.11.1"
-simple_asn1 = "0.5.4"
+simple_asn1 = "0.6.1"
 
 [dev-dependencies]
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
