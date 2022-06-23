@@ -3,6 +3,7 @@
 //! subnets.
 
 use crate::consensus::{
+    metrics::{BatchStats, BlockStats},
     pool_reader::PoolReader,
     prelude::*,
     utils::{crypto_hashable_to_seed, get_block_hash_string, lookup_replica_version},
@@ -28,7 +29,7 @@ use ic_types::{
         NiDkgId, NiDkgTag, NiDkgTargetSubnet::Remote, NiDkgTranscript,
     },
     messages::{CallbackId, Response},
-    CountBytes, ReplicaVersion,
+    ReplicaVersion,
 };
 use std::collections::BTreeMap;
 
@@ -48,19 +49,7 @@ pub fn deliver_batches(
     // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
     // deliver all bathes up to the height `min(h, finalized_height)`.
     max_batch_height_to_deliver: Option<Height>,
-    result_processor: Option<
-        &dyn Fn(
-            &Result<(), MessageRoutingError>,
-            u64,
-            usize,
-            usize,
-            usize,
-            Vec<ic_types::artifact::IngressMessageId>,
-            &str,
-            u64,
-            u64,
-        ),
-    >,
+    result_processor: Option<&dyn Fn(&Result<(), MessageRoutingError>, BlockStats, BatchStats)>,
 ) -> Result<Height, MessageRoutingError> {
     let finalized_height = pool.get_finalized_height();
     // If `max_batch_height_to_deliver` is specified and smaller than
@@ -118,31 +107,28 @@ pub fn deliver_batches(
                     }
                 }
 
-                let block_hash = get_block_hash_string(&block);
-                let block_height = block.height().get();
                 let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
                 let ecdsa_subnet_public_key = pool.dkg_summary_block(&block).and_then(|summary| {
-                    let ecdsa_summary = summary.payload.as_ref().as_summary().ecdsa.as_ref();
-                    ecdsa_summary.and_then(|ecdsa| {
-                        let chain = build_consensus_block_chain(pool.pool(), &summary, &block);
-                        let block_reader = EcdsaBlockReaderImpl::new(chain);
-                        let transcript_ref = match ecdsa.key_transcript.current {
-                            Some(unmasked) => *unmasked.as_ref(),
-                            None => return None,
-                        };
-                        match block_reader.transcript(&transcript_ref) {
-                            Ok(transcript) =>  get_tecdsa_master_public_key(&transcript).ok().map(|public_key| (ecdsa.key_transcript.key_id.clone(), public_key)),
-                            Err(err) => {
-                                warn!(
-                                    log,
-                                    "deliver_batches(): failed to translate transcript ref {:?}: {:?}",
-                                    transcript_ref, err
-                                );
-                                None
+                    block.payload.as_ref().as_ecdsa().and_then(|ecdsa| {
+                        ecdsa.key_transcript.current.and_then(|unmasked| {
+                            let chain = build_consensus_block_chain(pool.pool(), &summary, &block);
+                            let block_reader = EcdsaBlockReaderImpl::new(chain);
+                            let transcript_ref = unmasked.as_ref();
+                            match block_reader.transcript(transcript_ref) {
+                                Ok(transcript) =>  get_tecdsa_master_public_key(&transcript).ok().map(|public_key| (ecdsa.key_transcript.key_id.clone(), public_key)),
+                                Err(err) => {
+                                    warn!(
+                                        log,
+                                        "deliver_batches(): failed to translate transcript ref {:?}: {:?}",
+                                        transcript_ref, err
+                                    );
+                                    None
+                                }
                             }
-                        }
+                        })
                     })
                 });
+                let block_stats = BlockStats::from(&block);
 
                 // This flag can only be true, if we've called deliver_batches with a height
                 // limit.  In this case we also want to have a checkpoint for that last height.
@@ -161,32 +147,17 @@ pub fn deliver_batches(
                     time: block.context.time,
                     consensus_responses,
                 };
-                let batch_height = batch.batch_number.get();
-                let ingress_count = batch.payload.ingress.message_count();
-                let ingress_bytes = batch.payload.ingress.count_bytes();
-                let xnet_bytes = batch.payload.xnet.count_bytes();
-                let ingress_ids = batch.payload.ingress.message_ids();
-                let block_context_certified_height = block.context.certified_height.get();
+                let batch_stats = BatchStats::from(&batch);
                 debug!(
                     log,
                     "replica {:?} delivered batch {:?} for block_hash {:?}",
                     current_replica_version,
-                    batch_height,
-                    block_hash
+                    batch_stats.batch_height,
+                    block_stats.block_hash
                 );
                 let result = message_routing.deliver_batch(batch);
                 if let Some(f) = result_processor {
-                    f(
-                        &result,
-                        batch_height,
-                        ingress_count,
-                        ingress_bytes,
-                        xnet_bytes,
-                        ingress_ids,
-                        &block_hash,
-                        block_height,
-                        block_context_certified_height,
-                    );
+                    f(&result, block_stats, batch_stats);
                 }
                 if let Err(err) = result {
                     warn!(every_n_seconds => 5, log, "Batch delivery failed: {:?}", err);

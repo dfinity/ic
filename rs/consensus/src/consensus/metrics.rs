@@ -1,10 +1,17 @@
-use crate::consensus::pool_reader::PoolReader;
+use crate::consensus::{pool_reader::PoolReader, utils::get_block_hash_string};
 use ic_consensus_message::ConsensusMessageHashable;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
 };
-use ic_types::consensus::{Block, BlockProposal, HasHeight, HasRank};
+use ic_types::{
+    batch::Batch,
+    consensus::{
+        ecdsa::{CompletedReshareRequest, CompletedSignature, EcdsaPayload, KeyTranscriptCreation},
+        Block, BlockProposal, HasHeight, HasRank,
+    },
+    CountBytes,
+};
 use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
 };
@@ -112,6 +119,94 @@ impl ConsensusGossipMetrics {
     }
 }
 
+// Block related stats
+pub struct BlockStats {
+    pub block_hash: String,
+    pub block_height: u64,
+    pub block_context_certified_height: u64,
+    pub ecdsa_stats: Option<EcdsaStats>,
+}
+
+impl From<&Block> for BlockStats {
+    fn from(block: &Block) -> Self {
+        Self {
+            block_hash: get_block_hash_string(block),
+            block_height: block.height().get(),
+            block_context_certified_height: block.context.certified_height.get(),
+            ecdsa_stats: block.payload.as_ref().as_ecdsa().map(EcdsaStats::from),
+        }
+    }
+}
+
+// Batch payload stats
+pub struct BatchStats {
+    pub batch_height: u64,
+    pub ingress_messages_delivered: usize,
+    pub ingress_message_bytes_delivered: usize,
+    pub xnet_bytes_delivered: usize,
+    pub ingress_ids: Vec<ic_types::artifact::IngressMessageId>,
+}
+
+impl From<&Batch> for BatchStats {
+    fn from(batch: &Batch) -> Self {
+        Self {
+            batch_height: batch.batch_number.get(),
+            ingress_messages_delivered: batch.payload.ingress.message_count(),
+            ingress_message_bytes_delivered: batch.payload.ingress.count_bytes(),
+            xnet_bytes_delivered: batch.payload.xnet.count_bytes(),
+            ingress_ids: batch.payload.ingress.message_ids(),
+        }
+    }
+}
+
+// Ecdsa payload stats
+pub struct EcdsaStats {
+    pub key_transcript_created: u64,
+    pub signature_agreements: usize,
+    pub ongoing_signatures: usize,
+    pub available_quadruples: usize,
+    pub quadruples_in_creation: usize,
+    pub ongoing_xnet_reshares: usize,
+    pub xnet_reshare_agreements: usize,
+}
+
+impl From<&EcdsaPayload> for EcdsaStats {
+    fn from(payload: &EcdsaPayload) -> Self {
+        let mut key_transcript_created = 0;
+        if let KeyTranscriptCreation::Created(transcript) = payload.key_transcript.next_in_creation
+        {
+            let transcript_id = &transcript.as_ref().transcript_id;
+            let current_transcript_id = payload
+                .key_transcript
+                .current
+                .as_ref()
+                .map(|transcript| &transcript.as_ref().transcript_id);
+            if Some(transcript_id) != current_transcript_id
+                && payload.idkg_transcripts.get(transcript_id).is_some()
+            {
+                key_transcript_created = 1;
+            }
+        }
+        Self {
+            key_transcript_created,
+            signature_agreements: payload
+                .signature_agreements
+                .values()
+                .filter(|status| matches!(status, CompletedSignature::Unreported(_)))
+                .count(),
+            ongoing_signatures: payload.ongoing_signatures.len(),
+            available_quadruples: payload.available_quadruples.len(),
+            quadruples_in_creation: payload.quadruples_in_creation.len(),
+            ongoing_xnet_reshares: payload.ongoing_xnet_reshares.len(),
+            xnet_reshare_agreements: payload
+                .xnet_reshare_agreements
+                .values()
+                .filter(|status| matches!(status, CompletedReshareRequest::Unreported(_)))
+                .count(),
+        }
+    }
+}
+
 pub struct FinalizerMetrics {
     pub batches_delivered: IntCounterVec,
     pub batch_height: IntGauge,
@@ -120,7 +215,7 @@ pub struct FinalizerMetrics {
     pub xnet_bytes_delivered: Histogram,
     pub finalization_certified_state_difference: IntGauge,
     // ecdsa payload related metrics
-    pub ecdsa_key_transcript_creation: IntCounterVec,
+    pub ecdsa_key_transcript_created: IntCounter,
     pub ecdsa_signature_agreements: IntCounter,
     pub ecdsa_ongoing_signatures: IntGauge,
     pub ecdsa_available_quadruples: IntGauge,
@@ -163,10 +258,9 @@ impl FinalizerMetrics {
                 // 0, 1, 2, 5, 10, 20, 50, 100, ..., 10MB, 20MB, 50MB
                 decimal_buckets_with_zero(0, 7),
             ),
-            ecdsa_key_transcript_creation: metrics_registry.int_counter_vec(
-                "consensus_ecdsa_key_transcript_creation",
+            ecdsa_key_transcript_created: metrics_registry.int_counter(
+                "consensus_ecdsa_key_transcript_created",
                 "The number of times ECDSA key transcript is created",
-                &["type"], // type == "begin" or "created"
             ),
             ecdsa_signature_agreements: metrics_registry.int_counter(
                 "consensus_ecdsa_signature_agreements",
@@ -192,6 +286,36 @@ impl FinalizerMetrics {
                 "consensus_ecdsa_reshare_agreements",
                 "Total number of ECDSA reshare agreements created",
             ),
+        }
+    }
+
+    pub fn process(&self, block_stats: &BlockStats, batch_stats: &BatchStats) {
+        self.batches_delivered.with_label_values(&["success"]).inc();
+        self.batch_height.set(batch_stats.batch_height as i64);
+        self.ingress_messages_delivered
+            .observe(batch_stats.ingress_messages_delivered as f64);
+        self.ingress_message_bytes_delivered
+            .observe(batch_stats.ingress_message_bytes_delivered as f64);
+        self.xnet_bytes_delivered
+            .observe(batch_stats.xnet_bytes_delivered as f64);
+        self.finalization_certified_state_difference.set(
+            block_stats.block_height as i64 - block_stats.block_context_certified_height as i64,
+        );
+        if let Some(ecdsa) = &block_stats.ecdsa_stats {
+            self.ecdsa_key_transcript_created
+                .inc_by(ecdsa.key_transcript_created);
+            self.ecdsa_signature_agreements
+                .inc_by(ecdsa.signature_agreements as u64);
+            self.ecdsa_ongoing_signatures
+                .set(ecdsa.ongoing_signatures as i64);
+            self.ecdsa_available_quadruples
+                .set(ecdsa.available_quadruples as i64);
+            self.ecdsa_quadruples_in_creation
+                .set(ecdsa.quadruples_in_creation as i64);
+            self.ecdsa_ongoing_xnet_reshares
+                .set(ecdsa.ongoing_xnet_reshares as i64);
+            self.ecdsa_xnet_reshare_agreements
+                .inc_by(ecdsa.xnet_reshare_agreements as u64);
         }
     }
 }

@@ -17,8 +17,11 @@
 //! into a complete finalization, at which point the block and its ancestors
 //! become finalized.
 use crate::consensus::{
-    batch_delivery::deliver_batches, membership::Membership, metrics::FinalizerMetrics,
-    pool_reader::PoolReader, prelude::*,
+    batch_delivery::deliver_batches,
+    membership::Membership,
+    metrics::{BatchStats, BlockStats, FinalizerMetrics},
+    pool_reader::PoolReader,
+    prelude::*,
 };
 use ic_interfaces::{
     ingress_manager::IngressSelector,
@@ -100,26 +103,8 @@ impl Finalizer {
             ReplicaVersion::default(),
             &self.log,
             None,
-            Some(&|result,
-                   batch_height,
-                   ingress_count,
-                   ingress_bytes,
-                   xnet_bytes,
-                   ingress_ids,
-                   block_hash,
-                   block_height,
-                   block_context_certified_height| {
-                self.process_batch_delivery_result(
-                    result,
-                    batch_height,
-                    ingress_count,
-                    ingress_bytes,
-                    xnet_bytes,
-                    ingress_ids,
-                    block_hash,
-                    block_height,
-                    block_context_certified_height,
-                )
+            Some(&|result, block_stats, batch_stats| {
+                self.process_batch_delivery_result(result, block_stats, batch_stats)
             }),
         );
 
@@ -135,38 +120,13 @@ impl Finalizer {
     fn process_batch_delivery_result(
         &self,
         result: &Result<(), MessageRoutingError>,
-        batch_height: u64,
-        ingress_count: usize,
-        ingress_bytes: usize,
-        xnet_bytes: usize,
-        ingress_ids: Vec<ic_types::artifact::IngressMessageId>,
-        block_hash: &str,
-        block_height: u64,
-        block_context_certified_height: u64,
+        block_stats: BlockStats,
+        batch_stats: BatchStats,
     ) {
         match result {
             Ok(()) => {
-                self.metrics
-                    .batches_delivered
-                    .with_label_values(&["success"])
-                    .inc();
-                self.metrics.batch_height.set(batch_height as i64);
-                self.metrics
-                    .ingress_messages_delivered
-                    .observe(ingress_count as f64);
-                self.metrics
-                    .ingress_message_bytes_delivered
-                    .observe(ingress_bytes as f64);
-                self.metrics.xnet_bytes_delivered.observe(xnet_bytes as f64);
-                self.metrics
-                    .finalization_certified_state_difference
-                    .set((block_height - block_context_certified_height) as i64);
-                debug!(
-                    self.log,
-                    "block_delivered";
-                    block.hash => block_hash
-                );
-                for ingress in ingress_ids.iter() {
+                self.metrics.process(&block_stats, &batch_stats);
+                for ingress in batch_stats.ingress_ids.iter() {
                     debug!(
                         self.log,
                         "ingress_message_delivered";
@@ -174,7 +134,7 @@ impl Finalizer {
                     );
                 }
                 self.ingress_selector
-                    .request_purge_finalized_messages(ingress_ids);
+                    .request_purge_finalized_messages(batch_stats.ingress_ids);
             }
             Err(MessageRoutingError::QueueIsFull) => {
                 self.metrics
