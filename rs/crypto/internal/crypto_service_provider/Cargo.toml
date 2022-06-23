@@ -24,6 +24,7 @@ ic-crypto-internal-fs-ni-dkg = { path = "../crypto_lib/fs_ni_dkg" }
 ic-crypto-internal-logmon = { path = "../logmon" }
 ic-crypto-internal-multi-sig-bls12381 = { path = "../crypto_lib/multi_sig/bls12_381" }
 ic-crypto-secrets-containers = { path = "../../secrets_containers" }
+ic-crypto-internal-seed = { path = "../crypto_lib/seed" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "../crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-internal-threshold-sig-ecdsa = { path = "../crypto_lib/threshold_sig/tecdsa" }
 ic-crypto-internal-test-vectors = { path = "../test_vectors" }

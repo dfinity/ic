@@ -135,7 +135,7 @@
 //!
 //! ## Utility Functions: H2C and XMD
 //!
-//! Files: `hash2curve.rs` and `xmd.rs`
+//! Files: `hash2curve.rs`, and `xmd.rs` in `seed` crate
 //!
 //! An implementation of IETF standard hash2curve is implemented in
 //! `hash2curve.rs`. This is actually never called in production; we do
@@ -172,7 +172,7 @@
 //!
 //! ## Utility Functions: Seed
 //!
-//! File: `seed.rs`
+//! File: `lib.rs` in `seed` crate
 //!
 //! This crate is deterministic; all randomness is provided by the
 //! caller. We may require several different random inputs for various
@@ -204,12 +204,14 @@
 
 #![forbid(unsafe_code)]
 
+use ic_crypto_internal_seed::xmd::XmdError;
 use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+pub use ic_crypto_internal_seed::Seed;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
     IDkgVerifyTranscriptError,
@@ -253,11 +255,9 @@ mod key_derivation;
 mod mega;
 mod poly;
 pub mod ro;
-mod seed;
 pub mod sign;
 pub mod test_utils;
 mod transcript;
-mod xmd;
 pub mod zk;
 
 pub use crate::complaints::IDkgComplaintInternal;
@@ -266,9 +266,7 @@ pub use crate::fe::*;
 pub use crate::group::*;
 pub use crate::mega::*;
 pub use crate::poly::*;
-pub use crate::seed::*;
 pub use crate::transcript::*;
-pub use crate::xmd::*;
 
 pub use crate::key_derivation::{DerivationIndex, DerivationPath};
 pub use sign::{ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal};
@@ -353,6 +351,14 @@ impl From<ThresholdEcdsaError> for IDkgCreateTranscriptInternalError {
             ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
             ThresholdEcdsaError::InsufficientDealings => Self::InsufficientDealings,
             x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+impl From<XmdError> for ThresholdEcdsaError {
+    fn from(e: XmdError) -> Self {
+        match e {
+            XmdError::InvalidOutputLength(x) => Self::InvalidArguments(format!("{:?}", x)),
         }
     }
 }

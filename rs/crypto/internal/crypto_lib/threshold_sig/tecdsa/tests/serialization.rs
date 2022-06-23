@@ -91,70 +91,70 @@ fn verify_protocol_output_remains_unchanged_over_time() -> Result<(), ThresholdE
     check_dealings(
         "key",
         &setup.key,
-        "da6286338edd7d4d",
-        "e662d96ce64b7f99",
+        "b9ab2030782684e7",
+        "e37b4bacfd8af891",
         &[
-            (0, "d46016e61131e59f"),
-            (1, "ce7b7b7ad2ea7279"),
-            (2, "222ad624c89a9196"),
-            (3, "019f742040b0a551"),
-            (4, "94c4405df048f449"),
+            (0, "0b2434d04f35e1dd"),
+            (1, "e4c44d0ceca518ad"),
+            (2, "9e267bb3507ff691"),
+            (3, "32404e779a80670c"),
+            (4, "5d39cb3b19ee2768"),
         ],
     )?;
 
     check_dealings(
         "key*lambda",
         &setup.key_times_lambda,
-        "dcd58ba515be5259",
-        "65dbb537693b73bd",
+        "091a06f5e7fa5414",
+        "ce06f103be27782d",
         &[
-            (0, "b9d6a6261245998a"),
-            (1, "5d46a683537172c5"),
-            (2, "53d0c39c06e7078d"),
-            (3, "ab56eaedc799d567"),
-            (4, "78ba39219830843f"),
+            (0, "6cc1169eacc5e420"),
+            (1, "53b50ba130414b61"),
+            (2, "80f74d3ae8d92133"),
+            (3, "3da495ebe276ff67"),
+            (4, "cc480265f7015049"),
         ],
     )?;
 
     check_dealings(
         "lambda",
         &setup.lambda,
-        "b8326892c3402d58",
-        "5fcd24bf605d4cff",
+        "88ef25657907b5a2",
+        "4e036dd84e25c40a",
         &[
-            (0, "a44000d2c06b75da"),
-            (1, "e7297326c85c7508"),
-            (2, "28f5ab0c1b505689"),
-            (3, "298648ee710ac5ba"),
-            (4, "1cf1a0364b05c417"),
+            (0, "10c13cdb7ce57d7c"),
+            (1, "ca5387d1b04e3fd2"),
+            (2, "2c8d2d1cd7d5dab5"),
+            (3, "ca129691c3797ca7"),
+            (4, "1e24da7f014f04c8"),
         ],
     )?;
 
     check_dealings(
         "kappa",
         &setup.kappa,
-        "556dccc6cab404fa",
-        "820694586d1a6143",
+        "3e106b6d4b8ed5dc",
+        "f7e36bc23c68bc20",
         &[
-            (0, "d857d82b6ba85eeb"),
-            (1, "c67bd8a94cf01ace"),
-            (2, "48304371a042dd29"),
-            (3, "e55062ad33957ee1"),
-            (4, "e08b196f15d8538b"),
+            (0, "b371a8a8b8d7315e"),
+            (1, "5bdc929b7bc7cbab"),
+            (2, "c9f6771a920b4294"),
+            (3, "2e06ad931f8c504c"),
+            (4, "a84f75bb59bfdc7e"),
         ],
     )?;
 
     check_dealings(
         "kappa*lambda",
         &setup.kappa_times_lambda,
-        "8a789fa03aa3a6d7",
-        "62189e2343328426",
+        "56813b7a7babce23",
+        "d6393464137c2baa",
         &[
-            (0, "2c5da3d260204f62"),
-            (1, "2eb17422f9672608"),
-            (2, "0a905e05faa7ae78"),
-            (3, "d69ba7c656ca7887"),
-            (4, "0aeef8cef93b2bdc"),
+            (0, "b1dd7cbda826d07a"),
+            (1, "641e292ee50c7bf5"),
+            (2, "8edb0295e7af18ff"),
+            (3, "5cab21eb8c9a4f7e"),
+            (4, "63ab56050518a532"),
         ],
     )?;
 
@@ -171,11 +171,11 @@ fn verify_protocol_output_remains_unchanged_over_time() -> Result<(), ThresholdE
     check_shares(
         &shares,
         &[
-            (0, "b53432872a836550"),
-            (1, "caca3ad9c96dcc20"),
-            (2, "22a8dcf47325b89e"),
-            (3, "a444752e464b2327"),
-            (4, "f3cf837cda339990"),
+            (0, "33bc4bc53944c06e"),
+            (1, "784ff29e3103b0f4"),
+            (2, "138c17db77b465a3"),
+            (3, "18fdf2802f5a1709"),
+            (4, "04d9548619a0a334"),
         ],
     )?;
 
@@ -183,7 +183,7 @@ fn verify_protocol_output_remains_unchanged_over_time() -> Result<(), ThresholdE
 
     verify_data(
         "signature".to_string(),
-        "c1abb20ffef4ae13",
+        "b44808970ea7d426",
         &sig.serialize(),
     );
 

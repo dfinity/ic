@@ -4935,6 +4935,7 @@ dependencies = [
  "ic-crypto-internal-fs-ni-dkg",
  "ic-crypto-internal-logmon",
  "ic-crypto-internal-multi-sig-bls12381",
+ "ic-crypto-internal-seed",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-threshold-sig-ecdsa",
@@ -5061,6 +5062,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-internal-seed"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "ic-crypto-sha",
+ "ic-types 0.8.0",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "serde",
+ "zeroize",
+]
+
+[[package]]
 name = "ic-crypto-internal-sha2"
 version = "0.8.0"
 dependencies = [
@@ -5132,6 +5146,7 @@ dependencies = [
  "hex",
  "hex-literal 0.3.3",
  "ic-crypto-internal-hmac",
+ "ic-crypto-internal-seed",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "ic-types 0.8.0",

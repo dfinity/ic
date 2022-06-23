@@ -1,8 +1,16 @@
-use crate::expand_message_xmd;
+//! # Seed
+//!
+//! The [`Seed`] type encapsulates a crypto variable which can be
+//! used to derive additional values (using XMD) or be turned into
+//! a random number generator (ChaCha20).
+
+use crate::xmd::expand_message_xmd;
 use core::fmt::{self, Debug};
 use rand::{CryptoRng, RngCore, SeedableRng};
 use std::convert::TryInto;
 use zeroize::Zeroize;
+
+pub mod xmd;
 
 /// The internal length of a Seed
 ///
@@ -43,12 +51,12 @@ impl Seed {
     /// If the Seed is intended to be random the input should be at least 256
     /// bits long.
     pub fn from_bytes(value: &[u8]) -> Self {
-        Self::new(value, "ic-crypto-tecdsa-seed-from-bytes")
+        Self::new(value, "ic-crypto-seed-from-bytes")
     }
 
     /// Create a Seed from an externally provided Randomness
     pub fn from_randomness(r: &ic_types::Randomness) -> Self {
-        Self::new(&r.get(), "ic-crypto-tecdsa-seed-from-randomness")
+        Self::new(&r.get(), "ic-crypto-seed-from-randomness")
     }
 
     /// Create a Seed from a random number generator
@@ -57,7 +65,7 @@ impl Seed {
     pub fn from_rng<R: CryptoRng + RngCore>(rng: &mut R) -> Self {
         let mut rng_output = [0u8; SEED_LEN];
         rng.fill_bytes(&mut rng_output);
-        Self::new(&rng_output, "ic-crypto-tecdsa-seed-from-rng")
+        Self::new(&rng_output, "ic-crypto-seed-from-rng")
     }
 
     /// Derive a new Seed from self

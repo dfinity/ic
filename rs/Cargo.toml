@@ -53,6 +53,7 @@ members = [
   "crypto/internal/crypto_lib/fs_ni_dkg",
   "crypto/internal/crypto_lib/hmac",
   "crypto/internal/crypto_lib/multi_sig/bls12_381",
+  "crypto/internal/crypto_lib/seed",
   "crypto/internal/crypto_lib/sha2",
   "crypto/secrets_containers",
   "crypto/internal/crypto_lib/threshold_sig/bls12_381",

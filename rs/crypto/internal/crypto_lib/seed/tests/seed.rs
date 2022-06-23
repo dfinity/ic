@@ -1,4 +1,4 @@
-use ic_crypto_internal_threshold_sig_ecdsa::*;
+use ic_crypto_internal_seed::Seed;
 use rand::RngCore;
 
 #[test]
@@ -20,32 +20,32 @@ fn seed_fixed_output() {
 
     test_seed_output(
         Seed::from_bytes(&[42; 32]),
-        "37cca0b1183b7c084731a1e0445707aa5f52119e69dd582bfc3c6b9a79225523",
+        "21b03e2c906a3c20d8159b65a459991238fd3bfb8a36c0af904cd1b12a109853",
     );
 
     test_seed_output(
         Seed::from_bytes(&[42; 32]).derive("label1"),
-        "c10cc8472945b48a8794da965a0e1110c8178943f2fbecc4bca52c95d0b8a5c3",
+        "6f3377835641b9ea865e077ae3d09806fa7cd77af4ad7a6674400d8e0683517a",
     );
 
     test_seed_output(
         Seed::from_bytes(&[42; 32])
             .derive("label1")
             .derive("label2"),
-        "4119033db2534e972e328209f61bf69f722da4e7c5a277799c3d5ddfefa6be7a",
+        "545e10f21a984c7f33a03ffb1be596ae967f7b397fd086d76ccf71b3f2a43ef3",
     );
 
     let mut rng = Seed::from_bytes(&[42; 32]).into_rng();
 
     test_seed_output(
         Seed::from_rng(&mut rng),
-        "d73d27ddc5e54cfd69941f005b0ce62997b88a212f3513c5eb56ea5532a31ccf",
+        "2e7af894bb91c48e2b72be9627dbc960d7800ef7569c8f6f0f3d9873c7337c9a",
     );
 
     // This reads the next bytes from the RNG and so has a different
     // output than the previous test
     test_seed_output(
         Seed::from_rng(&mut rng),
-        "3f811c646ec91b746ac4a41fdcc86f5a95911297e2c1006cb77f0e58013170b8",
+        "2bb9a6469fff531083abd8f85c3d7ffa78090f725546a9633a35c0c4582c9b5c",
     );
 }
