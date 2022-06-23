@@ -274,6 +274,8 @@ pub struct RequestId {
     pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag="2")]
     pub quadruple_id: u64,
+    #[prost(uint64, tag="3")]
+    pub height: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]

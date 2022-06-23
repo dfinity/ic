@@ -141,7 +141,7 @@ impl EcdsaComplaintHandlerImpl {
             match Action::action(
                 block_reader,
                 &active_transcripts,
-                complaint.complainer_height,
+                complaint.idkg_complaint.transcript_id.source_height(),
                 &complaint.idkg_complaint.transcript_id,
             ) {
                 Action::Process(transcript) => {
@@ -255,7 +255,7 @@ impl EcdsaComplaintHandlerImpl {
             match Action::action(
                 block_reader,
                 &active_transcripts,
-                opening.complainer_height,
+                opening.idkg_opening.transcript_id.source_height(),
                 &opening.idkg_opening.transcript_id,
             ) {
                 Action::Process(transcript) => {
@@ -320,7 +320,7 @@ impl EcdsaComplaintHandlerImpl {
                 let complaint = signed_complaint.get();
                 self.should_purge(
                     &complaint.idkg_complaint.transcript_id,
-                    complaint.complainer_height,
+                    complaint.idkg_complaint.transcript_id.source_height(),
                     current_height,
                     &active_transcripts,
                 )
@@ -337,7 +337,7 @@ impl EcdsaComplaintHandlerImpl {
                 let complaint = signed_complaint.get();
                 self.should_purge(
                     &complaint.idkg_complaint.transcript_id,
-                    complaint.complainer_height,
+                    complaint.idkg_complaint.transcript_id.source_height(),
                     current_height,
                     &active_transcripts,
                 )
@@ -354,7 +354,7 @@ impl EcdsaComplaintHandlerImpl {
                 let opening = signed_opening.get();
                 self.should_purge(
                     &opening.idkg_opening.transcript_id,
-                    opening.complainer_height,
+                    opening.idkg_opening.transcript_id.source_height(),
                     current_height,
                     &active_transcripts,
                 )
@@ -371,7 +371,7 @@ impl EcdsaComplaintHandlerImpl {
                 let opening = signed_opening.get();
                 self.should_purge(
                     &opening.idkg_opening.transcript_id,
-                    opening.complainer_height,
+                    opening.idkg_opening.transcript_id.source_height(),
                     current_height,
                     &active_transcripts,
                 )
@@ -387,13 +387,9 @@ impl EcdsaComplaintHandlerImpl {
     fn crypto_create_complaint(
         &self,
         idkg_complaint: IDkgComplaint,
-        height: Height,
         registry_version: RegistryVersion,
     ) -> Option<EcdsaComplaint> {
-        let content = EcdsaComplaintContent {
-            complainer_height: height,
-            idkg_complaint,
-        };
+        let content = EcdsaComplaintContent { idkg_complaint };
         match self.crypto.sign(&content, self.node_id, registry_version) {
             Ok(signature) => {
                 let signed_complaint = EcdsaComplaint { content, signature };
@@ -519,7 +515,6 @@ impl EcdsaComplaintHandlerImpl {
         // Sign the opening
         let content = EcdsaOpeningContent {
             complainer_id: signed_complaint.signature.signer,
-            complainer_height: complaint.complainer_height,
             idkg_opening,
         };
         match self
@@ -770,7 +765,6 @@ pub(crate) trait EcdsaTranscriptLoader: Send {
         &self,
         ecdsa_pool: &dyn EcdsaPool,
         transcript: &IDkgTranscript,
-        height: Height,
     ) -> TranscriptLoadStatus;
 }
 
@@ -790,7 +784,6 @@ impl EcdsaTranscriptLoader for EcdsaComplaintHandlerImpl {
         &self,
         ecdsa_pool: &dyn EcdsaPool,
         transcript: &IDkgTranscript,
-        height: Height,
     ) -> TranscriptLoadStatus {
         // 1. Try loading the transcripts without openings
         let complaints = match IDkgProtocol::load_transcript(&*self.crypto, transcript) {
@@ -819,7 +812,7 @@ impl EcdsaTranscriptLoader for EcdsaComplaintHandlerImpl {
         for complaint in complaints {
             if !self.has_complainer_issued_complaint(ecdsa_pool, &complaint, &self.node_id) {
                 if let Some(ecdsa_complaint) =
-                    self.crypto_create_complaint(complaint, height, transcript.registry_version)
+                    self.crypto_create_complaint(complaint, transcript.registry_version)
                 {
                     new_complaints.push(ecdsa_complaint);
                 } else {
@@ -1003,15 +996,14 @@ mod tests {
                     create_complaint_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3) = (
-                    create_transcript_id(1),
-                    create_transcript_id(2),
-                    create_transcript_id(3),
+                    create_transcript_id_with_height(1, Height::from(200)),
+                    create_transcript_id_with_height(2, Height::from(20)),
+                    create_transcript_id_with_height(3, Height::from(30)),
                 );
 
                 // Set up the ECDSA pool
                 // Complaint from a node ahead of us (deferred)
-                let mut complaint = create_complaint(id_1, NODE_2, NODE_3);
-                complaint.content.complainer_height = Height::from(200);
+                let complaint = create_complaint(id_1, NODE_2, NODE_3);
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
@@ -1019,8 +1011,7 @@ mod tests {
                 });
 
                 // Complaint for a transcript not currently active (dropped)
-                let mut complaint = create_complaint(id_2, NODE_2, NODE_3);
-                complaint.content.complainer_height = Height::from(20);
+                let complaint = create_complaint(id_2, NODE_2, NODE_3);
                 let msg_id_2 = complaint.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
@@ -1029,8 +1020,7 @@ mod tests {
                 });
 
                 // Complaint for a transcript currently active (accepted)
-                let mut complaint = create_complaint(id_3, NODE_2, NODE_3);
-                complaint.content.complainer_height = Height::from(30);
+                let complaint = create_complaint(id_3, NODE_2, NODE_3);
                 let msg_id_3 = complaint.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
@@ -1059,12 +1049,11 @@ mod tests {
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
-                let id_1 = create_transcript_id(1);
+                let id_1 = create_transcript_id_with_height(1, Height::from(30));
 
                 // Set up the ECDSA pool
                 // Complaint from NODE_3 for transcript id_1, dealer NODE_2
-                let mut complaint = create_complaint(id_1, NODE_2, NODE_3);
-                complaint.content.complainer_height = Height::from(30);
+                let complaint = create_complaint(id_1, NODE_2, NODE_3);
                 let msg_id = complaint.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint.clone()),
@@ -1080,8 +1069,8 @@ mod tests {
                 ecdsa_pool.apply_changes(change_set);
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
-                    Height::new(100),
-                    vec![TranscriptRef::new(Height::new(10), id_1)],
+                    Height::new(30),
+                    vec![TranscriptRef::new(Height::new(30), id_1)],
                 );
                 let change_set = complaint_handler.validate_complaints(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
@@ -1099,12 +1088,11 @@ mod tests {
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
-                let id_1 = create_transcript_id(1);
+                let id_1 = create_transcript_id_with_height(1, Height::from(30));
 
                 // Set up the ECDSA pool
                 // Complaint from NODE_3 for transcript id_1, dealer NODE_2
-                let mut complaint = create_complaint(id_1, NODE_2, NODE_3);
-                complaint.content.complainer_height = Height::from(30);
+                let complaint = create_complaint_with_nonce(id_1, NODE_2, NODE_3, 0);
                 let msg_id_1 = complaint.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
@@ -1113,8 +1101,7 @@ mod tests {
                 });
 
                 // Complaint from NODE_3 for transcript id_1, dealer NODE_2
-                let mut complaint = create_complaint(id_1, NODE_2, NODE_3);
-                complaint.content.complainer_height = Height::from(10);
+                let complaint = create_complaint_with_nonce(id_1, NODE_2, NODE_3, 1);
                 let msg_id_2 = complaint.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
@@ -1124,7 +1111,7 @@ mod tests {
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
                     Height::new(100),
-                    vec![TranscriptRef::new(Height::new(10), id_1)],
+                    vec![TranscriptRef::new(Height::new(30), id_1)],
                 );
                 let change_set = complaint_handler.validate_complaints(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 2);
@@ -1201,16 +1188,15 @@ mod tests {
                     create_complaint_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3, id_4) = (
-                    create_transcript_id(1),
-                    create_transcript_id(2),
-                    create_transcript_id(3),
-                    create_transcript_id(4),
+                    create_transcript_id_with_height(1, Height::from(400)),
+                    create_transcript_id_with_height(2, Height::from(20)),
+                    create_transcript_id_with_height(3, Height::from(30)),
+                    create_transcript_id_with_height(4, Height::from(40)),
                 );
 
                 // Set up the ECDSA pool
                 // Opening from a node ahead of us (deferred)
-                let mut opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
-                opening.content.complainer_height = Height::from(200);
+                let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
@@ -1218,8 +1204,7 @@ mod tests {
                 });
 
                 // Opening for a transcript not currently active(dropped)
-                let mut opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
-                opening.content.complainer_height = Height::from(20);
+                let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
                 let msg_id_1 = opening.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
@@ -1229,8 +1214,7 @@ mod tests {
 
                 // Opening for a transcript currently active,
                 // with a matching complaint (accepted)
-                let mut opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
-                opening.content.complainer_height = Height::from(30);
+                let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
                 let msg_id_2 = opening.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
@@ -1246,8 +1230,7 @@ mod tests {
 
                 // Opening for a transcript currently active,
                 // without a matching complaint (deferred)
-                let mut opening = create_opening(id_4, NODE_2, NODE_3, NODE_4);
-                opening.content.complainer_height = Height::from(40);
+                let opening = create_opening(id_4, NODE_2, NODE_3, NODE_4);
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
@@ -1277,12 +1260,11 @@ mod tests {
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
-                let id_1 = create_transcript_id(1);
+                let id_1 = create_transcript_id_with_height(1, Height::from(20));
 
                 // Set up the ECDSA pool
                 // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
-                let mut opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
-                opening.content.complainer_height = Height::from(20);
+                let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
                 let msg_id = opening.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening.clone()),
@@ -1316,12 +1298,11 @@ mod tests {
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
-                let id_1 = create_transcript_id(1);
+                let id_1 = create_transcript_id_with_height(1, Height::from(20));
 
                 // Set up the ECDSA pool
                 // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
-                let mut opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
-                opening.content.complainer_height = Height::from(20);
+                let opening = create_opening_with_nonce(id_1, NODE_2, NODE_3, NODE_4, 1);
                 let msg_id_1 = opening.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
@@ -1330,8 +1311,7 @@ mod tests {
                 });
 
                 // Opening from NODE_4 for transcript id_1, dealer NODE_2, complainer NODE_3
-                let mut opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
-                opening.content.complainer_height = Height::from(30);
+                let opening = create_opening_with_nonce(id_1, NODE_2, NODE_3, NODE_4, 2);
                 let msg_id_2 = opening.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
@@ -1360,14 +1340,13 @@ mod tests {
                     create_complaint_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3) = (
-                    create_transcript_id(1),
-                    create_transcript_id(2),
-                    create_transcript_id(3),
+                    create_transcript_id_with_height(1, Height::from(20)),
+                    create_transcript_id_with_height(2, Height::from(30)),
+                    create_transcript_id_with_height(3, Height::from(200)),
                 );
 
                 // Complaint 1: height <= current_height, active transcripts (not purged)
-                let mut complaint = create_complaint(id_1, NODE_2, NODE_3);
-                complaint.content.complainer_height = Height::from(20);
+                let complaint = create_complaint(id_1, NODE_2, NODE_3);
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
@@ -1375,8 +1354,7 @@ mod tests {
                 });
 
                 // Complaint 2: height <= current_height, non-active transcripts (purged)
-                let mut complaint = create_complaint(id_2, NODE_2, NODE_3);
-                complaint.content.complainer_height = Height::from(30);
+                let complaint = create_complaint(id_2, NODE_2, NODE_3);
                 let msg_id = complaint.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
@@ -1385,8 +1363,7 @@ mod tests {
                 });
 
                 // Complaint 3: height > current_height (not purged)
-                let mut complaint = create_complaint(id_3, NODE_2, NODE_3);
-                complaint.content.complainer_height = Height::from(200);
+                let complaint = create_complaint(id_3, NODE_2, NODE_3);
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaComplaint(complaint),
                     peer_id: NODE_3,
@@ -1413,22 +1390,20 @@ mod tests {
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
-                    create_transcript_id(1),
-                    create_transcript_id(2),
-                    create_transcript_id(3),
+                    create_transcript_id_with_height(1, Height::from(20)),
+                    create_transcript_id_with_height(2, Height::from(30)),
+                    create_transcript_id_with_height(3, Height::from(200)),
                 );
 
                 // Complaint 1: height <= current_height, active transcripts (not purged)
-                let mut complaint = create_complaint(id_1, NODE_2, NODE_3);
-                complaint.content.complainer_height = Height::from(20);
+                let complaint = create_complaint(id_1, NODE_2, NODE_3);
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
                 )];
                 ecdsa_pool.apply_changes(change_set);
 
                 // Complaint 2: height <= current_height, non-active transcripts (purged)
-                let mut complaint = create_complaint(id_2, NODE_2, NODE_3);
-                complaint.content.complainer_height = Height::from(30);
+                let complaint = create_complaint(id_2, NODE_2, NODE_3);
                 let msg_id = complaint.message_hash();
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
@@ -1436,8 +1411,7 @@ mod tests {
                 ecdsa_pool.apply_changes(change_set);
 
                 // Complaint 3: height > current_height (not purged)
-                let mut complaint = create_complaint(id_3, NODE_2, NODE_3);
-                complaint.content.complainer_height = Height::from(200);
+                let complaint = create_complaint(id_3, NODE_2, NODE_3);
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
                 )];
@@ -1464,14 +1438,13 @@ mod tests {
                     create_complaint_dependencies(pool_config, logger);
                 let time_source = FastForwardTimeSource::new();
                 let (id_1, id_2, id_3) = (
-                    create_transcript_id(1),
-                    create_transcript_id(2),
-                    create_transcript_id(3),
+                    create_transcript_id_with_height(1, Height::from(20)),
+                    create_transcript_id_with_height(2, Height::from(30)),
+                    create_transcript_id_with_height(3, Height::from(200)),
                 );
 
                 // Opening 1: height <= current_height, active transcripts (not purged)
-                let mut opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
-                opening.content.complainer_height = Height::from(20);
+                let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
@@ -1479,8 +1452,7 @@ mod tests {
                 });
 
                 // Opening 2: height <= current_height, non-active transcripts (purged)
-                let mut opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
-                opening.content.complainer_height = Height::from(30);
+                let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
                 let msg_id = opening.message_hash();
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
@@ -1489,8 +1461,7 @@ mod tests {
                 });
 
                 // Complaint 3: height > current_height (not purged)
-                let mut opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
-                opening.content.complainer_height = Height::from(200);
+                let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
                 ecdsa_pool.insert(UnvalidatedArtifact {
                     message: EcdsaMessage::EcdsaOpening(opening),
                     peer_id: NODE_4,
@@ -1517,22 +1488,20 @@ mod tests {
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
                 let (id_1, id_2, id_3) = (
-                    create_transcript_id(1),
-                    create_transcript_id(2),
-                    create_transcript_id(3),
+                    create_transcript_id_with_height(1, Height::from(20)),
+                    create_transcript_id_with_height(2, Height::from(30)),
+                    create_transcript_id_with_height(3, Height::from(200)),
                 );
 
                 // Opening 1: height <= current_height, active transcripts (not purged)
-                let mut opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
-                opening.content.complainer_height = Height::from(20);
+                let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaOpening(opening),
                 )];
                 ecdsa_pool.apply_changes(change_set);
 
                 // Opening 2: height <= current_height, non-active transcripts (purged)
-                let mut opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
-                opening.content.complainer_height = Height::from(30);
+                let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
                 let msg_id = opening.message_hash();
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaOpening(opening),
@@ -1540,8 +1509,7 @@ mod tests {
                 ecdsa_pool.apply_changes(change_set);
 
                 // Complaint 3: height > current_height (not purged)
-                let mut opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
-                opening.content.complainer_height = Height::from(200);
+                let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaOpening(opening),
                 )];

@@ -118,12 +118,7 @@ impl EcdsaPreSignerImpl {
                     );
                 }
 
-                self.crypto_create_dealing(
-                    ecdsa_pool,
-                    transcript_loader,
-                    block_reader,
-                    transcript_params,
-                )
+                self.crypto_create_dealing(ecdsa_pool, transcript_loader, transcript_params)
             })
             .collect()
     }
@@ -560,15 +555,11 @@ impl EcdsaPreSignerImpl {
         &self,
         ecdsa_pool: &dyn EcdsaPool,
         transcript_loader: &dyn EcdsaTranscriptLoader,
-        block_reader: &dyn EcdsaBlockReader,
         transcript_params: &IDkgTranscriptParams,
     ) -> EcdsaChangeSet {
-        if let Some(changes) = self.load_dependencies(
-            ecdsa_pool,
-            transcript_loader,
-            transcript_params,
-            block_reader.tip_height(),
-        ) {
+        if let Some(changes) =
+            self.load_dependencies(ecdsa_pool, transcript_loader, transcript_params)
+        {
             return changes;
         }
 
@@ -867,18 +858,17 @@ impl EcdsaPreSignerImpl {
         ecdsa_pool: &dyn EcdsaPool,
         transcript_loader: &dyn EcdsaTranscriptLoader,
         transcript_params: &IDkgTranscriptParams,
-        height: Height,
     ) -> Option<EcdsaChangeSet> {
         match &transcript_params.operation_type() {
             IDkgTranscriptOperation::Random => None,
             IDkgTranscriptOperation::ReshareOfMasked(t) => {
-                load_transcripts(ecdsa_pool, transcript_loader, &[t], height)
+                load_transcripts(ecdsa_pool, transcript_loader, &[t])
             }
             IDkgTranscriptOperation::ReshareOfUnmasked(t) => {
-                load_transcripts(ecdsa_pool, transcript_loader, &[t], height)
+                load_transcripts(ecdsa_pool, transcript_loader, &[t])
             }
             IDkgTranscriptOperation::UnmaskedTimesMasked(t1, t2) => {
-                load_transcripts(ecdsa_pool, transcript_loader, &[t1, t2], height)
+                load_transcripts(ecdsa_pool, transcript_loader, &[t1, t2])
             }
         }
     }

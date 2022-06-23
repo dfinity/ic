@@ -50,6 +50,7 @@ message XnetReshareAgreement {
 message RequestId {
   bytes pseudo_random_id = 1;
   uint64 quadruple_id = 2;
+  uint64 height = 3;
 }
 
 message TranscriptRef {
