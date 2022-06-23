@@ -511,20 +511,21 @@ fn simple_commitment_stable_representation_is_stable() {
 
     assert_eq!(
         hex::encode(simple_commitment_bytes(EccCurveType::K256, 1)),
-        "5301039fe83fd99e3c6b76df143254cb8a836d6b47aa68cf3fd7581196afdeb904f9d2"
+        "53010269a513d6375661fb245a5b66206a85671568178e0608b4585bee50542be4999a"
     );
     assert_eq!(
         hex::encode(simple_commitment_bytes(EccCurveType::K256, 2)),
-        "530103c1f401c44781086b6d0e6b0ef5c4b44615704d089d454570a15f5d57ec5c55820347ab40cedd0e1d19945028dd62a945d7f48083cef4174753c27925b26912af3f"
+        "5301034af5f78220f96e265d9c93af4463b7b91a2dc1ef1db105913cb85024c697f79c036ac66cf30781414b2cb7e4e5ee13885e3d6c8049f2cf623f2d24f37de1d08432"
     );
 
     assert_eq!(
         hex::encode(simple_commitment_bytes(EccCurveType::P256, 1)),
-        "5302032aaa236410513db103d17be5d6f52f1444bdd4e440a20e65c481b56d86a431bc"
+        "5302027996e5e935a3e833b61251b232b629defc6120a469fb3fa3f1815491c4ec820c"
     );
     assert_eq!(
         hex::encode(simple_commitment_bytes(EccCurveType::P256, 2)),
-        "530203ebb013814bb1b37b43cf69423883313209fa39a52dae48babe7295010002991c03bfd2404c3905d7fa0a9ab22549ab5c5a34e275d4fbf6953ca2afdd92289b4ae7"
+        "530203d0cbae46273bf136b2a34fb9962ac837a46493ffc9142119584d929a0fac488c030a2d9528db1d50193c868cd77f991b6bfa25daa82fedd9fb6406df46c229577f\
+        "
     );
 }
 
@@ -546,19 +547,19 @@ fn pedersen_commitment_stable_representation_is_stable() {
 
     assert_eq!(
         hex::encode(pedersen_commitment_bytes(EccCurveType::K256, 1)),
-        "5001025b20c6c5dec68e994ec79c9dbdc4657eedda2bce11d3cfd4e9d328b56e25b288"
+        "500103e4febce7716f1f46b4c3ce26332c71ac013d901bf214bcf04a02c331ac9df8fb"
     );
     assert_eq!(
         hex::encode(pedersen_commitment_bytes(EccCurveType::K256, 2)),
-        "5001032d67617d5848b9401d292fd026b062bdf1c48e8471608b1983ee54b773e61cdb03b4ee72750211155139f613cb32897854152d4f6cb41c843963075c7146dc6001"
+        "500103dcd8d3bf27056abab419a773e1eb8f066968a427af43148595b105d2875b8804036bcc68f6a1547bdc684a95e8dde462891e130fd35bf79911e0f503a6469cb08f"
     );
 
     assert_eq!(
         hex::encode(pedersen_commitment_bytes(EccCurveType::P256, 1)),
-        "5002026662cd78cf51a8afee0a158b49c9d222930168a96488fe7d574e42585126b085"
+        "5002032f7131615a8e025949ccce43d18ac5f76aaabc7d2c86139fb1499d4271af2996"
     );
     assert_eq!(
         hex::encode(pedersen_commitment_bytes(EccCurveType::P256, 2)),
-        "5002027facbc97df263004792094aa69d0e00e14a9f490f052c20b49abd6e981da2017023720c8f9a0d53edf8e285a47737b47bae702309546a51adf1b8fc2c13db3417f"
+        "500202e48822b0cd88327b344f4064467a221c60e012b572f8ade76391696468b1dda203a251d2fb0a33059bc78738379aa0b4cba4b26e87e6a95362a303153d7d3988b6"
     );
 }

@@ -2,6 +2,7 @@ use crate::fe::EccFieldElement;
 use crate::group::{EccCurveType, EccPoint, EccScalar};
 use crate::{ThresholdEcdsaError, ThresholdEcdsaResult};
 use hex_literal::hex;
+use ic_crypto_internal_seed::xmd;
 
 /// Conditional move matching draft-irtf-cfrg-hash-to-curve-14 notation
 ///
@@ -135,7 +136,7 @@ fn hash_to_field(
     let field_len = (p_bits + security_level + 7) / 8; // "L" in spec
     let len_in_bytes = count * field_len;
 
-    let uniform_bytes = crate::xmd::expand_message_xmd(input, domain_separator, len_in_bytes)?;
+    let uniform_bytes = xmd::expand_message_xmd(input, domain_separator, len_in_bytes)?;
 
     let mut out = Vec::with_capacity(count);
 
@@ -162,7 +163,7 @@ pub(crate) fn hash_to_scalar(
     let field_len = (s_bits + security_level + 7) / 8; // "L" in spec
     let len_in_bytes = count * field_len;
 
-    let uniform_bytes = crate::xmd::expand_message_xmd(input, domain_separator, len_in_bytes)?;
+    let uniform_bytes = xmd::expand_message_xmd(input, domain_separator, len_in_bytes)?;
 
     let mut out = Vec::with_capacity(count);
 

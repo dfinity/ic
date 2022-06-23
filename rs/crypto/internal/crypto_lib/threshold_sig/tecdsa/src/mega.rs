@@ -1,5 +1,4 @@
 use crate::group::*;
-use crate::seed::Seed;
 use crate::*;
 use core::fmt::{self, Debug};
 use paste::paste;

@@ -8,6 +8,7 @@ edition = "2018"
 [dependencies]
 fe-derive = { path = "fe-derive" }
 ic-crypto-sha = { path = "../../../../sha" }
+ic-crypto-internal-seed = { path = "../../seed" }
 ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-internal-hmac = { path = "../../hmac" }
 ic-types = { path = "../../../../../types/types" }

@@ -1,4 +1,5 @@
 use crate::*;
+use ic_crypto_internal_seed::xmd;
 use std::collections::BTreeMap;
 
 /// A Random Oracle (based on XMD)
@@ -181,7 +182,11 @@ impl RandomOracle {
     pub fn output_bytestring(self, output_length: usize) -> ThresholdEcdsaResult<Vec<u8>> {
         let ro_input = self.form_ro_input()?;
 
-        xmd::expand_message_xmd(&ro_input, self.domain_separator.as_bytes(), output_length)
+        Ok(xmd::expand_message_xmd(
+            &ro_input,
+            self.domain_separator.as_bytes(),
+            output_length,
+        )?)
     }
 
     /// Consume the random oracle and generate a point as output

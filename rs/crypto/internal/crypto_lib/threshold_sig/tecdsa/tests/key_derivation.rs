@@ -1,6 +1,4 @@
-use ic_crypto_internal_threshold_sig_ecdsa::{
-    DerivationIndex, DerivationPath, EccCurveType, EccPoint, Seed, ThresholdEcdsaError,
-};
+use ic_crypto_internal_threshold_sig_ecdsa::*;
 use rand::Rng;
 use std::convert::{TryFrom, TryInto};
 
@@ -55,7 +53,7 @@ fn verify_bip32_extended_key_derivation() -> Result<(), ThresholdEcdsaError> {
     let master_key = setup.public_key(&DerivationPath::new(vec![]))?;
     assert_eq!(
         hex::encode(master_key.public_key),
-        "038cc78aa6040c5f269351939a05aad3a31f86902d0b8cf3085244bb58b6d4337a"
+        "02aab10ba2f09b79f712726f9fa697811facd778dac10b543c42cc7e7c78e9db21"
     );
     assert_eq!(
         hex::encode(master_key.chain_key),
@@ -68,31 +66,31 @@ fn verify_bip32_extended_key_derivation() -> Result<(), ThresholdEcdsaError> {
     let key = setup.public_key(&DerivationPath::new(vec![index1.clone()]))?;
     assert_eq!(
         hex::encode(key.public_key),
-        "0216ce1e78a8477d41351c31d0a9f70286935a96bdd5544356d8ecf63a4120979c"
+        "03effbb1f5199bd6372a5f297e1787b1749297f97e0614eabdb6b668e57771dc8d"
     );
     assert_eq!(
         hex::encode(key.chain_key),
-        "0811cb2a510b05fedcfb7ba49a5ceb4d48d9ed1210b6a85839e36c53105d3308"
+        "9b51621c5a011a5b2857df82c75071ae446b091b7cfeba00fa646591ba2045a1"
     );
 
     let key = setup.public_key(&DerivationPath::new(vec![index2.clone()]))?;
     assert_eq!(
         hex::encode(key.public_key),
-        "02a9a19dc211db7ec0cbc5883bbc70eedef9d95fed51d950d2fe350e66fbb542aa"
+        "03a7827a3b1449e3f0f8114ce6d92f9a9da0aede44a911c44aa15d2633895a6005"
     );
     assert_eq!(
         hex::encode(key.chain_key),
-        "979ab6baf82d9e4b0793236f61012a48d9b3bfa9b6f30c86a0b5d01c1fab300d"
+        "380827cbbcc3cb9b1e810bbc9ed5497141bd61fc199fe92a10cd832bf66601f0"
     );
 
     let key = setup.public_key(&DerivationPath::new(vec![index1, index2]))?;
     assert_eq!(
         hex::encode(key.public_key),
-        "0312ea4418122888ddd95b15261053864861f46f6081a0374c73918c3957b7f35b"
+        "021714eb5c8c8a0b010f494243b1e5272d67d79fa9cd12de301aad847bba8aa7f3"
     );
     assert_eq!(
         hex::encode(key.chain_key),
-        "53ab3ab4ba311976dfae6e7f38fe2131dd5cb72ceff178b06a19b8ad92d1f2d3"
+        "006cc2146eedc68e85947dccd9d0b3aa7a794f9dd928bb9415fc0aa96ed9a45d"
     );
 
     Ok(())

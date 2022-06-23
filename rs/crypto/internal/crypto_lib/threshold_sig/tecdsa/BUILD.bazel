@@ -24,6 +24,7 @@ rust_library(
     ],
     deps = [
         "//rs/crypto/internal/crypto_lib/hmac",
+        "//rs/crypto/internal/crypto_lib/seed",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/sha",
         "//rs/types/types",

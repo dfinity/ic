@@ -1,19 +1,24 @@
-use crate::{ThresholdEcdsaError, ThresholdEcdsaResult};
 use ic_crypto_sha::Sha256;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum XmdError {
+    InvalidOutputLength(String),
+}
+
+pub type XmdResult<T> = std::result::Result<T, XmdError>;
 
 // Section 5.4.1 of https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-14.html
 // Produces a uniformly random byte string of a given length using SHA-256
 // from a message and domain separator.
 // The desired length `len` must not exceed 255*32 = 8160 bytes.
-pub fn expand_message_xmd(
-    msg: &[u8],
-    domain_separator: &[u8],
-    len: usize,
-) -> ThresholdEcdsaResult<Vec<u8>> {
-    if len > 255 * 32 {
-        return Err(ThresholdEcdsaError::InvalidArguments(
-            "Requested XMD output too large".to_string(),
-        ));
+pub fn expand_message_xmd(msg: &[u8], domain_separator: &[u8], len: usize) -> XmdResult<Vec<u8>> {
+    const MAX_LEN: usize = 255 * 32;
+    if len > MAX_LEN {
+        return Err(XmdError::InvalidOutputLength(format!(
+            "Requested XMD output length {} too large (max: {})",
+            len, MAX_LEN
+        )));
     }
 
     // len ≤ 8160 ⭢ ell ≤ 255

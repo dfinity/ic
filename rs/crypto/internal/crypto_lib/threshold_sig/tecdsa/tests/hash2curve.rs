@@ -1,3 +1,4 @@
+use ic_crypto_internal_seed::xmd::expand_message_xmd;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 
 fn xmd_check(msg: &str, dst: &str, want: &str) {
