@@ -375,7 +375,12 @@ impl CyclesAccountManager {
                     }
                 },
                 Ok(Method::UpdateSettings) => match UpdateSettingsArgs::decode(ingress.arg()) {
-                    Ok(record) => Some(record.get_canister_id()),
+                    Ok(_) => {
+                        // The fee for `UpdateSettings` is charged after applying the settings
+                        // to allow users to unfreeze canisters after accidentally setting
+                        // the freezing threshold too high.
+                        None
+                    }
                     Err(err) => {
                         return Err(IngressInductionCostError::InvalidSubnetPayload(
                             err.to_string(),
@@ -426,8 +431,8 @@ impl CyclesAccountManager {
                 let bytes_to_charge = ingress.arg().len()
                     + ingress.method_name().len()
                     + ingress.nonce().map(|n| n.len()).unwrap_or(0);
-                let cost = self.config.ingress_message_reception_fee
-                    + self.config.ingress_byte_reception_fee * bytes_to_charge;
+                let cost =
+                    self.ingress_induction_cost_from_bytes(NumBytes::from(bytes_to_charge as u64));
                 Ok(IngressInductionCost::Fee {
                     payer: paying_canister,
                     cost,
@@ -435,6 +440,12 @@ impl CyclesAccountManager {
             }
             None => Ok(IngressInductionCost::Free),
         }
+    }
+
+    /// Returns the cost of an ingress message based on the message size.
+    pub fn ingress_induction_cost_from_bytes(&self, bytes: NumBytes) -> Cycles {
+        self.config.ingress_message_reception_fee
+            + self.config.ingress_byte_reception_fee * bytes.get()
     }
 
     /// How often canisters should be charged for memory and compute allocation.

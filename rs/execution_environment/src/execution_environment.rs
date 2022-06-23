@@ -448,6 +448,30 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                 &mut state,
                             ),
                         };
+                        // The induction cost of `UpdateSettings` is charged
+                        // after applying the new settings to allow users to
+                        // decrease the freezing threshold if it was set too
+                        // high that topping up the canister is not feasible.
+                        if let RequestOrIngress::Ingress(ingress) = &msg {
+                            if let Ok(canister) = get_canister_mut(canister_id, &mut state) {
+                                let bytes_to_charge =
+                                    ingress.method_payload.len() + ingress.method_name.len();
+                                let induction_cost = self
+                                    .cycles_account_manager
+                                    .ingress_induction_cost_from_bytes(NumBytes::from(
+                                        bytes_to_charge as u64,
+                                    ));
+                                let memory_usage = canister.memory_usage(self.own_subnet_type);
+                                // This call may fail with `CanisterOutOfCyclesError`,
+                                // which is not actionable at this point.
+                                let _ignore_error = self.cycles_account_manager.consume_cycles(
+                                    &mut canister.system_state,
+                                    memory_usage,
+                                    canister.scheduler_state.compute_allocation,
+                                    induction_cost,
+                                );
+                            }
+                        }
                         info!(
                             self.log,
                             "Finished executing update_settings message on canister {:?} after {:?} with result: {:?}",
