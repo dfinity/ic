@@ -546,7 +546,7 @@ impl PolynomialCommitment {
     /// equivalent deserialization function is provided. For this
     /// reason the encoding *must never change* in the future as this
     /// would prevent looking up existing openings in the SKS
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn stable_representation(&self) -> Vec<u8> {
         let curve_type = self.curve_type();
         let mut r = Vec::with_capacity(2 + self.len() * curve_type.point_bytes());
 

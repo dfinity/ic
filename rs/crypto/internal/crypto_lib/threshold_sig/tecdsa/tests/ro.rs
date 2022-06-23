@@ -23,11 +23,11 @@ fn test_random_oracle_stability() -> ThresholdEcdsaResult<()> {
 
     assert_eq!(
         hex::encode(c1[0].serialize()),
-        "c344fc1d9d24d591082e6c5f2732aa00e2c79983ff5081fcee38654a0df4c76f"
+        "a4d99e60e6985076b4f9a7e0042ec4cb279135d128d431b5618005755ecb6611"
     );
     assert_eq!(
         hex::encode(c1[1].serialize()),
-        "0c5c8f16c63135712f393cd57b9b54cea612990eed20ebf18afc9d650152d0b6"
+        "9175435e81a33b3e5f585bfb509a2f3292e92edf522fa2015ba0de165b499335"
     );
 
     // Test random oracle chaining:
@@ -40,7 +40,7 @@ fn test_random_oracle_stability() -> ThresholdEcdsaResult<()> {
 
     assert_eq!(
         hex::encode(c2.serialize()),
-        "ddc1982f681ca10a7633c0651d712ed25f2a1903f9c4a2e5efa0f1b706cbc56f"
+        "7b032238061db2dd2de9346713c6d141ee0eb2c979e29dfe8f6c23f7f685ab52"
     );
 
     let mut ro = ro::RandomOracle::new("ic-test-domain-sep-3");
@@ -52,7 +52,7 @@ fn test_random_oracle_stability() -> ThresholdEcdsaResult<()> {
 
     assert_eq!(
         hex::encode(&byte_output),
-        "899305380c54a613fea73e19346086115f7019a65eec7d9f91d9131d7ad1fbb5464992f08ac3c7e8a6d6"
+        "ee5a02cb81b9146b403a7f8b8b3f0f44c7dbf602c3070691f882562888646290d9f88a6e7d36af0e6ed0"
     );
 
     let mut ro = ro::RandomOracle::new("ic-test-domain-sep-4");
@@ -64,7 +64,7 @@ fn test_random_oracle_stability() -> ThresholdEcdsaResult<()> {
 
     assert_eq!(
         hex::encode(pt.serialize()),
-        "03509940144796c03cf4bd2b3da5a93fe95b758fc4d4ce5b214d6a5f7c1c8230a1"
+        "0377a23b74bdce383717d39f52a7e806193102f842a62afa6a0ccc6ef21206838f"
     );
 
     Ok(())

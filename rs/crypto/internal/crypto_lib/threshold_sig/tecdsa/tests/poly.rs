@@ -495,7 +495,7 @@ fn commitment_opening_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
 }
 
 #[test]
-fn simple_commitment_to_bytes_is_stable() {
+fn simple_commitment_stable_representation_is_stable() {
     fn simple_commitment_bytes(curve: EccCurveType, sz: usize) -> Vec<u8> {
         let mut rng = Seed::from_bytes(&vec![42; sz]).into_rng();
 
@@ -506,7 +506,7 @@ fn simple_commitment_to_bytes_is_stable() {
             SimpleCommitment::create(&polynomial, sz).expect("SimpleCommitment::create failed");
 
         let opening = PolynomialCommitment::Simple(opening);
-        opening.to_bytes()
+        opening.stable_representation()
     }
 
     assert_eq!(
@@ -529,7 +529,7 @@ fn simple_commitment_to_bytes_is_stable() {
 }
 
 #[test]
-fn pedersen_commitment_to_bytes_is_stable() {
+fn pedersen_commitment_stable_representation_is_stable() {
     fn pedersen_commitment_bytes(curve: EccCurveType, sz: usize) -> Vec<u8> {
         let mut rng = Seed::from_bytes(&vec![42; sz]).into_rng();
 
@@ -541,7 +541,7 @@ fn pedersen_commitment_to_bytes_is_stable() {
             .expect("PedersenCommitment::create failed");
 
         let opening = PolynomialCommitment::Pedersen(opening);
-        opening.to_bytes()
+        opening.stable_representation()
     }
 
     assert_eq!(
