@@ -7,6 +7,11 @@ filegroup(
     srcs = glob(["**"]),
 )
 
+filegroup(
+    name = "artifacts",
+    srcs = glob(["artifacts/**"]),
+)
+
 rust_library(
     name = "local_store",
     srcs = glob(["src/**"]),

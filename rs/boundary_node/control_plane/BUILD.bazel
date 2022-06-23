@@ -1,0 +1,51 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/crypto/utils/basic_sig",
+    "//rs/crypto/utils/threshold_sig",
+    "//rs/monitoring/metrics",
+    "//rs/registry/client",
+    "//rs/registry/helpers",
+    "//rs/registry/nns_data_provider",
+    "//rs/types/types",
+    "@crate_index//:anyhow",
+    "@crate_index//:fix-hidden-lifetime-bug",
+    "@crate_index//:futures",
+    "@crate_index//:gflags",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-tls",
+    "@crate_index//:lazy_static",
+    "@crate_index//:native-tls",
+    "@crate_index//:openssl",
+    "@crate_index//:prometheus",
+    "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:slog-scope",
+    "@crate_index//:slog-term",
+    "@crate_index//:substring",
+    "@crate_index//:tokio",
+    "@crate_index//:tokio-openssl",
+    "@crate_index//:url",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+rust_library(
+    name = "control_plane",
+    srcs = glob(["src/**"]),
+    crate_name = "boundary_node_control_plane",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
