@@ -202,6 +202,7 @@ pub fn test(env: TestEnv) {
 
     let faulty_nodes = app_nodes.take(f + 1).collect::<Vec<_>>();
     for node in faulty_nodes {
+        // simulate subnet failure by breaking the replica process, but not the orchestrator
         subnet_recovery
             .get_recovery_api()
             .execute_ssh_command(
@@ -260,7 +261,8 @@ pub fn test(env: TestEnv) {
         }
 
         info!(logger, "{}", step.descr());
-        step.exec().expect("Execution of step failed");
+        step.exec()
+            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
     }
 
     info!(logger, "Blocking for newer registry version");
