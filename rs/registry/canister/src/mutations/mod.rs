@@ -1,6 +1,5 @@
 pub mod common;
 pub mod complete_canister_migration;
-mod dkg;
 pub mod do_add_node_operator;
 pub mod do_add_nodes_to_subnet;
 mod do_add_or_remove_data_centers;

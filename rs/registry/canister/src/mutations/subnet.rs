@@ -1,5 +1,4 @@
 use crate::mutations::common::get_subnet_ids_from_subnet_list;
-use crate::mutations::dkg::{ComputeInitialEcdsaDealingsArgs, ComputeInitialEcdsaDealingsResponse};
 use crate::mutations::do_create_subnet::EcdsaInitialConfig;
 use crate::registry::Version;
 use crate::{
@@ -9,8 +8,12 @@ use crate::{
 };
 use candid::Encode;
 use dfn_core::call;
-use ic_base_types::{subnet_id_into_protobuf, CanisterId, NodeId, PrincipalId, SubnetId};
-use ic_ic00_types::EcdsaKeyId;
+use ic_base_types::{
+    subnet_id_into_protobuf, CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
+};
+use ic_ic00_types::{
+    ComputeInitialEcdsaDealingsArgs, ComputeInitialEcdsaDealingsResponse, EcdsaKeyId,
+};
 use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
 use ic_protobuf::registry::subnet::v1::EcdsaInitialization;
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord};
@@ -171,7 +174,7 @@ impl Registry {
     pub async fn get_all_initial_ecdsa_dealings_from_ic00(
         &self,
         ecdsa_initial_config: &Option<EcdsaInitialConfig>,
-        receiver_nodes: Vec<PrincipalId>,
+        receiver_nodes: Vec<NodeId>,
     ) -> Vec<EcdsaInitialization> {
         let initial_ecdsa_dealings_futures = ecdsa_initial_config
             .as_ref()
@@ -189,7 +192,7 @@ impl Registry {
     fn get_compute_ecdsa_args_from_initial_config(
         &self,
         ecdsa_initial_config: &EcdsaInitialConfig,
-        receiver_nodes: Vec<PrincipalId>,
+        receiver_nodes: Vec<NodeId>,
     ) -> Vec<ComputeInitialEcdsaDealingsArgs> {
         let latest_version = self.latest_version() as u64;
         ecdsa_initial_config
@@ -199,12 +202,12 @@ impl Registry {
                 // create requests outside of async move context to avoid ownership problems
                 let key_id = key_request.key_id.clone();
                 let target_subnet = key_request.subnet_id.map(SubnetId::new);
-                ComputeInitialEcdsaDealingsArgs {
+                ComputeInitialEcdsaDealingsArgs::new(
                     key_id,
-                    subnet_id: target_subnet,
-                    nodes: receiver_nodes.clone(),
-                    registry_version: latest_version,
-                }
+                    target_subnet,
+                    receiver_nodes.iter().copied().collect(),
+                    RegistryVersion::new(latest_version),
+                )
             })
             .collect()
     }
@@ -230,7 +233,7 @@ impl Registry {
 
         EcdsaInitialization {
             key_id: Some((&dealing_request.key_id).into()),
-            dealings: Some(response.initial_dealings),
+            dealings: Some(response.initial_dkg_dealings),
         }
     }
 
