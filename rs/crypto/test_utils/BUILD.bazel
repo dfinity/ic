@@ -7,7 +7,10 @@ filegroup(
     srcs = glob(
         ["**"],
         exclude = ["target/**"],
-    ),
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(include = ["**"])],
     visibility = ["//visibility:public"],
 )
 

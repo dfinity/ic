@@ -1,0 +1,25 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "canister_threshold_sigs",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_test_utils_canister_threshold_sigs",
+    edition = "2018",
+    deps = [
+        "//rs/crypto",
+        "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
+        "//rs/interfaces",
+        "//rs/registry/fake",
+        "//rs/registry/keys",
+        "//rs/registry/proto_data_provider",
+        "//rs/types/types",
+        "@crate_index//:rand_0_8_4",
+    ],
+)
