@@ -33,6 +33,7 @@ import json
 import os
 import sys
 import time
+from statistics import mean
 
 import gflags
 
@@ -131,7 +132,11 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
                 num_failure,
             ) = evaluated_summaries.convert_tuple()
 
-            t_median, t_average, t_max, t_min, p99 = evaluated_summaries.get_latencies()
+            t_median = max(t_median_list)
+            t_average = mean(t_average_list)
+            t_max = max(t_max_list)
+            t_min = max(t_min_list)
+            num_succ_per_iteration.append(num_success)
 
             print(f"🚀  ... failure rate for {load_total} rps was {failure_rate} median latency is {t_median}")
 
