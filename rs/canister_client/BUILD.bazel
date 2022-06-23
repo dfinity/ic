@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "sources",
-    srcs = glob(["**"]),
+    srcs = glob(["**"]) + ["//rs/canister_client/sender:sources"],
 )
 
 rust_library(
@@ -19,16 +19,14 @@ rust_library(
         "@crate_index//:async-trait",
     ],
     deps = [
+        "//rs/canister_client/sender",
         "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
-        "//rs/crypto/sha",
         "//rs/crypto/tree_hash",
-        "//rs/interfaces",
         "//rs/protobuf",
         "//rs/tree_deserializer",
         "//rs/types/ic00_types",
         "//rs/types/types",
         "@crate_index//:backoff",
-        "@crate_index//:bytes",
         "@crate_index//:ed25519-dalek",
         "@crate_index//:futures-util",
         "@crate_index//:hyper",

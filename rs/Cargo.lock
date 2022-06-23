@@ -4177,17 +4177,15 @@ version = "0.8.0"
 dependencies = [
  "async-trait",
  "backoff",
- "bytes",
  "ed25519-dalek",
  "futures-util",
  "hex",
  "hyper",
  "hyper-tls",
+ "ic-canister-client-sender",
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
- "ic-crypto-sha",
  "ic-crypto-tree-hash",
  "ic-ic00-types",
- "ic-interfaces",
  "ic-protobuf",
  "ic-test-utilities",
  "ic-types 0.8.0",
@@ -4205,6 +4203,18 @@ dependencies = [
  "tokio-test",
  "tree-deserializer",
  "url",
+]
+
+[[package]]
+name = "ic-canister-client-sender"
+version = "0.8.0"
+dependencies = [
+ "ed25519-dalek",
+ "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
+ "ic-crypto-sha",
+ "ic-ic00-types",
+ "ic-interfaces",
+ "ic-types 0.8.0",
 ]
 
 [[package]]
