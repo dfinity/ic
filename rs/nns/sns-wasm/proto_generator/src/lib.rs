@@ -20,17 +20,17 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     // Our specific tags for all of our protobufs
     std_ic_sns_type_attr(&mut config, "SnsCanisterType");
     std_ic_sns_type_attr(&mut config, "SnsWasm");
-    std_ic_sns_type_attr(&mut config, "AddWasm");
+    std_ic_sns_type_attr(&mut config, "AddWasmRequest");
     std_ic_sns_type_attr(&mut config, "AddWasmResponse");
     std_ic_sns_type_attr(&mut config, "AddWasmResponse.result");
     std_ic_sns_type_attr(&mut config, "AddWasmResponse.AddWasmOk");
     std_ic_sns_type_attr(&mut config, "AddWasmResponse.AddWasmError");
-    std_ic_sns_type_attr(&mut config, "GetWasm");
+    std_ic_sns_type_attr(&mut config, "GetWasmRequest");
     std_ic_sns_type_attr(&mut config, "GetWasmResponse");
-    std_ic_sns_type_attr(&mut config, "DeployNewSns");
+    std_ic_sns_type_attr(&mut config, "DeployNewSnsRequest");
     std_ic_sns_type_attr(&mut config, "DeployNewSnsResponse");
     std_ic_sns_type_attr(&mut config, "SnsCanisterIds");
-    std_ic_sns_type_attr(&mut config, "ListDeployedSnses");
+    std_ic_sns_type_attr(&mut config, "ListDeployedSnsesRequest");
     std_ic_sns_type_attr(&mut config, "ListDeployedSnsesResponse");
     std_ic_sns_type_attr(&mut config, "DeployedSns");
     std_ic_sns_type_attr(&mut config, "SnsVersion");

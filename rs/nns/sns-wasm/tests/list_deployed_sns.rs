@@ -1,6 +1,9 @@
 use candid::Encode;
 use canister_test::Project;
 use ic_nns_test_utils::sns_wasm;
+use ic_nns_test_utils::sns_wasm::{
+    build_governance_sns_wasm, build_ledger_sns_wasm, build_root_sns_wasm,
+};
 use ic_nns_test_utils::state_test_helpers::create_canister_with_cycles;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesResponse};
@@ -35,6 +38,23 @@ fn list_deployed_snses_lists_created_sns_instances() {
         Cycles::new(1_000_000_000_000),
         None,
     );
+
+    let root_wasm = build_root_sns_wasm();
+    let root_hash = root_wasm.sha256_hash();
+    sns_wasm::add_wasm(&machine, sns_wasm_canister_id, root_wasm, &root_hash);
+
+    let governance_wasm = build_governance_sns_wasm();
+    let governance_hash = governance_wasm.sha256_hash();
+    sns_wasm::add_wasm(
+        &machine,
+        sns_wasm_canister_id,
+        governance_wasm,
+        &governance_hash,
+    );
+
+    let ledger_wasm = build_ledger_sns_wasm();
+    let ledger_hash = ledger_wasm.sha256_hash();
+    sns_wasm::add_wasm(&machine, sns_wasm_canister_id, ledger_wasm, &ledger_hash);
 
     let root_1 = sns_wasm::deploy_new_sns(&machine, sns_wasm_canister_id)
         .canisters

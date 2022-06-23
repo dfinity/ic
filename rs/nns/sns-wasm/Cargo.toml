@@ -18,9 +18,11 @@ async-trait = "0.1.42"
 candid = "0.7.4"
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
+futures = "0.3.21"
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-ic00-types = {path = "../../types/ic00_types"}
+ic-sns-init = { path = "../../sns/init" }
 ic-types = { path = "../../types/types"}
 maplit = "1.0.2"
 serde = { version = "1.0", features = ["derive"] }
@@ -42,3 +44,4 @@ ic-state-machine-tests = { path = "../../state_machine_tests" }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
+ic-ic00-types = { path = "../../types/ic00_types" }

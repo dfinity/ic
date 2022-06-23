@@ -22,7 +22,7 @@ message SnsWasm {
 }
 
 // The payload for the add_wasm endpoint, which takes an SnsWasm along with the hash of the wasm bytes
-message AddWasm {
+message AddWasmRequest {
   SnsWasm wasm = 1;
   bytes hash = 2;
 }
@@ -44,7 +44,7 @@ message AddWasmResponse {
 }
 
 // The argument for get_wasm, which consists of the WASM hash to be retrieved.
-message GetWasm {
+message GetWasmRequest {
   bytes hash = 1;
 }
 
@@ -54,7 +54,7 @@ message GetWasmResponse {
 }
 
 // Payload to deploy a new SNS.
-message DeployNewSns {}
+message DeployNewSnsRequest {}
 
 // The response to creating a new SNS.
 message DeployNewSnsResponse {
@@ -72,10 +72,12 @@ message SnsCanisterIds {
   ic_base_types.pb.v1.PrincipalId  ledger = 2;
   // PrincipalId of the governance canister
   ic_base_types.pb.v1.PrincipalId governance = 3;
+  // PrincipalId of the swap canister
+  ic_base_types.pb.v1.PrincipalId swap = 4;
 }
 
 // Message to list deployed sns instances
-message ListDeployedSnses {}
+message ListDeployedSnsesRequest {}
 
 // Response to list_deployed_snses
 message ListDeployedSnsesResponse {

@@ -14,4 +14,19 @@ pub trait CanisterApi {
         controller_id: PrincipalId,
         cycles: Cycles,
     ) -> Result<CanisterId, String>;
+
+    /// Install a WASM on a given canister (which must be controlled by this canister)
+    async fn install_wasm(
+        &self,
+        target_canister: CanisterId,
+        wasm: Vec<u8>,
+        init_payload: Vec<u8>,
+    ) -> Result<(), String>;
+
+    /// Set the controller for a given canister (we must currently control it)
+    async fn set_controller(
+        &self,
+        canister: CanisterId,
+        controller: PrincipalId,
+    ) -> Result<(), String>;
 }
