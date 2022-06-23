@@ -79,21 +79,25 @@ impl<'a> UniversalCanister<'a> {
     /// Initializes a [UniversalCanister] using the provided [Agent] and
     /// allocates some stable memory at canister installation.
     pub async fn new(agent: &'a Agent) -> UniversalCanister<'a> {
-        Self::new_with_comp_alloc(agent, None, None)
+        Self::new_with_params(agent, None, None, None)
             .await
             .expect("Could not create universal canister.")
     }
 
     pub async fn try_new(agent: &'a Agent) -> Result<UniversalCanister<'a>, String> {
-        Self::new_with_comp_alloc(agent, None, None).await
+        Self::new_with_params(agent, None, None, None).await
     }
 
-    pub async fn new_with_comp_alloc(
+    pub async fn new_with_params(
         agent: &'a Agent,
         compute_allocation: Option<u64>,
         cycles: Option<u128>,
+        pages: Option<u32>,
     ) -> Result<UniversalCanister<'a>, String> {
-        let payload = universal_canister_argument_builder().stable_grow(1).build();
+        let pages = pages.unwrap_or(1);
+        let payload = universal_canister_argument_builder()
+            .stable_grow(pages)
+            .build();
 
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
