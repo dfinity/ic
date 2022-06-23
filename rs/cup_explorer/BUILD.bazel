@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/canister_client",
+    "//rs/protobuf",
+    "//rs/registry/keys",
+    "//rs/registry/nns_data_provider",
+    "//rs/types/types",
+    "@crate_index//:hex",
+    "@crate_index//:prost",
+    "@crate_index//:reqwest",
+    "@crate_index//:tokio",
+]
+
+rust_library(
+    name = "cup_explorer",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_cup_explorer",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "cup_explorer_bin",
+    srcs = glob(["src/**"]),
+    edition = "2018",
+    deps = DEPENDENCIES,
+)

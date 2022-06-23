@@ -1,0 +1,31 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]) + ["//rs/crypto/node_key_validation/tls_cert_validation:sources"],
+)
+
+DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
+    "//rs/crypto/internal/crypto_lib/fs_ni_dkg",
+    "//rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/node_key_validation/tls_cert_validation",
+    "//rs/protobuf",
+    "//rs/types/base_types",
+    "//rs/types/types",
+    "@crate_index//:hex",
+    "@crate_index//:x509-parser",
+]
+
+rust_library(
+    name = "node_key_validation",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_node_key_validation",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)

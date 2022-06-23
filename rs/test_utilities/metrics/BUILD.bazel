@@ -1,0 +1,27 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/monitoring/metrics",
+    "@crate_index//:prometheus",
+]
+
+rust_library(
+    name = "metrics",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_test_utilities_metrics",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "metrics_test",
+    crate = ":metrics",
+    edition = "2018",
+)
