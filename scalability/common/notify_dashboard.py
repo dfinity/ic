@@ -1,4 +1,29 @@
-"""Class for sending metrics to ElasticSearch ci-performance-test index."""
+"""
+Class for sending metrics to ElasticSearch ci-performance-test index.
+
+Expected JSON format for max-capacity run:
+{
+    ...,
+    "experiment_details": {
+        "rps_max": 3.850419,
+        "is_update": true
+    }
+}
+
+Expected JSON format for spot run:
+{
+    ...,
+    "is_success": true,
+    "experiment_details": {
+        "rps_max": 3.850419,
+        "is_update": true,
+        "median_latency_threshold": 200,  //This field should come from "verify_perf.py" which runs before current script
+        "target_load": 50,
+        "t_median": 120,
+        "failure_rate": 0
+    }
+}
+"""
 import datetime
 import json
 import os

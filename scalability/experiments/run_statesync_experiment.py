@@ -111,6 +111,8 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
             StatesyncExperiment.change_state([nodes[0]], self.get_canister_ids(), i)
             print("State change call number", i, "out of", 3 * dkg_len)
 
+        # Kill all other nodes in the same data center to avoid local communication to catch-up
+        # from restarted node.
         restarted_ip_prefix = nodes[-1][:9]
         print("Stop nodes with the same prefix", restarted_ip_prefix)
         same_prefix_nodes = [node for node in nodes[:-1] if node[:9] == restarted_ip_prefix]

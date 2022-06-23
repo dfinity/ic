@@ -70,15 +70,14 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
             self.machines,
             self.target_nodes,
             config["load_total"],
-            outdir=self.iter_outdir,
             arguments=arguments,
             duration=duration,
         )
 
-    def run_iterations(self, datapoints=None):
+    def run_iterations(self, iterations=None):
         """Exercise the experiment with specified iterations."""
-        if datapoints is None:
-            datapoints = []
+        if iterations is None:
+            iterations = []
 
         self.start_experiment()
 
@@ -101,7 +100,7 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
 
         while run:
 
-            load_total = datapoints[iteration]
+            load_total = iterations[iteration]
             iteration += 1
 
             rps.append(load_total)
@@ -139,7 +138,7 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
 
             duration.append(duration_in_iteration)
 
-            if len(datapoints) == 1:
+            if len(iterations) == 1:
                 rps_max = num_success / duration_in_iteration
                 rps_max_iter.append(rps_max)
                 rps_max_in = load_total
@@ -158,7 +157,7 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
                 run = (
                     failure_rate < workload_experiment.STOP_FAILURE_RATE
                     and t_median < workload_experiment.STOP_T_MEDIAN
-                    and iteration < len(datapoints)
+                    and iteration < len(iterations)
                 )
 
             # Write summary file in each iteration including experiment specific data.
@@ -183,9 +182,9 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
                     "target_duration": iter_duration,
                     "target_load": load_total,
                     "allowable_failure_rate": workload_experiment.ALLOWABLE_FAILURE_RATE
-                    if len(datapoints) > 1
+                    if len(iterations) > 1
                     else "n.a.",
-                    "allowable_latency": workload_experiment.ALLOWABLE_LATENCY if len(datapoints) > 1 else "n.a.",
+                    "allowable_latency": workload_experiment.ALLOWABLE_LATENCY if len(iterations) > 1 else "n.a.",
                 },
                 rps,
                 "requests / s",

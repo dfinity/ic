@@ -113,10 +113,10 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
         aggregated = report.evaluate_summaries(all_destinations)
         return (results, aggregated)
 
-    def run_iterations(self, datapoints=None):
+    def run_iterations(self, iterations=None):
         """Exercise the experiment with specified iterations."""
         results = []
-        for d in datapoints:
+        for d in iterations:
             config = {"load_total": d}
             res, aggregated = self.run_experiment(config)
             results.append((config, res, aggregated))
@@ -139,7 +139,7 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
                 "description": self.raw_description["description"],
                 "title": self.raw_description["title"],
             },
-            datapoints,
+            iterations,
             "base requests / s",
             "mixed",
         )
@@ -149,6 +149,6 @@ if __name__ == "__main__":
     misc.parse_command_line_args()
     exp = MixedWorkloadExperiment()
     exp.init_experiment()
-    datapoints = misc.get_datapoints(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 1)
-    exp.run_iterations(datapoints)
+    iterations = misc.get_iterations(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 1)
+    exp.run_iterations(iterations)
     exp.end_experiment()

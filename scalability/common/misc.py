@@ -112,7 +112,7 @@ def get_latest_ic_version_on_branch(branch: str):
     return result_newest_revision.decode("utf-8").strip()
 
 
-def get_datapoints(target_rps=500, rps_min=50, rps_max=20000, increment=50, exponent=0.5):
+def get_iterations(target_rps=500, rps_min=50, rps_max=20000, increment=50, exponent=0.5):
     """Get a distribution around target_rps from rps_min to rps_max with increasing distance between individual measurements."""
     rps = [rps_min, target_rps, rps_max]
     for inc in sorted(set([increment * round(2 ** (i * exponent)) for i in range(100)])):
@@ -135,7 +135,7 @@ def get_equally_distributed_datapoints(rps_min, rps_max, increment):
     return range(rps_min, rps_max, increment)
 
 
-def get_threshold_approaching_datapoints(threshold, num_exp_points, num_lin_points):
+def get_threshold_approaching_iterations(threshold, num_exp_points, num_lin_points):
     """
     Use if you want to measure the behaviour when the benchmark approaches some threshold value.
 

@@ -29,7 +29,6 @@ class ExperimentMock(WorkloadExperiment):
             self.machines,
             self.target_nodes,
             200,
-            outdir=self.iter_outdir,
             duration=60,
         )
 

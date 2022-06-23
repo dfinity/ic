@@ -88,7 +88,7 @@ def main(argv):
     run(
         [
             "python3",
-            "experiments/run_xnet_experiment.py",
+            "experiments/max_capacity_xnet.py",
             "--iter_duration",
             "20",
             "--tests_first_subnet_index",
@@ -107,12 +107,12 @@ def main(argv):
     run(
         [
             "python3",
-            "experiments/run_response_payload_size_experiment.py",
+            "experiments/max_capacity_response_payload_size.py",
             "--iter_duration",
             "10",
-            "--initial_response_size_kb",
+            "--initial_kb",
             "250",
-            "--max_size_increment_kb",
+            "--max_kb",
             "250",
         ]
         + base_arguments_load_test

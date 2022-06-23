@@ -56,12 +56,12 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
 
     def __init__(self, num_workload_gen=NUM_WORKLOAD_GEN, request_type="query"):
         """Init."""
-        self.wg_testnet = FLAGS.wg_testnet
         self.num_workload_gen = num_workload_gen
-        self.use_updates = FLAGS.use_updates
 
         super().__init__(request_type)
 
+        self.wg_testnet = FLAGS.wg_testnet
+        self.use_updates = FLAGS.use_updates
         if self.use_updates:
             self.request_type = "call"
         print(f"Update calls: {self.use_updates} {self.request_type}")
@@ -284,7 +284,6 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         requests_per_second,
         canister_ids=None,
         duration=300,
-        outdir=None,
         payload=None,
         method=None,
         call_method=None,
@@ -297,7 +296,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         print("Got targets: ", targets)
         print("Running against target_list")
 
-        curr_outdir = self.iter_outdir if outdir is None else outdir
+        curr_outdir = self.iter_outdir
         f_stdout = os.path.join(curr_outdir, "workload-generator-{}.stdout.txt")
         f_stderr = os.path.join(curr_outdir, "workload-generator-{}.stderr.txt")
 

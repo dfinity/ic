@@ -18,7 +18,6 @@ gflags.DEFINE_integer(
 
 if __name__ == "__main__":
     misc.parse_command_line_args()
-
-    datapoints = misc.get_datapoints(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 2)
+    iterations = misc.get_iterations(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 2)
     exp = run_system_baseline_experiment.BaselineExperiment()
-    exp.run_iterations(datapoints)
+    exp.run_iterations(iterations)

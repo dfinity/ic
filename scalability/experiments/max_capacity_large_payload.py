@@ -47,11 +47,11 @@ if __name__ == "__main__":
     num_succ_per_iteration = []
 
     iteration = 0
-    datapoints = misc.get_threshold_approaching_datapoints(FLAGS.max_block_payload_size, 8, 4)
+    iterations = misc.get_threshold_approaching_iterations(FLAGS.max_block_payload_size, 8, 4)
 
     while run:
 
-        curr_payload_size = datapoints[iteration]
+        curr_payload_size = iterations[iteration]
         iteration += 1
 
         payload_size.append(curr_payload_size)
@@ -84,7 +84,7 @@ if __name__ == "__main__":
         run = (
             failure_rate < workload_experiment.STOP_FAILURE_RATE
             and t_median < workload_experiment.STOP_T_MEDIAN
-            and iteration < len(datapoints)
+            and iteration < len(iterations)
         )
 
         # Write summary file in each iteration including experiment specific data.

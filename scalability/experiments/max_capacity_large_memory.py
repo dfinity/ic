@@ -20,5 +20,5 @@ gflags.DEFINE_integer("increment_rps", 5, "Increment of requests per second per 
 if __name__ == "__main__":
     misc.parse_command_line_args()
     exp = run_large_memory_experiment.LargeMemoryExperiment()
-    datapoints = misc.get_datapoints(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 1.5)
-    exp.run_iterations(datapoints)
+    iterations = misc.get_iterations(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 1.5)
+    exp.run_iterations(iterations)
