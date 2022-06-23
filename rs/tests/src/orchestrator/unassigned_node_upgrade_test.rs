@@ -39,7 +39,7 @@ use crate::{
         fetch_unassigned_node_version, fetch_update_file_sha256, get_blessed_replica_versions,
         get_update_image_url, UpdateImageType,
     },
-    util::{block_on, runtime_from_url},
+    util::{block_on, get_nns_node, runtime_from_url},
 };
 use anyhow::bail;
 use ic_canister_client::Sender;
@@ -63,14 +63,7 @@ pub fn test(env: TestEnv) {
     let logger = env.logger();
 
     // choose a node from the nns subnet
-    let nns_node = env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap();
-    nns_node.await_status_is_healthy().unwrap();
-
+    let nns_node = get_nns_node(&env.topology_snapshot());
     nns_node
         .install_nns_canisters()
         .expect("NNS canisters not installed");

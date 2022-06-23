@@ -61,12 +61,7 @@ pub fn test(env: TestEnv) {
     let topo_snapshot = env.topology_snapshot();
 
     // Install all necessary NNS canisters.
-    let nns_node = topo_snapshot
-        .root_subnet()
-        .nodes()
-        .next()
-        .expect("there is no NNS node");
-    nns_node.await_status_is_healthy().unwrap();
+    let nns_node = get_nns_node(&topo_snapshot);
     nns_node
         .install_nns_canisters()
         .expect("NNS canisters not installed");
@@ -83,15 +78,7 @@ pub fn test(env: TestEnv) {
     let unassigned_nodes = topo_snapshot.unassigned_nodes();
 
     // get application node
-    let app_subnet = topo_snapshot
-        .subnets()
-        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
-        .expect("there is no application subnet");
-    let app_node = app_subnet
-        .nodes()
-        .next()
-        .expect("there is no application node");
-    app_node.await_status_is_healthy().unwrap();
+    let (app_subnet, app_node) = get_app_subnet_and_node(&topo_snapshot);
 
     // Create NNS runtime.
     let nns_runtime = runtime_from_url(nns_node.get_public_url());

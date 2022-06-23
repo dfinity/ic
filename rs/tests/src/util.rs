@@ -1,3 +1,4 @@
+use crate::driver::test_env_api::*;
 use crate::types::*;
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
@@ -504,6 +505,27 @@ pub fn create_delay(throttle_duration: u64, timeout: u64) -> garcon::Delay {
 
 pub fn get_random_node_endpoint<'a>(handle: &'a IcHandle, rng: &mut ChaCha8Rng) -> &'a IcEndpoint {
     handle.as_permutation(rng).next().unwrap()
+}
+
+pub fn get_nns_node(topo_snapshot: &TopologySnapshot) -> IcNodeSnapshot {
+    let nns_node = topo_snapshot.root_subnet().nodes().next().unwrap();
+    nns_node.await_status_is_healthy().unwrap();
+    nns_node
+}
+
+pub fn get_app_subnet_and_node(
+    topo_snapshot: &TopologySnapshot,
+) -> (SubnetSnapshot, IcNodeSnapshot) {
+    let app_subnet = topo_snapshot
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .expect("there is no application subnet");
+    let app_node = app_subnet
+        .nodes()
+        .next()
+        .expect("there is no application node");
+    app_node.await_status_is_healthy().unwrap();
+    (app_subnet, app_node)
 }
 
 pub fn get_random_nns_node_endpoint<'a>(

@@ -14,7 +14,7 @@ end::catalog[] */
 use crate::{
     driver::{test_env::TestEnv, test_env_api::*},
     orchestrator::utils::ssh_access::*,
-    util::block_on,
+    util::{block_on, get_app_subnet_and_node, get_nns_node},
 };
 
 use crate::driver::ic::InternetComputer;
@@ -41,19 +41,8 @@ fn topology_entities(
     SubnetSnapshot,
 ) {
     // Fetch the nodes
-    let nns_node = topo_snapshot
-        .root_subnet()
-        .nodes()
-        .next()
-        .expect("there is no NNS node");
-    let app_subnet = topo_snapshot
-        .subnets()
-        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
-        .expect("there is no application subnet");
-    let app_node = app_subnet
-        .nodes()
-        .next()
-        .expect("there is no application node");
+    let nns_node = get_nns_node(&topo_snapshot);
+    let (app_subnet, app_node) = get_app_subnet_and_node(&topo_snapshot);
     let unassigned_node = topo_snapshot.unassigned_nodes().next().unwrap();
 
     // check they are all ready

@@ -34,7 +34,7 @@ use crate::{
             update_subnet_replica_version, UpdateImageType,
         },
     },
-    util::block_on,
+    util::{block_on, get_nns_node},
 };
 use core::time;
 use ic_registry_subnet_type::SubnetType;
@@ -60,14 +60,7 @@ pub fn config(env: TestEnv) {
 pub fn test(env: TestEnv) {
     let log = env.logger();
 
-    // choose a node from the nns subnet
-    let nns_node = env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap();
-    nns_node.await_status_is_healthy().unwrap();
+    let nns_node = get_nns_node(&env.topology_snapshot());
 
     nns_node
         .install_nns_canisters()
