@@ -33,10 +33,15 @@ function disk_image_exists() {
 branch_name=${1:-}
 count=${2:-1}
 
+# Make sure that the local checkout of the branch is up to date.
+if [[ $branch_name =~ ^origin\/ ]]; then
+    git fetch origin "${branch_name//origin\//}"
+fi
+
 for git_sha in $(git log --format=format:%H "$branch_name" --max-count=50); do
     test "$count" = 0 && exit 0
-    if disk_image_exists $git_sha; then
-        echo $git_sha
+    if disk_image_exists "$git_sha"; then
+        echo "$git_sha"
         count=$((count - 1))
     fi
 done
