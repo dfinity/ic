@@ -23,14 +23,14 @@ use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::node_reassignment_test::{can_read_msg, store_message};
 use crate::orchestrator::utils::upgrade::can_install_canister;
 use crate::util::*;
-use ic_recovery::file_sync_helper;
 use ic_recovery::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
-use ic_recovery::RecoveryArgs;
+use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use std::convert::TryFrom;
 use std::env;
+use std::mem::swap;
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
@@ -72,7 +72,7 @@ pub fn test(env: TestEnv) {
 
     // choose a node from the nns subnet
     let mut nns_nodes = topo_snapshot.root_subnet().nodes();
-    let upload_node = nns_nodes.next().expect("there is no NNS node");
+    let mut upload_node = nns_nodes.next().expect("there is no NNS node");
     upload_node.await_status_is_healthy().unwrap();
 
     upload_node
@@ -88,7 +88,7 @@ pub fn test(env: TestEnv) {
     );
 
     // get another one for the download node
-    let download_node = nns_nodes.next().expect("there is no NNS node");
+    let mut download_node = nns_nodes.next().expect("there is no NNS node");
     info!(
         logger,
         "NNS node for download: {} ({:?})",
@@ -162,6 +162,14 @@ pub fn test(env: TestEnv) {
         "Ensure the subnet doesn't work in write mode anymore"
     );
     assert!(!can_install_canister(&upload_node.get_public_url()));
+
+    let up_node_metrics = get_node_metrics(&logger, &upload_node.get_ip_addr())
+        .expect("Missing metrics for upload node");
+    let dn_node_metrics = get_node_metrics(&logger, &download_node.get_ip_addr())
+        .expect("Missing metrics for download node");
+    if dn_node_metrics.finalization_height < up_node_metrics.finalization_height {
+        swap(&mut download_node, &mut upload_node);
+    }
 
     info!(
         logger,
