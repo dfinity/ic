@@ -9,8 +9,9 @@ use ic_ic00_types::{CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, 
 use ic_sns_wasm::canister_api::CanisterApi;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_sns_wasm::pb::v1::{
-    AddWasm, AddWasmResponse, DeployNewSns, DeployNewSnsResponse, GetWasm, GetWasmResponse,
-    ListDeployedSnses, ListDeployedSnsesResponse,
+    AddWasm, AddWasmResponse, DeployNewSns, DeployNewSnsResponse, GetNextSnsVersionRequest,
+    GetNextSnsVersionResponse, GetWasm, GetWasmResponse, ListDeployedSnses,
+    ListDeployedSnsesResponse,
 };
 use ic_sns_wasm::sns_wasm::SnsWasmCanister;
 use ic_types::{CanisterId, Cycles};
@@ -123,6 +124,16 @@ fn get_wasm() {
 #[candid_method(query, rename = "get_wasm")]
 fn get_wasm_(get_wasm_payload: GetWasm) -> GetWasmResponse {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_wasm(get_wasm_payload))
+}
+
+#[export_name = "canister_query get_next_sns_version"]
+fn get_next_sns_version() {
+    over(candid_one, get_next_sns_version_)
+}
+
+#[candid_method(query, rename = "get_next_sns_version")]
+fn get_next_sns_version_(request: GetNextSnsVersionRequest) -> GetNextSnsVersionResponse {
+    SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_next_sns_version(request))
 }
 
 #[export_name = "canister_update deploy_new_sns"]

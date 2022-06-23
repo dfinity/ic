@@ -7,6 +7,8 @@ type DeployNewSnsResponse = record {
   canisters : opt SnsCanisterIds;
 };
 type DeployedSns = record { root_canister_id : opt principal };
+type GetNextSnsVersionRequest = record { current_version : opt SnsVersion };
+type GetNextSnsVersionResponse = record { next_version : opt SnsVersion };
 type GetWasm = record { hash : vec nat8 };
 type GetWasmResponse = record { wasm : opt SnsWasm };
 type ListDeployedSnsesResponse = record { instances : vec DeployedSns };
@@ -16,11 +18,19 @@ type SnsCanisterIds = record {
   ledger : opt principal;
   governance : opt principal;
 };
+type SnsVersion = record {
+  root_wasm_hash : vec nat8;
+  ledger_wasm_hash : vec nat8;
+  governance_wasm_hash : vec nat8;
+};
 type SnsWasm = record { wasm : vec nat8; canister_type : int32 };
 type SnsWasmCanisterInitPayload = record { sns_subnet_ids : vec principal };
 service : (SnsWasmCanisterInitPayload) -> {
   add_wasm : (AddWasm) -> (AddWasmResponse);
   deploy_new_sns : (record {}) -> (DeployNewSnsResponse);
+  get_next_sns_version : (GetNextSnsVersionRequest) -> (
+      GetNextSnsVersionResponse,
+    ) query;
   get_wasm : (GetWasm) -> (GetWasmResponse) query;
   list_deployed_snses : (record {}) -> (ListDeployedSnsesResponse) query;
 }

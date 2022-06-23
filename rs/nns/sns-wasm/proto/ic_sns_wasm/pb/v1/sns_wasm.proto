@@ -88,3 +88,25 @@ message DeployedSns {
   // PrincipalId of the root canister of the sns
   ic_base_types.pb.v1.PrincipalId root_canister_id = 1;
 }
+
+// Specifies the version of an SNS
+message SnsVersion {
+  // The hash of the Root canister WASM
+  bytes root_wasm_hash = 1;
+
+  // The hash of the Governance canister WASM
+  bytes governance_wasm_hash = 2;
+
+  // The hash of the Ledger canister WASM
+  bytes ledger_wasm_hash = 3;
+}
+
+// The request type accepted by the get_next_sns_version canister method
+message GetNextSnsVersionRequest {
+  SnsVersion current_version = 1;
+}
+
+// The response type returned by the get_next_sns_version canister method
+message GetNextSnsVersionResponse {
+  SnsVersion next_version = 1;
+}

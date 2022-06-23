@@ -113,6 +113,35 @@ pub struct DeployedSns {
     #[prost(message, optional, tag="1")]
     pub root_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
+/// Specifies the version of an SNS
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Eq, Hash)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SnsVersion {
+    /// The hash of the Root canister WASM
+    #[prost(bytes="vec", tag="1")]
+    pub root_wasm_hash: ::prost::alloc::vec::Vec<u8>,
+    /// The hash of the Governance canister WASM
+    #[prost(bytes="vec", tag="2")]
+    pub governance_wasm_hash: ::prost::alloc::vec::Vec<u8>,
+    /// The hash of the Ledger canister WASM
+    #[prost(bytes="vec", tag="3")]
+    pub ledger_wasm_hash: ::prost::alloc::vec::Vec<u8>,
+}
+/// The request type accepted by the get_next_sns_version canister method
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetNextSnsVersionRequest {
+    #[prost(message, optional, tag="1")]
+    pub current_version: ::core::option::Option<SnsVersion>,
+}
+/// The response type returned by the get_next_sns_version canister method
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetNextSnsVersionResponse {
+    #[prost(message, optional, tag="1")]
+    pub next_version: ::core::option::Option<SnsVersion>,
+}
 /// The type of canister a particular WASM is intended to be installed on
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

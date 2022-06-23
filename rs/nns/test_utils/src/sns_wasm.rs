@@ -2,8 +2,9 @@ use crate::state_test_helpers::{query, update};
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
 use ic_sns_wasm::pb::v1::{
-    AddWasm, AddWasmResponse, DeployNewSns, DeployNewSnsResponse, GetWasm, GetWasmResponse,
-    ListDeployedSnses, ListDeployedSnsesResponse, SnsCanisterType, SnsWasm,
+    AddWasm, AddWasmResponse, DeployNewSns, DeployNewSnsResponse, GetNextSnsVersionRequest,
+    GetNextSnsVersionResponse, GetWasm, GetWasmResponse, ListDeployedSnses,
+    ListDeployedSnsesResponse, SnsCanisterType, SnsWasm,
 };
 use ic_state_machine_tests::StateMachine;
 
@@ -88,4 +89,21 @@ pub fn list_deployed_snses(
     .unwrap();
 
     Decode!(&response, ListDeployedSnsesResponse).unwrap()
+}
+
+/// Make get_next_sns_version request to a canister in the StateMachine
+pub fn get_next_sns_version(
+    env: &StateMachine,
+    sns_wasm_canister_id: CanisterId,
+    request: GetNextSnsVersionRequest,
+) -> GetNextSnsVersionResponse {
+    let response_bytes = query(
+        env,
+        sns_wasm_canister_id,
+        "get_next_sns_version",
+        Encode!(&request).unwrap(),
+    )
+    .unwrap();
+
+    Decode!(&response_bytes, GetNextSnsVersionResponse).unwrap()
 }

@@ -33,6 +33,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     std_ic_sns_type_attr(&mut config, "ListDeployedSnses");
     std_ic_sns_type_attr(&mut config, "ListDeployedSnsesResponse");
     std_ic_sns_type_attr(&mut config, "DeployedSns");
+    std_ic_sns_type_attr(&mut config, "SnsVersion");
+    ic_sns_type_attr(&mut config, "SnsVersion", "#[derive(Eq, Hash)]");
+    std_ic_sns_type_attr(&mut config, "GetNextSnsVersionRequest");
+    std_ic_sns_type_attr(&mut config, "GetNextSnsVersionResponse");
 
     config
         .compile_protos(&proto_files, &[proto.base_types, proto.sns_wasm])

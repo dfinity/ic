@@ -3,14 +3,15 @@ use crate::pb::hash_to_hex_string;
 use crate::pb::v1::add_wasm_response::{AddWasmError, AddWasmOk};
 use crate::pb::v1::{
     add_wasm_response, AddWasm, AddWasmResponse, DeployNewSns, DeployNewSnsResponse, DeployedSns,
-    GetWasm, GetWasmResponse, ListDeployedSnses, ListDeployedSnsesResponse, SnsCanisterIds,
-    SnsCanisterType, SnsWasm,
+    GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetWasm, GetWasmResponse,
+    ListDeployedSnses, ListDeployedSnsesResponse, SnsCanisterIds, SnsCanisterType, SnsVersion,
+    SnsWasm,
 };
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_types::{Cycles, SubnetId};
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryInto;
 use std::thread::LocalKey;
 
@@ -23,6 +24,8 @@ pub struct SnsWasmCanister {
     sns_subnet_ids: Vec<SubnetId>,
     /// Stored deployed_sns instances
     deployed_sns_list: Vec<DeployedSns>,
+    /// Specifies the upgrade path for SNS instances
+    upgrade_path: UpgradePath,
 }
 
 impl SnsWasmCanister {
@@ -46,12 +49,18 @@ impl SnsWasmCanister {
     /// provided WASM bytecode.
     pub fn add_wasm(&mut self, add_wasm_payload: AddWasm) -> AddWasmResponse {
         let wasm = add_wasm_payload.wasm.expect("Wasm is required");
+        let sns_canister_type = wasm.checked_sns_canister_type();
         let hash = vec_to_hash(add_wasm_payload.hash);
 
         let result = match self.wasm_storage.add_wasm(wasm, &hash) {
-            Ok(_) => Some(add_wasm_response::Result::Ok(AddWasmOk {
-                hash: hash.to_vec(),
-            })),
+            Ok(_) => {
+                self.upgrade_path
+                    .add_wasm(sns_canister_type.expect("Invalid canister_type"), &hash);
+
+                Some(add_wasm_response::Result::Ok(AddWasmOk {
+                    hash: hash.to_vec(),
+                }))
+            }
             Err(msg) => Some(add_wasm_response::Result::Error(AddWasmError {
                 error: msg,
             })),
@@ -126,6 +135,19 @@ impl SnsWasmCanister {
         // TODO something more sophisticated
         self.sns_subnet_ids[0]
     }
+
+    /// Given the SnsVersion of an SNS instance, returns the SnsVersion that this SNS instance
+    /// should upgrade to
+    pub fn get_next_sns_version(
+        &self,
+        request: GetNextSnsVersionRequest,
+    ) -> GetNextSnsVersionResponse {
+        let next_version = request
+            .current_version
+            .and_then(|sns_version| self.upgrade_path.upgrade_path.get(&sns_version).cloned());
+
+        GetNextSnsVersionResponse { next_version }
+    }
 }
 
 /// This struct is responsible for storing and retrieving the wasms held by the canister
@@ -153,16 +175,8 @@ impl SnsWasmStorage {
     /// Adds a wasm to the storage
     /// Validates that the expected hash matches the sha256 hash of the WASM.
     fn add_wasm(&mut self, wasm: SnsWasm, expected_hash: &[u8; 32]) -> Result<(), String> {
-        if wasm.canister_type == i32::from(SnsCanisterType::Unspecified) {
-            return Err("SnsWasm::canister_type cannot be 'Unspecified' (0).".to_string());
-        }
-
-        if !SnsCanisterType::is_valid(wasm.canister_type) {
-            return Err(
-                "Invalid value for SnsWasm::canister_type.  See documentation for valid values"
-                    .to_string(),
-            );
-        }
+        // Validate the SnsCanisterType
+        let _ = wasm.checked_sns_canister_type()?;
 
         if expected_hash != &wasm.sha256_hash() {
             return Err(format!(
@@ -184,6 +198,36 @@ impl SnsWasmStorage {
     }
 }
 
+/// Specifies the upgrade path for SNS instances
+#[derive(Default)]
+pub struct UpgradePath {
+    // The latest SNS version. New SNS deployments will deploy the SNS canisters specified by
+    // this version.
+    latest_version: SnsVersion,
+
+    // Maps SnsVersions to the SnsVersion that should be upgraded to.
+    upgrade_path: HashMap<SnsVersion, SnsVersion>,
+}
+
+impl UpgradePath {
+    pub fn add_wasm(&mut self, canister_type: SnsCanisterType, wasm_hash: &[u8; 32]) {
+        let mut new_latest_version = self.latest_version.clone();
+
+        match canister_type {
+            SnsCanisterType::Unspecified => panic!("SNS canister type must be non-zero"),
+            SnsCanisterType::Root => new_latest_version.root_wasm_hash = wasm_hash.to_vec(),
+            SnsCanisterType::Governance => {
+                new_latest_version.governance_wasm_hash = wasm_hash.to_vec()
+            }
+            SnsCanisterType::Ledger => new_latest_version.ledger_wasm_hash = wasm_hash.to_vec(),
+        }
+
+        self.upgrade_path
+            .insert(self.latest_version.clone(), new_latest_version.clone());
+        self.latest_version = new_latest_version;
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::canister_api::CanisterApi;
@@ -191,8 +235,9 @@ mod test {
     use crate::pb::v1::{
         add_wasm_response,
         add_wasm_response::{AddWasmError, AddWasmOk},
-        AddWasm, DeployNewSns, DeployNewSnsResponse, DeployedSns, GetWasm, ListDeployedSnses,
-        ListDeployedSnsesResponse, SnsCanisterIds, SnsCanisterType,
+        AddWasm, DeployNewSns, DeployNewSnsResponse, DeployedSns, GetNextSnsVersionResponse,
+        GetWasm, ListDeployedSnses, ListDeployedSnsesResponse, SnsCanisterIds, SnsCanisterType,
+        SnsVersion,
     };
     use crate::sns_wasm::{SnsWasm, SnsWasmCanister, SnsWasmStorage};
     use async_trait::async_trait;
@@ -404,6 +449,78 @@ mod test {
             add_wasm_response::Result::Ok(AddWasmOk {
                 hash: valid_hash.to_vec()
             })
+        );
+    }
+
+    /// Adds Governance and Ledger WASMs and asserts that the upgrade path is updated by
+    /// these calls to add_wasm
+    #[test]
+    fn test_add_wasm_updates_upgrade_path() {
+        let mut canister = new_wasm_canister();
+
+        assert_eq!(
+            canister.get_next_sns_version(SnsVersion::default().into()),
+            GetNextSnsVersionResponse::default()
+        );
+
+        let mut wasm = smallest_valid_wasm();
+
+        // Add a Governance WASM
+        wasm.canister_type = i32::from(SnsCanisterType::Governance);
+
+        let valid_hash = wasm.sha256_hash();
+        canister.add_wasm(AddWasm {
+            wasm: Some(wasm.clone()),
+            hash: valid_hash.to_vec(),
+        });
+
+        // Add a Root WASM
+        wasm.canister_type = i32::from(SnsCanisterType::Root);
+
+        canister.add_wasm(AddWasm {
+            wasm: Some(wasm.clone()),
+            hash: valid_hash.to_vec(),
+        });
+
+        // Add a Ledger WASM
+        wasm.canister_type = i32::from(SnsCanisterType::Ledger);
+
+        canister.add_wasm(AddWasm {
+            wasm: Some(wasm),
+            hash: valid_hash.to_vec(),
+        });
+
+        // Assert that the upgrade path was constructed as expected
+        let expected_next_sns_version1 = SnsVersion {
+            governance_wasm_hash: valid_hash.to_vec(),
+            ..Default::default()
+        };
+
+        let expected_next_sns_version2 = SnsVersion {
+            governance_wasm_hash: valid_hash.to_vec(),
+            root_wasm_hash: valid_hash.to_vec(),
+            ..Default::default()
+        };
+
+        let expected_next_sns_version3 = SnsVersion {
+            governance_wasm_hash: valid_hash.to_vec(),
+            root_wasm_hash: valid_hash.to_vec(),
+            ledger_wasm_hash: valid_hash.to_vec(),
+        };
+
+        assert_eq!(
+            canister.get_next_sns_version(SnsVersion::default().into()),
+            expected_next_sns_version1.clone().into()
+        );
+
+        assert_eq!(
+            canister.get_next_sns_version(expected_next_sns_version1.into()),
+            expected_next_sns_version2.clone().into()
+        );
+
+        assert_eq!(
+            canister.get_next_sns_version(expected_next_sns_version2.into()),
+            expected_next_sns_version3.into()
         );
     }
 
