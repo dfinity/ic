@@ -146,10 +146,10 @@ impl SnsTestsInitPayloadBuilder {
     pub fn with_ledger_accounts(
         &mut self,
         accounts: Vec<AccountIdentifier>,
-        icpts: Tokens,
+        tokens: Tokens,
     ) -> &mut Self {
         for account in accounts {
-            self.ledger.initial_values.insert(account, icpts);
+            self.ledger.initial_values.insert(account, tokens);
         }
         self
     }
@@ -162,13 +162,8 @@ impl SnsTestsInitPayloadBuilder {
         self
     }
 
-    pub fn with_governance_proto(&mut self, proto: Governance) -> &mut Self {
-        self.governance.with_governance_proto(proto);
-        self
-    }
-
     pub fn with_nervous_system_parameters(&mut self, params: NervousSystemParameters) -> &mut Self {
-        self.governance.proto.parameters = Some(params);
+        self.governance.with_parameters(params);
         self
     }
 

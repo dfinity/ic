@@ -3,6 +3,7 @@ pub mod distributions;
 use crate::distributions::InitialTokenDistribution;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
+use ic_sns_governance::pb::v1::governance::Mode;
 use ic_sns_governance::pb::v1::{
     Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
 };
@@ -163,14 +164,11 @@ impl SnsInitPayload {
 
     /// Construct the params used to initialize a SNS Governance canister.
     fn governance_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> Governance {
-        let mut governance = GovernanceCanisterInitPayloadBuilder::new().build();
-        governance.ledger_canister_id = Some(sns_canister_ids.ledger);
-        governance.root_canister_id = Some(sns_canister_ids.root);
+        let mut builder = GovernanceCanisterInitPayloadBuilder::new();
+        builder.with_ledger_canister_id(sns_canister_ids.ledger);
+        builder.with_root_canister_id(sns_canister_ids.root);
 
-        let parameters = governance
-            .parameters
-            .as_mut()
-            .expect("NervousSystemParameters not set");
+        let mut parameters = NervousSystemParameters::with_default_values();
 
         let all_permissions = NeuronPermissionList {
             permissions: NeuronPermissionType::all(),
@@ -186,9 +184,11 @@ impl SnsInitPayload {
             parameters.reject_cost_e8s = Some(proposal_reject_cost_e8s);
         }
 
-        governance.neurons = self.get_initial_neurons(parameters);
+        builder.with_neurons(self.get_initial_neurons(&parameters));
+        builder.with_parameters(parameters);
+        builder.with_mode(Mode::PreInitializationSwap);
 
-        governance
+        builder.build()
     }
 
     /// Construct the params used to initialize a SNS Ledger canister.
