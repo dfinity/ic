@@ -2,9 +2,9 @@
 use crate::{
     cbor::{parse_canister_query_response, parse_read_state_response, RequestStatus},
     http_client::{HttpClient, HttpClientConfig},
-    sender::Sender,
 };
 use backoff::backoff::Backoff;
+use ic_canister_client_sender::Sender;
 use ic_crypto_tree_hash::Path;
 use ic_protobuf::types::v1 as pb;
 use ic_types::{

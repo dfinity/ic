@@ -19,6 +19,7 @@ members = [
   "boundary_node/control_plane",
   "boundary_node/prober",
   "canister_client",
+  "canister_client/sender",
   "cycles_account_manager",
   "canister_http/adapter",
   "canister_http/client",
