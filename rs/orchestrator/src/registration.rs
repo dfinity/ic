@@ -229,10 +229,12 @@ impl NodeRegistration {
         let key_handler = self.key_handler.clone();
         let registry_version = self.registry_client.get_latest_version();
         let sign_cmd = move |msg: &MessageId| {
-            key_handler
-                .sign_basic(msg, node_id, registry_version)
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-                .map(|value| value.get().0)
+            tokio::task::block_in_place(|| {
+                key_handler
+                    .sign_basic(msg, node_id, registry_version)
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+                    .map(|value| value.get().0)
+            })
         };
 
         let sender = Sender::Node {
