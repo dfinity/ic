@@ -7578,6 +7578,7 @@ dependencies = [
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-protobuf",
+ "ic-sns-governance",
  "ic-sns-sale-protobuf-generator",
  "ic-types 0.8.0",
  "lazy_static",
@@ -7592,6 +7593,7 @@ dependencies = [
  "serde",
  "strum 0.18.0",
  "strum_macros 0.18.0",
+ "tokio",
 ]
 
 [[package]]
