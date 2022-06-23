@@ -1,16 +1,12 @@
 import json
 import os
-import sys
-import time
 import traceback
 from typing import List
 
 import gflags
 import requests
+from common import metrics
 from termcolor import colored
-
-sys.path.insert(1, ".")
-from common import metrics  # noqa
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_boolean("no_prometheus", False, "Set true to disable querying Prometheus.")
@@ -219,9 +215,7 @@ def get_http_request_duration(testnet, hosts: List[str], t_start, t_end, request
     r = get_prometheus_range(payload)
     data = json.loads(r.text)
 
-    print(data)
     r = parse(data)
-
     values, metric = r[0]
 
     http_request_duration = [val[1] for val in values]
@@ -329,6 +323,6 @@ def parse_xnet(r):
 
 
 if __name__ == "__main__":
-    r = get_http_request_duration("large02", [], int(time.time()) - 642, int(time.time()))
+    r = get_xnet_stream_size("large04", 1638357985, 1638358627)
     print(json.dumps(r, indent=2))
     print(parse_xnet(r))
