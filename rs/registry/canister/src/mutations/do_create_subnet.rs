@@ -2,10 +2,7 @@ use std::{collections::HashSet, convert::TryFrom};
 
 use crate::{
     common::LOG_PREFIX,
-    mutations::{
-        common::{decode_registry_value, encode_or_panic},
-        dkg::{SetupInitialDKGArgs, SetupInitialDKGResponse},
-    },
+    mutations::common::{decode_registry_value, encode_or_panic},
     registry::Registry,
 };
 
@@ -15,8 +12,8 @@ use dfn_core::api::{call, CanisterId};
 use dfn_core::println;
 use serde::Serialize;
 
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
-use ic_ic00_types::EcdsaKeyId;
+use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
+use ic_ic00_types::{EcdsaKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse};
 use ic_protobuf::registry::subnet::v1::EcdsaConfig;
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
@@ -51,16 +48,14 @@ impl Registry {
 
         self.validate_create_subnet_payload(&payload);
 
-        let node_principal_ids: Vec<PrincipalId> =
-            payload.node_ids.iter().map(|n| n.get()).collect();
         // The steps are now:
         // 1. SetupInitialDKG gets a list of nodes l and a registry version rv.
         //    A guarantee that it expects is that all nodes in l exist in the
         //    registry at version rv. Thus, we get the latest registry version.
-        let request = SetupInitialDKGArgs {
-            node_ids: node_principal_ids.clone(),
-            registry_version: self.latest_version(),
-        };
+        let request = SetupInitialDKGArgs::new(
+            payload.node_ids.clone(),
+            RegistryVersion::new(self.latest_version()),
+        );
 
         // 2a. Invoke NI-DKG on ic_00
         let response_bytes = call(
@@ -79,18 +74,20 @@ impl Registry {
         );
 
         let generated_subnet_id = response.fresh_subnet_id;
-        let subnet_id_principal = payload.subnet_id_override.unwrap_or(generated_subnet_id);
-        let subnet_id = SubnetId::new(subnet_id_principal);
+        let subnet_id = payload
+            .subnet_id_override
+            .map(SubnetId::new)
+            .unwrap_or(generated_subnet_id);
         println!(
             "{}do_create_subnet: {{payload: {:?}, subnet_id: {}}}",
-            LOG_PREFIX, payload, subnet_id_principal
+            LOG_PREFIX, payload, subnet_id
         );
 
         // 2b. Invoke compute_initial_ecdsa_dealings on ic_00
         let ecdsa_initializations = self
             .get_all_initial_ecdsa_dealings_from_ic00(
                 &payload.ecdsa_config,
-                node_principal_ids.clone(),
+                payload.node_ids.clone(),
             )
             .await;
 

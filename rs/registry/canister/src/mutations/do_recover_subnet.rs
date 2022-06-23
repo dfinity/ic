@@ -7,20 +7,13 @@
 
 use crate::mutations::do_create_subnet::EcdsaInitialConfig;
 use crate::registry::Version;
-use crate::{
-    common::LOG_PREFIX,
-    mutations::{
-        common::encode_or_panic,
-        dkg::{SetupInitialDKGArgs, SetupInitialDKGResponse},
-    },
-    registry::Registry,
-};
+use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
 use candid::{CandidType, Deserialize, Encode};
 use dfn_core::api::{call, CanisterId};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
-use ic_ic00_types::EcdsaKeyId;
+use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
+use ic_ic00_types::{EcdsaKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse};
 use ic_protobuf::registry::subnet::v1::RegistryStoreUri;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
@@ -78,10 +71,10 @@ impl Registry {
                     .collect()
             };
 
-            let request = SetupInitialDKGArgs {
-                node_ids: dkg_nodes.iter().map(|n| n.get()).collect(),
-                registry_version: pre_call_registry_version,
-            };
+            let request = SetupInitialDKGArgs::new(
+                dkg_nodes.clone(),
+                RegistryVersion::new(pre_call_registry_version),
+            );
 
             let response_bytes = call(
                 CanisterId::ic_00(),
@@ -93,10 +86,7 @@ impl Registry {
             .unwrap();
 
             let ecdsa_initializations = self
-                .get_all_initial_ecdsa_dealings_from_ic00(
-                    &payload.ecdsa_config,
-                    dkg_nodes.iter().map(|n| n.get()).collect(),
-                )
+                .get_all_initial_ecdsa_dealings_from_ic00(&payload.ecdsa_config, dkg_nodes)
                 .await;
 
             // If ECDSA config is set, we must both update the subnets ecdsa_config
