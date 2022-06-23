@@ -1,0 +1,41 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]) + [
+        "//rs/canister_sandbox/backend_lib:sources",
+        "//rs/canister_sandbox/common:sources",
+        "//rs/canister_sandbox/sandbox_launcher:sources",
+        "//rs/canister_sandbox/replica_controller:sources",
+    ],
+)
+
+DEPENDENCIES = [
+    "//rs/canister_sandbox/backend_lib",
+    "@crate_index//:libc",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    data = ["src/backtrace.c"],
+    edition = "2018",
+    deps = ["@crate_index//:cc"],
+)
+
+rust_binary(
+    name = "canister_sandbox",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    crate_name = "canister_sandbox",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":build_script"],
+)

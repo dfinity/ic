@@ -1,0 +1,46 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/canister_sandbox/backend_lib",
+    "//rs/canister_sandbox/common",
+    "//rs/config",
+    "//rs/embedders",
+    "//rs/interfaces",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/replicated_state",
+    "//rs/sys",
+    "//rs/system_api",
+    "//rs/types/types",
+    "//rs/types/wasm_types",
+    "@crate_index//:lazy_static",
+    "@crate_index//:libc",
+    "@crate_index//:nix",
+    "@crate_index//:once_cell",
+    "@crate_index//:prometheus",
+    "@crate_index//:regex",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:which",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "replica_controller",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_canister_sandbox_replica_controller",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
