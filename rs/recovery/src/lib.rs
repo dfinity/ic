@@ -66,7 +66,7 @@ pub struct NeuronArgs {
 #[derive(Debug)]
 pub struct NodeMetrics {
     _ip: IpAddr,
-    finalization_height: Height,
+    pub finalization_height: Height,
     certification_height: Height,
 }
 
@@ -181,41 +181,8 @@ impl Recovery {
         Ok(self
             .get_member_ips(subnet_id)?
             .iter()
-            .filter_map(|ip| {
-                let body = match reqwest::blocking::get(format!("http://[{}]:9090", ip)).and_then(|r|r.text()) {
-                    Ok(val) => val,
-                    Err(e) => {
-                        warn!(self.logger, "Http request failed: {:?}", e);
-                        return None;
-                    }
-                };
-                let mut node_heights = NodeMetrics { finalization_height : Height::from(0), certification_height : Height::from(0), _ip: *ip};
-                for line in body.split('\n') {
-                    let mut parts = line.split(' ');
-                    if let (Some(prefix), Some(height)) = (parts.next(), parts.next()) {
-                        match prefix {
-                            "certification_last_certified_height" => match height.trim().parse::<u64>() {
-                                Ok(val) => node_heights.certification_height = Height::from(val),
-                                error => warn!(
-                                    self.logger,
-                                    "Couldn't parse height {}: {:?}", height, error
-                                ),
-                            },
-                            r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="finalization"}"# => 
-                                match height.trim().parse::<u64>() {
-                                    Ok(val) => node_heights.finalization_height = Height::from(val),
-                                    error => warn!(
-                                        self.logger,
-                                        "Couldn't parse height {}: {:?}", height, error
-                                    ),
-                                },
-                            _ => continue,
-                        }
-                    }
-                }
-                Some(node_heights)
-            })
-        .collect())
+            .filter_map(|ip| get_node_metrics(&self.logger, ip))
+            .collect())
     }
 
     /// Executes the given SSH command.
@@ -849,4 +816,41 @@ impl Recovery {
             key_file: self.key_file.clone(),
         }
     }
+}
+
+pub fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetrics> {
+    let body = match reqwest::blocking::get(format!("http://[{}]:9090", ip)).and_then(|r| r.text())
+    {
+        Ok(val) => val,
+        Err(e) => {
+            warn!(logger, "Http request failed: {:?}", e);
+            return None;
+        }
+    };
+    let mut node_heights = NodeMetrics {
+        finalization_height: Height::from(0),
+        certification_height: Height::from(0),
+        _ip: *ip,
+    };
+    for line in body.split('\n') {
+        let mut parts = line.split(' ');
+        if let (Some(prefix), Some(height)) = (parts.next(), parts.next()) {
+            match prefix {
+                "certification_last_certified_height" => match height.trim().parse::<u64>() {
+                    Ok(val) => node_heights.certification_height = Height::from(val),
+                    error => warn!(logger, "Couldn't parse height {}: {:?}", height, error),
+                },
+                r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="finalization"}"# => {
+                    match height.trim().parse::<u64>() {
+                        Ok(val) => node_heights.finalization_height = Height::from(val),
+                        error => {
+                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
+                        }
+                    }
+                }
+                _ => continue,
+            }
+        }
+    }
+    Some(node_heights)
 }
