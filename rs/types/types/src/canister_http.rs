@@ -151,6 +151,8 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             body: args.body,
             http_method: match args.http_method {
                 HttpMethod::GET => CanisterHttpMethod::GET,
+                HttpMethod::POST => CanisterHttpMethod::POST,
+                HttpMethod::HEAD => CanisterHttpMethod::HEAD,
             },
             transform_method_name: args.transform_method_name,
             time,
@@ -250,12 +252,16 @@ pub struct CanisterHttpHeader {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum CanisterHttpMethod {
     GET,
+    POST,
+    HEAD,
 }
 
 impl From<&CanisterHttpMethod> for pb_metadata::HttpMethod {
     fn from(http_method: &CanisterHttpMethod) -> Self {
         match http_method {
             CanisterHttpMethod::GET => pb_metadata::HttpMethod::Get,
+            CanisterHttpMethod::POST => pb_metadata::HttpMethod::Post,
+            CanisterHttpMethod::HEAD => pb_metadata::HttpMethod::Head,
         }
     }
 }
@@ -266,6 +272,8 @@ impl TryFrom<pb_metadata::HttpMethod> for CanisterHttpMethod {
     fn try_from(http_method: pb_metadata::HttpMethod) -> Result<Self, Self::Error> {
         match http_method {
             pb_metadata::HttpMethod::Get => Ok(CanisterHttpMethod::GET),
+            pb_metadata::HttpMethod::Post => Ok(CanisterHttpMethod::POST),
+            pb_metadata::HttpMethod::Head => Ok(CanisterHttpMethod::HEAD),
             pb_metadata::HttpMethod::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "ic_protobuf::state::system_metadata::v1::HttpMethod",
                 err: "Unspecified HttpMethod".to_string(),

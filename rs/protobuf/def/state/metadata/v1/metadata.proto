@@ -80,6 +80,8 @@ message SignWithEcdsaContextTree {
 enum HttpMethod {
     HTTP_METHOD_UNSPECIFIED = 0;
     HTTP_METHOD_GET = 1;
+    HTTP_METHOD_POST = 2;
+    HTTP_METHOD_HEAD = 3;
 }
 
 message HttpHeader {

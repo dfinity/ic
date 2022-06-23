@@ -2,15 +2,15 @@ use candid::Encode;
 use futures::future::TryFutureExt;
 use ic_canister_http_service::{
     canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest,
-    CanisterHttpSendResponse, HttpHeader,
+    CanisterHttpSendResponse, HttpHeader, HttpMethod,
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces_canister_http_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
 use ic_types::{
     canister_http::{
-        CanisterHttpReject, CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseContent,
+        CanisterHttpMethod, CanisterHttpReject, CanisterHttpRequest, CanisterHttpRequestContext,
+        CanisterHttpResponse, CanisterHttpResponseContent,
     },
     messages::{AnonymousQuery, AnonymousQueryResponse, Request},
     CanisterId,
@@ -117,7 +117,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         url: request_url,
                         headers: request_headers,
                         body: request_body,
-                        http_method: _request_http_method,
+                        http_method: request_http_method,
                         transform_method_name: request_transform_method,
                         ..
                     },
@@ -127,6 +127,11 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             let adapter_canister_http_response = http_adapter_client
                 .canister_http_send(CanisterHttpSendRequest {
                     url: request_url,
+                    method: match request_http_method{
+                        CanisterHttpMethod::GET => HttpMethod::Get.into(),
+                        CanisterHttpMethod::POST => HttpMethod::Post.into(),
+                        CanisterHttpMethod::HEAD => HttpMethod::Head.into(),
+                    },
                     headers: request_headers
                         .into_iter()
                         .map(|h| HttpHeader {

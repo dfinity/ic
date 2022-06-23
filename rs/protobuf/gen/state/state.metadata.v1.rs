@@ -213,4 +213,6 @@ pub struct StableMemory {
 pub enum HttpMethod {
     Unspecified = 0,
     Get = 1,
+    Post = 2,
+    Head = 3,
 }
