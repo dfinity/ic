@@ -80,7 +80,7 @@ impl InternalState {
     /// [`RegistryCanister`], applies changes to [`LocalStore`] accordingly.
     /// Exits the process if this node appears on a subnet that is started as
     /// the new NNS after a version update.
-    pub(crate) fn poll(&mut self) -> Result<(), String> {
+    pub(crate) async fn poll(&mut self) -> Result<(), String> {
         // Note, this may not actually be the latest version, rather it is the latest
         // version that is locally available
         let latest_version = self.registry_client.get_latest_version();
@@ -106,13 +106,10 @@ impl InternalState {
                 .nns_pub_key
                 .expect("registry canister is set => pub key is set");
             // Note, code duplicate in registry_replicator.rs initialize_local_store()
-            let (mut resp, t) = match tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(
-                    // get certified changes since the latest version we have locally
-                    registry_canister
-                        .get_certified_changes_since(latest_version.get(), &nns_pub_key),
-                )
-            }) {
+            let (mut resp, t) = match registry_canister
+                .get_certified_changes_since(latest_version.get(), &nns_pub_key)
+                .await
+            {
                 Ok((records, _, t)) => (records, t),
                 Err(e) => {
                     return Err(format!(
