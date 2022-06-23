@@ -25,6 +25,7 @@ use wasmtime::Config;
 pub const RESERVED_SYMBOLS: [&str; 2] = ["canister counter_instructions", "canister_start"];
 
 const WASM_FUNCTION_COMPLEXITY_LIMIT: usize = 10_000;
+const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -1021,9 +1022,9 @@ pub fn validate_custom_section(
 fn validate_code_section(module: &Module) -> Result<(), WasmValidationError> {
     if let Some(code_section) = module.code_section() {
         for func_body in code_section.bodies().iter() {
-            let complexity_count = func_body
-                .code()
-                .elements()
+            let instructions = func_body.code().elements();
+            let function_size = instructions.len();
+            let complexity_count = instructions
                 .iter()
                 .filter(|instruction| {
                     matches!(
@@ -1039,8 +1040,13 @@ fn validate_code_section(module: &Module) -> Result<(), WasmValidationError> {
                     )
                 })
                 .count();
+
             if complexity_count >= WASM_FUNCTION_COMPLEXITY_LIMIT {
                 return Err(WasmValidationError::FunctionComplexityTooHigh);
+            }
+
+            if function_size >= WASM_FUNCTION_SIZE_LIMIT {
+                return Err(WasmValidationError::FunctionTooLarge);
             }
         }
     }
