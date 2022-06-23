@@ -1,8 +1,8 @@
 use super::{
-    node::{Key, Node, NodeType, Value},
+    node::{Node, NodeType},
     StableBTreeMap,
 };
-use crate::{types::NULL, Address, Memory};
+use crate::{types::NULL, Address, Memory, Storable};
 
 /// An indicator of the current position in the map.
 pub(crate) enum Cursor {
@@ -18,9 +18,9 @@ pub(crate) enum Index {
 
 /// An iterator over the entries of a [`StableBTreeMap`].
 #[must_use = "iterators are lazy and do nothing unless consumed"]
-pub struct Iter<'a, M: Memory> {
+pub struct Iter<'a, M: Memory, K: Storable, V: Storable> {
     // A reference to the map being iterated on.
-    map: &'a StableBTreeMap<M>,
+    map: &'a StableBTreeMap<M, K, V>,
 
     // A stack of cursors indicating the current position in the tree.
     cursors: Vec<Cursor>,
@@ -34,8 +34,8 @@ pub struct Iter<'a, M: Memory> {
     offset: Option<Vec<u8>>,
 }
 
-impl<'a, M: Memory> Iter<'a, M> {
-    pub(crate) fn new(map: &'a StableBTreeMap<M>) -> Self {
+impl<'a, M: Memory, K: Storable, V: Storable> Iter<'a, M, K, V> {
+    pub(crate) fn new(map: &'a StableBTreeMap<M, K, V>) -> Self {
         Self {
             map,
             // Initialize the cursors with the address of the root of the map.
@@ -46,7 +46,7 @@ impl<'a, M: Memory> Iter<'a, M> {
     }
 
     /// Returns an empty iterator.
-    pub(crate) fn null(map: &'a StableBTreeMap<M>) -> Self {
+    pub(crate) fn null(map: &'a StableBTreeMap<M, K, V>) -> Self {
         Self {
             map,
             cursors: vec![],
@@ -56,7 +56,7 @@ impl<'a, M: Memory> Iter<'a, M> {
     }
 
     pub(crate) fn new_with_prefix(
-        map: &'a StableBTreeMap<M>,
+        map: &'a StableBTreeMap<M, K, V>,
         prefix: Vec<u8>,
         cursors: Vec<Cursor>,
     ) -> Self {
@@ -69,7 +69,7 @@ impl<'a, M: Memory> Iter<'a, M> {
     }
 
     pub(crate) fn new_with_prefix_and_offset(
-        map: &'a StableBTreeMap<M>,
+        map: &'a StableBTreeMap<M, K, V>,
         prefix: Vec<u8>,
         offset: Vec<u8>,
         cursors: Vec<Cursor>,
@@ -83,8 +83,8 @@ impl<'a, M: Memory> Iter<'a, M> {
     }
 }
 
-impl<M: Memory + Clone> Iterator for Iter<'_, M> {
-    type Item = (Key, Value);
+impl<M: Memory + Clone, K: Storable, V: Storable> Iterator for Iter<'_, M, K, V> {
+    type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.cursors.pop() {
@@ -169,7 +169,7 @@ impl<M: Memory + Clone> Iterator for Iter<'_, M> {
                     }
                 }
 
-                Some(entry)
+                Some((K::from_bytes(entry.0), V::from_bytes(entry.1)))
             }
             None => {
                 // The cursors are empty. Iteration is complete.

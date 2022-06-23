@@ -4,12 +4,13 @@ mod node;
 use crate::{
     read_struct,
     types::{Address, Bytes, NULL},
-    write_struct, Memory,
+    write_struct, Memory, Storable,
 };
 use allocator::Allocator;
 pub use iter::Iter;
 use iter::{Cursor, Index};
-use node::{Key, Node, NodeType, Value, B};
+use node::{Entry, Node, NodeType, B};
+use std::marker::PhantomData;
 
 const LAYOUT_VERSION: u8 = 1;
 const MAGIC: &[u8; 3] = b"BTR";
@@ -18,7 +19,7 @@ const MAGIC: &[u8; 3] = b"BTR";
 ///
 /// The implementation is based on the algorithm outlined in "Introduction to Algorithms"
 /// by Cormen et al.
-pub struct StableBTreeMap<M: Memory> {
+pub struct StableBTreeMap<M: Memory, K: Storable, V: Storable> {
     // The address of the root node. If a root node doesn't exist, the address
     // is set to NULL.
     root_addr: Address,
@@ -36,6 +37,9 @@ pub struct StableBTreeMap<M: Memory> {
     length: u64,
 
     memory: M,
+
+    // A marker to communicate to the Rust compiler that we own these types.
+    _phantom: PhantomData<(K, V)>,
 }
 
 #[repr(packed)]
@@ -56,7 +60,7 @@ impl BTreeHeader {
     }
 }
 
-impl<M: Memory + Clone> StableBTreeMap<M> {
+impl<M: Memory + Clone, K: Storable, V: Storable> StableBTreeMap<M, K, V> {
     /// Initializes a `StableBTreeMap`.
     ///
     /// The given `memory` is assumed to be exclusively reserved for this data
@@ -85,6 +89,7 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
             max_key_size,
             max_value_size,
             length: 0,
+            _phantom: PhantomData,
         };
 
         btree.save();
@@ -106,6 +111,7 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
             max_key_size: header.max_key_size,
             max_value_size: header.max_value_size,
             length: header.length,
+            _phantom: PhantomData,
         }
     }
 
@@ -115,7 +121,10 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
     ///
     /// The size of the key/value must be <= the max key/value sizes configured
     /// for the map. Otherwise, an `InsertError` is returned.
-    pub fn insert(&mut self, key: Key, value: Value) -> Result<Option<Value>, InsertError> {
+    pub fn insert(&mut self, key: K, value: V) -> Result<Option<V>, InsertError> {
+        let key = key.to_bytes();
+        let value = value.to_bytes();
+
         // Verify the size of the key.
         if key.len() > self.max_key_size as usize {
             return Err(InsertError::KeyTooLarge {
@@ -167,11 +176,13 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
             }
         };
 
-        Ok(self.insert_nonfull(root, key, value))
+        Ok(self
+            .insert_nonfull(root, key.to_vec(), value.to_vec())
+            .map(V::from_bytes))
     }
 
     // Inserts an entry into a node that is *not full*.
-    fn insert_nonfull(&mut self, mut node: Node, key: Key, value: Value) -> Option<Value> {
+    fn insert_nonfull(&mut self, mut node: Node, key: Vec<u8>, value: Vec<u8>) -> Option<Vec<u8>> {
         // We're guaranteed by the caller that the provided node is not full.
         assert!(!node.is_full());
 
@@ -281,17 +292,18 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
     }
 
     /// Returns the value associated with the given key if it exists.
-    pub fn get(&self, key: &Key) -> Option<Value> {
+    pub fn get(&self, key: &K) -> Option<V> {
         if self.root_addr == NULL {
             return None;
         }
 
-        self.get_helper(self.root_addr, key)
+        self.get_helper(self.root_addr, &key.to_bytes())
+            .map(V::from_bytes)
     }
 
-    fn get_helper(&self, node_addr: Address, key: &Key) -> Option<Value> {
+    fn get_helper(&self, node_addr: Address, key: &[u8]) -> Option<Vec<u8>> {
         let node = self.load_node(node_addr);
-        match node.entries.binary_search_by(|e| e.0.cmp(key)) {
+        match node.entries.binary_search_by(|e| e.0.as_slice().cmp(key)) {
             Ok(idx) => Some(node.entries[idx].1.clone()),
             Err(idx) => {
                 match node.node_type {
@@ -306,7 +318,7 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
     }
 
     /// Returns `true` if the key exists in the map, `false` otherwise.
-    pub fn contains_key(&self, key: &Key) -> bool {
+    pub fn contains_key(&self, key: &K) -> bool {
         self.get(key).is_some()
     }
 
@@ -326,16 +338,17 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
     }
 
     /// Removes a key from the map, returning the previous value at the key if it exists.
-    pub fn remove(&mut self, key: &Key) -> Option<Value> {
+    pub fn remove(&mut self, key: &K) -> Option<V> {
         if self.root_addr == NULL {
             return None;
         }
 
-        self.remove_helper(self.root_addr, key)
+        self.remove_helper(self.root_addr, &key.to_bytes())
+            .map(V::from_bytes)
     }
 
     // A helper method for recursively removing a key from the B-tree.
-    fn remove_helper(&mut self, node_addr: Address, key: &Key) -> Option<Value> {
+    fn remove_helper(&mut self, node_addr: Address, key: &[u8]) -> Option<Vec<u8>> {
         let mut node = self.load_node(node_addr);
 
         if node.address != self.root_addr {
@@ -349,7 +362,7 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
 
         match node.node_type {
             NodeType::Leaf => {
-                match node.entries.binary_search_by(|e| e.0.cmp(key)) {
+                match node.entries.binary_search_by(|e| e.0.as_slice().cmp(key)) {
                     Ok(idx) => {
                         // Case 1: The node is a leaf node and the key exists in it.
                         // This is the simplest case. The key is removed from the leaf.
@@ -376,7 +389,7 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
                 }
             }
             NodeType::Internal => {
-                match node.entries.binary_search_by(|e| e.0.cmp(key)) {
+                match node.entries.binary_search_by(|e| e.0.as_slice().cmp(key)) {
                     Ok(idx) => {
                         // Case 2: The node is an internal node and the key exists in it.
 
@@ -684,7 +697,7 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
     }
 
     /// Returns an iterator over the entries of the map, sorted by key.
-    pub fn iter(&self) -> Iter<M> {
+    pub fn iter(&self) -> Iter<M, K, V> {
         Iter::new(self)
     }
 
@@ -692,7 +705,7 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
     /// If the optional `offset` is set, the iterator returned will start from the entry that
     /// contains this `offset` (while still iterating over all remaining entries that begin
     /// with the given `prefix`).
-    pub fn range(&self, prefix: Vec<u8>, offset: Option<Vec<u8>>) -> Iter<M> {
+    pub fn range(&self, prefix: Vec<u8>, offset: Option<Vec<u8>>) -> Iter<M, K, V> {
         if self.root_addr == NULL {
             // Map is empty.
             return Iter::null(self);
@@ -767,7 +780,7 @@ impl<M: Memory + Clone> StableBTreeMap<M> {
     // Output:
     //   [1, 2, 3, 4, 5, 6, 7] (stored in the `into` node)
     //   `source` is deallocated.
-    fn merge(&mut self, source: Node, into: Node, median: (Key, Value)) -> Node {
+    fn merge(&mut self, source: Node, into: Node, median: Entry) -> Node {
         assert_eq!(source.node_type, into.node_type);
         assert!(!source.entries.is_empty());
         assert!(!into.entries.is_empty());
@@ -873,7 +886,7 @@ mod test {
     }
 
     // A helper method to succinctly create an entry.
-    fn e(x: u8) -> (Key, Value) {
+    fn e(x: u8) -> (Vec<u8>, Vec<u8>) {
         (vec![x], vec![])
     }
 
@@ -1171,7 +1184,7 @@ mod test {
         assert_eq!(btree.remove(&vec![5]), Some(vec![]));
 
         // Reload the btree to verify that we saved it correctly.
-        let btree = StableBTreeMap::load(mem);
+        let btree = StableBTreeMap::<_, Vec<u8>, Vec<u8>>::load(mem);
 
         // The result should look like this:
         // [0, 1, 2, 3, 4, 7, 8, 9, 10, 11]
@@ -1376,7 +1389,7 @@ mod test {
         assert_eq!(btree.remove(&vec![3]), Some(vec![]));
 
         // Reload the btree to verify that we saved it correctly.
-        let btree = StableBTreeMap::load(mem);
+        let btree = StableBTreeMap::<_, Vec<u8>, Vec<u8>>::load(mem);
 
         // The result should look like this:
         //
@@ -1451,7 +1464,7 @@ mod test {
         assert_eq!(btree.remove(&vec![10]), Some(vec![]));
 
         // Reload the btree to verify that we saved it correctly.
-        let btree = StableBTreeMap::load(mem);
+        let btree = StableBTreeMap::<_, Vec<u8>, Vec<u8>>::load(mem);
 
         // The result should look like this:
         //
@@ -1553,7 +1566,7 @@ mod test {
 
         // Reload the btree. The element should still be there, and `len()`
         // should still be `1`.
-        let btree = StableBTreeMap::load(mem.clone());
+        let btree = StableBTreeMap::<_, Vec<u8>, Vec<u8>>::load(mem.clone());
         assert_eq!(btree.get(&vec![1, 2, 3]), Some(vec![4, 5, 6]));
         assert_eq!(btree.len(), 1);
         assert!(!btree.is_empty());
@@ -1565,7 +1578,7 @@ mod test {
         assert!(btree.is_empty());
 
         // Reload. Btree should still be empty.
-        let btree = StableBTreeMap::load(mem);
+        let btree = StableBTreeMap::<_, Vec<u8>, Vec<u8>>::load(mem);
         assert_eq!(btree.get(&vec![1, 2, 3]), None);
         assert_eq!(btree.len(), 0);
         assert!(btree.is_empty());
@@ -1611,7 +1624,7 @@ mod test {
     #[test]
     fn range_empty() {
         let mem = make_memory();
-        let btree = StableBTreeMap::new(mem, 5, 5);
+        let btree = StableBTreeMap::<_, Vec<u8>, Vec<u8>>::new(mem, 5, 5);
 
         // Test prefixes that don't exist in the map.
         assert_eq!(btree.range(vec![0], None).collect::<Vec<_>>(), vec![]);
@@ -1830,7 +1843,7 @@ mod test {
     #[test]
     fn range_large() {
         let mem = make_memory();
-        let mut btree = StableBTreeMap::new(mem, 5, 5);
+        let mut btree = StableBTreeMap::<_, Vec<u8>, Vec<u8>>::new(mem, 5, 5);
 
         // Insert 1000 elements with prefix 0 and another 1000 elements with prefix 1.
         for prefix in 0..=1 {

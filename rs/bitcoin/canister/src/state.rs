@@ -144,7 +144,7 @@ fn load_or_initialize_btree(
     page_map: PageMap,
     max_key_size: u32,
     max_value_size: u32,
-) -> StableBTreeMap<PageMapMemory> {
+) -> StableBTreeMap<PageMapMemory, Vec<u8>, Vec<u8>> {
     let memory = PageMapMemory::new(page_map);
     let mut dst = vec![0; 3];
     memory.read(0, &mut dst);
@@ -223,10 +223,10 @@ impl From<&State> for proto::State {
 ///    3) "Large" to store UTXOs with script size > 201 bytes.
 pub struct Utxos {
     // A map storing the UTXOs that are "small" in size.
-    pub small_utxos: StableBTreeMap<PageMapMemory>,
+    pub small_utxos: StableBTreeMap<PageMapMemory, Vec<u8>, Vec<u8>>,
 
     // A map storing the UTXOs that are "medium" in size.
-    pub medium_utxos: StableBTreeMap<PageMapMemory>,
+    pub medium_utxos: StableBTreeMap<PageMapMemory, Vec<u8>, Vec<u8>>,
 
     // A map storing the UTXOs that are "large" in size.
     // The number of entries stored in this map is tiny (see docs above), so a
@@ -301,7 +301,7 @@ pub struct UtxoSet {
     pub utxos: Utxos,
     pub network: Network,
     // An index for fast retrievals of an address's UTXOs.
-    pub address_to_outpoints: StableBTreeMap<PageMapMemory>,
+    pub address_to_outpoints: StableBTreeMap<PageMapMemory, Vec<u8>, Vec<u8>>,
 }
 
 impl UtxoSet {

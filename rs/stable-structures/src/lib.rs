@@ -156,3 +156,29 @@ impl<M: Memory> Memory for RestrictedMemory<M> {
             .write(self.page_range.start * WASM_PAGE_SIZE + offset, src)
     }
 }
+
+/// A trait with convenience methods for storing an element into a stable structure.
+pub trait Storable {
+    /// Converts an element into bytes.
+    ///
+    /// NOTE: `Cow` is used here to avoid unnecessary cloning.
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]>;
+
+    /// Converts bytes into an element.
+    ///
+    /// NOTE: The bytes are passed as a `Vec<u8>` as opposed to `&[u8]` because
+    /// in the vast majority of cases, the caller will no longer need the bytes,
+    /// and passing a `Vec<u8>` prevents unnecessary cloning.
+    fn from_bytes(bytes: Vec<u8>) -> Self;
+}
+
+// An implementation of `Storable` for `Vec<u8>`
+impl Storable for Vec<u8> {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        std::borrow::Cow::Borrowed(self)
+    }
+
+    fn from_bytes(bytes: Vec<u8>) -> Self {
+        bytes
+    }
+}
