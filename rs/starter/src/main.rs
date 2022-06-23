@@ -37,6 +37,7 @@ use ic_config::{
     transport::{TransportConfig, TransportFlowConfig},
     ConfigOptional as ReplicaConfig,
 };
+use ic_ic00_types::EcdsaKeyId;
 use ic_logger::LoggerImpl;
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
@@ -45,7 +46,7 @@ use ic_prep_lib::{
 };
 use ic_protobuf::{
     bitcoin::v1::Network as BitcoinNetwork,
-    registry::subnet::v1::{BitcoinFeatureInfo, BitcoinFeatureStatus, SubnetFeatures},
+    registry::subnet::v1::{BitcoinFeatureInfo, BitcoinFeatureStatus, EcdsaConfig, SubnetFeatures},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
@@ -58,7 +59,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddrV4},
     time::Duration,
 };
-use std::{io, os::unix::process::CommandExt, path::PathBuf, process::Command};
+use std::{io, os::unix::process::CommandExt, path::PathBuf, process::Command, str::FromStr};
 use tempfile::TempDir;
 
 const NODE_INDEX: NodeIndex = 100;
@@ -103,6 +104,12 @@ fn main() -> Result<()> {
             },
         );
 
+        let ecdsa_config = config.ecdsa_keyid.clone().map(|key_id| EcdsaConfig {
+            quadruples_to_create_in_advance: 1,
+            key_ids: vec![(&key_id).into()],
+            max_queue_size: 64,
+        });
+
         let mut topology_config = TopologyConfig::default();
         topology_config.insert_subnet(
             SUBNET_ID,
@@ -123,6 +130,7 @@ fn main() -> Result<()> {
                 None,
                 None,
                 Some(config.subnet_features),
+                ecdsa_config,
                 None,
                 vec![],
                 vec![],
@@ -308,6 +316,10 @@ struct CliArgs {
         multiple_values(true))]
     subnet_features: Vec<String>,
 
+    /// Enable ecdsa signature by assigning the given key id a freshly generated key.
+    #[clap(long = "ecdsa-keyid")]
+    ecdsa_keyid: Option<String>,
+
     /// Subnet type
     #[clap(long = "subnet-type",
                 possible_values = &["application", "verified_application", "system"])]
@@ -484,6 +496,18 @@ impl CliArgs {
             }
         };
 
+        let ecdsa_keyid = self
+            .ecdsa_keyid
+            .as_ref()
+            .map(|s| EcdsaKeyId::from_str(s))
+            .transpose()
+            .map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("Invalid ecdsa_keyid: {}", err),
+                )
+            })?;
+
         Ok(ValidatedConfig {
             replica_path,
             replica_version,
@@ -506,6 +530,7 @@ impl CliArgs {
             detect_consensus_starvation: self.detect_consensus_starvation,
             consensus_pool_backend: self.consensus_pool_backend,
             subnet_features: to_subnet_features(&self.subnet_features),
+            ecdsa_keyid,
             subnet_type,
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path,
             canister_http_uds_path: self.canister_http_uds_path,
@@ -613,6 +638,7 @@ struct ValidatedConfig {
     detect_consensus_starvation: Option<bool>,
     consensus_pool_backend: Option<String>,
     subnet_features: SubnetFeatures,
+    ecdsa_keyid: Option<EcdsaKeyId>,
     subnet_type: SubnetType,
     bitcoin_testnet_uds_path: Option<PathBuf>,
     canister_http_uds_path: Option<PathBuf>,
