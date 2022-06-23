@@ -6,10 +6,9 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
 
 http_archive(
     name = "rules_rust",
-    sha256 = "872b04538ca20dad94791c348623f079ba93daf274c1d57ae6bfe0930ec77f0d",
+    sha256 = "545645db520e15b5bdb54a1512f9e04b727cdc018302b420e733ab8625518b0b",
     urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_rust/releases/download/0.6.0/rules_rust-v0.6.0.tar.gz",
-        "https://github.com/bazelbuild/rules_rust/releases/download/0.6.0/rules_rust-v0.6.0.tar.gz",
+        "https://github.com/dfinity-lab/rules_rust/releases/download/0.6.1/rules_rust-v0.6.1.tar.gz",
     ],
 )
 

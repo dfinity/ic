@@ -1,0 +1,49 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/config",
+    "//rs/cycles_account_manager",
+    "//rs/interfaces",
+    "//rs/memory_tracker",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/registry/subnet_type",
+    "//rs/replicated_state",
+    "//rs/sys",
+    "//rs/system_api",
+    "//rs/types/types",
+    "//rs/types/wasm_types",
+    "//rs/utils",
+    "@crate_index//:anyhow",
+    "@crate_index//:libc",
+    "@crate_index//:libflate",
+    "@crate_index//:nix",
+    "@crate_index//:parity-wasm",
+    "@crate_index//:prometheus",
+    "@crate_index//:serde",
+    "@crate_index//:slog",
+    "@crate_index//:wasmtime",
+    "@crate_index//:wasmtime-environ",
+    "@crate_index//:wasmtime-runtime",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "embedders",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_embedders",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
