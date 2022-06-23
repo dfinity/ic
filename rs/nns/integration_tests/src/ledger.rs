@@ -116,7 +116,7 @@ fn test_rosetta1_92() {
             .archive_options(ArchiveOptions {
                 node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
                 max_message_size_bytes: Some(max_message_size_bytes),
-                controller_id: ROOT_CANISTER_ID,
+                controller_id: ROOT_CANISTER_ID.into(),
                 trigger_threshold: blocks_per_archive_node,
                 num_blocks_to_archive: blocks_per_archive_call,
                 cycles_for_archive_creation: Some(0),

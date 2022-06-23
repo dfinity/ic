@@ -216,7 +216,7 @@ impl SnsInitPayload {
                 node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
                 // 128kb
                 max_message_size_bytes: Some(128 * 1024),
-                controller_id: root_canister_id,
+                controller_id: root_canister_id.into(),
                 // TODO: allow users to set this value
                 // 10 Trillion cycles
                 cycles_for_archive_creation: Some(10_000_000_000_000),
@@ -364,11 +364,10 @@ mod test {
         InitialTokenDistribution, SnsCanisterIds, SnsInitPayload, SnsInitPayloadBuilder,
         MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH,
     };
-    use ic_base_types::{CanisterId, PrincipalId};
+    use ic_base_types::CanisterId;
     use ic_sns_governance::governance::ValidGovernanceProto;
     use ledger_canister::{AccountIdentifier, Tokens};
     use maplit::hashset;
-    use std::str::FromStr;
 
     impl Default for InitialTokenDistribution {
         fn default() -> Self {
@@ -388,10 +387,10 @@ mod test {
 
     fn create_canister_ids() -> SnsCanisterIds {
         SnsCanisterIds {
-            governance: PrincipalId::from_str(&CanisterId::from_u64(1).to_string()).unwrap(),
-            ledger: PrincipalId::from_str(&CanisterId::from_u64(2).to_string()).unwrap(),
-            root: PrincipalId::from_str(&CanisterId::from_u64(3).to_string()).unwrap(),
-            swap: PrincipalId::from_str(&CanisterId::from_u64(4).to_string()).unwrap(),
+            governance: CanisterId::from_u64(1).into(),
+            ledger: CanisterId::from_u64(2).into(),
+            root: CanisterId::from_u64(3).into(),
+            swap: CanisterId::from_u64(4).into(),
         }
     }
 
@@ -484,7 +483,7 @@ mod test {
                 .archive_options
                 .unwrap()
                 .controller_id,
-            CanisterId::new(sns_canister_ids.root).unwrap()
+            sns_canister_ids.root
         );
         assert_eq!(
             sns_canisters_init_payloads.ledger.minting_account,

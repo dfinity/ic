@@ -117,7 +117,7 @@ impl SnsTestsInitPayloadBuilder {
                     // 128kb
                     max_message_size_bytes: Some(128 * 1024),
                     // controller_id will be set when the Root canister ID is allocated
-                    controller_id: CanisterId::from_u64(0),
+                    controller_id: CanisterId::from_u64(0).into(),
                     cycles_for_archive_creation: Some(0),
                 }),
                 max_message_size_bytes: Some(128 * 1024),
@@ -224,7 +224,7 @@ impl SnsCanisters<'_> {
             .archive_options
             .as_mut()
             .expect("Archive options not set")
-            .controller_id = root.canister_id();
+            .controller_id = root.canister_id().into();
 
         assert!(init_payloads
             .ledger

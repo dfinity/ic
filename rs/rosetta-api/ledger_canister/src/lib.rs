@@ -1112,7 +1112,7 @@ mod tests {
             num_blocks_to_archive: 1000,
             node_max_memory_size_bytes: None,
             max_message_size_bytes: None,
-            controller_id: CanisterId::from_u64(876),
+            controller_id: CanisterId::from_u64(876).into(),
             cycles_for_archive_creation: Some(0),
         }))));
 
