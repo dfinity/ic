@@ -15,7 +15,7 @@ use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{EcdsaBlockReader, EcdsaMessage};
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgDealing, IDkgDealingSupport, IDkgMultiSignedDealing, IDkgTranscript, IDkgTranscriptId,
+    IDkgDealingSupport, IDkgMultiSignedDealing, IDkgTranscript, IDkgTranscriptId,
     IDkgTranscriptOperation, IDkgTranscriptParams, SignedIDkgDealing,
 };
 use ic_types::crypto::CryptoHashOf;
@@ -28,6 +28,9 @@ use std::cell::RefCell;
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
+
+#[cfg(feature = "malicious_code")]
+use ic_types::crypto::canister_threshold_sig::idkg::IDkgDealing;
 
 pub(crate) trait EcdsaPreSigner: Send {
     /// The on_state_change() called from the main ECDSA path.
@@ -138,28 +141,22 @@ impl EcdsaPreSignerImpl {
             &self.log,
         );
 
-        // Pass 1: collection of <TranscriptId, DealerId>
-        let mut dealing_keys = BTreeSet::new();
-        let mut duplicate_keys = BTreeSet::new();
-        for (_, signed_dealing) in ecdsa_pool.unvalidated().signed_dealings() {
-            let dealing = signed_dealing.idkg_dealing();
-            let key = (dealing.transcript_id, signed_dealing.dealer_id());
-            if !dealing_keys.insert(key) {
-                duplicate_keys.insert(key);
-            }
-        }
-
         let mut target_subnet_xnet_transcripts = BTreeSet::new();
         for transcript_params_ref in block_reader.target_subnet_xnet_transcripts() {
             target_subnet_xnet_transcripts.insert(transcript_params_ref.transcript_id);
         }
 
+        let mut validated_dealings = BTreeSet::new();
         let mut ret = Vec::new();
         for (id, signed_dealing) in ecdsa_pool.unvalidated().signed_dealings() {
             let dealing = signed_dealing.idkg_dealing();
-            // Remove the duplicate entries
+            // We already accepted a dealing for the same <transcript_id, dealer_id>
+            // in the current batch, drop the subsequent ones. This scheme does create a
+            // risk when we get several invalid dealings for the same <transcript_id, dealer_id>
+            // before we see a good one. In this case, we would spend several cycles
+            // to just check/discard the invalid ones.
             let key = (dealing.transcript_id, signed_dealing.dealer_id());
-            if duplicate_keys.contains(&key) {
+            if validated_dealings.contains(&key) {
                 self.metrics
                     .pre_sign_errors_inc("duplicate_dealing_in_batch");
                 ret.push(EcdsaChangeAction::HandleInvalid(
@@ -215,8 +212,12 @@ impl EcdsaPreSignerImpl {
                             format!("Duplicate dealing: {}", signed_dealing),
                         ))
                     } else {
-                        let mut changes =
-                            self.crypto_verify_dealing(&id, transcript_params, &signed_dealing);
+                        let mut changes = self.crypto_verify_dealing(
+                            &id,
+                            transcript_params,
+                            &signed_dealing,
+                            &mut validated_dealings,
+                        );
                         ret.append(&mut changes);
                     }
                 }
@@ -633,6 +634,7 @@ impl EcdsaPreSignerImpl {
         id: &EcdsaMessageId,
         transcript_params: &IDkgTranscriptParams,
         signed_dealing: &SignedIDkgDealing,
+        validated_dealings: &mut BTreeSet<(IDkgTranscriptId, NodeId)>,
     ) -> EcdsaChangeSet {
         let dealing = signed_dealing.idkg_dealing();
 
@@ -695,6 +697,10 @@ impl EcdsaPreSignerImpl {
                 }
             },
             |()| {
+                validated_dealings.insert((
+                    signed_dealing.idkg_dealing().transcript_id,
+                    signed_dealing.dealer_id(),
+                ));
                 self.metrics.pre_sign_metrics_inc("dealing_received");
                 vec![EcdsaChangeAction::MoveToValidated(id.clone())]
             },
@@ -1707,11 +1713,16 @@ mod tests {
                 let block_reader =
                     TestEcdsaBlockReader::for_pre_signer_test(Height::from(100), vec![t2]);
 
-                // msg_id_2_a, msg_id_2_a should be dropped as duplicates
+                // One of msg_id_2_a or msg_id_2_b should be accepted, the other one dropped
                 let change_set = pre_signer.validate_dealings(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 3);
-                assert!(is_handle_invalid(&change_set, &msg_id_2_a));
-                assert!(is_handle_invalid(&change_set, &msg_id_2_b));
+                if is_moved_to_validated(&change_set, &msg_id_2_a) {
+                    assert!(is_handle_invalid(&change_set, &msg_id_2_b));
+                } else if is_moved_to_validated(&change_set, &msg_id_2_b) {
+                    assert!(is_handle_invalid(&change_set, &msg_id_2_a));
+                } else {
+                    panic!("Neither dealing was accepted");
+                }
                 assert!(is_moved_to_validated(&change_set, &msg_id_3));
             })
         })
