@@ -150,7 +150,7 @@ pub fn commitment_key_id(commitment: &PolynomialCommitment) -> KeyId {
     let mut hash = Sha256::new_with_context(&DomainSeparationContext::new(
         COMMITMENT_KEY_ID_DOMAIN.to_string(),
     ));
-    let commitment_encoding = commitment.to_bytes();
+    let commitment_encoding = commitment.stable_representation();
     hash.write(&(commitment_encoding.len() as u64).to_be_bytes());
     hash.write(&commitment_encoding);
     KeyId::from(hash.finish())

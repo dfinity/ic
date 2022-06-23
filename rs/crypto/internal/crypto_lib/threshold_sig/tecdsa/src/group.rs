@@ -15,7 +15,7 @@ mod secp256r1;
 ///
 /// Enumerates the curves supported by this library, currently K256 (aka
 /// secp256k1) and P256 (aka secp256r1)
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum EccCurveType {
     K256,
     P256,
@@ -81,6 +81,14 @@ impl EccCurveType {
         match self {
             EccCurveType::K256 => 1,
             EccCurveType::P256 => 2,
+        }
+    }
+
+    pub(crate) fn from_tag(tag: u8) -> Option<Self> {
+        match tag {
+            1 => Some(EccCurveType::K256),
+            2 => Some(EccCurveType::P256),
+            _ => None,
         }
     }
 
@@ -182,6 +190,17 @@ impl EccScalar {
         }
     }
 
+    /// Serialize the scalar in SEC1 format (with curve tag)
+    pub(crate) fn serialize_tagged(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(1 + self.curve_type().scalar_bytes());
+        bytes.push(self.curve_type().tag());
+        bytes.extend_from_slice(&match self {
+            Self::K256(s) => s.as_bytes(),
+            Self::P256(s) => s.as_bytes(),
+        });
+        bytes
+    }
+
     /// Hash an input to a Scalar value
     pub fn hash_to_scalar(
         curve: EccCurveType,
@@ -200,6 +219,18 @@ impl EccScalar {
         domain_separator: &[u8],
     ) -> ThresholdEcdsaResult<Vec<Self>> {
         hash2curve::hash_to_scalar(count, curve, input, domain_separator)
+    }
+
+    /// Deserialize a SEC1 formatted scalar value (with tag)
+    pub fn deserialize_tagged(bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+        if bytes.is_empty() {
+            return Err(ThresholdEcdsaError::InvalidScalar);
+        }
+
+        match EccCurveType::from_tag(bytes[0]) {
+            Some(curve) => Self::deserialize(curve, &bytes[1..]),
+            None => Err(ThresholdEcdsaError::InvalidScalar),
+        }
     }
 
     /// Deserialize a SEC1 formatted scalar value
@@ -330,20 +361,11 @@ impl EccScalar {
 }
 
 #[derive(Deserialize, Serialize)]
-struct EccScalarSerializationHelper {
-    curve_type: EccCurveType,
-    raw: Vec<u8>,
-}
+struct EccScalarSerializationHelper(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl Serialize for EccScalar {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let helper = EccScalarSerializationHelper {
-            curve_type: self.curve_type(),
-            raw: self.serialize(),
-        };
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let helper = EccScalarSerializationHelper(self.serialize_tagged());
         helper.serialize(serializer)
     }
 }
@@ -351,7 +373,7 @@ impl Serialize for EccScalar {
 impl<'de> Deserialize<'de> for EccScalar {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let helper: EccScalarSerializationHelper = Deserialize::deserialize(deserializer)?;
-        EccScalar::deserialize(helper.curve_type, &helper.raw)
+        EccScalar::deserialize_tagged(&helper.0)
             .map_err(|e| serde::de::Error::custom(format!("{:?}", e)))
     }
 }
@@ -603,6 +625,22 @@ impl EccPoint {
         }
     }
 
+    /// Serialize a point in compressed form with a curve ID tag
+    ///
+    /// The output is the same as serialize but prefixed with the
+    /// (arbitrarily chosen) tag from EccCurveType::tag()
+    pub(crate) fn serialize_tagged(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(1 + self.curve_type().point_bytes());
+        bytes.push(self.curve_type().tag());
+
+        bytes.extend_from_slice(&match self {
+            Self::K256(pt) => pt.serialize(),
+            Self::P256(pt) => pt.serialize(),
+        });
+
+        bytes
+    }
+
     /// Serialize a point in uncompressed form
     ///
     /// The output is in SEC1 format, and will be 1 header byte
@@ -636,6 +674,18 @@ impl EccPoint {
         match self {
             Self::K256(p) => Ok(p.is_infinity()),
             Self::P256(p) => Ok(p.is_infinity()),
+        }
+    }
+
+    /// Deserialize a tagged point. Only compressed points are accepted.
+    pub fn deserialize_tagged(bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+        if bytes.is_empty() {
+            return Err(ThresholdEcdsaError::InvalidPoint);
+        }
+
+        match EccCurveType::from_tag(bytes[0]) {
+            Some(curve) => Self::deserialize(curve, &bytes[1..]),
+            None => Err(ThresholdEcdsaError::InvalidPoint),
         }
     }
 
@@ -690,20 +740,11 @@ impl EccPoint {
 }
 
 #[derive(Deserialize, Serialize)]
-struct EccPointSerializationHelper {
-    curve_type: EccCurveType,
-    raw: Vec<u8>,
-}
+struct EccPointSerializationHelper(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl Serialize for EccPoint {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let helper = EccPointSerializationHelper {
-            curve_type: self.curve_type(),
-            raw: self.serialize(),
-        };
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let helper = EccPointSerializationHelper(self.serialize_tagged());
         helper.serialize(serializer)
     }
 }
@@ -711,7 +752,7 @@ impl Serialize for EccPoint {
 impl<'de> Deserialize<'de> for EccPoint {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let helper: EccPointSerializationHelper = Deserialize::deserialize(deserializer)?;
-        EccPoint::deserialize(helper.curve_type, &helper.raw)
+        EccPoint::deserialize_tagged(&helper.0)
             .map_err(|e| serde::de::Error::custom(format!("{:?}", e)))
     }
 }

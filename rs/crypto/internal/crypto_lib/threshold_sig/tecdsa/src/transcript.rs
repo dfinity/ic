@@ -50,10 +50,15 @@ impl PartialOrd for IDkgTranscriptInternal {
 
 impl Ord for IDkgTranscriptInternal {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.combined_commitment
+        let lhs = self
+            .combined_commitment
             .commitment()
-            .to_bytes()
-            .cmp(&other.combined_commitment.commitment().to_bytes())
+            .stable_representation();
+        let rhs = other
+            .combined_commitment
+            .commitment()
+            .stable_representation();
+        lhs.cmp(&rhs)
     }
 }
 

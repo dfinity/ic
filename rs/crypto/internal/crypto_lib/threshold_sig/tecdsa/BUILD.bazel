@@ -35,6 +35,7 @@ rust_library(
         "@crate_index//:rand_0_8_4",
         "@crate_index//:rand_chacha_0_3_1",
         "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
         "@crate_index//:subtle",
         "@crate_index//:zeroize",
