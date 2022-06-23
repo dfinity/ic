@@ -3553,6 +3553,60 @@ fn install_code_context_conversion_u128() {
 }
 
 #[test]
+fn unfreezing_of_frozen_canister() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
+        .unwrap();
+
+    // Set the freezing theshold high to freeze the canister.
+    let payload = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgs {
+            freezing_threshold: Some(candid::Nat::from(1_000_000_000_000_u64)),
+            ..Default::default()
+        },
+    }
+    .encode();
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let result = test.subnet_message(Method::UpdateSettings, payload);
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    // If the freezing threshold doesn't change, then the canister is not charged.
+    assert_eq!(balance_before, balance_after);
+    get_reply(result);
+
+    // Sending an ingress message fails due to the cycles balance.
+    let err = test
+        .ingress(canister_id, "update", wasm().reply().build())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
+
+    // Unfreeze the canister.
+    let payload = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgs {
+            freezing_threshold: Some(candid::Nat::from(0_u64)),
+            ..Default::default()
+        },
+    }
+    .encode();
+    let ingress_bytes =
+        NumBytes::from((Method::UpdateSettings.to_string().len() + payload.len()) as u64);
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    test.subnet_message(Method::UpdateSettings, payload)
+        .unwrap();
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(
+        balance_before - balance_after,
+        test.cycles_account_manager()
+            .ingress_induction_cost_from_bytes(ingress_bytes)
+    );
+    // Now the canister works again.
+    let result = test.ingress(canister_id, "update", wasm().reply().build());
+    get_reply(result);
+}
+
+#[test]
 fn create_canister_when_compute_capacity_is_oversubscribed() {
     let mut test = ExecutionTestBuilder::new()
         .with_allocatable_compute_capacity_in_percent(0)
