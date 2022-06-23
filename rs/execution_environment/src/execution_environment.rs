@@ -845,7 +845,15 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                 (Some(res), instructions_limit)
             }
 
-            Ok(Ic00Method::BitcoinSendTransaction) | Err(ParseError::VariantNotFound) => {
+            Ok(Ic00Method::BitcoinSendTransaction) => {
+                let cycles = msg.take_cycles();
+                let res =
+                    crate::bitcoin::send_transaction(msg.method_payload(), &mut state, cycles);
+
+                (Some(res), instructions_limit)
+            }
+
+            Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,
                     format!("Management canister has no method '{}'", msg.method_name()),

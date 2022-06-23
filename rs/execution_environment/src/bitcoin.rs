@@ -4,7 +4,7 @@ use ic_btc_canister::state::State as BitcoinCanisterState;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
-    BitcoinNetwork, BitcoinSendTransactionArgs, Method as Ic00Method, Payload,
+    BitcoinNetwork, BitcoinSendTransactionArgs, EmptyBlob, Method as Ic00Method, Payload,
 };
 use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_replicated_state::ReplicatedState;
@@ -20,6 +20,8 @@ const NUMBER_OF_TRANSACTIONS_FOR_CALCULATING_FEES: u32 = 10_000;
 const GET_BALANCE_FEE: Cycles = Cycles::new(100_000_000);
 const GET_UTXOS_FEE: Cycles = Cycles::new(100_000_000);
 const GET_CURRENT_FEE_PERCENTILES_FEE: Cycles = Cycles::new(100_000_000);
+const SEND_TRANSACTION_FEE_BASE: Cycles = Cycles::new(5_000_000_000);
+const SEND_TRANSACTION_FEE_PER_BYTE: Cycles = Cycles::new(20_000_000);
 
 /// Handles a `bitcoin_get_balance` request.
 pub fn get_balance(
@@ -133,13 +135,31 @@ pub fn get_current_fee_percentiles(
 }
 
 /// Handles a `bitcoin_send_transaction` request.
-#[allow(dead_code)] // TODO(EXC-1132): remove after connecting implementation to management canister endpoint.
-pub fn send_transaction(payload: &[u8], state: &mut ReplicatedState) -> Result<(), UserError> {
-    verify_feature_is_enabled(state)?;
+pub fn send_transaction(
+    payload: &[u8],
+    state: &mut ReplicatedState,
+    payment: Cycles,
+) -> (Result<Vec<u8>, UserError>, Cycles) {
+    let args = match BitcoinSendTransactionArgs::decode(payload) {
+        Err(err) => {
+            // Failed to parse payload. Charge the base fee and return.
+            return (
+                Err(candid_error_to_user_error(err)),
+                payment - SEND_TRANSACTION_FEE_BASE,
+            );
+        }
+        Ok(args) => args,
+    };
 
-    match BitcoinSendTransactionArgs::decode(payload) {
-        Err(err) => Err(candid_error_to_user_error(err)),
-        Ok(args) => {
+    let fee = SEND_TRANSACTION_FEE_BASE
+        + Cycles::from(args.transaction.len() as u64) * SEND_TRANSACTION_FEE_PER_BYTE;
+
+    execute_bitcoin_endpoint(
+        payload,
+        state,
+        payment,
+        fee,
+        move |_payload: &[u8], state: &mut ReplicatedState| -> Result<Vec<u8>, UserError> {
             // Verify that the request is for the expected network.
             verify_network(args.network, state.bitcoin().network())?;
 
@@ -147,30 +167,20 @@ pub fn send_transaction(payload: &[u8], state: &mut ReplicatedState) -> Result<(
             let result = ic_btc_canister::send_transaction(&mut btc_canister_state, args);
             state.put_bitcoin_state(btc_canister_state.into());
 
-            result.map_err(|err| {
-                UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!("{} failed: {}", Ic00Method::BitcoinSendTransaction, err),
-                )
-            })
-        }
-    }
+            result
+                .map_err(|err| {
+                    UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        format!("{} failed: {}", Ic00Method::BitcoinSendTransaction, err),
+                    )
+                })
+                .map(|()| EmptyBlob::encode())
+        },
+    )
 }
 
 fn is_feature_enabled(state: &mut ReplicatedState) -> bool {
     state.metadata.own_subnet_features.bitcoin().status == BitcoinFeatureStatus::Enabled
-}
-
-// TODO(EXC-1089): remove this method once `send_transaction` is refactored to charge cycles.
-fn verify_feature_is_enabled(state: &mut ReplicatedState) -> Result<(), UserError> {
-    if state.metadata.own_subnet_features.bitcoin().status != BitcoinFeatureStatus::Enabled {
-        return Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            "The bitcoin API is not enabled on this subnet.",
-        ));
-    }
-
-    Ok(())
 }
 
 fn verify_network(
@@ -197,7 +207,7 @@ fn execute_bitcoin_endpoint(
     state: &mut ReplicatedState,
     payment: Cycles,
     fee_to_charge: Cycles,
-    endpoint: fn(payload: &[u8], state: &mut ReplicatedState) -> Result<Vec<u8>, UserError>,
+    endpoint: impl FnOnce(&[u8], &mut ReplicatedState) -> Result<Vec<u8>, UserError>,
 ) -> (Result<Vec<u8>, UserError>, Cycles) {
     // Verify that the feature is enabled.
     if !is_feature_enabled(state) {
