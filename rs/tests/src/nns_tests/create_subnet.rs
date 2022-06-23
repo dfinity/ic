@@ -45,8 +45,21 @@ use crate::util::{
 
 const NNS_SUBNET_SIZE: usize = 40;
 const APP_SUBNET_SIZE: usize = 34; // f*3+1 with f=11
+const NNS_PRE_MASTER: usize = 4;
+const APP_PRE_MASTER: usize = 4;
 
-pub fn config() -> InternetComputer {
+// Small IC for correctness test pre-master
+pub fn pre_master_config() -> InternetComputer {
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::fast(SubnetType::System, NNS_PRE_MASTER)
+                .with_dkg_interval_length(Height::from(NNS_PRE_MASTER as u64 * 2)),
+        )
+        .with_unassigned_nodes(APP_PRE_MASTER as i32)
+}
+
+// IC with large subnets for a more resource-intensive test
+pub fn hourly_config() -> InternetComputer {
     InternetComputer::new()
         .add_subnet(
             Subnet::fast(SubnetType::System, NNS_SUBNET_SIZE)

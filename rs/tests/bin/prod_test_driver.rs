@@ -202,7 +202,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
         "create_subnet_pre_master",
         vec![pot(
             "create_subnet",
-            nns_tests::create_subnet::config(),
+            nns_tests::create_subnet::pre_master_config(),
             par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
         )],
     ));
@@ -322,7 +322,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
             /*
             pot(
                 "create_subnet",
-                nns_tests::create_subnet::config(),
+                nns_tests::create_subnet::pre_master_config(),
                 par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
             ),
              */
@@ -661,7 +661,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                 pot(
                     "create_subnet",
-                    nns_tests::create_subnet::config(),
+                    nns_tests::create_subnet::hourly_config(),
                     par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
                 ),
                 pot(
