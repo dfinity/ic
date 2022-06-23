@@ -365,7 +365,7 @@ pub fn test_everything(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
         num_blocks_to_archive: 4,
         node_max_memory_size_bytes: Some(1024 + 512), // about 10 blocks
         max_message_size_bytes: Some(2 * 1024 * 1024),
-        controller_id: CanisterId::from_u64(876),
+        controller_id: CanisterId::from_u64(876).into(),
         cycles_for_archive_creation: Some(0),
     };
 

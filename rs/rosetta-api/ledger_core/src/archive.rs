@@ -1,6 +1,6 @@
 use crate::{block::EncodedBlock, runtime::Runtime, spawn};
 use candid::{CandidType, Encode};
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::IC_00;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -21,7 +21,7 @@ pub struct ArchiveOptions {
     pub num_blocks_to_archive: usize,
     pub node_max_memory_size_bytes: Option<usize>,
     pub max_message_size_bytes: Option<usize>,
-    pub controller_id: CanisterId,
+    pub controller_id: PrincipalId,
     // cycles to use for the call to create a new archive canister
     #[serde(default)]
     pub cycles_for_archive_creation: Option<u64>,
@@ -81,7 +81,7 @@ pub struct Archive<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
     // List of Archive Nodes
     nodes: Vec<CanisterId>,
 
-    controller_id: CanisterId,
+    controller_id: PrincipalId,
 
     // BlockHeights of Blocks stored in each archive node.
 
@@ -337,7 +337,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         0,
         (ic_ic00_types::SetControllerArgs::new(
             node_canister_id,
-            controller_id.into(),
+            controller_id,
         ),),
     )
     .await;

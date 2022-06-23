@@ -114,7 +114,7 @@ impl NnsInitPayloadsBuilder {
                     node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
                     // 128kb
                     max_message_size_bytes: Some(128 * 1024),
-                    controller_id: ROOT_CANISTER_ID,
+                    controller_id: ROOT_CANISTER_ID.into(),
                     cycles_for_archive_creation: Some(0),
                 })
                 .max_message_size_bytes(128 * 1024)
