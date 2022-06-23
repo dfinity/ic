@@ -5,13 +5,17 @@ use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::println;
 use dfn_core::{over, over_async, over_init};
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_ic00_types::{CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, Method};
+use ic_ic00_types::CanisterInstallMode::Install;
+use ic_ic00_types::{
+    CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, InstallCodeArgs, Method,
+    SetControllerArgs,
+};
 use ic_sns_wasm::canister_api::CanisterApi;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_sns_wasm::pb::v1::{
-    AddWasm, AddWasmResponse, DeployNewSns, DeployNewSnsResponse, GetNextSnsVersionRequest,
-    GetNextSnsVersionResponse, GetWasm, GetWasmResponse, ListDeployedSnses,
-    ListDeployedSnsesResponse,
+    AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
+    GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetWasmRequest, GetWasmResponse,
+    ListDeployedSnsesRequest, ListDeployedSnsesResponse,
 };
 use ic_sns_wasm::sns_wasm::SnsWasmCanister;
 use ic_types::{CanisterId, Cycles};
@@ -34,10 +38,12 @@ struct CanisterApiImpl {}
 
 #[async_trait]
 impl CanisterApi for CanisterApiImpl {
+    /// See CanisterApi::local_canister_id
     fn local_canister_id(&self) -> CanisterId {
         dfn_core::api::id()
     }
 
+    /// See CanisterApi::create_canister
     async fn create_canister(
         &self,
         target_subnet: SubnetId,
@@ -71,6 +77,63 @@ impl CanisterApi for CanisterApiImpl {
                 Err(err)
             }
         }
+    }
+
+    /// See CanisterApi::install_wasm
+    async fn install_wasm(
+        &self,
+        target_canister: CanisterId,
+        wasm: Vec<u8>,
+        init_paylaod: Vec<u8>,
+    ) -> Result<(), String> {
+        let install_args = InstallCodeArgs {
+            mode: Install,
+            canister_id: target_canister.get(),
+            wasm_module: wasm,
+            arg: init_paylaod,
+            compute_allocation: None,
+            memory_allocation: None,
+            query_allocation: None,
+        };
+        let install_res: Result<(), (Option<i32>, String)> = dfn_core::call(
+            CanisterId::ic_00(),
+            "install_code",
+            dfn_candid::candid_multi_arity,
+            (install_args,),
+        )
+        .await;
+        install_res.map_err(|(code, msg)| {
+            format!(
+                "{}{}",
+                code.map(|c| format!("error code {}: ", c))
+                    .unwrap_or_default(),
+                msg
+            )
+        })
+    }
+
+    /// See CanisterApi::set_controller
+    async fn set_controller(
+        &self,
+        canister: CanisterId,
+        controller: PrincipalId,
+    ) -> Result<(), String> {
+        let set_controller_args = SetControllerArgs::new(canister, controller);
+        let set_result: Result<(), (Option<i32>, String)> = dfn_core::call(
+            CanisterId::ic_00(),
+            "set_controller",
+            dfn_candid::candid_multi_arity,
+            (set_controller_args,),
+        )
+        .await;
+        set_result.map_err(|(code, msg)| {
+            format!(
+                "{}{}",
+                code.map(|c| format!("error code {}: ", c))
+                    .unwrap_or_default(),
+                msg
+            )
+        })
     }
 }
 
@@ -112,7 +175,7 @@ fn add_wasm() {
 }
 
 #[candid_method(update, rename = "add_wasm")]
-fn add_wasm_(add_wasm_payload: AddWasm) -> AddWasmResponse {
+fn add_wasm_(add_wasm_payload: AddWasmRequest) -> AddWasmResponse {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow_mut().add_wasm(add_wasm_payload))
 }
 
@@ -122,7 +185,7 @@ fn get_wasm() {
 }
 
 #[candid_method(query, rename = "get_wasm")]
-fn get_wasm_(get_wasm_payload: GetWasm) -> GetWasmResponse {
+fn get_wasm_(get_wasm_payload: GetWasmRequest) -> GetWasmResponse {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_wasm(get_wasm_payload))
 }
 
@@ -142,7 +205,7 @@ fn deploy_new_sns() {
 }
 
 #[candid_method(update, rename = "deploy_new_sns")]
-async fn deploy_new_sns_(deploy_new_sns: DeployNewSns) -> DeployNewSnsResponse {
+async fn deploy_new_sns_(deploy_new_sns: DeployNewSnsRequest) -> DeployNewSnsResponse {
     SnsWasmCanister::deploy_new_sns(&SNS_WASM, &canister_api(), deploy_new_sns).await
 }
 
@@ -152,7 +215,7 @@ fn list_deployed_snses() {
 }
 
 #[candid_method(query, rename = "list_deployed_snses")]
-fn list_deployed_snses_(request: ListDeployedSnses) -> ListDeployedSnsesResponse {
+fn list_deployed_snses_(request: ListDeployedSnsesRequest) -> ListDeployedSnsesResponse {
     SNS_WASM.with(|sns_wasm| sns_wasm.borrow().list_deployed_snses(request))
 }
 

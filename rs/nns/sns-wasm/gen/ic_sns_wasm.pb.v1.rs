@@ -10,7 +10,7 @@ pub struct SnsWasm {
 /// The payload for the add_wasm endpoint, which takes an SnsWasm along with the hash of the wasm bytes
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AddWasm {
+pub struct AddWasmRequest {
     #[prost(message, optional, tag="1")]
     pub wasm: ::core::option::Option<SnsWasm>,
     #[prost(bytes="vec", tag="2")]
@@ -51,7 +51,7 @@ pub mod add_wasm_response {
 /// The argument for get_wasm, which consists of the WASM hash to be retrieved.
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GetWasm {
+pub struct GetWasmRequest {
     #[prost(bytes="vec", tag="1")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
@@ -65,7 +65,7 @@ pub struct GetWasmResponse {
 /// Payload to deploy a new SNS.
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DeployNewSns {
+pub struct DeployNewSnsRequest {
 }
 /// The response to creating a new SNS.
 #[derive(candid::CandidType, candid::Deserialize)]
@@ -91,11 +91,14 @@ pub struct SnsCanisterIds {
     /// PrincipalId of the governance canister
     #[prost(message, optional, tag="3")]
     pub governance: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// PrincipalId of the swap canister
+    #[prost(message, optional, tag="4")]
+    pub swap: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 /// Message to list deployed sns instances
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListDeployedSnses {
+pub struct ListDeployedSnsesRequest {
 }
 /// Response to list_deployed_snses
 #[derive(candid::CandidType, candid::Deserialize)]

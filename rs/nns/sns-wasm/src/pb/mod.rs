@@ -1,7 +1,9 @@
 use crate::pb::v1::{
-    GetNextSnsVersionRequest, GetNextSnsVersionResponse, SnsCanisterType, SnsVersion, SnsWasm,
+    GetNextSnsVersionRequest, GetNextSnsVersionResponse, SnsCanisterIds, SnsCanisterType,
+    SnsVersion, SnsWasm,
 };
 use ic_crypto_sha::Sha256;
+use std::convert::TryFrom;
 use std::fmt::Write;
 
 #[rustfmt::skip]
@@ -61,5 +63,20 @@ impl From<SnsVersion> for GetNextSnsVersionResponse {
         GetNextSnsVersionResponse {
             next_version: Some(version),
         }
+    }
+}
+
+impl TryFrom<SnsCanisterIds> for ic_sns_init::SnsCanisterIds {
+    type Error = String;
+
+    fn try_from(ids: SnsCanisterIds) -> Result<Self, Self::Error> {
+        Ok(ic_sns_init::SnsCanisterIds {
+            governance: ids
+                .governance
+                .ok_or_else(|| "Governance missing".to_string())?,
+            ledger: ids.ledger.ok_or_else(|| "Ledger missing".to_string())?,
+            root: ids.root.ok_or_else(|| "Root missing".to_string())?,
+            swap: ids.swap.ok_or_else(|| "Swap missing".to_string())?,
+        })
     }
 }

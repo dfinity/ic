@@ -1,10 +1,11 @@
 use crate::state_test_helpers::{query, update};
 use candid::{Decode, Encode};
+use canister_test::Project;
 use ic_base_types::CanisterId;
 use ic_sns_wasm::pb::v1::{
-    AddWasm, AddWasmResponse, DeployNewSns, DeployNewSnsResponse, GetNextSnsVersionRequest,
-    GetNextSnsVersionResponse, GetWasm, GetWasmResponse, ListDeployedSnses,
-    ListDeployedSnsesResponse, SnsCanisterType, SnsWasm,
+    AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
+    GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetWasmRequest, GetWasmResponse,
+    ListDeployedSnsesRequest, ListDeployedSnsesResponse, SnsCanisterType, SnsWasm,
 };
 use ic_state_machine_tests::StateMachine;
 
@@ -26,7 +27,7 @@ pub fn get_wasm(
         env,
         sns_wasm_canister_id,
         "get_wasm",
-        Encode!(&GetWasm {
+        Encode!(&GetWasmRequest {
             hash: hash.to_vec()
         })
         .unwrap(),
@@ -47,7 +48,7 @@ pub fn add_wasm(
         env,
         sns_wasm_canister_id,
         "add_wasm",
-        Encode!(&AddWasm {
+        Encode!(&AddWasmRequest {
             hash: hash.to_vec(),
             wasm: Some(wasm)
         })
@@ -68,7 +69,7 @@ pub fn deploy_new_sns(
         env,
         sns_wasm_canister_id,
         "deploy_new_sns",
-        Encode!(&DeployNewSns {}).unwrap(),
+        Encode!(&DeployNewSnsRequest {}).unwrap(),
     )
     .unwrap();
 
@@ -84,7 +85,7 @@ pub fn list_deployed_snses(
         env,
         sns_wasm_canister_id,
         "list_deployed_snses",
-        Encode!(&ListDeployedSnses {}).unwrap(),
+        Encode!(&ListDeployedSnsesRequest {}).unwrap(),
     )
     .unwrap();
 
@@ -106,4 +107,37 @@ pub fn get_next_sns_version(
     .unwrap();
 
     Decode!(&response_bytes, GetNextSnsVersionResponse).unwrap()
+}
+
+pub fn build_root_sns_wasm() -> SnsWasm {
+    let root_wasm =
+        Project::cargo_bin_maybe_use_path_relative_to_rs("sns/root", "sns-root-canister", &[]);
+    SnsWasm {
+        wasm: root_wasm.bytes(),
+        canister_type: SnsCanisterType::Root.into(),
+    }
+}
+
+pub fn build_governance_sns_wasm() -> SnsWasm {
+    let governance_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
+        "sns/governance",
+        "sns-governance-canister",
+        &[],
+    );
+    SnsWasm {
+        wasm: governance_wasm.bytes(),
+        canister_type: SnsCanisterType::Governance.into(),
+    }
+}
+
+pub fn build_ledger_sns_wasm() -> SnsWasm {
+    let ledger_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
+        "rosetta-api/ledger_canister",
+        "ledger-canister",
+        &[],
+    );
+    SnsWasm {
+        wasm: ledger_wasm.bytes(),
+        canister_type: SnsCanisterType::Ledger.into(),
+    }
 }
