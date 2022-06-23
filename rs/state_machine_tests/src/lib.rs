@@ -722,9 +722,25 @@ impl StateMachine {
         self.install_wasm_in_mode(canister_id, CanisterInstallMode::Upgrade, wasm, payload)
     }
 
-    /// Queries the canister with the specified ID.
+    /// Queries the canister with the specified ID using the anonymous principal.
     pub fn query(
         &self,
+        receiver: CanisterId,
+        method: impl ToString,
+        method_payload: Vec<u8>,
+    ) -> Result<WasmResult, UserError> {
+        self.query_as(
+            PrincipalId::new_anonymous(),
+            receiver,
+            method,
+            method_payload,
+        )
+    }
+
+    /// Queries the canister with the specified ID.
+    pub fn query_as(
+        &self,
+        sender: PrincipalId,
         receiver: CanisterId,
         method: impl ToString,
         method_payload: Vec<u8>,
@@ -754,7 +770,7 @@ impl StateMachine {
         self.query_handler.query(
             UserQuery {
                 receiver,
-                source: UserId::from(PrincipalId::new_anonymous()),
+                source: UserId::from(sender),
                 method_name: method.to_string(),
                 method_payload,
                 ingress_expiry: 0,
