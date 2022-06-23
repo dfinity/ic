@@ -111,6 +111,7 @@ fn test_symbol_and_name() {
 fn test_mint_burn() {
     let env = StateMachine::new();
     let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
     let canister_id = install_ledger(&env, vec![]);
 
     assert_eq!(0, balance_of(&env, canister_id, p1.into()));
@@ -125,6 +126,37 @@ fn test_mint_burn() {
 
     assert_eq!(9_000_000, balance_of(&env, canister_id, p1.into()));
     assert_eq!(0, balance_of(&env, canister_id, MINTER.clone()));
+
+    // You have at least FEE, you can burn at least FEE
+    assert_eq!(
+        Err(TransferError::BadBurn {
+            min_burn_amount: FEE
+        }),
+        transfer(&env, canister_id, p1.into(), MINTER.clone(), FEE / 2),
+    );
+
+    transfer(&env, canister_id, p1.into(), p2.into(), FEE / 2).expect("transfer failed");
+
+    assert_eq!(FEE / 2, balance_of(&env, canister_id, p2.into()));
+
+    // If you have less than FEE, you can burn only the whole amount.
+    assert_eq!(
+        Err(TransferError::BadBurn {
+            min_burn_amount: FEE / 2
+        }),
+        transfer(&env, canister_id, p2.into(), MINTER.clone(), FEE / 4),
+    );
+    transfer(&env, canister_id, p2.into(), MINTER.clone(), FEE / 2).expect("burn failed");
+
+    assert_eq!(0, balance_of(&env, canister_id, p2.into()));
+
+    // You cannot burn zero tokens, no matter what your balance is.
+    assert_eq!(
+        Err(TransferError::BadBurn {
+            min_burn_amount: FEE
+        }),
+        transfer(&env, canister_id, p2.into(), MINTER.clone(), 0),
+    );
 }
 
 #[test]
