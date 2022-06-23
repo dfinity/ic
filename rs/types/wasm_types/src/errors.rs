@@ -52,6 +52,8 @@ pub enum WasmValidationError {
     InvalidFunctionIndex { index: usize, import_count: usize },
     /// A function was too complex.
     FunctionComplexityTooHigh,
+    /// A function was too large.
+    FunctionTooLarge,
 }
 
 impl std::fmt::Display for WasmValidationError {
@@ -105,6 +107,7 @@ impl std::fmt::Display for WasmValidationError {
                 index, import_count
             ),
             Self::FunctionComplexityTooHigh => write!(f, "Wasm module contains a function that is too complex"),
+            Self::FunctionTooLarge => write!(f, "Wasm module contains a function that is too large"),
         }
     }
 }
