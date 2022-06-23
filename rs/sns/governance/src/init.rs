@@ -1,17 +1,10 @@
-#[cfg(target_arch = "x86_64")]
-use rand::rngs::StdRng;
-#[cfg(target_arch = "x86_64")]
-use rand_core::SeedableRng;
+use crate::pb::v1::governance::Mode;
+use crate::pb::v1::{Governance, NervousSystemParameters, Neuron};
+use ic_base_types::PrincipalId;
+use std::collections::BTreeMap;
 
-use crate::pb::v1::{governance, Governance, NervousSystemParameters};
-use ic_base_types::{CanisterId, PrincipalId};
-
-#[allow(dead_code)]
 pub struct GovernanceCanisterInitPayloadBuilder {
     pub proto: Governance,
-    voters_to_add_to_all_neurons: Vec<PrincipalId>,
-    #[cfg(target_arch = "x86_64")]
-    rng: StdRng,
 }
 
 #[allow(clippy::new_without_default)]
@@ -20,12 +13,9 @@ impl GovernanceCanisterInitPayloadBuilder {
         Self {
             proto: Governance {
                 parameters: Some(NervousSystemParameters::with_default_values()),
-                mode: governance::Mode::Normal as i32,
+                mode: Mode::Normal as i32,
                 ..Default::default()
             },
-            voters_to_add_to_all_neurons: Vec::new(),
-            #[cfg(target_arch = "x86_64")]
-            rng: StdRng::seed_from_u64(0),
         }
     }
 
@@ -37,17 +27,28 @@ impl GovernanceCanisterInitPayloadBuilder {
             .sum()
     }
 
-    pub fn with_governance_proto(&mut self, proto: Governance) -> &mut Self {
-        // Save the neurons from the current proto, to account for the neurons
-        // possibly already crated.
-        let neurons = self.proto.neurons.clone();
-        self.proto = proto;
-        self.proto.neurons.extend(neurons);
+    pub fn with_ledger_canister_id(&mut self, ledger_canister_id: PrincipalId) -> &mut Self {
+        self.proto.ledger_canister_id = Some(ledger_canister_id);
         self
     }
 
-    pub fn with_ledger_canister_id(&mut self, ledger_canister_id: CanisterId) -> &mut Self {
-        self.proto.ledger_canister_id = Some(ledger_canister_id.get());
+    pub fn with_root_canister_id(&mut self, root_canister_id: PrincipalId) -> &mut Self {
+        self.proto.root_canister_id = Some(root_canister_id);
+        self
+    }
+
+    pub fn with_mode(&mut self, mode: Mode) -> &mut Self {
+        self.proto.set_mode(mode);
+        self
+    }
+
+    pub fn with_parameters(&mut self, parameters: NervousSystemParameters) -> &mut Self {
+        self.proto.parameters = Some(parameters);
+        self
+    }
+
+    pub fn with_neurons(&mut self, neurons: BTreeMap<String, Neuron>) -> &mut Self {
+        self.proto.neurons = neurons;
         self
     }
 
