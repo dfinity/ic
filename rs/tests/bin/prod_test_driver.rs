@@ -754,6 +754,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     orchestrator::subnet_recovery_app_subnet::test,
                 )]),
             ),
+            pot_with_setup(
+                "subnet_recovery_nns_same_nodes",
+                orchestrator::subnet_recovery_nns_subnet::setup,
+                par(vec![sys_t(
+                    "subnet_recovery_nns_same_nodes",
+                    orchestrator::subnet_recovery_nns_subnet::test,
+                )]),
+            ),
         ],
     ));
 
