@@ -98,6 +98,18 @@ fn icrc1_transfer(arg: TransferArg) -> Result<BlockHeight, TransferError> {
             if fee.is_some() && fee != Some(Tokens::ZERO) {
                 return Err(TransferError::BadFee { expected_fee: 0 });
             }
+            let balance = ledger.balances().account_balance(&from_account);
+            let min_burn_amount = ledger.transfer_fee().min(balance);
+            if amount < min_burn_amount {
+                return Err(TransferError::BadBurn {
+                    min_burn_amount: min_burn_amount.get_e8s(),
+                });
+            }
+            if amount == Tokens::ZERO {
+                return Err(TransferError::BadBurn {
+                    min_burn_amount: ledger.transfer_fee().get_e8s(),
+                });
+            }
             Transaction::burn(from_account, amount, now)
         } else if &from_account == ledger.minting_account() {
             if fee.is_some() && fee != Some(Tokens::ZERO) {

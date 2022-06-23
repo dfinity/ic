@@ -8,6 +8,7 @@ use serde::Deserialize;
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub enum TransferError {
     BadFee { expected_fee: u64 },
+    BadBurn { min_burn_amount: u64 },
     InsufficientFunds { balance: u64 },
     TxTooOld { allowed_window_nanos: u64 },
     TxCreatedInFuture,
