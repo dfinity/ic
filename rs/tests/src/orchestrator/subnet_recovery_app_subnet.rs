@@ -91,13 +91,7 @@ pub fn test(env: TestEnv) {
     );
 
     // choose a node from the nns subnet
-    let nns_node = env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .expect("there is no NNS node");
-    nns_node.await_status_is_healthy().unwrap();
+    let nns_node = get_nns_node(&env.topology_snapshot());
 
     nns_node
         .install_nns_canisters()

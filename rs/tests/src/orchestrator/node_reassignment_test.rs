@@ -59,11 +59,7 @@ pub fn test(env: TestEnv) {
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
 
-    let nns_node = topo_snapshot
-        .root_subnet()
-        .nodes()
-        .next()
-        .expect("there is no NNS node");
+    let nns_node = get_nns_node(&topo_snapshot);
     nns_node
         .install_nns_canisters()
         .expect("NNS canisters not installed");
@@ -101,15 +97,7 @@ pub fn test(env: TestEnv) {
     info!(log, "Message on both nns nodes verified!");
 
     // Now we store another message on the app subnet.
-    let app_subnet = topo_snapshot
-        .subnets()
-        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
-        .expect("there is no application subnet");
-    let app_node = app_subnet
-        .nodes()
-        .next()
-        .expect("there is no application node");
-    app_node.await_status_is_healthy().unwrap();
+    let (app_subnet, app_node) = get_app_subnet_and_node(&topo_snapshot);
     let app_msg = "hello world from app subnet!";
     let app_can_id = block_on(store_message(&app_node.get_public_url(), app_msg));
     assert!(block_on(can_read_msg(
