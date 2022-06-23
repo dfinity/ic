@@ -4,9 +4,10 @@ use crate::execution_environment::{CanisterHeartbeatError, MockExecutionEnvironm
 use crate::{execution_environment::ExecuteMessageResult, ExecutionResponse};
 use candid::Encode;
 use ic_base_types::NumSeconds;
+use ic_btc_types::Network;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{CanisterIdRecord, Method};
+use ic_ic00_types::{BitcoinGetBalanceArgs, CanisterIdRecord, Method};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_logger::replica_logger::no_op_logger;
@@ -1996,6 +1997,180 @@ fn subnet_messages_respect_instruction_limit_per_round() {
             let cycles = 1000000;
 
             for _ in 0..20 {
+                state
+                    .subnet_queues_mut()
+                    .push_input(
+                        QUEUE_INDEX_NONE,
+                        RequestBuilder::new()
+                            .sender(controller)
+                            .receiver(CanisterId::from(subnet_id))
+                            .method_name(Method::CanisterStatus)
+                            .method_payload(payload.clone())
+                            .payment(Cycles::from(cycles))
+                            .build()
+                            .into(),
+                        InputQueueType::RemoteSubnet,
+                    )
+                    .unwrap();
+            }
+
+            let round = ExecutionRound::from(1);
+            scheduler.execute_round(
+                state,
+                Randomness::from([0; 32]),
+                BTreeMap::new(),
+                round,
+                ExecutionRoundType::OrdinaryRound,
+                &test_registry_settings(),
+            );
+        },
+        ingress_history_writer,
+        exec_env,
+    );
+}
+
+#[test]
+fn subnet_messages_respect_bitcoin_request_limit_per_round() {
+    // In this test we have a canister with `MAX_BITCOIN_REQUESTS_PER_ROUND` + 1
+    // bitcoin requests in the subnet queues and we expect that only
+    // `MAX_BITCOIN_REQUESTS_PER_ROUND` are executed.
+    let scheduler_test_fixture = SchedulerTestFixture {
+        scheduler_config: SchedulerConfig {
+            scheduler_cores: 1,
+            max_instructions_per_round: NumInstructions::new(1000),
+            max_instructions_per_message: NumInstructions::new(1),
+            instruction_overhead_per_message: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        },
+        metrics_registry: MetricsRegistry::new(),
+        canister_num: 1,
+        message_num_per_canister: 0,
+    };
+
+    let mut exec_env = default_exec_env_mock(
+        &scheduler_test_fixture,
+        0,
+        scheduler_test_fixture
+            .scheduler_config
+            .max_instructions_per_message,
+        NumBytes::new(4096),
+    );
+
+    exec_env
+        .expect_execute_subnet_message()
+        .times(MAX_BITCOIN_REQUESTS_PER_ROUND)
+        .returning(move |_, state, _, _, _, _, _| (state, NumInstructions::from(0)));
+
+    let exec_env = Arc::new(exec_env);
+
+    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(0));
+
+    scheduler_test(
+        &scheduler_test_fixture,
+        |scheduler| {
+            let mut state = get_initial_state(
+                scheduler_test_fixture.canister_num,
+                scheduler_test_fixture.message_num_per_canister,
+            );
+
+            let canister = state.canisters_iter().next().unwrap();
+            let controller_id = canister.system_state.controllers.iter().next().unwrap();
+            let controller = CanisterId::new(*controller_id).unwrap();
+            let subnet_id = state.metadata.own_subnet_id;
+            let payload = Encode!(&BitcoinGetBalanceArgs {
+                address: String::from("my_address"),
+                network: Network::Testnet,
+                min_confirmations: None,
+            })
+            .unwrap();
+            let cycles = 1000000;
+
+            for _ in 0..MAX_BITCOIN_REQUESTS_PER_ROUND + 1 {
+                state
+                    .subnet_queues_mut()
+                    .push_input(
+                        QUEUE_INDEX_NONE,
+                        RequestBuilder::new()
+                            .sender(controller)
+                            .receiver(CanisterId::from(subnet_id))
+                            .method_name(Method::BitcoinGetBalance)
+                            .method_payload(payload.clone())
+                            .payment(Cycles::from(cycles))
+                            .build()
+                            .into(),
+                        InputQueueType::RemoteSubnet,
+                    )
+                    .unwrap();
+            }
+
+            let round = ExecutionRound::from(1);
+            scheduler.execute_round(
+                state,
+                Randomness::from([0; 32]),
+                BTreeMap::new(),
+                round,
+                ExecutionRoundType::OrdinaryRound,
+                &test_registry_settings(),
+            );
+        },
+        ingress_history_writer,
+        exec_env,
+    );
+}
+
+#[test]
+fn non_bitcoin_subnet_messages_not_affected_by_bitcoin_request_limit() {
+    // In this test we have a canister with 2 * `MAX_BITCOIN_REQUESTS_PER_ROUND`
+    // non-bitcoin requests in the subnet queues and we expect that only
+    // all of them are executed.
+    let scheduler_test_fixture = SchedulerTestFixture {
+        scheduler_config: SchedulerConfig {
+            scheduler_cores: 1,
+            max_instructions_per_round: NumInstructions::new(1000),
+            max_instructions_per_message: NumInstructions::new(1),
+            instruction_overhead_per_message: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        },
+        metrics_registry: MetricsRegistry::new(),
+        canister_num: 1,
+        message_num_per_canister: 0,
+    };
+
+    let mut exec_env = default_exec_env_mock(
+        &scheduler_test_fixture,
+        0,
+        scheduler_test_fixture
+            .scheduler_config
+            .max_instructions_per_message,
+        NumBytes::new(4096),
+    );
+
+    exec_env
+        .expect_execute_subnet_message()
+        .times(2 * MAX_BITCOIN_REQUESTS_PER_ROUND)
+        .returning(move |_, state, _, _, _, _, _| (state, NumInstructions::from(0)));
+
+    let exec_env = Arc::new(exec_env);
+
+    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(0));
+
+    scheduler_test(
+        &scheduler_test_fixture,
+        |scheduler| {
+            let mut state = get_initial_state(
+                scheduler_test_fixture.canister_num,
+                scheduler_test_fixture.message_num_per_canister,
+            );
+
+            let canister = state.canisters_iter().next().unwrap();
+            let controller_id = canister.system_state.controllers.iter().next().unwrap();
+            let controller = CanisterId::new(*controller_id).unwrap();
+            let canister_id = canister.canister_id();
+            let subnet_id = state.metadata.own_subnet_id;
+            let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
+            let cycles = 1000000;
+
+            for _ in 0..2 * MAX_BITCOIN_REQUESTS_PER_ROUND {
                 state
                     .subnet_queues_mut()
                     .push_input(

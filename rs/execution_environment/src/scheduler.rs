@@ -46,6 +46,10 @@ use std::{
 mod scheduler_metrics;
 use scheduler_metrics::*;
 
+/// Maximum number of allowed bitcoin requests per round. If this number is
+/// reached we stop executing more bitcoin requests for this round.
+const MAX_BITCOIN_REQUESTS_PER_ROUND: usize = 5;
+
 #[cfg(test)]
 pub(crate) mod tests;
 
@@ -978,10 +982,15 @@ impl Scheduler for SchedulerImpl {
             let max_instructions_per_round_for_subnet_messages =
                 self.config.max_instructions_per_round / 16;
             let mut total_instructions_consumed = NumInstructions::from(0);
+            let mut total_bitcoin_requests = 0;
 
             while let Some(msg) = state.pop_subnet_input() {
                 let instructions_limit_per_message =
                     get_instructions_limit_for_subnet_message(&self.config, &msg);
+
+                if is_bitcoin_request(&msg) {
+                    total_bitcoin_requests += 1;
+                }
 
                 let (new_state, instructions_left) = self.exec_env.execute_subnet_message(
                     msg,
@@ -1004,6 +1013,20 @@ impl Scheduler for SchedulerImpl {
                 // `instruction_limit_per_message` and that is okay since the limit was set as
                 // a heuristic anyway.
                 if total_instructions_consumed >= max_instructions_per_round_for_subnet_messages {
+                    break;
+                }
+
+                // Stop after executing at most `MAX_BITCOIN_REQUESTS_PER_ROUND`.
+                //
+                // Note that this is a rather crude measure to ensure that we
+                // do not exceed a "reasonable" amount of work in a round. We
+                // rely on the assumption that no other subnet messages can
+                // exist on bitcoin enabled subnets, so blocking the subnet
+                // message progress does not affect other types of messages.
+                // On the other hand, on non-bitcoin enabled subnets, there
+                // should be no bitcoin related requests, so this should be
+                // a no-op for those subnets.
+                if total_bitcoin_requests >= MAX_BITCOIN_REQUESTS_PER_ROUND {
                     break;
                 }
             }
@@ -1495,5 +1518,41 @@ fn get_instructions_limit_for_subnet_message(
             },
         },
         Err(_) => config.max_instructions_per_message,
+    }
+}
+
+fn is_bitcoin_request(msg: &CanisterInputMessage) -> bool {
+    use Ic00Method::*;
+
+    match msg {
+        CanisterInputMessage::Ingress(_) => false,
+        CanisterInputMessage::Request(req) => match Ic00Method::from_str(&req.method_name) {
+            Ok(method) => match method {
+                BitcoinGetBalance
+                | BitcoinGetUtxos
+                | BitcoinSendTransaction
+                | BitcoinGetCurrentFeePercentiles => true,
+                CanisterStatus
+                | CreateCanister
+                | DeleteCanister
+                | DepositCycles
+                | ECDSAPublicKey
+                | RawRand
+                | SetController
+                | HttpRequest
+                | SetupInitialDKG
+                | SignWithECDSA
+                | ComputeInitialEcdsaDealings
+                | StartCanister
+                | StopCanister
+                | UninstallCode
+                | UpdateSettings
+                | ProvisionalCreateCanisterWithCycles
+                | ProvisionalTopUpCanister
+                | InstallCode => false,
+            },
+            Err(_) => false,
+        },
+        CanisterInputMessage::Response(_) => false,
     }
 }
