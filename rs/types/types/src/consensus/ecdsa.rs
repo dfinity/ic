@@ -653,9 +653,6 @@ impl From<(EcdsaMessageType, Vec<u8>)> for EcdsaMessageHash {
 /// The ECDSA signature share
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct EcdsaSigShare {
-    /// Height of the finalized block that requested the signature
-    pub requested_height: Height,
-
     /// The node that signed the share
     pub signer_id: NodeId,
 
@@ -670,8 +667,8 @@ impl Display for EcdsaSigShare {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "SigShare[request_id = {:?}, requested_height = {:?}, signer_id = {:?}]",
-            self.request_id, self.requested_height, self.signer_id,
+            "SigShare[request_id = {:?}, signer_id = {:?}]",
+            self.request_id, self.signer_id,
         )
     }
 }
@@ -679,12 +676,9 @@ impl Display for EcdsaSigShare {
 /// Complaint related defines
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct EcdsaComplaintContent {
-    /// Finalized height of the complainer
-    pub complainer_height: Height,
-
-    /// The complaint
     pub idkg_complaint: IDkgComplaint,
 }
+
 pub type EcdsaComplaint = Signed<EcdsaComplaintContent, BasicSignature<EcdsaComplaintContent>>;
 
 impl EcdsaComplaint {
@@ -722,9 +716,6 @@ impl SignedBytesWithoutDomainSeparator for EcdsaComplaint {
 pub struct EcdsaOpeningContent {
     /// Complainer Id. This is the signer Id in the complaint message
     pub complainer_id: NodeId,
-
-    /// Finalized height of the complainer
-    pub complainer_height: Height,
 
     /// The opening
     pub idkg_opening: IDkgOpening,
@@ -769,9 +760,9 @@ pub type EcdsaTranscript = IDkgTranscript;
 pub enum EcdsaMessageAttribute {
     EcdsaSignedDealing(IDkgTranscriptId),
     EcdsaDealingSupport(IDkgTranscriptId),
-    EcdsaSigShare(Height),
-    EcdsaComplaint(Height),
-    EcdsaOpening(Height),
+    EcdsaSigShare(RequestId),
+    EcdsaComplaint(IDkgTranscriptId),
+    EcdsaOpening(IDkgTranscriptId),
 }
 
 impl From<&EcdsaMessage> for EcdsaMessageAttribute {
@@ -784,13 +775,13 @@ impl From<&EcdsaMessage> for EcdsaMessageAttribute {
                 EcdsaMessageAttribute::EcdsaDealingSupport(support.transcript_id)
             }
             EcdsaMessage::EcdsaSigShare(share) => {
-                EcdsaMessageAttribute::EcdsaSigShare(share.requested_height)
+                EcdsaMessageAttribute::EcdsaSigShare(share.request_id)
             }
-            EcdsaMessage::EcdsaComplaint(complaint) => {
-                EcdsaMessageAttribute::EcdsaComplaint(complaint.content.complainer_height)
-            }
+            EcdsaMessage::EcdsaComplaint(complaint) => EcdsaMessageAttribute::EcdsaComplaint(
+                complaint.content.idkg_complaint.transcript_id,
+            ),
             EcdsaMessage::EcdsaOpening(opening) => {
-                EcdsaMessageAttribute::EcdsaOpening(opening.content.complainer_height)
+                EcdsaMessageAttribute::EcdsaOpening(opening.content.idkg_opening.transcript_id)
             }
         }
     }

@@ -29,10 +29,14 @@ use ic_protobuf::types::v1 as pb;
 ///
 /// Quadruples must be matched with requests in the same order as requests
 /// are created.
+///
+/// The height field represents at which block the RequestId is created.
+/// It is used for purging purpose.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct RequestId {
     pub quadruple_id: QuadrupleId,
     pub pseudo_random_id: [u8; 32],
+    pub height: Height,
 }
 
 impl From<RequestId> for pb::RequestId {
@@ -40,6 +44,7 @@ impl From<RequestId> for pb::RequestId {
         Self {
             quadruple_id: request_id.quadruple_id.0 as u64,
             pseudo_random_id: request_id.pseudo_random_id.to_vec(),
+            height: request_id.height.get(),
         }
     }
 }
@@ -56,6 +61,7 @@ impl TryFrom<&pb::RequestId> for RequestId {
             Ok(Self {
                 quadruple_id: QuadrupleId(request_id.quadruple_id),
                 pseudo_random_id,
+                height: Height::from(request_id.height),
             })
         }
     }
@@ -774,7 +780,7 @@ pub enum TranscriptLookupError {
 }
 
 /// Wrapper to access the ECDSA related info from the blocks.
-pub trait EcdsaBlockReader {
+pub trait EcdsaBlockReader: Send + Sync {
     /// Returns the height of the tip
     fn tip_height(&self) -> Height;
 

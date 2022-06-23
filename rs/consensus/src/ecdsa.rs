@@ -358,9 +358,9 @@ fn compute_priority(
             }
             transcript_id.source_height()
         }
-        EcdsaMessageAttribute::EcdsaSigShare(height) => *height,
-        EcdsaMessageAttribute::EcdsaComplaint(height) => *height,
-        EcdsaMessageAttribute::EcdsaOpening(height) => *height,
+        EcdsaMessageAttribute::EcdsaSigShare(request_id) => request_id.height,
+        EcdsaMessageAttribute::EcdsaComplaint(transcript_id) => transcript_id.source_height(),
+        EcdsaMessageAttribute::EcdsaOpening(transcript_id) => transcript_id.source_height(),
     };
 
     if height < cached_finalized_height + Height::from(LOOK_AHEAD) {
@@ -373,8 +373,12 @@ fn compute_priority(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ecdsa::utils::test_utils::*;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
-    use ic_types::{PrincipalId, SubnetId};
+    use ic_types::{
+        consensus::ecdsa::{EcdsaUIDGenerator, RequestId},
+        PrincipalId, SubnetId,
+    };
 
     // Tests the priority computation
     #[test]
@@ -384,6 +388,7 @@ mod tests {
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
         let xnet_transcript_id = IDkgTranscriptId::new(xnet_subnet_id, 1, Height::from(1000));
         let local_transcript_id = IDkgTranscriptId::new(subnet_id, 1, Height::from(120));
+        let mut uid_generator = EcdsaUIDGenerator::new(subnet_id, cached_finalized_height);
         let tests = vec![
             (
                 EcdsaMessageAttribute::EcdsaSignedDealing(xnet_transcript_id),
@@ -402,35 +407,61 @@ mod tests {
                 Priority::Stash,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSigShare(Height::from(90)),
+                EcdsaMessageAttribute::EcdsaSigShare(RequestId {
+                    quadruple_id: uid_generator.next_quadruple_id(),
+                    pseudo_random_id: [0; 32],
+                    height: Height::from(90),
+                }),
                 Priority::Fetch,
             ),
             (
-                EcdsaMessageAttribute::EcdsaSigShare(Height::from(109)),
+                EcdsaMessageAttribute::EcdsaSigShare(RequestId {
+                    quadruple_id: uid_generator.next_quadruple_id(),
+                    pseudo_random_id: [0; 32],
+                    height: Height::from(109),
+                }),
                 Priority::Fetch,
             ),
             (
-                EcdsaMessageAttribute::EcdsaComplaint(Height::from(110)),
+                EcdsaMessageAttribute::EcdsaComplaint(create_transcript_id_with_height(
+                    1,
+                    Height::from(110),
+                )),
                 Priority::Stash,
             ),
             (
-                EcdsaMessageAttribute::EcdsaComplaint(Height::from(120)),
+                EcdsaMessageAttribute::EcdsaComplaint(create_transcript_id_with_height(
+                    1,
+                    Height::from(120),
+                )),
                 Priority::Stash,
             ),
             (
-                EcdsaMessageAttribute::EcdsaOpening(Height::from(90)),
+                EcdsaMessageAttribute::EcdsaOpening(create_transcript_id_with_height(
+                    1,
+                    Height::from(90),
+                )),
                 Priority::Fetch,
             ),
             (
-                EcdsaMessageAttribute::EcdsaOpening(Height::from(109)),
+                EcdsaMessageAttribute::EcdsaOpening(create_transcript_id_with_height(
+                    1,
+                    Height::from(109),
+                )),
                 Priority::Fetch,
             ),
             (
-                EcdsaMessageAttribute::EcdsaOpening(Height::from(110)),
+                EcdsaMessageAttribute::EcdsaOpening(create_transcript_id_with_height(
+                    1,
+                    Height::from(110),
+                )),
                 Priority::Stash,
             ),
             (
-                EcdsaMessageAttribute::EcdsaOpening(Height::from(120)),
+                EcdsaMessageAttribute::EcdsaOpening(create_transcript_id_with_height(
+                    1,
+                    Height::from(120),
+                )),
                 Priority::Stash,
             ),
         ];

@@ -751,7 +751,8 @@ mod test {
             sig_inputs_2.sig_inputs_ref.presig_quadruple_ref,
         );
 
-        let all_requests = get_signing_requests(&ecdsa_payload, &sign_with_ecdsa_contexts);
+        let all_requests =
+            get_signing_requests(Height::from(0), &ecdsa_payload, &sign_with_ecdsa_contexts);
 
         update_ongoing_signatures(
             all_requests,

@@ -573,7 +573,7 @@ pub(crate) fn create_data_payload_helper(
         .subnet_call_context_manager
         .sign_with_ecdsa_contexts;
 
-    let new_signing_requests = get_signing_requests(&ecdsa_payload, all_signing_requests);
+    let new_signing_requests = get_signing_requests(height, &ecdsa_payload, all_signing_requests);
     update_signature_agreements(
         all_signing_requests,
         signature_builder,
@@ -780,6 +780,7 @@ fn make_new_quadruples_if_needed(
 /// using at least some (and typically most) of the quadruples that were
 /// already available when we pro-actively reshare the signing key.
 pub(crate) fn get_signing_requests<'a>(
+    height: Height,
     ecdsa_payload: &ecdsa::EcdsaPayload,
     sign_with_ecdsa_contexts: &'a BTreeMap<CallbackId, SignWithEcdsaContext>,
 ) -> BTreeMap<ecdsa::RequestId, &'a SignWithEcdsaContext> {
@@ -800,6 +801,7 @@ pub(crate) fn get_signing_requests<'a>(
         };
         if let Some(quadruple_id) = unassigned_quadruple_ids.pop() {
             let request_id = ecdsa::RequestId {
+                height,
                 quadruple_id,
                 pseudo_random_id: context.pseudo_random_id,
             };
@@ -1600,7 +1602,9 @@ mod tests {
                 },
             );
         let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+        let height = Height::from(1);
         let result = get_signing_requests(
+            height,
             &ecdsa_payload,
             &state
                 .metadata
@@ -1625,6 +1629,7 @@ mod tests {
             &mut ecdsa_payload.quadruples_in_creation,
         );
         let new_requests = get_signing_requests(
+            height,
             &ecdsa_payload,
             &state
                 .metadata
@@ -1681,6 +1686,7 @@ mod tests {
             );
         // Now there are two signing requests
         let new_requests = get_signing_requests(
+            height,
             &ecdsa_payload,
             &state
                 .metadata
@@ -1703,6 +1709,7 @@ mod tests {
         );
         // Run get_signing_requests again, we should get request_id_0, but not request_id_1
         let result = get_signing_requests(
+            height,
             &ecdsa_payload,
             &state
                 .metadata
@@ -1734,7 +1741,9 @@ mod tests {
                 },
             );
         let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+        let height = Height::from(1);
         let result = get_signing_requests(
+            height,
             &ecdsa_payload,
             &state
                 .metadata
@@ -1757,6 +1766,7 @@ mod tests {
             quadruple_ref.clone(),
         );
         let result = get_signing_requests(
+            height,
             &ecdsa_payload,
             &state
                 .metadata
@@ -2214,6 +2224,7 @@ mod tests {
                 },
             );
         let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+        let height = Height::from(10);
         let all_requests = &state
             .metadata
             .subnet_call_context_manager
@@ -2224,6 +2235,7 @@ mod tests {
             ecdsa::RequestId {
                 quadruple_id: quadruple_id_1,
                 pseudo_random_id: [1; 32],
+                height,
             },
             ecdsa::CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
                 signature: vec![1; 32],
@@ -2233,6 +2245,7 @@ mod tests {
             ecdsa::RequestId {
                 quadruple_id: ecdsa_payload.uid_generator.next_quadruple_id(),
                 pseudo_random_id: [0; 32],
+                height,
             },
             ecdsa::CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
                 signature: vec![2; 32],
@@ -2715,10 +2728,12 @@ mod tests {
             let req_id_1 = ecdsa::RequestId {
                 quadruple_id: quadruple_id_1,
                 pseudo_random_id: [0; 32],
+                height: payload_height_1,
             };
             let req_id_2 = ecdsa::RequestId {
                 quadruple_id: quadruple_id_2,
                 pseudo_random_id: [1; 32],
+                height: payload_height_1,
             };
             ecdsa_payload
                 .ongoing_signatures
@@ -2973,10 +2988,12 @@ mod tests {
             let req_id_1 = ecdsa::RequestId {
                 quadruple_id: quadruple_id_1,
                 pseudo_random_id: [0; 32],
+                height: payload_height_1,
             };
             let req_id_2 = ecdsa::RequestId {
                 quadruple_id: quadruple_id_2,
                 pseudo_random_id: [1; 32],
+                height: payload_height_1,
             };
             ecdsa_payload.ongoing_signatures.insert(req_id_1, sig_1);
             ecdsa_payload.ongoing_signatures.insert(req_id_2, sig_2);
@@ -3036,6 +3053,7 @@ mod tests {
                 ecdsa::RequestId {
                     quadruple_id: ecdsa_payload.uid_generator.next_quadruple_id(),
                     pseudo_random_id: [2; 32],
+                    height: payload_height_1,
                 },
                 ecdsa::CompletedSignature::ReportedToExecution,
             );
@@ -3043,6 +3061,7 @@ mod tests {
                 ecdsa::RequestId {
                     quadruple_id: ecdsa_payload.uid_generator.next_quadruple_id(),
                     pseudo_random_id: [3; 32],
+                    height: payload_height_1,
                 },
                 ecdsa::CompletedSignature::Unreported(ThresholdEcdsaCombinedSignature {
                     signature: vec![10; 10],

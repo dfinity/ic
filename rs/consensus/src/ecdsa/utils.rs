@@ -134,11 +134,10 @@ pub(crate) fn load_transcripts(
     ecdsa_pool: &dyn EcdsaPool,
     transcript_loader: &dyn EcdsaTranscriptLoader,
     transcripts: &[&IDkgTranscript],
-    height: Height,
 ) -> Option<EcdsaChangeSet> {
     let mut new_complaints = Vec::new();
     for transcript in transcripts {
-        match transcript_loader.load_transcript(ecdsa_pool, transcript, height) {
+        match transcript_loader.load_transcript(ecdsa_pool, transcript) {
             TranscriptLoadStatus::Success => (),
             TranscriptLoadStatus::Failure => return Some(Default::default()),
             TranscriptLoadStatus::Complaints(complaints) => {
@@ -436,7 +435,6 @@ pub(crate) mod test_utils {
             &self,
             _ecdsa_pool: &dyn EcdsaPool,
             transcript: &IDkgTranscript,
-            _height: Height,
         ) -> TranscriptLoadStatus {
             match self.load_transcript_result {
                 TestTranscriptLoadStatus::Success => TranscriptLoadStatus::Success,
@@ -906,17 +904,44 @@ pub(crate) mod test_utils {
     }
 
     // Creates a test signature share
+    pub(crate) fn create_signature_share_with_nonce(
+        signer_id: NodeId,
+        request_id: RequestId,
+        nonce: u8,
+    ) -> EcdsaSigShare {
+        EcdsaSigShare {
+            signer_id,
+            request_id,
+            share: ThresholdEcdsaSigShare {
+                sig_share_raw: vec![nonce],
+            },
+        }
+    }
+
+    // Creates a test signature share
     pub(crate) fn create_signature_share(
         signer_id: NodeId,
         request_id: RequestId,
     ) -> EcdsaSigShare {
-        EcdsaSigShare {
-            requested_height: Height::from(10),
-            signer_id,
-            request_id,
-            share: ThresholdEcdsaSigShare {
-                sig_share_raw: vec![],
+        create_signature_share_with_nonce(signer_id, request_id, 0)
+    }
+
+    pub(crate) fn create_complaint_with_nonce(
+        transcript_id: IDkgTranscriptId,
+        dealer_id: NodeId,
+        complainer_id: NodeId,
+        nonce: u8,
+    ) -> EcdsaComplaint {
+        let content = EcdsaComplaintContent {
+            idkg_complaint: IDkgComplaint {
+                transcript_id,
+                dealer_id,
+                internal_complaint_raw: vec![nonce],
             },
+        };
+        EcdsaComplaint {
+            content,
+            signature: BasicSignature::fake(complainer_id),
         }
     }
 
@@ -926,17 +951,28 @@ pub(crate) mod test_utils {
         dealer_id: NodeId,
         complainer_id: NodeId,
     ) -> EcdsaComplaint {
-        let content = EcdsaComplaintContent {
-            complainer_height: Height::from(0),
-            idkg_complaint: IDkgComplaint {
+        create_complaint_with_nonce(transcript_id, dealer_id, complainer_id, 0)
+    }
+
+    // Creates a test signed opening
+    pub(crate) fn create_opening_with_nonce(
+        transcript_id: IDkgTranscriptId,
+        dealer_id: NodeId,
+        complainer_id: NodeId,
+        opener_id: NodeId,
+        nonce: u8,
+    ) -> EcdsaOpening {
+        let content = EcdsaOpeningContent {
+            complainer_id,
+            idkg_opening: IDkgOpening {
                 transcript_id,
                 dealer_id,
-                internal_complaint_raw: vec![],
+                internal_opening_raw: vec![nonce],
             },
         };
-        EcdsaComplaint {
+        EcdsaOpening {
             content,
-            signature: BasicSignature::fake(complainer_id),
+            signature: BasicSignature::fake(opener_id),
         }
     }
 
@@ -947,21 +983,8 @@ pub(crate) mod test_utils {
         complainer_id: NodeId,
         opener_id: NodeId,
     ) -> EcdsaOpening {
-        let content = EcdsaOpeningContent {
-            complainer_id,
-            complainer_height: Height::from(0),
-            idkg_opening: IDkgOpening {
-                transcript_id,
-                dealer_id,
-                internal_opening_raw: vec![],
-            },
-        };
-        EcdsaOpening {
-            content,
-            signature: BasicSignature::fake(opener_id),
-        }
+        create_opening_with_nonce(transcript_id, dealer_id, complainer_id, opener_id, 0)
     }
-
     // Checks that the dealing with the given id is being added to the validated
     // pool
     pub(crate) fn is_dealing_added_to_validated(
@@ -1062,7 +1085,7 @@ pub(crate) mod test_utils {
     ) -> bool {
         for action in change_set {
             if let EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSigShare(share)) = action {
-                if share.requested_height == requested_height
+                if share.request_id.height == requested_height
                     && share.request_id == *request_id
                     && share.signer_id == NODE_1
                 {
