@@ -29,7 +29,7 @@ impl OrchestratorMetrics {
                 "Registry version last used to successfully fetch datacenter information",
             ),
             ssh_access_registry_version: metrics_registry.int_gauge(
-                "shh_access_registry_version",
+                "ssh_access_registry_version",
                 "Registry version last used to update the SSH public keys",
             ),
             firewall_registry_version: metrics_registry.int_gauge(
