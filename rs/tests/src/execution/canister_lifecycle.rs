@@ -977,7 +977,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(
 
         let cans = join_all(
             (0..app_sched_cores)
-                .map(|_| UniversalCanister::new_with_comp_alloc(&agent, MAX_COMP_ALLOC, None)),
+                .map(|_| UniversalCanister::new_with_params(&agent, MAX_COMP_ALLOC, None, None)),
         )
         .await;
         for can in cans {
@@ -988,7 +988,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(
         }
 
         // Installing the app_sched_cores + 1st canister should fail.
-        let can = UniversalCanister::new_with_comp_alloc(&agent, MAX_COMP_ALLOC, None).await;
+        let can = UniversalCanister::new_with_params(&agent, MAX_COMP_ALLOC, None, None).await;
         assert!(can.is_err());
 
         let mgr = ManagementCanister::create(&agent);
@@ -1014,7 +1014,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(
 
         // Create universal canister with 'best effort' compute allocation of `0`.
         let uni_can =
-            UniversalCanister::new_with_comp_alloc(&agent, Some(0), Some(std::u64::MAX as u128))
+            UniversalCanister::new_with_params(&agent, Some(0), Some(std::u64::MAX as u128), None)
                 .await
                 .expect("Could not create and install universal canister.");
         let arbitrary_bytes = b";ioapusdvzn,x";
