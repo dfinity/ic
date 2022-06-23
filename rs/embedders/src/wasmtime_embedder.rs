@@ -10,7 +10,7 @@ use std::{
 };
 
 use ic_system_api::ModificationTracking;
-use wasmtime::{unix::StoreExt, Memory, Mutability, Store, Val, ValType};
+use wasmtime::{unix::StoreExt, Memory, Mutability, OptLevel, Store, Val, ValType};
 
 use host_memory::MmapMemoryCreator;
 pub use host_memory::WasmtimeMemoryCreator;
@@ -125,6 +125,7 @@ impl WasmtimeEmbedder {
 
     pub fn compile(&self, wasm_binary: &BinaryEncodedWasm) -> HypervisorResult<EmbedderCache> {
         let mut config = wasmtime::Config::default();
+        config.cranelift_opt_level(OptLevel::None);
         ensure_determinism(&mut config);
         let raw_creator = MmapMemoryCreator {};
         let mem_creator = Arc::new(WasmtimeMemoryCreator::new(
