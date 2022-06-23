@@ -350,13 +350,15 @@ pub(crate) fn deserialize_consensus_artifacts(
             last_finalized_height
         };
         // call validator, which moves artifacts to validated or removes invalid
-        let mut invalid = match validator.validate(pool, dkg_manager, target_height) {
-            Ok(artifacts) => artifacts,
-            Err(ReplayError::ValidationIncomplete(h, _)) => {
-                return ExitPoint::ValidationIncomplete(h)
-            }
-            other => panic!("Unexpected failure during validation: {:?}", other),
-        };
+        let (mut invalid, failure_after_height) =
+            match validator.validate(pool, dkg_manager, target_height) {
+                Ok(artifacts) => (artifacts, None),
+                Err(ReplayError::ValidationIncomplete(h, artifacts)) => (artifacts, Some(h)),
+                Err(other) => {
+                    println!("Unexpected failure during validation: {:?}", other);
+                    (Vec::new(), Some(last_finalized_height))
+                }
+            };
         invalid.iter().for_each(|i| match i.get_file_name() {
             Some(name) => {
                 assert!(
@@ -368,6 +370,10 @@ pub(crate) fn deserialize_consensus_artifacts(
             None => println!("Failed to get path for invalid artifact: {:?}", i),
         });
         invalid_artifacts.append(&mut invalid);
+
+        if let Some(height) = failure_after_height {
+            return ExitPoint::ValidationIncomplete(height);
+        }
 
         // If we just inserted a height_artifacts, which finalizes the last seen CUP
         // height, we need to deliver all batches before we insert the cup.

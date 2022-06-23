@@ -1,6 +1,5 @@
 use crate::{
     backup,
-    mocks::MockVerifier,
     validator::{InvalidArtifact, ReplayValidator},
 };
 use ic_artifact_pool::{
@@ -11,15 +10,18 @@ use ic_config::{
     artifact_pool::ArtifactPoolConfig, registry_client::DataProviderConfig,
     subnet_config::SubnetConfigs, Config,
 };
-use ic_consensus::consensus::{
-    batch_delivery::deliver_batches, pool_reader::PoolReader, utils::crypto_hashable_to_seed,
+use ic_consensus::{
+    certification::VerifierImpl,
+    consensus::{
+        batch_delivery::deliver_batches, pool_reader::PoolReader, utils::crypto_hashable_to_seed,
+    },
 };
+use ic_crypto::CryptoComponentFatClient;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_interfaces::{
     certification::CertificationPool,
-    certification::Verifier,
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::{MessageRouting, MessageRoutingError},
     registry::{RegistryClient, RegistryDataProvider, RegistryTransportRecord},
@@ -115,6 +117,7 @@ pub struct Player {
     pub subnet_id: SubnetId,
     backup_dir: Option<PathBuf>,
     tmp_dir: Option<TempDir>,
+    _crypto_dir: TempDir,
     // The target height until which the state will be replayed.
     // None means finalized height.
     replay_target_height: Option<u64>,
@@ -189,7 +192,6 @@ impl Player {
 
         let mut player = Player::new_with_params(
             cfg,
-            Arc::new(MockVerifier {}),
             registry,
             subnet_id,
             Some(pool),
@@ -232,7 +234,6 @@ impl Player {
 
         Player::new_with_params(
             cfg,
-            Arc::new(MockVerifier {}),
             registry,
             subnet_id,
             consensus_pool,
@@ -246,7 +247,6 @@ impl Player {
     #[allow(clippy::too_many_arguments)]
     fn new_with_params(
         cfg: Config,
-        verifier: Arc<dyn Verifier>,
         registry: Arc<RegistryClientImpl>,
         subnet_id: SubnetId,
         consensus_pool: Option<ConsensusPoolImpl>,
@@ -283,6 +283,11 @@ impl Player {
             subnet_id,
             subnet_config.cycles_account_manager_config,
         ));
+        let (crypto, node_id, _crypto_dir) =
+            CryptoComponentFatClient::new_temp_with_all_keys(registry.clone(), log.clone());
+        let crypto = Arc::new(crypto);
+
+        let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
         let state_manager = Arc::new(StateManagerImpl::new(
             verifier,
             subnet_id,
@@ -326,7 +331,9 @@ impl Player {
         let validator = consensus_pool.as_ref().map(|pool| {
             ReplayValidator::new(
                 cfg,
+                node_id,
                 subnet_id,
+                crypto,
                 pool.get_cache().clone(),
                 registry.clone(),
                 state_manager.clone(),
@@ -351,6 +358,7 @@ impl Player {
             log,
             _async_log_guard,
             tmp_dir: None,
+            _crypto_dir,
             replay_target_height: None,
         }
     }

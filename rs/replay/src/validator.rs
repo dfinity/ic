@@ -7,7 +7,6 @@ use ic_consensus::consensus::{
     Membership, ValidatorMetrics,
 };
 use ic_consensus_message::ConsensusMessageHashable;
-use ic_crypto::CryptoComponentFatClient;
 use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
     consensus_pool::{
@@ -26,10 +25,9 @@ use ic_types::{
     consensus::{Block, CatchUpPackage, ConsensusMessage, ConsensusMessageHash, HasBlockHash},
     crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
-    Height, SubnetId,
+    Height, NodeId, SubnetId,
 };
 use serde::{Deserialize, Serialize};
-use tempfile::TempDir;
 
 use crate::{mocks::MockPayloadBuilder, player::ReplayError};
 
@@ -78,7 +76,6 @@ pub struct ReplayValidator {
     pub replica_cfg: ReplicaConfig,
     validator: Validator,
     crypto: Arc<dyn ConsensusCrypto>,
-    _crypto_dir: TempDir,
     metrics_registry: MetricsRegistry,
     log: ReplicaLogger,
     time_source: Arc<dyn TimeSource>,
@@ -87,17 +84,15 @@ pub struct ReplayValidator {
 impl ReplayValidator {
     pub fn new(
         cfg: Config,
+        node_id: NodeId,
         subnet_id: SubnetId,
+        crypto: Arc<dyn ConsensusCrypto>,
         pool_cache: Arc<dyn ConsensusPoolCache>,
         registry: Arc<dyn RegistryClient>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         message_routing: Arc<dyn MessageRouting>,
         log: ReplicaLogger,
     ) -> Self {
-        let (crypto, node_id, crypto_dir) =
-            CryptoComponentFatClient::new_temp_with_all_keys(registry.clone(), log.clone());
-        let crypto = Arc::new(crypto);
-
         let metrics_registry = MetricsRegistry::new();
         let membership = Membership::new(pool_cache, registry.clone(), subnet_id);
         let time_source = Arc::new(SysTimeSource::new());
@@ -108,7 +103,7 @@ impl ReplayValidator {
             replica_cfg.clone(),
             Arc::new(membership),
             registry,
-            Arc::clone(&crypto) as Arc<_>,
+            Arc::clone(&crypto),
             Arc::new(MockPayloadBuilder {}) as Arc<_>,
             state_manager,
             message_routing,
@@ -123,7 +118,6 @@ impl ReplayValidator {
             replica_cfg,
             validator,
             crypto,
-            _crypto_dir: crypto_dir,
             metrics_registry,
             log,
             time_source,
