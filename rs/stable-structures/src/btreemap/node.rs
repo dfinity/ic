@@ -16,9 +16,8 @@ const INTERNAL_NODE_TYPE: u8 = 1;
 // The size of u32 in bytes.
 const U32_SIZE: Bytes = Bytes::new(4);
 
-// Keys and values in the node are blobs.
-pub type Key = Vec<u8>;
-pub type Value = Vec<u8>;
+// Entries in the node are key-value pairs and both are blobs.
+pub type Entry = (Vec<u8>, Vec<u8>);
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum NodeType {
@@ -42,7 +41,7 @@ pub enum NodeType {
 #[derive(Debug, PartialEq)]
 pub struct Node {
     pub address: Address,
-    pub entries: Vec<(Key, Value)>,
+    pub entries: Vec<Entry>,
     pub children: Vec<Address>,
     pub node_type: NodeType,
     pub max_key_size: u32,
@@ -176,7 +175,7 @@ impl Node {
     }
 
     /// Returns the entry with the max key in the subtree.
-    pub fn get_max<M: Memory>(&self, memory: &M) -> (Key, Value) {
+    pub fn get_max<M: Memory>(&self, memory: &M) -> Entry {
         match self.node_type {
             NodeType::Leaf => self
                 .entries
@@ -199,7 +198,7 @@ impl Node {
     }
 
     /// Returns the entry with min key in the subtree.
-    pub fn get_min(&self, memory: &impl Memory) -> (Key, Value) {
+    pub fn get_min(&self, memory: &impl Memory) -> Entry {
         match self.node_type {
             NodeType::Leaf => {
                 // NOTE: a node can never be empty, so this access is safe.
@@ -224,7 +223,7 @@ impl Node {
     }
 
     /// Swaps the entry at index `idx` with the given entry, returning the old entry.
-    pub fn swap_entry(&mut self, idx: usize, mut entry: (Key, Value)) -> (Key, Value) {
+    pub fn swap_entry(&mut self, idx: usize, mut entry: Entry) -> Entry {
         core::mem::swap(&mut self.entries[idx], &mut entry);
         entry
     }

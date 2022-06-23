@@ -87,8 +87,8 @@ impl UtxosTrait for Utxos {
 /// An iterator over the entries in [`Utxos`].
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct Iter<'a, M: Memory> {
-    small_utxos_iter: btreemap::Iter<'a, M>,
-    medium_utxos_iter: btreemap::Iter<'a, M>,
+    small_utxos_iter: btreemap::Iter<'a, M, Vec<u8>, Vec<u8>>,
+    medium_utxos_iter: btreemap::Iter<'a, M, Vec<u8>, Vec<u8>>,
     large_utxos_iter: std::collections::btree_map::Iter<'a, OutPoint, (TxOut, Height)>,
 }
 
