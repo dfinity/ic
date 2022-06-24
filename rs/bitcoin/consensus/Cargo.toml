@@ -16,7 +16,7 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-types = { path = "../../types/types" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
-slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 thiserror = "1.0"
 
 [dev-dependencies]

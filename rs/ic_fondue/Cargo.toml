@@ -52,7 +52,7 @@ serde_cbor = "0.11.1"
 serde_millis = "0.1"
 signal-hook = { version = "0.3.6", features = ["iterator"] }
 signal-hook-mio = { version = "0.2.0", features = ["support-v0_7"] }
-slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_trace"] }
+slog = { version = "2.5.2", features = ["nested-values", "release_max_level_trace"] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
 ssh2 = { git = "https://github.com/dfinity-lab/ssh2-rs", branch = "master" }

@@ -29,7 +29,7 @@ ic-state-layout = { path = "../state_layout" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
-slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 
 [dev-dependencies]
 ic-test-utilities = { path = "../test_utilities" }

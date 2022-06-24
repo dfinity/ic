@@ -24,7 +24,7 @@ nix = "0.23.0"
 parity-wasm = { version = "0.42.2", features = [ "std", "multi_value", "bulk" ] }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }
-slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 wasmtime = { version = "0.37", default_features = false, features = ['cranelift', 'parallel-compilation', 'posix-signals-on-macos', 'wasm-backtrace'] }
 wasmtime-environ = "0.37"
 wasmtime-runtime = "0.37"
@@ -37,7 +37,7 @@ ic-test-utilities = { path = "../test_utilities" }
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 proptest = "0.9.4"
-slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 assert_matches = "1.3.0"
 insta = "1.8.0"
 pretty_assertions = "0.6.1"

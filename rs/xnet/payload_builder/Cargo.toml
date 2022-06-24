@@ -26,7 +26,7 @@ ic-xnet-uri = { path = "../uri" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 rand = "0.7.3"
 rand_chacha = "0.2.2"
-slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 tokio = { version = "1.15.0", features = ["full"] }
 
 [dev-dependencies]
