@@ -33,8 +33,10 @@ function copy_deny_list() {
     DENY_LIST=/boot/config/denylist.map
     if [[ -f ${DENY_LIST} ]]; then
         cp "${DENY_LIST}" "${NGINX_RUN}"/denylist.map
-        mount --bind "${NGINX_RUN}"/denylist.map /etc/nginx/denylist.map
+    else
+        cp -a /etc/nginx/denylist.map "${NGINX_RUN}"/denylist.map
     fi
+    mount --bind "${NGINX_RUN}"/denylist.map /etc/nginx/denylist.map
 }
 
 function setup_domain_name() {
@@ -79,21 +81,33 @@ function enable_dev_mode() {
     fi
 }
 
+function writable_nginx_ic() {
+    IC_ROUTING=$1
+    mkdir -p $IC_ROUTING
+    cp -ar /etc/nginx/ic/* $IC_ROUTING
+    mount --bind "$IC_ROUTING" /etc/nginx/ic
+}
+
 function restore_context() {
     restorecon -v /etc/nginx/ic_public_key.pem \
         /etc/nginx/certs/fullchain.pem \
         /etc/nginx/keys/privkey.pem \
         /etc/nginx/certs/chain.pem \
         /etc/nginx/conf.d/*.conf \
-        /etc/nginx/denylist.map
+        /etc/nginx/denylist.map \
+        /etc/nginx/ic/*
 }
 
 # Place to assemble nginx related configuration for the current run
 NGINX_RUN="/run/ic-node/etc/nginx"
+
+# Place to store the generated routing tables
+IC_ROUTING="/var/opt/nginx/ic"
 
 copy_nns_url "$NGINX_RUN"
 copy_certs "$NGINX_RUN"
 copy_deny_list "$NGINX_RUN"
 setup_domain_name "$NGINX_RUN"
 enable_dev_mode "$NGINX_RUN"
+writable_nginx_ic "$IC_ROUTING"
 restore_context
