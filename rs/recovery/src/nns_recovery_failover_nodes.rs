@@ -187,7 +187,7 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
                     .get_update_local_store_step(self.params.subnet_id),
             )),
 
-            StepType::CreateRegistryTar => Ok(Box::new(self.recovery.get_create_tars_step(false))),
+            StepType::CreateRegistryTar => Ok(Box::new(self.recovery.get_create_tars_step())),
 
             StepType::UploadAndHostTar => {
                 if let (Some(aux_user), Some(aux_ip)) =

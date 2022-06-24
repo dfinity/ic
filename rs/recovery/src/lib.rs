@@ -440,11 +440,21 @@ impl Recovery {
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
     pub fn get_upload_and_restart_step(&self, node_ip: IpAddr) -> impl Step {
+        self.get_upload_and_restart_step_with_data_src(node_ip, self.work_dir.join(IC_STATE_DIR))
+    }
+
+    /// Return an [UploadAndRestartStep] to upload the current recovery state to
+    /// a node and restart it.
+    pub fn get_upload_and_restart_step_with_data_src(
+        &self,
+        node_ip: IpAddr,
+        data_src: PathBuf,
+    ) -> impl Step {
         UploadAndRestartStep {
             logger: self.logger.clone(),
             node_ip,
             work_dir: self.work_dir.clone(),
-            data_src: self.work_dir.join(IC_STATE_DIR),
+            data_src,
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
         }
@@ -752,9 +762,9 @@ impl Recovery {
     }
 
     /// Return a [CreateTarsStep] to create tar files of the current registry local store and ic state
-    pub fn get_create_tars_step(&self, with_state: bool) -> impl Step {
-        let mut tar1 = Command::new("tar");
-        tar1.arg("-C")
+    pub fn get_create_tars_step(&self) -> impl Step {
+        let mut tar = Command::new("tar");
+        tar.arg("-C")
             .arg(self.work_dir.join("data").join(IC_REGISTRY_LOCAL_STORE))
             .arg("-zcvf")
             .arg(
@@ -763,36 +773,26 @@ impl Recovery {
             )
             .arg(".");
 
-        let state_tar_cmd = if with_state {
-            let mut tar2 = Command::new("tar");
-            tar2.arg("-C")
-                .arg(self.work_dir.join("data"))
-                .arg("-zcvf")
-                .arg(self.work_dir.join(format!("{}.tar.gz", IC_STATE)))
-                .arg(IC_STATE);
-            Some(tar2)
-        } else {
-            None
-        };
-
         CreateTarsStep {
             logger: self.logger.clone(),
-            store_tar_cmd: tar1,
-            state_tar_cmd,
+            store_tar_cmd: tar,
+        }
+    }
+
+    pub fn get_copy_ic_state(&self, new_state_dir: PathBuf) -> impl Step {
+        CopyIcStateStep {
+            logger: self.logger.clone(),
+            work_dir: self.work_dir.join(IC_STATE_DIR),
+            new_state_dir,
         }
     }
 
     /// Return an [UploadCUPAndTar] uploading tars and extracted CUP to subnet nodes
-    pub fn get_upload_cup_and_tar_step(
-        &self,
-        subnet_id: SubnetId,
-        upload_node: Option<IpAddr>,
-    ) -> impl Step {
+    pub fn get_upload_cup_and_tar_step(&self, subnet_id: SubnetId) -> impl Step {
         UploadCUPAndTar {
             recovery: self.clone(),
             logger: self.logger.clone(),
             subnet_id,
-            upload_node,
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),

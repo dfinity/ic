@@ -1,3 +1,4 @@
+use crate::file_sync_helper::create_dir;
 use crate::recovery_iterator::RecoveryIterator;
 use crate::RecoveryResult;
 use crate::{error::RecoveryError, RecoveryArgs};
@@ -6,6 +7,7 @@ use ic_base_types::SubnetId;
 use ic_types::ReplicaVersion;
 use slog::Logger;
 use std::net::IpAddr;
+use std::path::PathBuf;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
@@ -20,6 +22,7 @@ pub enum StepType {
     ValidateReplayOutput,
     UpdateRegistryLocalStore,
     CreateTars,
+    CopyIcState,
     SetRecoveryCUP,
     UpdateLocalStoreWithCUP,
     ExtractCUPFile,
@@ -59,6 +62,7 @@ pub struct NNSRecoverySameNodes {
     recovery: Recovery,
     test: bool,
     logger: Logger,
+    new_state_dir: PathBuf,
 }
 
 impl NNSRecoverySameNodes {
@@ -68,13 +72,17 @@ impl NNSRecoverySameNodes {
         subnet_args: NNSRecoverySameNodesArgs,
         test: bool,
     ) -> Self {
+        let recovery = Recovery::new(logger.clone(), recovery_args, None, !test)
+            .expect("Failed to init recovery");
+        let new_state_dir = recovery.work_dir.join("new_ic_state");
+        create_dir(&new_state_dir).expect("Failed to create state directory for upload.");
         Self {
             step_iterator: Box::new(StepType::iter()),
             params: subnet_args,
-            recovery: Recovery::new(logger.clone(), recovery_args, None, !test)
-                .expect("Failed to init recovery"),
+            recovery,
             test,
             logger,
+            new_state_dir,
         }
     }
 
@@ -142,7 +150,12 @@ impl RecoveryIterator<StepType> for NNSRecoverySameNodes {
                     .get_update_local_store_step(self.params.subnet_id),
             )),
 
-            StepType::CreateTars => Ok(Box::new(self.recovery.get_create_tars_step(true))),
+            StepType::CreateTars => Ok(Box::new(self.recovery.get_create_tars_step())),
+
+            StepType::CopyIcState => Ok(Box::new(
+                self.recovery.get_copy_ic_state(self.new_state_dir.clone()),
+            )),
+
             StepType::SetRecoveryCUP => Ok(Box::new(
                 self.recovery
                     .get_set_recovery_cup_step(self.params.subnet_id)?,
@@ -160,7 +173,7 @@ impl RecoveryIterator<StepType> for NNSRecoverySameNodes {
 
             StepType::UploadCUPandRegistry => Ok(Box::new(
                 self.recovery
-                    .get_upload_cup_and_tar_step(self.params.subnet_id, None),
+                    .get_upload_cup_and_tar_step(self.params.subnet_id),
             )),
 
             StepType::WaitForCUP => {
@@ -176,10 +189,12 @@ impl RecoveryIterator<StepType> for NNSRecoverySameNodes {
 
             StepType::UploadState => {
                 if let Some(node_ip) = self.params.upload_node {
-                    Ok(Box::new(self.recovery.get_upload_cup_and_tar_step(
-                        self.params.subnet_id,
-                        Some(node_ip),
-                    )))
+                    Ok(Box::new(
+                        self.recovery.get_upload_and_restart_step_with_data_src(
+                            node_ip,
+                            self.new_state_dir.clone(),
+                        ),
+                    ))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
