@@ -47,6 +47,13 @@ function main() {
         | base64 -d \
             >"${RUN_NODE_DIR}/${PROBER_CONFIG_DST_DIR}/root_key.der"
 
+    # Setup enable/disable flag
+    if [[ -f "${PROBER_CONFIG_SRC_DIR}/prober.disabled" ]]; then
+        cp \
+            "${PROBER_CONFIG_SRC_DIR}/prober.disabled" \
+            "${RUN_NODE_DIR}/${PROBER_CONFIG_DST_DIR}/prober.disabled"
+    fi
+
     # Setup bind mount
     mount --bind "${RUN_NODE_DIR}/${PROBER_CONFIG_DST_DIR}" "${PROBER_CONFIG_DST_DIR}"
 }
