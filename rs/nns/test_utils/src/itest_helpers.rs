@@ -29,7 +29,7 @@ use canister_test::{
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use dfn_candid::{candid_one, CandidOne};
 use ic_base_types::CanisterId;
-use ic_canister_client::Sender;
+use ic_canister_client_sender::Sender;
 use ic_config::{subnet_config::SubnetConfig, Config};
 use ic_ic00_types::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;

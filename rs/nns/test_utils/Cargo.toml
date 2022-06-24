@@ -13,7 +13,7 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_json = { path = "../../rust_canisters/dfn_json" }
 futures = "0.3.8"
 ic-base-types = { path = "../../types/base_types"}
-ic-canister-client = { path = "../../canister_client" }
+ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto = {path = "../../crypto"}
 ic-crypto-sha = {path = "../../crypto/sha"}

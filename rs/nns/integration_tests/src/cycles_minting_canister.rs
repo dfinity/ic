@@ -2,7 +2,7 @@ use canister_test::Canister;
 use cycles_minting_canister::{IcpXdrConversionRateCertifiedResponse, MEMO_TOP_UP_CANISTER};
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
-use ic_canister_client::Sender;
+use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
 };

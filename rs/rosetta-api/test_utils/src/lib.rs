@@ -50,7 +50,7 @@ pub fn make_user(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, Princip
     let public_key = to_public_key(&keypair);
 
     let public_key_der =
-        ic_canister_client::ed25519_public_key_to_der(keypair.public.to_bytes().to_vec());
+        ic_canister_client_sender::ed25519_public_key_to_der(keypair.public.to_bytes().to_vec());
 
     assert_eq!(
         from_public_key(&public_key).unwrap(),
@@ -69,7 +69,7 @@ pub fn acc_id(seed: u64) -> AccountIdentifier {
     let mut rng = StdRng::seed_from_u64(seed);
     let keypair = EdKeypair::generate(&mut rng);
     let public_key_der =
-        ic_canister_client::ed25519_public_key_to_der(keypair.public.to_bytes().to_vec());
+        ic_canister_client_sender::ed25519_public_key_to_der(keypair.public.to_bytes().to_vec());
 
     PrincipalId::new_self_authenticating(&public_key_der).into()
 }
@@ -529,7 +529,7 @@ pub async fn send_icpts_with_window(
     RosettaError,
 > {
     let public_key_der =
-        ic_canister_client::ed25519_public_key_to_der(keypair.public.to_bytes().to_vec());
+        ic_canister_client_sender::ed25519_public_key_to_der(keypair.public.to_bytes().to_vec());
 
     let from: AccountIdentifier = PrincipalId::new_self_authenticating(&public_key_der).into();
 

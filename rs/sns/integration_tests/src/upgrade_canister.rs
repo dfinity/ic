@@ -1,7 +1,7 @@
 use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
-use ic_canister_client::Sender;
+use ic_canister_client_sender::Sender;
 use ic_ic00_types::{CanisterInstallMode, CanisterStatusResultV2};
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
 use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, CanisterStatusType};

@@ -1,7 +1,7 @@
 use canister_test::Canister;
 use dfn_candid::candid;
 use ic_base_types::NodeId;
-use ic_canister_client::Sender;
+use ic_canister_client_sender::Sender;
 use ic_crypto::utils::generate_idkg_dealing_encryption_keys;
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR, TEST_USER2_PRINCIPAL,

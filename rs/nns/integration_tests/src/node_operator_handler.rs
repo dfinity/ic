@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use dfn_candid::candid_one;
 
 use ic_base_types::NodeId;
-use ic_canister_client::Sender;
+use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };

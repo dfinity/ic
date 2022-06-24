@@ -1,7 +1,7 @@
 use dfn_candid::{candid, candid_one};
 use dfn_protobuf::protobuf;
 use ed25519_dalek::Keypair;
-use ic_canister_client::Sender;
+use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR,
     TEST_NEURON_2_OWNER_PRINCIPAL,

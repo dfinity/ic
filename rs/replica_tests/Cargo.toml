@@ -6,7 +6,7 @@ edition = "2018"
 [dependencies]
 futures = "0.3.13"
 ic-config = { path = "../config" }
-ic-canister-client = { path = "../canister_client" }
+ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-error-types = { path = "../types/error_types" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-ic00-types = { path = "../types/ic00_types" }
