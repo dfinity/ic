@@ -11,8 +11,9 @@ filegroup(
 )
 
 rust_library(
-    name = "ic_btc_test_utils",
+    name = "test-utils",
     srcs = glob(["src/**"]),
+    crate_name = "ic_btc_test_utils",
     edition = "2018",
     deps = [
         "@crate_index//:bitcoin",
@@ -21,5 +22,5 @@ rust_library(
 
 rust_test(
     name = "ic_btc_test_utils_test",
-    crate = ":ic_btc_test_utils",
+    crate = ":test-utils",
 )
