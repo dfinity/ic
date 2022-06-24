@@ -1,6 +1,7 @@
 [Unit]
 Description=Boundary Node Control Plane Watcher
 After=syslog.target
+After=setup-nginx.service
 
 [Service]
 User=root
