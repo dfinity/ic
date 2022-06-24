@@ -17,40 +17,17 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
 
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
 
-    // Our specific tags for all of our protobufs
-    std_ic_sns_type_attr(&mut config, "SnsCanisterType");
-    std_ic_sns_type_attr(&mut config, "SnsWasm");
-    std_ic_sns_type_attr(&mut config, "AddWasmRequest");
-    std_ic_sns_type_attr(&mut config, "AddWasmResponse");
-    std_ic_sns_type_attr(&mut config, "AddWasmResponse.result");
-    std_ic_sns_type_attr(&mut config, "AddWasmResponse.AddWasmOk");
-    std_ic_sns_type_attr(&mut config, "AddWasmResponse.AddWasmError");
-    std_ic_sns_type_attr(&mut config, "GetWasmRequest");
-    std_ic_sns_type_attr(&mut config, "GetWasmResponse");
-    std_ic_sns_type_attr(&mut config, "DeployNewSnsRequest");
-    std_ic_sns_type_attr(&mut config, "DeployNewSnsResponse");
-    std_ic_sns_type_attr(&mut config, "SnsCanisterIds");
-    std_ic_sns_type_attr(&mut config, "ListDeployedSnsesRequest");
-    std_ic_sns_type_attr(&mut config, "ListDeployedSnsesResponse");
-    std_ic_sns_type_attr(&mut config, "DeployedSns");
-    std_ic_sns_type_attr(&mut config, "SnsVersion");
+    // Add universally needed types to all definitions in this namespace
+    config.type_attribute(
+        ".ic_sns_wasm.pb.v1",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    // Add additional customizations
     ic_sns_type_attr(&mut config, "SnsVersion", "#[derive(Eq, Hash)]");
-    std_ic_sns_type_attr(&mut config, "GetNextSnsVersionRequest");
-    std_ic_sns_type_attr(&mut config, "GetNextSnsVersionResponse");
 
     config
         .compile_protos(&proto_files, &[proto.base_types, proto.sns_wasm])
         .unwrap();
-}
-
-/// Base level derive attributes (anything we want to apply to almost everything as a rule).
-/// See ic_sns_type_attr below.
-fn std_ic_sns_type_attr(cfg: &mut Config, class: &str) {
-    ic_sns_type_attr(
-        cfg,
-        class,
-        ["#[derive(candid::CandidType, candid::Deserialize)]"].join(" "),
-    );
 }
 
 /// Convenience function to add the correct namespace to our class names
