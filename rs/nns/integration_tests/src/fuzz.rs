@@ -25,7 +25,7 @@ use canister_test::Canister;
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
-use ic_canister_client::Sender;
+use ic_canister_client_sender::Sender;
 use ic_crypto_sha::Sha256;
 use ic_nervous_system_common::ledger;
 use ic_nns_common::pb::v1::NeuronId;

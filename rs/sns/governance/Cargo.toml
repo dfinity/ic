@@ -62,7 +62,7 @@ prost-build = "0.10.4"
 criterion = "0.3"
 futures = "0.3.13"
 ic-base-types = { path = "../../types/base_types", features = ["test"] }
-ic-canister-client = { path = "../../canister_client" }
+ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-sns-governance = { path = ".", features = ["test"] }

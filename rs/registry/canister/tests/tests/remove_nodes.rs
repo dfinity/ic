@@ -4,7 +4,7 @@ use candid::Encode;
 use dfn_candid::candid;
 
 use ic_base_types::PrincipalId;
-use ic_canister_client::Sender;
+use ic_canister_client_sender::Sender;
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;

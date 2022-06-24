@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
-use ic_canister_client::Sender;
+use ic_canister_client_sender::Sender;
 use ic_crypto_sha::Sha256;
 use ic_nervous_system_common::{ledger::Ledger, NervousSystemError};
 use ic_nervous_system_common_test_keys::{

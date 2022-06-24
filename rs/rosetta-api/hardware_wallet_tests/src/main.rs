@@ -58,7 +58,7 @@ pub fn generate_zondax_test(
     send_args: SendArgs,
 ) -> serde_json::Value {
     let public_key_der =
-        ic_canister_client::ed25519_public_key_to_der(keypair.public.to_bytes().to_vec());
+        ic_canister_client_sender::ed25519_public_key_to_der(keypair.public.to_bytes().to_vec());
 
     let public_key =
         models::PublicKey::new(hex::encode(public_key_der.clone()), CurveType::Edwards25519);
@@ -114,7 +114,7 @@ pub fn generate_zondax_test(
 
     let envelope = HttpRequestEnvelope::<HttpCallContent> {
         content: HttpCallContent::Call { update },
-        sender_pubkey: Some(Blob(ic_canister_client::ed25519_public_key_to_der(
+        sender_pubkey: Some(Blob(ic_canister_client_sender::ed25519_public_key_to_der(
             from_public_key(&transaction_signature.public_key).unwrap(),
         ))),
         sender_sig: Some(Blob(from_hex(&transaction_signature.hex_bytes).unwrap())),

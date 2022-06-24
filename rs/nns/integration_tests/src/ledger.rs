@@ -7,7 +7,7 @@ use canister_test::{Canister, Project};
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canister_client::Sender;
+use ic_canister_client_sender::Sender;
 use ic_ledger_core::{block::BlockType, timestamp::TimeStamp};
 use ic_nervous_system_common::ledger;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;

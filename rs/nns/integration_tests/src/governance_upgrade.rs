@@ -7,7 +7,7 @@
 use canister_test::local_test_e;
 use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
-use ic_canister_client::Sender;
+use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_governance::init::GovernanceCanisterInitPayloadBuilder;

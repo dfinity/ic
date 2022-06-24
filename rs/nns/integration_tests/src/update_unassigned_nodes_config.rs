@@ -1,4 +1,4 @@
-use ic_canister_client::Sender;
+use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::{
     registry::MAX_NUM_SSH_KEYS,

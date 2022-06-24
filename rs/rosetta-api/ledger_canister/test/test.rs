@@ -3,7 +3,7 @@ use canister_test::*;
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canister_client::Sender;
+use ic_canister_client_sender::Sender;
 use ic_ledger_core::{
     archive::ArchiveOptions,
     block::{BlockType, EncodedBlock},
@@ -30,14 +30,14 @@ struct TestQueryBlocksArgs {
     result: Vec<CandidBlock>,
 }
 
-fn create_sender(i: u64) -> ic_canister_client::Sender {
+fn create_sender(i: u64) -> Sender {
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
     let keypair = {
         let mut rng = ChaChaRng::seed_from_u64(i);
         ed25519_dalek::Keypair::generate(&mut rng)
     };
-    ic_canister_client::Sender::from_keypair(&keypair)
+    Sender::from_keypair(&keypair)
 }
 
 // So we can get the size of EncodedBlock

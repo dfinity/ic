@@ -1,5 +1,5 @@
 use candid::Encode;
-use ic_canister_client::Sender;
+use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_sns_governance::pb::v1::nervous_system_function::{
     FunctionType, GenericNervousSystemFunction,

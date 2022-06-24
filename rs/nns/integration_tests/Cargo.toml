@@ -42,7 +42,7 @@ crossbeam-channel = "0.5.1"
 ed25519-dalek = "1.0.1"
 futures-util = "0.3.8"
 hex = "0.4.2"
-ic-canister-client = { path = "../../canister_client" }
+ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto = { path = "../../crypto" }
 ic-crypto-sha = { path = "../../crypto/sha" }

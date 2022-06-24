@@ -35,7 +35,7 @@ use std::time::{Duration, SystemTime};
 
 use crate::{NUM_SNS_CANISTERS, SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES};
 use dfn_protobuf::protobuf;
-use ic_canister_client::Sender;
+use ic_canister_client_sender::Sender;
 use ic_crypto_sha::Sha256;
 use ic_nervous_system_root::{CanisterStatusResult, CanisterStatusType};
 use ic_sns_governance::governance::TimeWarp;
