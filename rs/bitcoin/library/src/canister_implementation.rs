@@ -32,6 +32,8 @@ impl BitcoinCanister for BitcoinCanisterImpl {
         address: &Address,
         min_confirmations: u32,
     ) -> Result<Vec<Utxo>, MinConfirmationsTooHigh> {
-        utxo_management::get_utxos(self, address, min_confirmations).await
+        utxo_management::get_utxos(self.network, address, min_confirmations)
+            .await
+            .map(|r| r.utxos)
     }
 }

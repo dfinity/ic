@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use bitcoin::{Address, Network};
 
 /// The Bitcoin canister mock is used to perform unit tests against the library.
-pub(crate) struct BitcoinCanisterMock {
+pub struct BitcoinCanisterMock {
     pub(crate) utxos: Vec<Utxo>,
     network: Network,
     pub(crate) tip_height: u32,

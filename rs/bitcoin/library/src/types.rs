@@ -81,6 +81,19 @@ impl UtxosUpdate {
     }
 }
 
+/// Arguments used to call get_utxos_from_args in the agent.
+pub struct UtxosArgs {
+    pub network: bitcoin::Network,
+    pub address: bitcoin::Address,
+    pub min_confirmations: u32,
+}
+
+/// Latest utxos retrieved at a given address.
+pub struct UtxosResult {
+    pub address: bitcoin::Address,
+    pub utxos: Vec<Utxo>,
+}
+
 /// Represents the last seen state and the unseen state UTXOs for a given `min_confirmations`.
 #[derive(CandidType, Debug, Deserialize, PartialEq, Clone)]
 pub struct UtxosState {

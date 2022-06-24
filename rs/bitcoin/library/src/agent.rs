@@ -1,3 +1,7 @@
+#[cfg(test)]
+use crate::canister_mock::BitcoinCanisterMock;
+use crate::types::{UtxosArgs, UtxosResult};
+use crate::utxo_management::get_utxos;
 use crate::{
     address_management,
     address_management::{get_btc_ecdsa_public_key, get_main_address},
@@ -8,11 +12,6 @@ use crate::{
 };
 use bitcoin::Address;
 use std::{collections::HashMap, error::Error};
-#[cfg(test)]
-use {
-    crate::{canister_mock::BitcoinCanisterMock, types::from_bitcoin_network_to_types_network},
-    bitcoin::Network,
-};
 
 #[derive(Clone)]
 pub struct BitcoinAgent<C: BitcoinCanister> {
@@ -134,11 +133,8 @@ impl<C: BitcoinCanister> BitcoinAgent<C> {
     /// Returns the difference between the current UTXO state and the last seen state for this address.
     /// The last seen state for an address is updated to the current state by calling `update_state` or implicitly when invoking `get_utxos_update`.
     /// If there are no changes to the UTXO set since the last call, the returned `UtxosUpdate` will be identical.
-    pub async fn peek_utxos_update(
-        &mut self,
-        address: &Address,
-    ) -> Result<UtxosUpdate, AddressNotTracked> {
-        utxo_management::peek_utxos_update(self, address).await
+    pub fn peek_utxos_update(&self, address: &Address) -> Result<UtxosUpdate, AddressNotTracked> {
+        utxo_management::peek_utxos_update(self, address)
     }
 
     /// Updates the state of the `BitcoinAgent` for the given `address`.
@@ -150,11 +146,11 @@ impl<C: BitcoinCanister> BitcoinAgent<C> {
     /// Returns the difference in the set of UTXOs of an address controlled by the `BitcoinAgent` between the current state and the seen state when the function was last called, considering only UTXOs with the number of confirmations specified when adding the given address.
     /// The returned `UtxosUpdate` contains the information which UTXOs were added and removed. If the function is called for the first time, the current set of UTXOs is returned.
     /// Note that the function changes the state of the `BitcoinAgent`: A subsequent call will return changes to the UTXO set that have occurred since the last call.
-    pub async fn get_utxos_update(
+    pub fn get_utxos_update(
         &mut self,
         address: &Address,
     ) -> Result<UtxosUpdate, AddressNotTracked> {
-        utxo_management::get_utxos_update(self, address).await
+        utxo_management::get_utxos_update(self, address)
     }
 
     /// Returns the balance of the given Bitcoin `address` according to `min_confirmations`.
@@ -169,34 +165,98 @@ impl<C: BitcoinCanister> BitcoinAgent<C> {
     /// Returns the difference between the current balance state and the last seen state for this address.
     /// The last seen state for an address is updated to the current unseen state by calling `update_state` or implicitly when invoking `get_balance_update`.
     /// If there are no changes to the balance since the last call, the returned `BalanceUpdate` will be identical.
-    pub async fn peek_balance_update(
-        &mut self,
+    pub fn peek_balance_update(
+        &self,
         address: &Address,
     ) -> Result<BalanceUpdate, AddressNotTracked> {
-        utxo_management::peek_balance_update(self, address).await
+        utxo_management::peek_balance_update(self, address)
     }
 
     /// Returns the difference in the balance of an address controlled by the `BitcoinAgent` between the current state and the seen state when the function was last called, considering only transactions with the specified number of confirmations.
     /// The returned `BalanceUpdate` contains the information on how much balance was added and subtracted in total. If the function is called for the first time, the current balance of the address is returned.
     /// It is equivalent to calling `get_utxos_update` and summing up the balances in the returned UTXOs.
-    pub async fn get_balance_update(
+    pub fn get_balance_update(
         &mut self,
         address: &Address,
     ) -> Result<BalanceUpdate, AddressNotTracked> {
-        utxo_management::get_balance_update(self, address).await
+        utxo_management::get_balance_update(self, address)
+    }
+
+    // ---
+    // Usage pattern to update the utxos state of the agent (eg. with thread_local agents):
+    // let args = AGENT.with(|s| s.borrow().get_utxos_args(address));
+    // let result = get_utxos_from_args(args).await;
+    // let utxos = AGENT.with(|s| s.borrow_mut().apply_utxos(result));
+
+    pub fn get_utxos_args(&self, address: &Address, min_confirmations: u32) -> UtxosArgs {
+        UtxosArgs {
+            network: self.bitcoin_canister.get_network(),
+            address: address.clone(),
+            min_confirmations,
+        }
+    }
+
+    pub fn apply_utxos(&mut self, utxos_result: UtxosResult) -> UtxosUpdate {
+        let mut utxos_state_address = self
+            .utxos_state_addresses
+            .get_mut(&utxos_result.address)
+            .unwrap();
+        utxos_state_address.unseen_state = utxos_result.utxos;
+        UtxosUpdate::from_state(
+            &utxos_state_address.seen_state,
+            &utxos_state_address.unseen_state,
+        )
+    }
+}
+
+pub async fn get_utxos_from_args(
+    utxos_args: UtxosArgs,
+) -> Result<UtxosResult, MinConfirmationsTooHigh> {
+    get_utxos(
+        utxos_args.network,
+        &utxos_args.address,
+        utxos_args.min_confirmations,
+    )
+    .await
+}
+
+#[cfg(test)]
+impl BitcoinAgent<BitcoinCanisterMock> {
+    /// This function is used for simulating UTXOs retrieval from the Bitcoin network during tests.
+    pub fn get_utxos_from_args_test(
+        &self,
+        utxos_args: UtxosArgs,
+    ) -> Result<UtxosResult, MinConfirmationsTooHigh> {
+        Ok(UtxosResult {
+            address: utxos_args.address,
+            utxos: self.bitcoin_canister.utxos.clone(),
+        })
     }
 }
 
 /// Creates a new instance of the Bitcoin agent using the Bitcoin canister mock.
 #[cfg(test)]
-pub(crate) fn new_mock(
-    network: &Network,
-    main_address_type: &AddressType,
-) -> BitcoinAgent<BitcoinCanisterMock> {
-    BitcoinAgent::new(
-        BitcoinCanisterMock::new(from_bitcoin_network_to_types_network(*network)),
-        main_address_type,
-        0,
-    )
-    .unwrap()
+pub(crate) mod tests {
+    use crate::canister_mock::BitcoinCanisterMock;
+    use crate::types::from_bitcoin_network_to_types_network;
+    use crate::{AddressType, BitcoinAgent, BitcoinCanister};
+    use bitcoin::Network;
+    use std::cell::RefCell;
+
+    pub(crate) fn new_mock(
+        network: &bitcoin::Network,
+        main_address_type: &AddressType,
+    ) -> BitcoinAgent<BitcoinCanisterMock> {
+        BitcoinAgent::new(
+            BitcoinCanisterMock::new(from_bitcoin_network_to_types_network(*network)),
+            main_address_type,
+            0,
+        )
+        .unwrap()
+    }
+
+    // Thread local agent to verify library usage pattern.
+    thread_local! {
+        pub(crate) static MOCK_AGENT: RefCell<BitcoinAgent<BitcoinCanisterMock>> = RefCell::new(new_mock(&Network::Regtest, &AddressType::P2pkh));
+    }
 }
