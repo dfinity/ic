@@ -17,8 +17,11 @@ Success::
 
 end::catalog[] */
 
-use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
+use crate::driver::driver_setup::{
+    IcSetup, SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
+};
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::test_env::TestEnvAttribute;
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::node_reassignment_test::{can_read_msg, store_message};
 use crate::orchestrator::utils::upgrade::can_install_canister;
@@ -29,7 +32,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use std::convert::TryFrom;
-use std::env;
 use std::mem::swap;
 
 const DKG_INTERVAL: u64 = 9;
@@ -49,15 +51,18 @@ pub fn setup(env: TestEnv) {
 pub fn test(env: TestEnv) {
     let logger = env.logger();
     let topo_snapshot = env.topology_snapshot();
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 
-    let master_version = match env::var("IC_VERSION_ID") {
-        Ok(ver) => ver,
-        Err(_) => panic!("Environment variable $IC_VERSION_ID is not set!"),
-    };
-    info!(logger, "IC_VERSION_ID: {}", master_version);
+    let ic_version = IcSetup::read_attribute(&env).initial_replica_version;
+    let ic_version_str = ic_version.to_string();
+    info!(logger, "IC_VERSION_ID: {}", ic_version_str);
 
-    let working_version = format!("{}-test", master_version);
-
+    // identifies the version of the replica after the recovery
+    let working_version = ReplicaVersion::try_from(format!("{}-test", ic_version_str)).unwrap();
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
 
@@ -73,7 +78,6 @@ pub fn test(env: TestEnv) {
     // choose a node from the nns subnet
     let mut nns_nodes = topo_snapshot.root_subnet().nodes();
     let mut upload_node = nns_nodes.next().expect("there is no NNS node");
-    upload_node.await_status_is_healthy().unwrap();
 
     upload_node
         .install_nns_canisters()
@@ -114,20 +118,21 @@ pub fn test(env: TestEnv) {
     let recovery_args = RecoveryArgs {
         dir: tempdir.path().to_path_buf(),
         nns_url: upload_node.get_public_url(),
-        replica_version: Some(ReplicaVersion::try_from(master_version).unwrap()),
+        replica_version: Some(ic_version),
         key_file: Some(ssh_authorized_priv_keys_dir.join(ADMIN)),
     };
 
     // unlike during a production recovery using the CLI, here we already know all of parameters ahead of time.
     let subnet_args = NNSRecoverySameNodesArgs {
         subnet_id: topo_snapshot.root_subnet_id(),
-        upgrade_version: Some(ReplicaVersion::try_from(working_version).unwrap()),
+        upgrade_version: Some(working_version),
         pub_key: Some(pub_key),
         download_node: Some(download_node.get_ip_addr()),
         upload_node: Some(upload_node.get_ip_addr()),
     };
 
-    let subnet_recovery = NNSRecoverySameNodes::new(env.logger(), recovery_args, subnet_args, true);
+    let subnet_recovery =
+        NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args, true);
 
     // let's take f+1 nodes and break them.
     let f = (SUBNET_SIZE - 1) / 3;
