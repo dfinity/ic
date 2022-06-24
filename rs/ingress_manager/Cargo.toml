@@ -19,7 +19,7 @@ ic-types = { path = "../types/types" }
 ic-validator = { path = "../validator" }
 bincode = "1.2.1"
 prometheus = { version = "0.12.0", features = [ "process" ] }
-slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 
 [dev-dependencies]
 assert_matches = "1.3.0"

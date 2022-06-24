@@ -12,5 +12,5 @@ ic-metrics = { path = "../metrics" }
 ic-types = { path = "../../types/types" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }
-slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 tokio = "1.15.0"

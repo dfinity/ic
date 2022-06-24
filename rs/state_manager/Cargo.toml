@@ -33,7 +33,7 @@ rand_chacha = "0.2.2"
 scoped_threadpool = "0.1.*"
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_bytes = "0.11"
-slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 tree-deserializer = { path = "../tree_deserializer" }
 
 [lib]

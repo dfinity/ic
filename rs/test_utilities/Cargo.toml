@@ -63,7 +63,7 @@ rand = "0.8"
 rand_chacha = "0.3"
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_cbor = "0.11.1"
-slog = { version = "2.5.2", features = ["nested-values", "max_level_trace", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 slog-scope = "4.1.2"
 slog-term = "2.6.0"
 socket2 = { version = "0.3.19", features = ["reuseport"] }
