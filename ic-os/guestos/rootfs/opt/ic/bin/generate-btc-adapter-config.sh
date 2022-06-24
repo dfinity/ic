@@ -13,26 +13,42 @@ function read_bitcoind_addr_variables() {
     done <"$1"
 }
 
+# Reads the socks proxy config file. The file must be of the form "key=value".
+# The file should only contain the key `socks_proxy`. All other keys are ignored.
+#
+# Arguments:
+# - $1: Name of the file to be read.
+function read_socks_proxy() {
+    while IFS="=" read -r key value; do
+        case "$key" in
+            "socks_proxy") SOCKS_PROXY="${value}" ;;
+        esac
+    done <"$1"
+}
+
 function usage() {
     cat <<EOF
 Usage:
-  generate-btc-adapter-config [-b bitcoind_addr.conf] -o ic-btc-adapter.json5
+  generate-btc-adapter-config [-b bitcoind_addr.conf] [-s socks_proxy.conf] -o ic-btc-adapter.json5
 
   Generate the bitcoin adapter config.
 
   -b bitcoind_addr.conf: Optional, bitcoind address
+  -s socks_proxy.conf: Optional, socks proxy url
   -m If set, we will use bitcoin mainnet dns seeds 
   -o outfile: output ic-btc-adapter.json5 file
 EOF
 }
 
 MAINNET=false
-while getopts "n:o:b:m" OPT; do
+while getopts "b:mo:s:" OPT; do
     case "${OPT}" in
         b)
             BITCOIND_ADDR_FILE="${OPTARG}"
             ;;
-
+        s)
+            SOCKS_FILE="${OPTARG}"
+            ;;
         o)
             OUT_FILE="${OPTARG}"
             ;;
@@ -46,19 +62,22 @@ while getopts "n:o:b:m" OPT; do
     esac
 done
 
-if [ "${BITCOIND_ADDR_FILE}" != "" -a -e "${BITCOIND_ADDR_FILE}" ]; then
-    read_bitcoind_addr_variables "${BITCOIND_ADDR_FILE}"
+# Production socks5 proxy url needs to include schema, host and port to be accepted by the adapters.
+# Testnets deploy with a 'socks_proxy.conf' file to overwrite the production socks proxy with the testnet proxy.
+SOCKS_PROXY="socks5://socks5.ic0.app:1080"
+if [ "${SOCKS_FILE}" != "" -a -e "${SOCKS_FILE}" ]; then
+    read_socks_proxy "${SOCKS_FILE}"
 fi
 
 BITCOIN_NETWORK='"testnet"'
-dns_seeds='"testnet-seed.bitcoin.jonasschnelli.ch",
+DNS_SEEDS='"testnet-seed.bitcoin.jonasschnelli.ch",
             "seed.tbtc.petertodd.org",
             "seed.testnet.bitcoin.sprovoost.nl",
             "testnet-seed.bluematt.me"'
 
 if [ "$MAINNET" = true ]; then
     BITCOIN_NETWORK='"bitcoin"'
-    dns_seeds='"seed.bitcoin.sipa.be",
+    DNS_SEEDS='"seed.bitcoin.sipa.be",
                 "dnsseed.bluematt.me",
                 "dnsseed.bitcoin.dashjr.org",
                 "seed.bitcoinstats.com",
@@ -69,21 +88,32 @@ if [ "$MAINNET" = true ]; then
                 "seed.bitcoin.wiz.biz"'
 fi
 
-DNS_SEEDS="${bitcoind_addr:-$dns_seeds}"
-
 if [ "${OUT_FILE}" == "" ]; then
     usage
     exit 1
 fi
 
-echo '{
-    "network": '"${BITCOIN_NETWORK}"',
-    "dns_seeds": ['"${DNS_SEEDS}"'],
-    "logger": {
-        "format": "json",
-        "level": "info"
-    }
-}' >$OUT_FILE
+# BITCOIND_ADDR indicates that we are in system test environment. No socks proxy needed.
+if [ "${BITCOIND_ADDR_FILE}" != "" -a -e "${BITCOIND_ADDR_FILE}" ]; then
+    echo '{
+        "network": '"${BITCOIN_NETWORK}"',
+        "dns_seeds": ['"${DNS_SEEDS}"'],
+        "logger": {
+            "format": "json",
+            "level": "info"
+        }
+    }' >$OUT_FILE
+else
+    echo '{
+        "network": '"${BITCOIN_NETWORK}"',
+        "dns_seeds": ['"${DNS_SEEDS}"'],
+        "socks_proxy": '\"${SOCKS_PROXY}\"',
+        "logger": {
+            "format": "json",
+            "level": "info"
+        }
+    }' >$OUT_FILE
+fi
 
 # umask for service is set to be restricted, but this file needs to be
 # world-readable

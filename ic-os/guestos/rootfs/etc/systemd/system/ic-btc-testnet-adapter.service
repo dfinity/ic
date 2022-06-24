@@ -10,7 +10,8 @@ StartLimitIntervalSec=0
 [Service]
 User=ic-replica
 Environment=RUST_BACKTRACE=1
-ExecStartPre=+/opt/ic/bin/generate-btc-adapter-config.sh -b /boot/config/bitcoind_addr.conf -o /run/ic-node/config/ic-btc-testnet-adapter.json5
+# socks_proxy.conf is not present for mainnet deployments and the socks_proxy defaults to 'socks5://socks5.ic0.app:1080'
+ExecStartPre=+/opt/ic/bin/generate-btc-adapter-config.sh -b /boot/config/bitcoind_addr.conf -s /boot/config/socks_proxy.conf -o /run/ic-node/config/ic-btc-testnet-adapter.json5
 ExecStart=/opt/ic/bin/ic-btc-adapter /run/ic-node/config/ic-btc-testnet-adapter.json5
 NotifyAccess=main
 Restart=always

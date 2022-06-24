@@ -1,7 +1,0 @@
-{
-  "logger": {
-    "level": "info",
-    "format": "json"
-  }
-}
-

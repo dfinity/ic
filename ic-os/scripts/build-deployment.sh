@@ -360,6 +360,23 @@ function generate_network_config() {
     done
 }
 
+# Adds a .conf file that includes the testnet socks proxy. The testnet socks proxy url is 'socks5://socks5.testnet.dfinity.network:1080'.
+# This config is used to inject the testnet socks into the node for testing. The mainnet socks proxy is hardcoded in the config generation files
+# for the bitcoin and canister http adapter.
+# MAKE SURE THIS IS ONLY CALLED FOR TESTNET DEPLOYMENTS!!! (In the future this should consolidated with 'build-bootstrap-config-image.sh')
+function generate_socks_config() {
+    for n in $NODES; do
+        declare -n NODE=$n
+        local subnet_idx=${NODE["subnet_idx"]}
+        local node_idx=${NODE["node_idx"]}
+
+        NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+
+        # Adapters have validity check for socks proxy url. Scheme, Host and Port are required. I.e socks5://someurl.com:1080.
+        echo "socks_proxy=socks5://socks5.testnet.dfinity.network:1080" >>"${CONFIG_DIR}/$NODE_PREFIX/socks_proxy.conf"
+    done
+}
+
 function copy_ssh_keys() {
     for n in $NODES; do
         declare -n NODE=$n
@@ -425,6 +442,7 @@ if [ ${DEBUG} -eq 1 ]; then
     generate_journalbeat_config
     generate_node_config
     generate_network_config
+    generate_socks_config
     copy_ssh_keys
     build_tarball
     build_removable_media
@@ -442,6 +460,7 @@ else
     generate_journalbeat_config >/dev/null 2>&1
     generate_node_config >/dev/null 2>&1
     generate_network_config >/dev/null 2>&1
+    generate_socks_config >/dev/null 2>&1
     copy_ssh_keys >/dev/null 2>&1
     build_tarball >/dev/null 2>&1
     build_removable_media >/dev/null 2>&1
