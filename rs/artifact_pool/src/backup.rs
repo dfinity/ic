@@ -45,7 +45,7 @@ use std::{
     time::Duration,
 };
 
-enum BackupArtifact {
+pub enum BackupArtifact {
     Finalization(Box<Finalization>),
     Notarization(Box<Notarization>),
     BlockProposal(Box<BlockProposal>),
@@ -498,9 +498,9 @@ impl Drop for Backup {
 }
 
 impl BackupArtifact {
-    // Writes the protobuf serialization of the artifact into a file in the given
-    // directory.
-    fn write_to_disk(&self, path: &Path) -> Result<(), std::io::Error> {
+    /// Writes the protobuf serialization of the artifact into a file in the given
+    /// directory.
+    pub fn write_to_disk(&self, path: &Path) -> Result<(), std::io::Error> {
         let (file_directory, file_name) = self.file_location(path);
         // Create the path if necessary.
         fs::create_dir_all(&file_directory)?;
@@ -511,8 +511,8 @@ impl BackupArtifact {
         ic_utils::fs::write_using_tmp_file(full_path, |writer| writer.write_all(&serialized))
     }
 
-    // Serializes the artifact to protobuf.
-    fn serialize(&self) -> Result<Vec<u8>, io::Error> {
+    /// Serializes the artifact to protobuf.
+    pub fn serialize(&self) -> Result<Vec<u8>, io::Error> {
         let mut buf = Vec::new();
         use BackupArtifact::*;
         match self {
@@ -529,17 +529,17 @@ impl BackupArtifact {
         Ok(buf)
     }
 
-    // Each artifact will be stored separately used the following path:
-    //
-    // <subnet_id>/<replica_version>/<(height / N) * N>/height/<artifact_specific_name>.bin
-    //
-    // Note that the artifact specific name must contain all parameters to be
-    // differentiated not only across other artifacts of the same replica, but also
-    // across artifacts from all replicas. E.g., since we use multi-signatures for
-    // notarizations and finalizations, these artifacts can be created in different
-    // ways on different replicas, so we need to put their hashes into the artifact
-    // name.
-    fn file_location(&self, path: &Path) -> (PathBuf, String) {
+    /// Each artifact will be stored separately used the following path:
+    ///
+    /// <subnet_id>/<replica_version>/<(height / N) * N>/height/<artifact_specific_name>.bin
+    ///
+    /// Note that the artifact specific name must contain all parameters to be
+    /// differentiated not only across other artifacts of the same replica, but also
+    /// across artifacts from all replicas. E.g., since we use multi-signatures for
+    /// notarizations and finalizations, these artifacts can be created in different
+    /// ways on different replicas, so we need to put their hashes into the artifact
+    /// name.
+    pub fn file_location(&self, path: &Path) -> (PathBuf, String) {
         // Create a subdir for the height
         use BackupArtifact::*;
         let (height, file_name) = match self {

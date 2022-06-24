@@ -1,9 +1,10 @@
 use crate::orchestrator::utils::ssh_access::{read_remote_file, AuthMean};
+use ic_artifact_pool::backup::BackupArtifact;
 use ic_replay::{
     cmd::{ClapSubnetId, ReplayToolArgs, RestoreFromBackupCmd, SubCommand},
     player::{ReplayError, StateParams},
 };
-use ic_types::SubnetId;
+use ic_types::{Height, SubnetId};
 use slog::{info, Logger};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
@@ -161,6 +162,67 @@ impl Backup {
         cmd.wait_with_output().unwrap();
     }
 
+    /// Write a batch of fake artifacts (without finalization) to the local backup spool.
+    /// Return the height at which the artifacts were written (= first height after last
+    /// finalization in spool).
+    pub fn store_invalid_artifacts(&self, replica_version: &str) -> Height {
+        use ic_test_utilities::{consensus::fake::*, mock_time, types::ids::node_test_id};
+        use ic_types::{
+            batch::*,
+            consensus::*,
+            crypto::{CryptoHash, CryptoHashOf},
+            RegistryVersion,
+        };
+
+        let registry_version = RegistryVersion::from(4);
+        let hash = CryptoHashOf::from(CryptoHash(vec![1, 2, 3]));
+        let path = Path::new(&self.spool_path())
+            .join(&self.subnet_id.to_string())
+            .join(replica_version);
+        let height = Height::from(self.get_end_height(replica_version) + 1);
+
+        let artifact = BlockProposal::fake(
+            Block::new(
+                hash.clone(),
+                Payload::new(
+                    ic_crypto::crypto_hash,
+                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                ),
+                height,
+                Rank(456),
+                ValidationContext {
+                    registry_version,
+                    certified_height: height - Height::from(10),
+                    time: mock_time(),
+                },
+            ),
+            node_test_id(333),
+        );
+        BackupArtifact::BlockProposal(Box::new(artifact))
+            .write_to_disk(&path)
+            .unwrap();
+
+        let artifact = RandomTape::fake(RandomTapeContent::new(height));
+        BackupArtifact::RandomTape(Box::new(artifact))
+            .write_to_disk(&path)
+            .unwrap();
+
+        let artifact = RandomBeacon::fake(RandomBeaconContent::new(
+            height,
+            CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+        ));
+        BackupArtifact::RandomBeacon(Box::new(artifact))
+            .write_to_disk(&path)
+            .unwrap();
+
+        let artifact = Notarization::fake(NotarizationContent::new(height, hash));
+        BackupArtifact::Notarization(Box::new(artifact))
+            .write_to_disk(&path)
+            .unwrap();
+
+        height
+    }
+
     fn config_path(&self) -> String {
         format!("{}/ic.json5", &self.backup_dir)
     }
@@ -182,6 +244,23 @@ impl Backup {
     }
 
     fn get_start_height(&self, replica_version: &str) -> u64 {
+        self.get_height_iterator(replica_version, false)
+            .min()
+            .unwrap()
+    }
+
+    /// get height of highest finalized batch in spool
+    fn get_end_height(&self, replica_version: &str) -> u64 {
+        self.get_height_iterator(replica_version, true)
+            .max()
+            .unwrap()
+    }
+
+    fn get_height_iterator(
+        &self,
+        replica_version: &str,
+        finalizations: bool,
+    ) -> impl Iterator<Item = u64> {
         let dir_path = format!(
             "{}/{}/{}/0/",
             self.spool_path(),
@@ -189,12 +268,22 @@ impl Backup {
             replica_version
         );
 
-        info!(self.logger, "Heights:");
+        let has_finalization = |path: PathBuf| {
+            std::fs::read_dir(path).unwrap().flatten().any(|artifact| {
+                artifact
+                    .file_name()
+                    .into_string()
+                    .unwrap()
+                    .contains("finalization")
+            })
+        };
+
         let heights = std::fs::read_dir(dir_path).unwrap();
         heights
+            .flatten()
+            .filter(move |height| !finalizations || has_finalization(height.path()))
             .map(|height| {
                 height
-                    .unwrap()
                     .path()
                     .into_os_string()
                     .into_string()
@@ -205,7 +294,5 @@ impl Backup {
                     .parse::<u64>()
                     .unwrap()
             })
-            .min()
-            .unwrap()
     }
 }
