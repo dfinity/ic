@@ -284,8 +284,12 @@ impl SignedBytesWithoutDomainSeparator for SignableMock {
 }
 
 /// A Crypto Component interface to create basic signatures.
+///
+/// Although the exact underlying signature scheme is unspecified and
+/// potentially subject to change, it is guaranteed to be non-malleable,
+/// that is, strongly unforgeable under chosen-message attack.
 pub trait BasicSigner<T: Signable> {
-    /// Creates a basic signature.
+    /// Creates a (non-malleable) basic signature.
     ///
     /// # Errors
     /// * `CryptoError::RegistryClient`: if the registry cannot be accessed at
@@ -312,6 +316,10 @@ pub trait BasicSigner<T: Signable> {
 /// A Crypto Component interface to verify basic signatures.
 pub trait BasicSigVerifier<T: Signable> {
     /// Verifies a basic signature.
+    ///
+    /// Although the exact underlying signature scheme is unspecified and
+    /// potentially subject to change, it is guaranteed to be non-malleable,
+    /// that is, strongly unforgeable under chosen-message attack.
     ///
     /// # Errors
     /// * `CryptoError::RegistryClient`: if the registry cannot be accessed at
