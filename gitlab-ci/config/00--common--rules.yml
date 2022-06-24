@@ -17,8 +17,20 @@
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/'
     - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
 
+# Always build and test //rs/...
+# Build and test everything in MR pipelines in specific cases:
+# - when MR hase '[bazel]' in the title
+# - when some specific files changes
+#
+# TODO: remove these conditions and just always build and test all targets when "legacy" targets will be removed.
+# "Legacy" are targets that depend on //rs:all_sources
+#
 .bazel-rules-pipeline:
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
+      variables:
+        BAZEL_TARGET: "//rs/..."
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[bazel\]/'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
         - '**/BUILD.bazel'
@@ -26,14 +38,12 @@
         - 'gitlab-ci/config/*bazel*'
         - '.bazel*'
         - 'WORKSPACE.bazel'
+        - 'bazel/*'
         - 'toolchains/*'
         - '**/Cargo*.lock'
-      when: always
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[bazel\]/'
-      when: always
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
-      allow_failure: true
+      variables:
+        BAZEL_TARGET: "//rs/..."
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
 
 .cargo-rules-autorun-on-trigger:
