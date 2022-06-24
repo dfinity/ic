@@ -272,7 +272,7 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
     ///     let metrics_registry = MetricsRegistry::new();
     ///
     ///     # // generate the node keys in the secret key store needed for this example to work:
-    ///     # get_node_keys_or_generate_if_missing(config.crypto_root.as_path());
+    ///     # get_node_keys_or_generate_if_missing(&config, None);
     ///     let first_crypto_component = Arc::new(CryptoComponent::new(&config, None, Arc::new(registry_client), logger, Some(&metrics_registry)));
     ///     let second_crypto_component = Arc::clone(&first_crypto_component);
     /// });
@@ -339,7 +339,7 @@ impl CryptoComponentFatClient<Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStor
     ) -> (Self, NodeId, TempDir) {
         let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
         let metrics = Arc::new(CryptoMetrics::none());
-        let (_npks, node_id) = get_node_keys_or_generate_if_missing(&config.crypto_root);
+        let (_npks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
         let crypto = CryptoComponentFatClient {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp: Csp::new(&config, None, None, Arc::clone(&metrics)),

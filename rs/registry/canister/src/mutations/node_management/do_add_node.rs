@@ -238,10 +238,10 @@ fn valid_keys_from_payload(
 mod tests {
     use super::*;
     use ic_base_types::NodeId;
+    use ic_config::crypto::CryptoConfig;
     use ic_crypto::utils::get_node_keys_or_generate_if_missing;
     use ic_nns_common::registry::encode_or_panic;
     use ic_protobuf::crypto::v1::NodePublicKeys;
-    use ic_test_utilities::crypto::temp_dir::temp_dir;
     use lazy_static::lazy_static;
 
     #[derive(Clone)]
@@ -252,8 +252,8 @@ mod tests {
 
     impl TestData {
         fn new() -> Self {
-            let temp_dir = temp_dir();
-            let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(temp_dir.path());
+            let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+            let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
             Self { _node_id, node_pks }
         }
     }

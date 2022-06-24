@@ -5,6 +5,7 @@ use dfn_candid::candid;
 
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
+use ic_config::crypto::CryptoConfig;
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
@@ -31,7 +32,6 @@ use ic_registry_keys::{
     make_subnet_record_key,
 };
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
-use ic_test_utilities::crypto::temp_dir::temp_dir;
 use ic_test_utilities::types::ids::{node_test_id, user_test_id};
 use ic_types::crypto::KeyPurpose;
 use ic_types::NodeId;
@@ -312,8 +312,8 @@ fn remove_nodes_removes_all_keys() {
         };
         let (init_mutation, _, _, _) = prepare_registry(1, NUM_NODES.into());
         let mut nodes_to_remove = vec![];
-
-        let (keys, node_id) = get_node_keys_or_generate_if_missing(temp_dir().path());
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        let (keys, node_id) = get_node_keys_or_generate_if_missing(&config, None);
         let valid_keys = ValidNodePublicKeys::try_from(keys, node_id).unwrap();
 
         // Add the node along with keys and certs

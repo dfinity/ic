@@ -3,7 +3,8 @@
 //! The CLI is for demo/testing purposes and not for use in production.
 //!
 //! Subcommands are used to direct work to subcomponents.
-use crate::common::utils::csp_at_root;
+use crate::common::utils::csp_for_config;
+use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
 use ic_crypto_internal_csp::Csp;
 use rand::rngs::OsRng;
@@ -55,5 +56,6 @@ pub fn csp() -> Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
     let path = std::env::current_dir()
         .expect("Cannot get current working directory")
         .join(".secret_key_store");
-    csp_at_root(&path)
+    let config = CryptoConfig::new(path);
+    csp_for_config(&config, None)
 }

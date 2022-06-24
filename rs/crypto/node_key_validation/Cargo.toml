@@ -23,5 +23,6 @@ x509-parser = { version = "0.12.0" }
 
 [dev-dependencies]
 curve25519-dalek = "3.0.2"
+ic-config = { path = "../../config" }
 ic-crypto = { path = "../../crypto" }
 ic-test-utilities = { path = "../../test_utilities" }

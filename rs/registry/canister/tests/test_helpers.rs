@@ -1,6 +1,7 @@
 use candid::Encode;
 use canister_test::{Canister, Runtime};
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
+use ic_config::crypto::CryptoConfig;
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_ic00_types::{ECDSAPublicKeyArgs, EcdsaKeyId, Method as Ic00Method};
 use ic_nns_common::registry::encode_or_panic;
@@ -20,7 +21,6 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_test_utilities::crypto::temp_dir::temp_dir;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
 use ic_types::crypto::KeyPurpose;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -141,8 +141,8 @@ pub fn prepare_registry_with_nodes(node_count: u64) -> (RegistryAtomicMutateRequ
     let mut mutations = vec![];
     let node_ids: Vec<NodeId> = (0..node_count)
         .map(|_| {
-            let temp_dir = temp_dir();
-            let (node_pks, node_id) = get_node_keys_or_generate_if_missing(temp_dir.path());
+            let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+            let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
             mutations.push(insert(
                 &make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
                 encode_or_panic(&node_pks.dkg_dealing_encryption_pk.unwrap()),

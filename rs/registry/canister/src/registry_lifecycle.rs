@@ -136,13 +136,13 @@ mod test {
     use crate::registry::{EncodedVersion, Version};
     use crate::registry_lifecycle::Registry;
     use ic_base_types::NodeId;
+    use ic_config::crypto::CryptoConfig;
     use ic_crypto::utils::get_node_keys_or_generate_if_missing;
     use ic_crypto_node_key_validation::ValidNodePublicKeys;
     use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
     use ic_protobuf::registry::node::v1::NodeRecord;
     use ic_registry_keys::{make_crypto_node_key, make_node_record_key};
     use ic_registry_transport::pb::v1::RegistryMutation;
-    use ic_test_utilities::crypto::temp_dir::temp_dir;
     use ic_types::crypto::KeyPurpose;
 
     fn stable_storage_from_registry(
@@ -252,9 +252,10 @@ mod test {
     }
 
     fn new_node_mutations() -> (NodeId, Vec<RegistryMutation>) {
-        let temp_dir = temp_dir();
-        let (keys, node_id) = get_node_keys_or_generate_if_missing(temp_dir.path());
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        let (keys, node_id) = get_node_keys_or_generate_if_missing(&config, None);
         let valid_pks = ValidNodePublicKeys::try_from(keys, node_id).unwrap();
+
         let node_record = NodeRecord {
             node_operator_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
             xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),

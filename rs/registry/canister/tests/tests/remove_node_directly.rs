@@ -1,6 +1,7 @@
 use dfn_candid::candid;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client_sender::Sender;
+use ic_config::crypto::CryptoConfig;
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_nervous_system_common_test_keys::{
@@ -26,7 +27,6 @@ use ic_registry_keys::{
 use ic_registry_transport::pb::v1::{
     registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
 };
-use ic_test_utilities::crypto::temp_dir::temp_dir;
 use ic_types::p2p::build_default_gossip_config;
 use ic_types::NodeId;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -240,8 +240,8 @@ fn node_cannot_be_removed_if_in_subnet() {
 }
 
 fn init_mutation(node_record: &NodeRecord) -> (NodeId, RegistryAtomicMutateRequest) {
-    let temp_dir = temp_dir();
-    let (keys, node_id) = get_node_keys_or_generate_if_missing(temp_dir.path());
+    let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+    let (keys, node_id) = get_node_keys_or_generate_if_missing(&config, None);
     let valid_pks = ValidNodePublicKeys::try_from(keys, node_id).unwrap();
     let mut mutations = make_add_node_registry_mutations(node_id, node_record.clone(), valid_pks);
     // Insert the node's operator

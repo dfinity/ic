@@ -1,11 +1,11 @@
 use super::*;
 use chrono::{Duration, Utc};
+use ic_config::crypto::CryptoConfig;
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_crypto_test_utils::tls::x509_certificates::ed25519_key_pair;
 use ic_crypto_test_utils::tls::x509_certificates::prime256v1_key_pair;
 use ic_crypto_test_utils::tls::x509_certificates::CertBuilder;
 use ic_crypto_test_utils::tls::x509_certificates::CertWithPrivateKey;
-use ic_test_utilities::crypto::temp_dir::temp_dir;
 use ic_types::PrincipalId;
 use openssl::hash::MessageDigest;
 use std::ops::Range;
@@ -382,8 +382,8 @@ fn invalidate_valid_ed25519_pubkey_bytes(pubkey_bytes: &[u8]) -> BasicSigEd25519
 }
 
 fn valid_cert_and_node_id() -> (X509PublicKeyCert, NodeId) {
-    let temp_dir = temp_dir();
-    let (node_keys, node_id) = get_node_keys_or_generate_if_missing(temp_dir.path());
+    let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+    let (node_keys, node_id) = get_node_keys_or_generate_if_missing(&config, None);
     (node_keys.tls_certificate.unwrap(), node_id)
 }
 

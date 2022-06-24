@@ -98,8 +98,7 @@ fn should_successfully_construct_crypto_component_for_non_replica_process_with_d
 ) {
     CryptoConfig::run_with_temp_config(|config| {
         // Create node keys.
-        let (_created_node_pks, _node_id) =
-            get_node_keys_or_generate_if_missing(&config.crypto_root);
+        let (_created_node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
 
         let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
         let _crypto = CryptoComponent::new_for_non_replica_process(
@@ -115,8 +114,7 @@ fn should_successfully_construct_crypto_component_for_non_replica_process_with_d
 fn should_provide_public_keys_via_crypto_for_non_replica_process() {
     CryptoConfig::run_with_temp_config(|config| {
         // Create node keys.
-        let (created_node_pks, _node_id) =
-            get_node_keys_or_generate_if_missing(&config.crypto_root);
+        let (created_node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
 
         let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
         let crypto = CryptoComponent::new_for_non_replica_process(
@@ -136,7 +134,7 @@ fn should_provide_public_keys_via_crypto_for_non_replica_process() {
 #[test]
 fn should_generate_all_keys_for_new_node() {
     CryptoConfig::run_with_temp_config(|config| {
-        let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config.crypto_root);
+        let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
         assert!(all_node_keys_are_present(&node_pks));
     })
 }
@@ -144,10 +142,9 @@ fn should_generate_all_keys_for_new_node() {
 #[test]
 fn should_not_generate_new_keys_if_all_keys_are_present() {
     CryptoConfig::run_with_temp_config(|config| {
-        let (orig_node_pks, orig_node_id) =
-            get_node_keys_or_generate_if_missing(&config.crypto_root);
+        let (orig_node_pks, orig_node_id) = get_node_keys_or_generate_if_missing(&config, None);
         assert!(all_node_keys_are_present(&orig_node_pks));
-        let (new_node_pks, new_node_id) = get_node_keys_or_generate_if_missing(&config.crypto_root);
+        let (new_node_pks, new_node_id) = get_node_keys_or_generate_if_missing(&config, None);
         assert!(all_node_keys_are_present(&new_node_pks));
         assert_eq!(orig_node_pks, new_node_pks);
         assert_eq!(orig_node_id, new_node_id);

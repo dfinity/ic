@@ -130,13 +130,11 @@ impl PublicKeyData {
 
 /// Implements the CryptoServiceProvider for an RNG and a SecretKeyStore.
 pub struct Csp<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> {
-    // CSPRNG stands for cryptographically secure random number generator.
-    csprng: CspRwLock<R>,
     csp_vault: Arc<dyn CspVault>,
     public_key_data: PublicKeyData,
     logger: ReplicaLogger,
-    // TODO(CRP-1325): remove S, C generics.
-    _marker: std::marker::PhantomData<(S, C)>,
+    // TODO(CRP-1325): remove R, S, C generics.
+    _marker: std::marker::PhantomData<(R, S, C)>,
 }
 
 /// This lock provides the option to add metrics about lock acquisition times.
@@ -192,13 +190,6 @@ impl<T> CspRwLock<T> {
     }
 }
 
-// CRP-1248: inline the following methods
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp<R, S, C> {
-    fn rng_write_lock(&self) -> RwLockWriteGuard<'_, R> {
-        self.csprng.write()
-    }
-}
-
 impl Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
     /// Creates a production-grade crypto service provider.
     ///
@@ -222,7 +213,6 @@ impl Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
                 tokio_runtime_handle.expect("missing tokio runtime handle"),
                 config,
                 logger,
-                metrics,
             ),
         }
     }
@@ -250,10 +240,10 @@ impl Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
         let csp_vault = Arc::new(LocalCspVault::new(
             secret_key_store,
             canister_key_store,
-            Arc::clone(&metrics),
+            metrics,
             new_logger!(&logger),
         ));
-        Self::csp_with(&config.crypto_root, logger, metrics, csp_vault)
+        Self::csp_with(&config.crypto_root, logger, csp_vault)
     }
 
     fn new_with_unix_socket_vault(
@@ -261,7 +251,6 @@ impl Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
         rt_handle: tokio::runtime::Handle,
         config: &CryptoConfig,
         logger: Option<ReplicaLogger>,
-        metrics: Arc<CryptoMetrics>,
     ) -> Self {
         let logger = logger.unwrap_or_else(no_op_logger);
         info!(
@@ -274,20 +263,13 @@ impl Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
                 socket_path, e
             )
         });
-        Self::csp_with(&config.crypto_root, logger, metrics, Arc::new(csp_vault))
+        Self::csp_with(&config.crypto_root, logger, Arc::new(csp_vault))
     }
 
-    fn csp_with(
-        pk_path: &Path,
-        logger: ReplicaLogger,
-        metrics: Arc<CryptoMetrics>,
-        csp_vault: Arc<dyn CspVault>,
-    ) -> Self {
+    fn csp_with(pk_path: &Path, logger: ReplicaLogger, csp_vault: Arc<dyn CspVault>) -> Self {
         let node_public_keys = read_node_public_keys(pk_path).unwrap_or_default();
         let public_key_data = PublicKeyData::new(node_public_keys);
-        let csprng = CspRwLock::new_for_rng(OsRng::default(), metrics);
         Csp {
-            csprng,
             public_key_data,
             csp_vault,
             logger,
@@ -307,7 +289,6 @@ impl<R: 'static + Rng + CryptoRng + Send + Sync + Clone>
         let node_public_keys = read_node_public_keys(&config.crypto_root).unwrap_or_default();
         let public_key_data = PublicKeyData::new(node_public_keys);
         Csp {
-            csprng: CspRwLock::new_for_rng(csprng.clone(), Arc::new(CryptoMetrics::none())),
             public_key_data,
             csp_vault: Arc::new(LocalCspVault::new_for_test(
                 csprng,
@@ -362,9 +343,7 @@ impl<R: 'static + Rng + CryptoRng + Send + Sync + Clone, S: 'static + SecretKeyS
     pub fn of(csprng: R, secret_key_store: S) -> Self {
         let node_public_keys = Default::default();
         let public_key_data = PublicKeyData::new(node_public_keys);
-        let metrics = Arc::new(CryptoMetrics::none());
         Csp {
-            csprng: CspRwLock::new_for_rng(csprng.clone(), metrics),
             public_key_data,
             csp_vault: Arc::new(LocalCspVault::new_for_test(csprng, secret_key_store)),
             logger: no_op_logger(),
