@@ -1,6 +1,7 @@
 [Unit]
 Description=Boundary Node Prober
-# After=setup-prober.service
+After=setup-prober.service
+ConditionPathExists=!/etc/prober/prober.disabled
 
 [Service]
 User=prober
@@ -16,4 +17,4 @@ ExecStart=/opt/ic/bin/boundary-node-prober \
     --metrics-addr "${METRICS_ADDR}"
 
 [Install]
-# WantedBy=multi-user.target
+WantedBy=multi-user.target

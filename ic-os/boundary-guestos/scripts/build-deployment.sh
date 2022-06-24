@@ -31,6 +31,7 @@ Arguments:
   -d=, --nginx-domainname=              domain name hosted by nginx ic0.dev or ic0.app
   -b=, --denylist=                      a deny list of canisters
        --prober-identity=               specify an identity file for the prober
+       --prober-hosts=                  specify hosts to run the prober on
        --git-revision=                  git revision for which to prepare the media
        --deployment-type={prod|dev}     production or development deployment type
   -x,  --debug                          enable verbose console output
@@ -69,6 +70,9 @@ Arguments:
             ;;
         --prober-identity=*)
             PROBER_IDENTITY="${argument#*=}"
+            ;;
+        --prober-hosts=*)
+            PROBER_HOSTS="${argument#*=}"
             ;;
         --deployment-type=*)
             DEPLOYMENT_TYPE="${argument#*=}"
@@ -305,6 +309,34 @@ function generate_network_config() {
     done
 }
 
+function generate_prober_config() {
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" == "boundary" ]]; then
+            local hostname=${NODE["hostname"]}
+            local subnet_idx=${NODE["subnet_idx"]}
+            local node_idx=${NODE["node_idx"]}
+
+            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+
+            # copy_prober_identity
+            if [[ -f ${PROBER_IDENTITY} ]]; then
+                echo "Using prober identity ${PROBER_IDENTITY}"
+                mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/prober
+                cp ${PROBER_IDENTITY} ${CONFIG_DIR}/$NODE_PREFIX/prober/identity.pem
+            fi
+
+            # enable/disable prober
+            IFS=',' read -r -a PROBER_HOSTS <<<"${PROBER_HOSTS}"
+            if [[ ! "${PROBER_HOSTS[*]}" =~ "${hostname}" ]]; then
+                echo "Disabling prober"
+                mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/prober
+                touch ${CONFIG_DIR}/$NODE_PREFIX/prober/prober.disabled
+            fi
+        fi
+    done
+}
+
 function copy_ssh_keys() {
     for n in $NODES; do
         declare -n NODE=$n
@@ -338,23 +370,6 @@ function copy_deny_list() {
             else
                 echo "Using empty denylist"
                 touch ${CONFIG_DIR}/${NODE_PREFIX}/denylist.map
-            fi
-        fi
-    done
-}
-
-function copy_prober_identity() {
-    for n in $NODES; do
-        declare -n NODE=$n
-        if [[ "${NODE["type"]}" == "boundary" ]]; then
-            local subnet_idx=${NODE["subnet_idx"]}
-            local node_idx=${NODE["node_idx"]}
-
-            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
-            if [[ -f ${PROBER_IDENTITY} ]]; then
-                echo "Using prober identity ${PROBER_IDENTITY}"
-                mkdir -p ${CONFIG_DIR}/$NODE_PREFIX/prober
-                cp ${PROBER_IDENTITY} ${CONFIG_DIR}/$NODE_PREFIX/prober/identity.pem
             fi
         fi
     done
@@ -429,10 +444,10 @@ function main() {
     generate_boundary_node_config
     generate_journalbeat_config
     generate_network_config
+    generate_prober_config
     copy_ssh_keys
     copy_certs
     copy_deny_list
-    copy_prober_identity
     build_tarball
     build_removable_media
     # remove_temporary_directories
