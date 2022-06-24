@@ -39,6 +39,7 @@ use crate::{
 use core::time;
 use ic_registry_subnet_type::SubnetType;
 use ic_replay::player::ReplayError;
+use ic_types::consensus::ConsensusMessageHash;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use std::convert::TryFrom;
@@ -141,9 +142,30 @@ pub fn test(env: TestEnv) {
             "nns_backup_test: Let's pull some more artefacts and replay with the new version."
         );
         backup.rsync_spool();
+        let invalid_height = backup.store_invalid_artifacts(&test_version);
+        info!(
+            log,
+            "nns_backup_test: Storing invalid artifacts at height: {}.", invalid_height,
+        );
         match backup.replay(&test_version) {
             Ok(state_params) => {
                 if state_params.height > upgrade_height {
+                    info!(log, "nns_backup_test: Found invalid artifacts:");
+                    info!(log, "{:?}", state_params.invalid_artifacts);
+                    assert!(
+                        state_params.invalid_artifacts.iter().any(|artifact| {
+                            matches!(artifact.id.hash, ConsensusMessageHash::RandomBeacon(_))
+                        }),
+                        "nns_backup_test: Injected invalid artifact not detected."
+                    );
+                    assert!(
+                        state_params
+                            .invalid_artifacts
+                            .iter()
+                            .all(|artifact| artifact.id.height == invalid_height),
+                        "nns_backup_test: Found invalid artifacts at height other than {}",
+                        invalid_height
+                    );
                     return;
                 }
             }

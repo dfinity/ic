@@ -27,6 +27,7 @@ garcon = "0.2"
 humantime = "2.0"
 ic-base-types = { path = "../types/base_types" }
 hex = "0.4.2"
+ic-artifact-pool = { path = "../artifact_pool" }
 ic-btc-types = { path = "../bitcoin/types/public" }
 ic-canister-client = { path = "../canister_client" }
 ic-certified-vars = { path = "../certified_vars" }
@@ -67,6 +68,7 @@ ic-replay = { path = "../replay" }
 ic-rosetta-api = { path = "../rosetta-api" }
 ic-rosetta-test-utils = { path = "../rosetta-api/test_utils" }
 ic-test-identity = { path = "../test_utilities/identity" }
+ic-test-utilities = { path = "../test_utilities" }
 ic-types = { path = "../types/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }

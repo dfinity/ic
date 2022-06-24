@@ -13,7 +13,7 @@ mod pool_common;
 #[cfg(test)]
 mod test_utils;
 
-mod backup;
+pub mod backup;
 mod lmdb_iterator;
 mod lmdb_pool;
 
