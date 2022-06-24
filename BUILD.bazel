@@ -52,6 +52,7 @@ cargo_build(
         "ic-recovery",
         "orchestrator",
         "replica",
+        "sandbox_launcher",
         "state-tool",
         "vsock_agent",
     ],

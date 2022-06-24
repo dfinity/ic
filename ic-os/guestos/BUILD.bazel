@@ -92,6 +92,7 @@ IC_OS_IMAGE_DEPS = {
         "//:ic-recovery": "/opt/ic/bin/ic-recovery:0755",
         "//:orchestrator": "/opt/ic/bin/orchestrator:0755",
         "//:replica": "/opt/ic/bin/replica:0755",
+        "//:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",
         "//:state-tool": "/opt/ic/bin/state-tool:0755",
         "//:vsock_agent": "/opt/ic/bin/vsock_agent:0755",
     },
