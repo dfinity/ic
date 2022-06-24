@@ -376,6 +376,36 @@ impl StateMachine {
         self.execute_block_with_ingress_payload(IngressPayload::default())
     }
 
+    /// Makes the state machine tick until there are no more messages in the system.
+    /// This method is useful if you need to wait for asynchronous canister communication to
+    /// complete.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the state machine did not process all messages within the
+    /// `max_ticks` iterations.
+    pub fn run_until_completion(&self, max_ticks: usize) {
+        let mut reached_completion = false;
+        for _tick in 0..max_ticks {
+            let state = self.state_manager.get_latest_state().take();
+            reached_completion = !state
+                .canisters_iter()
+                .any(|canister| canister.has_input() || canister.has_output())
+                && !state.subnet_queues().has_input()
+                && !state.subnet_queues().has_output();
+            if reached_completion {
+                break;
+            }
+            self.tick();
+        }
+        if !reached_completion {
+            panic!(
+                "The state machine did not reach completion after {} ticks",
+                max_ticks
+            );
+        }
+    }
+
     fn execute_block_with_ingress_payload(&self, ingress: IngressPayload) {
         let batch_number = self.message_routing.expected_batch_height();
         let batch = Batch {
