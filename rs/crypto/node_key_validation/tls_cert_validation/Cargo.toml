@@ -22,6 +22,7 @@ dfn_core = { path = "../../../rust_canisters/dfn_core" }
 
 [dev-dependencies]
 curve25519-dalek = "3.0.2"
+ic-config = { path = "../../../config"}
 ic-crypto = { path = "../../../crypto" }
 ic-crypto-test-utils = { path = "../../test_utils" }
 ic-test-utilities = { path = "../../../test_utilities" }

@@ -5,6 +5,7 @@ use crate::mutations::node_management::do_add_node::{
 };
 use crate::registry::Registry;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_config::crypto::CryptoConfig;
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_nns_test_utils::registry::invariant_compliant_mutation;
 use ic_protobuf::registry::node::v1::NodeRecord;
@@ -16,7 +17,6 @@ use ic_registry_transport::pb::v1::{
     registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
 };
 use ic_registry_transport::{insert, upsert};
-use ic_test_utilities::crypto::temp_dir::temp_dir;
 use ic_types::crypto::KeyPurpose;
 
 pub fn invariant_compliant_registry() -> Registry {
@@ -88,8 +88,8 @@ pub fn prepare_registry_with_nodes(nodes: u64) -> (RegistryAtomicMutateRequest, 
     let mut mutations = Vec::<RegistryMutation>::default();
     let node_ids: Vec<NodeId> = (0..nodes)
         .map(|_| {
-            let temp_dir = temp_dir();
-            let (node_pks, node_id) = get_node_keys_or_generate_if_missing(temp_dir.path());
+            let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+            let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
             mutations.push(insert(
                 &make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
                 encode_or_panic(&node_pks.dkg_dealing_encryption_pk.unwrap()),

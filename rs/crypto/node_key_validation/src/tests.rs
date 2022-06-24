@@ -1,8 +1,8 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
 use ic_base_types::PrincipalId;
+use ic_config::crypto::CryptoConfig;
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
-use ic_test_utilities::crypto::temp_dir::temp_dir;
 
 #[test]
 fn should_succeed_on_valid_keys() {
@@ -518,8 +518,8 @@ fn valid_node_keys() -> NodePublicKeys {
 }
 
 pub fn valid_node_keys_and_node_id() -> (NodePublicKeys, NodeId) {
-    let temp_dir = temp_dir();
-    get_node_keys_or_generate_if_missing(temp_dir.path())
+    let (config, _tepm_dir) = CryptoConfig::new_in_temp_dir();
+    get_node_keys_or_generate_if_missing(&config, None)
 }
 
 pub fn node_id(n: u64) -> NodeId {

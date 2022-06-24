@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
 use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
+use crate::types::CspSecretKey;
 use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
 use ic_types_test_utils::ids::node_test_id;
 use openssl::x509::X509NameEntries;
@@ -153,6 +154,7 @@ mod multi {
 mod tls {
     use super::*;
     use crate::secret_key_store::test_utils::MockSecretKeyStore;
+    use crate::secret_key_store::SecretKeyStoreError;
     use crate::vault::api::CspVault;
     use openssl::pkey::{Id, PKey};
     use openssl::x509::X509VerifyResult;

@@ -1,12 +1,10 @@
 //! Static crypto utility methods.
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_csp::api::{
-    CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker, NiDkgCspClient,
-};
-use ic_crypto_internal_csp::public_key_store;
+use ic_crypto_internal_csp::api::CspSecretKeyStoreChecker;
 use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
 use ic_crypto_internal_csp::Csp;
+use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_utils_basic_sig::conversions as basicsig_conversions;
 use ic_protobuf::crypto::v1::NodePublicKeys;
@@ -32,6 +30,8 @@ use crate::keygen::{
 pub use crate::sign::utils::combined_threshold_signature_and_public_key;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 pub use temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
+#[cfg(test)]
+use tempfile::TempDir;
 
 #[cfg(test)]
 mod tests;
@@ -39,14 +39,12 @@ mod tests;
 /// Generates (forward-secure) NI-DKG dealing encryption key material given the
 /// `node_id` of the node.
 ///
-/// Stores the secret key in the key store at `crypto_root` and returns the
-/// corresponding public key.
-///
-/// The `crypto_root` directory must exist and have the [permissions required
-/// for storing crypto state](CryptoConfig::check_dir_has_required_permissions).
-/// If there exists no key store in `crypto_root`, a new one is created.
-pub fn generate_dkg_dealing_encryption_keys(crypto_root: &Path, node_id: NodeId) -> PublicKeyProto {
-    let mut csp = csp_at_root(crypto_root);
+/// The secret key is stored in the key store of the provided `csp`, while the corresponding
+/// public key is returned by this function.
+fn generate_dkg_dealing_encryption_keys(
+    csp: &mut dyn CryptoServiceProvider,
+    node_id: NodeId,
+) -> PublicKeyProto {
     let (pubkey, pop) = csp
         .create_forward_secure_key_pair(AlgorithmId::NiDkg_Groth20_Bls12_381, node_id)
         .expect("Failed to generate DKG dealing encryption keys");
@@ -55,14 +53,9 @@ pub fn generate_dkg_dealing_encryption_keys(crypto_root: &Path, node_id: NodeId)
 
 /// Generates (MEGa) I-DKG dealing encryption key material.
 ///
-/// Stores the secret key in the key store at `crypto_root` and returns the
-/// corresponding public key.
-///
-/// The `crypto_root` directory must exist and have the [permissions required
-/// for storing crypto state](CryptoConfig::check_dir_has_required_permissions).
-/// If there exists no key store in `crypto_root`, a new one is created.
-pub fn generate_idkg_dealing_encryption_keys(crypto_root: &Path) -> PublicKeyProto {
-    let mut csp = csp_at_root(crypto_root);
+/// The secret key is stored in the key store of the provided `csp`, while the corresponding
+/// public key is returned by this function.
+fn generate_idkg_dealing_encryption_keys(csp: &mut dyn CryptoServiceProvider) -> PublicKeyProto {
     let pubkey = csp
         .idkg_create_mega_key_pair(AlgorithmId::ThresholdEcdsaSecp256k1)
         .expect("Failed to generate IDkg dealing encryption keys");
@@ -77,36 +70,41 @@ pub fn generate_idkg_dealing_encryption_keys(crypto_root: &Path) -> PublicKeyPro
 
 /// Obtains the node's cryptographic keys or generates them if they are missing.
 ///
-/// First, tries to retrieve the node's public keys from `crypto_root`. If they
-/// exist and they are consistent with the secret keys in `crypto_root`, the
+/// To check/generate the keys, a CSP client is created according to the given `config`.
+/// First, tries to retrieve the node's public keys from `config.crypto_root`. If they
+/// exist and they are consistent with the secret keys in kept by the CSP, the
 /// public keys are returned together with the corresponding node ID.
 ///
 /// If they do not exist, new keys are generated: the secret parts are stored in
-/// a secret key store at `crypto_root`, and the public parts are stored in a
-/// public key store at `crypto_root`. The keys are generated for a particular
+/// the secret key store of the CSP, and the public parts are stored in a
+/// public key store at `config.crypto_root`. The keys are generated for a particular
 /// node ID, which is derived from the node's signing public key. In particular,
 /// the node's TLS certificate and the node's DKG dealing encryption key are
 /// bound to this node ID. The newly generated public keys are then returned
 /// together with the corresponding node ID.
 ///
-/// The `crypto_root` directory must exist and have the [permissions required
+/// The `config.crypto_root` directory must exist and have the [permissions required
 /// for storing crypto state](CryptoConfig::check_dir_has_required_permissions).
-/// If there exists no key store in `crypto_root`, a new one is created.
+/// If there exists no key store in `config.crypto_root`, a new one is created.
 ///
 /// # Panics
 ///  * if public keys exist but are inconsistent with the secret keys.
 ///  * if an error occurs when accessing or generating the keys.
-pub fn get_node_keys_or_generate_if_missing(crypto_root: &Path) -> (NodePublicKeys, NodeId) {
-    match check_keys_locally(crypto_root) {
+pub fn get_node_keys_or_generate_if_missing(
+    config: &CryptoConfig,
+    tokio_runtime_handle: Option<tokio::runtime::Handle>,
+) -> (NodePublicKeys, NodeId) {
+    let crypto_root = config.crypto_root.as_path();
+    match check_keys_locally(config, tokio_runtime_handle.clone()) {
         Ok(None) => {
             // Generate new keys.
-            let committee_signing_pk = generate_committee_signing_keys(crypto_root);
-            let node_signing_pk = generate_node_signing_keys(crypto_root);
+            let mut csp = csp_for_config(config, tokio_runtime_handle.clone());
+            let committee_signing_pk = generate_committee_signing_keys(&csp);
+            let node_signing_pk = generate_node_signing_keys(&csp);
             let node_id = derive_node_id(&node_signing_pk);
-            let dkg_dealing_encryption_pk =
-                generate_dkg_dealing_encryption_keys(crypto_root, node_id);
-            let idkg_dealing_encryption_pk = generate_idkg_dealing_encryption_keys(crypto_root);
-            let tls_certificate = generate_tls_keys(crypto_root, node_id).to_proto();
+            let dkg_dealing_encryption_pk = generate_dkg_dealing_encryption_keys(&mut csp, node_id);
+            let idkg_dealing_encryption_pk = generate_idkg_dealing_encryption_keys(&mut csp);
+            let tls_certificate = generate_tls_keys(&mut csp, node_id).to_proto();
             let node_pks = NodePublicKeys {
                 version: 1,
                 node_signing_pk: Some(node_signing_pk),
@@ -118,7 +116,7 @@ pub fn get_node_keys_or_generate_if_missing(crypto_root: &Path) -> (NodePublicKe
             public_key_store::store_node_public_keys(crypto_root, &node_pks)
                 .unwrap_or_else(|_| panic!("Failed to store public key material"));
             // Re-check the generated keys.
-            let stored_keys = check_keys_locally(crypto_root)
+            let stored_keys = check_keys_locally(config, tokio_runtime_handle)
                 .expect("Could not read generated keys.")
                 .expect("Newly generated keys are inconsistent.");
             if stored_keys != node_pks {
@@ -133,13 +131,14 @@ pub fn get_node_keys_or_generate_if_missing(crypto_root: &Path) -> (NodePublicKe
             // version will be consistent on all nodes, no matter what it was
             // before.
             if node_pks.idkg_dealing_encryption_pk.is_none() {
-                let idkg_dealing_encryption_pk = generate_idkg_dealing_encryption_keys(crypto_root);
+                let mut csp = csp_for_config(config, tokio_runtime_handle.clone());
+                let idkg_dealing_encryption_pk = generate_idkg_dealing_encryption_keys(&mut csp);
                 node_pks.idkg_dealing_encryption_pk = Some(idkg_dealing_encryption_pk);
                 node_pks.version = 1;
                 public_key_store::store_node_public_keys(crypto_root, &node_pks)
                     .unwrap_or_else(|_| panic!("Failed to store public key material"));
                 // Re-check the generated keys.
-                let stored_keys = check_keys_locally(crypto_root)
+                let stored_keys = check_keys_locally(config, tokio_runtime_handle)
                     .expect("Could not read generated keys.")
                     .expect("Newly generated keys are inconsistent.");
                 if stored_keys != node_pks {
@@ -162,8 +161,7 @@ pub fn derive_node_id(node_signing_pk: &PublicKeyProto) -> NodeId {
         .expect("Corrupted node signing public key")
 }
 
-fn generate_node_signing_keys(crypto_root: &Path) -> PublicKeyProto {
-    let csp = csp_at_root(crypto_root);
+fn generate_node_signing_keys(csp: &dyn CryptoServiceProvider) -> PublicKeyProto {
     let generated = csp
         .gen_key_pair(AlgorithmId::Ed25519)
         .expect("Could not generate node signing keys");
@@ -192,7 +190,11 @@ fn read_public_keys(crypto_root: &Path) -> CryptoResult<NodePublicKeys> {
 ///    consistent with the secret keys.
 ///  - `Ok(None)` if no public keys are found.
 ///  - `Err(...)` in all other cases.
-fn check_keys_locally(crypto_root: &Path) -> CryptoResult<Option<NodePublicKeys>> {
+fn check_keys_locally(
+    config: &CryptoConfig,
+    tokio_runtime_handle: Option<tokio::runtime::Handle>,
+) -> CryptoResult<Option<NodePublicKeys>> {
+    let crypto_root = config.crypto_root.as_path();
     let node_pks = match read_public_keys(crypto_root) {
         Ok(pks) => pks,
         Err(_) => return Ok(None),
@@ -200,7 +202,7 @@ fn check_keys_locally(crypto_root: &Path) -> CryptoResult<Option<NodePublicKeys>
     if node_public_keys_are_empty(&node_pks) {
         return Ok(None);
     }
-    let csp = csp_at_root(crypto_root);
+    let csp = csp_for_config(config, tokio_runtime_handle);
     ensure_node_signing_key_is_set_up_locally(node_pks.node_signing_pk.clone(), &csp)?;
     ensure_committee_signing_key_is_set_up_locally(node_pks.committee_signing_pk.clone(), &csp)?;
     ensure_dkg_dealing_encryption_key_is_set_up_locally(
@@ -291,8 +293,7 @@ fn ensure_tls_cert_is_set_up_locally(
     Ok(())
 }
 
-fn generate_committee_signing_keys(crypto_root: &Path) -> PublicKeyProto {
-    let csp = csp_at_root(crypto_root);
+fn generate_committee_signing_keys(csp: &dyn CryptoServiceProvider) -> PublicKeyProto {
     let generated = csp
         .gen_key_pair_with_pop(AlgorithmId::MultiBls12_381)
         .expect("Could not generate committee signing keys");
@@ -311,26 +312,35 @@ fn generate_committee_signing_keys(crypto_root: &Path) -> PublicKeyProto {
 
 /// Generates TLS key material for a `node`.
 ///
-/// Stores the secret key in the key store at `crypto_root` and uses it to
-/// create a self-signed public key certificate. If there exists no key store
-/// in `crypto_root` yet, a new key store is created.
-///
+/// The secret key is stored in the key store of the provided `csp`,
+/// and is used to create a self-signed public key certificate returned by this function.
 ///
 /// The certificate's notAfter date indicates according to RFC5280 (section
 /// 4.1.2.5; see https://tools.ietf.org/html/rfc5280#section-4.1.2.5) that the
 /// certificate has no well-defined expiration date.
-///
-/// Returns the certificate.
-fn generate_tls_keys(crypto_root: &Path, node: NodeId) -> TlsPublicKeyCert {
-    let mut csp = csp_at_root(crypto_root);
+fn generate_tls_keys(csp: &mut dyn CryptoServiceProvider, node: NodeId) -> TlsPublicKeyCert {
     csp.gen_tls_key_pair(node, "99991231235959Z")
         .expect("error generating TLS key pair")
 }
 
-pub(crate) fn csp_at_root(
-    crypto_root: &Path,
+pub(crate) fn csp_for_config(
+    config: &CryptoConfig,
+    tokio_runtime_handle: Option<tokio::runtime::Handle>,
 ) -> Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
-    let config = CryptoConfig::new(crypto_root.to_path_buf());
-    // disable metrics
-    Csp::new(&config, None, None, Arc::new(CryptoMetrics::none()))
+    Csp::new(
+        config,
+        tokio_runtime_handle,
+        None,
+        Arc::new(CryptoMetrics::none()),
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn local_csp_in_temp_dir() -> (
+    Csp<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore>,
+    TempDir,
+) {
+    let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
+    let csp = csp_for_config(&config, None);
+    (csp, temp_dir)
 }

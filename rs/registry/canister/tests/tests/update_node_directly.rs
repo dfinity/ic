@@ -2,7 +2,8 @@ use canister_test::Canister;
 use dfn_candid::candid;
 use ic_base_types::NodeId;
 use ic_canister_client_sender::Sender;
-use ic_crypto::utils::generate_idkg_dealing_encryption_keys;
+use ic_config::crypto::CryptoConfig;
+use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR, TEST_USER2_PRINCIPAL,
 };
@@ -19,7 +20,6 @@ use ic_registry_keys::{make_crypto_node_key, make_node_record_key};
 use ic_registry_transport::pb::v1::{
     registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
 };
-use ic_test_utilities::crypto::temp_dir::temp_dir;
 use ic_types::crypto::KeyPurpose;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
@@ -51,9 +51,11 @@ fn node_is_updated_on_receiving_the_request() {
         let valid_sender = Sender::from_keypair(&TEST_USER2_KEYPAIR);
         let invalid_sender = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         // Generate a new key
-        let temp_dir = temp_dir();
-        let good_idkg_dealing_encryption_pk =
-            generate_idkg_dealing_encryption_keys(temp_dir.path());
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        let (pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
+        let good_idkg_dealing_encryption_pk = pks
+            .idkg_dealing_encryption_pk
+            .expect("Missing idkg_dealing_encryption_pk");
         let mut bad_idkg_dealing_encryption_pk = good_idkg_dealing_encryption_pk.clone();
         bad_idkg_dealing_encryption_pk.key_value = b"invalid key".to_vec();
 

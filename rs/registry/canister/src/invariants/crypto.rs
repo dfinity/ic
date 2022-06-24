@@ -303,12 +303,12 @@ fn check_no_orphaned_node_crypto_records(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_config::crypto::CryptoConfig;
     use ic_crypto::utils::get_node_keys_or_generate_if_missing;
     use ic_nns_common::registry::encode_or_panic;
     use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
     use ic_protobuf::registry::node::v1::NodeRecord;
     use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
-    use ic_test_utilities::crypto::temp_dir::temp_dir;
 
     fn insert_node_crypto_keys(
         node_id: &NodeId,
@@ -350,8 +350,8 @@ mod tests {
     }
 
     fn valid_node_keys_and_node_id() -> (NodePublicKeys, NodeId) {
-        let temp_dir = temp_dir();
-        get_node_keys_or_generate_if_missing(temp_dir.path())
+        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+        get_node_keys_or_generate_if_missing(&config, None)
     }
 
     fn insert_dummy_node(node_id: &NodeId, snapshot: &mut RegistrySnapshot) {

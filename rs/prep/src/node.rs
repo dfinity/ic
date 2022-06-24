@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::util::{write_proto_to_file_raw, write_registry_entry};
+use ic_config::crypto::CryptoConfig;
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_protobuf::{
     crypto::v1::NodePublicKeys,
@@ -424,7 +425,8 @@ impl NodeSecretKeyStore {
             }
         })?;
         Self::set_permissions(&path)?;
-        let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&path);
+        let config = CryptoConfig::new(path.clone());
+        let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
 
         use prost::Message;
         let node_pks = node_pks.encode_to_vec();

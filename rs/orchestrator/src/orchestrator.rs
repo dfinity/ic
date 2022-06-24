@@ -68,7 +68,16 @@ impl Orchestrator {
         args.create_dirs();
         let metrics_addr = args.get_metrics_addr();
         let config = args.get_ic_config();
-        let (_node_pks, node_id) = get_node_keys_or_generate_if_missing(&config.crypto.crypto_root);
+        let node_id = tokio::task::block_in_place({
+            let crypto_config = config.crypto.clone();
+            move || {
+                let (_node_pks, node_id) = get_node_keys_or_generate_if_missing(
+                    &crypto_config,
+                    Some(tokio::runtime::Handle::current()),
+                );
+                node_id
+            }
+        });
 
         let (logger, _async_log_guard) =
             new_replica_logger_from_config(&config.orchestrator_logger);
@@ -299,7 +308,16 @@ impl Orchestrator {
     /// Print the replica's current node ID.
     pub fn node_id(args: OrchestratorArgs) {
         let config = args.get_ic_config();
-        let (_node_pks, node_id) = get_node_keys_or_generate_if_missing(&config.crypto.crypto_root);
+        let node_id = tokio::task::block_in_place({
+            let crypto_config = config.crypto;
+            move || {
+                let (_node_pks, node_id) = get_node_keys_or_generate_if_missing(
+                    &crypto_config,
+                    Some(tokio::runtime::Handle::current()),
+                );
+                node_id
+            }
+        });
 
         println!("{}", node_id);
     }
@@ -307,7 +325,16 @@ impl Orchestrator {
     /// Print the DC ID where the current replica is located.
     pub fn dc_id(args: OrchestratorArgs) {
         let config = args.get_ic_config();
-        let (_node_pks, node_id) = get_node_keys_or_generate_if_missing(&config.crypto.crypto_root);
+        let node_id = tokio::task::block_in_place({
+            let crypto_config = config.crypto.clone();
+            move || {
+                let (_node_pks, node_id) = get_node_keys_or_generate_if_missing(
+                    &crypto_config,
+                    Some(tokio::runtime::Handle::current()),
+                );
+                node_id
+            }
+        });
 
         let (logger, _async_log_guard) =
             new_replica_logger_from_config(&config.orchestrator_logger);

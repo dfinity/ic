@@ -1,18 +1,17 @@
 //! Utilities for key generation and key identifier generation
 
 use crate::api::{CspKeyGenerator, CspSecretKeyStoreChecker};
-use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreError};
-use crate::types::{CspPop, CspPublicKey, CspSecretKey};
+use crate::secret_key_store::SecretKeyStore;
+use crate::types::{CspPop, CspPublicKey};
+use crate::vault::api::CspTlsKeygenError;
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey, PolynomialCommitment};
-use ic_crypto_internal_tls::keygen::{generate_tls_key_pair_der, TlsKeyPairAndCertGenerationError};
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_sha::Sha256;
 use ic_crypto_sha::{Context, DomainSeparationContext};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::{AlgorithmId, CryptoError, KeyId};
 use ic_types::NodeId;
-use openssl::asn1::Asn1Time;
 use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
 pub use tls_keygen::tls_cert_hash_as_key_id;
@@ -47,28 +46,24 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp
         node: NodeId,
         not_after: &str,
     ) -> Result<TlsPublicKeyCert, CryptoError> {
-        let common_name = &node.get().to_string()[..];
-        let not_after_asn1 =
-            Asn1Time::from_str_x509(not_after).map_err(|_| CryptoError::InvalidNotAfterDate {
-                message: "invalid X.509 certificate expiration date (not_after)".to_string(),
-                not_after: not_after.to_string(),
-            })?;
-
-        let (cert, secret_key) =
-            generate_tls_key_pair_der(&mut *self.rng_write_lock(), common_name, &not_after_asn1)
-                .map_err(
-                    |TlsKeyPairAndCertGenerationError::InvalidNotAfterDate { message: e }| {
-                        CryptoError::InvalidNotAfterDate {
-                            message: e,
-                            not_after: not_after.to_string(),
-                        }
+        let (_key_id, cert) =
+            self.csp_vault
+                .gen_tls_key_pair(node, not_after)
+                .map_err(|e| match e {
+                    CspTlsKeygenError::InvalidNotAfterDate {
+                        message: msg,
+                        not_after: date,
+                    } => CryptoError::InvalidNotAfterDate {
+                        message: msg,
+                        not_after: date,
                     },
-                )?;
-
-        let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes)
-            .expect("generated X509 certificate has malformed DER encoding");
-        let _key_id = self.store_tls_secret_key(&x509_pk_cert, secret_key);
-        Ok(x509_pk_cert)
+                    CspTlsKeygenError::InternalError {
+                        internal_error: msg,
+                    } => CryptoError::InternalError {
+                        internal_error: msg,
+                    },
+                })?;
+        Ok(cert)
     }
 }
 
@@ -83,20 +78,6 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
         // we calculate the key_id first to minimize locking time:
         let key_id = tls_cert_hash_as_key_id(cert);
         self.sks_contains(&key_id)
-    }
-}
-
-impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp<R, S, C> {
-    fn store_secret_key_or_panic(&self, csp_secret_key: CspSecretKey, key_id: KeyId) {
-        match &self
-            .csp_vault
-            .insert_secret_key(key_id, csp_secret_key, None)
-        {
-            Ok(()) => {}
-            Err(SecretKeyStoreError::DuplicateKeyId(key_id)) => {
-                panic!("A key with ID {} has already been inserted", key_id);
-            }
-        };
     }
 }
 
@@ -158,23 +139,10 @@ pub fn commitment_key_id(commitment: &PolynomialCommitment) -> KeyId {
 
 mod tls_keygen {
     use super::*;
-    use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
 
     /// Create a key identifier by hashing the bytes of the certificate
     pub fn tls_cert_hash_as_key_id(cert: &TlsPublicKeyCert) -> KeyId {
         bytes_hash_as_key_id(AlgorithmId::Tls, cert.as_der())
-    }
-
-    impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Csp<R, S, C> {
-        pub(super) fn store_tls_secret_key(
-            &mut self,
-            cert: &TlsPublicKeyCert,
-            secret_key: TlsEd25519SecretKeyDerBytes,
-        ) -> KeyId {
-            let key_id = tls_cert_hash_as_key_id(cert);
-            self.store_secret_key_or_panic(CspSecretKey::TlsEd25519(secret_key), key_id);
-            key_id
-        }
     }
 }
 

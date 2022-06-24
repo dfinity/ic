@@ -3,6 +3,7 @@ use crate::common::utils::{
     generate_committee_signing_keys, generate_dkg_dealing_encryption_keys,
     generate_idkg_dealing_encryption_keys, generate_node_signing_keys,
 };
+use crate::utils::csp_for_config;
 use crate::{derive_node_id, CryptoComponent, CryptoComponentFatClient};
 use async_trait::async_trait;
 use ic_base_types::PrincipalId;
@@ -179,13 +180,13 @@ impl TempCryptoBuilder {
 
     pub fn build(self) -> TempCryptoComponent {
         let (mut config, temp_dir) = CryptoConfig::new_in_temp_dir();
-
+        let mut csp = csp_for_config(&config, None);
         let node_keys_to_generate = self
             .node_keys_to_generate
             .unwrap_or_else(|| NodeKeysToGenerate::none());
         let node_signing_pk = node_keys_to_generate
             .generate_node_signing_keys
-            .then(|| generate_node_signing_keys(&config.crypto_root));
+            .then(|| generate_node_signing_keys(&csp));
         let node_id = self.node_id.unwrap_or_else(|| {
             node_signing_pk.as_ref().map_or(
                 NodeId::from(PrincipalId::new_node_test_id(Self::DEFAULT_NODE_ID)),
@@ -194,16 +195,16 @@ impl TempCryptoBuilder {
         });
         let committee_signing_pk = node_keys_to_generate
             .generate_committee_signing_keys
-            .then(|| generate_committee_signing_keys(&config.crypto_root));
+            .then(|| generate_committee_signing_keys(&csp));
         let dkg_dealing_encryption_pk = node_keys_to_generate
             .generate_dkg_dealing_encryption_keys
-            .then(|| generate_dkg_dealing_encryption_keys(&config.crypto_root, node_id));
+            .then(|| generate_dkg_dealing_encryption_keys(&mut csp, node_id));
         let idkg_dealing_encryption_pk = node_keys_to_generate
             .generate_idkg_dealing_encryption_keys
-            .then(|| generate_idkg_dealing_encryption_keys(&config.crypto_root));
+            .then(|| generate_idkg_dealing_encryption_keys(&mut csp));
         let tls_certificate = node_keys_to_generate
             .generate_tls_keys_and_certificate
-            .then(|| generate_tls_keys(&config.crypto_root, node_id).to_proto());
+            .then(|| generate_tls_keys(&mut csp, node_id).to_proto());
 
         let registry_client = if let Some(registry_client) = self.registry_client {
             registry_client
