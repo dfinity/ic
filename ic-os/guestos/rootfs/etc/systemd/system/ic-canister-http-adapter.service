@@ -10,7 +10,8 @@ StartLimitIntervalSec=0
 [Service]
 User=ic-replica
 Environment=RUST_BACKTRACE=1
-ExecStart=/opt/ic/bin/ic-canister-http-adapter /etc/ic/adapters/canister_http_adapter_config.json
+ExecStartPre=+/opt/ic/bin/generate-canister-http-adapter-config.sh -o /run/ic-node/config/ic-canister-http-adapter.json
+ExecStart=/opt/ic/bin/ic-canister-http-adapter /run/ic-node/config/ic-canister-http-adapter.json
 NotifyAccess=main
 Restart=always
 
