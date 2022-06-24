@@ -298,5 +298,5 @@ service : (Governance) -> {
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_proposals : (ListProposals) -> (ListProposalsResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
-  set_mode : (SetMode) -> ();
+  set_mode : (SetMode) -> (record {});
 }

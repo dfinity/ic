@@ -10,10 +10,26 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     let proto_file = proto.sale.join("ic_sns_sale/pb/v1/sale.proto");
 
     let mut config = Config::new();
+    config.protoc_arg("--experimental_allow_proto3_optional");
 
     // Use BTreeMap for all maps to enforce determinism and to be able to use reverse
     // iterators.
     config.btree_map(&["."]);
+
+    config.type_attribute(
+        "ic_sns_sale.pb.v1.SetModeCallResult",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+
+    config.type_attribute(
+        "ic_sns_sale.pb.v1.SetModeCallResult.possibility",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+
+    config.type_attribute(
+        "ic_sns_sale.pb.v1.CanisterCallError",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
 
     config.type_attribute(
         "ic_sns_sale.pb.v1.Sale",

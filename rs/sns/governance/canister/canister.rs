@@ -38,7 +38,7 @@ use ic_sns_governance::{
         governance, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
         Governance as GovernanceProto, ListNervousSystemFunctionsResponse, ListNeurons,
         ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
-        ManageNeuronResponse, NervousSystemParameters, RewardEvent, SetMode,
+        ManageNeuronResponse, NervousSystemParameters, RewardEvent, SetMode, SetModeResponse,
     },
     types::{Environment, HeapGrowthPotential},
 };
@@ -465,8 +465,9 @@ fn set_mode() {
 
 /// Internal method for calling set_mode.
 #[candid_method(update, rename = "set_mode")]
-fn set_mode_(request: SetMode) {
+fn set_mode_(request: SetMode) -> SetModeResponse {
     governance_mut().set_mode(request.mode, &caller());
+    SetModeResponse {}
 }
 
 /// The canister's heartbeat.

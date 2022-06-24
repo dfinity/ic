@@ -4,11 +4,13 @@ type BuyerState = record {
   amount_icp_e8s : nat64;
   sns_disbursing : bool;
 };
+type CanisterCallError = record { code : opt int32; description : text };
 type DerivedState = record {
   sns_tokens_per_icp : float32;
   buyer_total_icp_e8s : nat64;
 };
 type FinalizeSaleResponse = record {
+  sns_governance_normal_mode_enabled : opt SetModeCallResult;
   sweep_icp : opt SweepResult;
   sweep_sns : opt SweepResult;
   create_neuron : opt SweepResult;
@@ -25,8 +27,10 @@ type Init = record {
   sns_ledger_canister_id : text;
   sns_governance_canister_id : text;
 };
+type Possibility = variant { Err : CanisterCallError };
 type RefreshBuyerTokensRequest = record { buyer : text };
 type Sale = record { init : opt Init; state : opt State };
+type SetModeCallResult = record { possibility : opt Possibility };
 type State = record {
   sns_token_e8s : nat64;
   lifecycle : int32;

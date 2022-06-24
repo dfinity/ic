@@ -1469,6 +1469,10 @@ pub struct SetMode {
     #[prost(enumeration="governance::Mode", tag="1")]
     pub mode: i32,
 }
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SetModeResponse {
+}
 /// The different types of neuron permissions, i.e., privileges to modify a neuron,
 /// that principals can have.
 #[derive(candid::CandidType, candid::Deserialize, strum_macros::EnumIter)]

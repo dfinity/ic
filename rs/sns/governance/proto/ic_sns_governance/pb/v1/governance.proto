@@ -1317,3 +1317,6 @@ message ListNervousSystemFunctionsResponse {
 message SetMode {
   Governance.Mode mode = 1;
 }
+
+message SetModeResponse {
+}
