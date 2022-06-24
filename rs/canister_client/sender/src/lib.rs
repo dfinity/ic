@@ -1,7 +1,8 @@
 use ed25519_dalek::{Keypair, Signer, KEYPAIR_LENGTH};
+use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
 use ic_interfaces::crypto::DOMAIN_IC_REQUEST;
-use ic_types::{messages::MessageId, PrincipalId};
+use ic_types::messages::MessageId;
 use std::{error::Error, sync::Arc};
 
 /// A version of Keypair with a clone instance.
@@ -25,8 +26,8 @@ impl ClonableKeyPair {
     }
 }
 
-pub type SignF = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, Box<dyn Error>> + Send + Sync>;
-pub type SignFID = Arc<dyn Fn(&MessageId) -> Result<Vec<u8>, Box<dyn Error>> + Send + Sync>;
+pub type SignBytes = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, Box<dyn Error>> + Send + Sync>;
+pub type SignMessageId = Arc<dyn Fn(&MessageId) -> Result<Vec<u8>, Box<dyn Error>> + Send + Sync>;
 
 #[derive(Clone)]
 pub struct Secp256k1KeyPair {
@@ -57,7 +58,7 @@ pub enum Sender {
         /// DER encoded public key
         pub_key: Vec<u8>,
         /// Function that abstracts the external HSM.
-        sign: SignF,
+        sign: SignBytes,
     },
     /// The anonymous sender is used (no signature).
     Anonymous,
@@ -68,7 +69,7 @@ pub enum Sender {
         /// DER encoded public key
         pub_key: Vec<u8>,
         /// Function that signs the message id
-        sign: SignFID,
+        sign: SignMessageId,
     },
 }
 
@@ -83,7 +84,7 @@ impl Sender {
         Sender::SigKeys(SigKeys::EcdsaSecp256k1(Secp256k1KeyPair { sk, pk }))
     }
 
-    pub fn from_external_hsm(pub_key: Vec<u8>, sign: SignF) -> Self {
+    pub fn from_external_hsm(pub_key: Vec<u8>, sign: SignBytes) -> Self {
         Sender::ExternalHsm { pub_key, sign }
     }
 
@@ -112,25 +113,27 @@ impl Sender {
 
     pub fn sign_message_id(&self, msg_id: &MessageId) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
         match self {
+            // When signing from the node the domain separator is added by the signing function.
             Self::Node { sign, .. } => sign(msg_id).map(Some),
-            _ => {
-                let mut sig_data = vec![];
-                sig_data.extend_from_slice(DOMAIN_IC_REQUEST);
-                sig_data.extend_from_slice(msg_id.as_bytes());
-                self.sign(&sig_data)
-            }
+            _ => self.sign_with_ic_domain_separator(msg_id.as_bytes()),
         }
     }
 
-    fn sign(&self, msg: &[u8]) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+    fn sign_with_ic_domain_separator(
+        &self,
+        raw_msg: &[u8],
+    ) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+        let mut msg = vec![];
+        msg.extend_from_slice(DOMAIN_IC_REQUEST);
+        msg.extend_from_slice(raw_msg);
         match self {
-            Self::KeyPair(keypair) => Ok(Some(keypair.get().sign(msg).to_bytes().to_vec())),
+            Self::KeyPair(keypair) => Ok(Some(keypair.get().sign(&msg).to_bytes().to_vec())),
             Self::SigKeys(sig_keys) => match sig_keys {
                 SigKeys::EcdsaSecp256k1(key_pair) => {
                     // ECDSA CLib impl. does not hash the message (as hash algorithm can vary
                     // in ECDSA), so we do it here with SHA256, which is the only
                     // supported hash currently.
-                    let msg_hash = Sha256::hash(msg);
+                    let msg_hash = Sha256::hash(&msg);
                     Ok(Some(
                         ecdsa_secp256k1::api::sign(&msg_hash, &key_pair.sk)
                             .expect("ECDSA-secp256k1 signing failed")
@@ -139,7 +142,7 @@ impl Sender {
                     ))
                 }
             },
-            Self::ExternalHsm { sign, .. } => sign(msg).map(Some),
+            Self::ExternalHsm { sign, .. } => sign(&msg).map(Some),
             Self::Anonymous => Ok(None),
             Self::PrincipalId(_) => Ok(None),
             Self::Node { .. } => unreachable!("Wrong case of agent.sign()"),
