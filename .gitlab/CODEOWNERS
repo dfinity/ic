@@ -81,6 +81,7 @@
 /rs/bitcoin/library/                    @dfinity-lab/teams/financial-integrations
 /rs/bitcoin/service/                    @dfinity-lab/teams/networking-team
 /rs/bitcoin/types/                      @dfinity-lab/teams/execution-owners
+/rs/boundary_node/                      @dfinity-lab/teams/boundarynode-team
 /rs/canister_client/                    @dfinity-lab/teams/networking-team
 /rs/canister_http/                      @dfinity-lab/teams/networking-team
 /rs/canister_sandbox/                   @dfinity-lab/teams/runtime-owners
