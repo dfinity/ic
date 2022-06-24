@@ -68,7 +68,7 @@ dfx start
 #### Barebones deploy
 To deploy SNS locally without any customization, run:
 ```shell
-sns deploy --token-name="My Example Token" --token-symbol="MET"
+sns deploy --token-name="My Example Token" --token-symbol="MET" --initial-cycles-per-canister 200000000000
 ```
 (assuming `sns` is in your `PATH`)
 
