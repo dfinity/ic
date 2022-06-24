@@ -99,11 +99,20 @@ echo "${VERSION}" >"${TMPDIR}/version.txt"
     "${BASE_DIR}/bootloader/grub.cfg:/boot/grub/grub.cfg:644" \
     "${BASE_DIR}/bootloader/grubenv:/boot/grub/grubenv:644"
 "${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-config.tar" -s 100M
-"${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-boot.tar" -s 1G -i "${TMPDIR}/rootfs-tree.tar" -p boot/ \
-    "${TMPDIR}/version.txt:/boot/version.txt:0644"
 "${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-root.tar" -s 3G -i "${TMPDIR}/rootfs-tree.tar" \
     "${INSTALL_EXEC_ARGS[@]}" \
     "${TMPDIR}/version.txt:/opt/ic/share/version.txt:0644"
+
+tar xfv "${TMPDIR}/partition-root.tar" -C "${TMPDIR}"
+PARTITION="${TMPDIR}/partition.img"
+SIGNATURE="${TMPDIR}/ver_hash.img"
+root_hash=$(veritysetup format ${PARTITION} ${SIGNATURE} | tail -n 1 | cut -d' ' -f3- | xargs)
+echo ${root_hash} >${TMPDIR}/root_hash
+
+"${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-boot.tar" -s 1G -i "${TMPDIR}/rootfs-tree.tar" -p boot/ \
+    "${TMPDIR}/version.txt:/boot/version.txt:0644" "${SIGNATURE}:/boot/ver_hash.img:0644" \
+    "${TMPDIR}/root_hash:/boot/root_hash:0644"
+
 "${TOOL_DIR}"/build_disk_image.py -o "${TMPDIR}/disk.img.tar" -p "${BASE_DIR}/scripts/partitions.csv" \
     ${TMPDIR}/partition-esp.tar \
     ${TMPDIR}/partition-grub.tar \

@@ -90,7 +90,10 @@ RUN find /etc -type d -exec chmod 0755 {} \+ && \
     find /etc -type f -not -path "/etc/hostname" -not -path "/etc/hosts" -not -path "/etc/resolv.conf" -exec chmod 0644 {} \+ && \
     chmod 0755 /etc/systemd/system-generators/mount-generator && \
     chmod 0440 /etc/sudoers && \
-    chmod 755 /etc/initramfs-tools/scripts/init-bottom/set-machine-id
+    chmod 755 /etc/initramfs-tools/scripts/init-bottom/set-machine-id && \
+    chmod 755 /etc/initramfs-tools/scripts/local && \
+    chmod 755 /etc/initramfs-tools/scripts/local-premount/setup-verity && \
+    chmod 755 /etc/initramfs-tools/hooks/setup-verity
 
 # Deactivate motd, it tries creating $HOME/.cache/motd.legal-displayed,
 # but we want to prohibit it from writing to user home dirs

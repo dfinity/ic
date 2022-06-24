@@ -12,7 +12,7 @@ bazel-test-all:
     - zh
   image:
     # use the docker image without nix-shell as docker-run uses it too.
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:eb633daceb0fb9083146b8fc9913fe5e5b3f6e11a20cd243e013b23d3117c04f"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:939cda350b1e59089777b0294132040cd8311e25c792b18c147a69203419871a"
   stage: test
   needs: []
   artifacts:
