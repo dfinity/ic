@@ -362,9 +362,6 @@ pub struct InstrumentationOutput {
     /// Other methods are assumed to be private to the module and are ignored.
     pub exported_functions: BTreeSet<WasmMethod>,
 
-    /// Memory limits (min, max).
-    pub limits: (u32, Option<u32>),
-
     /// Data segements.
     pub data: Segments,
 
@@ -460,9 +457,9 @@ pub fn instrument(
         .filter_map(|export| WasmMethod::try_from(export.field().to_string()).ok())
         .collect();
 
-    let limits = match module.memory_section() {
+    let initial_limit = match module.memory_section() {
         // if Wasm does not declare any memory section (mostly tests), use this default
-        None => (0, None),
+        None => 0,
         Some(section) => {
             let entries = section.entries();
             if entries.len() != 1 {
@@ -472,13 +469,13 @@ pub fn instrument(
                 });
             }
             let limits = entries[0].limits();
-            (limits.initial(), limits.maximum())
+            limits.initial()
         }
     };
 
     // pull out the data from the data section
     let data = Segments::from(get_data(module.sections_mut()));
-    data.validate(NumWasmPages::from(limits.0 as usize))?;
+    data.validate(NumWasmPages::from(initial_limit as usize))?;
 
     let wasm_instruction_count = (module
         .code_section()
@@ -505,7 +502,6 @@ pub fn instrument(
     })?;
     Ok(InstrumentationOutput {
         exported_functions,
-        limits,
         data,
         binary: BinaryEncodedWasm::new(result),
         compilation_cost: cost_to_compile_wasm_instruction * wasm_instruction_count,
