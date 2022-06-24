@@ -3,7 +3,7 @@
 # operation for the "prod" image.
 
 # Need kernel to boot anything
-linux-image-virtual-hwe-20.04
+linux-image-generic-hwe-20.04
 initramfs-tools
 
 # Need systemd for boot process
@@ -21,8 +21,11 @@ faketime
 gdisk
 ipmitool
 iproute2
+iputils-ping
+isc-dhcp-client
 jq
 less
+locales
 lshw
 lvm2
 net-tools
