@@ -845,6 +845,12 @@ impl SignedBytesWithoutDomainSeparator for IDkgDealing {
 }
 
 /// The signed dealing sent by dealers
+///
+/// The iDKG protocol requires `IDkgDealing` to be signed with non-malleable
+/// signatures, that is, the signature-part in the `Signed` struct must use
+/// a type produced by a non-malleable signature scheme. For `BasicSignature`
+/// this is the case, because it is produced by `BasicSigner`, which
+/// guarantees non-malleability.
 pub type SignedIDkgDealing = Signed<IDkgDealing, BasicSignature<IDkgDealing>>;
 
 impl SignedIDkgDealing {

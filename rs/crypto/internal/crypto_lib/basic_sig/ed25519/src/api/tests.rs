@@ -373,3 +373,32 @@ mod verify_public_key {
         assert!(!verify_public_key(&pubkey_with_composite_order));
     }
 }
+
+mod non_malleability {
+    use crate::types::{PublicKeyBytes, SignatureBytes};
+    use crate::verify;
+    use ic_crypto_internal_test_vectors::ed25519::{crypto_lib_testvec, Ed25519TestVector};
+    use ic_types::crypto::CryptoError;
+    use num_bigint::BigUint;
+    use strum::IntoEnumIterator;
+
+    #[test]
+    fn should_fail_to_verify_malleable_signature() {
+        for test_vec in Ed25519TestVector::iter() {
+            let (_sk, pk, msg, mut sig) = crypto_lib_testvec(test_vec);
+
+            // Add curve order (L) to the S-element of the valid signature (R || S)
+            let s = BigUint::from_bytes_le(&sig[32..]); // little-endian according to RFC8032
+            let l = BigUint::from_bytes_le(curve25519_dalek::constants::BASEPOINT_ORDER.as_bytes());
+            sig[32..].copy_from_slice(&(s + l).to_bytes_le());
+
+            let result = verify(&SignatureBytes(sig), &msg, &PublicKeyBytes(pk));
+
+            assert!(
+                matches!(result, Err(CryptoError::SignatureVerification { .. })),
+                "Signature for test vector is malleable: {:?}",
+                test_vec
+            );
+        }
+    }
+}
