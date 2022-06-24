@@ -87,7 +87,8 @@ mod test {
     #[test]
     fn check_upgrade() {
         // Every field of the `BitcoinAgentState` is filled with non-default value during the `BitcoinAgent` instantiation.
-        let pre_upgrade_bitcoin_agent = agent::new_mock(&Network::Regtest, &AddressType::P2pkh);
+        let pre_upgrade_bitcoin_agent =
+            agent::tests::new_mock(&Network::Regtest, &AddressType::P2pkh);
 
         let pre_upgrade_state = pre_upgrade_bitcoin_agent.get_state();
         let post_upgrade_bitcoin_agent: BitcoinAgent<BitcoinCanisterMock> =

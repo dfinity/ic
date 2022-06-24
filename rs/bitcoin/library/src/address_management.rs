@@ -321,7 +321,7 @@ mod test {
     fn get_parsed_address_type_from_generated_address(
         address_type: &crate::AddressType,
     ) -> AddressType {
-        let bitcoin_agent = agent::new_mock(&Network::Regtest, address_type);
+        let bitcoin_agent = agent::tests::new_mock(&Network::Regtest, address_type);
         bitcoin_agent.get_main_address().address_type().unwrap()
     }
 
@@ -363,7 +363,7 @@ mod test {
     #[test]
     fn check_managed_addresses() {
         let address_type = &crate::AddressType::P2pkh;
-        let bitcoin_agent = &mut agent::new_mock(&Network::Regtest, address_type);
+        let bitcoin_agent = &mut agent::tests::new_mock(&Network::Regtest, address_type);
         let mut addresses = list_addresses(bitcoin_agent);
 
         let address = bitcoin_agent.add_address(&[0]).unwrap();

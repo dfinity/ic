@@ -170,7 +170,7 @@
 //! # ).unwrap();
 //! # let address = agent.get_main_address();
 //! #
-//! let balance_update = agent.get_balance_update(&address).await.unwrap();
+//! let balance_update = agent.get_balance_update(&address).unwrap();
 //! if balance_update.added_balance > 0 {
 //!     // ...
 //! }
@@ -196,7 +196,7 @@
 //! // ...
 //! // NOTE: A guard must be in place to prevent access to the given
 //! // address until the end of the code snippet!
-//! let balance_update = agent.peek_balance_update(&address).await.unwrap();
+//! let balance_update = agent.peek_balance_update(&address).unwrap();
 //! if balance_update.added_balance > 0 {
 //!     // async_call(balance_update.added_balance).await.unwrap();
 //!     // The state is updated after completing the asynchronous call.
@@ -360,7 +360,7 @@ pub use types::{
     Network, UtxosState, UtxosUpdate, STABILITY_THRESHOLD,
 };
 
-pub use agent::BitcoinAgent;
+pub use agent::{get_utxos_from_args, BitcoinAgent};
 pub use canister_common::BitcoinCanister;
 pub use canister_implementation::BitcoinCanisterImpl;
 
@@ -369,6 +369,5 @@ pub use canister_implementation::BitcoinCanisterImpl;
     1. uncomment the `use` line below.
     2. comment `#[cfg(test)]` above.
     3. remove the three `ignore` documentation test attribute above.
-    4. comment `(crate)` in `pub(crate) struct BitcoinCanisterMock` in `canister_mock.rs`.
 */
 //pub use canister_mock::BitcoinCanisterMock;
