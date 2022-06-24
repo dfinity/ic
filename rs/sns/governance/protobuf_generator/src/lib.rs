@@ -31,6 +31,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(
+        "ic_sns_governance.pb.v1.SetModeResponse",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
         "ic_sns_governance.pb.v1.NeuronPermissionType",
         "#[derive(candid::CandidType, candid::Deserialize, strum_macros::EnumIter)]",
     );

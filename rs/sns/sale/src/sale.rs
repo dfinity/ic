@@ -1,12 +1,15 @@
 use crate::pb::v1::{
-    BuyerState, DerivedState, FinalizeSaleResponse, Init, Lifecycle, Sale, State, SweepResult,
+    set_mode_call_result, BuyerState, CanisterCallError, DerivedState, FinalizeSaleResponse, Init,
+    Lifecycle, Sale, SetModeCallResult, State, SweepResult,
 };
 use async_trait::async_trait;
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
 
 use ic_nervous_system_common::ledger::{self, Ledger};
-use ic_sns_governance::pb::v1::{manage_neuron, ManageNeuron, ManageNeuronResponse};
+use ic_sns_governance::pb::v1::{
+    governance, manage_neuron, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
+};
 
 use std::str::FromStr;
 
@@ -28,15 +31,20 @@ pub enum TransferResult {
     Failure(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CanisterCallError {
-    code: Option<i32>,
-    message: String,
+impl From<(Option<i32>, String)> for CanisterCallError {
+    fn from((code, description): (Option<i32>, String)) -> Self {
+        Self { code, description }
+    }
 }
 
-impl From<(Option<i32>, String)> for CanisterCallError {
-    fn from((code, message): (Option<i32>, String)) -> Self {
-        Self { code, message }
+impl From<Result<SetModeResponse, CanisterCallError>> for SetModeCallResult {
+    fn from(native_result: Result<SetModeResponse, CanisterCallError>) -> Self {
+        let possibility = match native_result {
+            Ok(_ok) => None,
+            Err(err) => Some(set_mode_call_result::Possibility::Err(err)),
+        };
+
+        Self { possibility }
     }
 }
 
@@ -46,6 +54,8 @@ pub trait SnsGovernanceClient {
         &mut self,
         request: ManageNeuron,
     ) -> Result<ManageNeuronResponse, CanisterCallError>;
+
+    async fn set_mode(&mut self, request: SetMode) -> Result<SetModeResponse, CanisterCallError>;
 }
 
 /**
@@ -507,24 +517,33 @@ impl Sale {
             "Sale can only be finalized in the committed or aborted states - was {:?}",
             lifecycle
         );
+
         let sweep_icp = self.sweep_icp(DEFAULT_TRANSFER_FEE, &ledger_factory).await;
         if lifecycle != Lifecycle::Committed {
             return FinalizeSaleResponse {
                 sweep_icp: Some(sweep_icp),
                 sweep_sns: None,
                 create_neuron: None,
+                sns_governance_normal_mode_enabled: None,
             };
         }
 
         let sweep_sns = self.sweep_sns(DEFAULT_TRANSFER_FEE, &ledger_factory).await;
 
-        // Claim neurons.
         let create_neuron = self.claim_neurons(sns_governance_client).await;
+
+        let sns_governance_normal_mode_enabled =
+            Self::set_sns_governance_to_normal_mode_if_all_neurons_claimed(
+                sns_governance_client,
+                &create_neuron,
+            )
+            .await;
 
         FinalizeSaleResponse {
             sweep_icp: Some(sweep_icp),
             sweep_sns: Some(sweep_sns),
             create_neuron: Some(create_neuron),
+            sns_governance_normal_mode_enabled,
         }
     }
 
@@ -561,6 +580,26 @@ impl Sale {
         }
 
         result
+    }
+
+    async fn set_sns_governance_to_normal_mode_if_all_neurons_claimed(
+        sns_governance_client: &mut impl SnsGovernanceClient,
+        create_neuron: &SweepResult,
+    ) -> Option<SetModeCallResult> {
+        let all_neurons_created = create_neuron.failure == 0;
+
+        if !all_neurons_created {
+            return None;
+        }
+
+        Some(
+            sns_governance_client
+                .set_mode(SetMode {
+                    mode: governance::Mode::Normal as i32,
+                })
+                .await
+                .into(),
+        )
     }
 
     /// In state 'committed' or 'aborted'. Transfer ICP tokens from

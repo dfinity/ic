@@ -218,6 +218,8 @@ pub struct FinalizeSaleResponse {
     pub sweep_sns: ::core::option::Option<SweepResult>,
     #[prost(message, optional, tag="3")]
     pub create_neuron: ::core::option::Option<SweepResult>,
+    #[prost(message, optional, tag="4")]
+    pub sns_governance_normal_mode_enabled: ::core::option::Option<SetModeCallResult>,
 }
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -228,6 +230,31 @@ pub struct SweepResult {
     pub failure: u32,
     #[prost(uint32, tag="3")]
     pub skipped: u32,
+}
+/// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SetModeCallResult {
+    #[prost(oneof="set_mode_call_result::Possibility", tags="2")]
+    pub possibility: ::core::option::Option<set_mode_call_result::Possibility>,
+}
+/// Nested message and enum types in `SetModeCallResult`.
+pub mod set_mode_call_result {
+    #[derive(candid::CandidType, candid::Deserialize)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Possibility {
+        /// TODO ic_sns_governance.pb.v1.SetModeResponse ok = 1;
+        #[prost(message, tag="2")]
+        Err(super::CanisterCallError),
+    }
+}
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterCallError {
+    #[prost(int32, optional, tag="1")]
+    pub code: ::core::option::Option<i32>,
+    #[prost(string, tag="2")]
+    pub description: ::prost::alloc::string::String,
 }
 /// Lifecycle states of the sale cansiter's world state. The details of
 /// their meanings is provided in the documentation of the `Sale`.

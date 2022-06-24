@@ -27,14 +27,14 @@ use ic_nervous_system_common::ledger::{Ledger, LedgerCanister};
 use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
-use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse};
+use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse};
 use ic_sns_sale::pb::v1::{
-    FinalizeSaleRequest, FinalizeSaleResponse, GetCanisterStatusRequest, GetCanisterStatusResponse,
-    GetStateRequest, GetStateResponse, Init, OpenSaleRequest, OpenSaleResponse,
-    RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, RefreshSnsTokensRequest,
-    RefreshSnsTokensResponse, Sale,
+    CanisterCallError, FinalizeSaleRequest, FinalizeSaleResponse, GetCanisterStatusRequest,
+    GetCanisterStatusResponse, GetStateRequest, GetStateResponse, Init, OpenSaleRequest,
+    OpenSaleResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
+    RefreshSnsTokensRequest, RefreshSnsTokensResponse, Sale,
 };
-use ic_sns_sale::sale::{CanisterCallError, SnsGovernanceClient, LOG_PREFIX};
+use ic_sns_sale::sale::{SnsGovernanceClient, LOG_PREFIX};
 
 use std::str::FromStr;
 
@@ -175,6 +175,20 @@ impl SnsGovernanceClient for RealSnsGovernanceClient {
         dfn_core::api::call(
             self.canister_id,
             "manage_neuron",
+            dfn_candid::candid_one,
+            request,
+        )
+        .await
+        .map_err(CanisterCallError::from)
+    }
+
+    async fn set_mode(&mut self, request: SetMode) -> Result<SetModeResponse, CanisterCallError> {
+        // TODO: Eliminate repetitive code. At least textually, the only
+        // difference is the second argument that gets passed to
+        // dfn_core::api::call (the name of the method).
+        dfn_core::api::call(
+            self.canister_id,
+            "set_mode",
             dfn_candid::candid_one,
             request,
         )

@@ -7,13 +7,15 @@ use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
 };
-use ic_sns_governance::pb::v1::{manage_neuron, ManageNeuron, ManageNeuronResponse};
+use ic_sns_governance::pb::v1::{
+    governance, manage_neuron, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
+};
 use ic_sns_sale::{
     pb::v1::{
         Lifecycle::{Committed, Pending},
         *,
     },
-    sale::{CanisterCallError, SnsGovernanceClient},
+    sale::SnsGovernanceClient,
 };
 
 use lazy_static::lazy_static;
@@ -459,9 +461,15 @@ async fn test_finalize_sale() {
         static ref SALE_CANISTER_ID: CanisterId = CanisterId::from(100);
     }
 
+    #[allow(clippy::large_enum_variant)]
+    #[derive(Debug, PartialEq)]
+    enum SnsGovernanceClientCall {
+        ManageNeuron(ManageNeuron),
+        SetMode(SetMode),
+    }
     #[derive(Default, Debug)]
     struct SpySnsGovernanceClient {
-        manage_neuron_calls: Vec<ManageNeuron>,
+        calls: Vec<SnsGovernanceClientCall>,
     }
     #[async_trait]
     impl SnsGovernanceClient for SpySnsGovernanceClient {
@@ -469,8 +477,16 @@ async fn test_finalize_sale() {
             &mut self,
             request: ManageNeuron,
         ) -> Result<ManageNeuronResponse, CanisterCallError> {
-            self.manage_neuron_calls.push(request);
+            self.calls
+                .push(SnsGovernanceClientCall::ManageNeuron(request));
             Ok(ManageNeuronResponse::default())
+        }
+        async fn set_mode(
+            &mut self,
+            request: SetMode,
+        ) -> Result<SetModeResponse, CanisterCallError> {
+            self.calls.push(SnsGovernanceClientCall::SetMode(request));
+            Ok(SetModeResponse {})
         }
     }
 
@@ -596,10 +612,12 @@ async fn test_finalize_sale() {
     assert!(sale.try_commit_or_abort(/* now_seconds: */ 1));
     assert_eq!(sale.state().lifecycle(), Committed);
 
-    let mut governance = SpySnsGovernanceClient::default();
+    let mut sns_governance_client = SpySnsGovernanceClient::default();
 
     // Step 2: Run the code under test. To wit, finalize_sale.
-    let result = sale.finalize(&mut governance, ledger_factory).await;
+    let result = sale
+        .finalize(&mut sns_governance_client, ledger_factory)
+        .await;
 
     // Step 3: Inspect the results.
     assert_eq!(
@@ -620,14 +638,27 @@ async fn test_finalize_sale() {
                 failure: 0,
                 skipped: 0,
             }),
+            sns_governance_normal_mode_enabled: Some(SetModeCallResult { possibility: None }),
         },
     );
 
     // Assert that do_finalize_sale created neurons.
-    let neuron_controllers = governance
-        .manage_neuron_calls
+    assert_eq!(
+        sns_governance_client.calls.len(),
+        4,
+        "{:#?}",
+        sns_governance_client.calls
+    );
+    let neuron_controllers = sns_governance_client
+        .calls
         .iter()
-        .map(|m| {
+        .filter_map(|c| {
+            use SnsGovernanceClientCall as Call;
+            let m = match c {
+                Call::ManageNeuron(m) => m,
+                Call::SetMode(_) => return None,
+            };
+
             let command = match m.command.as_ref().unwrap() {
                 manage_neuron::Command::ClaimOrRefresh(command) => command,
                 command => panic!("{command:#?}"),
@@ -638,7 +669,7 @@ async fn test_finalize_sale() {
                 v => panic!("{v:#?}"),
             };
 
-            memo_and_controller.controller.unwrap().to_string()
+            Some(memo_and_controller.controller.unwrap().to_string())
         })
         .collect::<HashSet<_>>();
     assert_eq!(
@@ -649,6 +680,17 @@ async fn test_finalize_sale() {
             i2principal_id_string(1003),
         ],
     );
+    // Assert that SNS governance was set to normal mode.
+    {
+        let calls = &sns_governance_client.calls;
+        let last_call = &calls[calls.len() - 1];
+        assert_eq!(
+            last_call,
+            &SnsGovernanceClientCall::SetMode(SetMode {
+                mode: governance::Mode::Normal as i32,
+            }),
+        );
+    }
 
     // Assert that ICP and SNS tokens were sent.
     let ledger_calls = ledger_calls

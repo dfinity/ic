@@ -202,10 +202,26 @@ message FinalizeSaleResponse {
   SweepResult sweep_icp = 1;
   SweepResult sweep_sns = 2;
   SweepResult create_neuron = 3;
+  SetModeCallResult sns_governance_normal_mode_enabled = 4;
 }
 
 message SweepResult {
   uint32 success = 1;
   uint32 failure = 2;
   uint32 skipped = 3;
+}
+
+// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
+message SetModeCallResult {
+  reserved "ok";
+  reserved 1;
+  oneof possibility {
+    // TODO ic_sns_governance.pb.v1.SetModeResponse ok = 1;
+    CanisterCallError err = 2;
+  }
+}
+
+message CanisterCallError {
+  optional int32 code = 1;
+  string description = 2;
 }
