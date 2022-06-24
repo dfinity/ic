@@ -258,6 +258,7 @@ pub struct CanisterCallError {
 }
 /// Lifecycle states of the sale cansiter's world state. The details of
 /// their meanings is provided in the documentation of the `Sale`.
+#[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum Lifecycle {
