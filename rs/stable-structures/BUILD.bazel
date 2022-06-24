@@ -11,7 +11,7 @@ filegroup(
 )
 
 rust_library(
-    name = "stable_structures",
+    name = "stable-structures",
     srcs = glob(["src/**"]),
     crate_name = "stable_structures",
     edition = "2018",
@@ -19,5 +19,5 @@ rust_library(
 
 rust_test(
     name = "stable_structures_test",
-    crate = ":stable_structures",
+    crate = ":stable-structures",
 )

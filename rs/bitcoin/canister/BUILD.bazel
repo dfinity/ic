@@ -1,0 +1,103 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    ":build_script",
+    "//rs/bitcoin/types/internal",
+    "//rs/bitcoin/types/public",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/protobuf",
+    "//rs/registry/subnet_features",
+    "//rs/replicated_state",
+    "//rs/stable-structures",
+    "//rs/state_layout",
+    "@crate_index//:bitcoin",
+    "@crate_index//:byteorder",
+    "@crate_index//:candid",
+    "@crate_index//:lazy_static",
+    "@crate_index//:prometheus",
+    "@crate_index//:prost",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:slog",
+]
+
+DEV_DEPENDENCIES = DEPENDENCIES + [
+    ":canister",
+    "//rs/bitcoin/test-utils",
+    "@crate_index//:clap",
+    "@crate_index//:maplit",
+    "@crate_index//:proptest",
+    "@crate_index//:tempfile",
+]
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "canister",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_btc_canister",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    build_script_env = {
+        "CARGO_MANIFEST_DIR": "rs/bitcoin/canister",
+        "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+        "RUSTFMT": "$(execpath @rules_rust//rust/toolchain:current_exec_rustfmt_files)",
+    },
+    data = [
+        "src/proto.proto",
+        "//rs/protobuf:protos",
+        "@com_google_protobuf//:protoc",
+        "@rules_rust//rust/toolchain:current_exec_rustfmt_files",
+    ],
+    edition = "2018",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@crate_index//:prost-build",
+    ],
+)
+
+rust_binary(
+    name = "build-utxo-set",
+    srcs = ["src/examples/build_utxo_set.rs"],
+    edition = "2018",
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_binary(
+    name = "explore-set",
+    srcs = ["src/examples/explore_utxos.rs"],
+    edition = "2018",
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_test(
+    name = "canister_test",
+    size = "large",  # TODO: fix running time of store::test::process_100k_blocks, it runs ~7 min in debug and ~20 sec in release.
+    crate = ":canister",
+    crate_features = [
+        "rand",  # needed for generating secp256k1 keys.
+        "derive",
+    ],
+    data = [
+        "test-data/100k_blocks.dat",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/bitcoin/canister",
+    },
+    deps = DEV_DEPENDENCIES,
+)

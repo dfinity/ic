@@ -225,7 +225,13 @@ mod test {
 
         let mut blocks: HashMap<BlockHash, Block> = HashMap::new();
 
-        let mut blk_file = BufReader::new(File::open("./test-data/100k_blocks.dat").unwrap());
+        let mut blk_file = BufReader::new(
+            File::open(
+                PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+                    .join("test-data/100k_blocks.dat"),
+            )
+            .unwrap(),
+        );
 
         loop {
             let magic = match blk_file.read_u32::<LittleEndian>() {
