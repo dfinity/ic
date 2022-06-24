@@ -146,7 +146,7 @@ impl Step for DownloadIcStateStep {
             vec![],
             &format!("{}/", self.target),
             &self.working_dir,
-            self.require_confirmation,
+            false,
             None,
         )?;
 
@@ -580,20 +580,11 @@ impl Step for SetRecoveryCUPStep {
 pub struct CreateTarsStep {
     pub logger: Logger,
     pub store_tar_cmd: Command,
-    pub state_tar_cmd: Option<Command>,
 }
 
 impl Step for CreateTarsStep {
     fn descr(&self) -> String {
-        format!(
-            "Creating tar files by executing:\n{:?}{}",
-            self.store_tar_cmd,
-            if let Some(cmd) = &self.state_tar_cmd {
-                format!("\n{:?}", cmd)
-            } else {
-                "".to_string()
-            }
-        )
+        format!("Creating tar files by executing:\n{:?}", self.store_tar_cmd,)
     }
 
     fn exec(&self) -> RecoveryResult<()> {
@@ -602,15 +593,30 @@ impl Step for CreateTarsStep {
         if let Some(res) = exec_cmd(&mut tar1)? {
             info!(self.logger, "{}", res);
         }
+        Ok(())
+    }
+}
 
-        if let Some(cmd) = &self.state_tar_cmd {
-            let mut tar2 = Command::new("tar");
-            tar2.args(cmd.get_args());
-            if let Some(res) = exec_cmd(&mut tar2)? {
-                info!(self.logger, "{}", res);
-            }
-        }
+pub struct CopyIcStateStep {
+    pub logger: Logger,
+    pub work_dir: PathBuf,
+    pub new_state_dir: PathBuf,
+}
 
+impl Step for CopyIcStateStep {
+    fn descr(&self) -> String {
+        format!("Copying ic_state for upload to: {:?}", self.new_state_dir,)
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        rsync(
+            &self.logger,
+            vec![],
+            &format!("{}/", self.work_dir.display()),
+            &format!("{}/", self.new_state_dir.display()),
+            false,
+            None,
+        )?;
         Ok(())
     }
 }
@@ -619,7 +625,6 @@ pub struct UploadCUPAndTar {
     pub recovery: Recovery,
     pub logger: Logger,
     pub subnet_id: SubnetId,
-    pub upload_node: Option<IpAddr>,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
     pub work_dir: PathBuf,
@@ -627,7 +632,6 @@ pub struct UploadCUPAndTar {
 
 impl UploadCUPAndTar {
     pub fn get_restart_commands(&self) -> String {
-        let with_state = self.upload_node.is_some();
         format!(
             r#"
 cd {};
@@ -635,34 +639,19 @@ OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/ic_registry_local_store);
 GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/ic_registry_local_store);
 mkdir ic_registry_local_store;
 tar zxf ic_registry_local_store.tar.gz -C ic_registry_local_store;
-sudo chown -R "$OWNER_UID:$GROUP_UID"  ic_registry_local_store;
+sudo chown -R "$OWNER_UID:$GROUP_UID" ic_registry_local_store;
 OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/cups);
 GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/cups);
-sudo chown -R "$OWNER_UID:$GROUP_UID" cup.proto;{}
+sudo chown -R "$OWNER_UID:$GROUP_UID" cup.proto;
 sudo systemctl stop ic-replica;
 sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/;
 sudo cp cup.proto /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb;
-sudo cp cup.proto /var/lib/ic/data/cups/cup_${}.types.v1.CatchUpPackage.pb;{}
+sudo cp cup.proto /var/lib/ic/data/cups/cup_${}.types.v1.CatchUpPackage.pb;
 sudo systemctl start ic-replica;
 sudo systemctl status ic-replica;
 "#,
             UploadCUPAndTar::get_upload_dir_name(),
-            if with_state {
-                r#"
-OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/ic_state);
-GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/ic_state);
-tar zxf ic_state.tar.gz;
-sudo chown -R "$OWNER_UID:$GROUP_UID" ic_state;"#
-            } else {
-                ""
-            },
             self.subnet_id,
-            if with_state {
-                r#"
-sudo rsync -a --delete ic_state/ /var/lib/ic/data/ic_state/;"#
-            } else {
-                ""
-            }
         )
     }
 
@@ -673,24 +662,11 @@ sudo rsync -a --delete ic_state/ /var/lib/ic/data/ic_state/;"#
 
 impl Step for UploadCUPAndTar {
     fn descr(&self) -> String {
-        if let Some(ip) = self.upload_node {
-            format!(
-                "Uploading CUP, state and registry to {} on {} using admin. Then execute:\n{}",
-                UploadCUPAndTar::get_upload_dir_name(),
-                ip,
-                self.get_restart_commands()
-            )
-        } else {
-            format!("Uploading CUP and registry to {} on ALL nodes using admin (testnet only). Then execute on all nodes:\n{}", UploadCUPAndTar::get_upload_dir_name(), self.get_restart_commands())
-        }
+        format!("Uploading CUP and registry to {} on ALL nodes with admin access. Then execute on those nodes:\n{}", UploadCUPAndTar::get_upload_dir_name(), self.get_restart_commands())
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let ips = if let Some(ip) = self.upload_node {
-            vec![ip]
-        } else {
-            self.recovery.get_member_ips(self.subnet_id)?
-        };
+        let ips = self.recovery.get_member_ips(self.subnet_id)?;
 
         ips.into_iter()
             .map(|ip| {
@@ -701,6 +677,15 @@ impl Step for UploadCUPAndTar {
                     self.require_confirmation,
                     self.key_file.clone(),
                 );
+
+                if !ssh_helper.can_connect() {
+                    info!(
+                        self.logger,
+                        "No admin access to: {}, skipping upload...", ip
+                    );
+                    return Ok(None);
+                }
+
                 info!(self.logger, "Uploading to {}", ip);
                 let upload_dir = UploadCUPAndTar::get_upload_dir_name();
                 ssh_helper.ssh(format!(
@@ -727,17 +712,6 @@ impl Step for UploadCUPAndTar {
                     self.require_confirmation,
                     self.key_file.as_ref(),
                 )?;
-
-                if self.upload_node.is_some() {
-                    rsync(
-                        &self.logger,
-                        vec![],
-                        &format!("{}/ic_state.tar.gz", self.work_dir.display()),
-                        &target,
-                        self.require_confirmation,
-                        self.key_file.as_ref(),
-                    )?;
-                }
 
                 ssh_helper.ssh(self.get_restart_commands())
             })
