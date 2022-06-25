@@ -9,6 +9,10 @@ type DerivedState = record {
   sns_tokens_per_icp : float32;
   buyer_total_icp_e8s : nat64;
 };
+type ErrorRefundIcpRequest = record {
+  icp_e8s : nat64;
+  fee_override_e8s : nat64;
+};
 type FinalizeSaleResponse = record {
   sns_governance_normal_mode_enabled : opt SetModeCallResult;
   sweep_icp : opt SweepResult;
@@ -25,7 +29,9 @@ type Init = record {
   nns_governance_canister_id : text;
   icp_ledger_canister_id : text;
   sns_ledger_canister_id : text;
+  max_participant_icp_e8s : nat64;
   sns_governance_canister_id : text;
+  min_icp_e8s : nat64;
 };
 type Possibility = variant { Err : CanisterCallError };
 type RefreshBuyerTokensRequest = record { buyer : text };
@@ -38,6 +44,7 @@ type State = record {
 };
 type SweepResult = record { failure : nat32; skipped : nat32; success : nat32 };
 service : (Init) -> {
+  error_refund_icp : (ErrorRefundIcpRequest) -> (record {});
   finalize_sale : (record {}) -> (FinalizeSaleResponse);
   get_canister_status : (record {}) -> (GetCanisterStatusResponse);
   get_state : (record {}) -> (GetStateResponse) query;

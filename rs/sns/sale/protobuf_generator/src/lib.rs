@@ -121,6 +121,16 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
 
+    config.type_attribute(
+        "ic_sns_sale.pb.v1.ErrorRefundIcpRequest",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+
+    config.type_attribute(
+        "ic_sns_sale.pb.v1.ErrorRefundIcpResponse",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+
     std::fs::create_dir_all(out).expect("failed to create output directory");
     config.out_dir(out);
 

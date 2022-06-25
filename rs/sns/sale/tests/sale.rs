@@ -10,6 +10,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_sns_governance::pb::v1::{
     governance, manage_neuron, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
 };
+use ic_sns_sale::sale::TransferResult;
 use ic_sns_sale::{
     pb::v1::{
         Lifecycle::{Committed, Pending},
@@ -46,11 +47,13 @@ fn init() -> Init {
         sns_governance_canister_id: SNS_GOVERNANCE_CANISTER_ID.to_string(),
         sns_ledger_canister_id: SNS_LEDGER_CANISTER_ID.to_string(),
         icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
-        max_icp_e8s: 1000000_00000000,
+        max_icp_e8s: 1000000 * E8,
+        min_icp_e8s: 0,
         // 1640995200 = 2022-01-01T00:00:00
         token_sale_timestamp_seconds: 1640995200 + 10,
         min_participants: 3,
-        min_participant_icp_e8s: 100_00000000,
+        min_participant_icp_e8s: 100 * E8,
+        max_participant_icp_e8s: 1000000 * E8,
     }
 }
 
@@ -178,16 +181,358 @@ fn test_open() {
             SALE_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 account,
-                Ok(Tokens::from_e8s(100000_00000000))
+                Ok(Tokens::from_e8s(100000 * E8))
             )])
         )
         .now_or_never()
         .unwrap()
         .is_ok());
     // Check that state is updated.
-    assert_eq!(sale.state().sns_token_e8s, 100000_00000000);
+    assert_eq!(sale.state().sns_token_e8s, 100000 * E8);
     // Now the sale can be opened.
     assert!(sale.open().is_ok());
+}
+
+/// Check that the behaviour is correct when the sale is due and the
+/// minimum ICP hasn't been reached, i.e., the sale is aborted in this
+/// case.
+#[test]
+fn test_min_icp() {
+    let init = Init {
+        max_icp_e8s: 10 * E8,
+        min_icp_e8s: 5 * E8,
+        // 1640995200 = 2022-01-01T00:00:00
+        token_sale_timestamp_seconds: 1640995200 + 10,
+        min_participants: 2,
+        min_participant_icp_e8s: E8,
+        max_participant_icp_e8s: 5 * E8,
+        ..init()
+    };
+    let mut sale = Sale::new(init.clone());
+    // Open sale.
+    // Refresh giving 100k SNS tokens
+    assert!(sale
+        .refresh_sns_token_e8s(
+            SALE_CANISTER_ID,
+            &mock_stub(vec![LedgerExpect::AccountBalance(
+                AccountIdentifier::new(SALE_CANISTER_ID.get(), None),
+                Ok(Tokens::from_e8s(100000 * E8))
+            )])
+        )
+        .now_or_never()
+        .unwrap()
+        .is_ok());
+    assert_eq!(sale.state().sns_token_e8s, 100000 * E8);
+    assert!(sale.open().is_ok());
+    assert_eq!(sale.state().lifecycle(), Lifecycle::Open);
+    // Cannot commit or abort, as the sale is not due yet.
+    assert!(!sale.try_commit_or_abort(init.token_sale_timestamp_seconds - 1));
+    // Deposit 2 ICP from one buyer.
+    assert!(sale
+        .refresh_buyer_token_e8s(
+            *TEST_USER1_PRINCIPAL,
+            SALE_CANISTER_ID,
+            &mock_stub(vec![LedgerExpect::AccountBalance(
+                AccountIdentifier::new(
+                    SALE_CANISTER_ID.get(),
+                    Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone()))
+                ),
+                Ok(Tokens::from_e8s(2 * E8))
+            )])
+        )
+        .now_or_never()
+        .unwrap()
+        .is_ok());
+    assert_eq!(
+        sale.state()
+            .buyers
+            .get(&TEST_USER1_PRINCIPAL.to_string())
+            .unwrap()
+            .amount_icp_e8s,
+        2 * E8
+    );
+    // Deposit 2 ICP from another buyer.
+    assert!(sale
+        .refresh_buyer_token_e8s(
+            *TEST_USER2_PRINCIPAL,
+            SALE_CANISTER_ID,
+            &mock_stub(vec![LedgerExpect::AccountBalance(
+                AccountIdentifier::new(
+                    SALE_CANISTER_ID.get(),
+                    Some(Subaccount::from(&TEST_USER2_PRINCIPAL.clone()))
+                ),
+                Ok(Tokens::from_e8s(2 * E8))
+            )])
+        )
+        .now_or_never()
+        .unwrap()
+        .is_ok());
+    assert_eq!(
+        sale.state()
+            .buyers
+            .get(&TEST_USER2_PRINCIPAL.to_string())
+            .unwrap()
+            .amount_icp_e8s,
+        2 * E8
+    );
+    // There are now two participants with a total of 4 ICP.
+    //
+    // Cannot commit
+    assert!(!sale.can_commit(init.token_sale_timestamp_seconds));
+    // This should now abort as the minimum hasn't been reached.
+    assert!(sale.try_commit_or_abort(init.token_sale_timestamp_seconds));
+    assert_eq!(sale.state().lifecycle(), Lifecycle::Aborted);
+    {
+        let fee = 1152;
+        // "Sweep" all ICP, which should go back to the buyers.
+        let SweepResult {
+            success,
+            failure,
+            skipped,
+        } = sale
+            .sweep_icp(
+                Tokens::from_e8s(fee),
+                &mock_stub(vec![
+                    LedgerExpect::TransferFunds(
+                        2 * E8 - fee,
+                        fee,
+                        Some(Subaccount::from(&*TEST_USER2_PRINCIPAL)),
+                        AccountIdentifier::new(*TEST_USER2_PRINCIPAL, None),
+                        0,
+                        Ok(1066),
+                    ),
+                    LedgerExpect::TransferFunds(
+                        2 * E8 - fee,
+                        fee,
+                        Some(Subaccount::from(&*TEST_USER1_PRINCIPAL)),
+                        AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None),
+                        0,
+                        Ok(1067),
+                    ),
+                ]),
+            )
+            .now_or_never()
+            .unwrap();
+        assert_eq!(skipped, 0);
+        assert_eq!(success, 2);
+        assert_eq!(failure, 0);
+    }
+}
+
+/// Test going below the minimum and above the maximum ICP for a single participant.
+#[test]
+fn test_min_max_icp_per_buyer() {
+    let init = Init {
+        max_icp_e8s: 10 * E8,
+        min_icp_e8s: 5 * E8,
+        // 1640995200 = 2022-01-01T00:00:00
+        token_sale_timestamp_seconds: 1640995200 + 10,
+        min_participants: 2,
+        min_participant_icp_e8s: E8,
+        max_participant_icp_e8s: 5 * E8,
+        ..init()
+    };
+    let mut sale = Sale::new(init.clone());
+    // Open sale.
+    // Refresh giving 100k SNS tokens
+    assert!(sale
+        .refresh_sns_token_e8s(
+            SALE_CANISTER_ID,
+            &mock_stub(vec![LedgerExpect::AccountBalance(
+                AccountIdentifier::new(SALE_CANISTER_ID.get(), None),
+                Ok(Tokens::from_e8s(100000 * E8))
+            )])
+        )
+        .now_or_never()
+        .unwrap()
+        .is_ok());
+    assert_eq!(sale.state().sns_token_e8s, 100000 * E8);
+    assert!(sale.open().is_ok());
+    assert_eq!(sale.state().lifecycle(), Lifecycle::Open);
+    // Cannot commit or abort, as the sale is not due yet.
+    assert!(!sale.try_commit_or_abort(init.token_sale_timestamp_seconds - 1));
+    // Try to deposit 0.99999999 ICP, slightly less than the minimum.
+    {
+        let e = sale
+            .refresh_buyer_token_e8s(
+                *TEST_USER1_PRINCIPAL,
+                SALE_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    AccountIdentifier::new(
+                        SALE_CANISTER_ID.get(),
+                        Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone())),
+                    ),
+                    Ok(Tokens::from_e8s(99999999)),
+                )]),
+            )
+            .now_or_never()
+            .unwrap();
+        assert!(e.is_err());
+        assert!(sale
+            .state()
+            .buyers
+            .get(&TEST_USER1_PRINCIPAL.to_string())
+            .is_none());
+    }
+    // Try to deposit 6 ICP.
+    {
+        let e = sale
+            .refresh_buyer_token_e8s(
+                *TEST_USER1_PRINCIPAL,
+                SALE_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    AccountIdentifier::new(
+                        SALE_CANISTER_ID.get(),
+                        Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone())),
+                    ),
+                    Ok(Tokens::from_e8s(6 * E8)),
+                )]),
+            )
+            .now_or_never()
+            .unwrap();
+        assert!(e.is_ok());
+        // Should only get 5 as that's the max per participant.
+        assert_eq!(
+            sale.state()
+                .buyers
+                .get(&TEST_USER1_PRINCIPAL.to_string())
+                .unwrap()
+                .amount_icp_e8s,
+            5 * E8
+        );
+        // Make sure that a second refresh of the same principal doesn't change the balance.
+        let e = sale
+            .refresh_buyer_token_e8s(
+                *TEST_USER1_PRINCIPAL,
+                SALE_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    AccountIdentifier::new(
+                        SALE_CANISTER_ID.get(),
+                        Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone())),
+                    ),
+                    Ok(Tokens::from_e8s(10 * E8)),
+                )]),
+            )
+            .now_or_never()
+            .unwrap();
+        assert!(e.is_ok());
+        // Should still only be 5 as that's the max per participant.
+        assert_eq!(
+            sale.state()
+                .buyers
+                .get(&TEST_USER1_PRINCIPAL.to_string())
+                .unwrap()
+                .amount_icp_e8s,
+            5 * E8
+        );
+    }
+}
+
+/// Test going over the total max ICP for the sale.
+#[test]
+fn test_max_icp() {
+    let init = Init {
+        max_icp_e8s: 10 * E8,
+        min_icp_e8s: 5 * E8,
+        // 1640995200 = 2022-01-01T00:00:00
+        token_sale_timestamp_seconds: 1640995200 + 10,
+        min_participants: 2,
+        min_participant_icp_e8s: E8,
+        max_participant_icp_e8s: 6 * E8,
+        ..init()
+    };
+    let mut sale = Sale::new(init.clone());
+    // Open sale.
+    // Refresh giving 100k SNS tokens
+    assert!(sale
+        .refresh_sns_token_e8s(
+            SALE_CANISTER_ID,
+            &mock_stub(vec![LedgerExpect::AccountBalance(
+                AccountIdentifier::new(SALE_CANISTER_ID.get(), None),
+                Ok(Tokens::from_e8s(100000 * E8))
+            )])
+        )
+        .now_or_never()
+        .unwrap()
+        .is_ok());
+    assert_eq!(sale.state().sns_token_e8s, 100000 * E8);
+    assert!(sale.open().is_ok());
+    assert_eq!(sale.state().lifecycle(), Lifecycle::Open);
+    // Cannot commit or abort, as the sale is not due yet.
+    assert!(!sale.try_commit_or_abort(init.token_sale_timestamp_seconds - 1));
+    // Deposit 6 ICP from one buyer.
+    assert!(sale
+        .refresh_buyer_token_e8s(
+            *TEST_USER1_PRINCIPAL,
+            SALE_CANISTER_ID,
+            &mock_stub(vec![LedgerExpect::AccountBalance(
+                AccountIdentifier::new(
+                    SALE_CANISTER_ID.get(),
+                    Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone()))
+                ),
+                Ok(Tokens::from_e8s(6 * E8))
+            )])
+        )
+        .now_or_never()
+        .unwrap()
+        .is_ok());
+    assert_eq!(
+        sale.state()
+            .buyers
+            .get(&TEST_USER1_PRINCIPAL.to_string())
+            .unwrap()
+            .amount_icp_e8s,
+        6 * E8
+    );
+    // Deposit 6 ICP from another buyer.
+    assert!(sale
+        .refresh_buyer_token_e8s(
+            *TEST_USER2_PRINCIPAL,
+            SALE_CANISTER_ID,
+            &mock_stub(vec![LedgerExpect::AccountBalance(
+                AccountIdentifier::new(
+                    SALE_CANISTER_ID.get(),
+                    Some(Subaccount::from(&TEST_USER2_PRINCIPAL.clone()))
+                ),
+                Ok(Tokens::from_e8s(6 * E8))
+            )])
+        )
+        .now_or_never()
+        .unwrap()
+        .is_ok());
+    // But only 4 ICP is "accepted".
+    assert_eq!(
+        sale.state()
+            .buyers
+            .get(&TEST_USER2_PRINCIPAL.to_string())
+            .unwrap()
+            .amount_icp_e8s,
+        4 * E8
+    );
+    // Can commit even if time isn't up as the max has been reached.
+    assert!(sale.can_commit(init.token_sale_timestamp_seconds - 1));
+    // This should commit...
+    assert!(sale.try_commit_or_abort(init.token_sale_timestamp_seconds - 1));
+    assert_eq!(sale.state().lifecycle(), Lifecycle::Committed);
+    // Check that buyer balances are correct. Total SNS balance is 100k and total ICP is 10.
+    {
+        let b1 = sale
+            .state()
+            .buyers
+            .get(&TEST_USER1_PRINCIPAL.to_string())
+            .unwrap();
+        assert_eq!(b1.amount_icp_e8s, 6 * E8);
+        assert_eq!(b1.amount_sns_e8s, 60000 * E8);
+    }
+    {
+        let b2 = sale
+            .state()
+            .buyers
+            .get(&TEST_USER2_PRINCIPAL.to_string())
+            .unwrap();
+        assert_eq!(b2.amount_icp_e8s, 4 * E8);
+        assert_eq!(b2.amount_sns_e8s, 40000 * E8);
+    }
 }
 
 /// Test the happy path of a token sale. First 200k SNS tokens are
@@ -204,13 +549,13 @@ fn test_scenario_happy() {
             SALE_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 AccountIdentifier::new(SALE_CANISTER_ID.get(), None),
-                Ok(Tokens::from_e8s(200000_00000000))
+                Ok(Tokens::from_e8s(200000 * E8))
             )])
         )
         .now_or_never()
         .unwrap()
         .is_ok());
-    assert_eq!(sale.state().sns_token_e8s, 200000_00000000);
+    assert_eq!(sale.state().sns_token_e8s, 200000 * E8);
     assert!(sale.open().is_ok());
     assert_eq!(sale.state().lifecycle(), Lifecycle::Open);
     // Cannot commit or abort, as the sale is not due yet.
@@ -226,7 +571,7 @@ fn test_scenario_happy() {
                     SALE_CANISTER_ID.get(),
                     Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone()))
                 ),
-                Ok(Tokens::from_e8s(1000_00000000))
+                Ok(Tokens::from_e8s(1000 * E8))
             )])
         )
         .now_or_never()
@@ -238,7 +583,7 @@ fn test_scenario_happy() {
             .get(&TEST_USER1_PRINCIPAL.to_string())
             .unwrap()
             .amount_icp_e8s,
-        1000_00000000
+        1000 * E8
     );
     // Cannot commit or abort, as the sale is not due yet.
     assert!(!sale.try_commit_or_abort(init.token_sale_timestamp_seconds - 1));
@@ -252,7 +597,7 @@ fn test_scenario_happy() {
                     SALE_CANISTER_ID.get(),
                     Some(Subaccount::from(&TEST_USER2_PRINCIPAL.clone()))
                 ),
-                Ok(Tokens::from_e8s(600_00000000))
+                Ok(Tokens::from_e8s(600 * E8))
             )])
         )
         .now_or_never()
@@ -264,7 +609,7 @@ fn test_scenario_happy() {
             .get(&TEST_USER2_PRINCIPAL.to_string())
             .unwrap()
             .amount_icp_e8s,
-        600_00000000
+        600 * E8
     );
     // Now there are two participants. If the time was up, the sale could be aborted...
     {
@@ -282,7 +627,7 @@ fn test_scenario_happy() {
                     SALE_CANISTER_ID.get(),
                     Some(Subaccount::from(&TEST_USER3_PRINCIPAL.clone()))
                 ),
-                Ok(Tokens::from_e8s(400_00000000))
+                Ok(Tokens::from_e8s(400 * E8))
             )])
         )
         .now_or_never()
@@ -294,7 +639,7 @@ fn test_scenario_happy() {
             .get(&TEST_USER3_PRINCIPAL.to_string())
             .unwrap()
             .amount_icp_e8s,
-        400_00000000
+        400 * E8
     );
     // Cannot commit if the sale is not due.
     assert!(!sale.can_commit(init.token_sale_timestamp_seconds - 1));
@@ -310,8 +655,8 @@ fn test_scenario_happy() {
             .buyers
             .get(&TEST_USER1_PRINCIPAL.to_string())
             .unwrap();
-        assert_eq!(b1.amount_icp_e8s, 1000_00000000);
-        assert_eq!(b1.amount_sns_e8s, 100000_00000000);
+        assert_eq!(b1.amount_icp_e8s, 1000 * E8);
+        assert_eq!(b1.amount_sns_e8s, 100000 * E8);
     }
     {
         let b2 = sale
@@ -319,8 +664,8 @@ fn test_scenario_happy() {
             .buyers
             .get(&TEST_USER2_PRINCIPAL.to_string())
             .unwrap();
-        assert_eq!(b2.amount_icp_e8s, 600_00000000);
-        assert_eq!(b2.amount_sns_e8s, 60000_00000000);
+        assert_eq!(b2.amount_icp_e8s, 600 * E8);
+        assert_eq!(b2.amount_sns_e8s, 60000 * E8);
     }
     {
         let b3 = sale
@@ -328,8 +673,8 @@ fn test_scenario_happy() {
             .buyers
             .get(&TEST_USER3_PRINCIPAL.to_string())
             .unwrap();
-        assert_eq!(b3.amount_icp_e8s, 400_00000000);
-        assert_eq!(b3.amount_sns_e8s, 40000_00000000);
+        assert_eq!(b3.amount_icp_e8s, 400 * E8);
+        assert_eq!(b3.amount_sns_e8s, 40000 * E8);
     }
     {
         // "Sweep" all ICP, going to the governance canister. Mock one failure.
@@ -342,7 +687,7 @@ fn test_scenario_happy() {
                 Tokens::from_e8s(1),
                 &mock_stub(vec![
                     LedgerExpect::TransferFunds(
-                        600_00000000 - 1,
+                        600 * E8 - 1,
                         1,
                         Some(Subaccount::from(&*TEST_USER2_PRINCIPAL)),
                         AccountIdentifier::new(SNS_GOVERNANCE_CANISTER_ID.get(), None),
@@ -350,7 +695,7 @@ fn test_scenario_happy() {
                         Err(77),
                     ),
                     LedgerExpect::TransferFunds(
-                        1000_00000000 - 1,
+                        1000 * E8 - 1,
                         1,
                         Some(Subaccount::from(&*TEST_USER1_PRINCIPAL)),
                         AccountIdentifier::new(SNS_GOVERNANCE_CANISTER_ID.get(), None),
@@ -358,7 +703,7 @@ fn test_scenario_happy() {
                         Ok(1067),
                     ),
                     LedgerExpect::TransferFunds(
-                        400_00000000 - 1,
+                        400 * E8 - 1,
                         1,
                         Some(Subaccount::from(&*TEST_USER3_PRINCIPAL)),
                         AccountIdentifier::new(SNS_GOVERNANCE_CANISTER_ID.get(), None),
@@ -380,7 +725,7 @@ fn test_scenario_happy() {
             .sweep_icp(
                 Tokens::from_e8s(2),
                 &mock_stub(vec![LedgerExpect::TransferFunds(
-                    600_00000000 - 2,
+                    600 * E8 - 2,
                     2,
                     Some(Subaccount::from(&*TEST_USER2_PRINCIPAL)),
                     AccountIdentifier::new(SNS_GOVERNANCE_CANISTER_ID.get(), None),
@@ -409,7 +754,7 @@ fn test_scenario_happy() {
                 Tokens::from_e8s(1),
                 &mock_stub(vec![
                     LedgerExpect::TransferFunds(
-                        60000_00000000 - 1,
+                        60000 * E8 - 1,
                         1,
                         None,
                         dst(*TEST_USER2_PRINCIPAL),
@@ -417,7 +762,7 @@ fn test_scenario_happy() {
                         Ok(1068),
                     ),
                     LedgerExpect::TransferFunds(
-                        100000_00000000 - 1,
+                        100000 * E8 - 1,
                         1,
                         None,
                         dst(*TEST_USER1_PRINCIPAL),
@@ -425,7 +770,7 @@ fn test_scenario_happy() {
                         Ok(1067),
                     ),
                     LedgerExpect::TransferFunds(
-                        40000_00000000 - 1,
+                        40000 * E8 - 1,
                         1,
                         None,
                         dst(*TEST_USER3_PRINCIPAL),
@@ -564,7 +909,9 @@ async fn test_finalize_sale() {
         sns_ledger_canister_id     :     SNS_LEDGER_CANISTER_ID .clone(),
 
         max_icp_e8s: 100,
+        min_icp_e8s: 0,
         min_participant_icp_e8s: 1,
+        max_participant_icp_e8s: 100,
         min_participants: 1,
         token_sale_timestamp_seconds: 1,
     });
@@ -781,7 +1128,208 @@ async fn test_finalize_sale() {
     );
 }
 
-// TO-TEST:
-// - Reaching the target ICP, going over the bound.
-// - Refunds in aborted state.
-// - Refunds of tokens that the sale cansiter does not know about.
+/// Test the error refund method.
+#[test]
+fn test_error_refund() {
+    let init = Init {
+        max_icp_e8s: 10 * E8,
+        min_icp_e8s: 5 * E8,
+        // 1640995200 = 2022-01-01T00:00:00
+        token_sale_timestamp_seconds: 1640995200 + 10,
+        min_participants: 1,
+        min_participant_icp_e8s: E8,
+        max_participant_icp_e8s: 6 * E8,
+        ..init()
+    };
+    let mut sale = Sale::new(init.clone());
+    // Refresh giving 100k SNS tokens
+    assert!(sale
+        .refresh_sns_token_e8s(
+            SALE_CANISTER_ID,
+            &mock_stub(vec![LedgerExpect::AccountBalance(
+                AccountIdentifier::new(SALE_CANISTER_ID.get(), None),
+                Ok(Tokens::from_e8s(100000 * E8))
+            )])
+        )
+        .now_or_never()
+        .unwrap()
+        .is_ok());
+    assert_eq!(sale.state().sns_token_e8s, 100000 * E8);
+    assert!(sale.open().is_ok());
+    assert_eq!(sale.state().lifecycle(), Lifecycle::Open);
+    // Cannot commit or abort, as the sale is not due yet.
+    assert!(!sale.try_commit_or_abort(init.token_sale_timestamp_seconds - 1));
+    // Deposit 6 ICP from one buyer.
+    assert!(sale
+        .refresh_buyer_token_e8s(
+            *TEST_USER1_PRINCIPAL,
+            SALE_CANISTER_ID,
+            &mock_stub(vec![LedgerExpect::AccountBalance(
+                AccountIdentifier::new(
+                    SALE_CANISTER_ID.get(),
+                    Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone()))
+                ),
+                Ok(Tokens::from_e8s(6 * E8))
+            )])
+        )
+        .now_or_never()
+        .unwrap()
+        .is_ok());
+    assert_eq!(
+        sale.state()
+            .buyers
+            .get(&TEST_USER1_PRINCIPAL.to_string())
+            .unwrap()
+            .amount_icp_e8s,
+        6 * E8
+    );
+    let fee = 1234;
+    // Refund must fail as the sale is not committed or aborted.
+    {
+        match sale
+            .error_refund_icp(
+                *TEST_USER2_PRINCIPAL,
+                Tokens::from_e8s(10 * E8),
+                Tokens::from_e8s(fee),
+                &mock_stub(vec![]),
+            )
+            .now_or_never()
+            .unwrap()
+        {
+            TransferResult::Failure(_) => (),
+            _ => panic!("Expected error refund to fail!"),
+        }
+    }
+    // Will not auto-commit before the sale is due.
+    assert!(!sale.can_commit(init.token_sale_timestamp_seconds - 1));
+    assert!(!sale.try_commit_or_abort(init.token_sale_timestamp_seconds - 1));
+    // Commit when due.
+    assert!(sale.try_commit_or_abort(init.token_sale_timestamp_seconds));
+    assert_eq!(sale.state().lifecycle(), Lifecycle::Committed);
+    // Check that buyer balance is correct. Total SNS balance is 100k and total ICP is 6.
+    {
+        let b1 = sale
+            .state()
+            .buyers
+            .get(&TEST_USER1_PRINCIPAL.to_string())
+            .unwrap();
+        assert_eq!(b1.amount_icp_e8s, 6 * E8);
+        assert_eq!(b1.amount_sns_e8s, 100000 * E8);
+    }
+    // Now, we try to do some refunds.
+
+    // Perhaps USER2 (who never participated in the sale) sent 10 ICP in error?
+    match sale
+        .error_refund_icp(
+            *TEST_USER2_PRINCIPAL,
+            Tokens::from_e8s(10 * E8),
+            Tokens::from_e8s(fee),
+            &mock_stub(vec![LedgerExpect::TransferFunds(
+                10 * E8 - fee,
+                fee,
+                Some(Subaccount::from(&TEST_USER2_PRINCIPAL.clone())),
+                AccountIdentifier::new(*TEST_USER2_PRINCIPAL, None),
+                0,
+                Ok(1066),
+            )]),
+        )
+        .now_or_never()
+        .unwrap()
+    {
+        // Refund should succeed.
+        TransferResult::Success(x) => assert_eq!(x, 1066),
+        _ => panic!("Expected error refund to succeed"),
+    }
+    // Perhaps USER3 didn't actually send 10 ICP in error, but tries to get a refund anyway?
+    match sale
+        .error_refund_icp(
+            *TEST_USER3_PRINCIPAL,
+            Tokens::from_e8s(10 * E8),
+            Tokens::from_e8s(fee),
+            &mock_stub(vec![LedgerExpect::TransferFunds(
+                10 * E8 - fee,
+                fee,
+                Some(Subaccount::from(&TEST_USER3_PRINCIPAL.clone())),
+                AccountIdentifier::new(*TEST_USER3_PRINCIPAL, None),
+                0,
+                Err(100),
+            )]),
+        )
+        .now_or_never()
+        .unwrap()
+    {
+        TransferResult::Failure(_) => (),
+        _ => panic!("Expected error refund to fail"),
+    }
+    // Perhaps USER1 (who has a buyer record) sent 10 extra ICP in
+    // error? We expect this to fail as USER1's ICP still hasn't been
+    // "collected" (sweep).
+    match sale
+        .error_refund_icp(
+            *TEST_USER1_PRINCIPAL,
+            Tokens::from_e8s(10 * E8),
+            Tokens::from_e8s(fee),
+            &mock_stub(vec![]),
+        )
+        .now_or_never()
+        .unwrap()
+    {
+        TransferResult::Failure(_) => (),
+        _ => panic!("Expected error refund to fail"),
+    }
+    // "Sweep" all ICP, going to the governance canister.
+    let SweepResult {
+        success,
+        failure,
+        skipped,
+    } = sale
+        .sweep_icp(
+            Tokens::from_e8s(fee),
+            &mock_stub(vec![LedgerExpect::TransferFunds(
+                6 * E8 - fee,
+                fee,
+                Some(Subaccount::from(&*TEST_USER1_PRINCIPAL)),
+                AccountIdentifier::new(SNS_GOVERNANCE_CANISTER_ID.get(), None),
+                0,
+                Ok(1067),
+            )]),
+        )
+        .now_or_never()
+        .unwrap();
+    assert_eq!(skipped, 0);
+    assert_eq!(success, 1);
+    assert_eq!(failure, 0);
+    // Check that buyer balance is correct. Total SNS balance is 100k, but ICP is zero.
+    {
+        let b1 = sale
+            .state()
+            .buyers
+            .get(&TEST_USER1_PRINCIPAL.to_string())
+            .unwrap();
+        assert_eq!(b1.amount_icp_e8s, 0);
+        assert_eq!(b1.amount_sns_e8s, 100000 * E8);
+    }
+    // Perhaps USER1 (who has a buyer record) sent 10 extra ICP in
+    // error? We expect this to succeed now that the ICP that
+    // participated in the sale have been disbursed.
+    match sale
+        .error_refund_icp(
+            *TEST_USER1_PRINCIPAL,
+            Tokens::from_e8s(10 * E8),
+            Tokens::from_e8s(fee),
+            &mock_stub(vec![LedgerExpect::TransferFunds(
+                10 * E8 - fee,
+                fee,
+                Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone())),
+                AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None),
+                0,
+                Ok(1066),
+            )]),
+        )
+        .now_or_never()
+        .unwrap()
+    {
+        TransferResult::Success(_) => (),
+        _ => panic!("Expected error refund to succeed"),
+    }
+}

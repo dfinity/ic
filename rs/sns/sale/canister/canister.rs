@@ -29,17 +29,16 @@ use ic_nervous_system_common::stable_mem_utils::{
 };
 use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse};
 use ic_sns_sale::pb::v1::{
-    CanisterCallError, FinalizeSaleRequest, FinalizeSaleResponse, GetCanisterStatusRequest,
-    GetCanisterStatusResponse, GetStateRequest, GetStateResponse, Init, OpenSaleRequest,
-    OpenSaleResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
-    RefreshSnsTokensRequest, RefreshSnsTokensResponse, Sale,
+    CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSaleRequest,
+    FinalizeSaleResponse, GetCanisterStatusRequest, GetCanisterStatusResponse, GetStateRequest,
+    GetStateResponse, Init, OpenSaleRequest, OpenSaleResponse, RefreshBuyerTokensRequest,
+    RefreshBuyerTokensResponse, RefreshSnsTokensRequest, RefreshSnsTokensResponse, Sale,
 };
 use ic_sns_sale::sale::{SnsGovernanceClient, LOG_PREFIX};
+use ledger_canister::Tokens;
+use ledger_canister::DEFAULT_TRANSFER_FEE;
 
 use std::str::FromStr;
-
-// TODO: add canister methods for transferring tokens out.
-// use ledger_canister::{AccountIdentifier, Subaccount, DEFAULT_TRANSFER_FEE};
 
 use prost::Message;
 use std::time::Duration;
@@ -213,6 +212,28 @@ async fn finalize_sale_(_arg: FinalizeSaleRequest) -> FinalizeSaleResponse {
     sale_mut()
         .finalize(&mut sns_governance_client, ledger_factory)
         .await
+}
+
+#[export_name = "canister_update error_refund_icp"]
+fn error_refund_icp() {
+    over_async(candid_one, error_refund_icp_)
+}
+
+#[candid_method(update, rename = "error_refund_icp")]
+async fn error_refund_icp_(arg: ErrorRefundIcpRequest) -> ErrorRefundIcpResponse {
+    sale()
+        .error_refund_icp(
+            caller(),
+            Tokens::from_e8s(arg.icp_e8s),
+            if arg.fee_override_e8s > 0 {
+                Tokens::from_e8s(arg.fee_override_e8s)
+            } else {
+                DEFAULT_TRANSFER_FEE
+            },
+            &create_real_ledger,
+        )
+        .await;
+    ErrorRefundIcpResponse {}
 }
 
 trait Ic0 {

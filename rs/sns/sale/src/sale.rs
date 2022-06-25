@@ -63,16 +63,21 @@ pub trait SnsGovernanceClient {
 State diagram for the sale canister's state.
 
 ```text
-           has_sns_amount                  sufficient_participants && (sale_due || icp_target_reached)
+           has_sns_amount                  sufficient_participation && (sale_due || icp_target_reached)
 PENDING -------------------------> OPEN ------------------------------------------------------------> COMMITTED
  |                                  |                                                                     |
- |                                  | sale_due && not sufficient_participants                             |
+ |                                  | sale_due && not sufficient_participation                             |
  |                                  v                                                                     v
  |                                 ABORTED ---------------------------------------------------------> <DELETED>
  |                                  ^
  |                                  |
  +--------------------- sale_due  --+
 ```
+
+Here `sufficient_participation` means that the minimum number of
+participants `min_participants` has been reached, each contributing
+between `min_participant_icp_e8s` and `max_participant_icp_e8s`, and
+their total contributions add up to at least `min_icp_e8s`.
 
 The 'sale' canister smart contract is used to perform a type of
 single-price auction (SNS/ICP) of one token type SNS for another token
@@ -176,7 +181,7 @@ impl Sale {
         let lifecycle = self.state().lifecycle();
         if (lifecycle == Lifecycle::Open || lifecycle == Lifecycle::Pending)
             && self.sale_due(now_seconds)
-            && !self.sufficient_participants()
+            && !self.sufficient_participation()
         {
             self.abort(now_seconds);
             return true;
@@ -200,12 +205,12 @@ impl Sale {
         Ok(())
     }
 
-    /// Precondition: lifecycle == Open && sufficient_participants && (sale_due || icp_target_reached)
+    /// Precondition: lifecycle == Open && sufficient_participation && (sale_due || icp_target_reached)
     ///
     /// Postcondition: lifecycle == Committed
     fn commit(&mut self, now_seconds: u64) {
         assert!(self.state().lifecycle() == Lifecycle::Open);
-        assert!(self.sufficient_participants());
+        assert!(self.sufficient_participation());
         assert!(self.sale_due(now_seconds) || self.icp_target_reached());
         // We are selling SNS tokens for the base token (ICP), or, in
         // general, whatever token the ledger referred to as the ICP
@@ -250,7 +255,7 @@ impl Sale {
             total_sns_tokens_sold = total_sns_tokens_sold.saturating_add(x);
         }
         assert!(total_sns_tokens_sold <= sns_for_sale_e8s as u64);
-        println!("{}LOG: token sale committed; {} participants receive a total of {} out of {} (change {});",
+        println!("{}INFO: token sale committed; {} participants receive a total of {} out of {} (change {});",
 		 LOG_PREFIX,
 		 state_mut.buyers.len(),
 		 total_sns_tokens_sold,
@@ -263,7 +268,7 @@ impl Sale {
         state_mut.set_lifecycle(Lifecycle::Committed);
     }
 
-    /// Precondition: lifecycle IN {Open, Pending} && sale_due && not sufficient_participants
+    /// Precondition: lifecycle IN {Open, Pending} && sale_due && not sufficient_participation
     ///
     /// Postcondition: lifecycle == Aborted
     fn abort(&mut self, now_seconds: u64) {
@@ -272,7 +277,7 @@ impl Sale {
                 || self.state().lifecycle() == Lifecycle::Pending
         );
         assert!(self.sale_due(now_seconds));
-        assert!(!self.sufficient_participants());
+        assert!(!self.sufficient_participation());
         self.state_mut().sns_token_e8s = 0;
         self.state_mut().set_lifecycle(Lifecycle::Aborted);
     }
@@ -326,7 +331,7 @@ impl Sale {
         }
         let old_sns_tokens_e8s = self.state().sns_token_e8s;
         println!(
-            "{}LOG: refresh_sns_token old e8s: {}; new e8s: {}",
+            "{}INFO: refresh_sns_token old e8s: {}; new e8s: {}",
             LOG_PREFIX, old_sns_tokens_e8s, e8s
         );
         // Note that we allow any number of outstanding
@@ -399,6 +404,8 @@ impl Sale {
                 self.init().min_participant_icp_e8s
             ));
         }
+        // Extract init parameter before mutable borrow of state.
+        let max_participant_icp_e8s = self.init().max_participant_icp_e8s;
         let buyer_state = self
             .state_mut()
             .buyers
@@ -417,11 +424,12 @@ impl Sale {
         // Subtraction safe because of the preceding if-statement.
         let requested_increment_e8s = e8s - old_amount_icp_e8s;
         let actual_increment_e8s = std::cmp::min(max_increment_e8s, requested_increment_e8s);
-        buyer_state.amount_icp_e8s = buyer_state
+        let new_balance_e8s = buyer_state
             .amount_icp_e8s
             .saturating_add(actual_increment_e8s);
+        buyer_state.amount_icp_e8s = std::cmp::min(new_balance_e8s, max_participant_icp_e8s);
         println!(
-            "{}LOG: refresh_buyer_tokens for buyer {}; old e8s {}; new e8s {}",
+            "{}INFO: refresh_buyer_tokens for buyer {}; old e8s {}; new e8s {}",
             LOG_PREFIX, buyer, old_amount_icp_e8s, buyer_state.amount_icp_e8s
         );
         if requested_increment_e8s >= max_increment_e8s {
@@ -430,6 +438,13 @@ impl Sale {
                 LOG_PREFIX, max_icp_e8s
             );
         }
+        if new_balance_e8s > max_participant_icp_e8s {
+            println!(
+                "{}INFO: participant {} contributed {} e8s - the limit per participant is {}",
+                LOG_PREFIX, buyer, new_balance_e8s, max_participant_icp_e8s
+            );
+        }
+        // TODO: Consider returning information about the amount accepted.
         Ok(())
     }
 
@@ -600,6 +615,86 @@ impl Sale {
                 .await
                 .into(),
         )
+    }
+
+    /// Requests a refund of ICP tokens transferred to the Sale
+    /// cansiter in error. This method only works if this
+    /// canister is in the 'committed' or 'aborted' state.
+    ///
+    /// The request is to refund `amount` tokens for `principal`
+    /// (using `fee` as fee) on the ICP ledger. The specified amount
+    /// of tokens is transferred from `subaccount(sale_canister, P)`
+    /// to `P`, where `P` is the specified principal.
+    ///
+    /// Note that this function cannot mutate `self` - it only
+    /// initiates a ledger transfer, which may fail. It is up to the
+    /// caller to ensure the correctness of the parameters.
+    ///
+    /// This method is secure because it only transfers tokens from a
+    /// principal's subaccount (of the Sale canister) to the
+    /// principal's own account, i.e., the tokens were held in escrow
+    /// for the principal (buyer) before the call and are returned to
+    /// the same principal. Moreover, this method can only be called
+    /// by the principal; this serves two purposes: first, that third
+    /// parties cannot make many small transfers to drain the
+    /// principal's tokens by multiple fees, and, second, so a third
+    /// party cannot return the buyer's token that they intended to
+    /// use to join the sale.
+    pub async fn error_refund_icp(
+        &self,
+        principal: PrincipalId,
+        amount: Tokens,
+        fee: Tokens,
+        ledger_stub: &'_ dyn Fn(CanisterId) -> Box<dyn Ledger>,
+    ) -> TransferResult {
+        if !(self.state().lifecycle() == Lifecycle::Aborted
+            || self.state().lifecycle() == Lifecycle::Committed)
+        {
+            return TransferResult::Failure(
+                "Error refunds can only be performed when the sale is 'aborted' or 'committed'"
+                    .to_string(),
+            );
+        }
+        if let Some(buyer_state) = self.state().buyers.get(&principal.to_string()) {
+            // This buyer has participated in the sale, but all ICP
+            // has already been disbursed, either back to the buyer
+            // (aborted) or to the SNS Governance canister
+            // (committed). Any ICP in this buyer's subaccount must
+            // belong to the buyer.
+            if buyer_state.amount_icp_e8s != 0 || buyer_state.icp_disbursing {
+                return TransferResult::Failure(format!(
+                    "ICP cannot be refunded as principal {} has {} ICP (e8s) in escrow",
+                    principal, buyer_state.amount_icp_e8s
+                ));
+            }
+        }
+        let subaccount = Subaccount::from(&principal);
+        let dst = AccountIdentifier::new(principal, None);
+        let result = ledger_stub(self.init().icp_ledger())
+            .transfer_funds(
+                amount.get_e8s().saturating_sub(fee.get_e8s()),
+                fee.get_e8s(),
+                Some(subaccount),
+                dst,
+                0,
+            )
+            .await;
+        match result {
+            Ok(h) => {
+                println!(
+                    "{}INFO: error refund - transferred {} ICP from subaccount {} to {} at height {}",
+                    LOG_PREFIX, amount, subaccount, dst, h
+                );
+                TransferResult::Success(h)
+            }
+            Err(e) => {
+                println!(
+                    "{}ERROR: error refund - failed to transfer {} from subaccount {}: {}",
+                    LOG_PREFIX, amount, subaccount, e
+                );
+                TransferResult::Failure(e.to_string())
+            }
+        }
     }
 
     /// In state 'committed' or 'aborted'. Transfer ICP tokens from
@@ -782,11 +877,13 @@ impl Sale {
             .unwrap_or(false)
     }
 
-    /// At least the minimum number of participants have been achieved.
-    pub fn sufficient_participants(&self) -> bool {
+    /// The minimum number of participants have been achieved, and the
+    /// minimal total amount has been reached.
+    pub fn sufficient_participation(&self) -> bool {
         if let Some(init) = &self.init {
             if let Some(state) = &self.state {
-                return state.buyers.len() >= (init.min_participants as usize);
+                return state.buyers.len() >= (init.min_participants as usize)
+                    && state.buyer_total_icp_e8s() >= init.min_icp_e8s;
             }
         }
         false
@@ -809,7 +906,10 @@ impl Sale {
         if self.state().lifecycle() != Lifecycle::Open {
             return false;
         }
-        if !self.sufficient_participants() {
+        // Possible optimization: both 'sufficient_participation' and
+        // 'icp_target_reached' compute 'buyer_total_icp_e8s', and
+        // this computation could be shared (or cached).
+        if !self.sufficient_participation() {
             return false;
         }
         if !(self.sale_due(now_seconds) || self.icp_target_reached()) {
@@ -855,19 +955,24 @@ impl Init {
     }
 
     pub fn is_valid(&self) -> bool {
-        // TODO: check that the canister IDs are valid.
-        //
         // Sale date in the future, or at least past
         // '2022-01-01T00:00:00 GMT+0000' to prevent initialisation
         // errors.
         self.token_sale_timestamp_seconds >= 1640995200
-            && self.min_participants > 0
-            && self.min_participant_icp_e8s > 0
-            && self.max_icp_e8s >= (self.min_participants as u64) * self.min_participant_icp_e8s
+        // TODO: check that the canister IDs are valid.
+        //
             && !self.nns_governance_canister_id.is_empty()
             && !self.sns_governance_canister_id.is_empty()
             && !self.sns_ledger_canister_id.is_empty()
             && !self.icp_ledger_canister_id.is_empty()
+            && self.min_participants > 0
+            && self.min_participant_icp_e8s > 0
+            && self.max_participant_icp_e8s >= self.min_participant_icp_e8s
+            && self.max_participant_icp_e8s <= self.max_icp_e8s
+	    // Check that the numbers make sense, i.e., don't overflow
+	    && (self.min_participants as u64).checked_mul(self.max_participant_icp_e8s).is_some()
+            && self.max_icp_e8s >= (self.min_participants as u64).saturating_mul(self.min_participant_icp_e8s)
+	    && self.min_icp_e8s <= self.max_icp_e8s
     }
 }
 
@@ -926,7 +1031,7 @@ impl BuyerState {
             Ok(h) => {
                 self.amount_icp_e8s = 0;
                 println!(
-                    "{}LOG: transferred {} ICP from subaccount {} to {} at height {}",
+                    "{}INFO: transferred {} ICP from subaccount {} to {} at height {}",
                     LOG_PREFIX, amount, subaccount, dst, h
                 );
                 TransferResult::Success(h)
@@ -976,7 +1081,7 @@ impl BuyerState {
             Ok(h) => {
                 self.amount_sns_e8s = 0;
                 println!(
-                    "{}LOG: transferred {} SNS tokens to {} at height {}",
+                    "{}INFO: transferred {} SNS tokens to {} at height {}",
                     LOG_PREFIX, amount, dst, h
                 );
                 TransferResult::Success(h)

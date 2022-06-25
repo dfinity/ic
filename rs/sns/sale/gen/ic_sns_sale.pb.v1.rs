@@ -42,6 +42,21 @@ pub struct Init {
     /// participate. Must be greater than zero.
     #[prost(uint64, tag="8")]
     pub min_participant_icp_e8s: u64,
+    /// The maximum amount of ICP that each buyer can contribute. Must be
+    /// greater than or equal to `min_participant_icp_e8s` and less than
+    /// or equal to `target_icp_e8s`. Can effectively be disabled by
+    /// setting it to `target_icp_e8s`.
+    #[prost(uint64, tag="9")]
+    pub max_participant_icp_e8s: u64,
+    /// The total number of ICP that is required for this token sale to
+    /// take place. This number divided by the number of SNS tokens for
+    /// sale gives the seller's reserve price for the sale, i.e., the
+    /// minimum number of ICP per SNS tokens that the seller of SNS
+    /// tokens is willing to accept. If this amount is not achieved, the
+    /// sale will be aborted (instead of committed) when the due date/time
+    /// occurs. Must be smaller than or equal to `target_icp_e8s`.
+    #[prost(uint64, tag="10")]
+    pub min_icp_e8s: u64,
 }
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -49,9 +64,11 @@ pub struct BuyerState {
     /// Can only be set when a buyer state record for a new buyer is
     /// created, which can only happen when the lifecycle state is
     /// `Open`. Must be at least `init.min_participant_icp_e8s` on
-    /// initialization but will be set to zero once the tokens have been
-    /// transferred out - either to the governance canister when the sale
-    /// is committed or (back) to the buyer when the sale is aborted.
+    /// initialization. Can never be more than
+    /// `init.max_participant_icp_e8s`. Will be set to zero once the
+    /// tokens have been transferred out - either to the governance
+    /// canister when the sale is committed or (back) to the buyer when
+    /// the sale is aborted.
     ///
     /// Invariant between canisters:
     ///
@@ -62,16 +79,16 @@ pub struct BuyerState {
     /// where `P` is the principal ID associated with this buyer's state.
     ///
     /// ownership
-    /// * pending - must be zero
+    /// * pending - a `BuyerState` cannot exists
     /// * open - owned by the buyer, cannot be transferred out
-    /// * committed - owned by the governance canister, can be transferred out
+    /// * committed - owned by the SNS governance canister, can be transferred out
     /// * aborted - owned by the buyer, can be transferred out
     #[prost(uint64, tag="1")]
     pub amount_icp_e8s: u64,
     /// Computed when world lifecycle changes to Committed.
     ///
     /// ownership:
-    /// * pending - must be zero
+    /// * pending - a `BuyerState` cannot exists
     /// * open - must be zero
     /// * committed - owned by the buyer, can be transferred out
     /// * aborted - must be zero
@@ -255,6 +272,23 @@ pub struct CanisterCallError {
     pub code: ::core::option::Option<i32>,
     #[prost(string, tag="2")]
     pub description: ::prost::alloc::string::String,
+}
+/// Request a refund of tokens that were sent to the canister in
+/// error. The refund is always on the ICP ledger, from this canister's
+/// subaccount of the caller to the account of the caller.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ErrorRefundIcpRequest {
+    /// The amount of ICP to transfer.
+    #[prost(uint64, tag="1")]
+    pub icp_e8s: u64,
+    /// If specified, use this as 'fee' instead of the default.
+    #[prost(uint64, tag="2")]
+    pub fee_override_e8s: u64,
+}
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ErrorRefundIcpResponse {
 }
 /// Lifecycle states of the sale cansiter's world state. The details of
 /// their meanings is provided in the documentation of the `Sale`.
