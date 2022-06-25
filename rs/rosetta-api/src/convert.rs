@@ -14,11 +14,11 @@ use crate::request_types::{
     NeuronInfoMetadata, PublicKeyOrPrincipal, RequestResultMetadata, SetDissolveTimestampMetadata,
     SpawnMetadata, Status, STATUS_COMPLETED,
 };
-use crate::store::HashedBlock;
 use crate::transaction_id::TransactionIdentifier;
 use crate::{convert, errors};
 use dfn_protobuf::ProtoBuf;
 use ic_crypto_tree_hash::Path;
+use ic_ledger_client_core::store::HashedBlock;
 use ic_ledger_core::block::{BlockType, HashOf};
 use ic_types::messages::{HttpCanisterUpdate, HttpReadState};
 use ic_types::{CanisterId, PrincipalId};

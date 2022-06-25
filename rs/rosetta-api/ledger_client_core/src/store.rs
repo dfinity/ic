@@ -6,11 +6,9 @@ use std::sync::Mutex;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
+use crate::balance_book::BalanceBook;
 use ic_ledger_core::block::{BlockType, EncodedBlock, HashOf};
 use ledger_canister::{AccountIdentifier, Block, BlockHeight, Tokens};
-
-use crate::balance_book::BalanceBook;
-use crate::errors::ApiError;
 
 #[derive(candid::CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct HashedBlock {
@@ -40,20 +38,6 @@ pub enum BlockStoreError {
     NotFound(BlockHeight),
     NotAvailable(BlockHeight),
     Other(String),
-}
-
-impl From<BlockStoreError> for ApiError {
-    fn from(e: BlockStoreError) -> Self {
-        match e {
-            BlockStoreError::NotFound(idx) => {
-                ApiError::invalid_block_id(format!("Block not found: {}", idx))
-            }
-            BlockStoreError::NotAvailable(idx) => {
-                ApiError::invalid_block_id(format!("Block not available for query: {}", idx))
-            }
-            BlockStoreError::Other(msg) => ApiError::internal_error(msg),
-        }
-    }
 }
 
 fn vec_into_array(v: Vec<u8>) -> [u8; 32] {

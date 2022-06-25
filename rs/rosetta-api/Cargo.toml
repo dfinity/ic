@@ -15,19 +15,18 @@ base64 = "0.13.0"
 candid = "0.7.4"
 clap = { version = "3.1.6", features = ["derive"] }
 dfn_candid = {path = "../rust_canisters/dfn_candid"}
-dfn_core = {path = "../rust_canisters/dfn_core"}
 dfn_macro = {path = "../rust_canisters/dfn_macro"}
 dfn_protobuf = {path = "../rust_canisters/dfn_protobuf"}
 hex = "0.4.2"
 ic-canister-client = { path = "../canister_client" }
 ic-constants = { path = "../constants" }
-ic-certified-vars = { path = "../certified_vars" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "../crypto/internal/crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-sha = {path = "../crypto/sha/"}
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 ic-interfaces = { path = "../interfaces" }
 ic-ledger-core = { path = "ledger_core" }
+ic-ledger-client-core = { path = "ledger_client_core" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-nns-governance = { path = "../nns/governance" }
@@ -40,7 +39,6 @@ on_wire = {path = "../rust_canisters/on_wire"}
 prometheus = "0.12.0"
 rand = "0.7"
 reqwest = "0.11.1"
-rusqlite = "~0.25.4"
 serde = "1.0"
 serde_cbor = "0.11"
 serde_derive = "1.0"
@@ -53,7 +51,7 @@ url = "2.2.1"
 
 [dev-dependencies]
 ed25519-dalek = "1.0.1"
-ic-nns-governance = { path = "../nns/governance"}
+ic-nns-governance = { path = "../nns/governance" }
 ic-rosetta-test-utils = { path = "test_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-types = { path = "../types/types" }

@@ -5904,6 +5904,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-ledger-client-core"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "dfn_protobuf",
+ "ic-canister-client",
+ "ic-certified-vars",
+ "ic-ledger-core",
+ "ic-types 0.8.0",
+ "ledger-canister",
+ "log",
+ "on_wire",
+ "rusqlite",
+ "serde",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "ic-ledger-core"
 version = "0.8.0"
 dependencies = [
@@ -7240,7 +7259,6 @@ dependencies = [
  "candid",
  "clap 3.1.18",
  "dfn_candid",
- "dfn_core",
  "dfn_macro",
  "dfn_protobuf",
  "ed25519-dalek",
@@ -7248,13 +7266,13 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-canister-client",
- "ic-certified-vars",
  "ic-constants",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-sha",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig",
  "ic-interfaces",
+ "ic-ledger-client-core",
  "ic-ledger-core",
  "ic-nns-common",
  "ic-nns-constants",
@@ -7271,7 +7289,6 @@ dependencies = [
  "rand_chacha 0.2.2",
  "rand_core 0.5.1",
  "reqwest",
- "rusqlite",
  "serde",
  "serde_cbor",
  "serde_derive",
@@ -7290,7 +7307,9 @@ dependencies = [
  "base64 0.11.0",
  "ed25519-dalek",
  "hex",
+ "ic-canister-client",
  "ic-canister-client-sender",
+ "ic-ledger-client-core",
  "ic-ledger-core",
  "ic-nns-constants",
  "ic-rosetta-api",

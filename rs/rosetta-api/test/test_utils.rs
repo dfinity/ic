@@ -1,7 +1,7 @@
 mod basic_tests;
 mod rosetta_cli_tests;
-mod store_tests;
 
+use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::{block::BlockType, ledger::LedgerTransaction};
 use ic_rosetta_api::errors::ApiError;
 use ic_rosetta_api::models::{
@@ -15,18 +15,17 @@ use ledger_canister::{
 use tokio::sync::RwLock;
 
 use async_trait::async_trait;
-use dfn_core::CanisterId;
-use ic_rosetta_api::balance_book::BalanceBook;
+use ic_ledger_client_core::blocks::Blocks;
+use ic_ledger_client_core::store::HashedBlock;
 
 use ic_rosetta_api::convert::{from_arg, to_model_account_identifier};
-use ic_rosetta_api::ledger_client::blocks::Blocks;
 use ic_rosetta_api::ledger_client::LedgerAccess;
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::rosetta_server::RosettaApiServer;
-use ic_rosetta_api::{store::HashedBlock, DEFAULT_TOKEN_SYMBOL};
+use ic_rosetta_api::DEFAULT_TOKEN_SYMBOL;
 use ic_types::{
     messages::{HttpCallContent, HttpCanisterUpdate},
-    PrincipalId,
+    CanisterId, PrincipalId,
 };
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -34,13 +33,15 @@ use std::ops::Deref;
 use std::process::Command;
 use std::str::FromStr;
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::transaction_results::TransactionResults;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_test_utils::{acc_id, sample_data::Scribe};
+
+const FIRST_BLOCK_TIMESTAMP_NANOS_SINCE_EPOC: u64 = 1_656_147_600_000_000_000; // 25 June 2022 09:00:00
 
 fn init_test_logger() {
     // Unfortunately cargo test doesn't capture stdout properly
@@ -64,6 +65,7 @@ pub struct TestLedger {
     pub governance_canister_id: CanisterId,
     pub submit_queue: RwLock<Vec<HashedBlock>>,
     pub transfer_fee: Tokens,
+    next_block_timestamp: Mutex<TimeStamp>,
 }
 
 impl TestLedger {
@@ -77,6 +79,9 @@ impl TestLedger {
             governance_canister_id: ic_nns_constants::GOVERNANCE_CANISTER_ID,
             submit_queue: RwLock::new(Vec::new()),
             transfer_fee: DEFAULT_TRANSFER_FEE,
+            next_block_timestamp: Mutex::new(TimeStamp::from_nanos_since_unix_epoch(
+                FIRST_BLOCK_TIMESTAMP_NANOS_SINCE_EPOC,
+            )),
         }
     }
 
@@ -90,15 +95,31 @@ impl TestLedger {
     async fn last_submitted(&self) -> Result<Option<HashedBlock>, ApiError> {
         match self.submit_queue.read().await.last() {
             Some(b) => Ok(Some(b.clone())),
-            None => self.read_blocks().await.last_verified(),
+            None => self
+                .read_blocks()
+                .await
+                .last_verified()
+                .map_err(ApiError::from),
         }
     }
 
     async fn add_block(&self, hb: HashedBlock) -> Result<(), ApiError> {
         let mut blockchain = self.blockchain.write().await;
         blockchain.block_store.mark_last_verified(hb.index)?;
-        blockchain.add_block(hb)
+        blockchain.add_block(hb).map_err(ApiError::from)
     }
+
+    fn next_block_timestamp(&self) -> TimeStamp {
+        let mut next_block_timestamp = self.next_block_timestamp.lock().unwrap();
+        let res = *next_block_timestamp;
+        *next_block_timestamp = next_millisecond(res);
+        res
+    }
+}
+
+// return a timestamp with +1 millisecond
+fn next_millisecond(t: TimeStamp) -> TimeStamp {
+    TimeStamp::from_nanos_since_unix_epoch(t.as_nanos_since_unix_epoch() + 1_000_000)
 }
 
 impl Default for TestLedger {
@@ -187,7 +208,7 @@ impl LedgerAccess for TestLedger {
                 transaction.clone(),
                 memo,
                 created_at_time,
-                dfn_core::api::now().into(),
+                self.next_block_timestamp(),
             )
             .map_err(ApiError::internal_error)?;
 
@@ -223,18 +244,6 @@ impl LedgerAccess for TestLedger {
             transfer_fee: self.transfer_fee,
         })
     }
-}
-
-pub(crate) fn to_balances(
-    b: BTreeMap<AccountIdentifier, Tokens>,
-    index: BlockHeight,
-) -> BalanceBook {
-    let mut balance_book = BalanceBook::default();
-    for (acc, amount) in b {
-        balance_book.token_pool -= amount;
-        balance_book.store.insert(acc, index, amount);
-    }
-    balance_book
 }
 
 pub async fn get_balance(
