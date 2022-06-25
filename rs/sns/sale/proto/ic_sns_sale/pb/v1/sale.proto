@@ -48,15 +48,32 @@ message Init {
   // The minimum amount of ICP that each buyer must contribute to
   // participate. Must be greater than zero.
   uint64 min_participant_icp_e8s = 8;
+
+  // The maximum amount of ICP that each buyer can contribute. Must be
+  // greater than or equal to `min_participant_icp_e8s` and less than
+  // or equal to `target_icp_e8s`. Can effectively be disabled by
+  // setting it to `target_icp_e8s`.
+  uint64 max_participant_icp_e8s = 9;
+
+  // The total number of ICP that is required for this token sale to
+  // take place. This number divided by the number of SNS tokens for
+  // sale gives the seller's reserve price for the sale, i.e., the
+  // minimum number of ICP per SNS tokens that the seller of SNS
+  // tokens is willing to accept. If this amount is not achieved, the
+  // sale will be aborted (instead of committed) when the due date/time
+  // occurs. Must be smaller than or equal to `target_icp_e8s`.
+  uint64 min_icp_e8s = 10;
 }
 
 message BuyerState {
   // Can only be set when a buyer state record for a new buyer is
   // created, which can only happen when the lifecycle state is
   // `Open`. Must be at least `init.min_participant_icp_e8s` on
-  // initialization but will be set to zero once the tokens have been
-  // transferred out - either to the governance canister when the sale
-  // is committed or (back) to the buyer when the sale is aborted.
+  // initialization. Can never be more than
+  // `init.max_participant_icp_e8s`. Will be set to zero once the
+  // tokens have been transferred out - either to the governance
+  // canister when the sale is committed or (back) to the buyer when
+  // the sale is aborted.
   //
   // Invariant between canisters:
   //
@@ -67,16 +84,16 @@ message BuyerState {
   // where `P` is the principal ID associated with this buyer's state.
   //
   // ownership
-  // * pending - must be zero
+  // * pending - a `BuyerState` cannot exists
   // * open - owned by the buyer, cannot be transferred out
-  // * committed - owned by the governance canister, can be transferred out
+  // * committed - owned by the SNS governance canister, can be transferred out
   // * aborted - owned by the buyer, can be transferred out
   uint64 amount_icp_e8s = 1;
 
   // Computed when world lifecycle changes to Committed.
   //
   // ownership:
-  // * pending - must be zero
+  // * pending - a `BuyerState` cannot exists
   // * open - must be zero
   // * committed - owned by the buyer, can be transferred out
   // * aborted - must be zero
@@ -224,4 +241,17 @@ message SetModeCallResult {
 message CanisterCallError {
   optional int32 code = 1;
   string description = 2;
+}
+
+// Request a refund of tokens that were sent to the canister in
+// error. The refund is always on the ICP ledger, from this canister's
+// subaccount of the caller to the account of the caller.
+message ErrorRefundIcpRequest {
+  // The amount of ICP to transfer.
+  uint64 icp_e8s = 1;
+  // If specified, use this as 'fee' instead of the default.
+  uint64 fee_override_e8s = 2;
+}
+
+message ErrorRefundIcpResponse {
 }

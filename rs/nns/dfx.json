@@ -32,7 +32,7 @@
   "networks": {
     "mainnet": {
       "providers": [
-        "http://[2a00:fb01:400:100:5000:61ff:fe2c:14ac]:8080"
+        "https://ic0.app"
       ],
       "type": "persistent"
     },
