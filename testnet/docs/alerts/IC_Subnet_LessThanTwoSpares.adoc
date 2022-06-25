@@ -1,16 +1,19 @@
-= IC_Subnet_NotEnoughToMakeProgress
+= IC_Subnet_LessThanTwoSpares
 
 == Triggered by
 
-The number of running replicas in a subnet has dropped below the 2/3 + 1
-threshold required for the subnet to make progress.
+The number of running replicas in a subnet is less than 2*f+3 (i.e. 2 replicas
+above the 2*f+1 threshold required for the subnet to make progress).
 
 == Impact
 
-The subnet is now *stopped* and can make no further progress. All
-canisters on the subnet are *frozen*.
+If there are still at least 2*f+1 healthy replicas, only finalization rate is
+affected (as the number of running replicas drops, the finalization rate goes
+down).
 
-The system does not automatically recover from this.
+If fewer than 2*f+1 replicas are healthy, the subnet is *halted* and can make
+no further progress. Canisters on the subnet are no longer processing updates
+(but are likely still able to process queries).
 
 == Possible causes (non-exhaustive)
 
