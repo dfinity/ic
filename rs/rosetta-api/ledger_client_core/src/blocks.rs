@@ -1,5 +1,5 @@
 use crate::balance_book::BalanceBook;
-use crate::errors::ApiError;
+use crate::errors::Error;
 use crate::store::{BlockStoreError, HashedBlock, SQLiteStore};
 use ic_ledger_core::{
     block::{BlockType, EncodedBlock, HashOf},
@@ -46,7 +46,7 @@ impl Blocks {
         }
     }
 
-    pub fn load_from_store(&mut self) -> Result<u64, ApiError> {
+    pub fn load_from_store(&mut self) -> Result<u64, Error> {
         assert!(self.last()?.is_none(), "Blocks is not empty");
         assert!(
             self.balance_book.store.acc_to_hist.is_empty(),
@@ -100,11 +100,11 @@ impl Blocks {
         Ok(n)
     }
 
-    fn get_at(&self, index: BlockHeight) -> Result<HashedBlock, ApiError> {
+    fn get_at(&self, index: BlockHeight) -> Result<HashedBlock, Error> {
         Ok(self.block_store.get_at(index)?)
     }
 
-    pub fn get_verified_at(&self, index: BlockHeight) -> Result<HashedBlock, ApiError> {
+    pub fn get_verified_at(&self, index: BlockHeight) -> Result<HashedBlock, Error> {
         let last_verified_idx = self
             .block_store
             .last_verified()
@@ -117,10 +117,10 @@ impl Blocks {
         }
     }
 
-    pub fn get_balance(&self, acc: &AccountIdentifier, h: BlockHeight) -> Result<Tokens, ApiError> {
+    pub fn get_balance(&self, acc: &AccountIdentifier, h: BlockHeight) -> Result<Tokens, Error> {
         if let Ok(Some(b)) = self.first_verified() {
             if h < b.index {
-                return Err(ApiError::invalid_block_id(format!(
+                return Err(Error::InvalidBlockId(format!(
                     "Block at height: {} not available for query",
                     h
                 )));
@@ -132,7 +132,7 @@ impl Blocks {
             .map(|x| x as i128)
             .unwrap_or(-1);
         if h as i128 > last_verified_idx {
-            Err(ApiError::invalid_block_id(format!(
+            Err(Error::InvalidBlockId(format!(
                 "Block not found at height: {}",
                 h
             )))
@@ -141,31 +141,31 @@ impl Blocks {
         }
     }
 
-    fn get(&self, hash: HashOf<EncodedBlock>) -> Result<HashedBlock, ApiError> {
+    fn get(&self, hash: HashOf<EncodedBlock>) -> Result<HashedBlock, Error> {
         let index = *self
             .hash_location
             .get(&hash)
-            .ok_or_else(|| ApiError::invalid_block_id(format!("Block not found {}", hash)))?;
+            .ok_or_else(|| Error::InvalidBlockId(format!("Block not found {}", hash)))?;
         self.get_at(index)
     }
 
-    pub fn get_verified(&self, hash: HashOf<EncodedBlock>) -> Result<HashedBlock, ApiError> {
+    pub fn get_verified(&self, hash: HashOf<EncodedBlock>) -> Result<HashedBlock, Error> {
         let index = *self
             .hash_location
             .get(&hash)
-            .ok_or_else(|| ApiError::invalid_block_id(format!("Block not found {}", hash)))?;
+            .ok_or_else(|| Error::InvalidBlockId(format!("Block not found {}", hash)))?;
         self.get_verified_at(index)
     }
 
     /// Add a block to the block_store data structure, the parent_hash must
     /// match the end of the chain
-    pub fn add_block(&mut self, hb: HashedBlock) -> Result<(), ApiError> {
+    pub fn add_block(&mut self, hb: HashedBlock) -> Result<(), Error> {
         self.block_store.push(hb.clone())?;
         self.process_block(hb)?;
         Ok(())
     }
 
-    pub fn add_blocks_batch(&mut self, batch: Vec<HashedBlock>) -> Result<(), ApiError> {
+    pub fn add_blocks_batch(&mut self, batch: Vec<HashedBlock>) -> Result<(), Error> {
         self.block_store.push_batch(batch.clone())?;
         for hb in batch {
             self.process_block(hb)?;
@@ -173,7 +173,7 @@ impl Blocks {
         Ok(())
     }
 
-    pub fn process_block(&mut self, hb: HashedBlock) -> Result<(), ApiError> {
+    pub fn process_block(&mut self, hb: HashedBlock) -> Result<(), Error> {
         let HashedBlock {
             block,
             hash,
@@ -210,11 +210,11 @@ impl Blocks {
         Ok(())
     }
 
-    pub(crate) fn first(&self) -> Result<Option<HashedBlock>, ApiError> {
+    pub(crate) fn first(&self) -> Result<Option<HashedBlock>, Error> {
         Ok(self.block_store.first()?)
     }
 
-    pub fn first_verified(&self) -> Result<Option<HashedBlock>, ApiError> {
+    pub fn first_verified(&self) -> Result<Option<HashedBlock>, Error> {
         let last_verified_idx = self
             .block_store
             .last_verified()
@@ -229,7 +229,7 @@ impl Blocks {
         Ok(first_block)
     }
 
-    pub(crate) fn last(&self) -> Result<Option<HashedBlock>, ApiError> {
+    pub(crate) fn last(&self) -> Result<Option<HashedBlock>, Error> {
         match self.last_hash {
             Some(last_hash) => {
                 let last = self.get(last_hash)?;
@@ -239,7 +239,7 @@ impl Blocks {
         }
     }
 
-    pub fn last_verified(&self) -> Result<Option<HashedBlock>, ApiError> {
+    pub fn last_verified(&self) -> Result<Option<HashedBlock>, Error> {
         match self.block_store.last_verified() {
             Some(h) => Ok(Some(self.block_store.get_at(h)?)),
             None => Ok(None),
@@ -250,11 +250,7 @@ impl Blocks {
         self.last().ok().flatten().map(|hb| (hb.hash, hb.index))
     }
 
-    pub fn try_prune(
-        &mut self,
-        max_blocks: &Option<u64>,
-        prune_delay: u64,
-    ) -> Result<(), ApiError> {
+    pub fn try_prune(&mut self, max_blocks: &Option<u64>, prune_delay: u64) -> Result<(), Error> {
         if let Some(block_limit) = max_blocks {
             let first_idx = self.first()?.map(|hb| hb.index).unwrap_or(0);
             let last_idx = self.last()?.map(|hb| hb.index).unwrap_or(0);
@@ -279,7 +275,7 @@ impl Blocks {
                 self.balance_book.store.prune_at(hb.index);
                 self.block_store
                     .prune(&hb, &self.balance_book)
-                    .map_err(ApiError::internal_error)?
+                    .map_err(Error::InternalError)?;
             }
         }
         Ok(())

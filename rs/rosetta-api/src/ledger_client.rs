@@ -1,5 +1,3 @@
-pub mod blocks; // made pub for tests.
-pub mod canister_access;
 mod handle_add_hotkey;
 mod handle_disburse;
 mod handle_follow;
@@ -26,6 +24,11 @@ use log::{debug, error, warn};
 use reqwest::Client;
 
 use dfn_candid::CandidOne;
+use ic_ledger_client_core::blocks::Blocks;
+use ic_ledger_client_core::canister_access::CanisterAccess;
+use ic_ledger_client_core::ledger_blocks_sync::{
+    LedgerBlocksSynchronizer, LedgerBlocksSynchronizerMetrics,
+};
 use ic_nns_governance::pb::v1::{manage_neuron::NeuronIdOrSubaccount, GovernanceError, NeuronInfo};
 use ic_types::messages::{HttpCallContent, MessageId};
 use ic_types::CanisterId;
@@ -35,9 +38,6 @@ use on_wire::{FromWire, IntoWire};
 
 use crate::convert;
 use crate::errors::{ApiError, Details, ICError};
-use crate::ledger_blocks_sync::{LedgerBlocksSynchronizer, LedgerBlocksSynchronizerMetrics};
-use crate::ledger_client::blocks::Blocks;
-use crate::ledger_client::canister_access::CanisterAccess;
 use crate::ledger_client::neuron_response::NeuronResponse;
 use crate::ledger_client::{
     handle_add_hotkey::handle_add_hotkey, handle_disburse::handle_disburse,
@@ -195,7 +195,10 @@ impl LedgerAccess for LedgerClient {
         if self.offline {
             return Err(ApiError::NotAvailableOffline(false, Details::default()));
         }
-        self.ledger_blocks_synchronizer.sync_blocks(stopped).await
+        self.ledger_blocks_synchronizer
+            .sync_blocks(stopped)
+            .await
+            .map_err(ApiError::from)
     }
 
     fn ledger_canister_id(&self) -> &CanisterId {

@@ -1,6 +1,7 @@
-use crate::errors::ApiError;
 use ledger_canister::{AccountIdentifier, BalancesStore, BlockHeight, Tokens};
 use std::collections::HashMap;
+
+use crate::errors::Error;
 
 pub type BalanceBook = ledger_canister::Balances<AccountIdentifier, ClientBalancesStore>;
 
@@ -39,19 +40,15 @@ impl BalanceHistory {
         self.inner.push((height, amount));
     }
 
-    pub fn get_at(&self, height: BlockHeight) -> Result<Tokens, ApiError> {
+    pub fn get_at(&self, height: BlockHeight) -> Result<Tokens, Error> {
         // after prunning we always have at least one entry
         if self.num_pruned_transactions > 0 && self.inner.first().unwrap().0 > height {
             // TODO Add a new error type (ApiError::BlockPruned or something like that)
-            return Err(ApiError::InvalidBlockId(
-                false,
-                format!(
-                    "Block not available for query: {}. Oldest block: {}",
-                    height,
-                    self.inner.first().unwrap().0
-                )
-                .into(),
-            ));
+            return Err(Error::InvalidBlockId(format!(
+                "Block not available for query: {}. Oldest block: {}",
+                height,
+                self.inner.first().unwrap().0
+            )));
         }
         let idx = match self.inner.binary_search_by_key(&height, |&(h, _)| h) {
             Ok(i) => i,
@@ -153,7 +150,7 @@ impl ClientBalancesStore {
             .insert(height, amount);
     }
 
-    pub fn get_at(&self, acc: AccountIdentifier, height: BlockHeight) -> Result<Tokens, ApiError> {
+    pub fn get_at(&self, acc: AccountIdentifier, height: BlockHeight) -> Result<Tokens, Error> {
         self.acc_to_hist
             .get(&acc)
             .map(|hist| hist.get_at(height))

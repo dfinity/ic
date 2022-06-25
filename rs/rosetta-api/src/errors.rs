@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::TryFrom;
 
+use ic_ledger_client_core::store::BlockStoreError;
+
 /// Each Rosetta `Error` has a "retriable" flag and optional "details"
 /// Rosetta error code and message are determined by the `ApiError` variant.
 ///
@@ -91,6 +93,30 @@ impl ApiError {
 
     pub fn invalid_account_id<T: Into<Details>>(t: T) -> ApiError {
         ApiError::InvalidAccountId(false, t.into())
+    }
+}
+
+impl From<BlockStoreError> for ApiError {
+    fn from(e: BlockStoreError) -> Self {
+        match e {
+            BlockStoreError::NotFound(idx) => {
+                ApiError::invalid_block_id(format!("Block not found: {}", idx))
+            }
+            BlockStoreError::NotAvailable(idx) => {
+                ApiError::invalid_block_id(format!("Block not available for query: {}", idx))
+            }
+            BlockStoreError::Other(msg) => ApiError::internal_error(msg),
+        }
+    }
+}
+
+impl From<ic_ledger_client_core::errors::Error> for ApiError {
+    fn from(e: ic_ledger_client_core::errors::Error) -> Self {
+        use ic_ledger_client_core::errors::Error;
+        match e {
+            Error::InvalidBlockId(err) => ApiError::invalid_block_id(err),
+            Error::InternalError(err) => ApiError::internal_error(err),
+        }
     }
 }
 

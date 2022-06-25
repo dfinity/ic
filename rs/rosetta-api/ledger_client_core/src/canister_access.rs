@@ -1,5 +1,3 @@
-use crate::errors::ApiError;
-
 use dfn_protobuf::{ProtoBuf, ToProto};
 use ic_canister_client::{Agent, HttpClient, Sender};
 use ic_ledger_core::block::EncodedBlock;
@@ -25,7 +23,7 @@ pub struct CanisterAccess {
         VecDeque<(
             BlockHeight,
             BlockHeight,
-            JoinHandle<Result<Vec<EncodedBlock>, ApiError>>,
+            JoinHandle<Result<Vec<EncodedBlock>, String>>,
         )>,
     >,
 }
@@ -73,20 +71,20 @@ impl CanisterAccess {
         ProtoBuf::from_bytes(bytes).map(|c| c.0)
     }
 
-    pub async fn query_tip(&self) -> Result<TipOfChainRes, ApiError> {
+    pub async fn query_tip(&self) -> Result<TipOfChainRes, String> {
         self.query("tip_of_chain_pb", TipOfChainRequest {})
             .await
-            .map_err(|e| ApiError::internal_error(format!("In tip: {}", e)))
+            .map_err(|e| format!("In tip: {}", e))
     }
 
     pub async fn query_raw_block(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<EncodedBlock>, ApiError> {
+    ) -> Result<Option<EncodedBlock>, String> {
         let BlockRes(b) = self
             .query("block_pb", BlockArg(height))
             .await
-            .map_err(|e| ApiError::internal_error(format!("In block: {}", e)))?;
+            .map_err(|e| format!("In block: {}", e))?;
         match b {
             // block not found
             None => Ok(None),
@@ -97,7 +95,7 @@ impl CanisterAccess {
                 let BlockRes(b) = self
                     .query_canister(canister_id, "get_block_pb", BlockArg(height))
                     .await
-                    .map_err(|e| ApiError::internal_error(format!("In block: {}", e)))?;
+                    .map_err(|e| format!("In block: {}", e))?;
                 // get_block() on archive node will never return Ok(Err(canister_id))
                 Ok(b.map(|x| x.unwrap()))
             }
@@ -109,7 +107,7 @@ impl CanisterAccess {
         can_id: CanisterId,
         start: BlockHeight,
         end: BlockHeight,
-    ) -> Result<Vec<EncodedBlock>, ApiError> {
+    ) -> Result<Vec<EncodedBlock>, String> {
         let blocks: GetBlocksRes = self
             .query_canister(
                 can_id,
@@ -120,11 +118,9 @@ impl CanisterAccess {
                 },
             )
             .await
-            .map_err(|e| ApiError::internal_error(format!("In blocks: {}", e)))?;
+            .map_err(|e| format!("In blocks: {}", e))?;
 
-        blocks
-            .0
-            .map_err(|e| ApiError::internal_error(format!("In blocks response: {}", e)))
+        blocks.0.map_err(|e| format!("In blocks response: {}", e))
     }
 
     pub async fn clear_outstanding_queries(&self) {
@@ -141,7 +137,7 @@ impl CanisterAccess {
         self: &Arc<Self>,
         start: BlockHeight,
         end: BlockHeight,
-    ) -> Result<Vec<EncodedBlock>, ApiError> {
+    ) -> Result<Vec<EncodedBlock>, String> {
         let mut ongoing = self.ongoing_block_queries.lock().await;
         // clean up stale queries
         let a = ongoing.front().map(|(a, _, _)| *a);
@@ -150,7 +146,7 @@ impl CanisterAccess {
                 warn!("Requested for {} ignoring queries at {}.", start, a);
                 drop(ongoing);
                 self.clear_outstanding_queries().await;
-                return Err(ApiError::internal_error("Removed stale block queries"));
+                return Err("Removed stale block queries".to_string());
             }
         }
 
@@ -172,9 +168,7 @@ impl CanisterAccess {
             ongoing.pop_front().unwrap()
         };
 
-        let res = jh
-            .await
-            .map_err(|e| ApiError::internal_error(format!("{}", e)))??;
+        let res = jh.await.map_err(|e| format!("{}", e))??;
         let res_end = a + res.len() as u64;
         if res_end < b {
             let slf = self.clone();
@@ -188,7 +182,7 @@ impl CanisterAccess {
         self: &Arc<Self>,
         start: BlockHeight,
         end: BlockHeight,
-    ) -> Result<Vec<EncodedBlock>, ApiError> {
+    ) -> Result<Vec<EncodedBlock>, String> {
         // asking for a low number of blocks means we are close to the tip
         // so we can try fetching from ledger first
         if end - start < Self::BLOCKS_BATCH_LEN {
@@ -224,10 +218,10 @@ impl CanisterAccess {
             let mut alist = self.archive_list.lock().await;
             archive_entry = locate_archive(&*alist, start);
             if archive_entry.is_none() {
-                let al: ArchiveIndexResponse =
-                    self.query("get_archive_index_pb", ()).await.map_err(|e| {
-                        ApiError::internal_error(format!("In get archive index: {}", e))
-                    })?;
+                let al: ArchiveIndexResponse = self
+                    .query("get_archive_index_pb", ())
+                    .await
+                    .map_err(|e| format!("In get archive index: {}", e))?;
                 trace!("updating archive list to: {:?}", al);
                 *alist = Some(al);
                 archive_entry = locate_archive(&*alist, start);

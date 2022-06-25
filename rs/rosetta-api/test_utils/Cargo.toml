@@ -8,6 +8,8 @@ edition = "2018"
 base64 = "0.11"
 ed25519-dalek = "1.0.1"
 hex = "0.4.2"
+ic-canister-client = { path = "../../canister_client" }
+ic-ledger-client-core = { path = "../ledger_client_core" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-rosetta-api = {path = "../"}

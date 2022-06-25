@@ -2,19 +2,20 @@ use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::sync::Arc;
 
 use core::ops::Deref;
-use dfn_core::CanisterId;
 use ic_canister_client::HttpClient;
+
 use ic_ledger_core::block::BlockType;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
+use ic_types::CanisterId;
 use ledger_canister::{Block, TipOfChainRes};
 use log::{debug, error, info, trace};
 use tokio::sync::RwLock;
 use url::Url;
 
+use crate::blocks::Blocks;
+use crate::canister_access::CanisterAccess;
 use crate::certification::verify_block_hash;
-use crate::errors::ApiError;
-use crate::ledger_client::blocks::Blocks;
-use crate::ledger_client::canister_access::CanisterAccess;
+use crate::errors::Error;
 use crate::store::{BlockStoreError, HashedBlock};
 
 // If pruning is enabled, instead of pruning after each new block
@@ -49,7 +50,7 @@ impl LedgerBlocksSynchronizer {
         offline: bool,
         root_key: Option<ThresholdSigPublicKey>,
         metrics: Box<dyn LedgerBlocksSynchronizerMetrics + Send + Sync>,
-    ) -> Result<LedgerBlocksSynchronizer, ApiError> {
+    ) -> Result<LedgerBlocksSynchronizer, Error> {
         let mut blocks = match store_location {
             Some(loc) => Blocks::new_persistent(loc),
             None => Blocks::new_in_memory(),
@@ -72,11 +73,15 @@ impl LedgerBlocksSynchronizer {
                 let TipOfChainRes {
                     tip_index,
                     certification,
-                } = canister_access.query_tip().await?;
+                } = canister_access
+                    .query_tip()
+                    .await
+                    .map_err(Error::InternalError)?;
 
                 let tip_block = canister_access
                     .query_raw_block(tip_index)
-                    .await?
+                    .await
+                    .map_err(Error::InternalError)?
                     .expect("Blockchain in the ledger canister is empty");
 
                 verify_block_hash(
@@ -85,7 +90,7 @@ impl LedgerBlocksSynchronizer {
                     &root_key,
                     &ledger_canister_id,
                 )
-                .map_err(ApiError::internal_error)?;
+                .map_err(Error::InternalError)?;
             }
             Some(canister_access)
         };
@@ -124,10 +129,7 @@ impl LedgerBlocksSynchronizer {
         })
     }
 
-    async fn verify_store(
-        blocks: &Blocks,
-        canister_access: &CanisterAccess,
-    ) -> Result<(), ApiError> {
+    async fn verify_store(blocks: &Blocks, canister_access: &CanisterAccess) -> Result<(), Error> {
         debug!("Verifying store...");
         let first_block = blocks.block_store.first()?;
 
@@ -135,7 +137,8 @@ impl LedgerBlocksSynchronizer {
             Ok(store_genesis) => {
                 let genesis = canister_access
                     .query_raw_block(0)
-                    .await?
+                    .await
+                    .map_err(Error::InternalError)?
                     .expect("Blockchain in the ledger canister is empty");
 
                 if store_genesis.hash != Block::block_hash(&genesis) {
@@ -146,26 +149,29 @@ impl LedgerBlocksSynchronizer {
                         Block::block_hash(&genesis)
                     );
                     error!("{}", msg);
-                    return Err(ApiError::internal_error(msg));
+                    return Err(Error::InternalError(msg));
                 }
             }
             Err(BlockStoreError::NotFound(0)) => {
                 if first_block.is_some() {
                     let msg = "Snapshot found, but genesis block not present in the store";
                     error!("{}", msg);
-                    return Err(ApiError::internal_error(msg));
+                    return Err(Error::InternalError(msg.to_string()));
                 }
             }
             Err(e) => {
                 let msg = format!("Error loading genesis block: {:?}", e);
                 error!("{}", msg);
-                return Err(ApiError::internal_error(msg));
+                return Err(Error::InternalError(msg));
             }
         }
 
         if first_block.is_some() && first_block.as_ref().unwrap().index > 0 {
             let first_block = first_block.unwrap();
-            let queried_block = canister_access.query_raw_block(first_block.index).await?;
+            let queried_block = canister_access
+                .query_raw_block(first_block.index)
+                .await
+                .map_err(Error::InternalError)?;
             if queried_block.is_none() {
                 let msg = format!(
                     "Oldest block snapshot does not match the block on \
@@ -173,7 +179,7 @@ impl LedgerBlocksSynchronizer {
                     first_block.index
                 );
                 error!("{}", msg);
-                return Err(ApiError::internal_error(msg));
+                return Err(Error::InternalError(msg));
             }
             let queried_block = queried_block.unwrap();
             if first_block.hash != Block::block_hash(&queried_block) {
@@ -185,7 +191,7 @@ impl LedgerBlocksSynchronizer {
                     Block::block_hash(&queried_block)
                 );
                 error!("{}", msg);
-                return Err(ApiError::internal_error(msg));
+                return Err(Error::InternalError(msg));
             }
         }
         debug!("Verifying store done");
@@ -196,12 +202,12 @@ impl LedgerBlocksSynchronizer {
         Box::new(self.blockchain.read().await)
     }
 
-    pub async fn sync_blocks(&self, stopped: Arc<AtomicBool>) -> Result<(), ApiError> {
+    pub async fn sync_blocks(&self, stopped: Arc<AtomicBool>) -> Result<(), Error> {
         let canister = self.ledger_canister_access.as_ref().unwrap();
         let TipOfChainRes {
             tip_index,
             certification,
-        } = canister.query_tip().await?;
+        } = canister.query_tip().await.map_err(Error::InternalError)?;
         self.metrics.set_target_height(tip_index);
 
         let chain_length = tip_index + 1;
@@ -245,15 +251,18 @@ impl LedgerBlocksSynchronizer {
         let mut i = next_block_index;
         while i < chain_length {
             if stopped.load(Relaxed) {
-                return Err(ApiError::internal_error("Interrupted"));
+                return Err(Error::InternalError("Interrupted".to_string()));
             }
 
             debug!("Asking for blocks {}-{}", i, chain_length);
-            let batch = canister.multi_query_blocks(i, chain_length).await?;
+            let batch = canister
+                .multi_query_blocks(i, chain_length)
+                .await
+                .map_err(Error::InternalError)?;
 
             debug!("Got batch of len: {}", batch.len());
             if batch.is_empty() {
-                return Err(ApiError::internal_error(
+                return Err(Error::InternalError(
                     "Couldn't fetch new blocks (batch result empty)".to_string(),
                 ));
             }
@@ -261,16 +270,15 @@ impl LedgerBlocksSynchronizer {
             let mut hashed_batch = Vec::new();
             hashed_batch.reserve_exact(batch.len());
             for raw_block in batch {
-                let block = Block::decode(raw_block.clone()).map_err(|err| {
-                    ApiError::internal_error(format!("Cannot decode block: {}", err))
-                })?;
+                let block = Block::decode(raw_block.clone())
+                    .map_err(|err| Error::InternalError(format!("Cannot decode block: {}", err)))?;
                 if block.parent_hash != last_block_hash {
                     let err_msg = format!(
                         "Block at {}: parent hash mismatch. Expected: {:?}, got: {:?}",
                         i, last_block_hash, block.parent_hash
                     );
                     error!("{}", err_msg);
-                    return Err(ApiError::internal_error(err_msg));
+                    return Err(Error::InternalError(err_msg));
                 }
                 let hb = HashedBlock::hash_block(raw_block, last_block_hash, i);
                 if i == chain_length - 1 {
@@ -280,7 +288,7 @@ impl LedgerBlocksSynchronizer {
                         &self.root_key,
                         &self.ledger_canister_id,
                     )
-                    .map_err(ApiError::internal_error)?;
+                    .map_err(Error::InternalError)?;
                 }
                 last_block_hash = Some(hb.hash);
                 hashed_batch.push(hb);
