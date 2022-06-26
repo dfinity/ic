@@ -40,7 +40,7 @@ use ic_interfaces_transport::{
     AsyncTransportEventHandler, FlowId, FlowTag, SendError, Transport, TransportErrorCode,
     TransportPayload, TransportStateChange,
 };
-use ic_logger::{error, info, warn, LoggerImpl, ReplicaLogger};
+use ic_logger::{info, warn, LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::node::v1::{
     connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord,
@@ -380,10 +380,6 @@ impl TestClientEventHandler {
         None
     }
 
-    fn on_error(&self, flow: FlowId, error: TransportErrorCode) {
-        error!(self.log, "on_error(): Flow: {:?}, error: {:?}", flow, error);
-    }
-
     fn on_state_change(&self, change: TransportStateChange) {
         info!(self.log, "on_state_change(): {:?}", change);
         match change {
@@ -406,10 +402,6 @@ impl AsyncTransportEventHandler for TestClientEventHandler {
 
     async fn state_changed(&self, state_change: TransportStateChange) {
         self.on_state_change(state_change)
-    }
-
-    async fn error(&self, flow: FlowId, error: TransportErrorCode) {
-        self.on_error(flow, error);
     }
 }
 

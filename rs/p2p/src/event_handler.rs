@@ -77,8 +77,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use ic_interfaces_transport::{
-    AsyncTransportEventHandler, FlowId, SendError, TransportError, TransportErrorCode,
-    TransportPayload, TransportStateChange,
+    AsyncTransportEventHandler, FlowId, SendError, TransportPayload, TransportStateChange,
 };
 use ic_logger::{debug, info, replica_logger::ReplicaLogger, trace};
 use ic_metrics::MetricsRegistry;
@@ -386,27 +385,6 @@ impl AsyncTransportEventHandler for AsyncTransportEventHandlerImpl {
             .execute(self.node_id, state_change, consume_fn)
             .await;
     }
-
-    /// If there is a sender error, the method sends a transport error
-    /// notification message on the flow associated with the given flow ID.
-    async fn error(&self, flow: FlowId, error: TransportErrorCode) {
-        if let TransportErrorCode::SenderErrorIndicated = error {
-            let c_gossip = self.gossip.read().as_ref().unwrap().clone();
-            let consume_fn = move |item, _peer_id| {
-                c_gossip.on_transport_error(item);
-            };
-            self.transport
-                .execute(
-                    self.node_id,
-                    TransportError::TransportSendError(FlowId {
-                        peer_id: flow.peer_id,
-                        flow_tag: flow.flow_tag,
-                    }),
-                    consume_fn,
-                )
-                .await;
-        }
-    }
 }
 
 /// The struct is a handle for running a P2P thread relevant for the protocol.
@@ -650,11 +628,6 @@ pub mod tests {
             }
             .peer_id;
             TestGossip::increment_or_set(&self.num_changes, peer_id);
-        }
-
-        /// The method is called on a transport error.
-        fn on_transport_error(&self, _transport_error: TransportError) {
-            // Do nothing
         }
 
         fn on_timer(&self) {

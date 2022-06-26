@@ -246,9 +246,6 @@ impl TransportImpl {
                 );
 
                 if let Err(ReadError::SocketReadTimeOut) = ret {
-                    event_handler
-                        .error(flow_id, TransportErrorCode::TimeoutExpired)
-                        .await;
                     metrics
                         .socket_heart_beat_timeouts
                         .with_label_values(&[&flow_label, &flow_tag])
@@ -271,9 +268,6 @@ impl TransportImpl {
 
             // Pass up sender indicated error
             if header.flags & TRANSPORT_FLAGS_SENDER_ERROR != 0 {
-                event_handler
-                    .error(flow_id, TransportErrorCode::SenderErrorIndicated)
-                    .await;
                 metrics
                     .send_errors_received
                     .with_label_values(&[&flow_label, &flow_tag])
