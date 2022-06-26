@@ -88,9 +88,6 @@ pub trait AsyncTransportEventHandler: Send + Sync {
 
     /// Notify the client of a change in a connection state
     async fn state_changed(&self, state_change: TransportStateChange);
-
-    /// Notify the client of an error that occurred while a connection is active
-    async fn error(&self, flow: FlowId, error: TransportErrorCode);
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -101,13 +98,6 @@ pub type FlowTag = Id<FlowTagType, u32>;
 /// The payload for the transport layer.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TransportPayload(#[serde(with = "serde_bytes")] pub Vec<u8>);
-
-/// A transport notification.
-#[derive(Debug)]
-pub enum TransportNotification {
-    TransportStateChange(TransportStateChange),
-    TransportError(TransportError),
-}
 
 /// FlowId is the unique key for the flows being managed
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -127,12 +117,6 @@ pub enum TransportStateChange {
 
     /// Peer flow went down
     PeerFlowDown(FlowId),
-}
-
-/// Errors that are returned by the transport layer.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum TransportError {
-    TransportSendError(FlowId),
 }
 
 /// Error codes returned by transport manager functions.

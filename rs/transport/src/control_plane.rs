@@ -790,8 +790,7 @@ mod tests {
     use ic_config::transport::{TransportConfig, TransportFlowConfig};
     use ic_crypto::utils::TempCryptoComponent;
     use ic_interfaces_transport::{
-        AsyncTransportEventHandler, FlowId, SendError, TransportErrorCode, TransportPayload,
-        TransportStateChange,
+        AsyncTransportEventHandler, FlowId, SendError, TransportPayload, TransportStateChange,
     };
     use ic_logger::warn;
     use ic_metrics::MetricsRegistry;
@@ -832,8 +831,6 @@ mod tests {
                 self.connected.send(true).unwrap();
             }
         }
-
-        fn on_error(&self, _flow: FlowId, _error: TransportErrorCode) {}
     }
 
     #[async_trait]
@@ -849,10 +846,6 @@ mod tests {
 
         async fn state_changed(&self, state_change: TransportStateChange) {
             self.on_state_change(state_change);
-        }
-
-        async fn error(&self, flow: FlowId, error: TransportErrorCode) {
-            self.on_error(flow, error);
         }
     }
 

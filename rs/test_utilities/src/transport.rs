@@ -57,5 +57,4 @@ impl AsyncTransportEventHandler for MockTranportEventHandler {
         Ok(())
     }
     async fn state_changed(&self, _state_change: TransportStateChange) {}
-    async fn error(&self, _flow_id: FlowId, _error: TransportErrorCode) {}
 }

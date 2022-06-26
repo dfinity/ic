@@ -60,7 +60,7 @@ use crate::{
 };
 use ic_interfaces::artifact_manager::ArtifactManager;
 use ic_interfaces::registry::RegistryClient;
-use ic_interfaces_transport::{FlowTag, Transport, TransportError, TransportStateChange};
+use ic_interfaces_transport::{FlowTag, Transport, TransportStateChange};
 use ic_logger::{replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::p2p::v1 as pb;
@@ -132,9 +132,6 @@ pub trait Gossip {
     /// for each request and b) *Transport* having an additional error
     /// detection mechanism (not implemented yet).
     fn on_transport_state_change(&self, transport_state_change: TransportStateChange);
-
-    /// The method reacts to a transport error message.
-    fn on_transport_error(&self, transport_error: TransportError);
 
     /// The method is called periodically from a dedicated thread.
     fn on_timer(&self);
@@ -450,34 +447,6 @@ impl Gossip for GossipImpl {
                 self.download_manager.peer_connection_up(info.peer_id)
             }
         }
-    }
-
-    /// The method reacts to a *Transport* error message.
-    fn on_transport_error(&self, _transport_error: TransportError) {
-        // TODO: P2P-435 Re-instate call to
-        //
-        // download_manager
-        //    .send_retransmission_request(flow.peer_id)
-        //
-        // when using multiple flows in Transport and when having the
-        // new throttling mechanisms in download_management JIRA
-        // Tickets:
-        //
-        // - Multiple flows: P2P-435
-        // - Error handling: P2P-261
-        //
-        // We cannot send a retransmission request without having
-        // multiple flows support as we have to be able to clear the
-        // adverts queue (and only it) before responding to such a
-        // request. Otherwise, we'll have to clear the entire queue to
-        // that peer. This queue may contain a re-transmission
-        // request. So we must send a re-transmission request before
-        // the adverts (that are sent as a response to a
-        // retransmission request from the other side).  This would
-        // create an infinite loop of re-transmission requests. We
-        // could throttle them (as we would anyway do even with
-        // multiple flows support), but then we'll end up with
-        // periodic retransmission and not event-based.
     }
 
     /// The method is called on a periodic timer event.
