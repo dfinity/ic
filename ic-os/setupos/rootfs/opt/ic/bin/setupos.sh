@@ -7,6 +7,9 @@ SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
 function start_setupos() {
+    # Wait until login prompt appears
+    sleep 10
+    clear
     echo "* Starting SetupOS..."
     echo " "
     echo " "
@@ -120,10 +123,9 @@ function reboot_setupos() {
 main() {
     source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
-    # Wait until login prompt appears
-    sleep 10
     start_setupos
     /opt/ic/bin/hardware.sh
+    /opt/ic/bin/network.sh
     # NOTE: Firmware up-/downgrades are currently applied manually
     #/opt/ic/bin/firmware.sh
     # NOTE: UEFI settings are currently applied manually
