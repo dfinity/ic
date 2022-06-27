@@ -32,6 +32,7 @@ BIN_CANISTERS = [
     "nns-ui-canister",
     "panics",
     "pmap_canister",
+    "proxy_canister",
     "registry-canister",
     "response-payload-test-canister",
     "root-canister",

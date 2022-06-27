@@ -4448,12 +4448,12 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk"
-version = "0.3.1"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59ff298314d235dd2c150f74157df5bbcdbd48604b895425840c2fe9225c9a3a"
+checksum = "606276ed1ce363eb9ccaf492e36fb40425417dcd4598f261d47e0ed6a1309faa"
 dependencies = [
  "candid",
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "serde",
 ]
 
@@ -6124,7 +6124,7 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "ic-base-types",
- "ic-cdk 0.3.1",
+ "ic-cdk 0.3.3",
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-nervous-system-common",
@@ -10974,6 +10974,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8e86d370532557ae7573551a1ec8235a0f8d6cb276c7c9e6aa490b511c447485"
 
 [[package]]
+name = "proxy_canister"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "dfn_candid",
+ "dfn_core",
+ "ic-base-types",
+ "ic-cdk 0.5.1",
+ "ic-cdk-macros",
+ "ic-ic00-types",
+ "ic-types 0.8.0",
+ "serde",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "psm"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13086,6 +13102,7 @@ dependencies = [
  "phantom_newtype",
  "proptest 0.9.6",
  "prost 0.10.4",
+ "proxy_canister",
  "quickcheck",
  "rand 0.8.5",
  "rand_chacha 0.2.2",

@@ -185,6 +185,7 @@ members = [
   "rust_canisters/dfn_macro",
   "rust_canisters/dfn_protobuf",
   "rust_canisters/memory_test",
+  "rust_canisters/proxy_canister",
   "rust_canisters/on_wire",
   "rust_canisters/pmap",
   "rust_canisters/stable_reader",

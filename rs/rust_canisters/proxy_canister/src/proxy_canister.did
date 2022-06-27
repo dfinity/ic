@@ -1,0 +1,41 @@
+type HeaderField = record { text; text; };
+
+type RemoteHttpRequest = record {
+    url: text;
+    headers: vec HeaderField;
+    body: text;
+    transform: text;
+};
+
+type RemoteHttpResponse = record {
+    status: nat8;
+    headers: vec record { text; text; };
+    body: text;
+};
+
+type ResponseResult = variant {
+    Ok: RemoteHttpResponse;
+    Err: text;
+};
+
+type RequestResult = variant {
+    Ok;
+    Err: text;
+};
+
+type HttpHeader = record {
+    name: text;
+    value: text;
+}
+
+type CanisterHttpResponsePayload = record {
+    status: nat64;
+    headers: vec HttpHeader;
+    body: blob;
+}
+
+service : {
+    send_request: (RemoteHttpRequest) -> (RequestResult);
+    check_response: (text) -> (ResponseResult);
+    transform: (CanisterHttpResponsePayload) -> (CanisterHttpResponsePayload);
+}
