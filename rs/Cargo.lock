@@ -5907,10 +5907,13 @@ dependencies = [
 name = "ic-ledger-client-core"
 version = "0.1.0"
 dependencies = [
+ "actix-rt",
+ "actix-web",
  "candid",
  "dfn_protobuf",
  "ic-canister-client",
  "ic-certified-vars",
+ "ic-ledger-client-core-test-utils",
  "ic-ledger-core",
  "ic-types 0.8.0",
  "ledger-canister",
@@ -5920,6 +5923,25 @@ dependencies = [
  "serde",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "ic-ledger-client-core-test-utils"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "ic-canister-client",
+ "ic-cdk 0.5.1",
+ "ic-ledger-client-core",
+ "ic-ledger-core",
+ "ic-types 0.8.0",
+ "ledger-canister",
+ "log",
+ "log4rs",
+ "rand 0.7.3",
+ "rand_distr 0.3.0",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -7266,6 +7288,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-canister-client",
+ "ic-cdk 0.5.1",
  "ic-constants",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-sha",
@@ -7273,6 +7296,7 @@ dependencies = [
  "ic-crypto-utils-threshold-sig",
  "ic-interfaces",
  "ic-ledger-client-core",
+ "ic-ledger-client-core-test-utils",
  "ic-ledger-core",
  "ic-nns-common",
  "ic-nns-constants",
@@ -13037,6 +13061,7 @@ dependencies = [
  "ic-http-utils",
  "ic-ic00-types",
  "ic-interfaces",
+ "ic-ledger-client-core-test-utils",
  "ic-ledger-core",
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",

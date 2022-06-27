@@ -50,8 +50,10 @@ tokio = { version = "1.15.0", features = ["full"] }
 url = "2.2.1"
 
 [dev-dependencies]
+ic-cdk = { version = "0.5.1" }
 ed25519-dalek = "1.0.1"
 ic-nns-governance = { path = "../nns/governance" }
+ic-ledger-client-core-test-utils = { path = "ledger_client_core/test_utils" }
 ic-rosetta-test-utils = { path = "test_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-types = { path = "../types/types" }

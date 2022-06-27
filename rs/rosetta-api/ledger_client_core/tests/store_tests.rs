@@ -1,6 +1,11 @@
-use super::*;
-use ic_rosetta_api::store::{BlockStoreError, SQLiteStore};
-use std::path::Path;
+use ic_ledger_client_core::{
+    balance_book::BalanceBook,
+    store::{BlockStoreError, SQLiteStore},
+};
+use ic_ledger_client_core_test_utils::{create_tmp_dir, init_test_logger, sample_data::Scribe};
+use ic_ledger_core::Tokens;
+use ledger_canister::{AccountIdentifier, BlockHeight};
+use std::{collections::BTreeMap, path::Path};
 
 pub(crate) fn sqlite_on_disk_store(path: &Path) -> SQLiteStore {
     SQLiteStore::new_on_disk(path).expect("Unable to create store")
@@ -124,6 +129,18 @@ async fn store_prune_and_load_test() {
     let mut store = sqlite_on_disk_store(tmpdir.path());
     verify_pruned(&scribe, &mut store, 30);
     verify_balance_snapshot(&scribe, &mut store, 30);
+}
+
+pub(crate) fn to_balances(
+    balances: BTreeMap<AccountIdentifier, Tokens>,
+    index: BlockHeight,
+) -> BalanceBook {
+    let mut balance_book = BalanceBook::default();
+    for (acc, amount) in balances {
+        balance_book.token_pool -= amount;
+        balance_book.store.insert(acc, index, amount);
+    }
+    balance_book
 }
 
 fn prune(scribe: &Scribe, store: &mut SQLiteStore, prune_at: u64) {

@@ -25,7 +25,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub mod rosetta_api_serv;
-pub mod sample_data;
 
 use ic_rosetta_api::models::amount::{signed_amount, tokens_to_amount};
 use ic_rosetta_api::models::operation::OperationType;
@@ -63,15 +62,6 @@ pub fn make_user(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, Princip
     debug!("[test] created user {}", user_id);
 
     (user_id, keypair, public_key, pid)
-}
-
-pub fn acc_id(seed: u64) -> AccountIdentifier {
-    let mut rng = StdRng::seed_from_u64(seed);
-    let keypair = EdKeypair::generate(&mut rng);
-    let public_key_der =
-        ic_canister_client_sender::ed25519_public_key_to_der(keypair.public.to_bytes().to_vec());
-
-    PrincipalId::new_self_authenticating(&public_key_der).into()
 }
 
 pub struct RequestInfo {

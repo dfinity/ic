@@ -1,5 +1,7 @@
 use super::*;
 
+use ic_ledger_client_core_test_utils::sample_data::Scribe;
+use ic_ledger_client_core_test_utils::{create_tmp_dir, init_test_logger};
 use ic_ledger_core::block::BlockType;
 use ic_rosetta_api::convert::{block_id, from_hash, to_hash};
 use ic_rosetta_api::ledger_client::LedgerAccess;
