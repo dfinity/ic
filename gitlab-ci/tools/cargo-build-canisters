@@ -22,7 +22,8 @@ wasm_canister_build_list=(
     genesis-token-canister
     governance-canister
     governance-mem-test-canister
-    ic-ledger-icrc1
+    ic-icrc1-archive
+    ic-icrc1-ledger
     ic-nervous-system-common-test-canister
     identity-canister
     inter_canister_error_handling
@@ -91,9 +92,11 @@ build_with_features sns-governance-canister test sns-governance-canister_test sn
 
 # We need to build and optimize ledger archive node before we build the ledger
 # because the ledger embeds the Wasm file of the archive.
-cargo build --target wasm32-unknown-unknown --release --bin ledger-archive-node-canister
+cargo build --target wasm32-unknown-unknown --release --bin ledger-archive-node-canister --bin ic-icrc1-archive
 optimize_wasm ledger-archive-node-canister
+optimize_wasm ic-icrc1-archive
 export LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH=${ARTIFACTS}/ledger-archive-node-canister.wasm
+export IC_ICRC1_ARCHIVE_WASM_PATH=${ARTIFACTS}/ic-icrc1-archive.wasm
 
 # shellcheck disable=SC2046  # Intended splitting of $(wasm_canisters_cargo_args)
 cargo build --target wasm32-unknown-unknown --release $(wasm_canisters_cargo_args)

@@ -173,6 +173,8 @@ members = [
   "rosetta-api/ledger_canister/protobuf_generator",
   "rosetta-api/ledger_core",
   "rosetta-api/icrc1",
+  "rosetta-api/icrc1/ledger",
+  "rosetta-api/icrc1/archive",
   "rosetta-api/hardware_wallet_tests",
   "rosetta-api/test_utils",
   "rust_canisters/canister_test",

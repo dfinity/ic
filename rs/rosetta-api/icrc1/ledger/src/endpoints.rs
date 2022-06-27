@@ -1,6 +1,6 @@
-use crate::{Account, Subaccount};
 use candid::CandidType;
 use ic_base_types::PrincipalId;
+use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::block::BlockHeight;
 use ic_ledger_core::ledger::TransferError as CoreTransferError;
 use serde::Deserialize;

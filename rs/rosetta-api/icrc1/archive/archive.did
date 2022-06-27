@@ -1,0 +1,4 @@
+service : (principal, nat64, opt nat64) -> {
+    append_blocks : (vec blob) -> ();
+    remaining_capacity : () -> (nat64) query;
+}

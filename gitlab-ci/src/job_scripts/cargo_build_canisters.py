@@ -19,7 +19,8 @@ BIN_CANISTERS = [
     "genesis-token-canister",
     "governance-canister",
     "governance-mem-test-canister",
-    "ic-ledger-icrc1",
+    "ic-icrc1-archive",
+    "ic-icrc1-ledger",
     "ic-nervous-system-common-test-canister",
     "identity-canister",
     "inter_canister_error_handling",
@@ -53,7 +54,7 @@ LIB_CANISTERS = ["http_counter"]
 # message max size is 3MB on system subnets and 2MB on other subnets
 CANISTERS_MAX_SIZE_IN_BYTES = {
     "ledger-canister.wasm": 1_900_000,
-    "ic-ledger-icrc1.wasm": 1_900_000,
+    "ic-icrc1-ledger.wasm": 1_900_000,
     "ledger-canister_notify-method.wasm": 1_900_000,
     "cycles-minting-canister.wasm": 2_500_000,
     "genesis-token-canister.wasm": 2_500_000,
@@ -147,6 +148,8 @@ def run(artifacts_dir=default_artifacts_dir):
             CANISTER_BUILD_PROFILE,
             "--bin",
             "ledger-archive-node-canister",
+            "--bin",
+            "ic-icrc1-archive",
         )
         # We need to build the ledger archive node canister _before_ we build the ledger
         # canister because the latter needs to include the Wasm module of the former.
@@ -154,6 +157,9 @@ def run(artifacts_dir=default_artifacts_dir):
         # a compile-time environment variable.
         ledger_archive_path = _optimize_wasm(artifacts_dir, "ledger-archive-node-canister")
         environ["LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH"] = ledger_archive_path
+
+        icrc1_archive_path = _optimize_wasm(artifacts_dir, "ic-icrc1-archive")
+        environ["ICRC1_ARCHIVE_CANISTER_WASM_PATH"] = icrc1_archive_path
 
         _build_with_features("ledger-canister", "notify-method")
         _build_with_features("governance-canister", "test")

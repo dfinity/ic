@@ -1,13 +1,15 @@
 use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::PrincipalId;
+use ic_icrc1::{Account, Block, Operation, Transaction};
+use ic_icrc1_ledger::{
+    endpoints::{TransferArg, TransferError},
+    InitArgs,
+};
 use ic_ledger_core::{
+    archive::ArchiveOptions,
     block::{BlockHeight, BlockType, HashOf},
     Tokens,
-};
-use ic_ledger_icrc1::{
-    endpoints::{TransferArg, TransferError},
-    Account, Block, InitArgs, Operation, Transaction,
 };
 use ic_state_machine_tests::{CanisterId, StateMachine};
 use proptest::prelude::*;
@@ -25,7 +27,7 @@ const MINTER: Account = Account {
 
 fn ledger_wasm() -> Vec<u8> {
     let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    proj.cargo_bin("ic-ledger-icrc1", &[]).bytes()
+    proj.cargo_bin("ic-icrc1-ledger", &[]).bytes()
 }
 
 fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> CanisterId {
@@ -35,8 +37,15 @@ fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> 
         transfer_fee: Tokens::from_e8s(FEE),
         token_name: TOKEN_NAME.to_string(),
         token_symbol: TOKEN_SYMBOL.to_string(),
+        archive_options: ArchiveOptions {
+            trigger_threshold: 10,
+            num_blocks_to_archive: 5,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId::new_user_test_id(100),
+            cycles_for_archive_creation: None,
+        },
     };
-
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
 }

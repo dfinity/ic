@@ -5768,6 +5768,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-icrc1"
+version = "0.8.0"
+dependencies = [
+ "candid",
+ "ciborium 0.2.0 (git+https://github.com/enarx/ciborium?rev=e719537c99b564c3674a56defe53713c702c6f46)",
+ "hex",
+ "ic-base-types",
+ "ic-crypto-sha",
+ "ic-ledger-core",
+ "leb128",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
+name = "ic-icrc1-archive"
+version = "0.8.0"
+dependencies = [
+ "candid",
+ "ciborium 0.2.0 (git+https://github.com/enarx/ciborium?rev=e719537c99b564c3674a56defe53713c702c6f46)",
+ "ic-base-types",
+ "ic-cdk 0.5.1",
+ "ic-cdk-macros",
+ "ic-icrc1",
+ "ic-ledger-core",
+ "serde",
+]
+
+[[package]]
+name = "ic-icrc1-ledger"
+version = "0.8.0"
+dependencies = [
+ "async-trait",
+ "candid",
+ "canister-test",
+ "cddl",
+ "ciborium 0.2.0 (git+https://github.com/enarx/ciborium?rev=e719537c99b564c3674a56defe53713c702c6f46)",
+ "hex",
+ "ic-base-types",
+ "ic-cdk 0.5.1",
+ "ic-cdk-macros",
+ "ic-icrc1",
+ "ic-ledger-core",
+ "ic-state-machine-tests",
+ "leb128",
+ "proptest 0.9.6",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-identity"
 version = "0.8.0"
 dependencies = [
@@ -5913,28 +5964,6 @@ dependencies = [
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-utils 0.8.0",
- "serde",
- "serde_bytes",
-]
-
-[[package]]
-name = "ic-ledger-icrc1"
-version = "0.8.0"
-dependencies = [
- "async-trait",
- "candid",
- "canister-test",
- "cddl",
- "ciborium 0.2.0 (git+https://github.com/enarx/ciborium?rev=e719537c99b564c3674a56defe53713c702c6f46)",
- "hex",
- "ic-base-types",
- "ic-cdk 0.5.1",
- "ic-cdk-macros",
- "ic-crypto-sha",
- "ic-ledger-core",
- "ic-state-machine-tests",
- "leb128",
- "proptest 0.9.6",
  "serde",
  "serde_bytes",
 ]
