@@ -23,9 +23,7 @@ use crate::driver::driver_setup::{
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnvAttribute;
 use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::orchestrator::node_reassignment_test::{can_read_msg, store_message};
-use crate::orchestrator::utils::upgrade::can_install_canister;
-use crate::util::*;
+use crate::orchestrator::utils::rw_message::{can_install_canister, can_read_msg, store_message};
 use ic_recovery::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
 use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
 use ic_registry_subnet_type::SubnetType;
@@ -102,13 +100,13 @@ pub fn test(env: TestEnv) {
 
     info!(logger, "Ensure NNS subnet is functional");
     let msg = "subnet recovery works!";
-    let app_can_id = block_on(store_message(&upload_node.get_public_url(), msg));
-    assert!(block_on(can_read_msg(
+    let app_can_id = store_message(&upload_node.get_public_url(), msg);
+    assert!(can_read_msg(
         &logger,
         &upload_node.get_public_url(),
         app_can_id,
         msg
-    )));
+    ));
 
     let pub_key = file_sync_helper::read_file(&ssh_authorized_pub_keys_dir.join(ADMIN))
         .expect("Couldn't read public key");
@@ -156,12 +154,12 @@ pub fn test(env: TestEnv) {
     }
 
     info!(logger, "Ensure the subnet works in read mode");
-    assert!(block_on(can_read_msg(
+    assert!(can_read_msg(
         &logger,
         &upload_node.get_public_url(),
         app_can_id,
         msg
-    )));
+    ));
     info!(
         logger,
         "Ensure the subnet doesn't work in write mode anymore"
@@ -194,22 +192,22 @@ pub fn test(env: TestEnv) {
     // check that the network functions
     upload_node.await_status_is_healthy().unwrap();
     info!(logger, "Ensure the old message is still readable");
-    assert!(block_on(can_read_msg(
+    assert!(can_read_msg(
         &logger,
         &upload_node.get_public_url(),
         app_can_id,
         msg
-    )));
+    ));
     let new_msg = "subnet recovery still works!";
     info!(
         logger,
         "Ensure the the subnet is accepting updates after the recovery"
     );
-    let new_app_can_id = block_on(store_message(&upload_node.get_public_url(), new_msg));
-    assert!(block_on(can_read_msg(
+    let new_app_can_id = store_message(&upload_node.get_public_url(), new_msg);
+    assert!(can_read_msg(
         &logger,
         &upload_node.get_public_url(),
         new_app_can_id,
         new_msg
-    )));
+    ));
 }

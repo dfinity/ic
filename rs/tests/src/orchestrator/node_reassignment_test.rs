@@ -24,12 +24,13 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::nns::{add_nodes_to_subnet, remove_nodes_via_endpoint};
+use crate::orchestrator::utils::rw_message::{
+    can_read_msg, can_read_msg_with_retries, store_message,
+};
 use crate::util::*;
-use ic_agent::export::Principal;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
-use slog::{debug, info};
-use url::Url;
+use slog::info;
 
 const DKG_INTERVAL: u64 = 14;
 const SUBNET_SIZE: usize = 4;
@@ -79,33 +80,33 @@ pub fn test(env: TestEnv) {
     // NNS nodes.
     let nns_msg = "hello world from nns!";
 
-    let nns_can_id = block_on(store_message(&node1.get_public_url(), nns_msg));
-    assert!(block_on(can_read_msg(
+    let nns_can_id = store_message(&node1.get_public_url(), nns_msg);
+    assert!(can_read_msg(
         log,
         &node1.get_public_url(),
         nns_can_id,
         nns_msg
-    )));
-    assert!(block_on(can_read_msg_with_retries(
+    ));
+    assert!(can_read_msg_with_retries(
         log,
         &node2.get_public_url(),
         nns_can_id,
         nns_msg,
         5
-    )));
+    ));
 
     info!(log, "Message on both nns nodes verified!");
 
     // Now we store another message on the app subnet.
     let (app_subnet, app_node) = get_app_subnet_and_node(&topo_snapshot);
     let app_msg = "hello world from app subnet!";
-    let app_can_id = block_on(store_message(&app_node.get_public_url(), app_msg));
-    assert!(block_on(can_read_msg(
+    let app_can_id = store_message(&app_node.get_public_url(), app_msg);
+    assert!(can_read_msg(
         log,
         &app_node.get_public_url(),
         app_can_id,
         app_msg
-    )));
+    ));
     info!(log, "Message on app node verified!");
 
     // Unassign 2 nns nodes
@@ -131,34 +132,34 @@ pub fn test(env: TestEnv) {
     );
     node1.await_status_is_healthy().unwrap();
     node2.await_status_is_healthy().unwrap();
-    assert!(block_on(can_read_msg_with_retries(
+    assert!(can_read_msg_with_retries(
         log,
         &node1.get_public_url(),
         app_can_id,
         app_msg,
         50
-    )));
-    assert!(block_on(can_read_msg_with_retries(
+    ));
+    assert!(can_read_msg_with_retries(
         log,
         &node2.get_public_url(),
         app_can_id,
         app_msg,
         5
-    )));
+    ));
     info!(log, "App message on former NNS nodes could be retrieved!");
 
-    assert!(block_on(can_read_msg(
+    assert!(can_read_msg(
         log,
         &node3.get_public_url(),
         nns_can_id,
         nns_msg
-    )));
-    assert!(block_on(can_read_msg(
+    ));
+    assert!(can_read_msg(
         log,
         &node4.get_public_url(),
         nns_can_id,
         nns_msg
-    )));
+    ));
     info!(
         log,
         "NNS message on remaining NNS nodes could be retrieved!"
@@ -167,86 +168,29 @@ pub fn test(env: TestEnv) {
     // Now make sure the subnets are able to store new messages
     info!(log, "Try to store new messages on NNS...");
     let nns_msg_2 = "hello again on nns!";
-    let nns_can_id_2 = block_on(store_message(&node3.get_public_url(), nns_msg_2));
-    assert!(block_on(can_read_msg_with_retries(
+    let nns_can_id_2 = store_message(&node3.get_public_url(), nns_msg_2);
+    assert!(can_read_msg_with_retries(
         log,
         &node4.get_public_url(),
         nns_can_id_2,
         nns_msg_2,
         5
-    )));
+    ));
 
     info!(log, "Try to store new messages on app subnet...");
     let app_msg_2 = "hello again on app subnet!";
-    let app_can_id_2 = block_on(store_message(&app_node.get_public_url(), app_msg_2));
-    assert!(block_on(can_read_msg_with_retries(
+    let app_can_id_2 = store_message(&app_node.get_public_url(), app_msg_2);
+    assert!(can_read_msg_with_retries(
         log,
         &node1.get_public_url(),
         app_can_id_2,
         app_msg_2,
         5
-    )));
+    ));
     info!(
         log,
         "New messages could be written and retrieved on both subnets!"
     );
 
     info!(log, "Test finished successfully");
-}
-
-pub async fn store_message(url: &Url, msg: &str) -> Principal {
-    let bytes = msg.as_bytes();
-    let agent = assert_create_agent(url.as_str()).await;
-    let ucan = UniversalCanister::new(&agent).await;
-    // send an update call to it
-    ucan.store_to_stable(0, bytes).await;
-    ucan.canister_id()
-}
-
-pub async fn can_read_msg(
-    log: &slog::Logger,
-    url: &Url,
-    canister_id: Principal,
-    msg: &str,
-) -> bool {
-    can_read_msg_with_retries(log, url, canister_id, msg, 0).await
-}
-
-pub async fn can_read_msg_with_retries(
-    log: &slog::Logger,
-    url: &Url,
-    canister_id: Principal,
-    msg: &str,
-    retries: usize,
-) -> bool {
-    let bytes = msg.as_bytes();
-    for i in 0..retries + 1 {
-        debug!(log, "Try to create agent for node {:?}...", url.as_str());
-        match create_agent(url.as_str()).await {
-            Ok(agent) => {
-                debug!(log, "Try to get canister reference");
-                let ucan = UniversalCanister::from_canister_id(&agent, canister_id);
-                debug!(log, "Success, will try to read next");
-                if ucan.read_stable(0, msg.len() as u32).await == Ok(bytes.to_vec()) {
-                    return true;
-                } else {
-                    info!(
-                        log,
-                        "Could not read expected message, will retry {:?} times",
-                        retries - i
-                    );
-                }
-            }
-            Err(e) => {
-                debug!(
-                    log,
-                    "Could not create agent: {:?}, will retry {:?} times",
-                    e,
-                    retries - i
-                );
-            }
-        };
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-    }
-    false
 }
