@@ -124,7 +124,7 @@ echo "$PATH1/SHA256SUMS:"
 cat $SHA256SUMS1
 
 # XXX(marko): we ignore panics and sns-test-dapp-canister
-sed -i -E '/(panics.wasm|sns-test-dapp-canister.wasm)/d' $SHA256SUMS0 $SHA256SUMS1
+sed -i -E '/panics.wasm/d' $SHA256SUMS0 $SHA256SUMS1
 
 if ! diff -u $SHA256SUMS0 $SHA256SUMS1; then
     set +x
