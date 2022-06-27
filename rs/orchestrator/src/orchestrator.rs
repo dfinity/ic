@@ -1,7 +1,6 @@
 use crate::args::OrchestratorArgs;
 use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::firewall::Firewall;
-use crate::firewall_deprecated::Firewall as FirewallDeprecated;
 use crate::metrics::OrchestratorMetrics;
 use crate::registration::NodeRegistration;
 use crate::registry_helper::RegistryHelper;
@@ -35,7 +34,6 @@ pub struct Orchestrator {
     _async_log_guard: AsyncGuard,
     _metrics_runtime: MetricsRuntimeImpl,
     upgrade: Option<Upgrade>,
-    firewall_deprecated: Option<FirewallDeprecated>,
     firewall: Option<Firewall>,
     ssh_access_manager: Option<SshAccessManager>,
     // A flag used to communicate to async tasks, that their job is done.
@@ -185,12 +183,6 @@ impl Orchestrator {
             .await,
         );
 
-        let firewall_deprecated = Some(FirewallDeprecated::new(
-            Arc::clone(&registry),
-            Arc::clone(&metrics),
-            config.firewall.clone(),
-            logger.clone(),
-        ));
         let firewall = Some(Firewall::new(
             node_id,
             Arc::clone(&registry),
@@ -208,7 +200,6 @@ impl Orchestrator {
             _async_log_guard,
             _metrics_runtime,
             upgrade,
-            firewall_deprecated,
             firewall,
             ssh_access_manager,
             exit_signal: Default::default(),
@@ -256,7 +247,6 @@ impl Orchestrator {
         async fn ssh_key_and_firewall_rules_checks(
             maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
             mut ssh_access_manager: SshAccessManager,
-            mut firewall_deprecated: FirewallDeprecated,
             mut firewall: Firewall,
             exit_signal: Arc<RwLock<bool>>,
             log: ReplicaLogger,
@@ -267,7 +257,6 @@ impl Orchestrator {
                     .check_for_keyset_changes(*maybe_subnet_id.read().await)
                     .await;
                 // Check and update the firewall rules
-                firewall_deprecated.check_and_update();
                 firewall.check_and_update();
                 tokio::time::sleep(CHECK_INTERVAL_SECS).await;
             }
@@ -284,11 +273,8 @@ impl Orchestrator {
             )));
         }
 
-        if let (Some(ssh), Some(firewall_deprecated), Some(firewall)) = (
-            self.ssh_access_manager.take(),
-            self.firewall_deprecated.take(),
-            self.firewall.take(),
-        ) {
+        if let (Some(ssh), Some(firewall)) = (self.ssh_access_manager.take(), self.firewall.take())
+        {
             info!(
                 self.logger,
                 "Spawning the ssh-key and firewall rules check loop"
@@ -297,7 +283,6 @@ impl Orchestrator {
                 .push(tokio::spawn(ssh_key_and_firewall_rules_checks(
                     Arc::clone(&self.subnet_id),
                     ssh,
-                    firewall_deprecated,
                     firewall,
                     Arc::clone(&self.exit_signal),
                     self.logger.clone(),

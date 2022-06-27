@@ -23,11 +23,6 @@ pub struct Config {
     )]
     pub config_file: PathBuf,
 
-    // The following fields are obsolete and are to be removed when IC-1026 is staged
-    pub firewall_config: String,
-    pub ipv4_prefixes: Vec<String>,
-    pub ipv6_prefixes: Vec<String>,
-
     pub file_template: String,
     pub ipv4_rule_template: String,
     pub ipv6_rule_template: String,
@@ -40,9 +35,6 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             config_file: PathBuf::from(FIREWALL_FILE_DEFAULT_PATH),
-            firewall_config: "".to_string(),
-            ipv4_prefixes: vec![],
-            ipv6_prefixes: vec![],
             file_template: "".to_string(),
             ipv4_rule_template: "".to_string(),
             ipv6_rule_template: "".to_string(),

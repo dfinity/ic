@@ -36,8 +36,6 @@ use url::Url;
 const WAIT_TIMEOUT: Duration = Duration::from_secs(60);
 const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 
-pub const FEATURE_ACTIVATED: bool = true;
-
 pub fn config() -> InternetComputer {
     InternetComputer::new()
         .add_subnet(Subnet::fast(SubnetType::System, 1))
@@ -45,10 +43,6 @@ pub fn config() -> InternetComputer {
 }
 
 pub fn change_to_firewall_rules_takes_effect(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
-    if !FEATURE_ACTIVATED {
-        // If IC-1026 is not activated, this test should not run
-        return;
-    }
     let log = ctx.logger.clone();
     let mut rng = ctx.rng.clone();
     let http_client = reqwest::blocking::ClientBuilder::new()

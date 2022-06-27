@@ -335,12 +335,6 @@ pub const SAMPLE_CONFIG: &str = r#"
     firewall: {
         config_file: "/path/to/nftables/config",
         
-        // The following fields are obsolete:
-        firewall_config: "",
-        ipv4_prefixes: [],
-        ipv6_prefixes: [],
-
-        // New fields for IC-1026
         file_template: "",
         ipv4_rule_template: "",
         ipv6_rule_template: "",

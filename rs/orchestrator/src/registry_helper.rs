@@ -2,7 +2,7 @@ use crate::error::{OrchestratorError, OrchestratorResult};
 use ic_consensus::dkg::make_registry_cup;
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::ReplicaLogger;
-use ic_protobuf::registry::firewall::v1::{FirewallConfig, FirewallRuleSet};
+use ic_protobuf::registry::firewall::v1::FirewallRuleSet;
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::firewall::FirewallRegistry;
@@ -110,19 +110,6 @@ impl RegistryHelper {
     ) -> OrchestratorResult<CatchUpPackage> {
         make_registry_cup(&*self.registry_client, subnet_id, Some(&self.logger))
             .ok_or(OrchestratorError::MakeRegistryCupError(subnet_id, version))
-    }
-
-    // TODO: Remove after staging IC-1026
-    pub(crate) fn get_firewall_config(
-        &self,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<FirewallConfig> {
-        match self.registry_client.get_firewall_config(version) {
-            Ok(Some(firewall_config)) => Ok(firewall_config),
-            _ => Err(OrchestratorError::InvalidConfigurationError(
-                "Invalid firewall configuration".to_string(),
-            )),
-        }
     }
 
     pub(crate) fn get_firewall_rules(

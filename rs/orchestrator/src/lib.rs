@@ -36,7 +36,6 @@ pub mod args;
 mod catch_up_package_provider;
 mod error;
 mod firewall;
-mod firewall_deprecated;
 mod metrics;
 pub mod orchestrator;
 mod registration;
