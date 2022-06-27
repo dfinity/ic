@@ -463,6 +463,57 @@ system-tests-hourly:
   script:
     - *run-farm-based-test
 
+system-tests-pre-master:
+  extends:
+    - .system-tests
+    - .with-monitoring
+  variables:
+    SUITE_NAME: "pre_master"
+    cd_target_env: "HOURLY"
+  script:
+    - *run-farm-based-test
+
+system-tests-boundary-nodes-pre-master:
+  extends:
+    - .system-tests
+    - .with-monitoring
+  variables:
+    SUITE_NAME: "boundary_nodes_pre_master"
+    cd_target_env: "HOURLY"
+  script:
+    - *run-farm-based-test
+
+system-tests-tecdsa-pre-master:
+  extends:
+    - .system-tests
+    - .with-monitoring
+  variables:
+    SUITE_NAME: "tecdsa_pre_master"
+    cd_target_env: "HOURLY"
+  script:
+    - *run-farm-based-test   
+
+system-tests-subnet-recover-pre-master:
+  extends:
+    - .system-tests
+    - .with-monitoring
+  variables:
+    SUITE_NAME: "subnet_recovery"
+    cd_target_env: "HOURLY"
+  script:
+    - *run-farm-based-test   
+
+system-tests-upgrade-compatibility-pre-master:
+  extends:
+    - .system-tests
+    - .with-monitoring
+  variables:
+    SUITE_NAME: "upgrade_compatibility"
+    cd_target_env: "HOURLY"
+  script:
+    - *run-farm-based-test 
+
+
 system-tests-nightly:
   extends:
     - .system-tests
