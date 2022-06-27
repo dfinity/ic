@@ -15,8 +15,6 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-pub const FEATURE_ACTIVATED: bool = true;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum DataSource {
     Config,
@@ -52,12 +50,11 @@ impl Firewall {
         let config = firewall_config;
 
         // Disable if the config is the default one (e.g if we're in a test)
-        let enabled = FEATURE_ACTIVATED
-            && config
-                .config_file
-                .ne(&PathBuf::from(FIREWALL_FILE_DEFAULT_PATH));
+        let enabled = config
+            .config_file
+            .ne(&PathBuf::from(FIREWALL_FILE_DEFAULT_PATH));
 
-        if !enabled && FEATURE_ACTIVATED {
+        if !enabled {
             warn!(
                 logger,
                 "Firewall configuration not found. Orchestrator does not update firewall rules."
@@ -381,9 +378,6 @@ fn test_firewall_rule_compilation() {
 
     let config = FirewallConfig {
         config_file: PathBuf::default(),
-        firewall_config: "".to_string(),
-        ipv4_prefixes: vec![],
-        ipv6_prefixes: vec![],
         file_template,
         ipv4_rule_template,
         ipv6_rule_template,
