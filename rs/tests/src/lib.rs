@@ -16,6 +16,7 @@ pub mod orchestrator;
 pub mod rosetta_test;
 pub mod spec_compliance;
 pub mod tecdsa;
+pub mod test_suites;
 pub mod types;
 pub mod util;
 pub mod wasm_generator_test;
