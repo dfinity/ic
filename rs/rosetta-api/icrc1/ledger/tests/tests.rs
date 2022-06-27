@@ -13,7 +13,7 @@ use ic_ledger_core::{
 };
 use ic_state_machine_tests::{CanisterId, StateMachine};
 use proptest::prelude::*;
-use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
+use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 
@@ -326,31 +326,6 @@ fn block_hashes_are_stable() {
 fn check_transfer_model() {
     use proptest::collection::vec as pvec;
 
-    type BalancesModel = HashMap<Account, u64>;
-
-    fn model_transfer(
-        balances: &mut BalancesModel,
-        from: Account,
-        to: Account,
-        amount: u64,
-    ) -> ((u64, u64), Option<TransferError>) {
-        let from_balance = balances.get(&from).cloned().unwrap_or_default();
-        let to_balance = balances.get(&to).cloned().unwrap_or_default();
-        if from_balance < amount + FEE {
-            return (
-                (from_balance, to_balance),
-                Some(TransferError::InsufficientFunds {
-                    balance: from_balance,
-                }),
-            );
-        }
-        let new_from = from_balance - amount - FEE;
-        let new_to = to_balance + amount;
-        balances.insert(from, new_from);
-        balances.insert(to, new_to);
-        ((new_from, new_to), None)
-    }
-
     const NUM_ACCOUNTS: usize = 10;
     const MIN_TRANSACTIONS: usize = 5;
     const MAX_TRANSACTIONS: usize = 10;
@@ -365,37 +340,75 @@ fn check_transfer_model() {
                     MIN_TRANSACTIONS..MAX_TRANSACTIONS,
                 ),
             ),
-            |(accounts, mints, transfers)| {
-                let initial_balances: Vec<_> = mints
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, amount)| (accounts[i].clone(), amount))
-                    .collect();
-                let mut balances: BalancesModel = initial_balances.iter().cloned().collect();
-
-                let env = StateMachine::new();
-                let canister_id = install_ledger(&env, initial_balances);
-
-                for (from_idx, to_idx, amount) in transfers.into_iter() {
-                    let from = accounts[from_idx].clone();
-                    let to = accounts[to_idx].clone();
-
-                    let ((from_balance, to_balance), maybe_error) =
-                        model_transfer(&mut balances, from.clone(), to.clone(), amount);
-
-                    let result = transfer(&env, canister_id, from.clone(), to.clone(), amount);
-
-                    prop_assert_eq!(result.is_err(), maybe_error.is_some());
-
-                    if let Err(err) = result {
-                        prop_assert_eq!(Some(err), maybe_error);
-                    }
-
-                    prop_assert_eq!(from_balance, balance_of(&env, canister_id, from.clone()));
-                    prop_assert_eq!(to_balance, balance_of(&env, canister_id, to.clone()));
-                }
-                Ok(())
-            },
+            |(accounts, mints, transfers)| test_transfer_model(accounts, mints, transfers),
         )
         .unwrap();
+}
+
+type BalancesModel = HashMap<Account, u64>;
+
+fn model_transfer(
+    balances: &mut BalancesModel,
+    from: Account,
+    to: Account,
+    amount: u64,
+) -> ((u64, u64), Option<TransferError>) {
+    let from_balance = balances.get(&from).cloned().unwrap_or_default();
+    if from_balance < amount + FEE {
+        let to_balance = balances.get(&to).cloned().unwrap_or_default();
+        return (
+            (from_balance, to_balance),
+            Some(TransferError::InsufficientFunds {
+                balance: from_balance,
+            }),
+        );
+    }
+    balances.insert(from.clone(), from_balance - amount - FEE);
+
+    let to_balance = balances.get(&to).cloned().unwrap_or_default();
+    balances.insert(to.clone(), to_balance + amount);
+
+    let from_balance = balances.get(&from).cloned().unwrap_or_default();
+    let to_balance = balances.get(&to).cloned().unwrap_or_default();
+
+    ((from_balance, to_balance), None)
+}
+
+fn test_transfer_model(
+    accounts: Vec<Account>,
+    mints: Vec<u64>,
+    transfers: Vec<(usize, usize, u64)>,
+) -> TestCaseResult {
+    let initial_balances: Vec<_> = mints
+        .into_iter()
+        .enumerate()
+        .map(|(i, amount)| (accounts[i].clone(), amount))
+        .collect();
+    let mut balances: BalancesModel = initial_balances.iter().cloned().collect();
+
+    let env = StateMachine::new();
+    let canister_id = install_ledger(&env, initial_balances);
+
+    for (from_idx, to_idx, amount) in transfers.into_iter() {
+        let from = accounts[from_idx].clone();
+        let to = accounts[to_idx].clone();
+
+        let ((from_balance, to_balance), maybe_error) =
+            model_transfer(&mut balances, from.clone(), to.clone(), amount);
+
+        let result = transfer(&env, canister_id, from.clone(), to.clone(), amount);
+
+        prop_assert_eq!(result.is_err(), maybe_error.is_some());
+
+        if let Err(err) = result {
+            prop_assert_eq!(Some(err), maybe_error);
+        }
+
+        let actual_from_balance = balance_of(&env, canister_id, from);
+        let actual_to_balance = balance_of(&env, canister_id, to);
+
+        prop_assert_eq!(from_balance, actual_from_balance);
+        prop_assert_eq!(to_balance, actual_to_balance);
+    }
+    Ok(())
 }
