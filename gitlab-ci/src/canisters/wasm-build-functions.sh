@@ -12,7 +12,8 @@ wasm_canister_list=(
     governance-canister_test
     governance-mem-test-canister
     identity-canister
-    ic-ledger-icrc1
+    ic-icrc1-archive
+    ic-icrc1-ledger
     ic-nervous-system-common-test-canister
     inter_canister_error_handling
     json

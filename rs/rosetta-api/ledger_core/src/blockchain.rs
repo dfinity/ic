@@ -1,5 +1,5 @@
 use crate::{
-    archive::{Archive, ArchiveCanisterWasm},
+    archive::{Archive, ArchiveCanisterWasm, ArchiveOptions},
     block::{BlockHeight, BlockType, EncodedBlock, HashOf},
     runtime::Runtime,
     timestamp::TimeStamp,
@@ -43,6 +43,13 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Default for Blockchain<Rt, Wasm> {
 }
 
 impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Blockchain<Rt, Wasm> {
+    pub fn new_with_archive(archive_options: ArchiveOptions) -> Self {
+        Self {
+            archive: Arc::new(RwLock::new(Some(Archive::new(archive_options)))),
+            ..Self::default()
+        }
+    }
+
     pub fn add_block<B>(&mut self, block: B) -> Result<BlockHeight, String>
     where
         B: BlockType,

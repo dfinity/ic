@@ -1,0 +1,16 @@
+[package]
+name = "ic-icrc1-archive"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+description = "An archive canister for the ICRC-1 ledger"
+edition = "2018"
+
+[dependencies]
+candid = "0.7.10"
+ciborium = { git = "https://github.com/enarx/ciborium", rev = "e719537c99b564c3674a56defe53713c702c6f46" }
+ic-base-types = { path = "../../../types/base_types" }
+ic-cdk = { version = "0.5.1" }
+ic-cdk-macros = { version = "0.5.1" }
+ic-icrc1 = { path = "../" }
+ic-ledger-core = { path = "../../ledger_core" }
+serde = "1.0"
