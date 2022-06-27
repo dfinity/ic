@@ -408,6 +408,11 @@ impl StateMachine {
 
     fn execute_block_with_ingress_payload(&self, ingress: IngressPayload) {
         let batch_number = self.message_routing.expected_batch_height();
+
+        let mut seed = [0u8; 32];
+        // use the batch number to seed randomness
+        seed[..8].copy_from_slice(batch_number.get().to_le_bytes().as_slice());
+
         let batch = Batch {
             batch_number,
             requires_full_state_hash: self.checkpoints_enabled.get(),
@@ -415,7 +420,7 @@ impl StateMachine {
                 ingress,
                 ..BatchPayload::default()
             },
-            randomness: Randomness::from([0; 32]),
+            randomness: Randomness::from(seed),
             ecdsa_subnet_public_keys: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
             time: self.time.get(),
