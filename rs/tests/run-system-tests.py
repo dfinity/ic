@@ -113,7 +113,7 @@ def exit_with_log(msg: str) -> None:
     sys.exit(1)
 
 
-def extract_artifacts(source_dir: str, dest_dir: str, delete_source_dir: bool, is_set_executable: bool) -> None:
+def extract_artifacts(source_dir: str, dest_dir: str, is_set_executable: bool) -> None:
     logging.info(f"Unzipping files in {source_dir} dir.")
     files_list = os.listdir(source_dir)
     for file in files_list:
@@ -130,9 +130,6 @@ def extract_artifacts(source_dir: str, dest_dir: str, delete_source_dir: bool, i
                         os.chmod(save_file, st.st_mode | stat.S_IEXEC)
                     # Move the file after extraction (overwrite if exists).
                     shutil.move(save_file, os.path.join(dest_dir, os.path.basename(save_file)))
-    if delete_source_dir:
-        logging.info(f"Deleting source {source_dir} dir.")
-        shutil.rmtree(source_dir, ignore_errors=True)
 
 
 def replace_symbols(text: str, symbols_to_replace: List[str], replace_with: str) -> str:
@@ -370,21 +367,15 @@ def main(
 
     if use_locally_prebuilt_artifacts:
         logging.info(f"Extracting artifacts from the locally prebuilt {ARTIFACT_DIR} dir.")
-        extract_artifacts(
-            source_dir=canisters_path, dest_dir=ARTIFACT_DIR, delete_source_dir=False, is_set_executable=False
-        )
-        extract_artifacts(source_dir=icos_path, dest_dir=ARTIFACT_DIR, delete_source_dir=False, is_set_executable=False)
-        extract_artifacts(
-            source_dir=release_path, dest_dir=ARTIFACT_DIR, delete_source_dir=False, is_set_executable=True
-        )
+        extract_artifacts(source_dir=canisters_path, dest_dir=ARTIFACT_DIR, is_set_executable=False)
+        extract_artifacts(source_dir=icos_path, dest_dir=ARTIFACT_DIR, is_set_executable=False)
+        extract_artifacts(source_dir=release_path, dest_dir=ARTIFACT_DIR, is_set_executable=True)
     elif is_merge_request:
         logging.info(f"Extracting artifacts from {ARTIFACT_DIR} dir.")
-        extract_artifacts(
-            source_dir=canisters_path, dest_dir=ARTIFACT_DIR, delete_source_dir=True, is_set_executable=False
-        )
-        extract_artifacts(
-            source_dir=release_path, dest_dir=ARTIFACT_DIR, delete_source_dir=True, is_set_executable=True
-        )
+        extract_artifacts(source_dir=canisters_path, dest_dir=ARTIFACT_DIR, is_set_executable=False)
+        extract_artifacts(source_dir=release_path, dest_dir=ARTIFACT_DIR, is_set_executable=True)
+        if not keep_tmp_artifacts_folder:
+            folders_to_remove.extend([canisters_path, release_path])
     else:
         logging.info(f"Downloading dependencies built from commit: {GREEN}{IC_VERSION_ID}{NC}")
         RCLONE_ARGS = [f"--git-rev={IC_VERSION_ID}", f"--out={ARTIFACT_DIR}", "--unpack", "--mark-executable"]
@@ -508,6 +499,7 @@ def main(
             f"Consider changing the SYSTEM_TESTS_TIMEOUT environment variable to a higher value."
             f"{NC}"
         )
+        return TIMEOUT_CODE
     return test_suite_returncode
 
 
@@ -534,6 +526,11 @@ if __name__ == "__main__":
         working_dir_arg = tempfile.mkdtemp(prefix="tmp_working_dir_")
         runner_args.append(f"--working-dir={working_dir_arg}")
         folders_to_remove.append(working_dir_arg)
+    keep_tmp_dirs = False
+    if "--keep_tmp_dirs" in runner_args:
+        keep_tmp_dirs = True
+        # Delete the flag from the arguments, as it is not intended for `prod-test-driver`
+        runner_args.remove("--keep_tmp_dirs")
     logging.debug(f"runner_args arguments are: {runner_args}")
     # Run main() in the try/catch to delete tmp folders (marked for deletion) in case of exceptions or user interrupts.
     testrun_returncode = 1
@@ -542,7 +539,8 @@ if __name__ == "__main__":
     except Exception as e:
         logging.exception(f"Raised exception: {e}")
     finally:
-        remove_folders(folders_to_remove)
+        if not keep_tmp_dirs:
+            remove_folders(folders_to_remove)
         if keep_tmp_artifacts_folder:
             logging.info(f"{RED}Artifacts folder is not deleted `--keep_artifacts` was set by the user.{NC}")
     sys.exit(testrun_returncode)

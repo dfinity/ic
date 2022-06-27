@@ -11,6 +11,7 @@ use ic_tests::driver::evaluation::{evaluate, generate_suite_execution_contract};
 use ic_tests::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources};
 use ic_tests::driver::pot_dsl::*;
 use ic_tests::driver::test_env::TestEnv;
+use ic_tests::test_suites::test_suite::get_e2e_suites;
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, canister_http, consensus, execution,
     ledger_tests, message_routing, networking, nns_tests, orchestrator, rosetta_test,
@@ -197,6 +198,9 @@ fn resolve_execution_mode(
 
 fn get_test_suites() -> HashMap<String, Suite> {
     let mut m = HashMap::new();
+    // Suites used for testing `prod-test-driver` itself.
+    get_e2e_suites().into_iter().for_each(|s| m.add_suite(s));
+
     m.add_suite(suite(
         "create_subnet_pre_master",
         vec![pot(
