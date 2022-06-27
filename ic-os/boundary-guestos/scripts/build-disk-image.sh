@@ -7,7 +7,7 @@ set -eo pipefail
 function usage() {
     cat <<EOF
 Usage:
-  build-disk-image -o outfile [-t dev] [-x execdir]
+  build-disk-image -o outfile [-t dev] [-x execdir] [-s]
 
   Build whole disk of Boundary Node guest OS VM image.
 
@@ -19,11 +19,12 @@ Usage:
   -x execdir: Set executable source dir. Will take all required IC executables
      from source directory and install it into the correct location before
      building the image; mandatory
+  -s: Set SNP flag to true in order to build SEV-SNP enabled image; optional
 EOF
 }
 
 BUILD_TYPE=prod
-while getopts "o:t:v:p:x:" OPT; do
+while getopts "o:t:v:p:x:s" OPT; do
     case "${OPT}" in
         o)
             OUT_FILE="${OPTARG}"
@@ -39,6 +40,9 @@ while getopts "o:t:v:p:x:" OPT; do
             ;;
         x)
             EXEC_SRCDIR="${OPTARG}"
+            ;;
+        s)
+            SNP=true
             ;;
         *)
             usage >&2
@@ -78,7 +82,12 @@ if [ "${EXEC_SRCDIR}" == "" ]; then
     exit 1
 fi
 
-BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base.${BUILD_TYPE}")
+if [ "$SNP" = "true" ]; then
+    echo "Build SNP enabled image"
+    BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base.snp")
+else
+    BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base.${BUILD_TYPE}")
+fi
 
 # Compute arguments for actual build stage.
 
