@@ -15,7 +15,8 @@ use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{EcdsaBlockReader, EcdsaMessage, EcdsaSigShare, RequestId};
 use ic_types::crypto::canister_threshold_sig::{
-    ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
+    error::ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCombinedSignature,
+    ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
 use ic_types::{Height, NodeId};
 
@@ -400,13 +401,21 @@ impl<'a> EcdsaSignatureBuilderImpl<'a> {
     ) -> Option<ThresholdEcdsaCombinedSignature> {
         ThresholdEcdsaSigVerifier::combine_sig_shares(&*self.crypto, inputs, shares).map_or_else(
             |error| {
-                warn!(
-                    self.log,
-                    "Failed to combine signature shares: request_id = {:?}, {:?}",
-                    request_id,
-                    error
-                );
-                self.metrics.payload_errors_inc("combine_sig_share");
+                match error {
+                    ThresholdEcdsaCombineSigSharesError::UnsatisfiedReconstructionThreshold {
+                        threshold: _,
+                        share_count: _,
+                    } => (),
+                    _ => {
+                        warn!(
+                            self.log,
+                            "Failed to combine signature shares: request_id = {:?}, {:?}",
+                            request_id,
+                            error
+                        );
+                        self.metrics.payload_errors_inc("combine_sig_share");
+                    }
+                };
                 Default::default()
             },
             |combined_signature| {
