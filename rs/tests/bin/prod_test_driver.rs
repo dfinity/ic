@@ -12,9 +12,9 @@ use ic_tests::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, V
 use ic_tests::driver::pot_dsl::*;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::{
-    api_test, basic_health_test, boundary_nodes_integration, consensus, execution, ledger_tests,
-    message_routing, networking, nns_tests, orchestrator, rosetta_test, spec_compliance, tecdsa,
-    wasm_generator_test, workload_counter_canister_test,
+    api_test, basic_health_test, boundary_nodes_integration, canister_http, consensus, execution,
+    ledger_tests, message_routing, networking, nns_tests, orchestrator, rosetta_test,
+    spec_compliance, tecdsa, wasm_generator_test, workload_counter_canister_test,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -197,7 +197,6 @@ fn resolve_execution_mode(
 
 fn get_test_suites() -> HashMap<String, Suite> {
     let mut m = HashMap::new();
-
     m.add_suite(suite(
         "create_subnet_pre_master",
         vec![pot(
@@ -281,13 +280,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 btc_integration::btc::config,
                 par(vec![
                     sys_t("btc_test", btc_integration::btc::test),
-                ]),
-            ),
-            pot_with_setup(
-                "http_pot",
-                http_from_canister::basic_http::config,
-                par(vec![
-                    sys_t("basic_http", http_from_canister::basic_http::test),
                 ]),
             ),*/
             /*
@@ -818,6 +810,25 @@ fn get_test_suites() -> HashMap<String, Suite> {
         ],
     ));
 
+    m.add_suite(suite(
+        "manual",
+        vec![
+            // Below tests are disabled as Canister HTTP feature is not fully working
+            // on "master" yet. These tests will be enabled when the feature is code complete.
+            pot_with_setup(
+                "http_pot",
+                canister_http::lib::config,
+                par(vec![
+                    sys_t("http_basic", canister_http::http_basic_remote::test),
+                    sys_t(
+                        "http_fault_tolerance",
+                        canister_http::http_fault_tolerance::test,
+                    ),
+                    sys_t("http_time_out", canister_http::http_time_out::test),
+                ]),
+            ),
+        ],
+    ));
     m
 }
 

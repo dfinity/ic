@@ -36,6 +36,7 @@ wasm_canister_build_list=(
     nns-ui-canister
     panics
     pmap_canister
+    proxy_canister
     registry-canister
     root-canister
     sns-governance-canister
