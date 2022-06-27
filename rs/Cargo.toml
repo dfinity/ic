@@ -173,6 +173,7 @@ members = [
   "rosetta-api/ledger_canister/protobuf_generator",
   "rosetta-api/ledger_core",
   "rosetta-api/ledger_client_core",
+  "rosetta-api/ledger_client_core/test_utils",
   "rosetta-api/icrc1",
   "rosetta-api/icrc1/ledger",
   "rosetta-api/icrc1/archive",

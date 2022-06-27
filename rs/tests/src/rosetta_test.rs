@@ -30,6 +30,7 @@ use dfn_protobuf::protobuf;
 use ed25519_dalek::Signer;
 use ic_canister_client::Sender;
 use ic_fondue::ic_manager::IcHandle;
+use ic_ledger_client_core_test_utils::sample_data::acc_id;
 use ic_nervous_system_common::ledger;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
@@ -48,8 +49,8 @@ use ic_rosetta_api::request_types::{
     StopDissolve,
 };
 use ic_rosetta_test_utils::{
-    acc_id, assert_canister_error, assert_ic_error, do_multiple_txn, do_multiple_txn_external,
-    do_txn, make_user, prepare_txn, rosetta_api_serv::RosettaApiHandle, send_icpts, sign_txn,
+    assert_canister_error, assert_ic_error, do_multiple_txn, do_multiple_txn_external, do_txn,
+    make_user, prepare_txn, rosetta_api_serv::RosettaApiHandle, send_icpts, sign_txn,
     to_public_key, EdKeypair, RequestInfo,
 };
 use ic_types::{messages::Blob, CanisterId, PrincipalId};

@@ -1,5 +1,6 @@
 use super::*;
 
+use ic_ledger_client_core_test_utils::init_test_logger;
 use log::debug;
 
 #[actix_rt::test]
