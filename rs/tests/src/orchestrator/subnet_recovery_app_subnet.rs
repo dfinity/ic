@@ -27,8 +27,8 @@ end::catalog[] */
 use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::orchestrator::node_reassignment_test::{can_read_msg, store_message};
-use crate::orchestrator::utils::upgrade::{assert_assigned_replica_version, can_install_canister};
+use crate::orchestrator::utils::rw_message::{can_install_canister, can_read_msg, store_message};
+use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
 use crate::util::*;
 use ic_base_types::NodeId;
 use ic_cup_explorer::get_catchup_content;
@@ -123,13 +123,13 @@ pub fn test(env: TestEnv) {
 
     info!(logger, "Ensure app subnet is functional");
     let msg = "subnet recovery works!";
-    let app_can_id = block_on(store_message(&app_node.get_public_url(), msg));
-    assert!(block_on(can_read_msg(
+    let app_can_id = store_message(&app_node.get_public_url(), msg);
+    assert!(can_read_msg(
         &logger,
         &app_node.get_public_url(),
         app_can_id,
         msg
-    )));
+    ));
 
     let subnet_id = app_subnet.subnet_id;
 
@@ -214,12 +214,12 @@ pub fn test(env: TestEnv) {
     }
 
     info!(logger, "Ensure the subnet works in read mode");
-    assert!(block_on(can_read_msg(
+    assert!(can_read_msg(
         &logger,
         &app_node.get_public_url(),
         app_can_id,
         msg
-    )));
+    ));
     info!(
         logger,
         "Ensure the subnet doesn't work in write mode anymore"
@@ -302,23 +302,23 @@ pub fn test(env: TestEnv) {
     }
 
     info!(logger, "Ensure the old message is still readable");
-    assert!(block_on(can_read_msg(
+    assert!(can_read_msg(
         &logger,
         &upload_node.get_public_url(),
         app_can_id,
         msg
-    )));
+    ));
     upload_node.await_status_is_healthy().unwrap();
     let new_msg = "subnet recovery still works!";
     info!(
         logger,
         "Ensure the the subnet is accepting updates after the recovery"
     );
-    let new_app_can_id = block_on(store_message(&upload_node.get_public_url(), new_msg));
-    assert!(block_on(can_read_msg(
+    let new_app_can_id = store_message(&upload_node.get_public_url(), new_msg);
+    assert!(can_read_msg(
         &logger,
         &upload_node.get_public_url(),
         new_app_can_id,
         new_msg
-    )));
+    ));
 }

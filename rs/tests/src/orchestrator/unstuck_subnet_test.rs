@@ -14,8 +14,8 @@ Success:: The subnet is unstuck as we can write a message to it.
 end::catalog[] */
 
 use super::utils::upgrade::{bless_replica_version, update_subnet_replica_version};
-use crate::orchestrator::node_reassignment_test::{can_read_msg, store_message};
-use crate::orchestrator::utils::upgrade::{can_install_canister, UpdateImageType};
+use crate::orchestrator::utils::rw_message::{can_install_canister, can_read_msg, store_message};
+use crate::orchestrator::utils::upgrade::UpdateImageType;
 use crate::util::block_on;
 use crate::{
     driver::{
@@ -166,15 +166,10 @@ pub fn test(test_env: TestEnv) {
 
     info!(logger, "Write a message to a canister");
     let msg = "Hello world!";
-    let can_id = block_on(store_message(&nodes[0].get_public_url(), msg));
+    let can_id = store_message(&nodes[0].get_public_url(), msg);
     // read it on all other nodes
     for n in &nodes {
-        assert!(block_on(can_read_msg(
-            &logger,
-            &n.get_public_url(),
-            can_id,
-            msg
-        )));
+        assert!(can_read_msg(&logger, &n.get_public_url(), can_id, msg));
     }
     info!(logger, "Could store and read message!");
 }

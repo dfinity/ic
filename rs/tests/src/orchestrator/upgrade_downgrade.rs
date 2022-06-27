@@ -14,7 +14,7 @@ end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::orchestrator::node_reassignment_test::{can_read_msg, store_message};
+use crate::orchestrator::utils::rw_message::{can_read_msg, store_message};
 use crate::orchestrator::utils::upgrade::*;
 use crate::util::block_on;
 use anyhow::bail;
@@ -131,13 +131,13 @@ fn downgrade_upgrade_roundtrip(
     faulty_node.await_status_is_healthy().unwrap();
 
     let msg = "hello world!";
-    let can_id = block_on(store_message(&subnet_node.get_public_url(), msg));
-    assert!(block_on(can_read_msg(
+    let can_id = store_message(&subnet_node.get_public_url(), msg);
+    assert!(can_read_msg(
         &logger,
         &subnet_node.get_public_url(),
         can_id,
         msg
-    )));
+    ));
     info!(logger, "Could store and read message '{}'", msg);
 
     stop_node(&logger, &faulty_node);
@@ -147,40 +147,35 @@ fn downgrade_upgrade_roundtrip(
     start_node(&logger, &faulty_node);
     assert_assigned_replica_version(&faulty_node, target_version, env.logger());
 
-    assert!(block_on(can_read_msg(
+    assert!(can_read_msg(
         &logger,
         &faulty_node.get_public_url(),
         can_id,
         msg
-    )));
+    ));
     info!(logger, "After upgrade could read message '{}'", msg);
 
     let msg_2 = "hello world after downgrade!";
-    let can_id_2 = block_on(store_message(&faulty_node.get_public_url(), msg_2));
-    assert!(block_on(can_read_msg(
+    let can_id_2 = store_message(&faulty_node.get_public_url(), msg_2);
+    assert!(can_read_msg(
         &logger,
         &faulty_node.get_public_url(),
         can_id_2,
         msg_2
-    )));
+    ));
     info!(logger, "Could store and read message '{}'", msg_2);
 
     stop_node(&logger, &faulty_node);
     upgrade_to(nns_node, subnet_id, &subnet_node, branch_version, &logger);
 
     let msg_3 = "hello world after upgrade!";
-    let can_id_3 = block_on(store_message(&subnet_node.get_public_url(), msg_3));
+    let can_id_3 = store_message(&subnet_node.get_public_url(), msg_3);
 
     start_node(&logger, &faulty_node);
     assert_assigned_replica_version(&faulty_node, branch_version, env.logger());
 
     for (c, m) in &[(can_id, msg), (can_id_2, msg_2), (can_id_3, msg_3)] {
-        assert!(block_on(can_read_msg(
-            &logger,
-            &faulty_node.get_public_url(),
-            *c,
-            m
-        )));
+        assert!(can_read_msg(&logger, &faulty_node.get_public_url(), *c, m));
     }
 
     info!(logger, "Could read all previously stored messages!");

@@ -4,7 +4,7 @@ use crate::{
         get_governance_canister, submit_bless_replica_version_proposal,
         submit_update_subnet_replica_version_proposal, vote_execute_proposal_assert_executed,
     },
-    util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
+    util::runtime_from_url,
 };
 use anyhow::{bail, Result};
 use ic_canister_client::Sender;
@@ -196,11 +196,4 @@ pub(crate) async fn update_subnet_replica_version(
     )
     .await;
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
-}
-
-pub(crate) fn can_install_canister(url: &url::Url) -> bool {
-    block_on(async {
-        let agent = assert_create_agent(url.as_str()).await;
-        UniversalCanister::try_new(&agent).await.is_ok()
-    })
 }
