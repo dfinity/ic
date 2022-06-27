@@ -1,0 +1,81 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/config",
+    "//rs/crypto",
+    "//rs/interfaces",
+    "//rs/monitoring/logger",
+    "//rs/protobuf",
+    "//rs/registry/client",
+    "//rs/registry/keys",
+    "//rs/registry/local_store",
+    "//rs/registry/proto_data_provider",
+    "//rs/registry/provisional_whitelist",
+    "//rs/registry/routing_table",
+    "//rs/registry/subnet_type",
+    "//rs/registry/transport",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "@crate_index//:anyhow",
+    "@crate_index//:base64",
+    "@crate_index//:chrono",
+    "@crate_index//:clap",
+    "@crate_index//:fs_extra",
+    "@crate_index//:json5",
+    "@crate_index//:maplit",
+    "@crate_index//:openssl",
+    "@crate_index//:prost",
+    "@crate_index//:rand_0_7_3",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:tempfile",
+    "@crate_index//:thiserror",
+    "@crate_index//:url",
+]
+
+rust_library(
+    name = "prep",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_prep_lib",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "prep_test",
+    crate = ":prep",
+    edition = "2018",
+    deps = DEPENDENCIES + [
+        "@crate_index//:assert_matches",
+        "@crate_index//:pretty_assertions",
+    ],
+)
+
+rust_binary(
+    name = "ic-prep",
+    srcs = ["src/bin/prep.rs"],
+    edition = "2018",
+    deps = [":prep"] + DEPENDENCIES,
+)
+
+rust_binary(
+    name = "ic-principal-id",
+    srcs = ["src/bin/principal_id.rs"],
+    edition = "2018",
+    deps = [":prep"] + DEPENDENCIES,
+)
+
+# Disabled due to https://github.com/bazelbuild/rules_rust/issues/1233
+# rust_doc_test(
+#   name = "prep_doc_test",
+#   crate = ":prep",
+# )
