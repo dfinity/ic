@@ -37,25 +37,47 @@ function configure_efi() {
 function resize_partition() {
     echo "* Resizing partition..."
 
+    # Repair header at end of disk
     sgdisk --move-second-header /dev/nvme0n1 >/dev/null 2>&1
     log_and_reboot_on_error "${?}" "Unable to extend GPT data structures: /dev/nvme0n1"
 
+    # Extend the LVM partition to fill disk
     parted -s --align optimal /dev/nvme0n1 "resizepart 3 100%" >/dev/null 2>&1
     log_and_reboot_on_error "${?}" "Unable to resize partition: /dev/nvme0n1p3"
 
+    # Check and update PVs
     pvscan >/dev/null 2>&1
     log_and_reboot_on_error "${?}" "Unable scan physical volumes."
 
+    # Extend PV to the end of LVM partition
     pvresize /dev/nvme0n1p3 >/dev/null 2>&1
     log_and_reboot_on_error "${?}" "Unable to resize physical volume: /dev/nvme0n1p3"
 
+    # Check and update VGs
     vgscan >/dev/null 2>&1
     log_and_reboot_on_error "${?}" "Unable scan volume groups."
 
+    # Check and update LVs
     lvscan >/dev/null 2>&1
     log_and_reboot_on_error "${?}" "Unable scan logical volumes."
 
-    lvextend -l +100%FREE /dev/hostlvm/guestos >/dev/null 2>&1
+    # Add additional PVs to VG
+    skew=$(detect_skew)
+    if [ "${skew}" == "dell" ]; then
+        drives=9
+    elif [ "${skew}" == "supermicro" ]; then
+        drives=4
+    else
+        log_and_reboot_on_error "1" "Unknown machine skew."
+    fi
+
+    for drive in $(seq 1 ${drives}); do
+        vgextend hostlvm "/dev/nvme${drive}n1"
+        log_and_reboot_on_error "${?}" "Unable to include PV '/dev/nvme${drive}n1' in VG."
+    done
+
+    # Extend GuestOS LV to fill VG space
+    lvextend -i 10 --type striped -l +100%FREE /dev/hostlvm/guestos >/dev/null 2>&1
     log_and_reboot_on_error "${?}" "Unable to extend logical volume: /dev/hostlvm/guestos"
 }
 

@@ -1,5 +1,6 @@
 [Unit]
 Description=SetupOS install process
+After=generate-network-config.service
 
 [Install]
 WantedBy=multi-user.target

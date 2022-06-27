@@ -5,7 +5,6 @@ set -e
 # Generate a deterministic IPv6 address.
 
 SCRIPT="$(basename $0)[$$]"
-METRICS_DIR="/run/node_exporter/collector_textfile"
 
 # Get keyword arguments
 for argument in "${@}"; do
@@ -19,7 +18,7 @@ for argument in "${@}"; do
 Generate Deterministic IPv6 Address
 
 Arguments:
-  -c=, --config=        specify the config.ini configuration file (Default: /boot/config/config.ini)
+  -c=, --config=        specify the config.ini configuration file (Default: /config/config.ini)
   -h, --help            show this help message and exit
   -i=, --index=         mandatory: specify the single digit node index (Examples: host: 0, guest: 1, boundary: 2)
 '
@@ -37,7 +36,7 @@ Arguments:
 done
 
 # Set arguments if undefined
-CONFIG="${CONFIG:=/boot/config/config.ini}"
+CONFIG="${CONFIG:=/config/config.ini}"
 
 function validate_arguments() {
     if [ "${CONFIG}" == "" -o "${INDEX}" == "" ]; then
@@ -53,15 +52,6 @@ write_log() {
     fi
 
     logger -t ${SCRIPT} "${message}"
-}
-
-write_metric() {
-    local name=$1
-    local value=$2
-    local help=$3
-    local type=$4
-
-    echo -e "# HELP ${name} ${help}\n# INDEX ${type}\n${name} ${value}" >"${METRICS_DIR}/${name}.prom"
 }
 
 function read_variables() {
@@ -92,10 +82,6 @@ function generate_deterministic_ipv6() {
     echo "${DETERMINISTIC_IPV6}"
 
     write_log "Using deterministically generated IPv6 address: ${DETERMINISTIC_IPV6}"
-    write_metric "hostos_generate_deterministic_ipv6" \
-        "0" \
-        "HostOS generate deterministic IPv6 address" \
-        "gauge"
 }
 
 function main() {

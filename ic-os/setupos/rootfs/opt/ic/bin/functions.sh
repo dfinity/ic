@@ -99,3 +99,14 @@ function log_end() {
     log_and_reboot_on_error "${?}" "Unable to end '${script}' script."
     echo " "
 }
+
+function detect_skew() {
+    OEM=$(ipmitool mc info | sed -e 's/^Manufacturer ID[^0-9]*\([0-9]*\)/\1/' -e t -e d)
+    log_and_reboot_on_error "${?}" "Unable to identify variant of machine."
+
+    if [ "${OEM}" == "674" ]; then
+        echo "dell"
+    elif [ "${OEM}" == "10876" ]; then
+        echo "supermicro"
+    fi
+}

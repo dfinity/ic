@@ -258,6 +258,7 @@ function assemble_and_populate_image() {
 
     "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/boot-tree.tar" "${BASE_DIR}/bootloader"
     "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/rootfs-tree.tar" -- --build-arg BASE_IMAGE="${BASE_IMAGE}" "${BASE_DIR}/rootfs"
+
     "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-esp.tar" -s 100M -p boot/efi -i "${TMP_DIR}/boot-tree.tar"
     "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-grub.tar" -s 100M -p boot/grub -i "${TMP_DIR}/boot-tree.tar" \
         "${BASE_DIR}/bootloader/grub.cfg:/boot/grub/grub.cfg:644" \
@@ -272,7 +273,7 @@ function assemble_and_populate_image() {
         "${TMP_DIR}/version.txt:/boot/version.txt:0644" \
         "${BASE_DIR}/extra_boot_args:/boot/extra_boot_args:0644"
 
-    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-root.tar" -s 1G -i "${TMP_DIR}/rootfs-tree.tar" -S "${TMP_DIR}/file_contexts" \
+    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-root.tar" -s 2G -i "${TMP_DIR}/rootfs-tree.tar" -S "${TMP_DIR}/file_contexts" \
         "${TMP_DIR}/version.txt:/opt/ic/share/version.txt:0644"
 
     "${TOOL_DIR}"/build_disk_image.py -o "${TMP_DIR}/disk.img.tar" -p "${BASE_DIR}/scripts/partitions.csv" \
@@ -291,7 +292,7 @@ function provide_raw_image() {
     OUT_BASENAME="$(basename "${OUTPUT}")"
     tar xf "${TMP_DIR}/disk.img.tar" --transform="s/disk.img/${OUT_BASENAME}/" -C "${OUT_DIRNAME}"
     # increase size a bit, for immediate qemu use (legacy)
-    truncate --size 4G "${OUTPUT}"
+    truncate --size 5G "${OUTPUT}"
 }
 
 function log_end() {

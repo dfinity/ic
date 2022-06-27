@@ -41,12 +41,33 @@ function purge_partitions() {
     fi
 }
 
+function setup_storage() {
+    # Create PVs on each additional drive, at the same time, check that we have the required amount
+    skew=$(detect_skew)
+    if [ "${skew}" == "dell" ]; then
+        drives=9
+    elif [ "${skew}" == "supermicro" ]; then
+        drives=4
+    else
+        log_and_reboot_on_error "1" "Unknown machine skew."
+    fi
+
+    for drive in $(seq 1 ${drives}); do
+        test -b "/dev/nvme${drive}n1"
+        log_and_reboot_on_error "${?}" "Drive '/dev/nvme${drive}n1' not found. Are all drives correctly installed?"
+
+        pvcreate "/dev/nvme${drive}n1"
+        log_and_reboot_on_error "${?}" "Unable to setup PV on drive '/dev/nvme${drive}n1'."
+    done
+}
+
 # Establish run order
 main() {
     source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
     purge_volume_groups
     purge_partitions
+    setup_storage
     log_end "$(basename $0)"
 }
 
