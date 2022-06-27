@@ -1,8 +1,6 @@
-use async_trait::*;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_interfaces_transport::{
-    AsyncTransportEventHandler, FlowId, FlowTag, SendError, Transport, TransportErrorCode,
-    TransportPayload, TransportStateChange,
+    AsyncTransportEventHandler, FlowTag, Transport, TransportErrorCode, TransportPayload,
 };
 use ic_protobuf::registry::node::v1::NodeRecord;
 use mockall::*;
@@ -45,16 +43,4 @@ mock! {
 
 mock! {
     pub TranportEventHandler {}
-}
-
-#[async_trait]
-impl AsyncTransportEventHandler for MockTranportEventHandler {
-    async fn send_message(
-        &self,
-        _flow: FlowId,
-        _message: TransportPayload,
-    ) -> Result<(), SendError> {
-        Ok(())
-    }
-    async fn state_changed(&self, _state_change: TransportStateChange) {}
 }

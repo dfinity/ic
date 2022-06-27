@@ -1,5 +1,6 @@
 use ic_interfaces_transport::{
-    AsyncTransportEventHandler, FlowId, FlowTag, Transport, TransportErrorCode, TransportPayload,
+    AsyncTransportEventHandler, FlowId, FlowTag, Transport, TransportErrorCode, TransportEvent,
+    TransportMessage, TransportPayload,
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
@@ -144,13 +145,13 @@ impl ThreadPort {
         };
 
         event_handler
-            .send_message(
-                FlowId {
+            .call(TransportEvent::Message(TransportMessage {
+                flow_id: FlowId {
                     peer_id: src_node_id,
                     flow_tag: FlowTag::from(0),
                 },
-                message,
-            )
+                payload: message,
+            }))
             .await
             .expect("send message failed");
         Ok(())

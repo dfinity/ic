@@ -790,7 +790,7 @@ mod tests {
     use ic_config::transport::{TransportConfig, TransportFlowConfig};
     use ic_crypto::utils::TempCryptoComponent;
     use ic_interfaces_transport::{
-        AsyncTransportEventHandler, FlowId, SendError, TransportPayload, TransportStateChange,
+        AsyncTransportEventHandler, SendError, TransportEvent, TransportStateChange,
     };
     use ic_logger::warn;
     use ic_metrics::MetricsRegistry;
@@ -818,14 +818,6 @@ mod tests {
     }
 
     impl FakeEventHandler {
-        fn on_message(
-            &self,
-            _flow: FlowId,
-            _message: TransportPayload,
-        ) -> Option<TransportPayload> {
-            None
-        }
-
         fn on_state_change(&self, state_change: TransportStateChange) {
             if let TransportStateChange::PeerFlowUp(_) = state_change {
                 self.connected.send(true).unwrap();
@@ -835,17 +827,12 @@ mod tests {
 
     #[async_trait]
     impl AsyncTransportEventHandler for FakeEventHandler {
-        async fn send_message(
-            &self,
-            flow: FlowId,
-            message: TransportPayload,
-        ) -> Result<(), SendError> {
-            self.on_message(flow, message);
+        async fn call(&self, event: TransportEvent) -> Result<(), SendError> {
+            match event {
+                TransportEvent::Message(_) => (),
+                TransportEvent::StateChange(state_change) => self.on_state_change(state_change),
+            };
             Ok(())
-        }
-
-        async fn state_changed(&self, state_change: TransportStateChange) {
-            self.on_state_change(state_change);
         }
     }
 

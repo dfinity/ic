@@ -38,7 +38,7 @@ use ic_config::{
 };
 use ic_interfaces_transport::{
     AsyncTransportEventHandler, FlowId, FlowTag, SendError, Transport, TransportErrorCode,
-    TransportPayload, TransportStateChange,
+    TransportEvent, TransportPayload, TransportStateChange,
 };
 use ic_logger::{info, warn, LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -395,13 +395,14 @@ impl TestClientEventHandler {
 
 #[async_trait]
 impl AsyncTransportEventHandler for TestClientEventHandler {
-    async fn send_message(&self, flow: FlowId, message: TransportPayload) -> Result<(), SendError> {
-        self.on_message(flow, message);
+    async fn call(&self, event: TransportEvent) -> Result<(), SendError> {
+        match event {
+            TransportEvent::Message(msg) => {
+                self.on_message(msg.flow_id, msg.payload);
+            }
+            TransportEvent::StateChange(state_change) => self.on_state_change(state_change),
+        }
         Ok(())
-    }
-
-    async fn state_changed(&self, state_change: TransportStateChange) {
-        self.on_state_change(state_change)
     }
 }
 
