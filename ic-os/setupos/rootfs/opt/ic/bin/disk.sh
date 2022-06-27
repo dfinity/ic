@@ -23,21 +23,13 @@ function purge_partitions() {
     echo "* Purging partitions..."
 
     # Destroy master boot record and partition table
-    nvme_drives=($(find /dev/ -type b -iname "nvme*n1" | sort))
-    vda_drives=($(find /dev/ -type b -iname "vd*" | sort))
+    large_drives=($(lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'))
 
-    if [ ! -z "${nvme_drives}" ]; then
-        for drive in $(echo ${nvme_drives[@]}); do
-            wipefs --all --force ${drive}
-            log_and_reboot_on_error "${?}" "Unable to purge partitions on drive: ${drive}"
+    if [ ! -z "${large_drives}" ]; then
+        for drive in $(echo ${large_drives[@]}); do
+            wipefs --all --force "/dev/${drive}"
+            log_and_reboot_on_error "${?}" "Unable to purge partitions on drive: /dev/${drive}"
         done
-    elif [ ! -z "${vda_drives}" ]; then
-        for drive in $(echo ${vda_drives[@]}); do
-            wipefs --all --force ${drive}
-            log_and_reboot_on_error "${?}" "Unable to purge partitions on drive: ${drive}"
-        done
-    else
-        log_and_reboot_on_error "1" "Unable to locate suitable system drive."
     fi
 }
 
@@ -45,20 +37,33 @@ function setup_storage() {
     # Create PVs on each additional drive, at the same time, check that we have the required amount
     skew=$(detect_skew)
     if [ "${skew}" == "dell" ]; then
-        drives=9
+        target_drives=9
     elif [ "${skew}" == "supermicro" ]; then
-        drives=4
+        target_drives=4
     else
         log_and_reboot_on_error "1" "Unknown machine skew."
     fi
 
-    for drive in $(seq 1 ${drives}); do
-        test -b "/dev/nvme${drive}n1"
-        log_and_reboot_on_error "${?}" "Drive '/dev/nvme${drive}n1' not found. Are all drives correctly installed?"
+    count=0
+    large_drives=($(lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'))
+    for drive in $(echo ${large_drives[@]}); do
+        # Avoid creating PV on main disk
+        if [ "/dev/${drive}" == "/dev/nvme0n1" ]; then
+            continue
+        fi
 
-        pvcreate "/dev/nvme${drive}n1"
-        log_and_reboot_on_error "${?}" "Unable to setup PV on drive '/dev/nvme${drive}n1'."
+        count=$((${count} + 1))
+
+        test -b "/dev/${drive}"
+        log_and_reboot_on_error "${?}" "Drive '/dev/${drive}' not found. Are all drives correctly installed?"
+
+        pvcreate "/dev/${drive}"
+        log_and_reboot_on_error "${?}" "Unable to setup PV on drive '/dev/${drive}'."
     done
+
+    if [ "${count}" -ne "${target_drives}" ]; then
+        log_and_reboot_on_error "1" "Not enough drives found. Are all drives correctly installed?"
+    fi
 }
 
 # Establish run order

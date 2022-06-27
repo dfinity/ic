@@ -62,23 +62,28 @@ function resize_partition() {
     log_and_reboot_on_error "${?}" "Unable scan logical volumes."
 
     # Add additional PVs to VG
-    skew=$(detect_skew)
-    if [ "${skew}" == "dell" ]; then
-        drives=9
-    elif [ "${skew}" == "supermicro" ]; then
-        drives=4
-    else
-        log_and_reboot_on_error "1" "Unknown machine skew."
-    fi
+    large_drives=($(lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'))
+    for drive in $(echo ${large_drives[@]}); do
+        # Avoid adding PV of main disk
+        if [ "/dev/${drive}" == "/dev/nvme0n1" ]; then
+            continue
+        fi
 
-    for drive in $(seq 1 ${drives}); do
-        vgextend hostlvm "/dev/nvme${drive}n1"
-        log_and_reboot_on_error "${?}" "Unable to include PV '/dev/nvme${drive}n1' in VG."
+        vgextend hostlvm "/dev/${drive}"
+        log_and_reboot_on_error "${?}" "Unable to include PV '/dev/${drive}' in VG."
     done
 
     # Extend GuestOS LV to fill VG space
-    lvextend -i 10 --type striped -l +100%FREE /dev/hostlvm/guestos >/dev/null 2>&1
-    log_and_reboot_on_error "${?}" "Unable to extend logical volume: /dev/hostlvm/guestos"
+    skew=$(detect_skew)
+    if [ "${skew}" == "dell" ]; then
+        lvextend -i 10 --type striped -l +100%FREE /dev/hostlvm/guestos >/dev/null 2>&1
+        log_and_reboot_on_error "${?}" "Unable to extend logical volume: /dev/hostlvm/guestos"
+    elif [ "${skew}" == "supermicro" ]; then
+        lvextend -i 5 --type striped -l +100%FREE /dev/hostlvm/guestos >/dev/null 2>&1
+        log_and_reboot_on_error "${?}" "Unable to extend logical volume: /dev/hostlvm/guestos"
+    else
+        log_and_reboot_on_error "1" "Unknown machine skew."
+    fi
 }
 
 # Establish run order
