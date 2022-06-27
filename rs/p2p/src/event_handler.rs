@@ -77,7 +77,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use ic_interfaces_transport::{
-    AsyncTransportEventHandler, FlowId, SendError, TransportPayload, TransportStateChange,
+    AsyncTransportEventHandler, SendError, TransportEvent, TransportMessage,
 };
 use ic_logger::{debug, info, replica_logger::ReplicaLogger, trace};
 use ic_metrics::MetricsRegistry;
@@ -334,56 +334,58 @@ impl AsyncTransportEventHandlerImpl {
 impl AsyncTransportEventHandler for AsyncTransportEventHandlerImpl {
     /// The method sends the given message on the flow associated with the given
     /// flow ID.
-    async fn send_message(&self, flow: FlowId, message: TransportPayload) -> Result<(), SendError> {
-        let gossip_message = <pb::GossipMessage as ProtoProxy<GossipMessage>>::proxy_decode(
-            &message.0,
-        )
-        .map_err(|e| {
-            trace!(self.log, "Deserialization failed {}", e);
-            SendError::DeserializationFailed
-        })?;
+    async fn call(&self, event: TransportEvent) -> Result<(), SendError> {
+        match event {
+            TransportEvent::Message(raw) => {
+                let TransportMessage { payload, flow_id } = raw;
+                let gossip_message =
+                    <pb::GossipMessage as ProtoProxy<GossipMessage>>::proxy_decode(&payload.0)
+                        .map_err(|e| {
+                            trace!(self.log, "Deserialization failed {}", e);
+                            SendError::DeserializationFailed
+                        })?;
 
-        let c_gossip = self.gossip.read().as_ref().unwrap().clone();
-        match gossip_message {
-            GossipMessage::Advert(msg) => {
-                let consume_fn = move |item, peer_id| {
-                    c_gossip.on_advert(item, peer_id);
+                let c_gossip = self.gossip.read().as_ref().unwrap().clone();
+                match gossip_message {
+                    GossipMessage::Advert(msg) => {
+                        let consume_fn = move |item, peer_id| {
+                            c_gossip.on_advert(item, peer_id);
+                        };
+                        self.advert.execute(flow_id.peer_id, msg, consume_fn).await;
+                    }
+                    GossipMessage::ChunkRequest(msg) => {
+                        let consume_fn = move |item, peer_id| {
+                            c_gossip.on_chunk_request(item, peer_id);
+                        };
+                        self.request.execute(flow_id.peer_id, msg, consume_fn).await;
+                    }
+                    GossipMessage::Chunk(msg) => {
+                        let consume_fn = move |item, peer_id| {
+                            c_gossip.on_chunk(item, peer_id);
+                        };
+                        self.chunk.execute(flow_id.peer_id, msg, consume_fn).await;
+                    }
+                    GossipMessage::RetransmissionRequest(msg) => {
+                        let consume_fn = move |item, peer_id| {
+                            c_gossip.on_retransmission_request(item, peer_id);
+                        };
+                        self.retransmission
+                            .execute(flow_id.peer_id, msg, consume_fn)
+                            .await;
+                    }
                 };
-                self.advert.execute(flow.peer_id, msg, consume_fn).await;
             }
-            GossipMessage::ChunkRequest(msg) => {
-                let consume_fn = move |item, peer_id| {
-                    c_gossip.on_chunk_request(item, peer_id);
+            TransportEvent::StateChange(state_change) => {
+                let c_gossip = self.gossip.read().as_ref().unwrap().clone();
+                let consume_fn = move |item, _peer_id| {
+                    c_gossip.on_transport_state_change(item);
                 };
-                self.request.execute(flow.peer_id, msg, consume_fn).await;
-            }
-            GossipMessage::Chunk(msg) => {
-                let consume_fn = move |item, peer_id| {
-                    c_gossip.on_chunk(item, peer_id);
-                };
-                self.chunk.execute(flow.peer_id, msg, consume_fn).await;
-            }
-            GossipMessage::RetransmissionRequest(msg) => {
-                let consume_fn = move |item, peer_id| {
-                    c_gossip.on_retransmission_request(item, peer_id);
-                };
-                self.retransmission
-                    .execute(flow.peer_id, msg, consume_fn)
+                self.transport
+                    .execute(self.node_id, state_change, consume_fn)
                     .await;
             }
-        };
+        }
         Ok(())
-    }
-
-    /// The method changes the state of the P2P event handler.
-    async fn state_changed(&self, state_change: TransportStateChange) {
-        let c_gossip = self.gossip.read().as_ref().unwrap().clone();
-        let consume_fn = move |item, _peer_id| {
-            c_gossip.on_transport_state_change(item);
-        };
-        self.transport
-            .execute(self.node_id, state_change, consume_fn)
-            .await;
     }
 }
 
@@ -519,7 +521,7 @@ pub mod tests {
         gossip_protocol::{GossipAdvertSendRequest, GossipRetransmissionRequest},
     };
     use ic_interfaces::ingress_pool::IngressPoolThrottler;
-    use ic_interfaces_transport::FlowTag;
+    use ic_interfaces_transport::{FlowId, FlowTag, TransportPayload, TransportStateChange};
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{p2p::p2p_test_setup_logger, types::ids::node_test_id};
     use ic_types::artifact::AdvertClass;
@@ -668,13 +670,13 @@ pub mod tests {
             let message = GossipMessage::Advert(make_gossip_advert(i as u64));
             let message = TransportPayload(pb::GossipMessage::proxy_encode(message).unwrap());
             let _ = handler
-                .send_message(
-                    FlowId {
+                .call(TransportEvent::Message(TransportMessage {
+                    flow_id: FlowId {
                         peer_id,
                         flow_tag: FlowTag::from(0),
                     },
-                    message,
-                )
+                    payload: message,
+                }))
                 .await;
         }
     }

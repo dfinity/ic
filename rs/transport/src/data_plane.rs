@@ -28,8 +28,8 @@ use crate::{
 use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::{TlsReadHalf, TlsStream, TlsWriteHalf};
 use ic_interfaces_transport::{
-    AsyncTransportEventHandler, FlowId, FlowTag, TransportErrorCode, TransportPayload,
-    TransportStateChange,
+    AsyncTransportEventHandler, FlowId, FlowTag, TransportErrorCode, TransportEvent,
+    TransportMessage, TransportPayload, TransportStateChange,
 };
 use ic_logger::warn;
 use std::convert::TryInto;
@@ -283,7 +283,12 @@ impl TransportImpl {
                 .with_label_values(&[&flow_label, &flow_tag])
                 .inc_by(payload.0.len() as u64);
             let start_time = Instant::now();
-            let _ = event_handler.send_message(flow_id, payload).await;
+            let _ = event_handler
+                .call(TransportEvent::Message(TransportMessage {
+                    flow_id,
+                    payload,
+                }))
+                .await;
             metrics
                 .client_send_time_msec
                 .with_label_values(&[&flow_label, &flow_tag])
@@ -364,11 +369,13 @@ impl TransportImpl {
             };
             client_state.event_handler.clone()
         };
-        event_handler
-            .state_changed(TransportStateChange::PeerFlowDown(FlowId {
-                peer_id: flow_id.peer_id,
-                flow_tag: flow_id.flow_tag,
-            }))
+        let _ = event_handler
+            .call(TransportEvent::StateChange(
+                TransportStateChange::PeerFlowDown(FlowId {
+                    peer_id: flow_id.peer_id,
+                    flow_tag: flow_id.flow_tag,
+                }),
+            ))
             .await;
     }
 
@@ -459,36 +466,39 @@ impl TransportImpl {
     ) -> Result<(), TransportErrorCode> {
         let (tls_reader, tls_writer) = tls_stream.split();
         let flow_id = FlowId { peer_id, flow_tag };
-        self.on_connect_setup(
-            flow_id,
-            role,
-            peer_addr,
-            Box::new(tls_reader),
-            Box::new(tls_writer),
-        )
-        .map_err(|e| {
-            warn!(
-                every_n_seconds => 30,
-                self.log,
-                "ControlPlane::handshake_result(): failed to add flow: \
-                 node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, role = {:?}, \
-                 error = {:?}",
-                self.node_id,
-                local_addr,
-                flow_id.flow_tag,
-                flow_id.peer_id,
-                peer_addr,
+        let _ = self
+            .on_connect_setup(
+                flow_id,
                 role,
+                peer_addr,
+                Box::new(tls_reader),
+                Box::new(tls_writer),
+            )
+            .map_err(|e| {
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "ControlPlane::handshake_result(): failed to add flow: \
+                     node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, role = {:?}, \
+                     error = {:?}",
+                    self.node_id,
+                    local_addr,
+                    flow_id.flow_tag,
+                    flow_id.peer_id,
+                    peer_addr,
+                    role,
+                    e
+                );
                 e
-            );
-            e
-        })?
-        // Notify the client that peer flow is up.
-        .state_changed(TransportStateChange::PeerFlowUp(FlowId {
-            peer_id: flow_id.peer_id,
-            flow_tag: flow_id.flow_tag,
-        }))
-        .await;
+            })?
+            // Notify the client that peer flow is up.
+            .call(TransportEvent::StateChange(
+                TransportStateChange::PeerFlowUp(FlowId {
+                    peer_id: flow_id.peer_id,
+                    flow_tag: flow_id.flow_tag,
+                }),
+            ))
+            .await;
         Ok(())
     }
 }

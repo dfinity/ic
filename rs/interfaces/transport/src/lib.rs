@@ -83,11 +83,7 @@ pub enum SendError {
 /// client.
 #[async_trait]
 pub trait AsyncTransportEventHandler: Send + Sync {
-    /// Send a received message to the client
-    async fn send_message(&self, flow: FlowId, message: TransportPayload) -> Result<(), SendError>;
-
-    /// Notify the client of a change in a connection state
-    async fn state_changed(&self, state_change: TransportStateChange);
+    async fn call(&self, event: TransportEvent) -> Result<(), SendError>;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -98,6 +94,18 @@ pub type FlowTag = Id<FlowTagType, u32>;
 /// The payload for the transport layer.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TransportPayload(#[serde(with = "serde_bytes")] pub Vec<u8>);
+
+#[derive(Debug)]
+pub enum TransportEvent {
+    StateChange(TransportStateChange),
+    Message(TransportMessage),
+}
+
+#[derive(Debug)]
+pub struct TransportMessage {
+    pub flow_id: FlowId,
+    pub payload: TransportPayload,
+}
 
 /// FlowId is the unique key for the flows being managed
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
