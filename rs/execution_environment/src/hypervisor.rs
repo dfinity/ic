@@ -36,6 +36,7 @@ pub struct HypervisorMetrics {
     allocated_pages: IntGauge,
     executed_messages: IntCounterVec,
     largest_function_instruction_count: Histogram,
+    compile: Histogram,
 }
 
 impl HypervisorMetrics {
@@ -64,8 +65,13 @@ impl HypervisorMetrics {
             ),
             largest_function_instruction_count: metrics_registry.histogram(
                 "hypervisor_largest_function_instruction_count",
-                "Size of the largest compiled wasm function in a canister by number of wasm instructions",
+                "Size of the largest compiled wasm function in a canister by number of wasm instructions.",
                 decimal_buckets_with_zero(1, 7), // 10 - 10M.
+            ),
+            compile: metrics_registry.histogram(
+                "hypervisor_wasm_compile_time_seconds",
+                "The duration of Wasm module compilation including validation and instrumentation.",
+                decimal_buckets_with_zero(-4, 1),
             ),
         }
     }
@@ -91,10 +97,12 @@ impl HypervisorMetrics {
     fn observe_compilation_metrics(&self, compilation_result: &CompilationResult) {
         let CompilationResult {
             largest_function_instruction_count,
+            compilation_time,
             compilation_cost: _,
         } = compilation_result;
         self.largest_function_instruction_count
             .observe(largest_function_instruction_count.get() as f64);
+        self.compile.observe(compilation_time.as_secs_f64());
     }
 }
 
@@ -752,11 +760,7 @@ impl Hypervisor {
 
     #[cfg(test)]
     pub fn compile_count(&self) -> u64 {
-        if let Some(sandbox_executor) = &self.sandbox_executor {
-            sandbox_executor.compile_count_for_testing()
-        } else {
-            self.wasm_executor.compile_count_for_testing()
-        }
+        self.metrics.compile.get_sample_count()
     }
 
     /// Wrapper around the standalone `execute`.

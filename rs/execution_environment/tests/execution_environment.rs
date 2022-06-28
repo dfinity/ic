@@ -27,7 +27,7 @@ use ic_test_utilities::{
     },
     universal_canister::{call_args, wasm},
 };
-use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
+use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_count, metric_vec};
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES;
 use ic_types::{
     canister_http::CanisterHttpMethod,
@@ -2129,17 +2129,19 @@ fn compilation_metrics_are_recorded_during_installation() {
     let wat2 = "(module)";
     test.canister_from_wat(wat1).unwrap();
     test.canister_from_wat(wat2).unwrap();
-    let largest_function_metrics = test
-        .metrics_registry()
-        .prometheus_registry()
-        .gather()
-        .into_iter()
-        .find(|family| family.get_name() == "hypervisor_largest_function_instruction_count")
-        .unwrap();
-    assert_eq!(largest_function_metrics.get_metric().len(), 1);
-    let largest_function_metrics = largest_function_metrics.get_metric()[0].get_histogram();
-    assert_eq!(largest_function_metrics.get_sample_count(), 2);
-    assert_eq!(largest_function_metrics.get_sample_sum(), 8.0);
+    let largest_function_metric = fetch_histogram_stats(
+        test.metrics_registry(),
+        "hypervisor_largest_function_instruction_count",
+    )
+    .unwrap();
+    assert_eq!(largest_function_metric.count, 2);
+    assert_eq!(largest_function_metric.sum, 8.0);
+    let compilation_time_metric = fetch_histogram_stats(
+        test.metrics_registry(),
+        "hypervisor_wasm_compile_time_seconds",
+    )
+    .unwrap();
+    assert_eq!(compilation_time_metric.count, 2);
 }
 
 #[test]
@@ -2168,16 +2170,18 @@ fn compilation_metrics_are_recorded_during_update() {
         .wasm_binary
         .clear_compilation_cache();
     test.ingress(canister_id, "go", vec![]).unwrap();
-    let largest_function_metrics = test
-        .metrics_registry()
-        .prometheus_registry()
-        .gather()
-        .into_iter()
-        .find(|family| family.get_name() == "hypervisor_largest_function_instruction_count")
-        .unwrap();
-    assert_eq!(largest_function_metrics.get_metric().len(), 1);
-    let largest_function_metrics = largest_function_metrics.get_metric()[0].get_histogram();
+    let largest_function_metric = fetch_histogram_stats(
+        test.metrics_registry(),
+        "hypervisor_largest_function_instruction_count",
+    )
+    .unwrap();
     // Compiled once for install and once for execution.
-    assert_eq!(largest_function_metrics.get_sample_count(), 2);
-    assert_eq!(largest_function_metrics.get_sample_sum(), 20.0);
+    assert_eq!(largest_function_metric.count, 2);
+    assert_eq!(largest_function_metric.sum, 20.0);
+    let compilation_time_metric = fetch_histogram_stats(
+        test.metrics_registry(),
+        "hypervisor_wasm_compile_time_seconds",
+    )
+    .unwrap();
+    assert_eq!(compilation_time_metric.count, 2);
 }

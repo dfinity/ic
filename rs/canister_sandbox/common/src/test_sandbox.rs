@@ -5,6 +5,7 @@ use ic_types::NumInstructions;
 
 use std::os::unix::io::FromRawFd;
 use std::sync::Arc;
+use std::time::Duration;
 
 struct DummyMessageSink {}
 
@@ -25,6 +26,7 @@ impl sandbox_service::SandboxService for DummySandboxService {
         rpc::Call::new_resolved(Ok(sbxsvc::OpenWasmReply(Ok(CompilationResult {
             largest_function_instruction_count: NumInstructions::new(0),
             compilation_cost: NumInstructions::new(0),
+            compilation_time: Duration::from_millis(1),
         }))))
     }
     fn close_wasm(&self, _req: sbxsvc::CloseWasmRequest) -> rpc::Call<sbxsvc::CloseWasmReply> {
