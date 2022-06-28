@@ -4,7 +4,6 @@ version = "0.8.0"
 edition = "2018"
 
 [dependencies]
-lazy_static = "1.4.0"
 candid = "0.7.4"
 canister-test = { path = "../../rust_canisters/canister_test" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
@@ -21,11 +20,12 @@ ic-sns-root = { path = "../root" }
 ic-sns-sale = { path = "../sale" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
-ledger-canister = {path = "../../rosetta-api/ledger_canister"}
+lazy_static = "1.4.0"
+ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = "0.10.4"
-maplit = "1.0.2"
-tokio = { version = "1.17.0", features=["full"] }
+tokio = { version = "1.17.0", features = ["full"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ed25519-dalek = "1.0.1"

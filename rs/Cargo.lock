@@ -7549,6 +7549,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_approx_eq",
+ "candid",
+ "dfn_candid",
  "dfn_core",
  "ic-base-types",
  "ic-crypto-sha",
@@ -7556,14 +7558,25 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nns-constants",
  "ic-sns-governance",
+ "ic-sns-init-proto-generator",
  "ic-sns-root",
  "ic-sns-sale",
+ "ic-test-utilities-compare-dirs",
  "ledger-canister",
  "maplit",
  "num",
+ "prost 0.10.4",
  "serde",
  "serde_json",
  "serde_yaml",
+ "tempfile",
+]
+
+[[package]]
+name = "ic-sns-init-proto-generator"
+version = "0.8.0"
+dependencies = [
+ "prost-build 0.10.4",
 ]
 
 [[package]]
@@ -7581,6 +7594,7 @@ dependencies = [
  "dfn_protobuf",
  "hex",
  "ic-base-types",
+ "ic-canister-client",
  "ic-canister-client-sender",
  "ic-crypto",
  "ic-crypto-sha",

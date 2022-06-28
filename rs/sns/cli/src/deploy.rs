@@ -3,7 +3,8 @@
 use ic_base_types::PrincipalId;
 use ic_nns_constants::ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_sns_init::{SnsCanisterIds, SnsCanisterInitPayloads, SnsInitPayload};
+use ic_sns_init::pb::v1::SnsInitPayload;
+use ic_sns_init::{SnsCanisterIds, SnsCanisterInitPayloads};
 use std::str::FromStr;
 
 use crate::{call_dfx, get_identity, hex_encode_candid, DeployArgs};

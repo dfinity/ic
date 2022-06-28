@@ -8,7 +8,7 @@ use crate::init_config_file::InitConfigFileArgs;
 use candid::{CandidType, Encode, IDLArgs};
 use clap::Parser;
 use ic_base_types::PrincipalId;
-use ic_sns_init::SnsInitPayload;
+use ic_sns_init::pb::v1::SnsInitPayload;
 use ledger_canister::{AccountIdentifier, BinaryAccountBalanceArgs};
 use std::fs::File;
 use std::path::PathBuf;
