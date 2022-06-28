@@ -1,7 +1,7 @@
 //! The consensus public interface.
 use crate::{
     canister_http::{
-        CanisterHttpPayloadValidationError, CanisterHttpPermananentValidationError,
+        CanisterHttpPayloadValidationError, CanisterHttpPermanentValidationError,
         CanisterHttpTransientValidationError,
     },
     consensus_pool::{ChangeSet, ConsensusPool},
@@ -61,7 +61,7 @@ pub enum PayloadPermanentError {
         received: NumBytes,
     },
     SelfValidatingPayloadValidationError(InvalidSelfValidatingPayload),
-    CanisterHttpPayloadValidationError(CanisterHttpPermananentValidationError),
+    CanisterHttpPayloadValidationError(CanisterHttpPermanentValidationError),
 }
 
 #[derive(Debug)]

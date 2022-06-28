@@ -18,7 +18,7 @@ use ic_types::{
 };
 
 #[derive(Debug)]
-pub enum CanisterHttpPermananentValidationError {
+pub enum CanisterHttpPermanentValidationError {
     /// The [`CanisterHttpPayload`] is too large
     PayloadTooBig { expected: usize, received: usize },
     /// The signed metadata does not match the metadata of the content
@@ -61,7 +61,7 @@ pub enum CanisterHttpTransientValidationError {
 }
 
 pub type CanisterHttpPayloadValidationError =
-    ValidationError<CanisterHttpPermananentValidationError, CanisterHttpTransientValidationError>;
+    ValidationError<CanisterHttpPermanentValidationError, CanisterHttpTransientValidationError>;
 
 pub enum CanisterHttpChangeAction {
     AddToValidated(CanisterHttpResponseShare, CanisterHttpResponse),
