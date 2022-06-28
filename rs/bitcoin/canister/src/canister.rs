@@ -117,7 +117,7 @@ mod test {
     use bitcoin::secp256k1::rand::rngs::OsRng;
     use bitcoin::secp256k1::Secp256k1;
     use bitcoin::util::psbt::serialize::Serialize;
-    use bitcoin::{blockdata::constants::genesis_block, Address, Network, PublicKey};
+    use bitcoin::{blockdata::constants::genesis_block, Address, Block, Network, PublicKey};
     use ic_btc_test_utils::{random_p2tr_address, BlockBuilder, TransactionBuilder};
     use ic_btc_types::{Network as BtcTypesNetwork, OutPoint, Utxo};
 
@@ -407,6 +407,105 @@ mod test {
                     Err(GetUtxosError::MinConfirmationsTooLarge { given: i, max: 2 })
                 );
             }
+        }
+    }
+
+    #[test]
+    fn get_utxos_returns_results_in_descending_height_order() {
+        for network in [
+            Network::Bitcoin,
+            Network::Regtest,
+            Network::Testnet,
+            Network::Signet,
+        ]
+        .iter()
+        {
+            // Generate addresses.
+            let address_1 = {
+                let secp = Secp256k1::new();
+                let mut rng = OsRng::new().unwrap();
+                Address::p2pkh(&PublicKey::new(secp.generate_keypair(&mut rng).1), *network)
+            };
+
+            let address_2 = {
+                let secp = Secp256k1::new();
+                let mut rng = OsRng::new().unwrap();
+                Address::p2pkh(&PublicKey::new(secp.generate_keypair(&mut rng).1), *network)
+            };
+
+            // Create a blockchain which alternates between giving some BTC to
+            // address_1 and address_2 based on whether we're creating an even
+            // or an odd height block.
+            let num_blocks = 10;
+            let mut prev_block: Option<Block> = None;
+            let mut transactions = vec![];
+            let mut blocks = vec![];
+            for i in 0..num_blocks {
+                let tx = if i % 2 == 0 {
+                    TransactionBuilder::coinbase()
+                        .with_output(&address_1, i + 1)
+                        .build()
+                } else {
+                    TransactionBuilder::coinbase()
+                        .with_output(&address_2, i + 1)
+                        .build()
+                };
+                transactions.push(tx.clone());
+                let block = match prev_block {
+                    Some(b) => BlockBuilder::with_prev_header(b.header)
+                        .with_transaction(tx.clone())
+                        .build(),
+                    None => BlockBuilder::genesis().with_transaction(tx.clone()).build(),
+                };
+                blocks.push(block.clone());
+                prev_block = Some(block);
+            }
+
+            // Set the state.
+            let mut state = State::new(2, *network, blocks[0].clone());
+            for block in blocks[1..].iter() {
+                store::insert_block(&mut state, block.clone()).unwrap();
+            }
+
+            // We expect that address_1 has `Utxo`s on all even heights and
+            // address_2 on all odd heights, both in descending order.
+            let mut expected_utxos_address_1 = vec![];
+            let mut expected_utxos_address_2 = vec![];
+            for i in (0..num_blocks).rev() {
+                let expected_utxo = Utxo {
+                    outpoint: OutPoint {
+                        txid: transactions[i as usize].txid().to_vec(),
+                        vout: 0,
+                    },
+                    value: i + 1,
+                    height: i as u32,
+                };
+                if i % 2 == 0 {
+                    expected_utxos_address_1.push(expected_utxo)
+                } else {
+                    expected_utxos_address_2.push(expected_utxo);
+                }
+            }
+
+            assert_eq!(
+                get_utxos(&state, &address_1.to_string(), None,),
+                Ok(GetUtxosResponse {
+                    utxos: expected_utxos_address_1,
+                    tip_block_hash: blocks.last().unwrap().block_hash().to_vec(),
+                    tip_height: num_blocks as u32 - 1,
+                    next_page: None,
+                })
+            );
+
+            assert_eq!(
+                get_utxos(&state, &address_2.to_string(), None,),
+                Ok(GetUtxosResponse {
+                    utxos: expected_utxos_address_2,
+                    tip_block_hash: blocks.last().unwrap().block_hash().to_vec(),
+                    tip_height: num_blocks as u32 - 1,
+                    next_page: None,
+                })
+            );
         }
     }
 

@@ -7,6 +7,7 @@ use std::convert::TryInto;
 /// Used to signal the cut-off point for returning chunked UTXOs results.
 pub struct Page {
     pub tip_block_hash: BlockHash,
+    pub height: Height,
     pub outpoint: OutPoint,
 }
 
@@ -14,6 +15,7 @@ impl Page {
     pub fn to_bytes(&self) -> Vec<u8> {
         vec![
             self.tip_block_hash.to_vec(),
+            self.height.to_bytes(),
             OutPoint::to_bytes(&self.outpoint),
         ]
         .into_iter()
@@ -22,15 +24,31 @@ impl Page {
     }
 
     pub fn from_bytes(mut bytes: Vec<u8>) -> Result<Self, String> {
-        // The first 32 bytes represent the encoded `BlockHash`, the remaining the encoded `OutPoint`.
-        let outpoint_offset = 32;
+        // The first 32 bytes represent the encoded `BlockHash`, the next 4 the
+        // `Height` and the remaining the encoded `OutPoint`.
+        let height_offset = 32;
+        let outpoint_offset = 36;
         let outpoint_bytes = bytes.split_off(outpoint_offset);
+        let height_bytes = bytes.split_off(height_offset);
+
         let tip_block_hash = BlockHash::from_hash(
             Hash::from_slice(&bytes)
                 .map_err(|err| format!("Could not parse tip block hash: {}", err))?,
         );
+        // The height is parsed from bytes that are given by the user, so ensure
+        // that any errors are handled gracefully instead of using
+        // `Height::from_bytes` that can panic.
+        let height = u32::from_be_bytes(
+            height_bytes
+                .into_iter()
+                .map(|byte| byte ^ 255)
+                .collect::<Vec<_>>()
+                .try_into()
+                .map_err(|err| format!("Could not parse page height: {:?}", err))?,
+        );
         Ok(Page {
             tip_block_hash,
+            height,
             outpoint: outpoint_from_bytes(outpoint_bytes)?,
         })
     }
@@ -123,9 +141,7 @@ impl Storable for (Address, Height, OutPoint) {
     fn to_bytes(&self) -> Vec<u8> {
         vec![
             Address::to_bytes(&self.0),
-            // The height is represented as an XOR'ed big endian byte array
-            // so that outpoints of an address are sorted by height in descending order.
-            self.1.to_be_bytes().iter().map(|byte| byte ^ 255).collect(),
+            self.1.to_bytes(),
             OutPoint::to_bytes(&self.2),
         ]
         .into_iter()
@@ -142,14 +158,45 @@ impl Storable for (Address, Height, OutPoint) {
 
         (
             Address::from_bytes(bytes),
-            u32::from_be_bytes(
-                height_bytes
-                    .into_iter()
-                    .map(|byte| byte ^ 255)
-                    .collect::<Vec<_>>()
-                    .try_into()
-                    .expect("height_bytes must of length 4"),
-            ),
+            Height::from_bytes(height_bytes),
+            OutPoint::from_bytes(outpoint_bytes),
+        )
+    }
+}
+
+impl Storable for Height {
+    fn to_bytes(&self) -> Vec<u8> {
+        // The height is represented as an XOR'ed big endian byte array
+        // so that stored entries are sorted in descending height order.
+        self.to_be_bytes().iter().map(|byte| byte ^ 255).collect()
+    }
+
+    fn from_bytes(bytes: Vec<u8>) -> Self {
+        u32::from_be_bytes(
+            bytes
+                .into_iter()
+                .map(|byte| byte ^ 255)
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("height_bytes must of length 4"),
+        )
+    }
+}
+
+impl Storable for (Height, OutPoint) {
+    fn to_bytes(&self) -> Vec<u8> {
+        vec![self.0.to_bytes(), OutPoint::to_bytes(&self.1)]
+            .into_iter()
+            .flatten()
+            .collect()
+    }
+
+    fn from_bytes(mut bytes: Vec<u8>) -> Self {
+        let outpoint_offset = 4;
+        let outpoint_bytes = bytes.split_off(outpoint_offset);
+
+        (
+            Height::from_bytes(bytes),
             OutPoint::from_bytes(outpoint_bytes),
         )
     }

@@ -944,9 +944,11 @@ fn get_current_fee_percentiles_different_network_fails() {
             payment,
             Payload::Reject(RejectContext {
                 code: RejectCode::CanisterReject,
-                message: String::from("bitcoin_get_current_fee_percentiles failed: Received request for mainnet but the subnet supports testnet")
+                message: String::from(
+                    "Received request for mainnet but the subnet supports testnet",
+                ),
             }),
-            Cycles::zero()
+            Cycles::zero(),
         );
 
         // Request to get_current_fee_percentiles with the network parameter set to the
@@ -966,9 +968,11 @@ fn get_current_fee_percentiles_different_network_fails() {
             payment,
             Payload::Reject(RejectContext {
                 code: RejectCode::CanisterReject,
-                message: String::from("bitcoin_get_current_fee_percentiles failed: Received request for testnet but the subnet supports mainnet")
+                message: String::from(
+                    "Received request for testnet but the subnet supports mainnet",
+                ),
             }),
-            Cycles::zero()
+            Cycles::zero(),
         );
     });
 }
