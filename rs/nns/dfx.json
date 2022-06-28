@@ -27,6 +27,12 @@
     },
     "lifeline": {
       "candid": "handlers/lifeline/lifeline.did"
+    },
+    "sns-wasm": {
+      "type": "custom",
+      "candid": "sns-wasm/canister/sns-wasm.did",
+      "wasm": "../target/wasm32-unknown-unknown/release/sns-wasm-canister-opt.wasm",
+      "build": "cargo build --target wasm32-unknown-unknown --release -p ic-sns-wasm && ic-cdk-optimizer ../target/wasm32-unknown-unknown/release/sns-wasm-canister.wasm -o ../target/wasm32-unknown-unknown/release/sns-wasm-canister-opt.wasm"
     }
   },
   "networks": {

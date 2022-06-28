@@ -1,6 +1,7 @@
 //! Contains the logic for deploying SNS canisters
 
 use ic_base_types::PrincipalId;
+use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_init::{SnsCanisterIds, SnsCanisterInitPayloads, SnsInitPayload};
 use std::str::FromStr;
 
@@ -83,6 +84,44 @@ pub fn get_canister_id(canister_name: &str, args: &DeployArgs) -> Option<Princip
             }
         })
         .ok()
+}
+
+/// Responsible for deploying using SNS-WASM canister (for protected SNS subnet)
+pub struct SnsWasmSnsDeployer {
+    pub args: DeployArgs,
+    pub sns_init_payload: SnsInitPayload,
+    pub sns_wasms_canister_id: PrincipalId,
+}
+
+impl SnsWasmSnsDeployer {
+    pub fn new(args: DeployArgs, sns_init_payload: SnsInitPayload) -> Self {
+        let sns_wasms_canister_id = args
+            .override_sns_wasm_canister_id_for_tests
+            .as_ref()
+            .map(|principal| PrincipalId::from_str(principal).unwrap())
+            .unwrap_or_else(|| SNS_WASM_CANISTER_ID.get());
+
+        Self {
+            args,
+            sns_init_payload,
+            sns_wasms_canister_id,
+        }
+    }
+
+    /// Deploy this to the specified network using the SNS-WASM canister
+    pub fn deploy(&self) {
+        // let init_args = hex_encode_candid(&self.sns_init_payload);
+        call_dfx(&[
+            "canister",
+            "--network",
+            &self.args.network,
+            "call",
+            &self.sns_wasms_canister_id.to_string(),
+            "deploy_new_sns",
+            // TODO(NNS1-1473) Add initialization parameter support
+            "(record {},)",
+        ]);
+    }
 }
 
 /// Responsible for deploying SNS canisters

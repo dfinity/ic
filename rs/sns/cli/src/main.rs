@@ -2,7 +2,7 @@
 
 mod deploy;
 
-use crate::deploy::SnsDeployer;
+use crate::deploy::{SnsDeployer, SnsWasmSnsDeployer};
 use candid::{CandidType, Encode, IDLArgs};
 use clap::Parser;
 use ic_base_types::PrincipalId;
@@ -28,6 +28,7 @@ struct CliArgs {
 #[derive(Debug, Parser)]
 enum SubCommand {
     Deploy(DeployArgs),
+    DeployToSnsSubnet(DeployArgs),
     AccountBalance(AccountBalanceArgs),
 }
 
@@ -41,6 +42,12 @@ pub struct DeployArgs {
     /// The network to deploy to. This can be "local", "ic", or the URL of an IC network.
     #[structopt(default_value = "local", long)]
     network: String,
+
+    /// The canister ID of SNS-WASMS to use instead of the default
+    ///
+    /// This is useful for testing CLI commands against local replicas without fully deployed NNS
+    #[clap(long)]
+    pub override_sns_wasm_canister_id_for_tests: Option<String>,
 
     /// The amount of cycles to initialize each SNS canister with. This can be omitted when
     /// deploying locally.
@@ -90,6 +97,8 @@ impl DeployArgs {
     /// panic! if any args are invalid
     pub fn validate(&self) {
         if self.network == "ic" {
+            // TODO(NNS1-1511) For sns-subnet deploys, we have set fee, and will not need this
+            // parameter, but will need to ensure user intends to pay the fee
             assert!(
                 self.initial_cycles_per_canister.is_some(),
                 "When deploying to the ic network, initial_cycles_per_canister must be set"
@@ -145,6 +154,7 @@ fn main() {
 
     match args.sub_command {
         SubCommand::Deploy(args) => deploy(args),
+        SubCommand::DeployToSnsSubnet(args) => deploy_to_sns_subnet(args),
         SubCommand::AccountBalance(args) => print_account_balance(args),
     }
 }
@@ -154,6 +164,13 @@ fn deploy(args: DeployArgs) {
     args.validate();
     let sns_init_payload = args.generate_sns_init_payload();
     SnsDeployer::new(args, sns_init_payload).deploy()
+}
+
+/// Deploy via SNS-WASM canister (to protected SNS Subnet)
+fn deploy_to_sns_subnet(args: DeployArgs) {
+    args.validate();
+    let sns_init_payload = args.generate_sns_init_payload();
+    SnsWasmSnsDeployer::new(args, sns_init_payload).deploy();
 }
 
 /// Print the Ledger account balance of the principal in `AccountBalanceArgs` if given, else
@@ -209,7 +226,7 @@ fn call_dfx(args: &[&str]) -> Output {
     let output = Command::new("dfx")
         .args(args)
         .output()
-        .unwrap_or_else(|_| panic!("dfx failed when called with args: {:?}", args));
+        .unwrap_or_else(|e| panic!("dfx failed when called with args: {:?}: {}", args, e));
 
     // Some dfx commands output stderr instead of stdout, so we assign it for use in both
     // success and error cases below.

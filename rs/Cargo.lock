@@ -7465,6 +7465,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-sha",
  "ic-nervous-system-common",
+ "ic-nns-constants",
  "ic-protobuf",
  "ic-sns-governance",
  "ic-sns-init",
