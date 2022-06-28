@@ -42,6 +42,7 @@ use ic_rosetta_api::request::transaction_results::TransactionResults;
 use ic_rosetta_api::request::Request;
 
 const FIRST_BLOCK_TIMESTAMP_NANOS_SINCE_EPOC: u64 = 1_656_147_600_000_000_000; // 25 June 2022 09:00:00
+
 pub struct TestLedger {
     pub blockchain: RwLock<Blocks>,
     pub canister_id: CanisterId,

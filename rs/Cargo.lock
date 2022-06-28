@@ -5961,6 +5961,7 @@ version = "0.1.0"
 dependencies = [
  "actix-rt",
  "actix-web",
+ "async-trait",
  "candid",
  "dfn_protobuf",
  "ic-canister-client",
@@ -5973,6 +5974,7 @@ dependencies = [
  "on_wire",
  "rusqlite",
  "serde",
+ "serde_bytes",
  "tokio",
  "url",
 ]

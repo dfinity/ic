@@ -5,6 +5,7 @@ authors = ["The Internet Computer Project Developers"]
 edition = "2018"
 
 [dependencies]
+async-trait = "0.1.41"
 candid = "0.7.4"
 ic-certified-vars = { path = "../../certified_vars" }
 dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
@@ -23,3 +24,4 @@ url = "2.2.1"
 actix-rt = "2.2.0"
 actix-web = { version = "4.0.1", default_features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies"] }
 ic-ledger-client-core-test-utils = { path = "test_utils" }
+serde_bytes = "0.11"

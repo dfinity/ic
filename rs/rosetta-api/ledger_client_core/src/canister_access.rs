@@ -32,8 +32,8 @@ impl CanisterAccess {
     const BLOCKS_BATCH_LEN: u64 = 2000;
     const MAX_BLOCK_QUERIES: usize = 5;
 
-    pub fn new(url: Url, canister_id: CanisterId, client: HttpClient) -> Self {
-        let agent = Agent::new_with_client(client, url, Sender::Anonymous);
+    pub fn new(url: Url, canister_id: CanisterId) -> Self {
+        let agent = Agent::new_with_client(HttpClient::new(), url, Sender::Anonymous);
         Self {
             agent,
             canister_id,
@@ -134,7 +134,7 @@ impl CanisterAccess {
     }
 
     pub async fn multi_query_blocks(
-        self: &Arc<Self>,
+        self: Arc<Self>,
         start: BlockHeight,
         end: BlockHeight,
     ) -> Result<Vec<EncodedBlock>, String> {
