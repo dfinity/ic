@@ -2,7 +2,8 @@ use ic_interfaces::execution_environment::{
     AvailableMemory, ExecutionParameters, WasmExecutionOutput,
 };
 use ic_replicated_state::{
-    page_map::PageDeltaSerialization, Global, Memory, NumWasmPages, PageIndex,
+    canister_state::WASM_PAGE_SIZE_IN_BYTES, page_map::PageDeltaSerialization, ExecutionState,
+    Global, Memory, NumWasmPages, PageIndex,
 };
 use ic_system_api::{
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
@@ -91,5 +92,36 @@ impl StateModifications {
             subnet_available_memory,
             system_state_changes,
         }
+    }
+
+    /// Returns bytes allocated since the given old execution state.
+    /// The result is a pair `(total_allocated_bytes, message_allocated_bytes)`.
+    /// The first number consists of the bytes allocated in the Wasm memory, the
+    /// stable memory, and the new messages. The second number is the allocated
+    /// bytes of the new messages.
+    pub fn allocated_bytes(&self, execution_state: &ExecutionState) -> (NumBytes, NumBytes) {
+        let old_wasm_pages = execution_state.wasm_memory.size;
+        let new_wasm_pages = self.wasm_memory.size;
+        let added_wasm_pages = new_wasm_pages.max(old_wasm_pages) - old_wasm_pages;
+        let added_wasm_bytes = added_wasm_pages
+            .get()
+            .saturating_mul(WASM_PAGE_SIZE_IN_BYTES) as u64;
+
+        let old_stable_pages = execution_state.stable_memory.size;
+        let new_stable_pages = self.stable_memory.size;
+        let added_stable_pages = new_stable_pages.max(old_stable_pages) - old_stable_pages;
+        let added_stable_bytes = added_stable_pages
+            .get()
+            .saturating_mul(WASM_PAGE_SIZE_IN_BYTES) as u64;
+
+        let added_message_bytes = self.system_state_changes.allocated_request_bytes().get();
+
+        let added_total_bytes = added_wasm_bytes
+            .saturating_add(added_stable_bytes)
+            .saturating_add(added_message_bytes);
+        (
+            NumBytes::from(added_total_bytes as u64),
+            NumBytes::from(added_message_bytes as u64),
+        )
     }
 }

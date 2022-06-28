@@ -1025,14 +1025,16 @@ impl SystemApiImpl {
             Ok(RejectCode::SysTransient as i32)
         };
 
-        let reservation_bytes = (memory_required_to_push_request(&req) as u64).into();
-        let enforce_message_memory_usage =
-            self.execution_parameters.subnet_type != SubnetType::System;
-        if enforce_message_memory_usage
-            && self
-                .memory_usage
-                .allocate_memory(reservation_bytes, reservation_bytes)
-                .is_err()
+        let reservation_bytes = if self.execution_parameters.subnet_type == SubnetType::System {
+            // Effectively disable the memory limit checks on system subnets.
+            NumBytes::from(0)
+        } else {
+            (memory_required_to_push_request(&req) as u64).into()
+        };
+        if self
+            .memory_usage
+            .allocate_memory(reservation_bytes, reservation_bytes)
+            .is_err()
         {
             return abort(req, &mut self.sandbox_safe_system_state);
         }
@@ -1041,14 +1043,13 @@ impl SystemApiImpl {
             self.memory_usage.current_usage,
             self.execution_parameters.compute_allocation,
             req,
+            reservation_bytes,
         ) {
             Ok(()) => Ok(0),
             Err((StateError::QueueFull { .. }, request))
             | Err((StateError::CanisterOutOfCycles(_), request)) => {
-                if enforce_message_memory_usage {
-                    self.memory_usage
-                        .deallocate_memory(reservation_bytes, reservation_bytes);
-                }
+                self.memory_usage
+                    .deallocate_memory(reservation_bytes, reservation_bytes);
                 abort(request, &mut self.sandbox_safe_system_state)
             }
             Err((err, _)) => {

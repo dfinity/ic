@@ -2,7 +2,7 @@ use ic_canister_sandbox_common::controller_launcher_service::ControllerLauncherS
 use ic_canister_sandbox_common::launcher_service::LauncherService;
 use ic_canister_sandbox_common::protocol::id::{ExecId, MemoryId, WasmId};
 use ic_canister_sandbox_common::protocol::sbxsvc::MemorySerialization;
-use ic_canister_sandbox_common::protocol::structs::SandboxExecInput;
+use ic_canister_sandbox_common::protocol::structs::{SandboxExecInput, SandboxExecOutput};
 use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_canister_sandbox_common::{protocol, rpc};
 use ic_config::embedders::Config as EmbeddersConfig;
@@ -11,7 +11,8 @@ use ic_embedders::wasm_executor::{
 };
 use ic_embedders::WasmExecutionInput;
 use ic_interfaces::execution_environment::{
-    CompilationResult, HypervisorResult, InstanceStats, SubnetAvailableMemory, WasmExecutionOutput,
+    CompilationResult, HypervisorError, HypervisorResult, InstanceStats, SubnetAvailableMemory,
+    WasmExecutionOutput,
 };
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
@@ -763,10 +764,67 @@ impl SandboxedExecutionController {
             error!(self.logger, "[EXC-BUG] Canister {} completed execution with more instructions left than the initial limit.", canister_id)
         }
 
-        // Unless execution trapped, commit state (applying execution state
-        // changes, returning system state changes to caller).
-        let system_state_changes = if exec_output.wasm.wasm_result.is_ok() {
-            if let Some(state_modifications) = exec_output.state {
+        let system_state_changes = self.update_execution_state(
+            &mut exec_output,
+            &mut execution_state,
+            subnet_available_memory,
+            next_wasm_memory_id,
+            next_stable_memory_id,
+            canister_id,
+            sandbox_process,
+        );
+
+        self.metrics
+            .sandboxed_execution_sandbox_execute_duration
+            .with_label_values(&[api_type_label])
+            .observe(exec_output.execute_total_duration.as_secs_f64());
+        self.metrics
+            .sandboxed_execution_sandbox_execute_run_duration
+            .with_label_values(&[api_type_label])
+            .observe(exec_output.execute_run_duration.as_secs_f64());
+
+        (
+            execution_state,
+            WasmExecutionResult::Finished(exec_output.wasm, system_state_changes),
+        )
+    }
+
+    // Unless execution trapped, commit state (applying execution state
+    // changes, returning system state changes to caller).
+    #[allow(clippy::too_many_arguments)]
+    fn update_execution_state(
+        &self,
+        exec_output: &mut SandboxExecOutput,
+        execution_state: &mut ExecutionState,
+        subnet_available_memory: SubnetAvailableMemory,
+        next_wasm_memory_id: MemoryId,
+        next_stable_memory_id: MemoryId,
+        canister_id: CanisterId,
+        sandbox_process: Arc<SandboxProcess>,
+    ) -> SystemStateChanges {
+        // If the execution has failed, then we don't apply any changes.
+        if exec_output.wasm.wasm_result.is_err() {
+            return SystemStateChanges::default();
+        }
+        match exec_output.state.take() {
+            None => {
+                // Nothing to apply.
+                SystemStateChanges::default()
+            }
+            Some(state_modifications) => {
+                // First try to update the subnet available memory. If that
+                // fails, then replace the Wasm result with an OOM error.
+                let (added_total_bytes, added_message_bytes) =
+                    state_modifications.allocated_bytes(execution_state);
+                if subnet_available_memory
+                    .try_decrement(added_total_bytes, added_message_bytes)
+                    .is_err()
+                {
+                    exec_output.wasm.wasm_result = Err(HypervisorError::OutOfMemory);
+                    // Return early without applying other changes because we
+                    // changed the result to an OOM error.
+                    return SystemStateChanges::default();
+                }
                 // TODO: If a canister has broken out of wasm then it might have allocated more
                 // wasm or stable memory then allowed. We should add an additional check here
                 // that thet canister is still within it's allowed memory usage.
@@ -790,7 +848,6 @@ impl SandboxedExecutionController {
                         .sandboxed_execution_critical_error_invalid_memory_size
                         .inc();
                 }
-
                 execution_state
                     .stable_memory
                     .page_map
@@ -811,36 +868,10 @@ impl SandboxedExecutionController {
                         .sandboxed_execution_critical_error_invalid_memory_size
                         .inc();
                 }
-
                 execution_state.exported_globals = state_modifications.globals;
-
-                // TODO(RUN-230): Remove this after subnet available memory is simplified.
-                // Unconditionally update the subnet available memory.
-                // This value is actually a shared value under a RwLock, and the non-sandbox
-                // workflow involves directly updating the value. So failed executions are
-                // responsible for reseting the value themselves (see
-                // `SystemApiImpl::take_execution_result`).
-                subnet_available_memory.set(state_modifications.subnet_available_memory);
                 state_modifications.system_state_changes
-            } else {
-                SystemStateChanges::default()
             }
-        } else {
-            SystemStateChanges::default()
-        };
-        self.metrics
-            .sandboxed_execution_sandbox_execute_duration
-            .with_label_values(&[api_type_label])
-            .observe(exec_output.execute_total_duration.as_secs_f64());
-        self.metrics
-            .sandboxed_execution_sandbox_execute_run_duration
-            .with_label_values(&[api_type_label])
-            .observe(exec_output.execute_run_duration.as_secs_f64());
-
-        (
-            execution_state,
-            WasmExecutionResult::Finished(exec_output.wasm, system_state_changes),
-        )
+        }
     }
 
     pub fn create_execution_state(
