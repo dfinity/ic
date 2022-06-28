@@ -1,26 +1,25 @@
+use std::ops::Range;
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::sync::Arc;
 
 use core::ops::Deref;
-use ic_canister_client::HttpClient;
 
-use ic_ledger_core::block::BlockType;
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
-use ic_types::CanisterId;
-use ledger_canister::{Block, TipOfChainRes};
+use ic_ledger_core::block::{BlockType, EncodedBlock, HashOf};
+use ledger_canister::{Block, BlockHeight, TipOfChainRes};
 use log::{debug, error, info, trace};
 use tokio::sync::RwLock;
-use url::Url;
 
 use crate::blocks::Blocks;
-use crate::canister_access::CanisterAccess;
-use crate::certification::verify_block_hash;
+use crate::blocks_access::BlocksAccess;
+use crate::certification::{verify_block_hash, VerificationInfo};
 use crate::errors::Error;
 use crate::store::{BlockStoreError, HashedBlock};
 
 // If pruning is enabled, instead of pruning after each new block
 // we'll wait for PRUNE_DELAY blocks to accumulate and prune them in one go
 const PRUNE_DELAY: u64 = 10000;
+
+const PRINT_SYNC_PROGRESS_THRESHOLD: u64 = 1000;
 
 /// The LedgerBlocksSynchronizer will use this to output the metrics while
 /// synchronizing with the Leddger
@@ -30,70 +29,49 @@ pub trait LedgerBlocksSynchronizerMetrics {
     fn set_verified_height(&self, height: u64);
 }
 
+struct NopMetrics {}
+
+impl LedgerBlocksSynchronizerMetrics for NopMetrics {
+    fn set_target_height(&self, _height: u64) {}
+    fn set_synced_height(&self, _height: u64) {}
+    fn set_verified_height(&self, _height: u64) {}
+}
+
 /// Downloads the blocks of the Ledger to either an in-memory store or to
 /// a local sqlite store
-pub struct LedgerBlocksSynchronizer {
+pub struct LedgerBlocksSynchronizer<B>
+where
+    B: BlocksAccess,
+{
     pub blockchain: RwLock<Blocks>,
-    pub ledger_canister_id: CanisterId,
-    pub ledger_canister_access: Option<Arc<CanisterAccess>>,
+    blocks_access: Option<Arc<B>>,
+    // TODO: move store_max_blocks in sync or move up_to_block here
     store_max_blocks: Option<u64>,
-    root_key: Option<ThresholdSigPublicKey>,
+    verification_info: Option<VerificationInfo>,
     metrics: Box<dyn LedgerBlocksSynchronizerMetrics + Send + Sync>,
 }
 
-impl LedgerBlocksSynchronizer {
+impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
     pub async fn new(
-        ic_url: Url,
-        ledger_canister_id: CanisterId,
+        blocks_access: Option<Arc<B>>,
         store_location: Option<&std::path::Path>,
         store_max_blocks: Option<u64>,
-        offline: bool,
-        root_key: Option<ThresholdSigPublicKey>,
+        verification_info: Option<VerificationInfo>,
         metrics: Box<dyn LedgerBlocksSynchronizerMetrics + Send + Sync>,
-    ) -> Result<LedgerBlocksSynchronizer, Error> {
+    ) -> Result<LedgerBlocksSynchronizer<B>, Error> {
         let mut blocks = match store_location {
             Some(loc) => Blocks::new_persistent(loc),
             None => Blocks::new_in_memory(),
         };
 
-        let ledger_canister_access = if offline {
-            None
-        } else {
-            let http_client = HttpClient::new();
-            let canister_access = Arc::new(CanisterAccess::new(
-                ic_url.clone(),
-                ledger_canister_id,
-                http_client,
-            ));
-            Self::verify_store(&blocks, &canister_access).await?;
-
-            if root_key.is_some() {
+        if let Some(blocks_access) = &blocks_access {
+            Self::verify_store(&blocks, blocks_access).await?;
+            if let Some(verification_info) = &verification_info {
                 // verify if we have the right certificate/we are connecting to the right
                 // canister
-                let TipOfChainRes {
-                    tip_index,
-                    certification,
-                } = canister_access
-                    .query_tip()
-                    .await
-                    .map_err(Error::InternalError)?;
-
-                let tip_block = canister_access
-                    .query_raw_block(tip_index)
-                    .await
-                    .map_err(Error::InternalError)?
-                    .expect("Blockchain in the ledger canister is empty");
-
-                verify_block_hash(
-                    &certification,
-                    Block::block_hash(&tip_block),
-                    &root_key,
-                    &ledger_canister_id,
-                )
-                .map_err(Error::InternalError)?;
+                Self::verify_tip_of_chain(blocks_access, verification_info).await?;
             }
-            Some(canister_access)
-        };
+        }
 
         info!("Loading blocks from store");
         let num_loaded = blocks.load_from_store()?;
@@ -121,15 +99,14 @@ impl LedgerBlocksSynchronizer {
 
         Ok(Self {
             blockchain: RwLock::new(blocks),
-            ledger_canister_id,
-            ledger_canister_access,
+            blocks_access,
             store_max_blocks,
-            root_key,
+            verification_info,
             metrics,
         })
     }
 
-    async fn verify_store(blocks: &Blocks, canister_access: &CanisterAccess) -> Result<(), Error> {
+    async fn verify_store(blocks: &Blocks, canister_access: &B) -> Result<(), Error> {
         debug!("Verifying store...");
         let first_block = blocks.block_store.first()?;
 
@@ -198,73 +175,144 @@ impl LedgerBlocksSynchronizer {
         Ok(())
     }
 
+    async fn verify_tip_of_chain(
+        canister_access: &B,
+        verification_info: &VerificationInfo,
+    ) -> Result<(), Error> {
+        let TipOfChainRes {
+            tip_index,
+            certification,
+        } = canister_access
+            .query_tip()
+            .await
+            .map_err(Error::InternalError)?;
+        let tip_block = canister_access
+            .query_raw_block(tip_index)
+            .await
+            .map_err(Error::InternalError)?
+            .expect("Blockchain in the ledger canister is empty");
+        verify_block_hash(
+            &certification,
+            Block::block_hash(&tip_block),
+            verification_info,
+        )
+        .map_err(Error::InternalError)?;
+        Ok(())
+    }
+
     pub async fn read_blocks(&self) -> Box<dyn Deref<Target = Blocks> + '_> {
         Box::new(self.blockchain.read().await)
     }
 
-    pub async fn sync_blocks(&self, stopped: Arc<AtomicBool>) -> Result<(), Error> {
-        let canister = self.ledger_canister_access.as_ref().unwrap();
+    pub async fn sync_blocks(
+        &self,
+        stopped: Arc<AtomicBool>,
+        up_to_block_included: Option<BlockHeight>,
+    ) -> Result<(), Error> {
+        let canister = self.blocks_access.as_ref().unwrap();
         let TipOfChainRes {
             tip_index,
-            certification,
+            mut certification,
         } = canister.query_tip().await.map_err(Error::InternalError)?;
         self.metrics.set_target_height(tip_index);
 
-        let chain_length = tip_index + 1;
-
-        if chain_length == 0 {
-            return Ok(());
-        }
-
         let mut blockchain = self.blockchain.write().await;
 
-        let (mut last_block_hash, next_block_index) = match blockchain.synced_to() {
+        let (last_block_hash, next_block_index) = match blockchain.synced_to() {
             Some((hash, index)) => (Some(hash), index + 1),
             None => (None, 0),
         };
 
-        if next_block_index < chain_length {
+        if next_block_index > tip_index {
             trace!(
-                "Sync from: {}, chain_length: {}",
-                next_block_index,
-                chain_length
+                "Tip received from the Ledger is lower than what we already have (queried lagging replica?),
+                Ledger tip index: {}, local copy tip index: {}",
+                tip_index,
+                next_block_index
             );
-        } else {
-            if next_block_index > chain_length {
-                trace!("Tip received from IC lower than what we already have (queried lagging replica?),
-                 new chain length: {}, our {}", chain_length, next_block_index);
-            }
             return Ok(());
         }
 
-        let print_progress = if chain_length - next_block_index >= 1000 {
+        let up_to_block_included = tip_index.min(up_to_block_included.unwrap_or(u64::MAX));
+
+        if up_to_block_included != tip_index {
+            certification = None; // certification can be checked only with the last block
+        }
+
+        if next_block_index > up_to_block_included {
+            return Ok(()); // nothing to do nor report, local copy has enough blocks
+        }
+
+        trace!(
+            "Sync {} blocks from index: {}, ledger tip index: {}",
+            up_to_block_included - next_block_index,
+            next_block_index,
+            tip_index
+        );
+
+        self.sync_range_of_blocks(
+            Range {
+                start: next_block_index,
+                end: up_to_block_included + 1,
+            },
+            last_block_hash,
+            stopped,
+            certification,
+            &mut *blockchain,
+        )
+        .await?;
+
+        info!(
+            "You are all caught up to block {}",
+            blockchain.last()?.unwrap().index
+        );
+
+        blockchain.try_prune(&self.store_max_blocks, PRUNE_DELAY)
+    }
+
+    async fn sync_range_of_blocks(
+        &self,
+        range: Range<BlockHeight>,
+        first_block_parent_hash: Option<HashOf<EncodedBlock>>,
+        stopped: Arc<AtomicBool>,
+        certification: Option<Vec<u8>>,
+        blockchain: &mut Blocks,
+    ) -> Result<(), Error> {
+        let print_progress = if range.end - range.start >= PRINT_SYNC_PROGRESS_THRESHOLD {
             info!(
-                "Syncing {} blocks. New tip at {}",
-                chain_length - next_block_index,
-                chain_length - 1
+                "Syncing {} blocks. New tip will be {}",
+                range.end - range.start,
+                range.end,
             );
             true
         } else {
             false
         };
 
-        let mut i = next_block_index;
-        while i < chain_length {
+        let canister = self.blocks_access.as_ref().unwrap();
+        let mut i = range.start;
+        let mut last_block_hash = first_block_parent_hash;
+        while i < range.end {
             if stopped.load(Relaxed) {
                 return Err(Error::InternalError("Interrupted".to_string()));
             }
 
-            debug!("Asking for blocks {}-{}", i, chain_length);
+            debug!("Asking for blocks [{},{})", i, range.end);
             let batch = canister
-                .multi_query_blocks(i, chain_length)
+                .clone()
+                .multi_query_blocks(Range {
+                    start: i,
+                    end: range.end,
+                })
                 .await
                 .map_err(Error::InternalError)?;
 
             debug!("Got batch of len: {}", batch.len());
             if batch.is_empty() {
-                return Err(Error::InternalError(
-                    "Couldn't fetch new blocks (batch result empty)".to_string(),
-                ));
+                return Err(Error::InternalError(format!(
+                    "Couldn't fetch blocks [{},{}) (batch result empty)",
+                    i, range.end
+                )));
             }
 
             let mut hashed_batch = Vec::new();
@@ -281,14 +329,11 @@ impl LedgerBlocksSynchronizer {
                     return Err(Error::InternalError(err_msg));
                 }
                 let hb = HashedBlock::hash_block(raw_block, last_block_hash, i);
-                if i == chain_length - 1 {
-                    verify_block_hash(
-                        &certification,
-                        hb.hash,
-                        &self.root_key,
-                        &self.ledger_canister_id,
-                    )
-                    .map_err(Error::InternalError)?;
+                if i == range.end - 1 {
+                    if let Some(verification_info) = &self.verification_info {
+                        verify_block_hash(&certification, hb.hash, verification_info)
+                            .map_err(Error::InternalError)?;
+                    }
                 }
                 last_block_hash = Some(hb.hash);
                 hashed_batch.push(hb);
@@ -298,24 +343,184 @@ impl LedgerBlocksSynchronizer {
             blockchain.add_blocks_batch(hashed_batch)?;
             self.metrics.set_synced_height(i - 1);
 
-            if print_progress && (i - next_block_index) % 10000 == 0 {
+            if print_progress && (i - range.start) % 10000 == 0 {
                 info!("Synced up to {}", i - 1);
             }
         }
 
-        blockchain
-            .block_store
-            .mark_last_verified(chain_length - 1)?;
-        self.metrics.set_verified_height(chain_length - 1);
+        blockchain.block_store.mark_last_verified(range.end - 1)?;
+        self.metrics.set_verified_height(range.end - 1);
+        Ok(())
+    }
+}
 
-        if next_block_index != chain_length {
-            info!(
-                "You are all caught up to block {}",
-                blockchain.last()?.unwrap().index
+#[cfg(test)]
+mod test {
+
+    use std::ops::Range;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use ic_ledger_core::block::{BlockType, EncodedBlock, HashOf};
+    use ic_ledger_core::timestamp::TimeStamp;
+    use ic_ledger_core::Tokens;
+    use ic_types::PrincipalId;
+    use ledger_canister::{AccountIdentifier, Block, BlockHeight, Memo, TipOfChainRes};
+
+    use crate::blocks_access::BlocksAccess;
+    use crate::ledger_blocks_sync::LedgerBlocksSynchronizer;
+
+    use super::NopMetrics;
+
+    struct RangeOfBlocks {
+        pub blocks: Vec<EncodedBlock>,
+    }
+
+    impl RangeOfBlocks {
+        pub fn new(blocks: Vec<EncodedBlock>) -> Self {
+            Self { blocks }
+        }
+    }
+
+    #[async_trait]
+    impl BlocksAccess for RangeOfBlocks {
+        async fn query_raw_block(
+            &self,
+            height: BlockHeight,
+        ) -> Result<Option<EncodedBlock>, String> {
+            Ok(self.blocks.get(height as usize).cloned())
+        }
+
+        async fn query_tip(&self) -> Result<TipOfChainRes, String> {
+            if self.blocks.is_empty() {
+                Err("Not tip".to_string())
+            } else {
+                Ok(TipOfChainRes {
+                    certification: None,
+                    tip_index: (self.blocks.len() - 1) as u64,
+                })
+            }
+        }
+
+        async fn multi_query_blocks(
+            self: Arc<Self>,
+            range: Range<BlockHeight>,
+        ) -> Result<Vec<EncodedBlock>, String> {
+            Ok(self.blocks[range.start as usize..range.end as usize].to_vec())
+        }
+    }
+
+    async fn new_ledger_blocks_synchronizer(
+        blocks: Vec<EncodedBlock>,
+    ) -> LedgerBlocksSynchronizer<RangeOfBlocks> {
+        LedgerBlocksSynchronizer::new(
+            Some(Arc::new(RangeOfBlocks::new(blocks))),
+            /* store_location = */ None,
+            /* store_max_blocks = */ None,
+            /* verification_info = */ None,
+            Box::new(NopMetrics {}),
+        )
+        .await
+        .unwrap()
+    }
+
+    fn dummy_block(parent_hash: Option<HashOf<EncodedBlock>>) -> EncodedBlock {
+        let operation = match parent_hash {
+            Some(_) => {
+                let from = AccountIdentifier::new(PrincipalId::new_anonymous(), None);
+                let to = AccountIdentifier::new(PrincipalId::new_node_test_id(1), None);
+                let amount = Tokens::from_e8s(100_000);
+                let fee = Tokens::from_e8s(10_000);
+                ledger_canister::Operation::Transfer {
+                    from,
+                    to,
+                    amount,
+                    fee,
+                }
+            }
+            None => {
+                let to = AccountIdentifier::new(PrincipalId::new_anonymous(), None);
+                let amount = Tokens::from_e8s(100_000_000_000_000);
+                ledger_canister::Operation::Mint { amount, to }
+            }
+        };
+        let timestamp = TimeStamp::from_nanos_since_unix_epoch(
+            1656347498000000000, /* 27 June 2022 18:31:38 GMT+02:00 DST */
+        );
+        Block::new(parent_hash, operation, Memo(0), timestamp, timestamp)
+            .unwrap()
+            .encode()
+    }
+
+    fn dummy_blocks(n: usize) -> Vec<EncodedBlock> {
+        let mut res = vec![];
+        let mut parent_hash = None;
+        for _i in 0..n {
+            let block = dummy_block(parent_hash);
+            parent_hash = Some(Block::block_hash(&block));
+            res.push(block);
+        }
+        res
+    }
+
+    #[tokio::test]
+    async fn sync_empty_range_of_blocks() {
+        let blocks_sync = new_ledger_blocks_synchronizer(vec![]).await;
+        assert_eq!(None, blocks_sync.read_blocks().await.first().unwrap());
+    }
+
+    #[tokio::test]
+    async fn sync_all_blocks() {
+        let blocks = dummy_blocks(2);
+        let blocks_sync = new_ledger_blocks_synchronizer(blocks.clone()).await;
+        blocks_sync
+            .sync_blocks(Arc::new(AtomicBool::new(false)), None)
+            .await
+            .unwrap();
+        let actual_blocks = blocks_sync.read_blocks().await;
+        // there isn't a blocks.len() to use, so we check that the last index + 1 gives error and then we check the blocks
+        assert!(actual_blocks.get_verified_at(blocks.len() as u64).is_err());
+        assert_eq!(
+            blocks,
+            vec![
+                actual_blocks.get_verified_at(0).unwrap().block,
+                actual_blocks.get_verified_at(1).unwrap().block
+            ]
+        )
+    }
+
+    #[tokio::test]
+    async fn sync_blocks_in_2_steps() {
+        let blocks = dummy_blocks(2);
+        let blocks_sync = new_ledger_blocks_synchronizer(blocks.clone()).await;
+
+        // sync 1
+        blocks_sync
+            .sync_blocks(Arc::new(AtomicBool::new(false)), Some(0))
+            .await
+            .unwrap();
+        {
+            let actual_blocks = blocks_sync.read_blocks().await;
+            assert!(actual_blocks.get_verified_at(1).is_err());
+            assert_eq!(
+                *blocks.get(0).unwrap(),
+                actual_blocks.get_verified_at(0).unwrap().block
             );
         }
 
-        blockchain.try_prune(&self.store_max_blocks, PRUNE_DELAY)?;
-        Ok(())
+        // sync 2
+        blocks_sync
+            .sync_blocks(Arc::new(AtomicBool::new(false)), Some(1))
+            .await
+            .unwrap();
+        {
+            let actual_blocks = blocks_sync.read_blocks().await;
+            assert!(actual_blocks.get_verified_at(2).is_err());
+            assert_eq!(
+                *blocks.get(1).unwrap(),
+                actual_blocks.get_verified_at(1).unwrap().block
+            );
+        }
     }
 }

@@ -13,6 +13,7 @@ mod handle_stop_dissolve;
 mod neuron_response;
 
 use core::ops::Deref;
+use ic_ledger_client_core::certification::VerificationInfo;
 use std::convert::TryFrom;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -89,7 +90,7 @@ pub trait LedgerAccess {
 }
 
 pub struct LedgerClient {
-    ledger_blocks_synchronizer: LedgerBlocksSynchronizer,
+    ledger_blocks_synchronizer: LedgerBlocksSynchronizer<CanisterAccess>,
     canister_id: CanisterId,
     governance_canister_id: CanisterId,
     canister_access: Option<Arc<CanisterAccess>>,
@@ -116,17 +117,23 @@ impl LedgerClient {
         offline: bool,
         root_key: Option<ThresholdSigPublicKey>,
     ) -> Result<LedgerClient, ApiError> {
-        let ledger_blocks_synchronizer = LedgerBlocksSynchronizer::new(
-            ic_url.clone(),
+        let canister_access = if offline {
+            None
+        } else {
+            Some(Arc::new(CanisterAccess::new(ic_url.clone(), canister_id)))
+        };
+        let verification_info = root_key.map(|root_key| VerificationInfo {
+            root_key,
             canister_id,
+        });
+        let ledger_blocks_synchronizer = LedgerBlocksSynchronizer::new(
+            canister_access.clone(),
             store_location,
             store_max_blocks,
-            offline,
-            root_key,
+            verification_info,
             Box::new(LedgerBlocksSynchronizerMetricsImpl {}),
         )
         .await?;
-        let canister_access = ledger_blocks_synchronizer.ledger_canister_access.clone();
         if let Some(canister_access) = &canister_access {
             LedgerClient::check_ledger_symbol(&token_symbol, canister_access).await?;
         }
@@ -196,7 +203,7 @@ impl LedgerAccess for LedgerClient {
             return Err(ApiError::NotAvailableOffline(false, Details::default()));
         }
         self.ledger_blocks_synchronizer
-            .sync_blocks(stopped)
+            .sync_blocks(stopped, None)
             .await
             .map_err(ApiError::from)
     }
