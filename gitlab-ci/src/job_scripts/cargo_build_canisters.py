@@ -160,7 +160,7 @@ def run(artifacts_dir=default_artifacts_dir):
         environ["LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH"] = ledger_archive_path
 
         icrc1_archive_path = _optimize_wasm(artifacts_dir, "ic-icrc1-archive")
-        environ["ICRC1_ARCHIVE_CANISTER_WASM_PATH"] = icrc1_archive_path
+        environ["IC_ICRC1_ARCHIVE_WASM_PATH"] = icrc1_archive_path
 
         _build_with_features("ledger-canister", "notify-method")
         _build_with_features("governance-canister", "test")

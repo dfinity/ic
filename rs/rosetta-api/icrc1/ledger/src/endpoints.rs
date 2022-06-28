@@ -1,5 +1,5 @@
 use candid::CandidType;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::block::BlockHeight;
 use ic_ledger_core::ledger::TransferError as CoreTransferError;
@@ -57,4 +57,11 @@ impl TransferArg {
             subaccount: self.to_subaccount,
         }
     }
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub struct ArchiveInfo {
+    pub canister_id: CanisterId,
+    pub block_range_start: u64,
+    pub block_range_end: u64,
 }

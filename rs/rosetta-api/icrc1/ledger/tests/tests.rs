@@ -1,9 +1,9 @@
 use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::PrincipalId;
-use ic_icrc1::{Account, Block, Operation, Transaction};
+use ic_icrc1::{Account, Block, CandidBlock, CandidOperation, Operation, Transaction};
 use ic_icrc1_ledger::{
-    endpoints::{TransferArg, TransferError},
+    endpoints::{ArchiveInfo, TransferArg, TransferError},
     InitArgs,
 };
 use ic_ledger_core::{
@@ -18,6 +18,8 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 
 const FEE: u64 = 10_000;
+const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
+const NUM_BLOCKS_TO_ARCHIVE: u64 = 5;
 const TOKEN_NAME: &str = "Test Token";
 const TOKEN_SYMBOL: &str = "XTST";
 const MINTER: Account = Account {
@@ -38,8 +40,8 @@ fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> 
         token_name: TOKEN_NAME.to_string(),
         token_symbol: TOKEN_SYMBOL.to_string(),
         archive_options: ArchiveOptions {
-            trigger_threshold: 10,
-            num_blocks_to_archive: 5,
+            trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
+            num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
             node_max_memory_size_bytes: None,
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
@@ -86,6 +88,30 @@ fn transfer(
         Result<BlockHeight, TransferError>
     )
     .expect("failed to decode transfer response")
+}
+
+fn list_archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo> {
+    Decode!(
+        &env.query(ledger, "archives", Encode!().unwrap())
+            .expect("failed to query archives")
+            .bytes(),
+        Vec<ArchiveInfo>
+    )
+    .expect("failed to decode archives response")
+}
+
+fn get_archive_block(
+    env: &StateMachine,
+    archive: CanisterId,
+    block_index: u64,
+) -> Option<CandidBlock> {
+    Decode!(
+        &env.query(archive, "get_block", Encode!(&block_index).unwrap())
+            .expect("failed to query block")
+            .bytes(),
+        Option<CandidBlock>
+    )
+    .expect("failed to decode get_block response")
 }
 
 #[test]
@@ -188,6 +214,38 @@ fn test_single_transfer() {
 
     assert_eq!(9_000_000u64 - FEE, balance_of(&env, canister_id, p1.into()));
     assert_eq!(6_000_000u64, balance_of(&env, canister_id, p2.into()));
+}
+
+#[test]
+fn test_archiving() {
+    let env = StateMachine::new();
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    let canister_id = install_ledger(&env, vec![(Account::from(p1), 10_000_000)]);
+
+    for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
+        transfer(&env, canister_id, p1.into(), p2.into(), 10_000 + i).expect("transfer failed");
+    }
+
+    env.run_until_completion(/*max_ticks=*/ 10);
+
+    let archive_info = list_archives(&env, canister_id);
+    assert_eq!(archive_info.len(), 1);
+    assert_eq!(archive_info[0].block_range_start, 0);
+    assert_eq!(archive_info[0].block_range_end, NUM_BLOCKS_TO_ARCHIVE - 1);
+    assert_eq!(
+        get_archive_block(&env, archive_info[0].canister_id, /*block_index=*/ 1)
+            .unwrap()
+            .transaction
+            .operation,
+        CandidOperation::Transfer {
+            from: p1.into(),
+            to: p2.into(),
+            amount: 10_000,
+            fee: FEE
+        }
+    );
 }
 
 fn arb_amount() -> impl Strategy<Value = u64> {

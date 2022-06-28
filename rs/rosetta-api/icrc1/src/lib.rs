@@ -116,9 +116,7 @@ impl TryFrom<CompactAccount> for Account {
     }
 }
 
-#[derive(
-    Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
-)]
+#[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(tag = "op")]
 pub enum Operation {
     #[serde(rename = "mint")]
@@ -151,9 +149,67 @@ pub enum Operation {
     },
 }
 
-#[derive(
-    Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
-)]
+/// Like [Operation], but designed for a public Candid interface.
+#[derive(CandidType, Deserialize, Debug, PartialEq)]
+pub enum CandidOperation {
+    Mint {
+        to: Account,
+        amount: u64,
+    },
+    Transfer {
+        from: Account,
+        to: Account,
+        amount: u64,
+        fee: u64,
+    },
+    Burn {
+        from: Account,
+        amount: u64,
+    },
+}
+
+impl From<Operation> for CandidOperation {
+    fn from(op: Operation) -> Self {
+        match op {
+            Operation::Mint { to, amount } => Self::Mint { to, amount },
+            Operation::Transfer {
+                from,
+                to,
+                amount,
+                fee,
+            } => Self::Transfer {
+                from,
+                to,
+                amount,
+                fee,
+            },
+            Operation::Burn { from, amount } => Self::Burn { from, amount },
+        }
+    }
+}
+
+/// Like [Transaction], but designed for a public Candid interface.
+#[derive(CandidType, Deserialize, Debug, PartialEq)]
+pub struct CandidTransaction {
+    pub operation: CandidOperation,
+    pub created_at_time: u64,
+}
+
+impl From<Transaction> for CandidTransaction {
+    fn from(
+        Transaction {
+            operation,
+            created_at_time,
+        }: Transaction,
+    ) -> Self {
+        Self {
+            operation: operation.into(),
+            created_at_time,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Transaction {
     #[serde(flatten)]
     pub operation: Operation,
@@ -240,9 +296,7 @@ impl Transaction {
     }
 }
 
-#[derive(
-    Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
-)]
+#[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Block {
     #[serde(rename = "phash")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -301,6 +355,30 @@ impl BlockType for Block {
             parent_hash,
             transaction,
             timestamp: timestamp.as_nanos_since_unix_epoch(),
+        }
+    }
+}
+
+/// Like [Block], but designed for a public Candid interface.
+#[derive(CandidType, Deserialize, Debug, PartialEq)]
+pub struct CandidBlock {
+    pub parent_hash: Option<HashOf<EncodedBlock>>,
+    pub transaction: CandidTransaction,
+    pub timestamp: u64,
+}
+
+impl From<Block> for CandidBlock {
+    fn from(
+        Block {
+            parent_hash,
+            transaction,
+            timestamp,
+        }: Block,
+    ) -> Self {
+        Self {
+            parent_hash,
+            transaction: transaction.into(),
+            timestamp,
         }
     }
 }
