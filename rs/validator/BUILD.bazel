@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/constants",
+    "//rs/crypto",
+    "//rs/crypto/sha",
+    "//rs/interfaces",
+    "//rs/types/types",
+    "@crate_index//:chrono",
+    "@crate_index//:hex",
+]
+
+rust_library(
+    name = "validator",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_validator",
+    edition = "2018",
+    deps = DEPENDENCIES,
+)

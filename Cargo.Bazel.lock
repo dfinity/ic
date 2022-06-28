@@ -1,5 +1,5 @@
 {
-  "checksum": "52fc397229469aecfd3db4c75acf131694ea4af3b14813649fac4c5db4a9a027",
+  "checksum": "e8fa57ae8ccf4f19fbd2b8e93a147668423abdd99fdb5e86a94d0212137ef7ac",
   "crates": {
     "actix-codec 0.5.0": {
       "name": "actix-codec",
@@ -5904,13 +5904,13 @@
       },
       "license": "MIT"
     },
-    "clap 3.2.6": {
+    "clap 3.2.7": {
       "name": "clap",
-      "version": "3.2.6",
+      "version": "3.2.7",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/3.2.6/download",
-          "sha256": "9f1fe12880bae935d142c8702d500c63a4e8634b6c3c57ad72bf978fc7b6249a"
+          "url": "https://crates.io/api/v1/crates/clap/3.2.7/download",
+          "sha256": "5b7b16274bb247b45177db843202209b12191b631a14a9d06e41b3777d6ecf14"
         }
       },
       "targets": [
@@ -5967,7 +5967,7 @@
               "target": "bitflags"
             },
             {
-              "id": "clap_lex 0.2.3",
+              "id": "clap_lex 0.2.4",
               "target": "clap_lex"
             },
             {
@@ -5997,23 +5997,23 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "clap_derive 3.2.6",
+              "id": "clap_derive 3.2.7",
               "target": "clap_derive"
             }
           ],
           "selects": {}
         },
-        "version": "3.2.6"
+        "version": "3.2.7"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap_derive 3.2.6": {
+    "clap_derive 3.2.7": {
       "name": "clap_derive",
-      "version": "3.2.6",
+      "version": "3.2.7",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap_derive/3.2.6/download",
-          "sha256": "ed6db9e867166a43a53f7199b5e4d1f522a1e5bd626654be263c999ce59df39a"
+          "url": "https://crates.io/api/v1/crates/clap_derive/3.2.7/download",
+          "sha256": "759bf187376e1afa7b85b959e6a664a3e7a95203415dba952ad19139e798f902"
         }
       },
       "targets": [
@@ -6064,17 +6064,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "3.2.6"
+        "version": "3.2.7"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap_lex 0.2.3": {
+    "clap_lex 0.2.4": {
       "name": "clap_lex",
-      "version": "0.2.3",
+      "version": "0.2.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap_lex/0.2.3/download",
-          "sha256": "87eba3c8c7f42ef17f6c659fc7416d0f4758cd3e58861ee63c5fa4a4dde649e4"
+          "url": "https://crates.io/api/v1/crates/clap_lex/0.2.4/download",
+          "sha256": "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
         }
       },
       "targets": [
@@ -6106,7 +6106,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.3"
+        "version": "0.2.4"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -9937,7 +9937,7 @@
               "target": "ciborium"
             },
             {
-              "id": "clap 3.2.6",
+              "id": "clap 3.2.7",
               "target": "clap"
             },
             {
@@ -10687,6 +10687,10 @@
             {
               "id": "walkdir 2.3.2",
               "target": "walkdir"
+            },
+            {
+              "id": "wasm-bindgen 0.2.81",
+              "target": "wasm_bindgen"
             },
             {
               "id": "wasmtime 0.35.3",
@@ -41379,8 +41383,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -41403,8 +41407,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -45149,7 +45153,7 @@
     "brotli 3.3.4",
     "brotli-decompressor 2.3.2",
     "cc 1.0.73",
-    "clap 3.2.6",
+    "clap 3.2.7",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",
