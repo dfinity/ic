@@ -1,5 +1,5 @@
 use ic_config::embedders::Config;
-use ic_embedders::wasm_utils::instrumentation::{instrument, InstructionCostTable};
+use ic_embedders::wasm_utils::compile;
 use ic_embedders::WasmtimeEmbedder;
 use ic_interfaces::execution_environment::{
     AvailableMemory, ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
@@ -194,18 +194,12 @@ mod tests {
             let wasm = wat2wasm(&wat).unwrap();
 
             let config = Config::default();
-            let output_instrumentation = instrument(
-                &wasm,
-                &InstructionCostTable::new(),
-                config.cost_to_compile_wasm_instruction,
-            )
-            .unwrap();
+            let embedder = WasmtimeEmbedder::new(config, log);
+            let (embedder_cache, _) = compile(&embedder, &wasm).unwrap();
 
             // We will perform identical writes to wasm module's heap and this buffer.
             let mut test_heap = vec![0; TEST_HEAP_SIZE_BYTES];
             // Use SIGSEGV tracking and later compare against /proc/pic/pagemap.
-            let embedder = WasmtimeEmbedder::new(config, log);
-            let embedder_cache = embedder.compile(&output_instrumentation.binary).unwrap();
             let mut page_map = PageMap::default();
             let mut dirty_pages: BTreeSet<u64> = BTreeSet::new();
 
@@ -355,13 +349,10 @@ mod tests {
             let max_num_instructions = NumInstructions::from(5_000_000_000);
 
             let config = Config::default();
-            let output_instrumentation = instrument(
-                &wasm,
-                &InstructionCostTable::new(),
-                config.cost_to_compile_wasm_instruction,
-            )
-            .unwrap();
             let embedder = WasmtimeEmbedder::new(config, log.clone());
+            let output_instrumentation =
+                compile(&embedder, &wasm).unwrap().1.instrumentation_output;
+
             let api = test_api_for_update(log, None, payload, SubnetType::Application);
             let mut inst = embedder
                 .new_instance(
@@ -575,13 +566,8 @@ mod tests {
         let wasm = wat2wasm(&wat).unwrap();
 
         let config = Config::default();
-        let output_instrumentation = instrument(
-            &wasm,
-            &InstructionCostTable::new(),
-            config.cost_to_compile_wasm_instruction,
-        )
-        .unwrap();
         let embedder = WasmtimeEmbedder::new(config, log.clone());
+        let output_instrumentation = compile(&embedder, &wasm).unwrap().1.instrumentation_output;
         let api = test_api_for_update(log, None, payload, subnet_type);
         let mut inst = embedder
             .new_instance(

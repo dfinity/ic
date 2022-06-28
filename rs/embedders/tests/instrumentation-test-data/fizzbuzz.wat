@@ -1,5 +1,5 @@
 (module
-    (import "js" "println" (func $println (param i32 i32)))
+	(import "ic0" "debug_print" (func $println (param i32) (param i32)))
     (memory 1)
     (data (i32.const 0) "Fizz")
     (data (i32.const 4) "Buzz")

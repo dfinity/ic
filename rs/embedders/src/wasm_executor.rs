@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
 use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageMap};
 use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges};
@@ -10,22 +11,17 @@ use ic_types::methods::{FuncRef, WasmMethod};
 use prometheus::{Histogram, IntCounter};
 
 use crate::wasm_utils::instrumentation::InstrumentationOutput;
-use crate::wasm_utils::validation::WasmValidationDetails;
+use crate::wasm_utils::{compile, FullCompilationOutput};
 use crate::{
-    wasm_utils::decoding::decode_wasm,
-    wasm_utils::instrumentation::{instrument, InstructionCostTable},
-    wasm_utils::validation::{validate_wasm_binary, WasmImportsDetails},
-    wasmtime_embedder::WasmtimeInstance,
-    WasmExecutionInput, WasmtimeEmbedder,
+    wasm_utils::decoding::decode_wasm, wasm_utils::validation::WasmImportsDetails,
+    wasmtime_embedder::WasmtimeInstance, WasmExecutionInput, WasmtimeEmbedder,
 };
-use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
     CompilationResult, ExecutionParameters, HypervisorError, HypervisorResult, InstanceStats,
     OutOfInstructionsHandler, SubnetAvailableMemory, SystemApi, WasmExecutionOutput,
 };
 use ic_logger::{warn, ReplicaLogger};
-use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{EmbedderCache, ExecutionState};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
@@ -41,8 +37,6 @@ use std::hash::{Hash, Hasher};
 const EMIT_STATE_HASHES_FOR_DEBUGGING: FlagStatus = FlagStatus::Disabled;
 
 struct WasmExecutorMetrics {
-    // TODO(EXC-350): Remove this metric once we confirm that no reserved functions are exported.
-    reserved_exports: IntCounter,
     // TODO(EXC-365): Remove this metric once we confirm that no module imports `ic0.call_simple`
     // anymore.
     imports_call_simple: IntCounter,
@@ -61,10 +55,6 @@ impl WasmExecutorMetrics {
     #[doc(hidden)] // pub for usage in tests
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
-            reserved_exports: metrics_registry.int_counter(
-                "execution_wasm_reserved_exports_total",
-                "The number of reserved functions exported from Wasm modules",
-            ),
             imports_call_simple: metrics_registry.int_counter(
                 "execution_wasm_imports_call_simple_total",
                 "The number of Wasm modules that import ic0.call_simple",
@@ -135,7 +125,6 @@ pub enum WasmExecutionResult {
 /// An executor that can process any message (query or not).
 pub struct WasmExecutor {
     wasm_embedder: WasmtimeEmbedder,
-    config: EmbeddersConfig,
     metrics: WasmExecutorMetrics,
     log: ReplicaLogger,
 }
@@ -144,13 +133,11 @@ impl WasmExecutor {
     pub fn new(
         wasm_embedder: WasmtimeEmbedder,
         metrics_registry: &MetricsRegistry,
-        config: EmbeddersConfig,
         log: ReplicaLogger,
     ) -> Self {
         Self {
             wasm_embedder,
             metrics: WasmExecutorMetrics::new(metrics_registry),
-            config,
             log,
         }
     }
@@ -179,35 +166,11 @@ impl WasmExecutor {
         }
     }
 
-    pub fn compile(
-        &self,
-        wasm_binary: &BinaryEncodedWasm,
-    ) -> HypervisorResult<(EmbedderCache, WasmValidationDetails, InstrumentationOutput)> {
-        let _timer = self.metrics.compile.start_timer();
-        let validation_details = validate_wasm_binary(wasm_binary, &self.config)?;
-        if validation_details.reserved_exports > 0 {
-            self.metrics
-                .reserved_exports
-                .inc_by(validation_details.reserved_exports as u64);
-        }
-        self.observe_metrics(&validation_details.imports_details);
-        let instrumentation_output = instrument(
-            wasm_binary,
-            &InstructionCostTable::new(),
-            self.config.cost_to_compile_wasm_instruction,
-        )?;
-        let embedder_cache = self.wasm_embedder.compile(&instrumentation_output.binary)?;
-        Ok((embedder_cache, validation_details, instrumentation_output))
-    }
-
     fn get_embedder_cache(
         &self,
         decoded_wasm: Option<&BinaryEncodedWasm>,
         wasm_binary: &WasmBinary,
-    ) -> HypervisorResult<(
-        EmbedderCache,
-        Option<(WasmValidationDetails, InstrumentationOutput)>,
-    )> {
+    ) -> HypervisorResult<(EmbedderCache, Option<FullCompilationOutput>)> {
         let mut guard = wasm_binary.embedder_cache.lock().unwrap();
         if let Some(embedder_cache) = &*guard {
             Ok((embedder_cache.clone(), None))
@@ -221,10 +184,11 @@ impl WasmExecutor {
                 Some(wasm) => Cow::Borrowed(wasm),
                 None => Cow::Owned(decode_wasm(wasm_binary.binary.to_shared_vec())?),
             };
-            match self.compile(decoded_wasm.as_ref()) {
-                Ok((cache, validation_details, instrumentation_output)) => {
+            let _timer = self.metrics.compile.start_timer();
+            match compile(&self.wasm_embedder, decoded_wasm.as_ref()) {
+                Ok((cache, compilation_output)) => {
                     *guard = Some(cache.clone());
-                    Ok((cache, Some((validation_details, instrumentation_output))))
+                    Ok((cache, Some(compilation_output)))
                 }
                 Err(err) => Err(err),
             }
@@ -255,7 +219,7 @@ impl WasmExecutor {
         );
 
         // Ensure that Wasm is compiled.
-        let (embedder_cache, compilation_result) =
+        let (embedder_cache, compilation_output) =
             match self.get_embedder_cache(None, &execution_state.wasm_binary) {
                 Ok(compilation_result) => compilation_result,
                 Err(err) => {
@@ -311,10 +275,7 @@ impl WasmExecutor {
         let system_state_changes = system_api.into_system_state_changes();
 
         (
-            compilation_result.map(|(validation, instrumentation)| CompilationResult {
-                largest_function_instruction_count: validation.largest_function_instruction_count,
-                compilation_cost: instrumentation.compilation_cost,
-            }),
+            compilation_output.as_ref().map(Into::into),
             execution_state,
             WasmExecutionResult::Finished(wasm_execution_output, system_state_changes),
         )
@@ -331,15 +292,14 @@ impl WasmExecutor {
         let binary_encoded_wasm = decode_wasm(wasm_binary.binary.to_shared_vec())?;
         let (embedder_cache, compilation_output) =
             self.get_embedder_cache(Some(&binary_encoded_wasm), &wasm_binary)?;
-        let (wasm_validation_details, instrumentation_output) =
+        let compilation_output =
             compilation_output.expect("Newly created WasmBinary must be compiled");
+        let compilation_result = (&compilation_output).into();
         let mut wasm_page_map = PageMap::default();
-
-        let compilation_cost = instrumentation_output.compilation_cost;
 
         let (exported_functions, globals, _wasm_page_delta, wasm_memory_size) =
             get_initial_globals_and_memory(
-                instrumentation_output,
+                compilation_output.instrumentation_output,
                 &embedder_cache,
                 &self.wasm_embedder,
                 &mut wasm_page_map,
@@ -355,16 +315,9 @@ impl WasmExecutor {
             Memory::new(wasm_page_map, wasm_memory_size),
             stable_memory,
             globals,
-            wasm_validation_details.wasm_metadata,
+            compilation_output.validation_details.wasm_metadata,
         );
-        Ok((
-            CompilationResult {
-                largest_function_instruction_count: wasm_validation_details
-                    .largest_function_instruction_count,
-                compilation_cost,
-            },
-            execution_state,
-        ))
+        Ok((compilation_result, execution_state))
     }
 
     pub fn compile_count_for_testing(&self) -> u64 {

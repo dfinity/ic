@@ -3,15 +3,15 @@ source: embedders/tests/instrumentation.rs
 expression: out
 ---
 (module
-  (type (;0;) (func (param i32)))
+  (type (;0;) (func (param i64)))
   (type (;1;) (func))
   (type (;2;) (func (param i32 i32) (result i32)))
   (type (;3;) (func (param i32) (result i32)))
   (import "__" "out_of_instructions" (func (;0;) (type 1)))
   (import "__" "update_available_memory" (func (;1;) (type 2)))
-  (import "imports" "trace" (func (;2;) (type 0)))
+  (import "ic0" "call_cycles_add" (func (;2;) (type 0)))
   (func (;3;) (type 1)
-    (local i32)
+    (local i64)
     global.get 0
     i64.const 2
     i64.sub
@@ -22,7 +22,7 @@ expression: out
     if  ;; label = @1
       call 0
     end
-    i32.const 0
+    i64.const 0
     local.set 0
     block  ;; label = @1
       loop  ;; label = @2
@@ -37,8 +37,8 @@ expression: out
           call 0
         end
         local.get 0
-        i32.const 10
-        i32.eq
+        i64.const 10
+        i64.eq
         br_if 1 (;@1;)
         global.get 0
         i64.const 7
@@ -47,14 +47,14 @@ expression: out
         local.get 0
         call 2
         local.get 0
-        i32.const 1
-        i32.add
+        i64.const 1
+        i64.add
         local.set 0
         br 0 (;@2;)
       end
     end)
-  (func (;4;) (type 0) (param i32)
-    (local i32)
+  (func (;4;) (type 0) (param i64)
+    (local i64)
     global.get 0
     i64.const 2
     i64.sub
@@ -65,7 +65,7 @@ expression: out
     if  ;; label = @1
       call 0
     end
-    i32.const 0
+    i64.const 0
     local.set 1
     loop  ;; label = @1
       global.get 0
@@ -81,15 +81,15 @@ expression: out
       local.get 1
       call 2
       local.get 1
-      i32.const 1
-      i32.add
+      i64.const 1
+      i64.add
       local.set 1
       local.get 0
       local.get 1
-      i32.ne
+      i64.ne
       br_if 0 (;@1;)
     end)
-  (func (;5;) (type 0) (param i32)
+  (func (;5;) (type 0) (param i64)
     global.get 0
     i64.const 4
     i64.sub
@@ -101,21 +101,21 @@ expression: out
       call 0
     end
     local.get 0
-    i32.const 0
-    i32.eq
+    i64.const 0
+    i64.eq
     if  ;; label = @1
       global.get 0
       i64.const 2
       i64.sub
       global.set 0
-      i32.const 3
+      i64.const 3
       call 2
     else
       global.get 0
       i64.const 2
       i64.sub
       global.set 0
-      i32.const 5
+      i64.const 5
       call 2
     end)
   (func (;6;) (type 3) (param i32) (result i32)

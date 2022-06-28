@@ -10,7 +10,7 @@ expression: out
   (type (;4;) (func (param i32) (result i32)))
   (import "__" "out_of_instructions" (func (;0;) (type 2)))
   (import "__" "update_available_memory" (func (;1;) (type 3)))
-  (import "js" "println" (func (;2;) (type 0)))
+  (import "ic0" "debug_print" (func (;2;) (type 0)))
   (func (;3;) (type 1) (param i32)
     (local i32 i32 i32)
     global.get 0

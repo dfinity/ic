@@ -11,7 +11,7 @@ expression: out
   (func (;2;) (type 0) (param i32) (result i32)
     (local i32 i32)
     global.get 0
-    i64.const 513
+    i64.const 18
     i64.sub
     global.set 0
     global.get 0
@@ -35,7 +35,7 @@ expression: out
     local.set 2
     block  ;; label = @1
       global.get 0
-      i64.const 103
+      i64.const 4
       i64.sub
       global.set 0
       local.get 0
@@ -44,7 +44,7 @@ expression: out
       br_if 0 (;@1;)
       loop  ;; label = @2
         global.get 0
-        i64.const 313
+        i64.const 15
         i64.sub
         global.set 0
         global.get 0
@@ -65,7 +65,7 @@ expression: out
         local.get 1
         loop  ;; label = @3
           global.get 0
-          i64.const 404
+          i64.const 8
           i64.sub
           global.set 0
           global.get 0

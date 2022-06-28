@@ -126,7 +126,7 @@ fn instruction_to_mnemonic(i: &Instruction) -> String {
 /// The metering can be configured by providing a cost-per-instruction table and
 /// the default cost for an instruction in case it's not present in the cost
 /// table.
-pub struct InstructionCostTable {
+pub(super) struct InstructionCostTable {
     // mapping of instruction mnemonic to its cost
     instruction_cost: HashMap<String, u64>,
     // default cost of an instruction (if not present in the cost table)
@@ -134,20 +134,6 @@ pub struct InstructionCostTable {
 }
 
 impl InstructionCostTable {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn with_default_cost(mut self, cost: u64) -> Self {
-        self.default_cost = cost;
-        self
-    }
-
-    pub fn with_instruction_cost(mut self, id: String, cost: u64) -> Self {
-        self.instruction_cost.insert(id, cost);
-        self
-    }
-
     // Returns the cost of a Wasm instruction from the cost table or the default
     // cost if the instruction is not in the cost table.
     fn cost(&self, i: &Instruction) -> u64 {
@@ -386,7 +372,7 @@ pub struct ExportModuleData {
 ///
 /// Returns an [`InstrumentationOutput`] or an error if the input binary could
 /// not be instrumented.
-pub fn instrument(
+pub(super) fn instrument(
     wasm: &BinaryEncodedWasm,
     instruction_cost_table: &InstructionCostTable,
     cost_to_compile_wasm_instruction: NumInstructions,

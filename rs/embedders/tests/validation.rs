@@ -1,9 +1,17 @@
 use assert_matches::assert_matches;
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_embedders::wasm_utils::validation::{
-    extract_custom_section_name, validate_custom_section, validate_wasm_binary, WasmImportsDetails,
-    WasmValidationDetails, RESERVED_SYMBOLS,
+use ic_embedders::{
+    wasm_utils::{
+        compile,
+        validation::{
+            extract_custom_section_name, validate_custom_section, WasmImportsDetails,
+            WasmValidationDetails, RESERVED_SYMBOLS,
+        },
+    },
+    WasmtimeEmbedder,
 };
+use ic_interfaces::execution_environment::HypervisorError;
+use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 
 fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wabt::Error> {
@@ -17,6 +25,18 @@ use ic_replicated_state::canister_state::execution_state::{
 use ic_types::{NumBytes, NumInstructions};
 use maplit::btreemap;
 use parity_wasm::elements::{CustomSection as WasmCustomSection, Module, Section};
+
+fn validate_wasm_binary(
+    wasm: &BinaryEncodedWasm,
+    config: &EmbeddersConfig,
+) -> Result<WasmValidationDetails, WasmValidationError> {
+    let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
+    match compile(&embedder, wasm) {
+        Ok(output) => Ok(output.1.validation_details),
+        Err(HypervisorError::InvalidWasm(err)) => Err(err),
+        Err(other_error) => panic!("unexpected error {}", other_error),
+    }
+}
 
 #[test]
 fn can_validate_valid_import_section() {
@@ -331,6 +351,22 @@ fn can_validate_module_with_not_allowed_import_func() {
 #[test]
 fn can_validate_module_with_wrong_import_module_for_func() {
     let wasm = wat2wasm(r#"(module (import "foo" "msg_reply" (func $reply)))"#).unwrap();
+    assert_matches!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidImportSection(_))
+    );
+}
+
+#[test]
+fn reject_wasm_that_imports_global() {
+    let wasm = wat2wasm(
+        r#"
+                (module
+                  (import "test" "adf" (global i64))
+                )
+            "#,
+    )
+    .unwrap();
     assert_matches!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Err(WasmValidationError::InvalidImportSection(_))
@@ -715,5 +751,25 @@ fn can_validate_performance_counter_import() {
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails::default())
+    );
+}
+
+/// The spec doesn't allow exported functions to have results.
+#[test]
+fn function_with_result_is_invalid() {
+    let wasm = wat2wasm(
+        r#"
+          (module
+            (func $f (export "canister_update f") (result i64)
+              (i64.const 1)
+            )
+          )"#,
+    )
+    .unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidFunctionSignature(
+            "Expected return type [] for 'canister_update f', got [I64].".to_string()
+        ))
     );
 }

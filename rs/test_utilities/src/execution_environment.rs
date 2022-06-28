@@ -8,7 +8,7 @@ use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfigs;
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_embedders::wasm_utils::instrumentation::{instrument, InstructionCostTable};
+use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::{
     util::{process_result, process_stopping_canisters},
@@ -1252,22 +1252,14 @@ fn get_canister_id_if_install_code(message: CanisterInputMessage) -> Option<Cani
 
 pub fn wat_compilation_cost(wat: &str) -> NumInstructions {
     let wasm = BinaryEncodedWasm::new(wabt::wat2wasm(wat).unwrap());
-    let instrumented = instrument(
-        &wasm,
-        &InstructionCostTable::new(),
-        EmbeddersConfig::default().cost_to_compile_wasm_instruction,
-    )
-    .unwrap();
-    instrumented.compilation_cost
+    let config = EmbeddersConfig::default();
+    let (_, output) = compile(&WasmtimeEmbedder::new(config, no_op_logger()), &wasm).unwrap();
+    output.instrumentation_output.compilation_cost
 }
 
 pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
     let wasm = BinaryEncodedWasm::new(wasm.to_vec());
-    let instrumented = instrument(
-        &wasm,
-        &InstructionCostTable::new(),
-        EmbeddersConfig::default().cost_to_compile_wasm_instruction,
-    )
-    .unwrap();
-    instrumented.compilation_cost
+    let config = EmbeddersConfig::default();
+    let (_, output) = compile(&WasmtimeEmbedder::new(config, no_op_logger()), &wasm).unwrap();
+    output.instrumentation_output.compilation_cost
 }

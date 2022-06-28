@@ -371,36 +371,6 @@ mod test {
         assert!(result.is_ok());
     }
 
-    /// The spec doesn't allow exported functions to have results.
-    #[test]
-    fn function_with_results_traps() {
-        let mut instance = WasmtimeInstanceBuilder::new()
-            .with_wat(
-                r#"
-          (module
-            (func $f (export "canister_update f") (result i64)
-              (i64.const 1)
-            )
-          )
-        "#,
-            )
-            .build();
-
-        let result = instance.run(ic_types::methods::FuncRef::Method(
-            ic_types::methods::WasmMethod::Update("f".to_string()),
-        ));
-
-        match result {
-            Ok(_) => panic!("Expected a HypervisorError::ContractViolation"),
-            Err(err) => {
-                assert!(matches!(
-                    err,
-                    ic_interfaces::execution_environment::HypervisorError::ContractViolation(_)
-                ));
-            }
-        }
-    }
-
     #[test]
     fn stack_overflow_traps() {
         use std::thread;
