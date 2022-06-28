@@ -191,10 +191,8 @@ fn verify_network(
         return Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             format!(
-                "{} failed: Received request for {} but the subnet supports {}",
-                Ic00Method::BitcoinGetCurrentFeePercentiles,
-                network_argument,
-                network_supported
+                "Received request for {} but the subnet supports {}",
+                network_argument, network_supported
             ),
         ));
     }
