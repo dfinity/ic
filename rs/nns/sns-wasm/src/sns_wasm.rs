@@ -12,7 +12,7 @@ use candid::Encode;
 use dfn_core::println;
 use ic_base_types::CanisterId;
 use ic_sns_init::distributions::{InitialTokenDistribution, TokenDistribution};
-use ic_sns_init::{SnsCanisterInitPayloads, SnsInitPayloadBuilder};
+use ic_sns_init::{SnsCanisterInitPayloads, SnsInitPayload};
 use ic_types::{Cycles, SubnetId};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
@@ -131,11 +131,11 @@ impl SnsWasmCanister {
         let canisters = Self::create_sns_canisters(canister_api, subnet_id).await;
 
         // TODO(NNS1-1435 NNS1-1436) take initial parameters and put them into this structure
-        let initial_payloads = SnsInitPayloadBuilder::new()
+        let initial_payloads = SnsInitPayload {
             // We have placeholder values to get this to compile before we take real params
-            .with_token_symbol("FAKE".to_string())
-            .with_token_name("PlaceHolder".to_string())
-            .with_initial_token_distribution(InitialTokenDistribution {
+            token_symbol: Some("FAKE".to_string()),
+            token_name: Some("PlaceHolder".to_string()),
+            initial_token_distribution: Some(InitialTokenDistribution {
                 developers: TokenDistribution {
                     total_e8s: 100,
                     distributions: Default::default(),
@@ -145,11 +145,19 @@ impl SnsWasmCanister {
                     distributions: Default::default(),
                 },
                 swap: 100,
-            })
-            .build()
-            .unwrap()
-            .build_canister_payloads(&canisters.clone().try_into().unwrap())
-            .unwrap();
+            }),
+            max_icp_e8s: Some(1_000_000_000),
+            min_participants: Some(1),
+            // TODO(NNS1-1435 NNS1-1436): reminder.
+            token_sale_timestamp_seconds: Some(1661609146),
+            min_icp_e8s: Some(100),
+            max_participant_icp_e8s: Some(1_000_000_000),
+            ..SnsInitPayload::default()
+        }
+        .validate()
+        .unwrap()
+        .build_canister_payloads(&canisters.clone().try_into().unwrap())
+        .unwrap();
 
         let latest_wasms =
             thread_safe_sns.with(|sns_wasms| sns_wasms.borrow().get_latest_version_wasms());

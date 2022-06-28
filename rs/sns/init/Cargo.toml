@@ -8,16 +8,20 @@ path = "src/lib.rs"
 
 [dependencies]
 anyhow = "1.0.57"
+dfn_core = { path = "../../rust_canisters/dfn_core" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-nervous-system-common = { path = "../../nervous_system/common"}
+ic-nns-constants = { path = "../../nns/constants" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-root = { path = "../root" }
+ic-sns-sale = { path = "../sale" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 maplit = "1.0.2"
 num = "0.4.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.79"
+serde_yaml = "0.8.24"
 
 [dev-dependencies]
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }

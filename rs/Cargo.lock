@@ -2521,12 +2521,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
 
 [[package]]
-name = "dtoa"
-version = "0.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4358a9e11b9a09cf52383b451b49a169e8d797b68aa02301ff586d70d9661ea3"
-
-[[package]]
 name = "ecdsa"
 version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7481,8 +7475,10 @@ dependencies = [
  "prost 0.10.4",
  "rand 0.7.3",
  "rand_core 0.5.1",
+ "regex",
  "serde",
  "serde_json",
+ "serde_yaml",
  "url",
 ]
 
@@ -7553,17 +7549,21 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_approx_eq",
+ "dfn_core",
  "ic-base-types",
  "ic-crypto-sha",
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
+ "ic-nns-constants",
  "ic-sns-governance",
  "ic-sns-root",
+ "ic-sns-sale",
  "ledger-canister",
  "maplit",
  "num",
  "serde",
  "serde_json",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -7704,6 +7704,7 @@ dependencies = [
  "ic-sns-governance",
  "ic-sns-init",
  "ic-sns-root",
+ "ic-sns-sale",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "lazy_static",
@@ -12226,12 +12227,12 @@ dependencies = [
 
 [[package]]
 name = "serde_yaml"
-version = "0.8.15"
+version = "0.8.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "971be8f6e4d4a47163b405a3df70d14359186f9ab0f3a3ec37df144ca1ce089f"
+checksum = "707d15895415db6628332b737c838b88c598522e4dc70647e59b72312924aebc"
 dependencies = [
- "dtoa",
- "linked-hash-map",
+ "indexmap",
+ "ryu",
  "serde",
  "yaml-rust",
 ]

@@ -1,16 +1,17 @@
 //! A command-line tool to initialize, deploy and interact with a SNS (Service Nervous System)
 
 mod deploy;
+mod init_config_file;
 
 use crate::deploy::{SnsDeployer, SnsWasmSnsDeployer};
+use crate::init_config_file::InitConfigFileArgs;
 use candid::{CandidType, Encode, IDLArgs};
 use clap::Parser;
 use ic_base_types::PrincipalId;
-use ic_sns_init::{
-    distributions::{InitialTokenDistribution, TokenDistribution},
-    SnsInitPayload, SnsInitPayloadBuilder,
-};
+use ic_sns_init::SnsInitPayload;
 use ledger_canister::{AccountIdentifier, BinaryAccountBalanceArgs};
+use std::fs::File;
+use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::str::FromStr;
 
@@ -27,9 +28,13 @@ struct CliArgs {
 
 #[derive(Debug, Parser)]
 enum SubCommand {
+    /// Deploy an sns
     Deploy(DeployArgs),
     DeployToSnsSubnet(DeployArgs),
+    /// Display the balance of a given account.
     AccountBalance(AccountBalanceArgs),
+    /// Manage the config file where the initial sns parameters are set.
+    InitConfigFile(InitConfigFileArgs),
 }
 
 /// The arguments used to configure a SNS deployment
@@ -43,6 +48,10 @@ pub struct DeployArgs {
     #[structopt(default_value = "local", long)]
     network: String,
 
+    /// The initial config file, this file should have all the necessary parameters to deploy an SNS.
+    /// See command "init-config-file"
+    #[clap(long, parse(from_os_str))]
+    pub init_config_file: PathBuf,
     /// The canister ID of SNS-WASMS to use instead of the default
     ///
     /// This is useful for testing CLI commands against local replicas without fully deployed NNS
@@ -53,30 +62,6 @@ pub struct DeployArgs {
     /// deploying locally.
     #[structopt(long)]
     initial_cycles_per_canister: Option<u64>,
-
-    /// The transaction fee that must be paid for ledger transactions (except
-    /// minting and burning governance tokens), denominated in e8s (1 token = 100,000,000 e8s).
-    #[clap(long)]
-    transaction_fee_e8s: Option<u64>,
-
-    /// The name of the governance token controlled by this SNS, for example "Bitcoin".
-    #[clap(long)]
-    pub token_name: String,
-
-    /// The symbol of the governance token controlled by this SNS, for example "BTC".
-    #[clap(long)]
-    pub token_symbol: String,
-
-    /// The number of e8s (10E-8 of a token) that a rejected proposal costs the proposer.
-    #[clap(long)]
-    pub proposal_reject_cost_e8s: Option<u64>,
-
-    /// The minimum number of e8s (10E-8 of a token) that can be staked in a neuron.
-    ///
-    /// To ensure that staking and disbursing of the neuron work, the chosen value
-    /// must be larger than the transaction_fee_e8s.
-    #[clap(long)]
-    pub neuron_minimum_stake_e8s: Option<u64>,
 }
 
 /// The arguments used to display the account balance of a user
@@ -107,39 +92,13 @@ impl DeployArgs {
     }
 
     pub fn generate_sns_init_payload(&self) -> SnsInitPayload {
-        let mut builder = SnsInitPayloadBuilder::new();
-        builder
-            .with_token_name(self.token_name.clone())
-            .with_token_symbol(self.token_symbol.clone())
-            // TODO NNS1-1463: Include the InitialTokenDistribution as input
-            .with_initial_token_distribution(InitialTokenDistribution {
-                developers: TokenDistribution {
-                    total_e8s: 100,
-                    distributions: Default::default(),
-                },
-
-                treasury: TokenDistribution {
-                    total_e8s: 100,
-                    distributions: Default::default(),
-                },
-                swap: 100,
-            });
-
-        if let Some(transaction_fee_e8s) = self.transaction_fee_e8s {
-            builder.with_transaction_fee_e8s(transaction_fee_e8s);
-        }
-
-        if let Some(proposal_reject_cost_e8s) = self.proposal_reject_cost_e8s {
-            builder.with_proposal_reject_cost_e8s(proposal_reject_cost_e8s);
-        }
-
-        if let Some(neuron_minimum_stake_e8s) = self.neuron_minimum_stake_e8s {
-            builder.with_neuron_minimum_stake_e8s(neuron_minimum_stake_e8s);
-        }
-
-        builder
-            .build()
-            .unwrap_or_else(|e| panic!("Error creating the SnsInitPayload: {}", e))
+        let file =
+            File::open(&self.init_config_file).expect("Couldn't open initial parameters file");
+        let sns_init_payload: SnsInitPayload =
+            serde_yaml::from_reader(file).expect("Couldn't parse the initial parameters file");
+        sns_init_payload
+            .validate()
+            .expect("Initial parameters file failed validation.")
     }
 }
 
@@ -156,6 +115,7 @@ fn main() {
         SubCommand::Deploy(args) => deploy(args),
         SubCommand::DeployToSnsSubnet(args) => deploy_to_sns_subnet(args),
         SubCommand::AccountBalance(args) => print_account_balance(args),
+        SubCommand::InitConfigFile(args) => init_config_file::exec(args),
     }
 }
 

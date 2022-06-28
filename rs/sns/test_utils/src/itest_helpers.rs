@@ -19,6 +19,7 @@ use ic_sns_governance::pb::v1::{
 };
 use ic_sns_governance::pb::v1::{ListNervousSystemFunctionsResponse, RewardEvent};
 use ic_sns_root::pb::v1::SnsRootCanister;
+use ic_sns_sale::pb::v1::Init;
 use ledger_canister as ledger;
 use ledger_canister::{
     protobuf::AccountIdentifier as AccountIdentifierProto, tokens_from_proto, AccountBalanceArgs,
@@ -64,6 +65,7 @@ pub struct SnsTestsInitPayloadBuilder {
     pub governance: GovernanceCanisterInitPayloadBuilder,
     pub ledger: LedgerCanisterInitPayload,
     pub root: SnsRootCanister,
+    pub swap: Init,
 }
 
 /// Packages commonly used test data into a single struct.
@@ -130,6 +132,7 @@ impl SnsTestsInitPayloadBuilder {
                 token_name: None,
             },
             root: SnsRootCanister::default(),
+            swap: Init::default(),
         }
     }
 
@@ -172,6 +175,7 @@ impl SnsTestsInitPayloadBuilder {
             governance: self.governance.build(),
             ledger: self.ledger.clone(),
             root: self.root.clone(),
+            swap: self.swap.clone(),
         }
     }
 }
