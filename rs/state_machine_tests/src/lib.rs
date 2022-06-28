@@ -57,7 +57,7 @@ use ic_types::{
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress, UserQuery,
     },
-    time::{current_time_and_expiry_time, UNIX_EPOCH},
+    time::current_time_and_expiry_time,
     CryptoHashOfPartialState, Height, NodeId, NumberOfNodes, Randomness, RegistryVersion,
 };
 pub use ic_types::{
@@ -89,6 +89,8 @@ impl Verifier for FakeVerifier {
         Ok(())
     }
 }
+
+const GENESIS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
 
 /// Constructs the initial version of the registry containing a subnet with the
 /// specified SUBNET_ID, with the node with the specified NODE_ID assigned to
@@ -196,7 +198,7 @@ impl StateMachine {
         Self::setup_from_dir(
             TempDir::new().expect("failed to create a temporary directory"),
             0,
-            UNIX_EPOCH,
+            GENESIS,
             None,
         )
     }
@@ -206,7 +208,7 @@ impl StateMachine {
         Self::setup_from_dir(
             TempDir::new().expect("failed to create a temporary directory"),
             0,
-            UNIX_EPOCH,
+            GENESIS,
             Some(config),
         )
     }
