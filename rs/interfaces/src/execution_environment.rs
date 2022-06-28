@@ -18,9 +18,12 @@ use ic_types::{
     ComputeAllocation, Cycles, ExecutionRound, Height, NumInstructions, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, RwLock};
 use std::{collections::BTreeMap, ops};
 use std::{convert::Infallible, fmt};
+use std::{
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 use tower::{limit::ConcurrencyLimit, util::BoxCloneService};
 
 /// Instance execution statistics. The stats are cumulative and
@@ -964,6 +967,8 @@ pub struct CompilationResult {
     pub largest_function_instruction_count: NumInstructions,
     /// Compiling the canister is equivalent to executing this many instructions.
     pub compilation_cost: NumInstructions,
+    /// Time to compile canister (including instrumentation and validation).
+    pub compilation_time: Duration,
 }
 
 #[cfg(test)]

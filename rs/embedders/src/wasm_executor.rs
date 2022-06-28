@@ -2,13 +2,12 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
 use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageMap};
 use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges};
 use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
 use ic_types::methods::{FuncRef, WasmMethod};
-use prometheus::{Histogram, IntCounter};
+use prometheus::IntCounter;
 
 use crate::wasm_utils::instrumentation::InstrumentationOutput;
 use crate::wasm_utils::{compile, FullCompilationOutput};
@@ -48,7 +47,6 @@ struct WasmExecutorMetrics {
     imports_msg_cycles_refunded: IntCounter,
     imports_msg_cycles_accept: IntCounter,
     imports_mint_cycles: IntCounter,
-    compile: Histogram,
 }
 
 impl WasmExecutorMetrics {
@@ -82,11 +80,6 @@ impl WasmExecutorMetrics {
             imports_mint_cycles: metrics_registry.int_counter(
                 "execution_wasm_imports_mint_cycles",
                 "The number of Wasm modules that import ic0.mint_cycles",
-            ),
-            compile: metrics_registry.histogram(
-                "execution_wasm_compile",
-                "The duration of Wasm module compilation including validation and instrumentation",
-                decimal_buckets_with_zero(-4, 1),
             ),
         }
     }
@@ -184,7 +177,6 @@ impl WasmExecutor {
                 Some(wasm) => Cow::Borrowed(wasm),
                 None => Cow::Owned(decode_wasm(wasm_binary.binary.to_shared_vec())?),
             };
-            let _timer = self.metrics.compile.start_timer();
             match compile(&self.wasm_embedder, decoded_wasm.as_ref()) {
                 Ok((cache, compilation_output)) => {
                     *guard = Some(cache.clone());
@@ -318,10 +310,6 @@ impl WasmExecutor {
             compilation_output.validation_details.wasm_metadata,
         );
         Ok((compilation_result, execution_state))
-    }
-
-    pub fn compile_count_for_testing(&self) -> u64 {
-        self.metrics.compile.get_sample_count()
     }
 
     // Collecting information based on the result of the execution and wasm state changes.

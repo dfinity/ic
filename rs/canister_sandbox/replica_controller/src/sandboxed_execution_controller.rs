@@ -28,7 +28,6 @@ use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::path::PathBuf;
 use std::process::ExitStatus;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Weak;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -399,7 +398,6 @@ pub struct SandboxedExecutionController {
     /// Executable and arguments to be passed to `canister_sandbox` which are
     /// the same for all canisters.
     sandbox_exec_argv: Vec<String>,
-    compile_count_for_testing: AtomicU64,
     metrics: Arc<SandboxedExecutionMetrics>,
     launcher_service: Box<dyn LauncherService>,
 }
@@ -453,7 +451,6 @@ impl SandboxedExecutionController {
         Ok(Self {
             backends,
             logger,
-            compile_count_for_testing: AtomicU64::new(0),
             sandbox_exec_argv,
             metrics,
             launcher_service,
@@ -651,11 +648,6 @@ impl SandboxedExecutionController {
                     );
                 }
             };
-
-        if compilation_result.is_some() {
-            self.compile_count_for_testing
-                .fetch_add(1, Ordering::Relaxed);
-        }
 
         // Create channel through which we will receive the execution
         // output from closure (running by IPC thread at end of
@@ -858,8 +850,6 @@ impl SandboxedExecutionController {
         canister_id: CanisterId,
     ) -> HypervisorResult<(CompilationResult, ExecutionState)> {
         let sandbox_process = self.get_sandbox_process(canister_id);
-        self.compile_count_for_testing
-            .fetch_add(1, Ordering::Relaxed);
         let wasm_binary = WasmBinary::new(CanisterModule::new(wasm_source.clone()));
 
         // Steps 1, 2, 3, 4 are performed by the sandbox process.
@@ -920,10 +910,6 @@ impl SandboxedExecutionController {
             reply.wasm_metadata,
         );
         Ok((reply.compilation_result, execution_state))
-    }
-
-    pub fn compile_count_for_testing(&self) -> u64 {
-        self.compile_count_for_testing.load(Ordering::Relaxed)
     }
 }
 
