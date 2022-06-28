@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use candid::Encode;
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::ExecutionResponse;
 use ic_ic00_types::{
@@ -1428,9 +1428,10 @@ fn execute_canister_http_request() {
     // Create payload of the request.
     let url = "https://".to_string();
     let transform_method_name = Some("transform".to_string());
+    let response_size_limit = 1000u64;
     let args = CanisterHttpRequestArgs {
         url: url.clone(),
-        max_response_bytes: None,
+        max_response_bytes: Some(response_size_limit),
         headers: Vec::new(),
         body: None,
         http_method: HttpMethod::GET,
@@ -1438,7 +1439,10 @@ fn execute_canister_http_request() {
     };
 
     // Create request to HTTP_REQUEST method.
-    test.inject_call_to_ic00(Method::HttpRequest, args.encode(), Cycles::new(0));
+    let payment = Cycles::new(1_000_000_000);
+    let payload = args.encode();
+    let request_payload_size = NumBytes::from(payload.len() as u64);
+    test.inject_call_to_ic00(Method::HttpRequest, payload, payment);
     test.execute_all();
     // Check that the SubnetCallContextManager contains the request.
     let canister_http_request_contexts = &test
@@ -1458,6 +1462,14 @@ fn execute_canister_http_request() {
     );
     assert_eq!(http_request_context.http_method, CanisterHttpMethod::GET);
     assert_eq!(http_request_context.request.sender, caller_canister);
+    assert_eq!(
+        http_request_context.request.payment,
+        payment
+            - test.http_request_fee(
+                NumBytes::from(Method::HttpRequest.to_string().len() as u64) + request_payload_size,
+                Some(NumBytes::from(response_size_limit))
+            )
+    );
 }
 
 #[test]
