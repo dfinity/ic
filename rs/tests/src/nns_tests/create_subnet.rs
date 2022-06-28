@@ -20,9 +20,10 @@ end::catalog[] */
 
 use std::collections::HashSet;
 use std::iter::FromIterator;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::util::{assert_endpoints_reachability, get_unassinged_nodes_endpoints, EndpointsStatus};
 use ic_base_types::NodeId;
 use ic_fondue::ic_manager::IcHandle;
 use ic_fondue::ic_manager::IcSubnet;
@@ -69,15 +70,33 @@ pub fn hourly_config() -> InternetComputer {
 }
 
 pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
+    let mut rng = ctx.rng.clone();
+    let unassigned_endpoints = get_unassinged_nodes_endpoints(&handle);
+    info!(
+        ctx.logger,
+        "Checking readiness of all nodes after the IC setup ..."
+    );
+    block_on(async {
+        // Check readiness of all assigned nodes.
+        let nns_endpoints: Vec<_> = handle
+            .as_permutation(&mut rng)
+            .filter(|e| e.subnet.as_ref().map(|s| s.type_of) == Some(SubnetType::System))
+            .collect::<Vec<_>>();
+        assert_endpoints_reachability(nns_endpoints.as_slice(), EndpointsStatus::AllReachable)
+            .await;
+        // Check readiness of all unassigned nodes.
+        for ep in unassigned_endpoints.iter() {
+            ep.assert_ready_with_start(Instant::now(), ctx).await;
+        }
+    });
+    info!(ctx.logger, "All nodes are ready, IC setup succeeded.");
     // [Phase I] Prepare NNS
     ctx.install_nns_canisters(&handle, true);
-    let mut rng = ctx.rng.clone();
     let endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
     block_on(endpoint.assert_ready(ctx));
 
     // get IDs of (1) all nodes (2) unassigned nodes
     let node_ids = ctx.initial_node_ids(&handle);
-    let unassigned_endpoints = ctx.initial_unassigned_node_endpoints(&handle);
     let unassigned_nodes: Vec<NodeId> = unassigned_endpoints.iter().map(|ep| ep.node_id).collect();
 
     // check that (1) unassigned nodes are a subset of all the nodes and (2) there
