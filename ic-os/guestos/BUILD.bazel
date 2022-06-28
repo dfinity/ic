@@ -84,9 +84,9 @@ IC_OS_IMAGE_DEPS = {
         ":rootfs-tree.tar": "/",
 
         # additional files to install
-        "//:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",
+        "//rs/canister_sandbox:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",
         "//:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",
-        "//:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
+        "//rs/artifact_pool:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
         "//:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",
         "//:ic-regedit": "/opt/ic/bin/ic-regedit:0755",
         "//:ic-recovery": "/opt/ic/bin/ic-recovery:0755",

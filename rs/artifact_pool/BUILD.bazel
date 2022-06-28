@@ -1,0 +1,60 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/config",
+    "//rs/consensus/ecdsa_object",
+    "//rs/consensus/message",
+    "//rs/crypto",
+    "//rs/interfaces",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/protobuf",
+    "//rs/types/types",
+    "//rs/utils",
+    "@crate_index//:bincode",
+    "@crate_index//:byteorder",
+    "@crate_index//:clap",
+    "@crate_index//:lazy_static",
+    "@crate_index//:nix",
+    "@crate_index//:prometheus",
+    "@crate_index//:prost",
+    "@crate_index//:rocksdb",
+    "@crate_index//:serde",
+    "@crate_index//:serde-bytes-repr",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:strum",
+    "@crate_index//:tempfile",
+    "@lmdb_rkv",
+    "@lmdb_rkv//lmdb-sys",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "artifact_pool",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_artifact_pool",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "ic-consensus-pool-util",
+    srcs = ["src/bin/consensus_pool_util.rs"],
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":artifact_pool"],
+)

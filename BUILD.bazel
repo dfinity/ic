@@ -44,9 +44,7 @@ cargo_build(
     name = "binaries",
     srcs = ["//rs:all_sources"],
     binaries = [
-        "canister_sandbox",
         "ic-btc-adapter",
-        "ic-consensus-pool-util",
         "ic-crypto-csp",
         "ic-regedit",
         "ic-recovery",

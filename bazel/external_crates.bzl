@@ -67,6 +67,11 @@ def external_crates_repository(name, annotations):
             "bincode": crate.spec(
                 version = "^1.2.1",
             ),
+            "bindgen": crate.spec(
+                version = "^0.59.0",
+                default_features = False,
+                features = ["runtime"],
+            ),
             "bip32": crate.spec(
                 version = "^0.3",
                 features = [
@@ -384,14 +389,6 @@ def external_crates_repository(name, annotations):
             "linked-hash-map": crate.spec(
                 version = "^0.5.3",
             ),
-            "lmdb-rkv": crate.spec(
-                git = "https://github.com/dfinity-lab/lmdb-rs",
-                rev = "1cf86b5cc09947e94a787065cadd163a42ef7f18",
-            ),
-            "lmdb-rkv-sys": crate.spec(
-                git = "https://github.com/dfinity-lab/lmdb-rs",
-                rev = "1cf86b5cc09947e94a787065cadd163a42ef7f18",
-            ),
             "log": crate.spec(
                 version = "^0.4.14",
             ),
@@ -512,6 +509,9 @@ def external_crates_repository(name, annotations):
                 version = "^1.0.1",
             ),
             "pico-args": crate.spec(
+                version = "^0.3",
+            ),
+            "pkg-config": crate.spec(
                 version = "^0.3",
             ),
             "pprof": crate.spec(

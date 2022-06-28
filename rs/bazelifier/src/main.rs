@@ -59,6 +59,8 @@ struct Crate {
     dev_dependencies: BTreeMap<String, Dep>,
     #[serde(default)]
     target: toml::map::Map<String, toml::Value>,
+    #[serde(default)]
+    bin: Vec<BinSection>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -67,6 +69,12 @@ struct LibSection {
     proc_macro: bool,
     #[serde(rename = "name", default)]
     name_override: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct BinSection {
+    name: String,
+    path: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -115,6 +123,7 @@ struct BuildFile<'a> {
     target_name: Cow<'a, str>,
     edition: &'a str,
     crate_name: String,
+    bins: Vec<BinSection>,
     gen_tests: bool,
     has_testsuite: bool,
 }
@@ -223,7 +232,7 @@ impl Bazelifier {
         Ok(())
     }
 
-    fn run(self) -> eyre::Result<()> {
+    fn run(mut self) -> eyre::Result<()> {
         let buildfile_path = self.manifest_dir.join("BUILD.bazel");
         if !self.opts.dry_run && !self.opts.force && buildfile_path.exists() {
             eprintln!(
@@ -253,6 +262,7 @@ impl Bazelifier {
                 .and_then(|x| x.name_override.as_ref())
                 .map_or_else(|| self.pkg.package.name.replace('-', "_"), |x| x.clone()),
             gen_tests: self.opts.gen_tests,
+            bins: std::mem::take(&mut self.pkg.bin),
             ..Default::default()
         };
 
