@@ -7,7 +7,7 @@ use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_canister_sandbox_common::{protocol, rpc};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::wasm_executor::{
-    get_wasm_reserved_pages, PausedWasmExecution, WasmExecutionResult,
+    get_wasm_reserved_pages, PausedWasmExecution, WasmExecutionResult, WasmExecutor,
 };
 use ic_embedders::WasmExecutionInput;
 use ic_interfaces::execution_environment::{
@@ -373,7 +373,7 @@ impl PausedWasmExecution for PausedSandboxExecution {
         // Wait for completion.
         let result = rx.recv().unwrap();
         SandboxedExecutionController::process_completion(
-            &self.controller,
+            self.controller,
             self.canister_id,
             execution_state,
             result,
@@ -401,6 +401,224 @@ pub struct SandboxedExecutionController {
     sandbox_exec_argv: Vec<String>,
     metrics: Arc<SandboxedExecutionMetrics>,
     launcher_service: Box<dyn LauncherService>,
+}
+
+impl WasmExecutor for SandboxedExecutionController {
+    fn execute(
+        self: Arc<Self>,
+        WasmExecutionInput {
+            api_type,
+            sandbox_safe_system_state,
+            canister_current_memory_usage,
+            execution_parameters,
+            func_ref,
+            execution_state,
+        }: WasmExecutionInput,
+    ) -> (
+        Option<CompilationResult>,
+        ExecutionState,
+        WasmExecutionResult,
+    ) {
+        // TODO(EXC-868): Adjust this assertion once the execution environment
+        // supports deterministic time slicing with sandbox.
+        assert_eq!(
+            execution_parameters.total_instruction_limit,
+            execution_parameters.slice_instruction_limit
+        );
+        let initial_num_instructions_left = execution_parameters.slice_instruction_limit;
+        let api_type_label = api_type.as_str();
+        let _execute_timer = self
+            .metrics
+            .sandboxed_execution_replica_execute_duration
+            .with_label_values(&[api_type_label])
+            .start_timer();
+        let prepare_timer = self
+            .metrics
+            .sandboxed_execution_replica_execute_prepare_duration
+            .with_label_values(&[api_type_label])
+            .start_timer();
+
+        // Determine which process we want to run this on.
+        let sandbox_process = self.get_sandbox_process(sandbox_safe_system_state.canister_id());
+
+        // Ensure that Wasm is compiled.
+        let (wasm_id, compilation_result) =
+            match open_wasm(&sandbox_process, &*execution_state.wasm_binary) {
+                Ok((wasm_id, compilation_result)) => (wasm_id, compilation_result),
+                Err(err) => {
+                    return (
+                        None,
+                        execution_state,
+                        WasmExecutionResult::Finished(
+                            WasmExecutionOutput {
+                                wasm_result: Err(err),
+                                num_instructions_left: NumInstructions::from(0),
+                                instance_stats: InstanceStats {
+                                    accessed_pages: 0,
+                                    dirty_pages: 0,
+                                },
+                            },
+                            SystemStateChanges::default(),
+                        ),
+                    );
+                }
+            };
+
+        // Create channel through which we will receive the execution
+        // output from closure (running by IPC thread at end of
+        // execution).
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+
+        // Generate an ID for this execution, register it. We need to
+        // pass the system state accessor as well as the completion
+        // function that gets our result back in the end.
+        let sandbox_process_weakref = Arc::downgrade(&sandbox_process);
+        let exec_id =
+            sandbox_process
+                .execution_states
+                .register_execution(move |exec_id, result| {
+                    if let Some(sandbox_process) = sandbox_process_weakref.upgrade() {
+                        sandbox_process
+                            .history
+                            .record(format!("Completion(exec_id={})", exec_id));
+                    }
+                    tx.send(result).unwrap();
+                });
+
+        // Now set up resources on the sandbox to drive the execution.
+        let wasm_memory_handle = open_remote_memory(&sandbox_process, &execution_state.wasm_memory);
+        let canister_id = sandbox_safe_system_state.canister_id();
+        let wasm_memory_id = MemoryId::from(wasm_memory_handle.get_id());
+        let next_wasm_memory_id = MemoryId::new();
+
+        let stable_memory_handle =
+            open_remote_memory(&sandbox_process, &execution_state.stable_memory);
+        let stable_memory_id = MemoryId::from(stable_memory_handle.get_id());
+        let next_stable_memory_id = MemoryId::new();
+
+        let subnet_available_memory = execution_parameters.subnet_available_memory.clone();
+
+        sandbox_process.history.record(
+            format!("StartExecution(exec_id={} wasm_id={} wasm_memory_id={} stable_member_id={} api_type={}, next_wasm_memory_id={} next_stable_memory_id={}",
+                exec_id, wasm_id, wasm_memory_id, stable_memory_id, api_type.as_str(), next_wasm_memory_id, next_stable_memory_id));
+        sandbox_process
+            .sandbox_service
+            .start_execution(protocol::sbxsvc::StartExecutionRequest {
+                exec_id,
+                wasm_id,
+                wasm_memory_id,
+                stable_memory_id,
+                exec_input: SandboxExecInput {
+                    func_ref,
+                    api_type,
+                    globals: execution_state.exported_globals.clone(),
+                    canister_current_memory_usage,
+                    execution_parameters,
+                    next_wasm_memory_id,
+                    next_stable_memory_id,
+                    sandox_safe_system_state: sandbox_safe_system_state,
+                    wasm_reserved_pages: get_wasm_reserved_pages(&execution_state),
+                },
+            })
+            .on_completion(|_| {});
+        drop(prepare_timer);
+
+        let wait_timer = self
+            .metrics
+            .sandboxed_execution_replica_execute_wait_duration
+            .with_label_values(&[api_type_label])
+            .start_timer();
+        // Wait for completion.
+        let result = rx.recv().unwrap();
+        drop(wait_timer);
+        let _finish_timer = self
+            .metrics
+            .sandboxed_execution_replica_execute_finish_duration
+            .with_label_values(&[api_type_label])
+            .start_timer();
+        let (execution_state, execution_result) = Self::process_completion(
+            self,
+            canister_id,
+            execution_state,
+            result,
+            next_wasm_memory_id,
+            next_stable_memory_id,
+            initial_num_instructions_left,
+            api_type_label,
+            subnet_available_memory,
+            sandbox_process,
+        );
+        (compilation_result, execution_state, execution_result)
+    }
+
+    fn create_execution_state(
+        &self,
+        wasm_source: Vec<u8>,
+        canister_root: PathBuf,
+        canister_id: CanisterId,
+    ) -> HypervisorResult<(CompilationResult, ExecutionState)> {
+        let sandbox_process = self.get_sandbox_process(canister_id);
+        let wasm_binary = WasmBinary::new(CanisterModule::new(wasm_source.clone()));
+
+        // Steps 1, 2, 3, 4 are performed by the sandbox process.
+        let wasm_id = WasmId::new();
+        let wasm_page_map = PageMap::default();
+        let next_wasm_memory_id = MemoryId::new();
+        sandbox_process.history.record(format!(
+            "CreateExecutionState(wasm_id={}, next_wasm_memory_id={})",
+            wasm_id, next_wasm_memory_id
+        ));
+        let reply = sandbox_process
+            .sandbox_service
+            .create_execution_state(protocol::sbxsvc::CreateExecutionStateRequest {
+                wasm_id,
+                wasm_binary: wasm_source,
+                wasm_page_map: wasm_page_map.serialize(),
+                next_wasm_memory_id,
+                canister_id,
+            })
+            .sync()
+            .unwrap()
+            .0?;
+
+        cache_opened_wasm(
+            &mut *wasm_binary.embedder_cache.lock().unwrap(),
+            &sandbox_process,
+            wasm_id,
+        );
+
+        // Step 5. Create the execution state.
+        let mut wasm_memory = Memory::new(wasm_page_map, reply.wasm_memory_modifications.size);
+        wasm_memory
+            .page_map
+            .deserialize_delta(reply.wasm_memory_modifications.page_delta);
+        wasm_memory.sandbox_memory =
+            SandboxMemory::synced(wrap_remote_memory(&sandbox_process, next_wasm_memory_id));
+        if let Err(err) = wasm_memory.verify_size() {
+            error!(
+                self.logger,
+                "{}: Canister {} has invalid initial wasm memory size: {}",
+                SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE,
+                canister_id,
+                err
+            );
+            self.metrics
+                .sandboxed_execution_critical_error_invalid_memory_size
+                .inc();
+        }
+
+        let stable_memory = Memory::default();
+        let execution_state = ExecutionState::new(
+            canister_root,
+            wasm_binary,
+            ExportedFunctions::new(reply.exported_functions),
+            wasm_memory,
+            stable_memory,
+            reply.exported_globals,
+            reply.wasm_metadata,
+        );
+        Ok((reply.compilation_result, execution_state))
+    }
 }
 
 impl SandboxedExecutionController {
@@ -590,156 +808,9 @@ impl SandboxedExecutionController {
         sandbox_process
     }
 
-    pub fn process(
-        self: &Arc<Self>,
-        WasmExecutionInput {
-            api_type,
-            sandbox_safe_system_state,
-            canister_current_memory_usage,
-            execution_parameters,
-            func_ref,
-            execution_state,
-        }: WasmExecutionInput,
-    ) -> (
-        Option<CompilationResult>,
-        ExecutionState,
-        WasmExecutionResult,
-    ) {
-        // TODO(EXC-868): Adjust this assertion once the execution environment
-        // supports deterministic time slicing with sandbox.
-        assert_eq!(
-            execution_parameters.total_instruction_limit,
-            execution_parameters.slice_instruction_limit
-        );
-        let initial_num_instructions_left = execution_parameters.slice_instruction_limit;
-        let api_type_label = api_type.as_str();
-        let _execute_timer = self
-            .metrics
-            .sandboxed_execution_replica_execute_duration
-            .with_label_values(&[api_type_label])
-            .start_timer();
-        let prepare_timer = self
-            .metrics
-            .sandboxed_execution_replica_execute_prepare_duration
-            .with_label_values(&[api_type_label])
-            .start_timer();
-
-        // Determine which process we want to run this on.
-        let sandbox_process = self.get_sandbox_process(sandbox_safe_system_state.canister_id());
-
-        // Ensure that Wasm is compiled.
-        let (wasm_id, compilation_result) =
-            match open_wasm(&sandbox_process, &*execution_state.wasm_binary) {
-                Ok((wasm_id, compilation_result)) => (wasm_id, compilation_result),
-                Err(err) => {
-                    return (
-                        None,
-                        execution_state,
-                        WasmExecutionResult::Finished(
-                            WasmExecutionOutput {
-                                wasm_result: Err(err),
-                                num_instructions_left: NumInstructions::from(0),
-                                instance_stats: InstanceStats {
-                                    accessed_pages: 0,
-                                    dirty_pages: 0,
-                                },
-                            },
-                            SystemStateChanges::default(),
-                        ),
-                    );
-                }
-            };
-
-        // Create channel through which we will receive the execution
-        // output from closure (running by IPC thread at end of
-        // execution).
-        let (tx, rx) = std::sync::mpsc::sync_channel(1);
-
-        // Generate an ID for this execution, register it. We need to
-        // pass the system state accessor as well as the completion
-        // function that gets our result back in the end.
-        let sandbox_process_weakref = Arc::downgrade(&sandbox_process);
-        let exec_id =
-            sandbox_process
-                .execution_states
-                .register_execution(move |exec_id, result| {
-                    if let Some(sandbox_process) = sandbox_process_weakref.upgrade() {
-                        sandbox_process
-                            .history
-                            .record(format!("Completion(exec_id={})", exec_id));
-                    }
-                    tx.send(result).unwrap();
-                });
-
-        // Now set up resources on the sandbox to drive the execution.
-        let wasm_memory_handle = open_remote_memory(&sandbox_process, &execution_state.wasm_memory);
-        let canister_id = sandbox_safe_system_state.canister_id();
-        let wasm_memory_id = MemoryId::from(wasm_memory_handle.get_id());
-        let next_wasm_memory_id = MemoryId::new();
-
-        let stable_memory_handle =
-            open_remote_memory(&sandbox_process, &execution_state.stable_memory);
-        let stable_memory_id = MemoryId::from(stable_memory_handle.get_id());
-        let next_stable_memory_id = MemoryId::new();
-
-        let subnet_available_memory = execution_parameters.subnet_available_memory.clone();
-
-        sandbox_process.history.record(
-            format!("StartExecution(exec_id={} wasm_id={} wasm_memory_id={} stable_member_id={} api_type={}, next_wasm_memory_id={} next_stable_memory_id={}",
-                exec_id, wasm_id, wasm_memory_id, stable_memory_id, api_type.as_str(), next_wasm_memory_id, next_stable_memory_id));
-        sandbox_process
-            .sandbox_service
-            .start_execution(protocol::sbxsvc::StartExecutionRequest {
-                exec_id,
-                wasm_id,
-                wasm_memory_id,
-                stable_memory_id,
-                exec_input: SandboxExecInput {
-                    func_ref,
-                    api_type,
-                    globals: execution_state.exported_globals.clone(),
-                    canister_current_memory_usage,
-                    execution_parameters,
-                    next_wasm_memory_id,
-                    next_stable_memory_id,
-                    sandox_safe_system_state: sandbox_safe_system_state,
-                    wasm_reserved_pages: get_wasm_reserved_pages(&execution_state),
-                },
-            })
-            .on_completion(|_| {});
-        drop(prepare_timer);
-
-        let wait_timer = self
-            .metrics
-            .sandboxed_execution_replica_execute_wait_duration
-            .with_label_values(&[api_type_label])
-            .start_timer();
-        // Wait for completion.
-        let result = rx.recv().unwrap();
-        drop(wait_timer);
-        let _finish_timer = self
-            .metrics
-            .sandboxed_execution_replica_execute_finish_duration
-            .with_label_values(&[api_type_label])
-            .start_timer();
-        let (execution_state, execution_result) = Self::process_completion(
-            self,
-            canister_id,
-            execution_state,
-            result,
-            next_wasm_memory_id,
-            next_stable_memory_id,
-            initial_num_instructions_left,
-            api_type_label,
-            subnet_available_memory,
-            sandbox_process,
-        );
-        (compilation_result, execution_state, execution_result)
-    }
-
     #[allow(clippy::too_many_arguments)]
     fn process_completion(
-        self: &Arc<Self>,
+        self: Arc<Self>,
         canister_id: CanisterId,
         mut execution_state: ExecutionState,
         result: CompletionResult,
@@ -872,75 +943,6 @@ impl SandboxedExecutionController {
                 state_modifications.system_state_changes
             }
         }
-    }
-
-    pub fn create_execution_state(
-        &self,
-        wasm_source: Vec<u8>,
-        canister_root: PathBuf,
-        canister_id: CanisterId,
-    ) -> HypervisorResult<(CompilationResult, ExecutionState)> {
-        let sandbox_process = self.get_sandbox_process(canister_id);
-        let wasm_binary = WasmBinary::new(CanisterModule::new(wasm_source.clone()));
-
-        // Steps 1, 2, 3, 4 are performed by the sandbox process.
-        let wasm_id = WasmId::new();
-        let wasm_page_map = PageMap::default();
-        let next_wasm_memory_id = MemoryId::new();
-        sandbox_process.history.record(format!(
-            "CreateExecutionState(wasm_id={}, next_wasm_memory_id={})",
-            wasm_id, next_wasm_memory_id
-        ));
-        let reply = sandbox_process
-            .sandbox_service
-            .create_execution_state(protocol::sbxsvc::CreateExecutionStateRequest {
-                wasm_id,
-                wasm_binary: wasm_source,
-                wasm_page_map: wasm_page_map.serialize(),
-                next_wasm_memory_id,
-                canister_id,
-            })
-            .sync()
-            .unwrap()
-            .0?;
-
-        cache_opened_wasm(
-            &mut *wasm_binary.embedder_cache.lock().unwrap(),
-            &sandbox_process,
-            wasm_id,
-        );
-
-        // Step 5. Create the execution state.
-        let mut wasm_memory = Memory::new(wasm_page_map, reply.wasm_memory_modifications.size);
-        wasm_memory
-            .page_map
-            .deserialize_delta(reply.wasm_memory_modifications.page_delta);
-        wasm_memory.sandbox_memory =
-            SandboxMemory::synced(wrap_remote_memory(&sandbox_process, next_wasm_memory_id));
-        if let Err(err) = wasm_memory.verify_size() {
-            error!(
-                self.logger,
-                "{}: Canister {} has invalid initial wasm memory size: {}",
-                SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE,
-                canister_id,
-                err
-            );
-            self.metrics
-                .sandboxed_execution_critical_error_invalid_memory_size
-                .inc();
-        }
-
-        let stable_memory = Memory::default();
-        let execution_state = ExecutionState::new(
-            canister_root,
-            wasm_binary,
-            ExportedFunctions::new(reply.exported_functions),
-            wasm_memory,
-            stable_memory,
-            reply.exported_globals,
-            reply.wasm_metadata,
-        );
-        Ok((reply.compilation_result, execution_state))
     }
 }
 
