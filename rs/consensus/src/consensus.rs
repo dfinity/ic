@@ -2,7 +2,7 @@
 //! distributed consensus.
 
 pub mod batch_delivery;
-mod block_maker;
+pub(crate) mod block_maker;
 mod catchup_package_maker;
 pub(crate) mod crypto;
 pub mod dkg_key_manager;

@@ -4,7 +4,9 @@ use ic_interfaces::registry::{
     RegistryClientVersionedResult,
 };
 use ic_interfaces::time_source::TimeSource;
-use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord};
+use ic_protobuf::registry::subnet::v1::{
+    CatchUpPackageContents, SubnetFeatures, SubnetListRecord, SubnetRecord,
+};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
@@ -247,6 +249,11 @@ impl SubnetRecordBuilder {
 
     pub fn with_subnet_type(mut self, subnet_type: SubnetType) -> Self {
         self.record.subnet_type = subnet_type.into();
+        self
+    }
+
+    pub fn with_features(mut self, features: SubnetFeatures) -> Self {
+        self.record.features = Some(features);
         self
     }
 
