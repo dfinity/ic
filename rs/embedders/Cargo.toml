@@ -25,6 +25,7 @@ parity-wasm = { version = "0.42.2", features = [ "std", "multi_value", "bulk" ] 
 prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog-term = "2.6.0"
 wasmtime = { version = "0.37", default_features = false, features = ['cranelift', 'parallel-compilation', 'posix-signals-on-macos', 'wasm-backtrace'] }
 wasmtime-environ = "0.37"
 wasmtime-runtime = "0.37"

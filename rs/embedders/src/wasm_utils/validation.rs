@@ -1124,7 +1124,7 @@ pub struct WasmValidationDetails {
 /// * CustomSections
 ///
 /// Additionally, it ensures that the wasm binary can actually compile.
-pub fn validate_wasm_binary(
+pub(super) fn validate_wasm_binary(
     wasm: &BinaryEncodedWasm,
     config: &EmbeddersConfig,
 ) -> Result<WasmValidationDetails, WasmValidationError> {

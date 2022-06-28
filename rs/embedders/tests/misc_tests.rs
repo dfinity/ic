@@ -1,8 +1,11 @@
 mod wasmtime_simple;
 
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_embedders::wasm_utils::decoding::decode_wasm;
-use ic_embedders::wasm_utils::instrumentation::{instrument, InstructionCostTable};
+use ic_embedders::{
+    wasm_utils::{compile, decoding::decode_wasm},
+    WasmtimeEmbedder,
+};
+use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
 use parity_wasm::elements::Module;
 use std::sync::Arc;
@@ -28,7 +31,10 @@ fn assert_memory_and_table_exports(module: &Module) {
 // checks that we rename "mem" to "memory" and "tab" to "table" during
 // instrumentation.
 fn test_instrument_module_rename_memory_table() {
-    let output = instrument(
+    let config = EmbeddersConfig::default();
+    let embedder = WasmtimeEmbedder::new(config, no_op_logger());
+    let output = compile(
+        &embedder,
         &BinaryEncodedWasm::new(
             wabt::wat2wasm(
                 r#"
@@ -43,10 +49,10 @@ fn test_instrument_module_rename_memory_table() {
             )
             .unwrap(),
         ),
-        &InstructionCostTable::new(),
-        EmbeddersConfig::default().cost_to_compile_wasm_instruction,
     )
-    .unwrap();
+    .unwrap()
+    .1
+    .instrumentation_output;
 
     let module =
         parity_wasm::elements::deserialize_buffer::<Module>(output.binary.as_slice()).unwrap();
@@ -59,7 +65,10 @@ fn test_instrument_module_rename_memory_table() {
 // Memory and table need to be exported as "memory" and "table". This test
 // checks that we export them if they are not.
 fn test_instrument_module_export_memory_table() {
-    let output = instrument(
+    let config = EmbeddersConfig::default();
+    let embedder = WasmtimeEmbedder::new(config, no_op_logger());
+    let output = compile(
+        &embedder,
         &BinaryEncodedWasm::new(
             wabt::wat2wasm(
                 r#"
@@ -74,10 +83,10 @@ fn test_instrument_module_export_memory_table() {
             )
             .unwrap(),
         ),
-        &InstructionCostTable::new(),
-        EmbeddersConfig::default().cost_to_compile_wasm_instruction,
     )
-    .unwrap();
+    .unwrap()
+    .1
+    .instrumentation_output;
 
     let module =
         parity_wasm::elements::deserialize_buffer::<Module>(output.binary.as_slice()).unwrap();
@@ -88,7 +97,10 @@ fn test_instrument_module_export_memory_table() {
 
 #[test]
 fn test_instrument_module_with_exported_global() {
-    let output = instrument(
+    let config = EmbeddersConfig::default();
+    let embedder = WasmtimeEmbedder::new(config, no_op_logger());
+    let output = compile(
+        &embedder,
         &BinaryEncodedWasm::new(
             wabt::wat2wasm(
                 r#"
@@ -104,10 +116,10 @@ fn test_instrument_module_with_exported_global() {
             )
             .unwrap(),
         ),
-        &InstructionCostTable::new(),
-        EmbeddersConfig::default().cost_to_compile_wasm_instruction,
     )
-    .unwrap();
+    .unwrap()
+    .1
+    .instrumentation_output;
 
     wasmtime_simple::wasmtime_instantiate_and_call_run(&output.binary);
 }

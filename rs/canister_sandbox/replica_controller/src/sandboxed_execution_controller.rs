@@ -28,11 +28,9 @@ use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::path::PathBuf;
 use std::process::ExitStatus;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Weak;
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc, Mutex,
-};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 

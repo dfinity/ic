@@ -371,7 +371,7 @@ fn query_calls_disabled_for_application_subnet() {
 }
 
 #[test]
-fn query_compilied_once() {
+fn query_compiled_once() {
     with_setup(
         SubnetType::Application,
         |query_handler, canister_manager, mut state| {

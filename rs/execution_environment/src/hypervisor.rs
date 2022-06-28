@@ -736,13 +736,8 @@ impl Hypervisor {
             FlagStatus::Disabled => None,
         };
 
-        let wasm_embedder = WasmtimeEmbedder::new(embedder_config.clone(), log.clone());
-        let wasm_executor = WasmExecutor::new(
-            wasm_embedder,
-            metrics_registry,
-            embedder_config,
-            log.clone(),
-        );
+        let wasm_embedder = WasmtimeEmbedder::new(embedder_config, log.clone());
+        let wasm_executor = WasmExecutor::new(wasm_embedder, metrics_registry, log.clone());
 
         Self {
             wasm_executor: Arc::new(wasm_executor),

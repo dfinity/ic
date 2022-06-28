@@ -332,6 +332,10 @@ impl WasmtimeEmbedder {
             store,
         })
     }
+
+    pub fn config(&self) -> &EmbeddersConfig {
+        &self.config
+    }
 }
 
 struct StoreRef(*mut wasmtime::Store<()>);

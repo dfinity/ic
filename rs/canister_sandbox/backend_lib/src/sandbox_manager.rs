@@ -24,16 +24,9 @@ use ic_canister_sandbox_common::protocol::structs::{
 };
 use ic_canister_sandbox_common::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_embedders::wasm_utils::instrumentation::InstrumentationOutput;
-use ic_embedders::wasm_utils::validation::WasmValidationDetails;
+use ic_embedders::wasm_utils::{compile, FullCompilationOutput};
 use ic_embedders::{
-    wasm_executor::WasmStateChanges,
-    wasm_utils::{
-        decoding::decode_wasm,
-        instrumentation::{instrument, InstructionCostTable},
-        validation::validate_wasm_binary,
-    },
-    WasmtimeEmbedder,
+    wasm_executor::WasmStateChanges, wasm_utils::decoding::decode_wasm, WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{
     CompilationResult, ExecutionMode, HypervisorResult, WasmExecutionOutput,
@@ -247,25 +240,13 @@ struct CanisterWasm {
 impl CanisterWasm {
     /// Validates and compiles the given Wasm binary.
     pub fn compile(
-        config: &ic_config::embedders::Config,
         embedder: &Arc<WasmtimeEmbedder>,
         wasm_src: Vec<u8>,
-    ) -> HypervisorResult<(Self, InstrumentationOutput, WasmValidationDetails)> {
+    ) -> HypervisorResult<(Self, FullCompilationOutput)> {
         let wasm = decode_wasm(Arc::new(wasm_src))?;
-        let wasm_validation_details = validate_wasm_binary(&wasm, config)?;
-        let instrumentation_output = instrument(
-            &wasm,
-            &InstructionCostTable::new(),
-            config.cost_to_compile_wasm_instruction,
-        )?;
-        let compilate = embedder.compile(&instrumentation_output.binary)?;
+        let (compilate, output) = compile(embedder, &wasm)?;
         let compilate = Arc::new(compilate);
-
-        Ok((
-            Self { compilate },
-            instrumentation_output,
-            wasm_validation_details,
-        ))
+        Ok((Self { compilate }, output))
     }
 }
 
@@ -276,7 +257,6 @@ pub struct SandboxManager {
     repr: Mutex<SandboxManagerInt>,
     controller: Arc<dyn ControllerService>,
     embedder: Arc<WasmtimeEmbedder>,
-    config: ic_config::embedders::Config,
     log: ReplicaLogger,
 }
 struct SandboxManagerInt {
@@ -311,7 +291,6 @@ impl SandboxManager {
             }),
             controller,
             embedder,
-            config,
             log,
         }
     }
@@ -322,19 +301,14 @@ impl SandboxManager {
         &self,
         wasm_id: WasmId,
         wasm_src: Vec<u8>,
-    ) -> HypervisorResult<(
-        Arc<CanisterWasm>,
-        InstrumentationOutput,
-        WasmValidationDetails,
-    )> {
+    ) -> HypervisorResult<(Arc<CanisterWasm>, FullCompilationOutput)> {
         let mut guard = self.repr.lock().unwrap();
         assert!(
             !guard.canister_wasms.contains_key(&wasm_id),
             "Failed to open wasm session {}: id is already in use",
             wasm_id,
         );
-        let (wasm, instrumentation_output, wasm_validation_details) =
-            CanisterWasm::compile(&self.config, &self.embedder, wasm_src)?;
+        let (wasm, compilation_output) = CanisterWasm::compile(&self.embedder, wasm_src)?;
         // Return as much memory as possible because compiling seems to use up
         // some extra memory that can be returned.
         //
@@ -347,11 +321,7 @@ impl SandboxManager {
         guard
             .canister_wasms
             .insert(wasm_id, Arc::clone(&canister_wasm));
-        Ok((
-            canister_wasm,
-            instrumentation_output,
-            wasm_validation_details,
-        ))
+        Ok((canister_wasm, compilation_output))
     }
 
     /// Compiles the given Wasm binary and registers it under the given id.
@@ -361,13 +331,8 @@ impl SandboxManager {
         wasm_id: WasmId,
         wasm_src: Vec<u8>,
     ) -> HypervisorResult<CompilationResult> {
-        let (_wasm, instrumentation_output, validation_details) =
-            self.open_wasm_internal(wasm_id, wasm_src)?;
-        Ok(CompilationResult {
-            largest_function_instruction_count: validation_details
-                .largest_function_instruction_count,
-            compilation_cost: instrumentation_output.compilation_cost,
-        })
+        let (_wasm, compilation_output) = self.open_wasm_internal(wasm_id, wasm_src)?;
+        Ok((&compilation_output).into())
     }
 
     /// Closes previously opened wasm instance, by id.
@@ -498,9 +463,8 @@ impl SandboxManager {
         canister_id: CanisterId,
     ) -> HypervisorResult<CreateExecutionStateSuccessReply> {
         // Validate, instrument, and compile the binary.
-        let (canister_wasm, instrumentation_output, wasm_validation_details) =
-            self.open_wasm_internal(wasm_id, wasm_source)?;
-        let compilation_cost = instrumentation_output.compilation_cost;
+        let (canister_wasm, compilation_output) = self.open_wasm_internal(wasm_id, wasm_source)?;
+        let compilation_result = (&compilation_output).into();
         let embedder_cache = Arc::clone(&canister_wasm.compilate);
         let embedder = Arc::clone(&self.embedder);
 
@@ -508,7 +472,7 @@ impl SandboxManager {
 
         let (exported_functions, exported_globals, wasm_memory_delta, wasm_memory_size) =
             ic_embedders::wasm_executor::get_initial_globals_and_memory(
-                instrumentation_output,
+                compilation_output.instrumentation_output,
                 &embedder_cache,
                 &embedder,
                 &mut wasm_page_map,
@@ -530,12 +494,8 @@ impl SandboxManager {
             wasm_memory_modifications,
             exported_globals,
             exported_functions,
-            wasm_metadata: wasm_validation_details.wasm_metadata,
-            compilation_result: CompilationResult {
-                largest_function_instruction_count: wasm_validation_details
-                    .largest_function_instruction_count,
-                compilation_cost,
-            },
+            wasm_metadata: compilation_output.validation_details.wasm_metadata,
+            compilation_result,
         })
     }
 }

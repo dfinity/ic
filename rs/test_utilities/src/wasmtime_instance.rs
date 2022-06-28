@@ -1,10 +1,6 @@
 use std::sync::Arc;
 
-use ic_embedders::{
-    wasm_utils::instrumentation::{instrument, InstructionCostTable},
-    wasmtime_embedder::WasmtimeInstance,
-    WasmtimeEmbedder,
-};
+use ic_embedders::{wasm_utils::compile, wasmtime_embedder::WasmtimeInstance, WasmtimeEmbedder};
 use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, ExecutionParameters};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
@@ -83,18 +79,10 @@ impl WasmtimeInstanceBuilder {
         let wasm = wabt::wat2wasm(self.wat).expect("Failed to convert wat to wasm");
 
         let config = ic_config::embedders::Config::default();
-        let cost_to_compile_wasm_instruction = config.cost_to_compile_wasm_instruction;
         let embedder = WasmtimeEmbedder::new(config, log.clone());
-        let output = instrument(
-            &BinaryEncodedWasm::new(wasm),
-            &InstructionCostTable::new(),
-            cost_to_compile_wasm_instruction,
-        )
-        .unwrap();
-
-        let compiled = embedder
-            .compile(&output.binary)
-            .expect("Failed to compile canister wasm");
+        let compiled = compile(&embedder, &BinaryEncodedWasm::new(wasm))
+            .expect("Failed to compile wat in WasmtimeInstance")
+            .0;
 
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
         let system_state = SystemStateBuilder::default().build();

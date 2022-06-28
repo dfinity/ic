@@ -1,15 +1,12 @@
-pub mod decoding;
-pub mod errors;
-pub mod instrumentation;
-pub mod validation;
-pub mod wasm_module_builder;
-
-use decoding::decode_wasm;
-use instrumentation::{instrument, InstructionCostTable, InstrumentationOutput};
 use std::sync::Arc;
-use validation::validate_wasm_binary;
+
+use slog::Drain;
 
 use ic_config::embedders::Config as EmbeddersConfig;
+use ic_embedders::{
+    wasm_utils::{compile, decoding::decode_wasm},
+    WasmtimeEmbedder,
+};
 
 fn usage() {
     println!(
@@ -21,22 +18,36 @@ Usage: {} wasm_file
     );
 }
 
+#[cfg(build = "debug")]
+fn get_logger() -> slog::Logger {
+    let plain = slog_term::PlainSyncDecorator::new(std::io::stdout());
+    slog::Logger::root(slog_term::FullFormat::new(plain).build().fuse(), slog_o!())
+}
+#[cfg(not(build = "debug"))]
+fn get_logger() -> slog::Logger {
+    use slog::slog_o;
+
+    let plain = slog_term::PlainSyncDecorator::new(std::io::stdout());
+    slog::Logger::root(
+        slog_term::FullFormat::new(plain)
+            .build()
+            .filter_level(slog::Level::Info)
+            .fuse(),
+        slog_o!(),
+    )
+}
+
 fn instrument_wasm(filename: &str) -> std::io::Result<()> {
     use std::io::Write;
 
     let contents = std::fs::read(filename)?;
     let config = EmbeddersConfig::default();
     let decoded = decode_wasm(Arc::new(contents)).expect("failed to decode canister module");
-    if let Err(err) = validate_wasm_binary(&decoded, &config) {
-        eprintln!("Failed to validate wasm file {}: {}", filename, err);
-        std::process::exit(1);
-    }
-    match instrument(
-        &decoded,
-        &InstructionCostTable::default(),
-        config.cost_to_compile_wasm_instruction,
-    ) {
-        Ok(InstrumentationOutput { binary, .. }) => std::io::stdout().write_all(binary.as_slice()),
+    let embedder = WasmtimeEmbedder::new(config, get_logger().into());
+    match compile(&embedder, &decoded) {
+        Ok(output) => {
+            std::io::stdout().write_all(output.1.instrumentation_output.binary.as_slice())
+        }
         Err(err) => {
             eprintln!("Failed to instrument wasm file {}: {}", filename, err);
             std::process::exit(1);
