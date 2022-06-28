@@ -199,7 +199,7 @@ server {
 
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name .raw.{{DOMAIN}}.{{TLD}} ;
+    server_name .raw.{{DOMAIN}}.{{TLD}};
 
     client_max_body_size 60M;
 
@@ -379,7 +379,7 @@ server {
 server {
     listen      80;
     listen [::]:80;
-    server_name .{{DOMAIN}}.{{TLD}} ;
+    server_name .{{DOMAIN}}.{{TLD}};
 
     return 301 https://$host$request_uri;
 }
