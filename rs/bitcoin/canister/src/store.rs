@@ -70,6 +70,7 @@ pub fn get_utxos(
         Some(page) => {
             let Page {
                 tip_block_hash,
+                height,
                 outpoint,
             } = Page::from_bytes(page).map_err(|err| GetUtxosError::MalformedPage { err })?;
             let chain =
@@ -82,7 +83,7 @@ pub fn get_utxos(
                 address,
                 min_confirmations,
                 chain,
-                Some(outpoint),
+                Some((height, outpoint)),
                 utxo_limit,
             )
         }
@@ -99,7 +100,7 @@ fn get_utxos_from_chain(
     address: &str,
     min_confirmations: u32,
     chain: BlockChain,
-    offset: Option<OutPoint>,
+    offset: Option<(Height, OutPoint)>,
     utxo_limit: Option<usize>,
 ) -> Result<GetUtxosResponse, GetUtxosError> {
     if Address::from_str(address).is_err() {
@@ -153,6 +154,7 @@ fn get_utxos_from_chain(
                 next_page = Some(
                     Page {
                         tip_block_hash,
+                        height: rest[0].height,
                         outpoint: OutPoint {
                             txid: Txid::from_hash(
                                 Hash::from_slice(&rest[0].outpoint.txid)
@@ -869,7 +871,8 @@ mod test {
                 Just(Network::Regtest),
                 Just(Network::Signet)
             ],
-            num_transactions in 1..200u64,
+            num_transactions in 1..20u64,
+            num_blocks in 1..10u64,
             utxo_limit in prop_oneof![
                 Just(10),
                 Just(20),
@@ -884,21 +887,40 @@ mod test {
                 Address::p2pkh(&PublicKey::new(secp.generate_keypair(&mut rng).1), network)
             };
 
-            let mut transactions = vec![];
-            for i in 0..num_transactions {
-                transactions.push(
-                    TransactionBuilder::coinbase()
-                        .with_output(&address, (i + 1) * 10)
-                        .build()
-                )
+            let mut prev_block: Option<Block> = None;
+            let mut value = 1;
+            let mut blocks = vec![];
+            for block_idx in 0..num_blocks {
+                let mut block_builder = match prev_block {
+                    Some(b) => BlockBuilder::with_prev_header(b.header),
+                    None => BlockBuilder::genesis(),
+                };
+
+                let mut transactions = vec![];
+                for _ in 0..(num_transactions + block_idx) {
+                    transactions.push(
+                        TransactionBuilder::coinbase()
+                            .with_output(&address, value)
+                            .build()
+                    );
+                    // Vary the value of the transaction to ensure that
+                    // we get unique outpoints in the blockchain.
+                    value += 1;
+                }
+
+                for transaction in transactions.iter() {
+                    block_builder = block_builder.with_transaction(transaction.clone());
+                }
+
+                let block = block_builder.build();
+                blocks.push(block.clone());
+                prev_block = Some(block);
             }
 
-            let mut block_builder = BlockBuilder::genesis();
-            for transaction in transactions.iter() {
-                block_builder = block_builder.with_transaction(transaction.clone());
+            let mut state = State::new(2, network, blocks[0].clone());
+            for block in blocks[1..].iter() {
+                insert_block(&mut state, block.clone()).unwrap();
             }
-            let block_0 = block_builder.build();
-            let state = State::new(2, network, block_0);
 
             // Get UTXO set without any pagination...
             let utxo_set = get_utxos(&state, &address.to_string(), 0, None, None)
