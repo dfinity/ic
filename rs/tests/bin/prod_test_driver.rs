@@ -201,62 +201,71 @@ fn get_test_suites() -> HashMap<String, Suite> {
     // Suites used for testing `prod-test-driver` itself.
     get_e2e_suites().into_iter().for_each(|s| m.add_suite(s));
 
-    m.add_suite(suite(
-        "create_subnet_pre_master",
-        vec![pot(
-            "create_subnet",
-            nns_tests::create_subnet::pre_master_config(),
-            par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
-        )],
-    ));
+    m.add_suite(
+        suite(
+            "create_subnet_pre_master",
+            vec![pot(
+                "create_subnet",
+                nns_tests::create_subnet::pre_master_config(),
+                par(vec![t("create_subnet", nns_tests::create_subnet::test)]),
+            )],
+        )
+        .with_alert(TEST_FAILURE_CHANNEL),
+    );
 
-    m.add_suite(suite(
-        "boundary_nodes_pre_master",
-        vec![pot_with_setup(
-            "boundary_nodes_pot",
-            boundary_nodes_integration::boundary_nodes::config,
-            par(vec![
-                sys_t(
-                    "boundary_nodes_test",
-                    boundary_nodes_integration::boundary_nodes::test,
-                ),
-                sys_t(
-                    "boundary_nodes_nginx_test",
-                    boundary_nodes_integration::boundary_nodes::nginx_test,
-                ),
-            ]),
-        )],
-    ));
+    m.add_suite(
+        suite(
+            "boundary_nodes_pre_master",
+            vec![pot_with_setup(
+                "boundary_nodes_pot",
+                boundary_nodes_integration::boundary_nodes::config,
+                par(vec![
+                    sys_t(
+                        "boundary_nodes_test",
+                        boundary_nodes_integration::boundary_nodes::test,
+                    ),
+                    sys_t(
+                        "boundary_nodes_nginx_test",
+                        boundary_nodes_integration::boundary_nodes::nginx_test,
+                    ),
+                ]),
+            )],
+        )
+        .with_alert(TEST_FAILURE_CHANNEL),
+    );
 
-    m.add_suite(suite(
-        "tecdsa_pre_master",
-        vec![
-            pot(
-                "tecdsa_add_nodes_pot",
-                tecdsa::tecdsa_add_nodes_test::config(),
-                par(vec![t(
-                    "test_tecdsa_add_nodes",
-                    tecdsa::tecdsa_add_nodes_test::test,
-                )]),
-            ),
-            pot(
-                "tecdsa_remove_nodes_pot",
-                tecdsa::tecdsa_remove_nodes_test::config(),
-                par(vec![t(
-                    "test_tecdsa_remove_nodes",
-                    tecdsa::tecdsa_remove_nodes_test::test,
-                )]),
-            ),
-            pot_with_setup(
-                "tecdsa_signature_life_cycle",
-                tecdsa::tecdsa_signature_test::config_without_ecdsa_on_nns,
-                seq(vec![t(
-                    "test_threshold_ecdsa_life_cycle",
-                    tecdsa::tecdsa_signature_test::test_threshold_ecdsa_life_cycle,
-                )]),
-            ),
-        ],
-    ));
+    m.add_suite(
+        suite(
+            "tecdsa_pre_master",
+            vec![
+                pot(
+                    "tecdsa_add_nodes_pot",
+                    tecdsa::tecdsa_add_nodes_test::config(),
+                    par(vec![t(
+                        "test_tecdsa_add_nodes",
+                        tecdsa::tecdsa_add_nodes_test::test,
+                    )]),
+                ),
+                pot(
+                    "tecdsa_remove_nodes_pot",
+                    tecdsa::tecdsa_remove_nodes_test::config(),
+                    par(vec![t(
+                        "test_tecdsa_remove_nodes",
+                        tecdsa::tecdsa_remove_nodes_test::test,
+                    )]),
+                ),
+                pot_with_setup(
+                    "tecdsa_signature_life_cycle",
+                    tecdsa::tecdsa_signature_test::config_without_ecdsa_on_nns,
+                    seq(vec![t(
+                        "test_threshold_ecdsa_life_cycle",
+                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_life_cycle,
+                    )]),
+                ),
+            ],
+        )
+        .with_alert(TEST_FAILURE_CHANNEL),
+    );
 
     m.add_suite(suite(
         "pre_master",
@@ -529,7 +538,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
             ),
              */
         ],
-    ));
+    ).with_alert(TEST_FAILURE_CHANNEL));
 
     let xnet_slo_3_subnets = message_routing::xnet_slo_test::config_hotfix_slo_3_subnets();
     m.add_suite(suite(
@@ -722,44 +731,50 @@ fn get_test_suites() -> HashMap<String, Suite> {
 
     // The tests in this suite require canisters to be build prior to
     // running the tests which is why we separate it out.
-    m.add_suite(suite(
-        "wasm_generator",
-        vec![pot(
-            "wasm_generator_pot",
-            wasm_generator_test::config(),
-            par(vec![t("wasm_generator_test", wasm_generator_test::test)]),
-        )],
-    ));
+    m.add_suite(
+        suite(
+            "wasm_generator",
+            vec![pot(
+                "wasm_generator_pot",
+                wasm_generator_test::config(),
+                par(vec![t("wasm_generator_test", wasm_generator_test::test)]),
+            )],
+        )
+        .with_alert(TEST_FAILURE_CHANNEL),
+    );
 
-    m.add_suite(suite(
-        "subnet_recovery",
-        vec![
-            pot_with_setup(
-                "subnet_recovery_app_same_nodes",
-                orchestrator::subnet_recovery_app_subnet::setup_same_nodes,
-                par(vec![sys_t(
+    m.add_suite(
+        suite(
+            "subnet_recovery",
+            vec![
+                pot_with_setup(
                     "subnet_recovery_app_same_nodes",
-                    orchestrator::subnet_recovery_app_subnet::test,
-                )]),
-            ),
-            pot_with_setup(
-                "subnet_recovery_app_failover_nodes",
-                orchestrator::subnet_recovery_app_subnet::setup_failover_nodes,
-                par(vec![sys_t(
+                    orchestrator::subnet_recovery_app_subnet::setup_same_nodes,
+                    par(vec![sys_t(
+                        "subnet_recovery_app_same_nodes",
+                        orchestrator::subnet_recovery_app_subnet::test,
+                    )]),
+                ),
+                pot_with_setup(
                     "subnet_recovery_app_failover_nodes",
-                    orchestrator::subnet_recovery_app_subnet::test,
-                )]),
-            ),
-            pot_with_setup(
-                "subnet_recovery_nns_same_nodes",
-                orchestrator::subnet_recovery_nns_subnet::setup,
-                par(vec![sys_t(
+                    orchestrator::subnet_recovery_app_subnet::setup_failover_nodes,
+                    par(vec![sys_t(
+                        "subnet_recovery_app_failover_nodes",
+                        orchestrator::subnet_recovery_app_subnet::test,
+                    )]),
+                ),
+                pot_with_setup(
                     "subnet_recovery_nns_same_nodes",
-                    orchestrator::subnet_recovery_nns_subnet::test,
-                )]),
-            ),
-        ],
-    ));
+                    orchestrator::subnet_recovery_nns_subnet::setup,
+                    par(vec![sys_t(
+                        "subnet_recovery_nns_same_nodes",
+                        orchestrator::subnet_recovery_nns_subnet::test,
+                    )]),
+                ),
+            ],
+        )
+        .with_alert(TEST_FAILURE_CHANNEL),
+    );
 
     m.add_suite(suite(
         "upgrade_compatibility",
@@ -783,17 +798,20 @@ fn get_test_suites() -> HashMap<String, Suite> {
         ],
     ));
 
-    m.add_suite(suite(
-        "rosetta",
-        vec![pot(
-            "rosetta_pot",
-            rosetta_test::config(),
-            par(vec![t(
-                "rosetta_test_everything",
-                rosetta_test::test_everything,
-            )]),
-        )],
-    ));
+    m.add_suite(
+        suite(
+            "rosetta",
+            vec![pot(
+                "rosetta_pot",
+                rosetta_test::config(),
+                par(vec![t(
+                    "rosetta_test_everything",
+                    rosetta_test::test_everything,
+                )]),
+            )],
+        )
+        .with_alert(TEST_FAILURE_CHANNEL),
+    );
 
     m.add_suite(suite(
         "spec_compliance",
