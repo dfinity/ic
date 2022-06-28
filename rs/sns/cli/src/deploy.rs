@@ -1,6 +1,7 @@
 //! Contains the logic for deploying SNS canisters
 
 use ic_base_types::PrincipalId;
+use ic_nns_constants::ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_init::{SnsCanisterIds, SnsCanisterInitPayloads, SnsInitPayload};
 use std::str::FromStr;
@@ -241,6 +242,9 @@ impl SnsDeployer {
         // Ledger must be controlled by only Root
         self.add_controller(self.sns_canisters.root, "sns_ledger");
 
+        // Swap must be controlled by the NNS root canister.
+        self.add_controller(NNS_ROOT_CANISTER_ID.get(), "sns_swap");
+
         // Remove default controllers from SNS canisters
         for sns_canister in ["sns_governance", "sns_root", "sns_ledger"] {
             self.remove_controller(self.wallet_canister, sns_canister);
@@ -287,6 +291,7 @@ impl SnsDeployer {
         self.install_governance();
         self.install_ledger();
         self.install_root();
+        self.install_swap();
     }
 
     /// Install and initialize Governance
@@ -307,6 +312,11 @@ impl SnsDeployer {
         self.install_canister("sns_root", &init_args);
     }
 
+    /// Install and initialize Swap
+    fn install_swap(&self) {
+        let init_args = hex_encode_candid(&self.sns_canister_payloads.swap);
+        self.install_canister("sns_swap", &init_args);
+    }
     /// Install the given canister
     fn install_canister(&self, sns_canister_name: &str, init_args: &str) {
         call_dfx(&[

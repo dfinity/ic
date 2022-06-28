@@ -49,11 +49,20 @@ export PATH="<PATH_TO_PROJECT>/ic/rs/target/x86_64-apple-darwin/debug:$PATH"
 ```
 
 ### Deployment Arguments 
-There are many arguments that can be passed to `sns deploy`. To view these args and their
-documentation, run
+There are many parameters necessary to deploy an SNS, these parameters are passed to the CLI tool in a *yaml* file. 
+Command `init-config-file` provides functionality to create and validate this file.
 ```shell
-sns deploy --help
+sns init-config-file new
 ```
+Creates a new template file, by default with the name *sns_init.yaml*, that contains all the parameters necessary.
+The parameters that dont need to be set by the user are set to the default value, and can be changed. The parameters
+that need to be set are empty, and the deployment will not work unless a valid value is specified for them.
+
+There is also command:
+```shell
+sns init-config-file validate
+```
+It will check that all parameters are set to valid values.
 
 ### Local Deployment
 If you wish to remove state from past local deployments (to do a clean local deploy), run:
@@ -68,7 +77,11 @@ dfx start
 #### Barebones deploy
 To deploy SNS locally without any customization, run:
 ```shell
-sns deploy --token-name="My Example Token" --token-symbol="MET" --initial-cycles-per-canister 200000000000
+sns init-config-file new
+```
+fill the mandatory parameters, and them run:
+```shell
+sns deploy --initial-cycles-per-canister 200000000000 --init-config-file sns_init.yaml
 ```
 (assuming `sns` is in your `PATH`)
 
@@ -96,5 +109,5 @@ Ensure there are cycles in your cycles wallet. If you don't have any cycles, fol
 amount of cycles to initialize each SNS canister with (here we choose 200B cycles), choose a token name and symbol, 
 specify any optional params and call:
 ```shell
-sns deploy --network ic --initial-cycles-per-canister 200000000000 --token-name="My Example Token" --token-symbol="MET";
+sns deploy --network ic --initial-cycles-per-canister 200000000000 --init-config-file sns_init.yaml 
 ```
