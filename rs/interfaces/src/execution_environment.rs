@@ -39,6 +39,7 @@ pub struct InstanceStats {
 }
 
 /// Errors that can be returned when fetching the available memory on a subnet.
+#[derive(Debug)]
 pub enum SubnetAvailableMemoryError {
     InsufficientMemory {
         requested_total: NumBytes,
