@@ -166,6 +166,8 @@ impl ArtifactKind for EcdsaArtifact {
     }
 }
 
+/// The `ArtifactKind` of CanisterHttp messages.
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct CanisterHttpArtifact;
 
 /// `CanisterHttpArtifact` implements the `ArtifactKind` trait.

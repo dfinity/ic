@@ -687,7 +687,7 @@ impl<Pool: CanisterHttpPool + CanisterHttpGossipPool + Send + Sync> CanisterHttp
     }
 }
 
-impl<Pool: CanisterHttpPool + CanisterHttpGossipPool + CanisterHttpGossip + Send + Sync>
+impl<Pool: CanisterHttpPool + CanisterHttpGossipPool + Send + Sync>
     ArtifactClient<CanisterHttpArtifact> for CanisterHttpClient<Pool>
 {
     fn check_artifact_acceptance(

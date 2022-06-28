@@ -15,8 +15,7 @@ use ic_config::{
     artifact_pool::ArtifactPoolConfig, consensus::ConsensusConfig, transport::TransportConfig,
 };
 use ic_consensus::{
-    canister_http::CanisterHttpPayloadBuilderImpl,
-    certification,
+    canister_http, certification,
     consensus::{pool_reader::PoolReader, ConsensusCrypto, Membership},
     dkg, ecdsa,
 };
@@ -115,6 +114,8 @@ pub fn create_networking_stack(
     artifact_pools: &ArtifactPools,
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
+    canister_http_adapter_client:
+        ic_interfaces_canister_http_adapter_client::CanisterHttpAdapterClient,
     registry_poll_delay_duration_ms: u64,
 ) -> (IngressIngestionService, P2PThreadJoiner) {
     let gossip_config = fetch_gossip_config(registry_client.clone(), subnet_id);
@@ -145,6 +146,7 @@ pub fn create_networking_stack(
         local_store_time_reader,
         registry_poll_delay_duration_ms,
         advert_subscriber.clone(),
+        canister_http_adapter_client,
     )
     .unwrap();
 
@@ -216,6 +218,7 @@ fn setup_artifact_manager(
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
     registry_poll_delay_duration_ms: u64,
     advert_broadcaster: AdvertBroadcaster,
+    canister_http_adapter_client: ic_interfaces_canister_http_adapter_client::CanisterHttpAdapterClient,
 ) -> std::io::Result<Arc<dyn ArtifactManager>> {
     // Initialize the time source.
     let time_source = Arc::new(SysTimeSource::new());
@@ -274,7 +277,7 @@ fn setup_artifact_manager(
     );
     let ingress_manager = Arc::new(ingress_manager);
 
-    let canister_http_payload_builder = CanisterHttpPayloadBuilderImpl::new(
+    let canister_http_payload_builder = canister_http::CanisterHttpPayloadBuilderImpl::new(
         artifact_pools.canister_http_pool.clone(),
         artifact_pools.consensus_pool_cache.clone(),
         consensus_crypto.clone(),
@@ -401,6 +404,7 @@ fn setup_artifact_manager(
     }
 
     {
+        let advert_broadcaster = advert_broadcaster.clone();
         let finalized = artifact_pools.consensus_pool_cache.finalized_block();
         let ecdsa_config =
             registry_client.get_ecdsa_config(subnet_id, registry_client.get_latest_version());
@@ -436,6 +440,44 @@ fn setup_artifact_manager(
             replica_logger.clone(),
         );
         artifact_manager_maker.add_client(ecdsa_client, actor);
+    }
+
+    {
+        if registry_client
+            .get_features(subnet_id, registry_client.get_latest_version())
+            .ok()
+            .flatten()
+            .map(|features| features.http_requests)
+            == Some(true)
+        {
+            info!(replica_logger, "Canister Http Request feature enabled");
+            let (canister_http_client, actor) = processors::CanisterHttpProcessor::build(
+                move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
+                || {
+                    (
+                        canister_http::CanisterHttpPoolManagerImpl::new(
+                            Arc::clone(&state_manager) as Arc<_>,
+                            Arc::new(Mutex::new(canister_http_adapter_client)),
+                            Arc::clone(&consensus_crypto),
+                            ReplicaConfig { subnet_id, node_id },
+                            replica_logger.clone(),
+                        ),
+                        canister_http::CanisterHttpGossipImpl::new(
+                            Arc::clone(&artifact_pools.consensus_pool_cache),
+                            Arc::clone(&state_manager) as Arc<_>,
+                        ),
+                    )
+                },
+                Arc::clone(&time_source) as Arc<_>,
+                Arc::clone(&artifact_pools.consensus_pool_cache),
+                Arc::clone(&artifact_pools.canister_http_pool),
+                replica_logger.clone(),
+                metrics_registry,
+            );
+            artifact_manager_maker.add_client(canister_http_client, actor);
+        } else {
+            info!(replica_logger, "Canister HTTP Request feature disabled")
+        }
     }
 
     Ok(artifact_manager_maker.finish())

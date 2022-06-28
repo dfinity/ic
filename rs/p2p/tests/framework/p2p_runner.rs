@@ -122,6 +122,7 @@ fn execute_test(
             &artifact_pools,
             cycles_account_manager,
             None,
+            Box::new(ic_canister_http_adapter_client::BrokenCanisterHttpClient {}),
             0,
         );
 
@@ -282,6 +283,7 @@ fn execute_test_chunking_pool(
             &artifact_pools,
             cycles_account_manager,
             None,
+            Box::new(ic_canister_http_adapter_client::BrokenCanisterHttpClient {}),
             0,
         );
         let mut p2p_test_context = P2PTestContext::new(
