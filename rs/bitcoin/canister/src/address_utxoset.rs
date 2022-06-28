@@ -16,13 +16,13 @@ pub struct AddressUtxoSet<'a> {
     full_utxo_set: &'a UtxoSet,
 
     // Added UTXOs that are not present in the underlying UTXO set indexed by
-    // their encoded `OutPoint`.
+    // the encoded form of (`Height`, `OutPoint`).
     //
-    // Note that we use the encoded form of `Outpoint` to match with the data
-    // that's stored in the `StableBtreeMap` and be able to have consistent
-    // ordering between the two when combining the results for a `get_utxos`
-    // response.
-    added_utxos: BTreeMap<Vec<u8>, (TxOut, Height)>,
+    // Note that we use the encoded form of (`Height`, `Outpoint`) to match with
+    // the data that's stored in the `StableBtreeMap` and be able to have
+    // consistent ordering between the two when combining the results for a
+    // `get_utxos` response.
+    added_utxos: BTreeMap<Vec<u8>, TxOut>,
 
     // Removed UTXOs that are still present in the underlying UTXO set.
     removed_utxos: BTreeMap<OutPoint, (TxOut, Height)>,
@@ -51,14 +51,20 @@ impl<'a> AddressUtxoSet<'a> {
             return;
         }
 
+        let outpoint_to_height: BTreeMap<OutPoint, Height> = self
+            .added_utxos
+            .keys()
+            .map(|x| {
+                let (height, outpoint) = <(Height, OutPoint)>::from_bytes(x.clone());
+                (outpoint, height)
+            })
+            .collect();
+
         for input in &tx.input {
-            if self
-                .added_utxos
-                .get(&input.previous_output.to_bytes())
-                .is_some()
-            {
+            if let Some(height) = outpoint_to_height.get(&input.previous_output) {
                 // Remove a UTXO that was previously added.
-                self.added_utxos.remove(&input.previous_output.to_bytes());
+                self.added_utxos
+                    .remove(&(*height, input.previous_output).to_bytes());
                 return;
             }
 
@@ -89,8 +95,8 @@ impl<'a> AddressUtxoSet<'a> {
                 assert!(
                     self.added_utxos
                         .insert(
-                            OutPoint::new(tx.txid(), vout as u32).to_bytes(),
-                            (output.clone(), height),
+                            (height, OutPoint::new(tx.txid(), vout as u32)).to_bytes(),
+                            output.clone(),
                         )
                         .is_none(),
                     "Cannot insert same outpoint twice"
@@ -99,7 +105,7 @@ impl<'a> AddressUtxoSet<'a> {
         }
     }
 
-    pub fn into_vec(mut self, offset: Option<OutPoint>) -> Vec<Utxo> {
+    pub fn into_vec(mut self, offset: Option<(Height, OutPoint)>) -> Vec<Utxo> {
         // Retrieve all the UTXOs of the address from the underlying UTXO set.
         let mut set: BTreeSet<_> = self
             .full_utxo_set
@@ -113,7 +119,7 @@ impl<'a> AddressUtxoSet<'a> {
                     .get(&outpoint)
                     .expect("outpoint must exist");
 
-                (outpoint, txout, height)
+                ((height, outpoint).to_bytes(), txout)
             })
             .collect();
 
@@ -122,13 +128,13 @@ impl<'a> AddressUtxoSet<'a> {
             Some(offset) => self.added_utxos.split_off(&offset.to_bytes()),
             None => self.added_utxos,
         };
-        for (outpoint, (txout, height)) in added_utxos {
+        for (height_and_outpoint, txout) in added_utxos {
             if let Some(address) =
                 Address::from_script(&txout.script_pubkey, self.full_utxo_set.network)
             {
                 if address.to_string() == self.address {
                     assert!(
-                        set.insert((OutPoint::from_bytes(outpoint), txout, height)),
+                        set.insert((height_and_outpoint, txout)),
                         "Cannot overwrite existing outpoint"
                     );
                 }
@@ -140,19 +146,22 @@ impl<'a> AddressUtxoSet<'a> {
                 Address::from_script(&txout.script_pubkey, self.full_utxo_set.network)
             {
                 if address.to_string() == self.address {
-                    set.remove(&(outpoint, txout, height));
+                    set.remove(&((height, outpoint).to_bytes(), txout));
                 }
             }
         }
 
         set.into_iter()
-            .map(|(outpoint, txout, height)| Utxo {
-                outpoint: ic_btc_types::OutPoint {
-                    txid: outpoint.txid.to_vec(),
-                    vout: outpoint.vout,
-                },
-                value: txout.value,
-                height,
+            .map(|(height_and_outpoint, txout)| {
+                let (height, outpoint) = <(Height, OutPoint)>::from_bytes(height_and_outpoint);
+                Utxo {
+                    outpoint: ic_btc_types::OutPoint {
+                        txid: outpoint.txid.to_vec(),
+                        vout: outpoint.vout,
+                    },
+                    value: txout.value,
+                    height,
+                }
             })
             .collect()
     }
