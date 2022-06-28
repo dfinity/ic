@@ -1,0 +1,48 @@
+load("//bazel:canisters.bzl", "rust_canister")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+DEPENDENCIES = [
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/dfn_core",
+    "//rs/types/base_types",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:serde",
+    "@crate_index//:wasm-bindgen",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:ic-cdk-macros",
+]
+
+rust_library(
+    name = "proxy_canister_lib",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "proxy_canister",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "proxy_canister",
+    srcs = ["src/main.rs"],
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":proxy_canister_lib"] + DEPENDENCIES,
+)
+
+rust_test(
+    name = "proxy_canister_test",
+    crate = ":proxy_canister_lib",
+    edition = "2018",
+)

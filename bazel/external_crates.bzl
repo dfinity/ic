@@ -893,6 +893,9 @@ def external_crates_repository(name, annotations):
             "walkdir": crate.spec(
                 version = "^2.3.1",
             ),
+            "wasm-bindgen": crate.spec(
+                version = "^0.2",
+            ),
             "wasmtime": crate.spec(
                 version = "^0.35.3",
                 features = [
