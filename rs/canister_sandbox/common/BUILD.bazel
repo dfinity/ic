@@ -48,5 +48,7 @@ rust_binary(
     edition = "2018",
     deps = [
         ":common",
+        "//rs/interfaces",
+        "//rs/types/types",
     ],
 )

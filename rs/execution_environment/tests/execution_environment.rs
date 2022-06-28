@@ -2100,3 +2100,72 @@ fn ecdsa_signature_queue_fills_up() {
         )
     );
 }
+
+#[test]
+fn compilation_metrics_are_recorded_during_installation() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat1 = r#"
+        (module
+            (func (result i64)
+                (i64.const 1)
+                (i64.add (i64.const 1))
+                (i64.add (i64.const 1))
+                (i64.add (i64.const 1))
+            )
+            (func)
+        )"#;
+    let wat2 = "(module)";
+    test.canister_from_wat(wat1).unwrap();
+    test.canister_from_wat(wat2).unwrap();
+    let largest_function_metrics = test
+        .metrics_registry()
+        .prometheus_registry()
+        .gather()
+        .into_iter()
+        .find(|family| family.get_name() == "hypervisor_largest_function_instruction_count")
+        .unwrap();
+    assert_eq!(largest_function_metrics.get_metric().len(), 1);
+    let largest_function_metrics = largest_function_metrics.get_metric()[0].get_histogram();
+    assert_eq!(largest_function_metrics.get_sample_count(), 2);
+    assert_eq!(largest_function_metrics.get_sample_sum(), 8.0);
+}
+
+#[test]
+fn compilation_metrics_are_recorded_during_update() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func $go 
+                (i64.const 1)
+                (i64.add (i64.const 1))
+                (i64.add (i64.const 1))
+                (i64.add (i64.const 1))
+                (drop)
+                (call $msg_reply)
+            )
+            (export "canister_update go" (func $go))
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let canister_state = test.canister_state_mut(canister_id);
+    // Clear cache so that we are forced to recompile.
+    canister_state
+        .execution_state
+        .as_mut()
+        .unwrap()
+        .wasm_binary
+        .clear_compilation_cache();
+    test.ingress(canister_id, "go", vec![]).unwrap();
+    let largest_function_metrics = test
+        .metrics_registry()
+        .prometheus_registry()
+        .gather()
+        .into_iter()
+        .find(|family| family.get_name() == "hypervisor_largest_function_instruction_count")
+        .unwrap();
+    assert_eq!(largest_function_metrics.get_metric().len(), 1);
+    let largest_function_metrics = largest_function_metrics.get_metric()[0].get_histogram();
+    // Compiled once for install and once for execution.
+    assert_eq!(largest_function_metrics.get_sample_count(), 2);
+    assert_eq!(largest_function_metrics.get_sample_sum(), 20.0);
+}

@@ -10,14 +10,17 @@ use ic_config::{
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
-use ic_types::NumBytes;
+use ic_types::{NumBytes, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use parity_wasm::elements::{
     DataSegment, External, ImportCountType,
     Instruction::{self},
     Internal, Module, Section, Type, ValueType,
 };
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::{
+    cmp,
+    collections::{BTreeMap, HashMap, HashSet},
+};
 use wasmtime::Config;
 
 /// Symbols that are reserved and cannot be exported by canisters.
@@ -1019,7 +1022,8 @@ pub fn validate_custom_section(
     Ok(WasmMetadata::new(validated_custom_sections))
 }
 
-fn validate_code_section(module: &Module) -> Result<(), WasmValidationError> {
+fn validate_code_section(module: &Module) -> Result<NumInstructions, WasmValidationError> {
+    let mut max_function_size = NumInstructions::new(0);
     if let Some(code_section) = module.code_section() {
         for func_body in code_section.bodies().iter() {
             let instructions = func_body.code().elements();
@@ -1047,10 +1051,15 @@ fn validate_code_section(module: &Module) -> Result<(), WasmValidationError> {
 
             if function_size >= WASM_FUNCTION_SIZE_LIMIT {
                 return Err(WasmValidationError::FunctionTooLarge);
+            } else {
+                max_function_size = cmp::max(
+                    max_function_size,
+                    NumInstructions::new(function_size as u64),
+                );
             }
         }
     }
-    Ok(())
+    Ok(max_function_size)
 }
 
 /// Sets Wasmtime flags to ensure deterministic execution.
@@ -1097,6 +1106,7 @@ pub struct WasmValidationDetails {
     pub reserved_exports: usize,
     pub imports_details: WasmImportsDetails,
     pub wasm_metadata: WasmMetadata,
+    pub largest_function_instruction_count: NumInstructions,
 }
 
 /// Validates a Wasm binary against the requirements of the interface spec
@@ -1126,11 +1136,12 @@ pub fn validate_wasm_binary(
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;
-    validate_code_section(&module)?;
+    let largest_function_instruction_count = validate_code_section(&module)?;
     let wasm_metadata = validate_custom_section(&module, config)?;
     Ok(WasmValidationDetails {
         reserved_exports,
         imports_details,
         wasm_metadata,
+        largest_function_instruction_count,
     })
 }
