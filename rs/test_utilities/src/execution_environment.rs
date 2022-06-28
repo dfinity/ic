@@ -215,6 +215,15 @@ impl ExecutionTest {
         self.cycles_account_manager.canister_creation_fee()
     }
 
+    pub fn http_request_fee(
+        &self,
+        request_size: NumBytes,
+        response_size_limit: Option<NumBytes>,
+    ) -> Cycles {
+        self.cycles_account_manager
+            .http_request_fee(request_size, response_size_limit)
+    }
+
     pub fn subnet_available_memory(&self) -> AvailableMemory {
         self.subnet_available_memory.get()
     }

@@ -253,6 +253,12 @@ pub struct CyclesAccountManagerConfig {
 
     /// Amount to charge for an ECDSA signature.
     pub ecdsa_signature_fee: Cycles,
+
+    /// Baseline cost to charge for HTTP request.
+    pub http_request_baseline_fee: Cycles,
+
+    /// Fee per byte for networking and consensus work done for a http request or response.
+    pub http_request_per_byte_fee: Cycles,
 }
 
 impl CyclesAccountManagerConfig {
@@ -278,6 +284,8 @@ impl CyclesAccountManagerConfig {
             gib_storage_per_second_fee: Cycles::new(127_000),
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
+            http_request_baseline_fee: Cycles::new(400_000_000),
+            http_request_per_byte_fee: Cycles::new(100_000),
         }
     }
 
@@ -300,6 +308,8 @@ impl CyclesAccountManagerConfig {
             /// explicit exception for requests originating from the NNS when the
             /// charging occurs.
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
+            http_request_baseline_fee: Cycles::new(0),
+            http_request_per_byte_fee: Cycles::new(0),
         }
     }
 }

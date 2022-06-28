@@ -614,12 +614,30 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
                                     Some((Err(err.into()), msg.take_cycles())),
                                     instructions_limit,
                                 ),
-                                Ok(canister_http_request_context) => {
-                                    state
-                                        .metadata
-                                        .subnet_call_context_manager
-                                        .push_http_request(canister_http_request_context);
-                                    (None, instructions_limit)
+                                Ok(mut canister_http_request_context) => {
+                                    let http_request_fee =
+                                        self.cycles_account_manager.http_request_fee(
+                                            request.payload_size_bytes(),
+                                            canister_http_request_context.max_response_bytes,
+                                        );
+                                    if request.payment < http_request_fee {
+                                        let err = Err(UserError::new(
+                                            ErrorCode::CanisterRejectedMessage,
+                                            format!(
+                                                "http_request request sent with {} cycles, but {} cycles are required.",
+                                                request.payment, http_request_fee
+                                            ),
+                                        ));
+                                        (Some((err, msg.take_cycles())), instructions_limit)
+                                    } else {
+                                        canister_http_request_context.request.payment -=
+                                            http_request_fee;
+                                        state
+                                            .metadata
+                                            .subnet_call_context_manager
+                                            .push_http_request(canister_http_request_context);
+                                        (None, instructions_limit)
+                                    }
                                 }
                             },
                         }
