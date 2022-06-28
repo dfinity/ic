@@ -335,6 +335,7 @@ impl CountBytes for CanisterHttpResponseProof {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CanisterHttpResponseAttribute {
     Share(
         RegistryVersion,

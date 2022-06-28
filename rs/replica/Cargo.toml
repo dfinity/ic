@@ -11,6 +11,7 @@ hex = "0.4.2"
 ic-async-utils = { path = "../async_utils" }
 ic-btc-adapter-client = { path = "../bitcoin/client" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
+ic-canister-http-adapter-client = { path = "../canister_http/client" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-message = { path = "../consensus/message" }
@@ -34,9 +35,9 @@ ic-p2p = { path = "../p2p" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-replica-setup-ic-network =  { path = "./setup_ic_network" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-replica-setup-ic-network =  { path = "./setup_ic_network" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-sys = { path = "../sys" }
@@ -44,8 +45,8 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-xnet-endpoint = { path = "../xnet/endpoint" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
-jemallocator = "0.3.2"
 jemalloc-ctl = "0.3.3"
+jemallocator = "0.3.2"
 libc = "0.2.91"
 nix = "0.23.0"
 num_cpus = "1.13.1"

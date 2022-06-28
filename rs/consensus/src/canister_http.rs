@@ -32,6 +32,7 @@ use ic_types::{
     signature::MultiSignatureShare,
     CountBytes, Height, NumBytes, RegistryVersion, SubnetId,
 };
+pub use pool_manager::CanisterHttpPoolManagerImpl;
 use prometheus::HistogramVec;
 use std::{
     collections::{BTreeSet, HashSet},
@@ -42,9 +43,22 @@ use std::{
 pub mod pool_manager;
 
 /// The canonical implementation of [`CanisterHttpGossip`]
-struct CanisterHttpGossipImpl {
+pub struct CanisterHttpGossipImpl {
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+}
+
+impl CanisterHttpGossipImpl {
+    /// Construcet a new CanisterHttpGossipImpl instance
+    pub fn new(
+        consensus_cache: Arc<dyn ConsensusPoolCache>,
+        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    ) -> Self {
+        CanisterHttpGossipImpl {
+            consensus_cache,
+            state_manager,
+        }
+    }
 }
 
 impl CanisterHttpGossip for CanisterHttpGossipImpl {

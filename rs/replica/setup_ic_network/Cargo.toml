@@ -6,14 +6,16 @@ edition = "2018"
 [dependencies]
 ic-artifact-manager = { path = "../../artifact_manager" }
 ic-artifact-pool = { path = "../../artifact_pool" }
+ic-canister-http-adapter-client = { path = "../../canister_http/client" }
 ic-config = { path = "../../config" }
 ic-consensus = { path = "../../consensus" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 ic-ingress-manager = { path = "../../ingress_manager" }
 ic-interfaces = { path = "../../interfaces" }
-ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
+ic-interfaces-canister-http-adapter-client = { path = "../../interfaces/canister_http_adapter_client" }
 ic-interfaces-p2p = { path = "../../interfaces/p2p" }
+ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-interfaces-transport = { path = "../../interfaces/transport" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }

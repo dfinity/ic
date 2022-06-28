@@ -14,7 +14,7 @@
 //! All [`Artifact`] sub-types must also implement [`ChunkableArtifact`] trait
 //! defined in the chunkable module.
 use crate::{
-    canister_http::CanisterHttpResponseShare,
+    canister_http::{CanisterHttpResponseAttribute, CanisterHttpResponseShare},
     consensus::{certification::CertificationMessageHash, ConsensusMessageHash},
     crypto::{CryptoHash, CryptoHashOf},
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
@@ -49,6 +49,7 @@ pub enum Artifact {
     CertificationMessage(CertificationMessage),
     DkgMessage(DkgMessage),
     EcdsaMessage(EcdsaMessage),
+    CanisterHttpMessage(CanisterHttpResponseShare),
     FileTreeSync(FileTreeSyncArtifact),
     StateSync(StateSyncMessage),
 }
@@ -62,6 +63,7 @@ pub enum ArtifactAttribute {
     DkgMessage(DkgMessageAttribute),
     CertificationMessage(CertificationMessageAttribute),
     EcdsaMessage(EcdsaMessageAttribute),
+    CanisterHttpMessage(CanisterHttpResponseAttribute),
     FileTreeSync(FileTreeSyncAttribute),
     StateSync(StateSyncAttribute),
 }
@@ -148,6 +150,7 @@ impl From<&Artifact> for ArtifactTag {
             Artifact::CertificationMessage(_) => ArtifactTag::CertificationArtifact,
             Artifact::DkgMessage(_) => ArtifactTag::DkgArtifact,
             Artifact::EcdsaMessage(_) => ArtifactTag::EcdsaArtifact,
+            Artifact::CanisterHttpMessage(_) => ArtifactTag::CanisterHttpArtifact,
             Artifact::FileTreeSync(_) => ArtifactTag::FileTreeSyncArtifact,
             Artifact::StateSync(_) => ArtifactTag::StateSyncArtifact,
         }

@@ -17,6 +17,7 @@
 //! that implement a common trait.
 use crate::{
     artifact::{Artifact, StateSyncMessage},
+    canister_http::CanisterHttpResponseShare,
     consensus::{
         certification::CertificationMessage, dkg::Message as DkgMessage, ecdsa::EcdsaMessage,
         ConsensusMessage,
@@ -134,6 +135,9 @@ chunkable_artifact_impl! {DkgMessage, |self|
 }
 chunkable_artifact_impl! {EcdsaMessage, |self|
     ArtifactChunkData::UnitChunkData(Artifact::EcdsaMessage(*self))
+}
+chunkable_artifact_impl! {CanisterHttpResponseShare, |self|
+    ArtifactChunkData::UnitChunkData(Artifact::CanisterHttpMessage(*self))
 }
 
 impl ChunkableArtifact for StateSyncMessage {
