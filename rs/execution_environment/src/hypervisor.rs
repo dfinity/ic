@@ -2,8 +2,8 @@ use ic_canister_sandbox_replica_controller::sandboxed_execution_controller::Sand
 use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_embedders::wasm_executor::WasmExecutionResult;
-use ic_embedders::{wasm_executor::WasmExecutor, WasmExecutionInput, WasmtimeEmbedder};
+use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
+use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
@@ -108,8 +108,7 @@ impl HypervisorMetrics {
 
 #[doc(hidden)]
 pub struct Hypervisor {
-    wasm_executor: Arc<WasmExecutor>,
-    sandbox_executor: Option<Arc<SandboxedExecutionController>>,
+    wasm_executor: Arc<dyn WasmExecutor>,
     metrics: Arc<HypervisorMetrics>,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
@@ -585,6 +584,7 @@ impl Hypervisor {
     ///
     /// This method is called pre-consensus to let the canister decide if it
     /// wants to accept the message or not.
+    #[allow(clippy::too_many_arguments)]
     pub fn execute_inspect_message(
         &self,
         canister: CanisterState,
@@ -709,14 +709,9 @@ impl Hypervisor {
         canister_root: PathBuf,
         canister_id: CanisterId,
     ) -> HypervisorResult<(NumInstructions, ExecutionState)> {
-        let (compilation_result, execution_state) = if let Some(sandbox_executor) =
-            self.sandbox_executor.as_ref()
-        {
-            sandbox_executor.create_execution_state(wasm_binary, canister_root, canister_id)?
-        } else {
+        let (compilation_result, execution_state) =
             self.wasm_executor
-                .create_execution_state(wasm_binary, canister_root, canister_id)?
-        };
+                .create_execution_state(wasm_binary, canister_root, canister_id)?;
         self.metrics
             .observe_compilation_metrics(&compilation_result);
         Ok((compilation_result.compilation_cost, execution_state))
@@ -736,20 +731,28 @@ impl Hypervisor {
         embedder_config.feature_flags.rate_limiting_of_debug_prints =
             config.rate_limiting_of_debug_prints;
 
-        let sandbox_executor = match config.canister_sandboxing_flag {
-            FlagStatus::Enabled => Some(Arc::new(
-                SandboxedExecutionController::new(log.clone(), metrics_registry, &embedder_config)
-                    .expect("Failed to start sandboxed execution controller"),
-            )),
-            FlagStatus::Disabled => None,
+        let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
+            FlagStatus::Enabled => {
+                let executor = SandboxedExecutionController::new(
+                    log.clone(),
+                    metrics_registry,
+                    &embedder_config,
+                )
+                .expect("Failed to start sandboxed execution controller");
+                Arc::new(executor)
+            }
+            FlagStatus::Disabled => {
+                let executor = WasmExecutorImpl::new(
+                    WasmtimeEmbedder::new(embedder_config, log.clone()),
+                    metrics_registry,
+                    log.clone(),
+                );
+                Arc::new(executor)
+            }
         };
 
-        let wasm_embedder = WasmtimeEmbedder::new(embedder_config, log.clone());
-        let wasm_executor = WasmExecutor::new(wasm_embedder, metrics_registry, log.clone());
-
         Self {
-            wasm_executor: Arc::new(wasm_executor),
-            sandbox_executor,
+            wasm_executor,
             metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
             own_subnet_id,
             own_subnet_type,
@@ -766,6 +769,7 @@ impl Hypervisor {
     /// Wrapper around the standalone `execute`.
     /// NOTE: this is public to enable integration testing.
     #[doc(hidden)]
+    #[allow(clippy::too_many_arguments)]
     pub fn execute(
         &self,
         api_type: ApiType,
@@ -781,28 +785,14 @@ impl Hypervisor {
             SandboxSafeSystemState::new(&system_state, *self.cycles_account_manager);
 
         let (compilation_result, execution_state, execution_result) =
-            if let Some(sandbox_executor) = self.sandbox_executor.as_ref() {
-                SandboxedExecutionController::process(
-                    sandbox_executor,
-                    WasmExecutionInput {
-                        api_type,
-                        sandbox_safe_system_state: static_system_state,
-                        canister_current_memory_usage,
-                        execution_parameters,
-                        func_ref,
-                        execution_state,
-                    },
-                )
-            } else {
-                self.wasm_executor.process(WasmExecutionInput {
-                    api_type,
-                    sandbox_safe_system_state: static_system_state,
-                    canister_current_memory_usage,
-                    execution_parameters,
-                    func_ref,
-                    execution_state,
-                })
-            };
+            Arc::clone(&self.wasm_executor).execute(WasmExecutionInput {
+                api_type,
+                sandbox_safe_system_state: static_system_state,
+                canister_current_memory_usage,
+                execution_parameters,
+                func_ref,
+                execution_state,
+            });
         if let Some(compilation_result) = compilation_result {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);
@@ -842,28 +832,14 @@ impl Hypervisor {
             SandboxSafeSystemState::new(&system_state, *self.cycles_account_manager);
 
         let (compilation_result, execution_state, execution_result) =
-            if let Some(sandbox_executor) = self.sandbox_executor.as_ref() {
-                SandboxedExecutionController::process(
-                    sandbox_executor,
-                    WasmExecutionInput {
-                        api_type,
-                        sandbox_safe_system_state: static_system_state,
-                        canister_current_memory_usage,
-                        execution_parameters,
-                        func_ref,
-                        execution_state,
-                    },
-                )
-            } else {
-                self.wasm_executor.process(WasmExecutionInput {
-                    api_type,
-                    sandbox_safe_system_state: static_system_state,
-                    canister_current_memory_usage,
-                    execution_parameters,
-                    func_ref,
-                    execution_state,
-                })
-            };
+            Arc::clone(&self.wasm_executor).execute(WasmExecutionInput {
+                api_type,
+                sandbox_safe_system_state: static_system_state,
+                canister_current_memory_usage,
+                execution_parameters,
+                func_ref,
+                execution_state,
+            });
         if let Some(compilation_result) = compilation_result {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);

@@ -35,6 +35,27 @@ use std::hash::{Hash, Hasher};
 // Disabled by default to avoid producing too much data.
 const EMIT_STATE_HASHES_FOR_DEBUGGING: FlagStatus = FlagStatus::Disabled;
 
+/// The interface of a WebAssembly execution engine.
+/// Currently it has two implementations:
+/// - `SandboxedExecutionController` for out-of-process sandboxed execution.
+/// - `WasmExecutorImpl` for in-process execution.
+pub trait WasmExecutor: Send + Sync {
+    fn execute(
+        self: Arc<Self>,
+        input: WasmExecutionInput,
+    ) -> (
+        Option<CompilationResult>,
+        ExecutionState,
+        WasmExecutionResult,
+    );
+    fn create_execution_state(
+        &self,
+        wasm_source: Vec<u8>,
+        canister_root: PathBuf,
+        canister_id: CanisterId,
+    ) -> HypervisorResult<(CompilationResult, ExecutionState)>;
+}
+
 struct WasmExecutorMetrics {
     // TODO(EXC-365): Remove this metric once we confirm that no module imports `ic0.call_simple`
     // anymore.
@@ -116,79 +137,15 @@ pub enum WasmExecutionResult {
 }
 
 /// An executor that can process any message (query or not).
-pub struct WasmExecutor {
+pub struct WasmExecutorImpl {
     wasm_embedder: WasmtimeEmbedder,
     metrics: WasmExecutorMetrics,
     log: ReplicaLogger,
 }
 
-impl WasmExecutor {
-    pub fn new(
-        wasm_embedder: WasmtimeEmbedder,
-        metrics_registry: &MetricsRegistry,
-        log: ReplicaLogger,
-    ) -> Self {
-        Self {
-            wasm_embedder,
-            metrics: WasmExecutorMetrics::new(metrics_registry),
-            log,
-        }
-    }
-
-    pub fn observe_metrics(&self, imports_details: &WasmImportsDetails) {
-        if imports_details.imports_call_simple {
-            self.metrics.imports_call_simple.inc();
-        }
-        if imports_details.imports_call_cycles_add {
-            self.metrics.imports_call_cycles_add.inc();
-        }
-        if imports_details.imports_canister_cycle_balance {
-            self.metrics.imports_canister_cycle_balance.inc();
-        }
-        if imports_details.imports_msg_cycles_available {
-            self.metrics.imports_msg_cycles_available.inc();
-        }
-        if imports_details.imports_msg_cycles_accept {
-            self.metrics.imports_msg_cycles_accept.inc();
-        }
-        if imports_details.imports_msg_cycles_refunded {
-            self.metrics.imports_msg_cycles_refunded.inc();
-        }
-        if imports_details.imports_mint_cycles {
-            self.metrics.imports_mint_cycles.inc();
-        }
-    }
-
-    fn get_embedder_cache(
-        &self,
-        decoded_wasm: Option<&BinaryEncodedWasm>,
-        wasm_binary: &WasmBinary,
-    ) -> HypervisorResult<(EmbedderCache, Option<FullCompilationOutput>)> {
-        let mut guard = wasm_binary.embedder_cache.lock().unwrap();
-        if let Some(embedder_cache) = &*guard {
-            Ok((embedder_cache.clone(), None))
-        } else {
-            use std::borrow::Cow;
-            // The wasm_binary stored in the `ExecutionState` is not
-            // instrumented so instrument it before compiling. Further, due to
-            // IC upgrades, it is possible that the `validate_wasm_binary()`
-            // function has changed, so also validate the binary.
-            let decoded_wasm: Cow<'_, BinaryEncodedWasm> = match decoded_wasm {
-                Some(wasm) => Cow::Borrowed(wasm),
-                None => Cow::Owned(decode_wasm(wasm_binary.binary.to_shared_vec())?),
-            };
-            match compile(&self.wasm_embedder, decoded_wasm.as_ref()) {
-                Ok((cache, compilation_output)) => {
-                    *guard = Some(cache.clone());
-                    Ok((cache, Some(compilation_output)))
-                }
-                Err(err) => Err(err),
-            }
-        }
-    }
-
-    pub fn process(
-        &self,
+impl WasmExecutor for WasmExecutorImpl {
+    fn execute(
+        self: Arc<Self>,
         WasmExecutionInput {
             api_type,
             sandbox_safe_system_state,
@@ -273,7 +230,7 @@ impl WasmExecutor {
         )
     }
 
-    pub fn create_execution_state(
+    fn create_execution_state(
         &self,
         wasm_source: Vec<u8>,
         canister_root: PathBuf,
@@ -310,6 +267,72 @@ impl WasmExecutor {
             compilation_output.validation_details.wasm_metadata,
         );
         Ok((compilation_result, execution_state))
+    }
+}
+
+impl WasmExecutorImpl {
+    pub fn new(
+        wasm_embedder: WasmtimeEmbedder,
+        metrics_registry: &MetricsRegistry,
+        log: ReplicaLogger,
+    ) -> Self {
+        Self {
+            wasm_embedder,
+            metrics: WasmExecutorMetrics::new(metrics_registry),
+            log,
+        }
+    }
+
+    pub fn observe_metrics(&self, imports_details: &WasmImportsDetails) {
+        if imports_details.imports_call_simple {
+            self.metrics.imports_call_simple.inc();
+        }
+        if imports_details.imports_call_cycles_add {
+            self.metrics.imports_call_cycles_add.inc();
+        }
+        if imports_details.imports_canister_cycle_balance {
+            self.metrics.imports_canister_cycle_balance.inc();
+        }
+        if imports_details.imports_msg_cycles_available {
+            self.metrics.imports_msg_cycles_available.inc();
+        }
+        if imports_details.imports_msg_cycles_accept {
+            self.metrics.imports_msg_cycles_accept.inc();
+        }
+        if imports_details.imports_msg_cycles_refunded {
+            self.metrics.imports_msg_cycles_refunded.inc();
+        }
+        if imports_details.imports_mint_cycles {
+            self.metrics.imports_mint_cycles.inc();
+        }
+    }
+
+    fn get_embedder_cache(
+        &self,
+        decoded_wasm: Option<&BinaryEncodedWasm>,
+        wasm_binary: &WasmBinary,
+    ) -> HypervisorResult<(EmbedderCache, Option<FullCompilationOutput>)> {
+        let mut guard = wasm_binary.embedder_cache.lock().unwrap();
+        if let Some(embedder_cache) = &*guard {
+            Ok((embedder_cache.clone(), None))
+        } else {
+            use std::borrow::Cow;
+            // The wasm_binary stored in the `ExecutionState` is not
+            // instrumented so instrument it before compiling. Further, due to
+            // IC upgrades, it is possible that the `validate_wasm_binary()`
+            // function has changed, so also validate the binary.
+            let decoded_wasm: Cow<'_, BinaryEncodedWasm> = match decoded_wasm {
+                Some(wasm) => Cow::Borrowed(wasm),
+                None => Cow::Owned(decode_wasm(wasm_binary.binary.to_shared_vec())?),
+            };
+            match compile(&self.wasm_embedder, decoded_wasm.as_ref()) {
+                Ok((cache, compilation_output)) => {
+                    *guard = Some(cache.clone());
+                    Ok((cache, Some(compilation_output)))
+                }
+                Err(err) => Err(err),
+            }
+        }
     }
 
     // Collecting information based on the result of the execution and wasm state changes.
