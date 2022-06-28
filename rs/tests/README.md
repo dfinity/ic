@@ -83,6 +83,9 @@ command:
 IC_VERSION_ID=<version> ./run-system-tests.py --suite hourly --include-pattern basic_health_test
 ```
 
+If your test is supposed to run for more than 50min, you need to set the 
+'SYSTEM_TESTS_TIMEOUT' environment variable to a suitable value in seconds.
+
 If you have further questions, please contact the testing team on #eng-testing.
 
 # How to write a System Test
@@ -200,11 +203,16 @@ When writing your test, please keep in mind a few important things:
 
 * Make sure to add a ASCIIDOC description to the beginning of your file, just
 like `basic_health_test`.
-* Keep reproducibility in mind. For example, if you use a RNG in the test, make sure the seed is fixed (or at least logged).
+* Keep reproducibility in mind. For example, if you use a RNG in the test, make 
+  sure the seed is fixed (or at least logged).
 * Refrain from `println!` and use the logging primitives of the test environment instead.
-* In general, do not make too many environment assumptions. For example, never access the file system directory or only through information available through the test environment.
+* In general, do not make too many environment assumptions. For example, never access
+  the file system directory or only through information available through the test environment.
 * Put your test in a suitable folder in the src directory or create a new
-sub-directory. Don't forget to modify CODEOWNERS accordingly.
+  sub-directory. Don't forget to modify CODEOWNERS accordingly.
+* Add your test to a suitable suite in `rs/tests/bin/prod-test-driver.rs`. 
+  If your test takes more than 50min, it must only run nightly and the pipeline 
+  might need to be adjusted in `testnet/tests/pipeline/pipeline.yml`.
 
 ### A note on the CLI
 
