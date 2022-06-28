@@ -1,4 +1,6 @@
-use crate::{SnsCanisterIds, Tokens};
+use crate::pb::v1::TokenDistribution;
+use crate::{InitialTokenDistribution, SnsCanisterIds, Tokens};
+use anyhow::anyhow;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ledger::{
     compute_distribution_subaccount, compute_neuron_staking_subaccount,
@@ -7,10 +9,11 @@ use ic_nervous_system_common::{i2r, try_r2u64};
 use ic_sns_governance::pb::v1::neuron::DissolveState;
 use ic_sns_governance::pb::v1::{NervousSystemParameters, Neuron, NeuronPermission};
 use ledger_canister::AccountIdentifier;
+use maplit::btreemap;
 use num::rational::Ratio;
 use num::BigInt;
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
+use std::str::FromStr;
 use std::time::SystemTime;
 
 /// The static MEMO used when calculating subaccounts of neurons available at genesis.
@@ -25,59 +28,6 @@ pub const DEVELOPER_SUBACCOUNT_NONCE: u64 = 1;
 /// The static MEMO used when calculating the subaccount of future token swaps.
 pub const SWAP_SUBACCOUNT_NONCE: u64 = 2;
 
-/// A `TokenDistribution` couples a bucket's total distribution, and distributions
-/// of neurons created at genesis from that bucket's total distribution.
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-pub struct TokenDistribution {
-    /// The total number of tokens denominated in e8s (1 token = 100,000,000 e8s)
-    /// for a bucket at genesis. The stake of neurons created from this bucket
-    /// will be pulled from `total_e8s`.
-    pub total_e8s: u64,
-
-    /// A map of `PrincipalId` to tokens denominated in e8s (1 token = 100,000,000 e8s)
-    /// that represent Neurons and their stakes available at genesis. These neurons
-    /// will have reduced functionality until the decentralization swap has completed.
-    /// The ledger accounts containing the stake will be funded from `total_e8s`.
-    pub distributions: HashMap<PrincipalId, u64>,
-}
-
-/// An `InitialTokenDistribution` structures the configuration of the SNS Ledger and SNS
-/// Governance at genesis. Developers can allocate tokens to the different buckets needed
-/// for a decentralization swap.
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-pub struct InitialTokenDistribution {
-    /// The developer bucket distributes tokens to the original developers of the dapp.
-    /// Each distribution will create a neuron in `PreInitializationSwap` mode controlled
-    /// by the PrincipalId and with the provided stake. The tokens will be distributed
-    /// to the neuron's subaccount in the SNS Ledger, and the amount will be funded by
-    /// this bucket. The ratio between the bucket's `TokenDistribution::total_e8s` and
-    /// the sum of each distribution's stake determines how many tokens are swapped in
-    /// the first decentralization swap. This ratio will also determine how many
-    /// neurons will be created for the developers in future swaps. Any undistributed
-    /// tokens between swaps will remain in a subaccount of Governance until used to
-    /// fund the developer neurons in the future.
-    pub developers: TokenDistribution,
-
-    /// The treasury bucket distributes tokens to the SNS's treasury account and creates neurons
-    /// for the SNS community for use at genesis. Each distribution will create a one-time neuron
-    /// in `PreInitializationSwap` mode controlled by the PrincipalId and with the provided stake.
-    /// The tokens used to fund these one-time neurons comes from the treasury's total distribution.
-    /// The remaining tokens will be distributed to a subaccount of Governance for use after the
-    /// first decentralization swap.
-    pub treasury: TokenDistribution,
-
-    /// The total amount of tokens denominated in e8s (1 token = 100,000,000 e8s) used to fund
-    /// the Swap Canister for the decentralization swap. These tokens will be distributed to the
-    /// Swap Canister's main account on the SNS Ledger at genesis. The amount of these tokens
-    /// used in each swap is determined by the ratio configured by the developers
-    /// `TokenDistribution`. Any unused tokens will be distributed to a subaccount of Governance
-    /// for use in future swaps. For example if the developers want 25% of their neurons issued for
-    /// each during swap, only 25% of the swap bucket's total amount will be swapped
-    /// via the Swap Canister. The rest will be in a protected subaccount of Governance for
-    /// future swaps.
-    pub swap: u64,
-}
-
 impl InitialTokenDistribution {
     /// Given the configuration of the different buckets, when provided the SnsCanisterIds calculate
     /// all the `AccountId`s of SNS Ledger accounts that will have tokens distributed at genesis.
@@ -88,31 +38,32 @@ impl InitialTokenDistribution {
     pub fn get_account_ids_and_tokens(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> Result<HashMap<AccountIdentifier, Tokens>, String> {
+    ) -> anyhow::Result<HashMap<AccountIdentifier, Tokens>> {
+        let developers = self.get_developer_distribution()?;
+        let treasury = self.get_treasury_distribution()?;
+
         let developer_neuron_distribution =
-            Self::get_total_distributions(&self.developers.distributions)?;
-        let treasury_neuron_distribution =
-            Self::get_total_distributions(&self.treasury.distributions)?;
+            Self::get_total_distributions(&developers.distributions)?;
+        let treasury_neuron_distribution = Self::get_total_distributions(&treasury.distributions)?;
 
         // The initial_swap_ratio determines how much of the swap distribution is put in
         // the Swap Canister, and how much is held in locked reserves. It is proportional to
         // the amount that the devs have allocated in neurons and their total distribution.
         //
         // As this is a ratio, use Ration<BigInt> to not lose precision when dividing.
-        let initial_swap_ratio =
-            i2r(developer_neuron_distribution) / i2r(self.developers.total_e8s);
+        let initial_swap_ratio = i2r(developer_neuron_distribution) / i2r(developers.total_e8s);
 
         let mut accounts = HashMap::new();
         self.insert_developer_accounts(
             developer_neuron_distribution,
             sns_canister_ids,
             &mut accounts,
-        );
+        )?;
         self.insert_treasury_accounts(
             treasury_neuron_distribution,
             sns_canister_ids,
             &mut accounts,
-        );
+        )?;
         self.insert_swap_accounts(initial_swap_ratio, sns_canister_ids, &mut accounts)?;
 
         Ok(accounts)
@@ -124,52 +75,52 @@ impl InitialTokenDistribution {
     pub fn get_initial_neurons(
         &self,
         parameters: &NervousSystemParameters,
-    ) -> BTreeMap<String, Neuron> {
-        self.developers
-            .distributions
-            .iter()
-            .chain(self.treasury.distributions.iter())
-            .map(|(principal_id, stake_e8s)| {
-                let subaccount =
-                    compute_neuron_staking_subaccount(*principal_id, DEFAULT_NEURON_STAKING_NONCE);
+    ) -> anyhow::Result<BTreeMap<String, Neuron>> {
+        let treasury = &self.get_treasury_distribution()?.distributions;
+        let developers = &self.get_developer_distribution()?.distributions;
+        let mut initial_neurons = btreemap! {};
 
-                let permission = NeuronPermission {
-                    principal: Some(*principal_id),
-                    permission_type: parameters
-                        .neuron_claimer_permissions
-                        .as_ref()
-                        .unwrap()
-                        .permissions
-                        .clone(),
-                };
+        for (principal_id, stake_e8s) in developers.iter().chain(treasury.iter()) {
+            let principal_id = PrincipalId::from_str(principal_id)?;
 
-                // TODO Set to the genesis timestamp of the SNS
-                let now = SystemTime::now()
-                    .duration_since(SystemTime::UNIX_EPOCH)
+            let subaccount =
+                compute_neuron_staking_subaccount(principal_id, DEFAULT_NEURON_STAKING_NONCE);
+
+            let permission = NeuronPermission {
+                principal: Some(principal_id),
+                permission_type: parameters
+                    .neuron_claimer_permissions
+                    .as_ref()
                     .unwrap()
-                    .as_secs();
+                    .permissions
+                    .clone(),
+            };
 
-                let neuron = Neuron {
-                    id: Some(subaccount.into()),
-                    permissions: vec![permission],
-                    cached_neuron_stake_e8s: *stake_e8s,
-                    neuron_fees_e8s: 0,
-                    created_timestamp_seconds: now,
-                    aging_since_timestamp_seconds: now,
-                    followees: Default::default(),
-                    maturity_e8s_equivalent: 0,
-                    dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                        parameters
-                            .neuron_minimum_dissolve_delay_to_vote_seconds
-                            .expect(
-                                "Expected neuron_minimum_dissolve_delay_to_vote_seconds to exist",
-                            ),
-                    )),
-                };
+            // TODO Set to the genesis timestamp of the SNS
+            let now = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
 
-                (neuron.id.as_ref().unwrap().to_string(), neuron)
-            })
-            .collect()
+            let neuron = Neuron {
+                id: Some(subaccount.into()),
+                permissions: vec![permission],
+                cached_neuron_stake_e8s: *stake_e8s,
+                neuron_fees_e8s: 0,
+                created_timestamp_seconds: now,
+                aging_since_timestamp_seconds: now,
+                followees: Default::default(),
+                maturity_e8s_equivalent: 0,
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                    parameters
+                        .neuron_minimum_dissolve_delay_to_vote_seconds
+                        .expect("Expected neuron_minimum_dissolve_delay_to_vote_seconds to exist"),
+                )),
+            };
+
+            initial_neurons.insert(neuron.id.as_ref().unwrap().to_string(), neuron);
+        }
+        Ok(initial_neurons)
     }
 
     /// TODO NNS1-1464 : Enforce proper decentralization of distributions
@@ -183,11 +134,11 @@ impl InitialTokenDistribution {
         developer_neuron_distribution: u64,
         sns_canister_ids: &SnsCanisterIds,
         accounts: &mut HashMap<AccountIdentifier, Tokens>,
-    ) {
+    ) -> anyhow::Result<()> {
+        let developers = self.get_developer_distribution()?;
         // First deduct the distributions at genesis from the configured total_e8s. These funds
         // will be locked in a static subaccount of Governance until future decentralization swaps.
-        let locked_developer_distribution =
-            self.developers.total_e8s - developer_neuron_distribution;
+        let locked_developer_distribution = developers.total_e8s - developer_neuron_distribution;
         let (locked_developer_distribution_account, locked_developer_distribution) =
             Self::get_distribution_account_id_and_tokens(
                 &sns_canister_ids.governance,
@@ -199,14 +150,17 @@ impl InitialTokenDistribution {
             locked_developer_distribution,
         );
 
-        for (principal_id, amount) in self.developers.distributions.iter() {
+        for (principal_id, amount) in developers.distributions.iter() {
+            let principal_id = PrincipalId::from_str(principal_id)?;
+
             let (account, tokens) = Self::get_neuron_account_id_and_tokens(
                 &sns_canister_ids.governance,
-                principal_id,
+                &principal_id,
                 *amount,
             );
             accounts.insert(account, tokens);
         }
+        Ok(())
     }
 
     /// Calculate and insert the treasury bucket accounts into the provided map.
@@ -215,8 +169,10 @@ impl InitialTokenDistribution {
         treasury_neuron_distributions: u64,
         sns_canister_ids: &SnsCanisterIds,
         accounts: &mut HashMap<AccountIdentifier, Tokens>,
-    ) {
-        let locked_treasury_distribution = self.treasury.total_e8s - treasury_neuron_distributions;
+    ) -> anyhow::Result<()> {
+        let treasury = self.get_treasury_distribution()?;
+
+        let locked_treasury_distribution = treasury.total_e8s - treasury_neuron_distributions;
         let (locked_treasury_distribution_account, locked_treasury_distribution) =
             Self::get_distribution_account_id_and_tokens(
                 &sns_canister_ids.governance,
@@ -228,14 +184,17 @@ impl InitialTokenDistribution {
             locked_treasury_distribution,
         );
 
-        for (principal_id, amount) in self.treasury.distributions.iter() {
+        for (principal_id, amount) in treasury.distributions.iter() {
+            let principal_id = PrincipalId::from_str(principal_id)?;
+
             let (account, tokens) = Self::get_neuron_account_id_and_tokens(
                 &sns_canister_ids.governance,
-                principal_id,
+                &principal_id,
                 *amount,
             );
             accounts.insert(account, tokens);
         }
+        Ok(())
     }
 
     /// Calculate and insert the swap bucket accounts into the provided map.
@@ -244,14 +203,14 @@ impl InitialTokenDistribution {
         initial_swap_ratio: Ratio<BigInt>,
         sns_canister_ids: &SnsCanisterIds,
         accounts: &mut HashMap<AccountIdentifier, Tokens>,
-    ) -> Result<(), String> {
+    ) -> anyhow::Result<()> {
         // Multiply the total amount of allocated Swap distribution with the initial_swap_ratio to
         // determine how much of the distribution will be available to the token swap canister
         // at genesis.
         let initial_swap_amount_ratio: Ratio<BigInt> = i2r(self.swap) * initial_swap_ratio;
         // If the ratio produces a fractional, round down and convert back to a u64
         let initial_swap_amount = try_r2u64(&initial_swap_amount_ratio.floor()).map_err(|err| {
-            format!(
+            anyhow!(
                 "Unable to convert initial swap tokens to an unsigned integer: {}",
                 err
             )
@@ -304,30 +263,42 @@ impl InitialTokenDistribution {
 
     /// Safely get the sum of all the e8 denominated token distributions. The maximum amount
     /// of tokens e8s must be less than or equal to u64::MAX.
-    fn get_total_distributions(distributions: &HashMap<PrincipalId, u64>) -> Result<u64, String> {
+    fn get_total_distributions(distributions: &HashMap<String, u64>) -> anyhow::Result<u64> {
         let mut distribution_total: u64 = 0;
         for distribution in distributions.values() {
             distribution_total = match distribution_total.checked_add(*distribution) {
                 Some(total) => total,
                 None => {
-                    return Err(
+                    return Err(anyhow!(
                         "The total distribution overflowed and is not a valid distribution"
-                            .to_string(),
-                    )
+                    ))
                 }
             }
         }
 
         Ok(distribution_total)
     }
+
+    fn get_developer_distribution(&self) -> anyhow::Result<&TokenDistribution> {
+        self.developers
+            .as_ref()
+            .ok_or_else(|| anyhow!("Expected developer token distribution to exist"))
+    }
+
+    fn get_treasury_distribution(&self) -> anyhow::Result<&TokenDistribution> {
+        self.treasury
+            .as_ref()
+            .ok_or_else(|| anyhow!("Expected treasury token distribution to exist"))
+    }
 }
 
 #[cfg(test)]
 mod test {
     use crate::distributions::{
-        TokenDistribution, DEFAULT_NEURON_STAKING_NONCE, DEVELOPER_SUBACCOUNT_NONCE,
-        SWAP_SUBACCOUNT_NONCE, TREASURY_SUBACCOUNT_NONCE,
+        DEFAULT_NEURON_STAKING_NONCE, DEVELOPER_SUBACCOUNT_NONCE, SWAP_SUBACCOUNT_NONCE,
+        TREASURY_SUBACCOUNT_NONCE,
     };
+    use crate::pb::v1::TokenDistribution;
     use crate::{InitialTokenDistribution, SnsCanisterIds, Tokens};
     use assert_approx_eq::assert_approx_eq;
     use ic_base_types::{CanisterId, PrincipalId};
@@ -386,19 +357,19 @@ mod test {
         let treasury_total = 1_000_000_000;
 
         let initial_token_distribution = InitialTokenDistribution {
-            developers: TokenDistribution {
+            developers: Some(TokenDistribution {
                 total_e8s: dev_total,
                 distributions: hashmap! {
-                    *TEST_NEURON_1_OWNER_PRINCIPAL => neuron_stake,
-                    *TEST_NEURON_2_OWNER_PRINCIPAL => neuron_stake,
+                    (*TEST_NEURON_1_OWNER_PRINCIPAL).to_string() => neuron_stake,
+                    (*TEST_NEURON_2_OWNER_PRINCIPAL).to_string() => neuron_stake,
                 },
-            },
-            treasury: TokenDistribution {
+            }),
+            treasury: Some(TokenDistribution {
                 total_e8s: treasury_total,
                 distributions: hashmap! {
-                    *TEST_NEURON_3_OWNER_PRINCIPAL => neuron_stake,
+                    (*TEST_NEURON_3_OWNER_PRINCIPAL).to_string() => neuron_stake,
                 },
-            },
+            }),
             swap: swap_total,
         };
 
@@ -487,16 +458,16 @@ mod test {
         let treasury_total = 0;
 
         let initial_token_distribution = InitialTokenDistribution {
-            developers: TokenDistribution {
+            developers: Some(TokenDistribution {
                 total_e8s: dev_total,
                 distributions: hashmap! {
-                    *TEST_NEURON_1_OWNER_PRINCIPAL => neuron_stake,
+                    (*TEST_NEURON_1_OWNER_PRINCIPAL).to_string() => neuron_stake,
                 },
-            },
-            treasury: TokenDistribution {
+            }),
+            treasury: Some(TokenDistribution {
                 total_e8s: treasury_total,
                 distributions: hashmap! {},
-            },
+            }),
             swap: swap_total,
         };
 
@@ -559,25 +530,27 @@ mod test {
         let treasury_total = 1_000_000_000;
 
         let initial_token_distribution = InitialTokenDistribution {
-            developers: TokenDistribution {
+            developers: Some(TokenDistribution {
                 total_e8s: dev_total,
                 distributions: hashmap! {
-                    *TEST_NEURON_1_OWNER_PRINCIPAL => developer_neuron_stake,
-                    *TEST_NEURON_2_OWNER_PRINCIPAL => developer_neuron_stake,
+                    (*TEST_NEURON_1_OWNER_PRINCIPAL).to_string() => developer_neuron_stake,
+                    (*TEST_NEURON_2_OWNER_PRINCIPAL).to_string() => developer_neuron_stake,
                 },
-            },
-            treasury: TokenDistribution {
+            }),
+            treasury: Some(TokenDistribution {
                 total_e8s: treasury_total,
                 distributions: hashmap! {
-                    *TEST_NEURON_3_OWNER_PRINCIPAL => airdrop_neuron_stake,
+                    (*TEST_NEURON_3_OWNER_PRINCIPAL).to_string() => airdrop_neuron_stake,
                 },
-            },
+            }),
             swap: swap_total,
         };
 
         let parameters = NervousSystemParameters::with_default_values();
 
-        let initial_neurons = initial_token_distribution.get_initial_neurons(&parameters);
+        let initial_neurons = initial_token_distribution
+            .get_initial_neurons(&parameters)
+            .unwrap();
 
         let neuron_id_1 = NeuronId::from(compute_neuron_staking_subaccount(
             *TEST_NEURON_1_OWNER_PRINCIPAL,

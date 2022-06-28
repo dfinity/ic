@@ -1,6 +1,8 @@
 pub mod distributions;
+pub mod pb;
 
-use crate::distributions::InitialTokenDistribution;
+use crate::pb::v1::{InitialTokenDistribution, SnsInitPayload};
+use anyhow::anyhow;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
@@ -51,85 +53,11 @@ pub struct SnsCanisterInitPayloads {
     pub swap: Init,
 }
 
-/// This struct contains all the parameters necessary to initialize an SNS. All fields are optional
-/// to avoid future candid compatibility problems. However, for the struct to be "valid", all fields
-/// must be populated.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-pub struct SnsInitPayload {
-    /// The transaction fee that must be paid for ledger transactions (except
-    /// minting and burning governance tokens), denominated in e8s (1 token = 100,000,000 e8s).
-    pub transaction_fee_e8s: Option<u64>,
-
-    /// The name of the governance token controlled by this SNS, for example "Bitcoin".
-    pub token_name: Option<String>,
-
-    /// The symbol of the governance token controlled by this SNS, for example "BTC".
-    pub token_symbol: Option<String>,
-
-    /// The number of e8s (10E-8 of a token) that a rejected proposal costs the proposer.
-    pub proposal_reject_cost_e8s: Option<u64>,
-
-    /// The minimum number of e8s (10E-8 of a token) that can be staked in a neuron.
-    ///
-    /// To ensure that staking and disbursing of the neuron work, the chosen value
-    /// must be larger than the transaction_fee_e8s.
-    pub neuron_minimum_stake_e8s: Option<u64>,
-
-    /// The initial tokens and neurons will be distributed according to the
-    /// `InitialTokenDistribution`. This configures the accounts for the
-    /// the decentralization swap, and will store distributions for future
-    /// use.
-    ///
-    /// An example of a InitialTokenDistribution:
-    ///
-    /// InitialTokenDistribution {
-    ///     developers: TokenDistribution {
-    ///         total_e8s: 500_000_000,
-    ///         distributions: {
-    ///             "x4vjn-rrapj-c2kqe-a6m2b-7pzdl-ntmc4-riutz-5bylw-2q2bh-ds5h2-lae": 250_000_000,
-    ///         }
-    ///     },
-    ///     treasury: TokenDistribution {
-    ///         total_e8s: 500_000_000,
-    ///         distributions: {
-    ///             "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe": 100_000_000,
-    ///         }
-    ///     },
-    ///     swap: 1_000_000_000
-    /// }
-    pub initial_token_distribution: Option<InitialTokenDistribution>,
-
-    /// Amount targeted by the sale, if the amount is reach the sale is triggered. Must be at least
-    /// min_participants * min_participant_icp_e8.
-    pub max_icp_e8s: Option<u64>,
-
-    /// Time when the swap will end. Must be between 1 day and 3 months.
-    pub token_sale_timestamp_seconds: Option<u64>,
-
-    /// Minimum number of participants for the sale to take place. Has to larger than zero.
-    pub min_participants: Option<u32>,
-
-    /// The minimum amount of icp that each buyer must contribute to participate.
-    pub min_participant_icp_e8s: Option<u64>,
-
-    /// The maximum amount of ICP that each buyer can contribute. Must be
-    /// greater than or equal to `min_participant_icp_e8s` and less than
-    /// or equal to `max_icp_e8s`. Can effectively be disabled by
-    /// setting it to `max_icp_e8s`.
-    pub max_participant_icp_e8s: Option<u64>,
-
-    /// The total number of ICP that is required for this token sale to
-    /// take place. This number divided by the number of SNS tokens for
-    /// sale gives the seller's reserve price for the sale, i.e., the
-    /// minimum number of ICP per SNS tokens that the seller of SNS
-    /// tokens is willing to accept. If this amount is not achieved, the
-    /// sale will be aborted (instead of committed) when the due date/time
-    /// occurs. Must be smaller than or equal to `max_icp_e8s`.
-    pub min_icp_e8s: Option<u64>,
-}
-
-impl Default for SnsInitPayload {
-    fn default() -> SnsInitPayload {
+impl SnsInitPayload {
+    /// Due to conflict with the prost derived macros on the generated Rust structs, this method
+    /// acts like `SnsInitPayload::default()` except that it will provide default "real" values
+    /// for default-able parameters.
+    pub fn with_default_values() -> SnsInitPayload {
         let nervous_system_parameters_default = NervousSystemParameters::with_default_values();
         SnsInitPayload {
             transaction_fee_e8s: nervous_system_parameters_default.transaction_fee_e8s,
@@ -146,18 +74,16 @@ impl Default for SnsInitPayload {
             max_participant_icp_e8s: None,
         }
     }
-}
 
-impl SnsInitPayload {
     /// Build all the SNS canister's init payloads given the state of the SnsInitPayload and the
     /// provided SnsCanisterIds.
     pub fn build_canister_payloads(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> Result<SnsCanisterInitPayloads, String> {
+    ) -> anyhow::Result<SnsCanisterInitPayloads> {
         self.validate()?;
         Ok(SnsCanisterInitPayloads {
-            governance: self.governance_init_args(sns_canister_ids),
+            governance: self.governance_init_args(sns_canister_ids)?,
             ledger: self.ledger_init_args(sns_canister_ids)?,
             root: self.root_init_args(sns_canister_ids),
             swap: self.swap_init_args(sns_canister_ids),
@@ -165,7 +91,10 @@ impl SnsInitPayload {
     }
 
     /// Construct the params used to initialize a SNS Governance canister.
-    fn governance_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> Governance {
+    fn governance_init_args(
+        &self,
+        sns_canister_ids: &SnsCanisterIds,
+    ) -> anyhow::Result<Governance> {
         let mut governance = GovernanceCanisterInitPayloadBuilder::new().build();
         governance.ledger_canister_id = Some(sns_canister_ids.ledger);
         governance.root_canister_id = Some(sns_canister_ids.root);
@@ -182,16 +111,16 @@ impl SnsInitPayload {
         parameters.neuron_grantable_permissions = Some(all_permissions);
         parameters.neuron_minimum_stake_e8s = self.neuron_minimum_stake_e8s;
         parameters.reject_cost_e8s = self.proposal_reject_cost_e8s;
-        governance.neurons = self.get_initial_neurons(parameters);
+        governance.neurons = self.get_initial_neurons(parameters)?;
 
-        governance
+        Ok(governance)
     }
 
     /// Construct the params used to initialize a SNS Ledger canister.
     fn ledger_init_args(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> Result<LedgerCanisterInitPayload, String> {
+    ) -> anyhow::Result<LedgerCanisterInitPayload> {
         let root_canister_id = CanisterId::new(sns_canister_ids.root).unwrap();
         let token_symbol = self
             .token_symbol
@@ -269,7 +198,7 @@ impl SnsInitPayload {
     fn get_all_ledger_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> Result<HashMap<AccountIdentifier, Tokens>, String> {
+    ) -> anyhow::Result<HashMap<AccountIdentifier, Tokens>> {
         if let Some(initial_token_distribution) = &self.initial_token_distribution {
             return initial_token_distribution.get_account_ids_and_tokens(sns_canister_ids);
         }
@@ -283,17 +212,17 @@ impl SnsInitPayload {
     fn get_initial_neurons(
         &self,
         parameters: &NervousSystemParameters,
-    ) -> BTreeMap<String, Neuron> {
+    ) -> anyhow::Result<BTreeMap<String, Neuron>> {
         if let Some(initial_token_distribution) = &self.initial_token_distribution {
             return initial_token_distribution.get_initial_neurons(parameters);
         }
 
-        btreemap! {}
+        Ok(btreemap! {})
     }
 
     /// Validates the SnsInitPayload. This is called before building each SNS canister's
     /// payload and must pass.
-    pub fn validate(&self) -> Result<Self, String> {
+    pub fn validate(&self) -> anyhow::Result<Self> {
         let validation_fns = [
             self.validate_token_symbol(),
             self.validate_token_name(),
@@ -321,7 +250,7 @@ impl SnsInitPayload {
         if defect_msg.is_empty() {
             Ok(self.clone())
         } else {
-            Err(defect_msg)
+            Err(anyhow!(defect_msg))
         }
     }
 
@@ -517,11 +446,8 @@ impl SnsInitPayload {
 
 #[cfg(test)]
 mod test {
-    use crate::distributions::TokenDistribution;
-    use crate::{
-        InitialTokenDistribution, SnsCanisterIds, SnsInitPayload, MAX_TOKEN_NAME_LENGTH,
-        MAX_TOKEN_SYMBOL_LENGTH,
-    };
+    use crate::pb::v1::{InitialTokenDistribution, TokenDistribution};
+    use crate::{SnsCanisterIds, SnsInitPayload, MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH};
     use ic_base_types::CanisterId;
     use ic_sns_governance::governance::ValidGovernanceProto;
     use ic_sns_governance::types::ONE_DAY_SECONDS;
@@ -529,19 +455,17 @@ mod test {
     use maplit::hashset;
     use std::time::{Duration, SystemTime};
 
-    impl Default for InitialTokenDistribution {
-        fn default() -> Self {
-            InitialTokenDistribution {
-                developers: TokenDistribution {
-                    total_e8s: 100_000_000,
-                    distributions: Default::default(),
-                },
-                treasury: TokenDistribution {
-                    total_e8s: 500_000_000,
-                    distributions: Default::default(),
-                },
-                swap: 1_000_000_000,
-            }
+    fn create_valid_initial_token_distribution() -> InitialTokenDistribution {
+        InitialTokenDistribution {
+            developers: Some(TokenDistribution {
+                total_e8s: 100_000_000,
+                distributions: Default::default(),
+            }),
+            treasury: Some(TokenDistribution {
+                total_e8s: 500_000_000,
+                distributions: Default::default(),
+            }),
+            swap: 1_000_000_000,
         }
     }
 
@@ -555,10 +479,10 @@ mod test {
                 .map(|duration| duration.as_secs())
                 .ok(),
             min_participants: Some(100),
-            initial_token_distribution: Some(InitialTokenDistribution::default()),
+            initial_token_distribution: Some(create_valid_initial_token_distribution()),
             min_icp_e8s: Some(100),
             max_participant_icp_e8s: Some(1_000_000_000),
-            ..Default::default()
+            ..SnsInitPayload::with_default_values()
         }
     }
 
@@ -623,10 +547,9 @@ mod test {
             token_symbol: Some("SNS".to_string()),
             proposal_reject_cost_e8s: Some(10_000),
             neuron_minimum_stake_e8s: Some(100_000_000),
-            initial_token_distribution: Some(InitialTokenDistribution::default()),
+            initial_token_distribution: Some(create_valid_initial_token_distribution()),
             ..get_test_sns_init_payload()
         };
-        println!("SnsInitPayload = {:#?}", sns_init_payload);
         let sns_canister_ids = create_canister_ids();
 
         // Build all SNS canister's initialization payloads and verify the payload was.
@@ -682,7 +605,7 @@ mod test {
         let sns_init_payload = SnsInitPayload {
             token_name: Some("ServiceNervousSystem Coin".to_string()),
             token_symbol: Some("SNS".to_string()),
-            initial_token_distribution: Some(InitialTokenDistribution::default()),
+            initial_token_distribution: Some(create_valid_initial_token_distribution()),
             proposal_reject_cost_e8s: Some(10_000),
             neuron_minimum_stake_e8s: Some(100_000_000),
             ..get_test_sns_init_payload()
@@ -711,7 +634,7 @@ mod test {
         let sns_init_payload = SnsInitPayload {
             token_name: Some("ServiceNervousSystem".to_string()),
             token_symbol: Some("SNS".to_string()),
-            initial_token_distribution: Some(InitialTokenDistribution::default()),
+            initial_token_distribution: Some(create_valid_initial_token_distribution()),
             ..get_test_sns_init_payload()
         };
 
@@ -739,7 +662,7 @@ mod test {
         let sns_init_payload = SnsInitPayload {
             token_name: Some("ServiceNervousSystem".to_string()),
             token_symbol: Some("SNS".to_string()),
-            initial_token_distribution: Some(InitialTokenDistribution::default()),
+            initial_token_distribution: Some(create_valid_initial_token_distribution()),
             ..get_test_sns_init_payload()
         };
 
@@ -770,7 +693,7 @@ mod test {
         let sns_init_payload = SnsInitPayload {
             token_name: Some(token_name.clone()),
             token_symbol: Some(token_symbol.clone()),
-            initial_token_distribution: Some(InitialTokenDistribution::default()),
+            initial_token_distribution: Some(create_valid_initial_token_distribution()),
             transaction_fee_e8s: Some(transaction_fee),
             ..get_test_sns_init_payload()
         };

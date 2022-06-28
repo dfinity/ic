@@ -1,8 +1,9 @@
 use clap::Parser;
 use ic_sns_governance::pb::v1::NervousSystemParameters;
+use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_init::{
-    SnsInitPayload, MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH,
-    MIN_PARTICIPANT_ICP_E8S_DEFAULT, MIN_TOKEN_NAME_LENGTH, MIN_TOKEN_SYMBOL_LENGTH,
+    MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH, MIN_PARTICIPANT_ICP_E8S_DEFAULT,
+    MIN_TOKEN_NAME_LENGTH, MIN_TOKEN_SYMBOL_LENGTH,
 };
 use regex::Regex;
 use std::fs::File;
@@ -42,7 +43,7 @@ pub fn exec(init_config_file_args: InitConfigFileArgs) {
 }
 
 fn new(init_config_file_path: PathBuf) {
-    let default_sns_init_payload = SnsInitPayload::default();
+    let default_sns_init_payload = SnsInitPayload::with_default_values();
     let config_file_string = get_config_file_contents(default_sns_init_payload);
     let f = File::create(init_config_file_path).expect("Unable to open file");
     let mut f = BufWriter::new(f);
@@ -229,14 +230,17 @@ fn validate(init_config_file: PathBuf) {
 #[cfg(test)]
 mod test {
     use crate::init_config_file::get_config_file_contents;
-    use ic_sns_init::SnsInitPayload;
+    use ic_sns_init::pb::v1::SnsInitPayload;
 
     /// Tests that the text produced by the "new" command can be read into the default sns_init_payload
     #[test]
     fn test_default_init_config_file() {
         assert_eq!(
-            SnsInitPayload::default(),
-            serde_yaml::from_str(&get_config_file_contents(SnsInitPayload::default())).unwrap()
+            SnsInitPayload::with_default_values(),
+            serde_yaml::from_str(&get_config_file_contents(
+                SnsInitPayload::with_default_values()
+            ))
+            .unwrap()
         )
     }
 }

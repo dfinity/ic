@@ -11,8 +11,8 @@ use candid::Encode;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::CanisterId;
-use ic_sns_init::distributions::{InitialTokenDistribution, TokenDistribution};
-use ic_sns_init::{SnsCanisterInitPayloads, SnsInitPayload};
+use ic_sns_init::pb::v1::{InitialTokenDistribution, SnsInitPayload, TokenDistribution};
+use ic_sns_init::SnsCanisterInitPayloads;
 use ic_types::{Cycles, SubnetId};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
@@ -136,14 +136,14 @@ impl SnsWasmCanister {
             token_symbol: Some("FAKE".to_string()),
             token_name: Some("PlaceHolder".to_string()),
             initial_token_distribution: Some(InitialTokenDistribution {
-                developers: TokenDistribution {
+                developers: Some(TokenDistribution {
                     total_e8s: 100,
                     distributions: Default::default(),
-                },
-                treasury: TokenDistribution {
+                }),
+                treasury: Some(TokenDistribution {
                     total_e8s: 100,
                     distributions: Default::default(),
-                },
+                }),
                 swap: 100,
             }),
             max_icp_e8s: Some(1_000_000_000),
@@ -152,7 +152,7 @@ impl SnsWasmCanister {
             token_sale_timestamp_seconds: Some(1661609146),
             min_icp_e8s: Some(100),
             max_participant_icp_e8s: Some(1_000_000_000),
-            ..SnsInitPayload::default()
+            ..SnsInitPayload::with_default_values()
         }
         .validate()
         .unwrap()
