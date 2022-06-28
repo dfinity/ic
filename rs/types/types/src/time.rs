@@ -59,7 +59,7 @@ impl Time {
         self.0
     }
 
-    pub fn from_nanos_since_unix_epoch(nanos: u64) -> Self {
+    pub const fn from_nanos_since_unix_epoch(nanos: u64) -> Self {
         Time(nanos)
     }
 
