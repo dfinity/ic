@@ -4,16 +4,18 @@ use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::{Account, Transaction};
 use ic_icrc1_ledger::{
-    endpoints::{TransferArg, TransferError},
+    endpoints::{ArchiveInfo, TransferArg, TransferError},
     InitArgs, Ledger,
 };
 use ic_ledger_core::{
     block::BlockHeight,
-    ledger::{apply_transaction, LedgerAccess, LedgerData, LedgerTransaction},
+    ledger::{apply_transaction, archive_blocks, LedgerAccess, LedgerData, LedgerTransaction},
     timestamp::TimeStamp,
     tokens::Tokens,
 };
 use std::cell::RefCell;
+
+const MAX_MESSAGE_SIZE: usize = 1024 * 1024;
 
 thread_local! {
     static LEDGER: RefCell<Option<Ledger>> = RefCell::new(None);
@@ -84,8 +86,8 @@ fn icrc1_balance_of(account: Account) -> u64 {
 
 #[update]
 #[candid_method(update)]
-fn icrc1_transfer(arg: TransferArg) -> Result<BlockHeight, TransferError> {
-    Access::with_ledger_mut(|ledger| {
+async fn icrc1_transfer(arg: TransferArg) -> Result<BlockHeight, TransferError> {
+    let (block_idx, _hash) = Access::with_ledger_mut(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
         let from_account = Account {
             of: PrincipalId::from(ic_cdk::api::caller()),
@@ -127,9 +129,34 @@ fn icrc1_transfer(arg: TransferArg) -> Result<BlockHeight, TransferError> {
             Transaction::transfer(from_account, to_account, amount, expected_fee, now)
         };
 
-        // TODO(ROSETTA1-304): certify tip
-        let (block_idx, _hash) = apply_transaction(ledger, tx, now)?;
-        Ok(block_idx)
+        apply_transaction(ledger, tx, now).map_err(TransferError::from)
+    })?;
+    // TODO(ROSETTA1-304): certify tip
+    archive_blocks::<Access>(MAX_MESSAGE_SIZE).await;
+    Ok(block_idx)
+}
+
+#[query]
+fn archives() -> Vec<ArchiveInfo> {
+    Access::with_ledger(|ledger| {
+        ledger
+            .blockchain()
+            .archive
+            .read()
+            .unwrap()
+            .as_ref()
+            .iter()
+            .flat_map(|archive| {
+                archive
+                    .index()
+                    .into_iter()
+                    .map(|((start, end), canister_id)| ArchiveInfo {
+                        canister_id,
+                        block_range_start: start,
+                        block_range_end: end,
+                    })
+            })
+            .collect()
     })
 }
 

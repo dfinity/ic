@@ -1,7 +1,8 @@
 use candid::{candid_method, Principal};
 use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
-use ic_ledger_core::block::EncodedBlock;
+use ic_icrc1::{Block, CandidBlock};
+use ic_ledger_core::block::{BlockHeight, BlockType, EncodedBlock};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 
@@ -97,6 +98,25 @@ fn remaining_capacity() -> usize {
             .max_memory_size_bytes
             .checked_sub(state.total_block_size)
             .expect("bug: archive capacity underflow")
+    })
+}
+
+#[query]
+#[candid_method(query)]
+fn get_block(index: BlockHeight) -> Option<CandidBlock> {
+    with_archive(|archive| {
+        if index < archive.block_index_offset {
+            None
+        } else {
+            let idx = (index - archive.block_index_offset) as usize;
+            Some(
+                Block::decode(archive.blocks.get(idx)?.clone())
+                    .unwrap_or_else(|e| {
+                        ic_cdk::api::trap(&format!("failed to decode block {}: {}", index, e))
+                    })
+                    .into(),
+            )
+        }
     })
 }
 
