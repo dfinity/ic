@@ -503,16 +503,6 @@ system-tests-subnet-recover-pre-master:
   script:
     - *run-farm-based-test   
 
-system-tests-upgrade-compatibility-pre-master:
-  extends:
-    - .system-tests
-    - .with-monitoring
-  variables:
-    SUITE_NAME: "upgrade_compatibility"
-    cd_target_env: "HOURLY"
-  script:
-    - *run-farm-based-test 
-
 
 system-tests-nightly:
   extends:
