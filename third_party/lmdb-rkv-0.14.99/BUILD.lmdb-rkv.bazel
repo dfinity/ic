@@ -6,6 +6,7 @@ rust_library(
     crate_name = "lmdb",
     edition = "2015",
     version = "0.14.99",
+    visibility = ["//visibility:public"],
     deps = [
         "//lmdb-sys",
         "@crate_index//:bitflags",

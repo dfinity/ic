@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "{{ build_type }}", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "{{ build_type }}", "rust_binary", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -11,11 +11,12 @@ DEPENDENCIES = {{ deps|json }}
 
 MACRO_DEPENDENCIES = {{ macro_deps|json }}
 
-{% if gen_tests %}
+{% if gen_tests -%}
 DEV_DEPENDENCIES = {{ dev_deps|json }}
 
 MACRO_DEV_DEPENDENCIES = {{ macro_dev_deps|json }}
-{% endif %}
+
+{% endif -%}
 
 ALIASES = {{ aliases|json }}
 
@@ -29,7 +30,18 @@ ALIASES = {{ aliases|json }}
     aliases = ALIASES
 )
 
-{% if gen_tests %}
+{% for bin in bins -%}
+rust_binary(
+    name = "{{ bin.name }}",
+    srcs = ["{{ bin.path }}"],
+    edition = "{{ edition }}",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":{{ target_name }}"],
+    aliases = ALIASES
+)
+{%- endfor %}
+
+{% if gen_tests -%}
 rust_test(
     name = "{{ target_name }}_test",
     edition = "{{ edition }}",
@@ -39,7 +51,7 @@ rust_test(
     aliases = ALIASES
 )
 
-{% if has_testsuite %}
+{% if has_testsuite -%}
 rust_test_suite(
     name = "{{ target_name }}_integration_tests",
     edition = "{{ edition }}",
@@ -48,5 +60,5 @@ rust_test_suite(
     deps = [":{{ target_name }}"] + DEPENDENCIES + DEV_DEPENDENCIES,
     aliases = ALIASES
 )
-{% endif %}
-{% endif %}
+{%- endif %}
+{%- endif %}
