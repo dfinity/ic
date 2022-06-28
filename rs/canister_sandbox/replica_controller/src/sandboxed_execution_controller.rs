@@ -11,7 +11,7 @@ use ic_embedders::wasm_executor::{
 };
 use ic_embedders::WasmExecutionInput;
 use ic_interfaces::execution_environment::{
-    HypervisorResult, InstanceStats, SubnetAvailableMemory, WasmExecutionOutput,
+    CompilationResult, HypervisorResult, InstanceStats, SubnetAvailableMemory, WasmExecutionOutput,
 };
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
@@ -604,7 +604,11 @@ impl SandboxedExecutionController {
             func_ref,
             execution_state,
         }: WasmExecutionInput,
-    ) -> (ExecutionState, WasmExecutionResult) {
+    ) -> (
+        Option<CompilationResult>,
+        ExecutionState,
+        WasmExecutionResult,
+    ) {
         // TODO(EXC-868): Adjust this assertion once the execution environment
         // supports deterministic time slicing with sandbox.
         assert_eq!(
@@ -628,11 +632,12 @@ impl SandboxedExecutionController {
         let sandbox_process = self.get_sandbox_process(sandbox_safe_system_state.canister_id());
 
         // Ensure that Wasm is compiled.
-        let (wasm_id, compile_count) =
+        let (wasm_id, compilation_result) =
             match open_wasm(&sandbox_process, &*execution_state.wasm_binary) {
-                Ok((wasm_id, compile_count)) => (wasm_id, compile_count),
+                Ok((wasm_id, compilation_result)) => (wasm_id, compilation_result),
                 Err(err) => {
                     return (
+                        None,
                         execution_state,
                         WasmExecutionResult::Finished(
                             WasmExecutionOutput {
@@ -649,9 +654,9 @@ impl SandboxedExecutionController {
                 }
             };
 
-        if compile_count > 0 {
+        if compilation_result.is_some() {
             self.compile_count_for_testing
-                .fetch_add(compile_count, Ordering::Relaxed);
+                .fetch_add(1, Ordering::Relaxed);
         }
 
         // Create channel through which we will receive the execution
@@ -726,7 +731,7 @@ impl SandboxedExecutionController {
             .sandboxed_execution_replica_execute_finish_duration
             .with_label_values(&[api_type_label])
             .start_timer();
-        Self::process_completion(
+        let (execution_state, execution_result) = Self::process_completion(
             self,
             canister_id,
             execution_state,
@@ -737,7 +742,8 @@ impl SandboxedExecutionController {
             api_type_label,
             subnet_available_memory,
             sandbox_process,
-        )
+        );
+        (compilation_result, execution_state, execution_result)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -852,7 +858,7 @@ impl SandboxedExecutionController {
         wasm_source: Vec<u8>,
         canister_root: PathBuf,
         canister_id: CanisterId,
-    ) -> HypervisorResult<(NumInstructions, ExecutionState)> {
+    ) -> HypervisorResult<(CompilationResult, ExecutionState)> {
         let sandbox_process = self.get_sandbox_process(canister_id);
         self.compile_count_for_testing
             .fetch_add(1, Ordering::Relaxed);
@@ -915,7 +921,7 @@ impl SandboxedExecutionController {
             reply.exported_globals,
             reply.wasm_metadata,
         );
-        Ok((reply.compilation_cost, execution_state))
+        Ok((reply.compilation_result, execution_state))
     }
 
     pub fn compile_count_for_testing(&self) -> u64 {
@@ -939,13 +945,13 @@ fn cache_opened_wasm(
 fn open_wasm(
     sandbox_process: &Arc<SandboxProcess>,
     wasm_binary: &WasmBinary,
-) -> HypervisorResult<(WasmId, u64)> {
+) -> HypervisorResult<(WasmId, Option<CompilationResult>)> {
     let mut embedder_cache = wasm_binary.embedder_cache.lock().unwrap();
     if let Some(cache) = embedder_cache.as_ref() {
         if let Some(opened_wasm) = cache.downcast::<OpenedWasm>() {
             if let Some(cached_sandbox_process) = opened_wasm.sandbox_process.upgrade() {
                 assert!(Arc::ptr_eq(&cached_sandbox_process, sandbox_process));
-                return Ok((opened_wasm.wasm_id, 0));
+                return Ok((opened_wasm.wasm_id, None));
             }
         }
     }
@@ -953,7 +959,7 @@ fn open_wasm(
     sandbox_process
         .history
         .record(format!("OpenWasm(wasm_id={})", wasm_id));
-    sandbox_process
+    let compilation_result = sandbox_process
         .sandbox_service
         .open_wasm(protocol::sbxsvc::OpenWasmRequest {
             wasm_id,
@@ -963,7 +969,7 @@ fn open_wasm(
         .unwrap()
         .0?;
     cache_opened_wasm(&mut *embedder_cache, sandbox_process, wasm_id);
-    Ok((wasm_id, 1))
+    Ok((wasm_id, Some(compilation_result)))
 }
 
 // Returns the id of the remote memory after making sure that the remote memory

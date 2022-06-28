@@ -14,7 +14,7 @@ fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wabt::Error> {
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
-use ic_types::NumBytes;
+use ic_types::{NumBytes, NumInstructions};
 use maplit::btreemap;
 use parity_wasm::elements::{CustomSection as WasmCustomSection, Module, Section};
 
@@ -76,7 +76,10 @@ fn can_validate_valid_export_section() {
 
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Ok(WasmValidationDetails::default())
+        Ok(WasmValidationDetails {
+            largest_function_instruction_count: NumInstructions::new(1),
+            ..Default::default()
+        })
     );
 }
 
@@ -99,6 +102,7 @@ fn can_validate_valid_export_section_with_reserved_functions() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
             reserved_exports: 2,
+            largest_function_instruction_count: NumInstructions::new(1),
             ..Default::default()
         })
     );
@@ -256,7 +260,10 @@ fn can_validate_canister_query_update_method_name_with_whitespace() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Ok(WasmValidationDetails::default())
+        Ok(WasmValidationDetails {
+            largest_function_instruction_count: NumInstructions::new(1),
+            ..Default::default()
+        })
     );
 }
 

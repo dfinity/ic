@@ -956,6 +956,16 @@ impl fmt::Display for WasmExecutionOutput {
     }
 }
 
+/// The results of compiling a Canister which need to be passed back to the main
+/// replica process.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CompilationResult {
+    /// The number of instructions in the canister's largest function.
+    pub largest_function_instruction_count: NumInstructions,
+    /// Compiling the canister is equivalent to executing this many instructions.
+    pub compilation_cost: NumInstructions,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

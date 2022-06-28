@@ -35,7 +35,9 @@ use ic_embedders::{
     },
     WasmtimeEmbedder,
 };
-use ic_interfaces::execution_environment::{ExecutionMode, HypervisorResult, WasmExecutionOutput};
+use ic_interfaces::execution_environment::{
+    CompilationResult, ExecutionMode, HypervisorResult, WasmExecutionOutput,
+};
 use ic_logger::ReplicaLogger;
 use ic_replicated_state::page_map::PageMapSerialization;
 use ic_replicated_state::{EmbedderCache, Memory, PageMap};
@@ -354,10 +356,18 @@ impl SandboxManager {
 
     /// Compiles the given Wasm binary and registers it under the given id.
     /// The function may fail if the Wasm binary is invalid.
-    pub fn open_wasm(&self, wasm_id: WasmId, wasm_src: Vec<u8>) -> HypervisorResult<()> {
-        let (_wasm, _instrumentation_output, _validation_details) =
+    pub fn open_wasm(
+        &self,
+        wasm_id: WasmId,
+        wasm_src: Vec<u8>,
+    ) -> HypervisorResult<CompilationResult> {
+        let (_wasm, instrumentation_output, validation_details) =
             self.open_wasm_internal(wasm_id, wasm_src)?;
-        Ok(())
+        Ok(CompilationResult {
+            largest_function_instruction_count: validation_details
+                .largest_function_instruction_count,
+            compilation_cost: instrumentation_output.compilation_cost,
+        })
     }
 
     /// Closes previously opened wasm instance, by id.
@@ -521,7 +531,11 @@ impl SandboxManager {
             exported_globals,
             exported_functions,
             wasm_metadata: wasm_validation_details.wasm_metadata,
-            compilation_cost,
+            compilation_result: CompilationResult {
+                largest_function_instruction_count: wasm_validation_details
+                    .largest_function_instruction_count,
+                compilation_cost,
+            },
         })
     }
 }

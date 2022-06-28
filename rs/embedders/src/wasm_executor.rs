@@ -10,6 +10,7 @@ use ic_types::methods::{FuncRef, WasmMethod};
 use prometheus::{Histogram, IntCounter};
 
 use crate::wasm_utils::instrumentation::InstrumentationOutput;
+use crate::wasm_utils::validation::WasmValidationDetails;
 use crate::{
     wasm_utils::decoding::decode_wasm,
     wasm_utils::instrumentation::{instrument, InstructionCostTable},
@@ -20,7 +21,7 @@ use crate::{
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorError, HypervisorResult, InstanceStats,
+    CompilationResult, ExecutionParameters, HypervisorError, HypervisorResult, InstanceStats,
     OutOfInstructionsHandler, SubnetAvailableMemory, SystemApi, WasmExecutionOutput,
 };
 use ic_logger::{warn, ReplicaLogger};
@@ -178,35 +179,38 @@ impl WasmExecutor {
         }
     }
 
-    pub fn compile(&self, wasm_binary: &BinaryEncodedWasm) -> HypervisorResult<EmbedderCache> {
+    pub fn compile(
+        &self,
+        wasm_binary: &BinaryEncodedWasm,
+    ) -> HypervisorResult<(EmbedderCache, WasmValidationDetails, InstrumentationOutput)> {
         let _timer = self.metrics.compile.start_timer();
-        validate_wasm_binary(wasm_binary, &self.config)
-            .map_err(HypervisorError::from)
-            .and_then(|details| {
-                if details.reserved_exports > 0 {
-                    self.metrics
-                        .reserved_exports
-                        .inc_by(details.reserved_exports as u64);
-                }
-                self.observe_metrics(&details.imports_details);
-                instrument(
-                    wasm_binary,
-                    &InstructionCostTable::new(),
-                    self.config.cost_to_compile_wasm_instruction,
-                )
-                .map_err(HypervisorError::from)
-            })
-            .and_then(|output| self.wasm_embedder.compile(&output.binary))
+        let validation_details = validate_wasm_binary(wasm_binary, &self.config)?;
+        if validation_details.reserved_exports > 0 {
+            self.metrics
+                .reserved_exports
+                .inc_by(validation_details.reserved_exports as u64);
+        }
+        self.observe_metrics(&validation_details.imports_details);
+        let instrumentation_output = instrument(
+            wasm_binary,
+            &InstructionCostTable::new(),
+            self.config.cost_to_compile_wasm_instruction,
+        )?;
+        let embedder_cache = self.wasm_embedder.compile(&instrumentation_output.binary)?;
+        Ok((embedder_cache, validation_details, instrumentation_output))
     }
 
     fn get_embedder_cache(
         &self,
         decoded_wasm: Option<&BinaryEncodedWasm>,
         wasm_binary: &WasmBinary,
-    ) -> HypervisorResult<EmbedderCache> {
+    ) -> HypervisorResult<(
+        EmbedderCache,
+        Option<(WasmValidationDetails, InstrumentationOutput)>,
+    )> {
         let mut guard = wasm_binary.embedder_cache.lock().unwrap();
         if let Some(embedder_cache) = &*guard {
-            Ok(embedder_cache.clone())
+            Ok((embedder_cache.clone(), None))
         } else {
             use std::borrow::Cow;
             // The wasm_binary stored in the `ExecutionState` is not
@@ -218,9 +222,9 @@ impl WasmExecutor {
                 None => Cow::Owned(decode_wasm(wasm_binary.binary.to_shared_vec())?),
             };
             match self.compile(decoded_wasm.as_ref()) {
-                Ok(cache) => {
+                Ok((cache, validation_details, instrumentation_output)) => {
                     *guard = Some(cache.clone());
-                    Ok(cache)
+                    Ok((cache, Some((validation_details, instrumentation_output))))
                 }
                 Err(err) => Err(err),
             }
@@ -237,7 +241,11 @@ impl WasmExecutor {
             func_ref,
             mut execution_state,
         }: WasmExecutionInput,
-    ) -> (ExecutionState, WasmExecutionResult) {
+    ) -> (
+        Option<CompilationResult>,
+        ExecutionState,
+        WasmExecutionResult,
+    ) {
         // This function is called when canister sandboxing is disabled.
         // Since deterministic time slicing works only with sandboxing,
         // it must also be disabled and the execution limits must match.
@@ -247,25 +255,27 @@ impl WasmExecutor {
         );
 
         // Ensure that Wasm is compiled.
-        let embedder_cache = match self.get_embedder_cache(None, &execution_state.wasm_binary) {
-            Ok(embedder_cache) => embedder_cache,
-            Err(err) => {
-                return (
-                    execution_state,
-                    WasmExecutionResult::Finished(
-                        WasmExecutionOutput {
-                            wasm_result: Err(err),
-                            num_instructions_left: NumInstructions::from(0),
-                            instance_stats: InstanceStats {
-                                accessed_pages: 0,
-                                dirty_pages: 0,
+        let (embedder_cache, compilation_result) =
+            match self.get_embedder_cache(None, &execution_state.wasm_binary) {
+                Ok(compilation_result) => compilation_result,
+                Err(err) => {
+                    return (
+                        None,
+                        execution_state,
+                        WasmExecutionResult::Finished(
+                            WasmExecutionOutput {
+                                wasm_result: Err(err),
+                                num_instructions_left: NumInstructions::from(0),
+                                instance_stats: InstanceStats {
+                                    accessed_pages: 0,
+                                    dirty_pages: 0,
+                                },
                             },
-                        },
-                        sandbox_safe_system_state.changes(),
-                    ),
-                )
-            }
-        };
+                            sandbox_safe_system_state.changes(),
+                        ),
+                    )
+                }
+            };
 
         let wasm_reserved_pages = get_wasm_reserved_pages(&execution_state);
 
@@ -301,6 +311,10 @@ impl WasmExecutor {
         let system_state_changes = system_api.into_system_state_changes();
 
         (
+            compilation_result.map(|(validation, instrumentation)| CompilationResult {
+                largest_function_instruction_count: validation.largest_function_instruction_count,
+                compilation_cost: instrumentation.compilation_cost,
+            }),
             execution_state,
             WasmExecutionResult::Finished(wasm_execution_output, system_state_changes),
         )
@@ -311,20 +325,16 @@ impl WasmExecutor {
         wasm_source: Vec<u8>,
         canister_root: PathBuf,
         canister_id: CanisterId,
-    ) -> HypervisorResult<(NumInstructions, ExecutionState)> {
+    ) -> HypervisorResult<(CompilationResult, ExecutionState)> {
         // Compile Wasm binary and cache it.
         let wasm_binary = WasmBinary::new(CanisterModule::new(wasm_source));
         let binary_encoded_wasm = decode_wasm(wasm_binary.binary.to_shared_vec())?;
-        let embedder_cache = self.get_embedder_cache(Some(&binary_encoded_wasm), &wasm_binary)?;
+        let (embedder_cache, compilation_output) =
+            self.get_embedder_cache(Some(&binary_encoded_wasm), &wasm_binary)?;
+        let (wasm_validation_details, instrumentation_output) =
+            compilation_output.expect("Newly created WasmBinary must be compiled");
         let mut wasm_page_map = PageMap::default();
 
-        // Get data from instrumentation output.
-        let wasm_validation_details = validate_wasm_binary(&binary_encoded_wasm, &self.config)?;
-        let instrumentation_output = instrument(
-            &binary_encoded_wasm,
-            &InstructionCostTable::new(),
-            self.config.cost_to_compile_wasm_instruction,
-        )?;
         let compilation_cost = instrumentation_output.compilation_cost;
 
         let (exported_functions, globals, _wasm_page_delta, wasm_memory_size) =
@@ -347,7 +357,14 @@ impl WasmExecutor {
             globals,
             wasm_validation_details.wasm_metadata,
         );
-        Ok((compilation_cost, execution_state))
+        Ok((
+            CompilationResult {
+                largest_function_instruction_count: wasm_validation_details
+                    .largest_function_instruction_count,
+                compilation_cost,
+            },
+            execution_state,
+        ))
     }
 
     pub fn compile_count_for_testing(&self) -> u64 {

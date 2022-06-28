@@ -7,9 +7,10 @@ use ic_embedders::{wasm_executor::WasmExecutor, WasmExecutionInput, WasmtimeEmbe
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorError, HypervisorResult, WasmExecutionOutput,
+    CompilationResult, ExecutionParameters, HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
 use ic_logger::{fatal, ReplicaLogger};
+use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NetworkTopology;
@@ -34,6 +35,7 @@ pub struct HypervisorMetrics {
     dirty_pages: Histogram,
     allocated_pages: IntGauge,
     executed_messages: IntCounterVec,
+    largest_function_instruction_count: Histogram,
 }
 
 impl HypervisorMetrics {
@@ -60,6 +62,11 @@ impl HypervisorMetrics {
                 "Number of messages executed, by type and status.",
                 &["api_type", "status"],
             ),
+            largest_function_instruction_count: metrics_registry.histogram(
+                "hypervisor_largest_function_instruction_count",
+                "Size of the largest compiled wasm function in a canister by number of wasm instructions",
+                decimal_buckets_with_zero(1, 7), // 10 - 10M.
+            ),
         }
     }
 
@@ -79,6 +86,15 @@ impl HypervisorMetrics {
         self.executed_messages
             .with_label_values(&[api_type, status])
             .inc();
+    }
+
+    fn observe_compilation_metrics(&self, compilation_result: &CompilationResult) {
+        let CompilationResult {
+            largest_function_instruction_count,
+            compilation_cost: _,
+        } = compilation_result;
+        self.largest_function_instruction_count
+            .observe(largest_function_instruction_count.get() as f64);
     }
 }
 
@@ -685,12 +701,17 @@ impl Hypervisor {
         canister_root: PathBuf,
         canister_id: CanisterId,
     ) -> HypervisorResult<(NumInstructions, ExecutionState)> {
-        if let Some(sandbox_executor) = self.sandbox_executor.as_ref() {
-            sandbox_executor.create_execution_state(wasm_binary, canister_root, canister_id)
+        let (compilation_result, execution_state) = if let Some(sandbox_executor) =
+            self.sandbox_executor.as_ref()
+        {
+            sandbox_executor.create_execution_state(wasm_binary, canister_root, canister_id)?
         } else {
             self.wasm_executor
-                .create_execution_state(wasm_binary, canister_root, canister_id)
-        }
+                .create_execution_state(wasm_binary, canister_root, canister_id)?
+        };
+        self.metrics
+            .observe_compilation_metrics(&compilation_result);
+        Ok((compilation_result.compilation_cost, execution_state))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -760,7 +781,7 @@ impl Hypervisor {
         let static_system_state =
             SandboxSafeSystemState::new(&system_state, *self.cycles_account_manager);
 
-        let (execution_state, execution_result) =
+        let (compilation_result, execution_state, execution_result) =
             if let Some(sandbox_executor) = self.sandbox_executor.as_ref() {
                 SandboxedExecutionController::process(
                     sandbox_executor,
@@ -783,6 +804,10 @@ impl Hypervisor {
                     execution_state,
                 })
             };
+        if let Some(compilation_result) = compilation_result {
+            self.metrics
+                .observe_compilation_metrics(&compilation_result);
+        }
         let (output, system_state_changes) = match execution_result {
             WasmExecutionResult::Finished(output, system_state_changes) => {
                 (output, system_state_changes)
@@ -817,27 +842,33 @@ impl Hypervisor {
         let static_system_state =
             SandboxSafeSystemState::new(&system_state, *self.cycles_account_manager);
 
-        if let Some(sandbox_executor) = self.sandbox_executor.as_ref() {
-            SandboxedExecutionController::process(
-                sandbox_executor,
-                WasmExecutionInput {
+        let (compilation_result, execution_state, execution_result) =
+            if let Some(sandbox_executor) = self.sandbox_executor.as_ref() {
+                SandboxedExecutionController::process(
+                    sandbox_executor,
+                    WasmExecutionInput {
+                        api_type,
+                        sandbox_safe_system_state: static_system_state,
+                        canister_current_memory_usage,
+                        execution_parameters,
+                        func_ref,
+                        execution_state,
+                    },
+                )
+            } else {
+                self.wasm_executor.process(WasmExecutionInput {
                     api_type,
                     sandbox_safe_system_state: static_system_state,
                     canister_current_memory_usage,
                     execution_parameters,
                     func_ref,
                     execution_state,
-                },
-            )
-        } else {
-            self.wasm_executor.process(WasmExecutionInput {
-                api_type,
-                sandbox_safe_system_state: static_system_state,
-                canister_current_memory_usage,
-                execution_parameters,
-                func_ref,
-                execution_state,
-            })
+                })
+            };
+        if let Some(compilation_result) = compilation_result {
+            self.metrics
+                .observe_compilation_metrics(&compilation_result);
         }
+        (execution_state, execution_result)
     }
 }

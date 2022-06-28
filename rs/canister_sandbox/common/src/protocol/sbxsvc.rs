@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 
 use crate::fdenum::EnumerateInnerFileDescriptors;
 use crate::protocol::structs;
-use ic_interfaces::execution_environment::HypervisorResult;
+use ic_interfaces::execution_environment::{CompilationResult, HypervisorResult};
 use ic_replicated_state::{
     page_map::{
         CheckpointSerialization, MappingSerialization, PageAllocatorSerialization,
@@ -13,7 +13,7 @@ use ic_replicated_state::{
     },
     Global, NumWasmPages,
 };
-use ic_types::{methods::WasmMethod, CanisterId, NumInstructions};
+use ic_types::{methods::WasmMethod, CanisterId};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -56,7 +56,7 @@ pub struct OpenWasmRequest {
 
 /// Reply to an `OpenWasmRequest`.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct OpenWasmReply(pub HypervisorResult<()>);
+pub struct OpenWasmReply(pub HypervisorResult<CompilationResult>);
 
 /// Request to close the indicated wasm object.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -237,7 +237,7 @@ pub struct CreateExecutionStateSuccessReply {
     pub exported_globals: Vec<Global>,
     pub exported_functions: BTreeSet<WasmMethod>,
     pub wasm_metadata: WasmMetadata,
-    pub compilation_cost: NumInstructions,
+    pub compilation_result: CompilationResult,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
