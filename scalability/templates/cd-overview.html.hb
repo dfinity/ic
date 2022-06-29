@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
-    <title>Performance for {{githash}}</title>
+    <title>IC Performance Dashboard</title>
     <script src="https://cdn.plot.ly/plotly-2.4.2.min.js"></script>
     <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
@@ -20,6 +20,9 @@
   </head>
 <body onload="display_times()">
   <div class="w3-container">
+    <div style="position: absolute; top: 0px; right: 0px; padding: 2em;">
+      <img src="fully_on_chain-default-bg_dark.svg" alt="On-chain logo" style="width: 20em;" />
+    </div>
     <h1>Estimated mainnet performance</h1>
 
     <div>
@@ -120,17 +123,6 @@
       }, false);
     </script>
 
-    <div class="w3-dropdown-hover">
-      <button class="w3-button">Show list of detailed reports</button>
-      <div class="w3-dropdown-content w3-bar-block w3-border" style="min-width: 250px;">
-        {{#each plot_exp1_query.data}}
-        <a href="{{this.githash}}/{{this.timestamp}}/report.html" class="w3-bar-item w3-button">
-          {{this.date}}
-        </a>
-        {{/each}}
-      </div>
-    </div>
-
     <h3>Update calls</h3>
 
     <div id="plot-exp1-update" class="plot"></div>
@@ -151,17 +143,6 @@
           });
       }, false);
     </script>
-
-    <div class="w3-dropdown-hover">
-      <button class="w3-button">Show list of detailed reports</button>
-      <div class="w3-dropdown-content w3-bar-block w3-border" style="min-width: 250px;">
-        {{#each plot_exp1_update.data}}
-        <a href="{{this.githash}}/{{this.timestamp}}/report.html" class="w3-bar-item w3-button">
-          {{this.date}}
-        </a>
-        {{/each}}
-      </div>
-    </div>
 
     <h2>Experiment 2: Memory under load</h2>
 
@@ -195,17 +176,6 @@
       }, false);
     </script>
 
-    <div class="w3-dropdown-hover">
-      <button class="w3-button">Show list of detailed reports</button>
-      <div class="w3-dropdown-content w3-bar-block w3-border" style="min-width: 250px;">
-        {{#each plot_exp2_update.data}}
-        <a href="{{this.githash}}/{{this.timestamp}}/report.html" class="w3-bar-item w3-button">
-          {{this.date}}
-        </a>
-        {{/each}}
-      </div>
-    </div>
-
     <h3>Query</h3>
 
     <div id="plot-exp2-query" class="plot"></div>
@@ -227,17 +197,6 @@
 
       }, false);
     </script>
-
-    <div class="w3-dropdown-hover">
-      <button class="w3-button">Show list of detailed reports</button>
-      <div class="w3-dropdown-content w3-bar-block w3-border" style="min-width: 250px;">
-        {{#each plot_exp2_query.data}}
-        <a href="{{this.githash}}/{{this.timestamp}}/report.html" class="w3-bar-item w3-button">
-          {{this.date}}
-        </a>
-        {{/each}}
-      </div>
-    </div>
 
     <h2>State Sync duration</h2>
 
@@ -266,17 +225,6 @@
       }, false);
     </script>
 
-    <div class="w3-dropdown-hover">
-      <button class="w3-button">Show list of detailed reports</button>
-      <div class="w3-dropdown-content w3-bar-block w3-border" style="min-width: 250px;">
-        {{#each plot_statesync.data}}
-        <a href="{{this.githash}}/{{this.timestamp}}/report.html" class="w3-bar-item w3-button">
-          {{this.date}}
-        </a>
-        {{/each}}
-      </div>
-    </div>
-    
     <h2>Maximum Xnet capacity</h2>
 
     <p>
@@ -303,16 +251,5 @@
       }, false);
     </script>
 
-    <div class="w3-dropdown-hover">
-      <button class="w3-button">Show list of detailed reports</button>
-      <div class="w3-dropdown-content w3-bar-block w3-border" style="min-width: 250px;">
-        {{#each plot_xnet.data}}
-        <a href="{{this.githash}}/{{this.timestamp}}/report.html" class="w3-bar-item w3-button">
-          {{this.date}}
-        </a>
-        {{/each}}
-      </div>
-    </div>
-    
   </div> <!-- Container //-->
 </body>

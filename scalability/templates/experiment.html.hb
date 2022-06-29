@@ -35,6 +35,9 @@
   </head>
 <body onload="display_times()">
   <div class="w3-container">
+    <div style="position: absolute; top: 0px; right: 0px; padding: 2em;">
+      <img src="/fully_on_chain-default-bg_dark.svg" alt="On-chain logo" style="width: 20em;" />
+    </div>
     Experiment timestamp: {{timestamp}}<br>
     Git hash: <a href="https://gitlab.com/dfinity-lab/public/ic/-/commit/{{githash}}">
       <i class="fa fa-brands fa-gitlab"></i> {{githash}}</a><br>
@@ -94,6 +97,8 @@
     
     See <a href="https://docs.google.com/document/d/123I-dAzY7W8yVpGbys63Nx4QaaP9yvPIq-APdvMiUQg/edit#heading=h.b9iztisufxmz">here</a> for a complete list of experiments and their explanation.
 
+    {{#if is_external}}
+    {{else}}
     <h1>Grafana Dashboards</h1>
 
     For the time period of the experiment and the given testnets, those should be the relevant Grafana Dashboards:
@@ -108,6 +113,7 @@
       <li><a href="https://grafana.dfinity.systems/d/YKZloKJMz/replica-details?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">Replica Details</a>
       <li><a href="https://grafana.dfinity.systems/d/oHBzMeMMk/xnet?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">Xnet</a>
     </ul>
+    {{/if}}
     
 
     {{{experiment-details}}}
