@@ -56,9 +56,4 @@ else
     ls -lah "$BUILD_TMP"
 
     "$ROOT_DIR"/gitlab-ci/src/artifacts/openssl-sign.sh "$BUILD_OUT"
-
-    if [[ "$BUILD_EXTRA_SUFFIX" == "-dev" ]]; then
-        buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" rsync-disk-img -- \
-            "$CI_PROJECT_DIR"/gitlab-ci/tools/copy-disk "$CDPRNET"
-    fi
 fi
