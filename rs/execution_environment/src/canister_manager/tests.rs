@@ -883,17 +883,17 @@ fn create_canister_fails_if_not_enough_cycles_are_sent_with_the_request() {
             canister_manager.create_canister(
                 canister,
                 sender_subnet_id,
-                Cycles::from(100),
+                Cycles::new(100),
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
             ),
             (
                 Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
-                    sent: Cycles::from(100),
+                    sent: Cycles::new(100),
                     required: CANISTER_CREATION_FEE
                 }),
-                Cycles::from(100),
+                Cycles::new(100),
             ),
         );
         assert_eq!(state.canister_states.len(), 0);
@@ -1442,7 +1442,7 @@ fn stop_a_stopped_canister_from_another_canister() {
             CanisterStatusType::Stopped
         );
 
-        let cycles = 20;
+        let cycles = 20u128;
         let stop_context = StopCanisterContext::Canister {
             sender: controller,
             reply_callback: CallbackId::from(0),
@@ -1973,7 +1973,7 @@ fn deposit_cycles_succeeds_with_enough_cycles() {
         let mut canister = get_running_canister_with_args(canister_id, sender, *INITIAL_CYCLES);
 
         let cycles_balance_before = canister.system_state.balance();
-        let cycles = Cycles::from(100);
+        let cycles = Cycles::new(100);
 
         canister_manager
             .cycles_account_manager
@@ -2017,7 +2017,7 @@ fn create_canister_with_cycles_sender_in_whitelist() {
     let canister = state.take_canister_state(&canister_id).unwrap();
 
     // Verify cycles are set as expected.
-    assert_eq!(canister.system_state.balance(), Cycles::from(123));
+    assert_eq!(canister.system_state.balance(), Cycles::new(123));
 }
 
 #[test]
@@ -2025,7 +2025,7 @@ fn can_get_canister_balance() {
     with_setup(|canister_manager, mut state, _| {
         let canister_id = canister_test_id(0);
         let sender = canister_test_id(1).get();
-        let gas = Cycles::from(100);
+        let gas = Cycles::new(100);
         let canister = get_running_canister_with_args(canister_id, sender, gas);
         state.put_canister_state(canister);
 
@@ -2073,7 +2073,7 @@ fn add_cycles_sender_in_whitelist() {
     let canister = state.take_canister_state(&canister_id).unwrap();
     assert_eq!(
         canister.system_state.balance(),
-        initial_cycles + Cycles::from(123),
+        initial_cycles + Cycles::new(123),
     );
 }
 
@@ -2249,7 +2249,7 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
                 sender_subnet_id,
                 // Give the new canister a relatively small number of cycles so it doesn't have
                 // enough to be installed.
-                CANISTER_CREATION_FEE + Cycles::from(100),
+                CANISTER_CREATION_FEE + Cycles::new(100),
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
@@ -2700,8 +2700,8 @@ fn install_code_preserves_system_state_and_scheduler_state() {
             CyclesAccountManagerBuilder::new()
                 // Make it free so we don't have to worry about cycles when
                 // making assertions.
-                .with_update_message_execution_fee(Cycles::from(0))
-                .with_ten_update_instructions_execution_fee(Cycles::from(0))
+                .with_update_message_execution_fee(Cycles::zero())
+                .with_ten_update_instructions_execution_fee(Cycles::zero())
                 .build(),
         )
         .build();

@@ -40,7 +40,7 @@ fn correct_charging_target_canister_for_a_response() {
     let freeze_threshold = NumSeconds::new(30 * 24 * 60 * 60);
     let initial_cycles = mock_freeze_threshold_cycles(
         freeze_threshold,
-        Cycles::from(2_000_000),
+        Cycles::new(2_000_000),
         NumBytes::from(4 << 30),
     ) + Cycles::new(5_000_000_000_000);
     let mut system_state = SystemState::new_running(

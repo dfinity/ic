@@ -91,7 +91,7 @@ impl RequestInPrep {
             on_reply,
             on_reject,
             on_cleanup: None,
-            cycles: Cycles::from(0),
+            cycles: Cycles::zero(),
             method_name,
             method_payload: Vec::new(),
             max_size_remote_subnet,

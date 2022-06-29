@@ -112,7 +112,7 @@ impl State {
             cycles_per_xdr: DEFAULT_CYCLES_PER_XDR.into(),
             cycles_limit: 50_000_000_000_000_000u128.into(), // == 50 Pcycles/hour
             limiter: limiter::Limiter::new(resolution, max_age),
-            total_cycles_minted: 0.into(),
+            total_cycles_minted: Cycles::zero(),
             blocks_notified: Some(BTreeMap::new()),
             last_purged_notification: Some(0),
         }
@@ -1278,7 +1278,7 @@ mod tests {
             vec![SubnetId::from(PrincipalId::new_subnet_test_id(3))],
         );
         state.default_subnets = vec![SubnetId::from(PrincipalId::new_subnet_test_id(123))];
-        state.total_cycles_minted = 1234.into();
+        state.total_cycles_minted = Cycles::new(1234);
         state.last_purged_notification = Some(33);
         let mut blocks_notified = BTreeMap::new();
         for i in 50..60 {

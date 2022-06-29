@@ -25,7 +25,7 @@ impl Funds {
     /// Returns a new `Funds` object containing zero funds.
     pub fn zero() -> Self {
         Self {
-            cycles: Cycles::from(0),
+            cycles: Cycles::zero(),
         }
     }
 
@@ -41,7 +41,7 @@ impl Funds {
     /// Takes the cycles contained and sets the remaining cycles to zero
     pub fn take_cycles(&mut self) -> Cycles {
         let cycles = self.cycles;
-        self.cycles = Cycles::from(0);
+        self.cycles = Cycles::zero();
         cycles
     }
 

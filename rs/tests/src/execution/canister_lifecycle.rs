@@ -1474,7 +1474,7 @@ pub fn refunds_after_uninstall_are_refunded(handle: IcHandle, ctx: &ic_fondue::p
                                         .on_reply(wasm().reply()),
                                 ),
                             ),
-                            Cycles::from(50).into_parts(),
+                            Cycles::new(50).into_parts(),
                         ),
                     )
                     .await,

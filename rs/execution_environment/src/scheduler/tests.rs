@@ -1076,7 +1076,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
             let canister_id = canister.canister_id();
             let subnet_id = state.metadata.own_subnet_id;
             let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
-            let cycles = 1000000;
+            let cycles = 1000000u128;
 
             for _ in 0..20 {
                 state
@@ -1177,7 +1177,7 @@ fn subnet_messages_respect_bitcoin_request_limit_per_round() {
                             .receiver(CanisterId::from(subnet_id))
                             .method_name(Method::BitcoinGetBalance)
                             .method_payload(payload.clone())
-                            .payment(Cycles::from(cycles))
+                            .payment(Cycles::new(cycles))
                             .build()
                             .into(),
                         InputQueueType::RemoteSubnet,
@@ -1262,7 +1262,7 @@ fn non_bitcoin_subnet_messages_not_affected_by_bitcoin_request_limit() {
                             .receiver(CanisterId::from(subnet_id))
                             .method_name(Method::CanisterStatus)
                             .method_payload(payload.clone())
-                            .payment(Cycles::from(cycles))
+                            .payment(Cycles::new(cycles))
                             .build()
                             .into(),
                         InputQueueType::RemoteSubnet,
@@ -2243,7 +2243,7 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
                 .unwrap()
                 .new_call_context(
                     CallOrigin::Ingress(user_test_id(13), message_test_id(14)),
-                    Cycles::from(10),
+                    Cycles::from(10u128),
                     Time::from_nanos_since_unix_epoch(0),
                 );
 
@@ -2362,7 +2362,7 @@ fn execution_round_metrics_are_recorded() {
             let canister_id = canister.canister_id();
             let subnet_id = state.metadata.own_subnet_id;
             let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
-            let cycles = 1000000;
+            let cycles = 1000000u128;
             for _ in 0..3 {
                 state
                     .subnet_queues_mut()
@@ -2799,7 +2799,7 @@ fn canisters_reject_open_call_contexts_when_forcibly_uninstalled() {
                     CanisterStateBuilder::new()
                         .with_canister_id(canister_test_id(1))
                         // No cycles, so that it gets uninstalled.
-                        .with_cycles(0)
+                        .with_cycles(0u128)
                         // Add an allocation so that a canister needs to pay > 0 cycles.
                         .with_compute_allocation(ComputeAllocation::try_from(10).unwrap())
                         // Create a request from canister 0 so that there's an output queue
@@ -2876,7 +2876,7 @@ fn replicated_state_metrics_running_canister() {
 fn test_uninstall_canister() {
     let mut canister = CanisterStateBuilder::new()
         .with_canister_id(canister_test_id(0))
-        .with_cycles(0)
+        .with_cycles(0u128)
         .with_wasm(vec![4, 5, 6])
         .with_stable_memory(vec![1, 2, 3])
         .with_memory_allocation(1000)

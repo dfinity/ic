@@ -4442,12 +4442,12 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk"
-version = "0.3.3"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "606276ed1ce363eb9ccaf492e36fb40425417dcd4598f261d47e0ed6a1309faa"
+checksum = "59ff298314d235dd2c150f74157df5bbcdbd48604b895425840c2fe9225c9a3a"
 dependencies = [
  "candid",
- "cfg-if 1.0.0",
+ "cfg-if 0.1.10",
  "serde",
 ]
 
@@ -6189,7 +6189,7 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "ic-base-types",
- "ic-cdk 0.3.3",
+ "ic-cdk 0.3.1",
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-nervous-system-common",
@@ -9935,9 +9935,9 @@ dependencies = [
 
 [[package]]
 name = "num-traits"
-version = "0.2.15"
+version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "578ede34cf02f8924ab9447f50c28075b4d3e5b269972345e7e0372b38c6cdcd"
+checksum = "9a64b1ec5cda2586e284722486d802acf1f7dbdc623e2bfc57e65ca1cd099290"
 dependencies = [
  "autocfg 1.1.0",
  "libm",

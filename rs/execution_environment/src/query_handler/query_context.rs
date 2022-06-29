@@ -453,7 +453,7 @@ impl<'a> QueryContext<'a> {
             callback,
             response.response_payload,
             // No cycles are refunded in a response to a query call.
-            Cycles::from(0),
+            Cycles::zero(),
             self.state.time(),
             Arc::clone(&self.network_topology),
             execution_parameters,

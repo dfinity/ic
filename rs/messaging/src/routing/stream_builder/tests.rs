@@ -67,7 +67,7 @@ fn reject_local_request() {
         );
 
         // With a reservation on an input queue.
-        let payment = Cycles::from(100);
+        let payment = Cycles::new(100);
         let msg = generate_message_for_test(
             sender,
             receiver,
@@ -135,7 +135,7 @@ fn reject_local_request_for_subnet() {
         let (stream_builder, mut state, _) = new_fixture(&log);
 
         // With a reservation on the subnet input queue.
-        let payment = Cycles::from(100);
+        let payment = Cycles::new(100);
         let subnet_id = state.metadata.own_subnet_id;
         let subnet_id_as_canister_id = CanisterId::from(subnet_id);
         let msg = generate_message_for_test(
@@ -951,7 +951,7 @@ fn generate_messages_for_test(senders: u64, receivers: u64) -> Vec<Request> {
     for snd in 3..(3 + senders) {
         let sender = canister_test_id(snd);
         let mut next_callback_id = 0;
-        let payment = Cycles::from(100);
+        let payment = Cycles::new(100);
         for rcv in 700..(700 + receivers) {
             let receiver = canister_test_id(rcv);
             for i in snd..2 * snd {

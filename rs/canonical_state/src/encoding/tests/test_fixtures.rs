@@ -29,7 +29,7 @@ pub fn request() -> RequestOrResponse {
         .receiver(canister_test_id(1))
         .sender(canister_test_id(2))
         .sender_reply_callback(CallbackId::from(3))
-        .payment(Cycles::from(4))
+        .payment(Cycles::new(4))
         .method_name("test".to_string())
         .method_payload(vec![6])
         .build()
@@ -41,7 +41,7 @@ pub fn response() -> RequestOrResponse {
         .originator(canister_test_id(6))
         .respondent(canister_test_id(5))
         .originator_reply_callback(CallbackId::from(4))
-        .refund(Cycles::from(3))
+        .refund(Cycles::new(3))
         .response_payload(Payload::Data(vec![1]))
         .build()
         .into()
@@ -52,7 +52,7 @@ pub fn reject_response() -> RequestOrResponse {
         .originator(canister_test_id(6))
         .respondent(canister_test_id(5))
         .originator_reply_callback(CallbackId::from(4))
-        .refund(Cycles::from(3))
+        .refund(Cycles::new(3))
         .response_payload(Payload::Reject(RejectContext {
             code: RejectCode::SysFatal,
             message: "Oops".into(),

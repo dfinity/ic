@@ -69,7 +69,7 @@ impl ApiTypeBuilder {
         ApiType::update(
             mock_time(),
             vec![],
-            Cycles::from(0),
+            Cycles::zero(),
             user_test_id(1).get(),
             CallContextId::from(1),
         )
@@ -93,7 +93,7 @@ impl ApiTypeBuilder {
         ApiType::reject_callback(
             mock_time(),
             reject_context,
-            Cycles::from(0),
+            Cycles::zero(),
             call_context_test_id(1),
             false,
         )
@@ -125,7 +125,7 @@ pub fn get_system_state() -> SystemState {
         .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
-            Cycles::from(50),
+            Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
         );
     system_state

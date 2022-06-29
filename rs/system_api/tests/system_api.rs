@@ -392,7 +392,7 @@ fn test_reply_api_support_on_nns() {
         .with_subnet_type(SubnetType::System)
         .build();
 
-    let api_type = ApiTypeBuilder::build_reply_api(Cycles::from(0));
+    let api_type = ApiTypeBuilder::build_reply_api(Cycles::zero());
     let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
 
     assert_api_not_supported(api.ic0_msg_caller_size());
@@ -455,7 +455,7 @@ fn test_reply_api_support_non_nns() {
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let api_type = ApiTypeBuilder::build_reply_api(Cycles::from(0));
+    let api_type = ApiTypeBuilder::build_reply_api(Cycles::zero());
     let mut api = get_system_api(api_type, &get_system_state(), cycles_account_manager);
 
     assert_api_not_supported(api.ic0_msg_caller_size());
@@ -1050,7 +1050,7 @@ fn test_discard_cycles_charge_by_new_call() {
     );
 
     // Add cycles to call.
-    let amount = Cycles::from(49);
+    let amount = Cycles::new(49);
     assert_eq!(api.ic0_call_cycles_add128(amount), Ok(()));
     // Check cycles balance after call_add_cycles.
     assert_eq!(
@@ -1092,13 +1092,13 @@ fn test_fail_add_cycles_when_not_enough_balance() {
     );
 
     // Add cycles to call.
-    let amount = cycles_amount + Cycles::from(1);
+    let amount = cycles_amount + Cycles::new(1);
     assert_eq!(
         api.ic0_call_cycles_add128(amount).unwrap_err(),
         HypervisorError::InsufficientCyclesBalance(CanisterOutOfCyclesError {
             canister_id,
             available: cycles_amount,
-            threshold: Cycles::from(0),
+            threshold: Cycles::zero(),
             requested: amount,
         })
     );
@@ -1151,7 +1151,7 @@ fn test_fail_adding_more_cycles_when_not_enough_balance() {
         HypervisorError::InsufficientCyclesBalance(CanisterOutOfCyclesError {
             canister_id,
             available: Cycles::from(cycles_amount - amount),
-            threshold: Cycles::from(0),
+            threshold: Cycles::zero(),
             requested: Cycles::from(amount),
         })
     );
@@ -1176,7 +1176,7 @@ fn test_canister_balance() {
         .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
-            Cycles::from(50),
+            Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
         );
 
@@ -1204,7 +1204,7 @@ fn test_canister_cycle_balance() {
         .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
-            Cycles::from(50),
+            Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
         );
 
@@ -1419,7 +1419,7 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
         .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
-            Cycles::from(40),
+            Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
         );
     let mut api = get_system_api(
@@ -1440,7 +1440,7 @@ fn call_perform_not_enough_cycles_resets_state() {
         .build();
     // Set initial cycles small enough so that it does not have enough
     // cycles to send xnet messages.
-    let initial_cycles = cycles_account_manager.xnet_call_performed_fee() - Cycles::from(10);
+    let initial_cycles = cycles_account_manager.xnet_call_performed_fee() - Cycles::from(10u128);
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(initial_cycles)
         .build();
@@ -1449,7 +1449,7 @@ fn call_perform_not_enough_cycles_resets_state() {
         .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
-            Cycles::from(40),
+            Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
         );
     let mut api = get_system_api(
@@ -1459,7 +1459,7 @@ fn call_perform_not_enough_cycles_resets_state() {
     );
     api.ic0_call_new(0, 10, 0, 10, 0, 0, 0, 0, &[0; 1024])
         .unwrap();
-    api.ic0_call_cycles_add128(Cycles::from(100)).unwrap();
+    api.ic0_call_cycles_add128(Cycles::new(100)).unwrap();
     assert_eq!(api.ic0_call_perform().unwrap(), 2);
     let system_state_changes = api.into_system_state_changes();
     system_state_changes.apply_changes(
@@ -1595,7 +1595,7 @@ fn take_execution_result_properly_frees_memory() {
             call_context_test_id(0),
             Some(own_canister_id),
             Some(canister_test_id(0)),
-            Cycles::from(0),
+            Cycles::zero(),
             WasmClosure::new(0, 0),
             WasmClosure::new(0, 0),
             None,
@@ -1652,7 +1652,7 @@ fn push_output_request_respects_memory_limits() {
                 call_context_test_id(0),
                 Some(own_canister_id),
                 Some(canister_test_id(0)),
-                Cycles::from(0),
+                Cycles::zero(),
                 WasmClosure::new(0, 0),
                 WasmClosure::new(0, 0),
                 None,
@@ -1751,7 +1751,7 @@ fn push_output_request_oversized_request_memory_limits() {
             call_context_test_id(0),
             Some(own_canister_id),
             Some(canister_test_id(0)),
-            Cycles::from(0),
+            Cycles::zero(),
             WasmClosure::new(0, 0),
             WasmClosure::new(0, 0),
             None,

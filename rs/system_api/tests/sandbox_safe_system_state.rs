@@ -50,7 +50,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
     let system_state = SystemState::new_running(
         canister_test_id(0),
         user_test_id(1).get(),
-        request_payload_cost - Cycles::from(10),
+        request_payload_cost - Cycles::new(10),
         NumSeconds::from(100_000),
     );
 
@@ -67,9 +67,9 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         Err((
             StateError::CanisterOutOfCycles(CanisterOutOfCyclesError {
                 canister_id: canister_test_id(0),
-                available: request_payload_cost - Cycles::from(10),
+                available: request_payload_cost - Cycles::new(10),
                 requested: total_cost,
-                threshold: Cycles::from(0),
+                threshold: Cycles::zero(),
             }),
             request
         ))
@@ -101,7 +101,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
     let system_state = SystemState::new_running(
         canister_test_id(0),
         user_test_id(1).get(),
-        total_cost - Cycles::from(10),
+        total_cost - Cycles::new(10),
         NumSeconds::from(100_000),
     );
 
@@ -118,9 +118,9 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         Err((
             StateError::CanisterOutOfCycles(CanisterOutOfCyclesError {
                 canister_id: canister_test_id(0),
-                available: total_cost - Cycles::from(10),
+                available: total_cost - Cycles::new(10),
                 requested: total_cost,
-                threshold: Cycles::from(0),
+                threshold: Cycles::zero(),
             }),
             request
         ))

@@ -20,7 +20,7 @@ impl Limiter {
     pub fn new(resolution: Duration, max_age: Duration) -> Self {
         Self {
             time_windows: VecDeque::new(),
-            total_count: 0.into(),
+            total_count: Cycles::zero(),
             resolution,
             max_age,
         }
@@ -41,7 +41,7 @@ impl Limiter {
         {
             self.time_windows.push_back(TimeWindowCount {
                 window,
-                count: 0.into(),
+                count: Cycles::zero(),
             });
         };
 
@@ -100,43 +100,43 @@ mod tests {
         let resolution = Duration::from_secs(60);
         let max_age = Duration::from_secs(24 * 60 * 60);
         let mut limiter = Limiter::new(resolution, max_age);
-        assert_eq!(limiter.get_count(), 0.into());
+        assert_eq!(limiter.get_count(), Cycles::zero());
 
         let t = UNIX_EPOCH;
-        limiter.add(t, 100.into());
-        assert_eq!(limiter.get_count(), 100.into());
+        limiter.add(t, Cycles::new(100));
+        assert_eq!(limiter.get_count(), Cycles::new(100));
 
-        limiter.add(t + Duration::from_secs(59), 10.into());
+        limiter.add(t + Duration::from_secs(59), Cycles::new(10));
         assert_eq!(limiter.time_windows.len(), 1);
-        assert_eq!(limiter.get_count(), 110.into());
+        assert_eq!(limiter.get_count(), Cycles::new(110));
 
-        limiter.add(t + Duration::from_secs(60), 20.into());
+        limiter.add(t + Duration::from_secs(60), Cycles::new(20));
         assert_eq!(limiter.time_windows.len(), 2);
-        assert_eq!(limiter.get_count(), 130.into());
+        assert_eq!(limiter.get_count(), Cycles::new(130));
 
-        limiter.add(t + Duration::from_secs(10000), 1.into());
+        limiter.add(t + Duration::from_secs(10000), Cycles::new(1));
         assert_eq!(limiter.time_windows.len(), 3);
-        assert_eq!(limiter.get_count(), 131.into());
+        assert_eq!(limiter.get_count(), Cycles::new(131));
 
-        limiter.add(t + max_age, 7.into());
+        limiter.add(t + max_age, Cycles::new(7));
         assert_eq!(limiter.time_windows.len(), 4);
-        assert_eq!(limiter.get_count(), 138.into());
+        assert_eq!(limiter.get_count(), Cycles::new(138));
 
-        limiter.add(t + max_age + resolution, 1.into());
+        limiter.add(t + max_age + resolution, Cycles::new(1));
         assert_eq!(limiter.time_windows.len(), 4);
-        assert_eq!(limiter.get_count(), 29.into());
+        assert_eq!(limiter.get_count(), Cycles::new(29));
 
-        limiter.add(t + max_age + max_age + resolution, 23.into());
+        limiter.add(t + max_age + max_age + resolution, Cycles::new(23));
         assert_eq!(limiter.time_windows.len(), 2);
-        assert_eq!(limiter.get_count(), 24.into());
+        assert_eq!(limiter.get_count(), Cycles::new(24));
 
         // Times in the past should be added to the most recent window.
-        limiter.add(t, 1.into());
+        limiter.add(t, Cycles::from(1u128));
         assert_eq!(limiter.time_windows.len(), 2);
-        assert_eq!(limiter.get_count(), 25.into());
+        assert_eq!(limiter.get_count(), Cycles::new(25));
 
         limiter.purge_old(t + max_age * 4);
         assert_eq!(limiter.time_windows.len(), 0);
-        assert_eq!(limiter.get_count(), 0.into());
+        assert_eq!(limiter.get_count(), Cycles::zero());
     }
 }

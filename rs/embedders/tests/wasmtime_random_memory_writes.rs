@@ -55,7 +55,7 @@ fn test_api_for_update(
         ApiType::update(
             mock_time(),
             payload,
-            Cycles::from(0),
+            Cycles::zero(),
             caller,
             call_context_test_id(13),
         ),

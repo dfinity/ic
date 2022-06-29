@@ -70,7 +70,7 @@ pub fn execute_non_replicated_query(
                 .system_state
                 .call_context_manager_mut()
                 .unwrap()
-                .new_call_context(call_origin, Cycles::from(0), time);
+                .new_call_context(call_origin, Cycles::zero(), time);
             (
                 ic_system_api::NonReplicatedQueryKind::Stateful {
                     call_context_id,
