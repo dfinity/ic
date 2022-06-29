@@ -1,8 +1,5 @@
 //! Utility functions for the NI-DKG code
 
-use ic_crypto_internal_bls12381_serde_miracl::{
-    miracl_fr_to_bytes, miracl_g1_to_bytes, miracl_g2_to_bytes,
-};
 use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::ecp::ECP;
 use miracl_core::bls12381::ecp2::ECP2;
@@ -55,79 +52,8 @@ pub fn field_mul(left: &BIG, right: &BIG) -> BIG {
     BIG::modmul(left, right, &curve_order())
 }
 
-// Helpers to compute SHA256 hashes of elements of  Z_p/G_1/G_2.
-
-/// Feeds an element of Z_p BIG to a hash.
-///
-/// Note: The least significant 32 bytes of a BIG are sufficient to contain an
-/// element of Z_p.  We reduce the BIG representation to guarantee that the
-/// element is in canonical form, in those 32 bytes.
-pub fn process_fr(h: &mut miracl_core::hash256::HASH256, big: &BIG) {
-    let mut big = *big;
-    big.rmod(&BIG::new_ints(&rom::CURVE_ORDER));
-    h.process_array(&miracl_fr_to_bytes(&big).0)
-}
-
-/// Feeds the standard serialisation of an element of G1==ECP to a hash.
-pub fn process_ecp(h: &mut miracl_core::hash256::HASH256, point: &ECP) {
-    h.process_array(&miracl_g1_to_bytes(point).0)
-}
-
-/// Feeds the standard serialisation of an element of G2==ECP2 to a hash.
-pub fn process_ecp2(h: &mut miracl_core::hash256::HASH256, point: &ECP2) {
-    h.process_array(&miracl_g2_to_bytes(point).0)
-}
-
 fn ceil(a: usize, b: usize) -> usize {
     (a - 1) / b + 1
-}
-
-/// Hash a message to a random integer modulo the BLS12-381 order
-///
-/// # Arguments
-/// * `dst` a domain seperator
-/// * `msg` the message to hash
-/// * `spec_p` the order of BLS12-381
-/// # Returns
-/// An integer between 0 and spec_p
-pub fn oracle_p(dst: &[u8], msg: &[u8], spec_p: &BIG) -> BIG {
-    // We use `hash_to_field_bls12381` to hash to Z_p, even though it returns an
-    // element of Z_MODULUS. However, MODULUS is 381-bit, while p is about 256 bits,
-    // so the output is practically uniform modulo `p`.
-    let mut x = hash_to_field_bls12381(hmac::MC_SHA2, ecp::HASH_TYPE, dst, msg, 1)[0].redc();
-    x.rmod(spec_p);
-    x
-}
-
-// Hash-to-field and hash-to-point, according to the draft spec.
-// Copied from MIRACL's TestHTP.rs.
-fn hash_to_field_bls12381(
-    hash: usize,
-    hlen: usize,
-    dst: &[u8],
-    msg: &[u8],
-    ctr: usize,
-) -> [miracl_core::bls12381::fp::FP; 2] {
-    use miracl_core::bls12381::dbig::DBIG;
-    let mut spec_u: [FP; 2] = [FP::new(), FP::new()];
-
-    let q = BIG::new_ints(&rom::MODULUS);
-    let k = q.nbits();
-    let spec_r = BIG::new_ints(&rom::CURVE_ORDER);
-    let m = spec_r.nbits();
-    let ll = ceil(k + ceil(m, 2), 8);
-    let mut okm: [u8; 512] = [0; 512];
-    hmac::xmd_expand(hash, hlen, &mut okm, ll * ctr, dst, msg);
-    let mut fd: [u8; 256] = [0; 256];
-    for i in 0..ctr {
-        for j in 0..ll {
-            fd[j] = okm[i * ll + j];
-        }
-        let mut dx = DBIG::frombytes(&fd[0..ll]);
-        let w = FP::new_big(&dx.dmod(&q));
-        spec_u[i].copy(&w);
-    }
-    spec_u
 }
 
 fn hash_to_field2_bls12381(
