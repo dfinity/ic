@@ -1,9 +1,11 @@
+use candid::types::number::{Int, Nat};
 use candid::CandidType;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::block::BlockHeight;
 use ic_ledger_core::ledger::TransferError as CoreTransferError;
 use serde::Deserialize;
+use serde_bytes::ByteBuf;
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub enum TransferError {
@@ -64,4 +66,67 @@ pub struct ArchiveInfo {
     pub canister_id: CanisterId,
     pub block_range_start: u64,
     pub block_range_end: u64,
+}
+
+/// Variant type for the `metadata` endpoint values.
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub enum Value {
+    Nat(Nat),
+    Int(Int),
+    Text(String),
+    Blob(ByteBuf),
+}
+
+impl Value {
+    pub fn entry(key: impl ToString, val: impl Into<Value>) -> (String, Self) {
+        (key.to_string(), val.into())
+    }
+}
+
+impl From<i64> for Value {
+    fn from(n: i64) -> Self {
+        Value::Int(Int::from(n))
+    }
+}
+
+impl From<i128> for Value {
+    fn from(n: i128) -> Self {
+        Value::Int(Int::from(n))
+    }
+}
+
+impl From<u64> for Value {
+    fn from(n: u64) -> Self {
+        Value::Nat(Nat::from(n))
+    }
+}
+
+impl From<u128> for Value {
+    fn from(n: u128) -> Self {
+        Value::Nat(Nat::from(n))
+    }
+}
+
+impl From<String> for Value {
+    fn from(s: String) -> Self {
+        Value::Text(s)
+    }
+}
+
+impl<'a> From<&'a str> for Value {
+    fn from(s: &'a str) -> Self {
+        Value::Text(s.to_string())
+    }
+}
+
+impl From<Vec<u8>> for Value {
+    fn from(bytes: Vec<u8>) -> Value {
+        Value::Blob(ByteBuf::from(bytes))
+    }
+}
+
+impl<'a> From<&'a [u8]> for Value {
+    fn from(bytes: &'a [u8]) -> Value {
+        Value::Blob(ByteBuf::from(bytes.to_vec()))
+    }
 }

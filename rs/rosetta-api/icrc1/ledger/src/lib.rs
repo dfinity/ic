@@ -2,7 +2,11 @@ pub mod cdk_runtime;
 pub mod endpoints;
 
 use crate::cdk_runtime::CdkRuntime;
-use candid::CandidType;
+use crate::endpoints::Value;
+use candid::{
+    types::number::{Int, Nat},
+    CandidType,
+};
 use ic_icrc1::{Account, Block, LedgerBalances, Transaction};
 use ic_ledger_core::{
     archive::{ArchiveCanisterWasm, ArchiveOptions},
@@ -14,6 +18,7 @@ use ic_ledger_core::{
     tokens::Tokens,
 };
 use serde::{Deserialize, Serialize};
+use serde_bytes::ByteBuf;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::time::Duration;
@@ -33,6 +38,51 @@ impl ArchiveCanisterWasm for Icrc1ArchiveWasm {
     }
 }
 
+/// Like [endpoints::Value], but can be serialized to CBOR.
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub enum StoredValue {
+    NatBytes(ByteBuf),
+    IntBytes(ByteBuf),
+    Text(String),
+    Blob(ByteBuf),
+}
+
+impl From<StoredValue> for Value {
+    fn from(v: StoredValue) -> Self {
+        match v {
+            StoredValue::NatBytes(num_bytes) => Self::Nat(
+                Nat::decode(&mut &num_bytes[..])
+                    .unwrap_or_else(|e| panic!("bug: invalid Nat encoding {:?}: {}", num_bytes, e)),
+            ),
+            StoredValue::IntBytes(int_bytes) => Self::Int(
+                Int::decode(&mut &int_bytes[..])
+                    .unwrap_or_else(|e| panic!("bug: invalid Int encoding {:?}: {}", int_bytes, e)),
+            ),
+            StoredValue::Text(text) => Self::Text(text),
+            StoredValue::Blob(bytes) => Self::Blob(bytes),
+        }
+    }
+}
+
+impl From<Value> for StoredValue {
+    fn from(v: Value) -> Self {
+        match v {
+            Value::Nat(num) => {
+                let mut buf = vec![];
+                num.encode(&mut buf).expect("bug: failed to encode nat");
+                Self::NatBytes(ByteBuf::from(buf))
+            }
+            Value::Int(int) => {
+                let mut buf = vec![];
+                int.encode(&mut buf).expect("bug: failed to encode nat");
+                Self::IntBytes(ByteBuf::from(buf))
+            }
+            Value::Text(text) => Self::Text(text),
+            Value::Blob(bytes) => Self::Blob(bytes),
+        }
+    }
+}
+
 #[derive(Deserialize, CandidType, Clone, Debug, PartialEq)]
 pub struct InitArgs {
     pub minting_account: Account,
@@ -40,6 +90,7 @@ pub struct InitArgs {
     pub transfer_fee: Tokens,
     pub token_name: String,
     pub token_symbol: String,
+    pub metadata: Vec<(String, Value)>,
     pub archive_options: ArchiveOptions,
 }
 
@@ -56,6 +107,7 @@ pub struct Ledger {
 
     token_symbol: String,
     token_name: String,
+    metadata: Vec<(String, StoredValue)>,
 }
 
 impl Ledger {
@@ -66,6 +118,7 @@ impl Ledger {
             transfer_fee,
             token_name,
             token_symbol,
+            metadata,
             archive_options,
         }: InitArgs,
         now: TimeStamp,
@@ -79,6 +132,10 @@ impl Ledger {
             transfer_fee,
             token_symbol,
             token_name,
+            metadata: metadata
+                .into_iter()
+                .map(|(k, v)| (k, StoredValue::from(v)))
+                .collect(),
         };
 
         for (account, balance) in initial_balances.into_iter() {
@@ -175,6 +232,20 @@ impl Ledger {
 
     pub fn transfer_fee(&self) -> Tokens {
         self.transfer_fee
+    }
+
+    pub fn metadata(&self) -> Vec<(String, Value)> {
+        let mut records: Vec<(String, Value)> = self
+            .metadata
+            .clone()
+            .into_iter()
+            .map(|(k, v)| (k, StoredValue::into(v)))
+            .collect();
+        let decimals = ic_ledger_core::tokens::DECIMAL_PLACES as u64;
+        records.push(Value::entry("icrc1:decimals", decimals));
+        records.push(Value::entry("icrc1:name", self.token_name()));
+        records.push(Value::entry("icrc1:symbol", self.token_symbol()));
+        records
     }
 
     /// Returns the root hash of the certified ledger state.
