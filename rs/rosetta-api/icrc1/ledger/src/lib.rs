@@ -176,4 +176,19 @@ impl Ledger {
     pub fn transfer_fee(&self) -> Tokens {
         self.transfer_fee
     }
+
+    /// Returns the root hash of the certified ledger state.
+    /// The canister code must call set_certified_data with the value this function returns after
+    /// each successful modification of the ledger.
+    pub fn root_hash(&self) -> [u8; 32] {
+        use ic_crypto_tree_hash::{Label, MixedHashTree as T};
+        let tree = match self.blockchain().last_hash {
+            Some(hash) => T::Labeled(
+                Label::from("tip_hash"),
+                Box::new(T::Leaf(hash.as_slice().to_vec())),
+            ),
+            None => T::Empty,
+        };
+        tree.digest().0
+    }
 }

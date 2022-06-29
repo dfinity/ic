@@ -5810,6 +5810,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk 0.5.1",
  "ic-cdk-macros",
+ "ic-crypto-tree-hash",
  "ic-icrc1",
  "ic-ledger-core",
  "ic-state-machine-tests",
