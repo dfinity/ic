@@ -1,0 +1,18 @@
+[package]
+name = "ic-ledger-canister-blocks-synchronizer"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2018"
+description = "Synchronizes a local copy of the ledger blocks with the ledger"
+
+[dependencies]
+clap = { version = "3.1.6", features = ["derive"] }
+ic-ledger-core = { path = "../ledger_core" }
+ic-ledger-client-core = { path = "../ledger_client_core" }
+ic-types = { path = "../../types/types" }
+tokio = { version = "1.15.0", features = ["full"] }
+url = "2.2.1"
+
+[[bin]]
+path = "src/main.rs"
+name = "ledger_blocks_synch"
