@@ -5955,6 +5955,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-ledger-canister-blocks-synchronizer"
+version = "0.1.0"
+dependencies = [
+ "clap 3.1.18",
+ "ic-ledger-client-core",
+ "ic-ledger-core",
+ "ic-types 0.8.0",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "ic-ledger-client-core"
 version = "0.1.0"
 dependencies = [
