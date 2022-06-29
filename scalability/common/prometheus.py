@@ -282,7 +282,7 @@ def get_common(hosts, testnet):
     return c
 
 
-def get_prometheus(payload):
+def get_prometheus(payload, host="https://prometheus.testnet.dfinity.network"):
     """Query prometheus for metrics."""
     headers = {"Accept": "application/json"}
 
@@ -290,7 +290,7 @@ def get_prometheus(payload):
         raise Exception("Use get_prometheus_range for range queries")
     print("Executing Prometheus query: ", colored(json.dumps(payload, indent=2), "yellow"))
     print(payload["query"].replace("\\\\\\\\", "\\\\"))
-    r = requests.get("https://prometheus.testnet.dfinity.network/api/v1/query", headers=headers, params=payload)
+    r = requests.get(f"{host}/api/v1/query", headers=headers, params=payload)
     return r
 
 

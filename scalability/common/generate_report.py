@@ -33,6 +33,8 @@ gflags.DEFINE_string(
     "The timestamp the benchmark run was marked with. Output folder with this timestamp in name will be used to generate report.",
 )
 gflags.MarkFlagAsRequired("timestamp")
+gflags.DEFINE_string("asset_root", "", "Path to the root of the asset canister")
+gflags.DEFINE_boolean("strict", False, "Fail generating reports if something is missing")
 
 
 def add_plot(name: str, xlabel: str, ylabel: str, x: [str], plots: [([str], str)]):
@@ -72,13 +74,18 @@ def resolve_ip_addresses(ips: [str], testnet: str):
     return load_generators
 
 
-def add_file(base, path, alt):
+def add_file(base, path, alt, strict=None):
+    if strict is None:
+        strict = FLAGS.strict
     content = ""
     try:
         for p in path:
             content += open(os.path.join(base, p)).read()
     except Exception:
-        content += alt
+        if not strict:
+            content += alt
+        else:
+            raise
 
     return content
 
@@ -408,16 +415,19 @@ def generate_report(base, githash, timestamp):
             )
         )
 
-    dirname = f"{githash}/{timestamp}"
-    data["lscpu"] = add_file(dirname, ["lscpu.stdout.txt"], "lscpu data missing")
-    data["free"] = add_file(dirname, ["free.stdout.txt"], "free data missing")
-    data["subnet_info"] = add_file(dirname, ["subnet_info.json"], "subnet info data missing")
-    data["topology"] = add_file(dirname, ["topology.json"], "topology data missing")
+    data["lscpu"] = add_file(base, ["lscpu.stdout.txt"], "lscpu data missing")
+    data["free"] = add_file(base, ["free.stdout.txt"], "free data missing")
+    data["subnet_info"] = add_file(base, ["subnet_info.json"], "subnet info data missing")
+    data["topology"] = add_file(base, ["topology.json"], "topology data missing")
 
-    report_file = os.path.join(base, "report.html")
+    if len(FLAGS.asset_root) > 0:
+        report_file = os.path.join(FLAGS.asset_root, FLAGS.git_revision, FLAGS.timestamp, "report.html")
+    else:
+        report_file = os.path.join(base, "report.html")
 
     with open(report_file, "w") as outfile:
         print("Rendering report with: ", json.dumps(data, indent=2))
+        data.update({"is_external": len(FLAGS.asset_root) > 0})
         output = template(data)
         outfile.write(output)
 

@@ -1,0 +1,8 @@
+{
+    "canisters": {
+        "www": {
+            "type": "assets",
+            "source": ["build"]
+        }
+    }
+}
