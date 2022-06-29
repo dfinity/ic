@@ -25,7 +25,6 @@ type Init = record {
   min_participant_icp_e8s : nat64;
   max_icp_e8s : nat64;
   min_participants : nat32;
-  token_sale_timestamp_seconds : nat64;
   nns_governance_canister_id : text;
   icp_ledger_canister_id : text;
   sns_ledger_canister_id : text;
@@ -37,18 +36,24 @@ type Possibility = variant { Err : CanisterCallError };
 type RefreshBuyerTokensRequest = record { buyer : text };
 type Sale = record { init : opt Init; state : opt State };
 type SetModeCallResult = record { possibility : opt Possibility };
+type SetOpenTimeWindowRequest = record { open_time_window : opt TimeWindow };
 type State = record {
+  open_time_window : opt TimeWindow;
   sns_token_e8s : nat64;
   lifecycle : int32;
   buyers : vec record { text; BuyerState };
 };
 type SweepResult = record { failure : nat32; skipped : nat32; success : nat32 };
+type TimeWindow = record {
+  start_timestamp_seconds : nat64;
+  end_timestamp_seconds : nat64;
+};
 service : (Init) -> {
   error_refund_icp : (ErrorRefundIcpRequest) -> (record {});
   finalize_sale : (record {}) -> (FinalizeSaleResponse);
   get_canister_status : (record {}) -> (GetCanisterStatusResponse);
   get_state : (record {}) -> (GetStateResponse) query;
-  open_sale : (record {}) -> (record {});
   refresh_buyer_tokens : (RefreshBuyerTokensRequest) -> (record {});
   refresh_sns_tokens : (record {}) -> (record {});
+  set_open_time_window : (SetOpenTimeWindowRequest) -> (record {});
 }

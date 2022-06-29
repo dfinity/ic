@@ -12,13 +12,11 @@ use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_governance::pb::v1::{
     Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
 };
-use ic_sns_governance::types::ONE_DAY_SECONDS;
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_sale::pb::v1::Init;
 use ledger_canister::{AccountIdentifier, ArchiveOptions, LedgerCanisterInitPayload, Tokens};
 use maplit::{btreemap, hashmap, hashset};
 use std::collections::{BTreeMap, HashMap};
-use std::time::{Duration, SystemTime};
 
 /// The maximum number of characters allowed for token symbol.
 pub const MAX_TOKEN_SYMBOL_LENGTH: usize = 10;
@@ -67,7 +65,6 @@ impl SnsInitPayload {
             neuron_minimum_stake_e8s: nervous_system_parameters_default.neuron_minimum_stake_e8s,
             initial_token_distribution: None,
             max_icp_e8s: None,
-            token_sale_timestamp_seconds: None,
             min_participants: None,
             min_participant_icp_e8s: Some(MIN_PARTICIPANT_ICP_E8S_DEFAULT),
             min_icp_e8s: None,
@@ -177,9 +174,6 @@ impl SnsInitPayload {
             sns_ledger_canister_id: sns_canister_ids.ledger.to_string(),
             icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
             max_icp_e8s: self.max_icp_e8s.expect("Field max_icp_e8 cannot be None"),
-            token_sale_timestamp_seconds: self
-                .token_sale_timestamp_seconds
-                .expect("Field token_sale_timestamp_seconds cannot be None"),
             min_participants: self
                 .min_participants
                 .expect("Field min_participants cannot be None"),
@@ -228,7 +222,6 @@ impl SnsInitPayload {
             self.validate_token_name(),
             self.validate_token_distribution(),
             self.validate_min_participants(),
-            self.validate_token_sale_timestamp_seconds(),
             self.validate_icp_parameters(),
             self.validate_min_participant_icp_e8s(),
             self.validate_neuron_minimum_stake_e8s(),
@@ -357,41 +350,6 @@ impl SnsInitPayload {
         }
     }
 
-    /// The token sale timestamp must exist, and be between 1 day and 90 days.
-    fn validate_token_sale_timestamp_seconds(&self) -> Result<(), String> {
-        let token_sale_timestamp_seconds = self
-            .token_sale_timestamp_seconds
-            .ok_or_else(|| "Error: token_sale_timestamp_seconds must be specified.".to_string())?;
-
-        let one_day_from_now_timestamp = dfn_core::api::now()
-            .checked_add(Duration::from_secs(ONE_DAY_SECONDS))
-            .expect("Error when calculating Unix time.")
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .map(|duration| duration.as_secs())
-            .expect("Error when calculating Unix time");
-
-        let three_month_from_now_timestamp = dfn_core::api::now()
-            .checked_add(Duration::from_secs(90 * ONE_DAY_SECONDS))
-            .expect("Error when calcuting Unix time.")
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .map(|duration| duration.as_secs())
-            .expect("Error when calculating Unix time");
-
-        if token_sale_timestamp_seconds < one_day_from_now_timestamp {
-            Err(
-                "Error: token_sale_timestamp_seconds must be at least one day from now."
-                    .to_string(),
-            )
-        } else if token_sale_timestamp_seconds > three_month_from_now_timestamp {
-            Err(
-                "Error: token_sale_timestamp_seconds can not be more than three months from now."
-                    .to_string(),
-            )
-        } else {
-            Ok(())
-        }
-    }
-
     /// Must exist and be greater than 0.
     fn validate_min_participants(&self) -> Result<(), String> {
         let min_participants = self
@@ -450,10 +408,8 @@ mod test {
     use crate::{SnsCanisterIds, SnsInitPayload, MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH};
     use ic_base_types::CanisterId;
     use ic_sns_governance::governance::ValidGovernanceProto;
-    use ic_sns_governance::types::ONE_DAY_SECONDS;
     use ledger_canister::{AccountIdentifier, Tokens};
     use maplit::hashset;
-    use std::time::{Duration, SystemTime};
 
     fn create_valid_initial_token_distribution() -> InitialTokenDistribution {
         InitialTokenDistribution {
@@ -472,12 +428,6 @@ mod test {
     fn get_test_sns_init_payload() -> SnsInitPayload {
         SnsInitPayload {
             max_icp_e8s: Some(1_000_000_000),
-            token_sale_timestamp_seconds: SystemTime::now()
-                .checked_add(Duration::from_secs(2 * ONE_DAY_SECONDS))
-                .expect("Error when calculating Unix time.")
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .map(|duration| duration.as_secs())
-                .ok(),
             min_participants: Some(100),
             initial_token_distribution: Some(create_valid_initial_token_distribution()),
             min_icp_e8s: Some(100),

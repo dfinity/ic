@@ -1,6 +1,8 @@
 #[cfg(not(target_arch = "wasm32"))]
 use crate::pb::v1::{neuron::DissolveState, neuron::Followees, Topic};
 #[cfg(not(target_arch = "wasm32"))]
+use ic_nervous_system_common::ledger;
+#[cfg(not(target_arch = "wasm32"))]
 use ledger_canister::Subaccount;
 #[cfg(not(target_arch = "wasm32"))]
 use rand::rngs::StdRng;
@@ -11,7 +13,6 @@ use std::path::Path;
 
 use crate::pb::v1::{Governance, NetworkEconomics, Neuron};
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::ledger;
 use ic_nns_common::types::NeuronId;
 
 #[allow(dead_code)]

@@ -24,16 +24,10 @@ pub struct Init {
     pub icp_ledger_canister_id: ::prost::alloc::string::String,
     /// The number of ICP that is "targetted" by this token sale. If this
     /// amount is achieved, the sale can be triggered immediately,
-    /// without waiting for the due date (token_sale_timestamp). Must be
+    /// without waiting for the due date (end_timestamp_seconds). Must be
     /// at least `min_participants * min_participant_icp_e8s`.
     #[prost(uint64, tag="5")]
     pub max_icp_e8s: u64,
-    /// The date/time (seconds since Unix epoch) that this sale will end,
-    /// i.e., when the swap will take place (unless `max_icp` is
-    /// achieved earlier). Must be in the future at the time of canister
-    /// creation.
-    #[prost(uint64, tag="6")]
-    pub token_sale_timestamp_seconds: u64,
     /// The minimum number of buyers that must participate for the sale
     /// to take place. Must be greater than zero.
     #[prost(uint32, tag="7")]
@@ -44,8 +38,8 @@ pub struct Init {
     pub min_participant_icp_e8s: u64,
     /// The maximum amount of ICP that each buyer can contribute. Must be
     /// greater than or equal to `min_participant_icp_e8s` and less than
-    /// or equal to `target_icp_e8s`. Can effectively be disabled by
-    /// setting it to `target_icp_e8s`.
+    /// or equal to `max_icp_e8s`. Can effectively be disabled by
+    /// setting it to `max_icp_e8s`.
     #[prost(uint64, tag="9")]
     pub max_participant_icp_e8s: u64,
     /// The total number of ICP that is required for this token sale to
@@ -54,7 +48,7 @@ pub struct Init {
     /// minimum number of ICP per SNS tokens that the seller of SNS
     /// tokens is willing to accept. If this amount is not achieved, the
     /// sale will be aborted (instead of committed) when the due date/time
-    /// occurs. Must be smaller than or equal to `target_icp_e8s`.
+    /// occurs. Must be smaller than or equal to `max_icp_e8s`.
     #[prost(uint64, tag="10")]
     pub min_icp_e8s: u64,
 }
@@ -131,6 +125,18 @@ pub struct State {
     /// The current lifecycle state of the sale.
     #[prost(enumeration="Lifecycle", tag="3")]
     pub lifecycle: i32,
+    /// Set by the set_open_time_window Candid method.
+    #[prost(message, optional, tag="4")]
+    pub open_time_window: ::core::option::Option<TimeWindow>,
+}
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Copy)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TimeWindow {
+    #[prost(uint64, tag="1")]
+    pub start_timestamp_seconds: u64,
+    #[prost(uint64, tag="2")]
+    pub end_timestamp_seconds: u64,
 }
 /// The complete state of the sale canister.
 #[derive(candid::CandidType, candid::Deserialize)]
@@ -187,12 +193,15 @@ pub struct DerivedState {
 /// See `open_sale` for details.
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct OpenSaleRequest {
+pub struct SetOpenTimeWindowRequest {
+    /// Duration must be between 1 and 90 days.
+    #[prost(message, optional, tag="1")]
+    pub open_time_window: ::core::option::Option<TimeWindow>,
 }
 /// Response if the sale was successfully opened.
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct OpenSaleResponse {
+pub struct SetOpenTimeWindowResponse {
 }
 /// The can notify the sale canister about tokens 'for sale' having
 /// been transferred in.
@@ -298,8 +307,14 @@ pub struct ErrorRefundIcpResponse {
 pub enum Lifecycle {
     /// Canister is incorrectly configured. Not a real lifecycle state.
     Unspecified = 0,
-    /// The canister is correctly initialized and waiting to receive the
-    /// amount of SNS tokens for sale.
+    /// The canister is correctly initialized and waiting for ALL of the
+    /// following conditions to be met in order to transition to OPEN:
+    ///   1. Funded. More precisely, this means that
+    ///     a. SNS tokens have been sent to the canister, and
+    ///     b. The refresh_sns_tokens Candid method has been called
+    ///        (to notify that the funds have been sent).
+    ///   2. The current time is not before start_timestamp_seconds, which is set
+    ///      via the set_open_time_window Candid method.
     Pending = 1,
     /// Users can register for the token sale.
     Open = 2,

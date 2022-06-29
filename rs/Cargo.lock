@@ -7674,6 +7674,7 @@ dependencies = [
  "build-info-build",
  "bytes",
  "candid",
+ "chrono",
  "comparable",
  "criterion",
  "dfn_candid",

@@ -31,15 +31,9 @@ message Init {
   
   // The number of ICP that is "targetted" by this token sale. If this
   // amount is achieved, the sale can be triggered immediately,
-  // without waiting for the due date (token_sale_timestamp). Must be
+  // without waiting for the due date (end_timestamp_seconds). Must be
   // at least `min_participants * min_participant_icp_e8s`.
   uint64 max_icp_e8s = 5;
-  
-  // The date/time (seconds since Unix epoch) that this sale will end,
-  // i.e., when the swap will take place (unless `max_icp` is
-  // achieved earlier). Must be in the future at the time of canister
-  // creation.
-  uint64 token_sale_timestamp_seconds = 6;
   
   // The minimum number of buyers that must participate for the sale
   // to take place. Must be greater than zero.
@@ -114,8 +108,14 @@ message BuyerState {
 enum Lifecycle {
   // Canister is incorrectly configured. Not a real lifecycle state.
   LIFECYCLE_UNSPECIFIED = 0;
-  // The canister is correctly initialized and waiting to receive the
-  // amount of SNS tokens for sale.
+  // The canister is correctly initialized and waiting for ALL of the
+  // following conditions to be met in order to transition to OPEN:
+  //   1. Funded. More precisely, this means that
+  //     a. SNS tokens have been sent to the canister, and
+  //     b. The refresh_sns_tokens Candid method has been called
+  //        (to notify that the funds have been sent).
+  //   2. The current time is not before start_timestamp_seconds, which is set
+  //      via the set_open_time_window Candid method.
   LIFECYCLE_PENDING     = 1;
   // Users can register for the token sale.
   LIFECYCLE_OPEN        = 2;
@@ -148,6 +148,16 @@ message State {
   map<string, BuyerState> buyers = 2;
   // The current lifecycle state of the sale.
   Lifecycle lifecycle = 3;
+
+  // Initially, empty. Later, set by the set_open_time_window Candid method,
+  // while the canister is in the Pending state. This eventually allows the
+  // canister to enter the Open state.
+  TimeWindow open_time_window = 4;
+}
+
+message TimeWindow {
+  uint64 start_timestamp_seconds = 1;
+  uint64 end_timestamp_seconds = 2;
 }
 
 // The complete state of the sale canister.
@@ -190,9 +200,12 @@ message DerivedState {
 }
 
 // See `open_sale` for details.
-message OpenSaleRequest {}
+message SetOpenTimeWindowRequest {
+  // Duration must be between 1 and 90 days.
+  TimeWindow open_time_window = 1;
+}
 // Response if the sale was successfully opened.
-message OpenSaleResponse {}
+message SetOpenTimeWindowResponse {}
 
 
 // The can notify the sale canister about tokens 'for sale' having
