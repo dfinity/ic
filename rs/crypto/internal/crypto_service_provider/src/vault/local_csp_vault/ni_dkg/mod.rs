@@ -6,6 +6,7 @@ use crate::types::conversions::key_id_from_csp_pub_coeffs;
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::vault::api::NiDkgCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
+use ic_crypto_internal_logmon::metrics::MetricsDomain;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381 as ni_dkg_clib;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::{
@@ -85,6 +86,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
         epoch: Epoch,
     ) -> Result<(), ni_dkg_errors::CspDkgUpdateFsEpochError> {
         debug!(self.logger; crypto.method_name => "update_forward_secure_epoch", crypto.dkg_epoch => epoch.get());
+        let start_time = self.metrics.now();
 
         let updated_key_set = match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
@@ -127,6 +129,11 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
         );
 
         // FIN
+        self.metrics.observe_csp_local_duration_seconds(
+            MetricsDomain::NiDkgAlgorithm,
+            "update_forward_secure_epoch",
+            start_time,
+        );
         Ok(())
     }
 
@@ -140,6 +147,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
         maybe_resharing_secret_key_id: Option<KeyId>,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
         debug!(self.logger; crypto.method_name => "create_dealing", crypto.dkg_epoch => epoch.get());
+        let start_time = self.metrics.now();
         // If re-sharing, fetch the secret key from the Secret Key Store.
         let maybe_resharing_secret_key = match maybe_resharing_secret_key_id {
             Some(key_id) => {
@@ -160,7 +168,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
             None => None,
         };
         // Specialisation to this scheme:
-        match algorithm_id {
+        let result = match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
                 let maybe_resharing_secret_key_bytes = match maybe_resharing_secret_key {
                     Some(secret_key) => {
@@ -205,7 +213,13 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
             other => {
                 Err(ni_dkg_errors::CspDkgCreateReshareDealingError::UnsupportedAlgorithmId(other))
             }
-        }
+        };
+        self.metrics.observe_csp_local_duration_seconds(
+            MetricsDomain::NiDkgAlgorithm,
+            "create_dealing",
+            start_time,
+        );
+        result
     }
 
     fn load_threshold_signing_key(
@@ -217,7 +231,8 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
         receiver_index: NodeIndex,
     ) -> Result<(), ni_dkg_errors::CspDkgLoadPrivateKeyError> {
         debug!(self.logger; crypto.method_name => "load_threshold_signing_key", crypto.dkg_epoch => epoch.get());
-        match algorithm_id {
+        let start_time = self.metrics.now();
+        let result = match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
                 let threshold_key_id =
                     key_id_from_csp_pub_coeffs(&CspPublicCoefficients::from(&csp_transcript));
@@ -278,7 +293,13 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
                 }
             }
             other => Err(ni_dkg_errors::CspDkgLoadPrivateKeyError::UnsupportedAlgorithmId(other)),
-        }
+        };
+        self.metrics.observe_csp_local_duration_seconds(
+            MetricsDomain::NiDkgAlgorithm,
+            "load_threshold_signing_key",
+            start_time,
+        );
+        result
     }
 
     fn retain_threshold_keys_if_present(
@@ -286,9 +307,15 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
         active_key_ids: BTreeSet<KeyId>,
     ) -> Result<(), ni_dkg_errors::CspDkgRetainThresholdKeysError> {
         debug!(self.logger; crypto.method_name => "retain_threshold_keys_if_present");
+        let start_time = self.metrics.now();
         self.sks_write_lock().retain(
             |key_id, _| active_key_ids.contains(key_id),
             NIDKG_THRESHOLD_SCOPE,
+        );
+        self.metrics.observe_csp_local_duration_seconds(
+            MetricsDomain::NiDkgAlgorithm,
+            "retain_threshold_keys_if_present",
+            start_time,
         );
         Ok(())
     }

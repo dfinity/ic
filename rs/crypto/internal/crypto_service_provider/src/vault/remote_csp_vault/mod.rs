@@ -32,6 +32,8 @@ use tokio::net::UnixListener;
 mod tarpc_csp_vault_client;
 mod tarpc_csp_vault_server;
 
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
+use std::sync::Arc;
 pub use tarpc_csp_vault_client::RemoteCspVault;
 pub use tarpc_csp_vault_server::TarpcCspVaultServerImpl;
 
@@ -208,7 +210,17 @@ pub trait TarpcCspVault {
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
 }
 
-pub async fn run_csp_vault_server(sks_dir: &Path, listener: UnixListener, logger: ReplicaLogger) {
-    let server = tarpc_csp_vault_server::TarpcCspVaultServerImpl::new(sks_dir, listener, logger);
+pub async fn run_csp_vault_server(
+    sks_dir: &Path,
+    listener: UnixListener,
+    logger: ReplicaLogger,
+    metrics: CryptoMetrics,
+) {
+    let server = tarpc_csp_vault_server::TarpcCspVaultServerImpl::new(
+        sks_dir,
+        listener,
+        logger,
+        Arc::new(metrics),
+    );
     server.run().await
 }

@@ -1,9 +1,14 @@
 //! Metrics exported by crypto
 
+use core::fmt;
 use ic_metrics::MetricsRegistry;
 use prometheus::HistogramVec;
+use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter};
 use std::time;
 use std::time::Instant;
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
 /// Provides metrics for the crypto component.
 ///
@@ -54,36 +59,145 @@ impl CryptoMetrics {
         }
     }
 
-    /// Observes an NI-DKG method duration. The `method_name` indicates the
-    /// method's name, such as `load_transcript`.
+    /// Observes a CSP method duration, measuring the actual local cryptographic
+    /// computation. `method_name` indicates the method's name, such as `BasicSignature::sign`.
     ///
-    /// This only observes an NI-DKG method duration if metrics are enabled and
-    /// `start_time` is `Some`.
-    pub fn observe_ni_dkg_method_duration_seconds(
+    /// It observes the duration only if metrics are enabled, `start_time` is `Some`,
+    /// and the metrics for `domain` are defined.
+    pub fn observe_csp_local_duration_seconds(
         &self,
+        domain: MetricsDomain,
         method_name: &str,
         start_time: Option<Instant>,
     ) {
         if let (Some(metrics), Some(start_time)) = (&self.metrics, start_time) {
-            metrics
-                .ic_crypto_ni_dkg_method_duration_seconds
-                .with_label_values(&[method_name])
-                .observe(start_time.elapsed().as_secs_f64());
+            if let Some(domain_metrics) = metrics.ic_crypto_csp_local_duration_seconds.get(&domain)
+            {
+                domain_metrics
+                    .with_label_values(&[&format!("{}::{}", domain, method_name)])
+                    .observe(start_time.elapsed().as_secs_f64());
+            }
         }
     }
+
+    /// Observes a crypto method duration, measuring the the full duration,
+    /// which includes actual cryptographic computation and the potential RPC overhead.
+    /// `method_name` indicates the method's name, such as `BasicSignature::sign`.
+    ///
+    /// It observes the duration only if metrics are enabled, `start_time` is `Some`,
+    /// and the metrics for `domain` are defined.
+    pub fn observe_full_duration_seconds(
+        &self,
+        domain: MetricsDomain,
+        method_name: &str,
+        start_time: Option<Instant>,
+    ) {
+        if let (Some(metrics), Some(start_time)) = (&self.metrics, start_time) {
+            if let Some(domain_metrics) = metrics.ic_crypto_full_duration_seconds.get(&domain) {
+                domain_metrics
+                    .with_label_values(&[&format!("{}::{}", domain, method_name)])
+                    .observe(start_time.elapsed().as_secs_f64());
+            }
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, Eq, PartialOrd, Ord, PartialEq)]
+pub enum MetricsDomain {
+    BasicSignature,
+    MultiSignature,
+    ThresholdSignature,
+    NiDkgAlgorithm,
+    TlsHandshake,
+    IDkgProtocol,
+    ThresholdEcdsa,
 }
 
 struct Metrics {
     /// Histogram of crypto lock acquisition times. The 'access' label is either
     /// 'read' or 'write'.
     pub ic_crypto_lock_acquisition_duration_seconds: HistogramVec,
-    /// Histogram of `NiDkgAlgorithm` method call times. The 'method_name' label
-    /// indicates the method name, such as `load_transcript`.
-    pub ic_crypto_ni_dkg_method_duration_seconds: HistogramVec,
+
+    /// Histograms of CSP method call times of various functionalities, measuring
+    /// the duration of the actual local crypto computation.
+    ///
+    /// The 'method_name' label indicates the functionality, such as `BasicSignature::sign`.
+    pub ic_crypto_csp_local_duration_seconds: BTreeMap<MetricsDomain, HistogramVec>,
+
+    /// Histograms of crypto method call times of various functionalities, measuring the full
+    /// duration of the call, i.e. both the local crypto computation, and the
+    /// potential RPC overhead.
+    /// The 'method_name' label indicates the functionality, such as `BasicSignature::sign`.
+    pub ic_crypto_full_duration_seconds: BTreeMap<MetricsDomain, HistogramVec>,
+}
+
+impl Display for MetricsDomain {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str_snake_case())
+    }
+}
+
+impl MetricsDomain {
+    fn as_str_snake_case(&self) -> &str {
+        match self {
+            MetricsDomain::BasicSignature => "basic_signature",
+            MetricsDomain::MultiSignature => "multi_signature",
+            MetricsDomain::ThresholdSignature => "threshold_signature",
+            MetricsDomain::NiDkgAlgorithm => "ni_dkg",
+            MetricsDomain::TlsHandshake => "tls_handshake",
+            MetricsDomain::IDkgProtocol => "idkg",
+            MetricsDomain::ThresholdEcdsa => "threshold_ecdsa",
+        }
+    }
+
+    fn local_metric_name(&self) -> String {
+        format!("ic_crypto_{}_local_duration_seconds", self)
+    }
+
+    fn local_metric_help(&self) -> String {
+        format!(
+            "Histogram of CSP {} method call durations, measuring the actual crypto computation",
+            self
+        )
+    }
+
+    fn full_metric_name(&self) -> String {
+        format!("ic_crypto_{}_full_duration_seconds", self)
+    }
+
+    fn full_metric_help(&self) -> String {
+        format!("Histogram of {} method call durations, measuring both crypto computation and the potential RPC overhead", self)
+    }
 }
 
 impl Metrics {
     pub fn new(r: &MetricsRegistry) -> Self {
+        let default_buckets = vec![
+            0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0,
+            5.0, 10.0, 20.0, 50.0,
+        ];
+        let mut local_duration = BTreeMap::new();
+        let mut full_duration = BTreeMap::new();
+        for domain in MetricsDomain::iter() {
+            local_duration.insert(
+                domain,
+                r.histogram_vec(
+                    domain.local_metric_name(),
+                    domain.local_metric_help(),
+                    default_buckets.clone(),
+                    &["method_name"],
+                ),
+            );
+            full_duration.insert(
+                domain,
+                r.histogram_vec(
+                    domain.full_metric_name(),
+                    domain.full_metric_help(),
+                    default_buckets.clone(),
+                    &["method_name"],
+                ),
+            );
+        }
         Self {
             ic_crypto_lock_acquisition_duration_seconds: r.histogram_vec(
                 "ic_crypto_lock_acquisition_duration_seconds",
@@ -91,15 +205,8 @@ impl Metrics {
                 vec![0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0],
                 &["name", "access"],
             ),
-            ic_crypto_ni_dkg_method_duration_seconds: r.histogram_vec(
-                "ic_crypto_ni_dkg_method_duration_seconds",
-                "Histogram of NiDkgAlgorithm method call durations",
-                vec![
-                    0.0001, 0.001, 0.01, 0.1, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0,
-                    15.0, 20.0, 30.0, 40.0, 50.0,
-                ],
-                &["method_name"],
-            ),
+            ic_crypto_csp_local_duration_seconds: local_duration,
+            ic_crypto_full_duration_seconds: full_duration,
         }
     }
 }

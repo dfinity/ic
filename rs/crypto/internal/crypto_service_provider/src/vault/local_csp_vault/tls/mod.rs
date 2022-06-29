@@ -5,6 +5,7 @@ use crate::types::{CspSecretKey, CspSignature};
 use crate::vault::api::{CspTlsKeygenError, CspTlsSignError, TlsHandshakeCspVault};
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
+use ic_crypto_internal_logmon::metrics::MetricsDomain;
 use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_internal_tls::keygen::{generate_tls_key_pair_der, TlsKeyPairAndCertGenerationError};
 use ic_crypto_secrets_containers::{SecretArray, SecretVec};
@@ -26,6 +27,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Tls
         node: NodeId,
         not_after: &str,
     ) -> Result<(KeyId, TlsPublicKeyCert), CspTlsKeygenError> {
+        let start_time = self.metrics.now();
         let common_name = &node.get().to_string()[..];
         let not_after_asn1 = Asn1Time::from_str_x509(not_after).map_err(|_| {
             CspTlsKeygenError::InvalidNotAfterDate {
@@ -48,16 +50,22 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Tls
         let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes)
             .expect("generated X509 certificate has malformed DER encoding");
         let key_id = self.store_tls_secret_key(&x509_pk_cert, secret_key);
+        self.metrics.observe_csp_local_duration_seconds(
+            MetricsDomain::TlsHandshake,
+            "gen_tls_key_pair",
+            start_time,
+        );
         Ok((key_id, x509_pk_cert))
     }
 
     fn tls_sign(&self, message: &[u8], key_id: &KeyId) -> Result<CspSignature, CspTlsSignError> {
+        let start_time = self.metrics.now();
         let secret_key: CspSecretKey = self
             .sks_read_lock()
             .get(key_id)
             .ok_or(CspTlsSignError::SecretKeyNotFound { key_id: *key_id })?;
 
-        match &secret_key {
+        let result = match &secret_key {
             CspSecretKey::TlsEd25519(secret_key_der) => {
                 let secret_key_bytes = ed25519_secret_key_bytes_from_der(secret_key_der)?;
 
@@ -72,7 +80,13 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> Tls
             _ => Err(CspTlsSignError::WrongSecretKeyType {
                 algorithm: secret_key.algorithm_id(),
             }),
-        }
+        };
+        self.metrics.observe_csp_local_duration_seconds(
+            MetricsDomain::TlsHandshake,
+            "tls_sign",
+            start_time,
+        );
+        result
     }
 }
 

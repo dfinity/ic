@@ -34,6 +34,7 @@ pub struct LocalCspVault<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C:
     #[allow(dead_code)]
     canister_secret_key_store: CspRwLock<C>,
     logger: ReplicaLogger,
+    metrics: Arc<CryptoMetrics>,
 }
 
 impl LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore> {
@@ -75,8 +76,12 @@ impl<S: SecretKeyStore, C: SecretKeyStore> LocalCspVault<OsRng, S, C> {
                 node_secret_key_store,
                 Arc::clone(&metrics),
             ),
-            canister_secret_key_store: CspRwLock::new_for_csks(canister_secret_key_store, metrics),
+            canister_secret_key_store: CspRwLock::new_for_csks(
+                canister_secret_key_store,
+                Arc::clone(&metrics),
+            ),
             logger,
+            metrics,
         }
     }
 }
@@ -98,9 +103,10 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore>
             ),
             canister_secret_key_store: CspRwLock::new_for_csks(
                 VolatileSecretKeyStore::new(),
-                metrics,
+                Arc::clone(&metrics),
             ),
             logger: no_op_logger(),
+            metrics,
         }
     }
 }

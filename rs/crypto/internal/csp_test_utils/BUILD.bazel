@@ -19,6 +19,7 @@ rust_library(
     deps = [
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/internal/crypto_service_provider",
+        "//rs/crypto/internal/logmon",
         "//rs/crypto/internal/test_vectors",
         "//rs/monitoring/logger",
         "//rs/types/types",

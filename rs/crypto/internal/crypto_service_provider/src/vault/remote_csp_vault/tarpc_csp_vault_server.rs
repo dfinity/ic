@@ -448,7 +448,12 @@ impl TarpcCspVault for TarpcCspVaultServerWorker {
 }
 
 impl TarpcCspVaultServerImpl {
-    pub fn new(sks_dir: &Path, listener: UnixListener, logger: ReplicaLogger) -> Self {
+    pub fn new(
+        sks_dir: &Path,
+        listener: UnixListener,
+        logger: ReplicaLogger,
+        metrics: Arc<CryptoMetrics>,
+    ) -> Self {
         let node_secret_key_store =
             ProtoSecretKeyStore::open(sks_dir, SKS_DATA_FILENAME, Some(new_logger!(&logger)));
         let canister_secret_key_store = ProtoSecretKeyStore::open(
@@ -459,7 +464,7 @@ impl TarpcCspVaultServerImpl {
         let local_csp_server = Arc::new(LocalCspVault::new(
             node_secret_key_store,
             canister_secret_key_store,
-            Arc::new(CryptoMetrics::none()),
+            metrics,
             new_logger!(&logger),
         ));
         let thread_pool = threadpool::Builder::new()

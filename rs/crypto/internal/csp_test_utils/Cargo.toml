@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 ic-crypto-internal-csp = { path = "../crypto_service_provider" }
+ic-crypto-internal-logmon = { path = "../logmon" }
 ic-crypto-internal-test-vectors = { path = "../test_vectors" }
 ic-crypto-internal-types = { path = "../crypto_lib/types" }
 ic-logger = { path = "../../../monitoring/logger" }

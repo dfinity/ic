@@ -5,6 +5,7 @@ use crate::types::{CspSignature, ThresBls12_381_Signature};
 use crate::vault::api::CspThresholdSignatureKeygenError;
 use crate::vault::api::ThresholdSignatureCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
+use ic_crypto_internal_logmon::metrics::MetricsDomain;
 use ic_crypto_internal_threshold_sig_bls12381 as bls12381_clib;
 use ic_types::crypto::CryptoError;
 use ic_types::crypto::{AlgorithmId, KeyId};
@@ -101,7 +102,8 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
         message: &[u8],
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError> {
-        match algorithm_id {
+        let start_time = self.metrics.now();
+        let result = match algorithm_id {
             AlgorithmId::ThresBls12_381 => {
                 let csp_key = self.sks_read_lock().get(&key_id).ok_or({
                     CspThresholdSignError::SecretKeyNotFound {
@@ -119,6 +121,12 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
             _ => Err(CspThresholdSignError::UnsupportedAlgorithm {
                 algorithm: algorithm_id,
             }),
-        }
+        };
+        self.metrics.observe_csp_local_duration_seconds(
+            MetricsDomain::ThresholdSignature,
+            "threshold_sign",
+            start_time,
+        );
+        result
     }
 }
