@@ -51,6 +51,7 @@ const BATCH_QUEUE_BUFFER_SIZE: usize = 16;
 
 const METRIC_DELIVER_BATCH_COUNT: &str = "mr_deliver_batch_count";
 const METRIC_EXPECTED_BATCH_HEIGHT: &str = "mr_expected_batch_height";
+const METRIC_REGISTRY_VERSION: &str = "mr_registry_version";
 pub(crate) const METRIC_TIME_IN_BACKLOG: &str = "mr_time_in_backlog";
 pub(crate) const METRIC_TIME_IN_STREAM: &str = "mr_time_in_stream";
 
@@ -226,6 +227,8 @@ pub(crate) struct MessageRoutingMetrics {
     deliver_batch_count: IntCounterVec,
     /// Expected batch height.
     expected_batch_height: IntGauge,
+    /// Registry version referenced in the most recently executed batch.
+    registry_version: IntGauge,
     /// Batch processing durations.
     process_batch_duration: Histogram,
     /// Batch processing phase durations, by phase.
@@ -258,6 +261,10 @@ impl MessageRoutingMetrics {
             expected_batch_height: metrics_registry.int_gauge(
                 METRIC_EXPECTED_BATCH_HEIGHT,
                 "Height of the batch that MR expects to be delivered next.",
+            ),
+            registry_version: metrics_registry.int_gauge(
+                METRIC_REGISTRY_VERSION,
+                "Registry version referenced in the most recently executed batch.",
             ),
             process_batch_phase_duration: metrics_registry.histogram_vec(
                 METRIC_PROCESS_BATCH_PHASE_DURATION,
@@ -707,14 +714,15 @@ impl BatchProcessor for BatchProcessorImpl {
 
         // TODO (MR-29) Cache network topology and subnet_features; and populate only
         // if version referenced in batch changes.
-        let network_topology = self.populate_network_topology(batch.registry_version);
-        let provisional_whitelist = self.get_provisional_whitelist(batch.registry_version);
+        let registry_version = batch.registry_version;
+        let network_topology = self.populate_network_topology(registry_version);
+        let provisional_whitelist = self.get_provisional_whitelist(registry_version);
         let subnet_features =
-            self.get_subnet_features(state.metadata.own_subnet_id, batch.registry_version);
+            self.get_subnet_features(state.metadata.own_subnet_id, registry_version);
         let max_number_of_canisters =
-            self.get_max_number_of_canisters(state.metadata.own_subnet_id, batch.registry_version);
+            self.get_max_number_of_canisters(state.metadata.own_subnet_id, registry_version);
         let max_ecdsa_queue_size =
-            self.get_max_ecdsa_queue_size(state.metadata.own_subnet_id, batch.registry_version);
+            self.get_max_ecdsa_queue_size(state.metadata.own_subnet_id, registry_version);
 
         self.remove_canisters_not_in_routing_table(&mut state);
 
@@ -741,6 +749,9 @@ impl BatchProcessor for BatchProcessorImpl {
         self.observe_phase_duration(PHASE_COMMIT, &phase_timer);
 
         self.metrics.process_batch_duration.observe(timer.elapsed());
+        self.metrics
+            .registry_version
+            .set(registry_version.get() as i64);
     }
 }
 
