@@ -16,7 +16,7 @@ use ic_sns_sale::{
         Lifecycle::{Committed, Pending},
         *,
     },
-    sale::SnsGovernanceClient,
+    sale::{SnsGovernanceClient, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS},
 };
 
 use lazy_static::lazy_static;
@@ -49,8 +49,6 @@ fn init() -> Init {
         icp_ledger_canister_id: ICP_LEDGER_CANISTER_ID.to_string(),
         max_icp_e8s: 1000000 * E8,
         min_icp_e8s: 0,
-        // 1640995200 = 2022-01-01T00:00:00
-        token_sale_timestamp_seconds: 1640995200 + 10,
         min_participants: 3,
         min_participant_icp_e8s: 100 * E8,
         max_participant_icp_e8s: 1000000 * E8,
@@ -138,6 +136,49 @@ fn mock_stub(mut expect: Vec<LedgerExpect>) -> impl Fn(CanisterId) -> Box<dyn Le
     move |_| Box::new(MockLedger { expect: e.clone() })
 }
 
+const START_TIMESTAMP_SECONDS: u64 = START_OF_2022_TIMESTAMP_SECONDS + 42 * SECONDS_PER_DAY;
+const END_TIMESTAMP_SECONDS: u64 = START_TIMESTAMP_SECONDS + 7 * SECONDS_PER_DAY;
+const OPEN_TIME_WINDOW: TimeWindow = TimeWindow {
+    start_timestamp_seconds: START_TIMESTAMP_SECONDS,
+    end_timestamp_seconds: END_TIMESTAMP_SECONDS,
+};
+
+fn new_sale(init: Init) -> Sale {
+    let nns_governance = PrincipalId::from(init.nns_governance());
+    let mut result = Sale::new(init);
+    result.set_open_time_window(
+        nns_governance,
+        START_TIMESTAMP_SECONDS,
+        &SetOpenTimeWindowRequest {
+            open_time_window: Some(OPEN_TIME_WINDOW),
+        },
+    );
+    result
+}
+
+fn open_at_start(sale: &mut Sale) -> Result<(), String> {
+    let (start, _end) = sale
+        .state()
+        .open_time_window
+        .unwrap()
+        .to_boundaries_timestamp_seconds();
+    sale.open(start)
+}
+
+#[should_panic]
+#[test]
+fn set_open_time_window_requires_authorization() {
+    let wrong_canister = PrincipalId::from(init().icp_ledger());
+    let mut sale = Sale::new(init());
+    sale.set_open_time_window(
+        wrong_canister,
+        START_TIMESTAMP_SECONDS,
+        &SetOpenTimeWindowRequest {
+            open_time_window: Some(OPEN_TIME_WINDOW),
+        },
+    );
+}
+
 #[test]
 fn test_init() {
     let sale = Sale::new(init());
@@ -146,9 +187,9 @@ fn test_init() {
 
 #[test]
 fn test_open() {
-    let mut sale = Sale::new(init());
+    let mut sale = new_sale(init());
     // Cannot open as nothing for sale yet.
-    assert!(sale.open().is_err());
+    assert!(open_at_start(&mut sale).is_err());
     let account = AccountIdentifier::new(SALE_CANISTER_ID.get(), None);
     // Refresh yielding zero tokens...
     assert!(sale
@@ -163,7 +204,7 @@ fn test_open() {
         .unwrap()
         .is_ok());
     // Can still not open...
-    assert!(sale.open().is_err());
+    assert!(open_at_start(&mut sale).is_err());
     // Refresh giving error...
     assert!(sale
         .refresh_sns_token_e8s(
@@ -174,7 +215,7 @@ fn test_open() {
         .unwrap()
         .is_err());
     // Can still not open...
-    assert!(sale.open().is_err());
+    assert!(open_at_start(&mut sale).is_err());
     // Refresh giving 100k tokens
     assert!(sale
         .refresh_sns_token_e8s(
@@ -190,7 +231,7 @@ fn test_open() {
     // Check that state is updated.
     assert_eq!(sale.state().sns_token_e8s, 100000 * E8);
     // Now the sale can be opened.
-    assert!(sale.open().is_ok());
+    assert!(open_at_start(&mut sale).is_ok());
 }
 
 /// Check that the behaviour is correct when the sale is due and the
@@ -201,14 +242,12 @@ fn test_min_icp() {
     let init = Init {
         max_icp_e8s: 10 * E8,
         min_icp_e8s: 5 * E8,
-        // 1640995200 = 2022-01-01T00:00:00
-        token_sale_timestamp_seconds: 1640995200 + 10,
         min_participants: 2,
         min_participant_icp_e8s: E8,
         max_participant_icp_e8s: 5 * E8,
         ..init()
     };
-    let mut sale = Sale::new(init.clone());
+    let mut sale = new_sale(init);
     // Open sale.
     // Refresh giving 100k SNS tokens
     assert!(sale
@@ -223,10 +262,10 @@ fn test_min_icp() {
         .unwrap()
         .is_ok());
     assert_eq!(sale.state().sns_token_e8s, 100000 * E8);
-    assert!(sale.open().is_ok());
+    assert!(open_at_start(&mut sale).is_ok());
     assert_eq!(sale.state().lifecycle(), Lifecycle::Open);
     // Cannot commit or abort, as the sale is not due yet.
-    assert!(!sale.try_commit_or_abort(init.token_sale_timestamp_seconds - 1));
+    assert!(!sale.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 2 ICP from one buyer.
     assert!(sale
         .refresh_buyer_token_e8s(
@@ -278,9 +317,9 @@ fn test_min_icp() {
     // There are now two participants with a total of 4 ICP.
     //
     // Cannot commit
-    assert!(!sale.can_commit(init.token_sale_timestamp_seconds));
+    assert!(!sale.can_commit(END_TIMESTAMP_SECONDS));
     // This should now abort as the minimum hasn't been reached.
-    assert!(sale.try_commit_or_abort(init.token_sale_timestamp_seconds));
+    assert!(sale.try_commit_or_abort(END_TIMESTAMP_SECONDS));
     assert_eq!(sale.state().lifecycle(), Lifecycle::Aborted);
     {
         let fee = 1152;
@@ -325,14 +364,12 @@ fn test_min_max_icp_per_buyer() {
     let init = Init {
         max_icp_e8s: 10 * E8,
         min_icp_e8s: 5 * E8,
-        // 1640995200 = 2022-01-01T00:00:00
-        token_sale_timestamp_seconds: 1640995200 + 10,
         min_participants: 2,
         min_participant_icp_e8s: E8,
         max_participant_icp_e8s: 5 * E8,
         ..init()
     };
-    let mut sale = Sale::new(init.clone());
+    let mut sale = new_sale(init);
     // Open sale.
     // Refresh giving 100k SNS tokens
     assert!(sale
@@ -347,10 +384,10 @@ fn test_min_max_icp_per_buyer() {
         .unwrap()
         .is_ok());
     assert_eq!(sale.state().sns_token_e8s, 100000 * E8);
-    assert!(sale.open().is_ok());
+    assert!(open_at_start(&mut sale).is_ok());
     assert_eq!(sale.state().lifecycle(), Lifecycle::Open);
     // Cannot commit or abort, as the sale is not due yet.
-    assert!(!sale.try_commit_or_abort(init.token_sale_timestamp_seconds - 1));
+    assert!(!sale.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Try to deposit 0.99999999 ICP, slightly less than the minimum.
     {
         let e = sale
@@ -434,14 +471,12 @@ fn test_max_icp() {
     let init = Init {
         max_icp_e8s: 10 * E8,
         min_icp_e8s: 5 * E8,
-        // 1640995200 = 2022-01-01T00:00:00
-        token_sale_timestamp_seconds: 1640995200 + 10,
         min_participants: 2,
         min_participant_icp_e8s: E8,
         max_participant_icp_e8s: 6 * E8,
         ..init()
     };
-    let mut sale = Sale::new(init.clone());
+    let mut sale = new_sale(init);
     // Open sale.
     // Refresh giving 100k SNS tokens
     assert!(sale
@@ -456,10 +491,10 @@ fn test_max_icp() {
         .unwrap()
         .is_ok());
     assert_eq!(sale.state().sns_token_e8s, 100000 * E8);
-    assert!(sale.open().is_ok());
+    assert!(open_at_start(&mut sale).is_ok());
     assert_eq!(sale.state().lifecycle(), Lifecycle::Open);
     // Cannot commit or abort, as the sale is not due yet.
-    assert!(!sale.try_commit_or_abort(init.token_sale_timestamp_seconds - 1));
+    assert!(!sale.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 6 ICP from one buyer.
     assert!(sale
         .refresh_buyer_token_e8s(
@@ -510,9 +545,9 @@ fn test_max_icp() {
         4 * E8
     );
     // Can commit even if time isn't up as the max has been reached.
-    assert!(sale.can_commit(init.token_sale_timestamp_seconds - 1));
+    assert!(sale.can_commit(END_TIMESTAMP_SECONDS - 1));
     // This should commit...
-    assert!(sale.try_commit_or_abort(init.token_sale_timestamp_seconds - 1));
+    assert!(sale.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     assert_eq!(sale.state().lifecycle(), Lifecycle::Committed);
     // Check that buyer balances are correct. Total SNS balance is 100k and total ICP is 10.
     {
@@ -542,7 +577,7 @@ fn test_max_icp() {
 #[test]
 fn test_scenario_happy() {
     let init = init();
-    let mut sale = Sale::new(init.clone());
+    let mut sale = new_sale(init);
     // Refresh giving 200k tokens
     assert!(sale
         .refresh_sns_token_e8s(
@@ -556,10 +591,10 @@ fn test_scenario_happy() {
         .unwrap()
         .is_ok());
     assert_eq!(sale.state().sns_token_e8s, 200000 * E8);
-    assert!(sale.open().is_ok());
+    assert!(open_at_start(&mut sale).is_ok());
     assert_eq!(sale.state().lifecycle(), Lifecycle::Open);
     // Cannot commit or abort, as the sale is not due yet.
-    assert!(!sale.try_commit_or_abort(init.token_sale_timestamp_seconds - 1));
+    assert!(!sale.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     assert_eq!(sale.state().lifecycle(), Lifecycle::Open);
     // Deposit 1000 ICP from one buyer.
     assert!(sale
@@ -586,7 +621,7 @@ fn test_scenario_happy() {
         1000 * E8
     );
     // Cannot commit or abort, as the sale is not due yet.
-    assert!(!sale.try_commit_or_abort(init.token_sale_timestamp_seconds - 1));
+    assert!(!sale.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 600 ICP from another buyer.
     assert!(sale
         .refresh_buyer_token_e8s(
@@ -614,7 +649,7 @@ fn test_scenario_happy() {
     // Now there are two participants. If the time was up, the sale could be aborted...
     {
         let mut abort_sale = sale.clone();
-        assert!(abort_sale.try_commit_or_abort(init.token_sale_timestamp_seconds));
+        assert!(abort_sale.try_commit_or_abort(END_TIMESTAMP_SECONDS));
         assert_eq!(abort_sale.state().lifecycle(), Lifecycle::Aborted);
     }
     // Deposit 400 ICP from a third buyer.
@@ -642,11 +677,11 @@ fn test_scenario_happy() {
         400 * E8
     );
     // Cannot commit if the sale is not due.
-    assert!(!sale.can_commit(init.token_sale_timestamp_seconds - 1));
+    assert!(!sale.can_commit(END_TIMESTAMP_SECONDS - 1));
     // Can commit if the sale is due.
-    assert!(sale.can_commit(init.token_sale_timestamp_seconds));
+    assert!(sale.can_commit(END_TIMESTAMP_SECONDS));
     // This should commit...
-    assert!(sale.try_commit_or_abort(init.token_sale_timestamp_seconds));
+    assert!(sale.try_commit_or_abort(END_TIMESTAMP_SECONDS));
     assert_eq!(sale.state().lifecycle(), Lifecycle::Committed);
     // Check that buyer balances are correct. Total SNS balance is 200k and total ICP is 2k.
     {
@@ -913,8 +948,8 @@ async fn test_finalize_sale() {
         min_participant_icp_e8s: 1,
         max_participant_icp_e8s: 100,
         min_participants: 1,
-        token_sale_timestamp_seconds: 1,
     });
+    let nns_governance = PrincipalId::from(init.as_ref().unwrap().nns_governance());
     let mut sale = Sale {
         init,
         state: Some(State {
@@ -942,8 +977,16 @@ async fn test_finalize_sale() {
             },
             lifecycle: Pending as i32,
             sns_token_e8s: 0,
+            open_time_window: None,
         }),
     };
+    sale.set_open_time_window(
+        nns_governance,
+        START_TIMESTAMP_SECONDS,
+        &SetOpenTimeWindowRequest {
+            open_time_window: Some(OPEN_TIME_WINDOW),
+        },
+    );
 
     // Quickly run through the lifecycle.
     {
@@ -953,7 +996,7 @@ async fn test_finalize_sale() {
         assert!(r.is_ok(), "{r:#?}");
     }
     {
-        let r = sale.open();
+        let r = open_at_start(&mut sale);
         assert!(r.is_ok(), "{r:#?}");
     }
     assert!(sale.try_commit_or_abort(/* now_seconds: */ 1));
@@ -1134,14 +1177,12 @@ fn test_error_refund() {
     let init = Init {
         max_icp_e8s: 10 * E8,
         min_icp_e8s: 5 * E8,
-        // 1640995200 = 2022-01-01T00:00:00
-        token_sale_timestamp_seconds: 1640995200 + 10,
         min_participants: 1,
         min_participant_icp_e8s: E8,
         max_participant_icp_e8s: 6 * E8,
         ..init()
     };
-    let mut sale = Sale::new(init.clone());
+    let mut sale = new_sale(init);
     // Refresh giving 100k SNS tokens
     assert!(sale
         .refresh_sns_token_e8s(
@@ -1155,10 +1196,10 @@ fn test_error_refund() {
         .unwrap()
         .is_ok());
     assert_eq!(sale.state().sns_token_e8s, 100000 * E8);
-    assert!(sale.open().is_ok());
+    assert!(open_at_start(&mut sale).is_ok());
     assert_eq!(sale.state().lifecycle(), Lifecycle::Open);
     // Cannot commit or abort, as the sale is not due yet.
-    assert!(!sale.try_commit_or_abort(init.token_sale_timestamp_seconds - 1));
+    assert!(!sale.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 6 ICP from one buyer.
     assert!(sale
         .refresh_buyer_token_e8s(
@@ -1201,10 +1242,10 @@ fn test_error_refund() {
         }
     }
     // Will not auto-commit before the sale is due.
-    assert!(!sale.can_commit(init.token_sale_timestamp_seconds - 1));
-    assert!(!sale.try_commit_or_abort(init.token_sale_timestamp_seconds - 1));
+    assert!(!sale.can_commit(END_TIMESTAMP_SECONDS - 1));
+    assert!(!sale.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Commit when due.
-    assert!(sale.try_commit_or_abort(init.token_sale_timestamp_seconds));
+    assert!(sale.try_commit_or_abort(END_TIMESTAMP_SECONDS));
     assert_eq!(sale.state().lifecycle(), Lifecycle::Committed);
     // Check that buyer balance is correct. Total SNS balance is 100k and total ICP is 6.
     {

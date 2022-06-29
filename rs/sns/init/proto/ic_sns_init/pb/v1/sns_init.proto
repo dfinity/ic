@@ -53,9 +53,6 @@ message SnsInitPayload {
   // min_participants * min_participant_icp_e8.
   optional uint64 max_icp_e8s = 7;
 
-  // Time when the swap will end. Must be between 1 day and 3 months.
-  optional uint64 token_sale_timestamp_seconds = 8;
-
   // Minimum number of participants for the sale to take place. Has to larger than zero.
   optional uint32 min_participants = 9;
 

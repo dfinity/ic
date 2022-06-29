@@ -149,7 +149,6 @@ impl SnsWasmCanister {
             max_icp_e8s: Some(1_000_000_000),
             min_participants: Some(1),
             // TODO(NNS1-1435 NNS1-1436): reminder.
-            token_sale_timestamp_seconds: Some(1661609146),
             min_icp_e8s: Some(100),
             max_participant_icp_e8s: Some(1_000_000_000),
             ..SnsInitPayload::with_default_values()

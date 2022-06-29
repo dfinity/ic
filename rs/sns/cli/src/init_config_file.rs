@@ -165,15 +165,6 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
             .to_string(),
         ),
         (
-            Regex::new(r"token_sale_timestamp_seconds*").unwrap(),
-            r##"#
-# This field has no default, a value must be provided by the user.
-# Unix timestamp at which the sale will take place, it has to be between 1 day and
-# 90 days from the setup of the sns.
-#"##
-            .to_string(),
-        ),
-        (
             Regex::new(r"min_participants*").unwrap(),
             r##"#
 # This field has no default, a value must be provided by the user.

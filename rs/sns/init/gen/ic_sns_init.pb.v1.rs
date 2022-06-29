@@ -52,9 +52,6 @@ pub struct SnsInitPayload {
     /// min_participants * min_participant_icp_e8.
     #[prost(uint64, optional, tag="7")]
     pub max_icp_e8s: ::core::option::Option<u64>,
-    /// Time when the swap will end. Must be between 1 day and 3 months.
-    #[prost(uint64, optional, tag="8")]
-    pub token_sale_timestamp_seconds: ::core::option::Option<u64>,
     /// Minimum number of participants for the sale to take place. Has to larger than zero.
     #[prost(uint32, optional, tag="9")]
     pub min_participants: ::core::option::Option<u32>,

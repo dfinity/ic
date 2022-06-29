@@ -31,8 +31,9 @@ use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse, SetMode, Set
 use ic_sns_sale::pb::v1::{
     CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSaleRequest,
     FinalizeSaleResponse, GetCanisterStatusRequest, GetCanisterStatusResponse, GetStateRequest,
-    GetStateResponse, Init, OpenSaleRequest, OpenSaleResponse, RefreshBuyerTokensRequest,
-    RefreshBuyerTokensResponse, RefreshSnsTokensRequest, RefreshSnsTokensResponse, Sale,
+    GetStateResponse, Init, Lifecycle, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
+    RefreshSnsTokensRequest, RefreshSnsTokensResponse, Sale, SetOpenTimeWindowRequest,
+    SetOpenTimeWindowResponse,
 };
 use ic_sns_sale::sale::{SnsGovernanceClient, LOG_PREFIX};
 use ledger_canister::Tokens;
@@ -41,8 +42,7 @@ use ledger_canister::DEFAULT_TRANSFER_FEE;
 use std::str::FromStr;
 
 use prost::Message;
-use std::time::Duration;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 /// Size of the buffer for stable memory reads and writes.
 const STABLE_MEM_BUFFER_SIZE: u32 = 1024 * 1024; // 1MiB
@@ -89,28 +89,19 @@ fn get_state_(_arg: GetStateRequest) -> GetStateResponse {
     }
 }
 
-/// The sale can only be opened by the NNS Governance canister. See
-/// `Sale.open` for details.
-#[export_name = "canister_update open_sale"]
-fn open_sale() {
-    over(candid_one, open_sale_)
+/// Sets the window of time when buyers can participate.
+///
+/// See Sale.set_open_time_window.
+#[export_name = "canister_update set_open_time_window"]
+fn set_open_time_window() {
+    over(candid_one, set_open_time_window_)
 }
 
-/// See `open_sale`.
-#[candid_method(update, rename = "open_sale")]
-fn open_sale_(_: OpenSaleRequest) -> OpenSaleResponse {
-    println!("{}open_sale", LOG_PREFIX);
-    let allowed_canister = sale().init().nns_governance();
-    if caller() != PrincipalId::from(allowed_canister) {
-        panic!(
-            "This method can only be called by canister {}",
-            allowed_canister
-        );
-    }
-    match sale_mut().open() {
-        Ok(()) => OpenSaleResponse {},
-        Err(msg) => panic!("{}", msg),
-    }
+/// See `set_open_time_window`.
+#[candid_method(update, rename = "set_open_time_window")]
+fn set_open_time_window_(request: SetOpenTimeWindowRequest) -> SetOpenTimeWindowResponse {
+    println!("{}set_open_time_window", LOG_PREFIX);
+    sale_mut().set_open_time_window(caller(), now_seconds(), &request)
 }
 
 /// See `Sale.refresh_sns_token_e8s`.
@@ -277,9 +268,33 @@ fn do_get_canister_status(
 // ===               Canister helper & boilerplate methods                   ===
 // =============================================================================
 
+/// Advances the sale. I.e. tries to move it into a more advanced phase in its
+/// Lifecycle.
 #[export_name = "canister_heartbeat"]
 fn canister_heartbeat() {
     let now = now_seconds();
+
+    // Try to open the sale.
+    if sale_mut().state().lifecycle() == Lifecycle::Pending {
+        let result = sale_mut().open(now);
+
+        // Log result.
+        match result {
+            Ok(()) => {
+                println!("The sale has been successfully opened.");
+            }
+            Err(err) => {
+                let squelch = err.contains("start time");
+                if !squelch {
+                    println!(
+                        "{}WARNING: Tried to open automatically, but failed: {}",
+                        LOG_PREFIX, err
+                    );
+                }
+            }
+        }
+    }
+
     if sale_mut().try_commit_or_abort(now) {
         println!("{}Sale committed/aborted at timestamp {}", LOG_PREFIX, now);
     }

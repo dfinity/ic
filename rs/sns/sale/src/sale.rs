@@ -1,8 +1,10 @@
 use crate::pb::v1::{
     set_mode_call_result, BuyerState, CanisterCallError, DerivedState, FinalizeSaleResponse, Init,
-    Lifecycle, Sale, SetModeCallResult, State, SweepResult,
+    Lifecycle, Sale, SetModeCallResult, SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, State,
+    SweepResult, TimeWindow,
 };
 use async_trait::async_trait;
+use chrono::Duration;
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
 
@@ -11,13 +13,24 @@ use ic_sns_governance::pb::v1::{
     governance, manage_neuron, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
 };
 
-use std::str::FromStr;
+use lazy_static::lazy_static;
+use std::{ops::RangeInclusive, str::FromStr};
 
 use ledger_canister::{AccountIdentifier, Subaccount, DEFAULT_TRANSFER_FEE};
 
 use ledger_canister::Tokens;
 
+// As a sanity check, start and end time cannot be less than this.
+pub const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1640995200;
+
 pub const LOG_PREFIX: &str = "[Sale] ";
+
+pub const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
+
+lazy_static! {
+    // The duration of a sale can be as little as 1 day, and at most 90 days.
+    static ref VALID_DURATION_RANGE: RangeInclusive<Duration> = Duration::days(1)..=Duration::days(90);
+}
 
 /// Result of a token transfer (commit or abort) on a ledger (ICP or SNS) for a single buyer.
 pub enum TransferResult {
@@ -63,15 +76,16 @@ pub trait SnsGovernanceClient {
 State diagram for the sale canister's state.
 
 ```text
-           has_sns_amount                  sufficient_participation && (sale_due || icp_target_reached)
-PENDING -------------------------> OPEN ------------------------------------------------------------> COMMITTED
- |                                  |                                                                     |
- |                                  | sale_due && not sufficient_participation                             |
- |                                  v                                                                     v
- |                                 ABORTED ---------------------------------------------------------> <DELETED>
- |                                  ^
- |                                  |
- +--------------------- sale_due  --+
+          has_sns_amount &&                                 sufficient_participantion &&
+            now >= init.start_timestamp_seconds               (sale_due || icp_target_reached)
+PENDING ------------------------------------------> OPEN ------------------------------------------> COMMITTED
+ |                                                    |                                                   |
+ |                                                    | sale_due && not sufficient_participation          |
+ |                                                    v                                                   v
+ |                                                   ABORTED ---------------------------------------> <DELETED>
+ |                                                    ^
+ |                                                    |
+ +--------------------- sale_due  --------------------+
 ```
 
 Here `sufficient_participation` means that the minimum number of
@@ -150,6 +164,7 @@ impl Sale {
                 sns_token_e8s: 0,
                 buyers: Default::default(),
                 lifecycle,
+                open_time_window: None,
             }),
         }
     }
@@ -189,18 +204,70 @@ impl Sale {
         false
     }
 
-    /// Precondition: lifecycle == Pending && sns_amount_available
+    /// Sets the open_time_window field.
+    ///
+    /// Request must be valid. See SetOpenTimeWindowRequest::is_valid. This is
+    /// why we need the current time.
+    ///
+    /// Caller must be authorized. To wit, nns_governance.
+    pub fn set_open_time_window(
+        &mut self,
+        caller: PrincipalId,
+        now_timestamp_seconds: u64,
+        request: &SetOpenTimeWindowRequest,
+    ) -> SetOpenTimeWindowResponse {
+        // Require authorization.
+        let allowed_canister = self.init().nns_governance();
+        if caller != PrincipalId::from(allowed_canister) {
+            panic!(
+                "This method can only be called by canister {}",
+                allowed_canister
+            );
+        }
+
+        // Inspect the request.
+        if !request.is_valid(now_timestamp_seconds) {
+            panic!(
+                "{}ERROR: Received an invalid SetOpenTimeWindowRequest. request: {:#?}",
+                LOG_PREFIX, request
+            );
+        }
+
+        // Modify self.
+        self.state_mut().open_time_window = request.open_time_window;
+
+        // Result.
+        SetOpenTimeWindowResponse {}
+    }
+
+    /// Precondition: lifecycle == Pending && sns_amount_available &&
+    /// open time window is set && now in open time window
     ///
     /// Postcondition (on Ok): lifecycle == Open
-    pub fn open(&mut self) -> Result<(), String> {
+    pub fn open(&mut self, now_timestamp_seconds: u64) -> Result<(), String> {
         if self.state().lifecycle() != Lifecycle::Pending {
             return Err(
                 "Invalid lifecycle state to 'open' the sale; must be 'pending'".to_string(),
             );
         }
-        if !self.sns_amount_available() {
-            return Err("Cannot 'open' the tokens for sale have not yet been received".to_string());
+
+        // The start time has arrived.
+        let start_timestamp_seconds = self
+            .state()
+            .open_time_window
+            .as_ref()
+            .ok_or("Cannot 'open', because the open time window has not been set yet.")?
+            .start_timestamp_seconds;
+        if now_timestamp_seconds < start_timestamp_seconds {
+            return Err("Cannot 'open', because the start time has not arrived yet".to_string());
         }
+
+        if !self.sns_amount_available() {
+            return Err(
+                "Cannot 'open', because the tokens for sale have not yet been received".to_string(),
+            );
+        }
+
         self.state_mut().set_lifecycle(Lifecycle::Open);
         Ok(())
     }
@@ -871,10 +938,15 @@ impl Sale {
     /// The paramter `now_seconds` is greater than or equal to the
     /// initialization parameter for the token sale timestamp.
     pub fn sale_due(&self, now_seconds: u64) -> bool {
-        self.init
-            .as_ref()
-            .map(|x| x.sale_due(now_seconds))
-            .unwrap_or(false)
+        let window = match self.state().open_time_window {
+            Some(window) => window,
+            None => {
+                return false;
+            }
+        };
+
+        let (_start, end) = window.to_boundaries_timestamp_seconds();
+        end <= now_seconds
     }
 
     /// The minimum number of participants have been achieved, and the
@@ -950,18 +1022,10 @@ impl Init {
         CanisterId::new(PrincipalId::from_str(&self.icp_ledger_canister_id).unwrap()).unwrap()
     }
 
-    pub fn sale_due(&self, now_seconds: u64) -> bool {
-        now_seconds >= self.token_sale_timestamp_seconds
-    }
-
     pub fn is_valid(&self) -> bool {
-        // Sale date in the future, or at least past
-        // '2022-01-01T00:00:00 GMT+0000' to prevent initialisation
-        // errors.
-        self.token_sale_timestamp_seconds >= 1640995200
         // TODO: check that the canister IDs are valid.
         //
-            && !self.nns_governance_canister_id.is_empty()
+        !self.nns_governance_canister_id.is_empty()
             && !self.sns_governance_canister_id.is_empty()
             && !self.sns_ledger_canister_id.is_empty()
             && !self.icp_ledger_canister_id.is_empty()
@@ -1094,8 +1158,150 @@ impl BuyerState {
     }
 }
 
+impl TimeWindow {
+    pub fn from_boundaries_timestamp_seconds(
+        start_timestamp_seconds: u64,
+        end_timestamp_seconds: u64,
+    ) -> Self {
+        Self {
+            start_timestamp_seconds,
+            end_timestamp_seconds,
+        }
+    }
+
+    pub fn to_boundaries_timestamp_seconds(&self) -> (u64, u64) {
+        (self.start_timestamp_seconds, self.end_timestamp_seconds)
+    }
+
+    // Precondition: The (signed) difference between end and start must fit within i64.
+    pub fn duration(&self) -> Duration {
+        let (start, end) = self.to_boundaries_timestamp_seconds();
+
+        if end >= start {
+            Duration::seconds((end - start).try_into().unwrap())
+        } else {
+            let result = -Duration::seconds((start - end).try_into().unwrap());
+            println!(
+                "{}WARNING: TimeWindow with negative duration ({}): {:#?}",
+                LOG_PREFIX, result, self
+            );
+            result
+        }
+    }
+}
+
+impl SetOpenTimeWindowRequest {
+    pub fn is_valid(&self, now_timestamp_seconds: u64) -> bool {
+        // Require that the open_time_window field be populated.
+        let window = match self.open_time_window {
+            Some(window) => window,
+            None => {
+                println!("{}ERROR: Invalid SetOpenTimeWindowRequest: the open_time_window field is not populated: {:#?}", LOG_PREFIX, self);
+                return false;
+            }
+        };
+
+        // Require that start time not be in the past.
+        let (start, _end) = window.to_boundaries_timestamp_seconds();
+        if start < now_timestamp_seconds {
+            println!("{}ERROR: Invalid SetOpenTimeWindowRequest: start time is in the past ({} vs. now={}): {:#?}", LOG_PREFIX, start, now_timestamp_seconds, self);
+            return false;
+        }
+
+        // Require that duratin be 1-90 days.
+        if !VALID_DURATION_RANGE.contains(&window.duration()) {
+            println!("{}ERROR: Invalid SetOpenTimeWindowRequest: duration must be at least 1 day and at most 90 days but was {}: {:#?}", LOG_PREFIX, window.duration(), self);
+            return false;
+        }
+
+        true
+    }
+}
+
 // Tools needed (Pete):
 //
 // - Compute subaccount(S, P) for a given buyer P once the canister S is installed.
 //
 // - P = dfx get-principal
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_time_window_round_trip() {
+        let s = 100;
+        let e = 200;
+
+        let w = TimeWindow::from_boundaries_timestamp_seconds(s, e);
+        assert_eq!(w.duration(), Duration::seconds((e - s).try_into().unwrap()));
+
+        let b = w.to_boundaries_timestamp_seconds();
+        assert_eq!(b, (s, e));
+    }
+
+    #[test]
+    fn test_set_open_time_window_request_is_valid() {
+        let start_timestamp_seconds = 100;
+        let request = SetOpenTimeWindowRequest {
+            open_time_window: Some(TimeWindow {
+                start_timestamp_seconds,
+                end_timestamp_seconds: start_timestamp_seconds + 2 * SECONDS_PER_DAY,
+            }),
+        };
+
+        assert!(request.is_valid(start_timestamp_seconds), "{request:#?}",);
+    }
+
+    #[test]
+    fn test_set_open_time_window_request_not_is_valid_in_the_future() {
+        let start_timestamp_seconds = 100;
+        let request = SetOpenTimeWindowRequest {
+            open_time_window: Some(TimeWindow {
+                start_timestamp_seconds,
+                end_timestamp_seconds: start_timestamp_seconds + 2 * SECONDS_PER_DAY,
+            }),
+        };
+
+        assert!(
+            !request.is_valid(start_timestamp_seconds + 1),
+            "{request:#?}",
+        );
+    }
+
+    #[test]
+    fn test_set_open_time_window_request_not_is_valid_too_short() {
+        let start_timestamp_seconds = 100;
+        let request = SetOpenTimeWindowRequest {
+            open_time_window: Some(TimeWindow {
+                start_timestamp_seconds,
+                end_timestamp_seconds: start_timestamp_seconds + SECONDS_PER_DAY - 1,
+            }),
+        };
+
+        assert!(!request.is_valid(start_timestamp_seconds), "{request:#?}",);
+    }
+
+    #[test]
+    fn test_set_open_time_window_request_not_is_valid_too_long() {
+        let start_timestamp_seconds = 100;
+        let request = SetOpenTimeWindowRequest {
+            open_time_window: Some(TimeWindow {
+                start_timestamp_seconds,
+                end_timestamp_seconds: start_timestamp_seconds + 90 * SECONDS_PER_DAY + 1,
+            }),
+        };
+
+        assert!(!request.is_valid(start_timestamp_seconds), "{request:#?}",);
+    }
+
+    #[test]
+    fn test_set_open_time_window_request_not_is_valid_empty() {
+        let start_timestamp_seconds = 100;
+        let request = SetOpenTimeWindowRequest {
+            open_time_window: None,
+        };
+
+        assert!(!request.is_valid(start_timestamp_seconds), "{request:#?}",);
+    }
+}
