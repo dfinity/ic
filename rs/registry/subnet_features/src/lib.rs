@@ -321,10 +321,21 @@ mod tests {
 
     #[test]
     fn test_set_bitcoin_multiple_times_returns_error() {
-        assert!(SubnetFeatures::from_str(
-            "canister_sandboxing,http_requests,bitcoin_testnet_paused,bitcoin_testnet",
-        )
-        .is_err());
+        for feature in [
+            "bitcoin_testnet",
+            "bitcoin_testnet_syncing",
+            "bitcoin_testnet_paused",
+            "bitcoin_mainnet",
+            "bitcoin_mainnet_syncing",
+            "bitcoin_mainnet_paused",
+        ] {
+            // Set bitcoin feature 2 times.
+            let string = format!("bitcoin_testnet,{}", feature);
+            assert_eq!(
+                SubnetFeatures::from_str(&string),
+                Err(String::from("Cannot set bitcoin feature more than once"))
+            );
+        }
     }
 
     #[test]

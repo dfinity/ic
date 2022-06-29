@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::{collections::BTreeSet, convert::TryFrom};
 
@@ -29,6 +30,7 @@ use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::QUEUE_INDEX_NONE,
@@ -146,6 +148,18 @@ impl ExecutionTest {
 
     pub fn xnet_messages(&self) -> &Vec<RequestOrResponse> {
         &self.xnet_messages
+    }
+
+    pub fn get_xnet_response(&self, index: usize) -> &Arc<Response> {
+        match &self.xnet_messages[index] {
+            RequestOrResponse::Request(request) => {
+                panic!(
+                    "Expected the xnet message to be a Response, but got a Request: {:?}",
+                    request
+                )
+            }
+            RequestOrResponse::Response(response) => response,
+        }
     }
 
     pub fn lost_messages(&self) -> &Vec<RequestOrResponse> {
@@ -889,6 +903,7 @@ pub struct ExecutionTestBuilder {
     manual_execution: bool,
     rate_limiting_of_instructions: bool,
     allocatable_compute_capacity_in_percent: usize,
+    subnet_features: &'static str,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -918,6 +933,7 @@ impl Default for ExecutionTestBuilder {
             manual_execution: false,
             rate_limiting_of_instructions: false,
             allocatable_compute_capacity_in_percent: 100,
+            subnet_features: "",
         }
     }
 }
@@ -1011,6 +1027,13 @@ impl ExecutionTestBuilder {
         }
     }
 
+    pub fn with_subnet_features(self, subnet_features: &'static str) -> Self {
+        Self {
+            subnet_features,
+            ..self
+        }
+    }
+
     pub fn with_max_number_of_canisters(self, max_number_of_canisters: u64) -> Self {
         Self {
             registry_settings: RegistryExecutionSettings {
@@ -1070,6 +1093,13 @@ impl ExecutionTestBuilder {
         );
         state.metadata.network_topology.routing_table = routing_table;
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
+
+        if self.subnet_features.is_empty() {
+            state.metadata.own_subnet_features = SubnetFeatures::default();
+        } else {
+            state.metadata.own_subnet_features =
+                SubnetFeatures::from_str(self.subnet_features).unwrap();
+        }
 
         let metrics_registry = MetricsRegistry::new();
 
