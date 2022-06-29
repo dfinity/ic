@@ -3,7 +3,7 @@ use canister_test::Project;
 use ic_base_types::PrincipalId;
 use ic_icrc1::{Account, Block, CandidBlock, CandidOperation, Operation, Transaction};
 use ic_icrc1_ledger::{
-    endpoints::{ArchiveInfo, TransferArg, TransferError},
+    endpoints::{ArchiveInfo, TransferArg, TransferError, Value},
     InitArgs,
 };
 use ic_ledger_core::{
@@ -14,18 +14,29 @@ use ic_ledger_core::{
 use ic_state_machine_tests::{CanisterId, StateMachine};
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 
 const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
 const NUM_BLOCKS_TO_ARCHIVE: u64 = 5;
-const TOKEN_NAME: &str = "Test Token";
-const TOKEN_SYMBOL: &str = "XTST";
+
 const MINTER: Account = Account {
     of: PrincipalId::new(0, [0u8; 29]),
     subaccount: None,
 };
+
+// Metadata-related constants
+const TOKEN_NAME: &str = "Test Token";
+const TOKEN_SYMBOL: &str = "XTST";
+const TEXT_META_KEY: &str = "test:image";
+const TEXT_META_VALUE: &str = "grumpy_cat.png";
+const BLOB_META_KEY: &str = "test:blob";
+const BLOB_META_VALUE: &[u8] = b"\xca\xfe\xba\xbe";
+const NAT_META_KEY: &str = "test:nat";
+const NAT_META_VALUE: u128 = u128::MAX;
+const INT_META_KEY: &str = "test:int";
+const INT_META_VALUE: i128 = i128::MIN;
 
 fn ledger_wasm() -> Vec<u8> {
     let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -39,6 +50,12 @@ fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> 
         transfer_fee: Tokens::from_e8s(FEE),
         token_name: TOKEN_NAME.to_string(),
         token_symbol: TOKEN_SYMBOL.to_string(),
+        metadata: vec![
+            Value::entry(NAT_META_KEY, NAT_META_VALUE),
+            Value::entry(INT_META_KEY, INT_META_VALUE),
+            Value::entry(TEXT_META_KEY, TEXT_META_VALUE),
+            Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
+        ],
         archive_options: ArchiveOptions {
             trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
             num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
@@ -60,6 +77,18 @@ fn balance_of(env: &StateMachine, ledger: CanisterId, acc: Account) -> u64 {
         u64
     )
     .expect("failed to decode balanceOf response")
+}
+
+fn metadata(env: &StateMachine, ledger: CanisterId) -> BTreeMap<String, Value> {
+    Decode!(
+        &env.query(ledger, "icrc1_metadata", Encode!().unwrap())
+            .expect("failed to query metadata")
+            .bytes(),
+        Vec<(String, Value)>
+    )
+    .expect("failed to decode metadata response")
+    .into_iter()
+    .collect()
 }
 
 fn transfer(
@@ -115,10 +144,16 @@ fn get_archive_block(
 }
 
 #[test]
-fn test_symbol_and_name() {
-    let env = StateMachine::new();
-    let canister_id = install_ledger(&env, vec![]);
+fn test_metadata() {
+    fn lookup<'a>(metadata: &'a BTreeMap<String, Value>, key: &str) -> &'a Value {
+        metadata
+            .get(key)
+            .unwrap_or_else(|| panic!("no metadata key {} in map {:?}", key, metadata))
+    }
 
+    let env = StateMachine::new();
+
+    let canister_id = install_ledger(&env, vec![]);
     assert_eq!(
         TOKEN_SYMBOL,
         Decode!(
@@ -139,6 +174,41 @@ fn test_symbol_and_name() {
             String
         )
         .unwrap()
+    );
+
+    assert_eq!(
+        8,
+        Decode!(
+            &env.query(canister_id, "icrc1_decimals", Encode!().unwrap())
+                .unwrap()
+                .bytes(),
+            u32
+        )
+        .unwrap()
+    );
+
+    let metadata = metadata(&env, canister_id);
+    assert_eq!(lookup(&metadata, "icrc1:name"), &Value::from(TOKEN_NAME));
+    assert_eq!(
+        lookup(&metadata, "icrc1:symbol"),
+        &Value::from(TOKEN_SYMBOL)
+    );
+    assert_eq!(lookup(&metadata, "icrc1:decimals"), &Value::from(8u64));
+    assert_eq!(
+        lookup(&metadata, NAT_META_KEY),
+        &Value::from(NAT_META_VALUE)
+    );
+    assert_eq!(
+        lookup(&metadata, INT_META_KEY),
+        &Value::from(INT_META_VALUE)
+    );
+    assert_eq!(
+        lookup(&metadata, TEXT_META_KEY),
+        &Value::from(TEXT_META_VALUE)
+    );
+    assert_eq!(
+        lookup(&metadata, BLOB_META_KEY),
+        &Value::from(BLOB_META_VALUE)
     );
 }
 

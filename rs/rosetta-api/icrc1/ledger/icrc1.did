@@ -29,9 +29,18 @@ type TransferResult = variant {
     Err : TransferError;
 };
 
+type Value = variant {
+    Nat : nat;
+    Int : int;
+    Text : text;
+    Blob : blob;
+};
+
 service : {
     icrc1_name : () -> (text) query;
     icrc1_symbol : () -> (text) query;
+    icrc1_decimals : () -> (nat32) query;
+    icrc1_metadata : () -> (vec record { text; Value }) query;
     icrc1_balanceOf : (Account) -> (nat64) query;
     icrc1_transfer : (TransferArg) -> (TransferResult);
 }

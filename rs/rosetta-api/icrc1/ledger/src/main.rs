@@ -4,7 +4,7 @@ use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::{Account, Transaction};
 use ic_icrc1_ledger::{
-    endpoints::{ArchiveInfo, TransferArg, TransferError},
+    endpoints::{ArchiveInfo, TransferArg, TransferError, Value},
     InitArgs, Ledger,
 };
 use ic_ledger_core::{
@@ -68,14 +68,26 @@ fn post_upgrade() {
 
 #[query]
 #[candid_method(query)]
+fn icrc1_name() -> String {
+    Access::with_ledger(|ledger| ledger.token_name().to_string())
+}
+
+#[query]
+#[candid_method(query)]
 fn icrc1_symbol() -> String {
     Access::with_ledger(|ledger| ledger.token_symbol().to_string())
 }
 
 #[query]
 #[candid_method(query)]
-fn icrc1_name() -> String {
-    Access::with_ledger(|ledger| ledger.token_name().to_string())
+fn icrc1_decimals() -> u32 {
+    ic_ledger_core::tokens::DECIMAL_PLACES
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc1_metadata() -> Vec<(String, Value)> {
+    Access::with_ledger(|ledger| ledger.metadata())
 }
 
 #[query(name = "icrc1_balanceOf")]
