@@ -48,7 +48,7 @@ pub fn init_ic(
     let ic_name = ic.name();
     let working_dir = test_env.create_prep_dir(&ic_name)?;
 
-    if let Some(bitcoind_addr) = ic.bitcoind_addr {
+    if let Some(bitcoind_addr) = &ic.bitcoind_addr {
         test_env.write_json_object(BITCOIND_ADDR_PATH, &bitcoind_addr)?;
     }
 
@@ -264,10 +264,9 @@ pub fn create_config_disk_image(
             .arg(log_debug_overrides_val);
     }
 
-    let bitcoind_addr_path = test_env.get_path(BITCOIND_ADDR_PATH);
-    if bitcoind_addr_path.exists() {
-        let bitcoind_addr: IpAddr = test_env.read_json_object(BITCOIND_ADDR_PATH)?;
-        cmd.arg("--bitcoind_addr").arg(bitcoind_addr.to_string());
+    // --bitcoind_addr indicates the local bitcoin node that the bitcoin adapter should be connected to in the system test environment.
+    if let Ok(arg) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
+        cmd.arg("--bitcoind_addr").arg(arg);
     }
 
     let output = cmd.output()?;
