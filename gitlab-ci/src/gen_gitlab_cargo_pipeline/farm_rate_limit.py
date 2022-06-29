@@ -1,0 +1,1 @@
+FARM_RATE_LIMIT = 10

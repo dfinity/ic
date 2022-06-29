@@ -1,6 +1,6 @@
 # This file will be dynamically included into the child pipeline if necessary.
 # For instance, if there are changes in the "prod" directory.
-# The following parts of the job may be overridden in gen_gitlab_cargo_pipeline.py:
+# The following parts of the job may be overridden in gen_gitlab_cargo_pipeline:
 # - stage
 # - needs
 # - GIT_REVISION and possibly some other variables
@@ -9,7 +9,7 @@ prod-generic-test:
   extends:
     - .ubuntu-nix-docker
     - .rules-protected-branch
-  # we modify stage in gen_gitlab_cargo_pipeline.py
+  # we modify stage in gen_gitlab_cargo_pipeline
   stage: prod-tests
   tags:
     - ic-prod-tests
