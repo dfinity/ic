@@ -832,6 +832,39 @@ fn get_test_suites() -> HashMap<String, Suite> {
         ],
     ));
 
+    let network_robustness_loss = networking::network_robustness::loss_config();
+    let network_robustness_delay = networking::network_robustness::delay_config();
+    let network_robustness_bandwidth = networking::network_robustness::bandwidth_config();
+    m.add_suite(suite(
+        "network_robustness",
+        vec![
+            pot_with_setup(
+                "network_robustness_loss_pot",
+                network_robustness_loss.build(),
+                par(vec![sys_t(
+                    "network_robustness_loss_test",
+                    network_robustness_loss.test(),
+                )]),
+            ),
+            pot_with_setup(
+                "network_robustness_delay_pot",
+                network_robustness_delay.build(),
+                par(vec![sys_t(
+                    "network_robustness_delay_test",
+                    network_robustness_delay.test(),
+                )]),
+            ),
+            pot_with_setup(
+                "network_robustness_bandwidth_pot",
+                network_robustness_bandwidth.build(),
+                par(vec![sys_t(
+                    "network_robustness_bandwidth_test",
+                    network_robustness_bandwidth.test(),
+                )]),
+            ),
+        ],
+    ));
+
     m.add_suite(suite(
         "manual",
         vec![
