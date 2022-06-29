@@ -12,7 +12,7 @@ When run on the master branch, the YAML config always builds and tests all crate
 
 Typical example usage:
 
-    python gen_gitlab_cargo_pipeline.py ../../rs/ --out=child-pipeline.yml
+    python gen_pipeline.py ../../rs/ --out=child-pipeline.yml
 """
 import argparse
 import io
@@ -32,6 +32,7 @@ import yaml
 import git_changes
 import gitlab_config.utils
 import notify_slack
+from gen_gitlab_cargo_pipeline.farm_rate_limit import FARM_RATE_LIMIT
 
 
 def locate_cargo_toml(fname, workspace_root):
@@ -285,7 +286,7 @@ def generate_gitlab_yaml(
 
         if "CI_PIPELINE_ID" in os.environ:
             fout.write("  PARENT_PIPELINE_ID: %s\n" % (os.getenv("CI_PIPELINE_ID")))
-            fout.write("  FARM_SHARD: %s\n" % random.randint(1, 6))
+            fout.write("  FARM_SHARD: %s\n" % random.randint(1, FARM_RATE_LIMIT))
             fout.write("  CDPRNET: cdpr0%s\n" % (random.randint(1, 5)))
             fout.write("  GIT_REVISION: $CI_COMMIT_SHA\n")
             if disable_caching:

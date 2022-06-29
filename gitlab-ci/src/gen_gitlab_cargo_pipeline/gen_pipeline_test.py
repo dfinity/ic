@@ -19,7 +19,7 @@ import shutil
 
 from git import Repo
 
-import gen_gitlab_cargo_pipeline
+from gen_gitlab_cargo_pipeline import gen_pipeline
 
 
 def run_test(tmpdir, testcase, branch="feature_branch"):
@@ -34,7 +34,7 @@ def run_test(tmpdir, testcase, branch="feature_branch"):
         4. Git creates a new feature branch.
         5. Copy testcases/after to tmpdir/rs/.
         6. Git commit to the feature branch.
-        7. Run gen_gitlab_cargo_pipeline.generate_tests against tmpdir/rs
+        7. Run main.generate_tests against tmpdir/rs
         8. Compare testcases/before/expected.yml to the generated GitLab YAML config.
 
     The the test fails, print a path to the expected and generated YAML file and output the file
@@ -105,7 +105,7 @@ def run_test(tmpdir, testcase, branch="feature_branch"):
         os.environ["CI_COMMIT_REF_PROTECTED"] = "true"
 
     with open(out_filename, "w") as fout:
-        gen_gitlab_cargo_pipeline.generate_tests(
+        gen_pipeline.generate_tests(
             os.path.join(tmpdir, "rs"),
             os.path.join(tmpdir, "ic-os", "guestos"),
             fout,
@@ -151,7 +151,7 @@ def test_no_op(tmpdir):
 
 def test_allow_to_fail(tmpdir):
     """Tests when nothing has changed."""
-    gen_gitlab_cargo_pipeline.CRATES_ALLOWED_TO_FAIL = ["foo"]
+    gen_pipeline.CRATES_ALLOWED_TO_FAIL = ["foo"]
     run_test(tmpdir, "allow_crate_to_fail")
 
 
@@ -355,4 +355,4 @@ def test_log_rdeps():
         "ic-crypto-basic-sig": "ic-crypto-basic-sig-ed25519",
         "ic-crypto-core": "ic-crypto-basic-sig",
     }
-    gen_gitlab_cargo_pipeline.log_rdeps(marked_crate_to_dep)
+    gen_pipeline.log_rdeps(marked_crate_to_dep)

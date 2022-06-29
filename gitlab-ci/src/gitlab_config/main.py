@@ -8,7 +8,7 @@ import dfinity_gitlab_config
 import gitrepo
 import yaml
 
-import gen_gitlab_cargo_pipeline
+from gen_gitlab_cargo_pipeline import gen_pipeline
 
 if __name__ == "__main__":
     repo = gitrepo.GitRepo()
@@ -110,13 +110,9 @@ if __name__ == "__main__":
             gitlab.ci_cfg_load_from_file(f)
 
     gitlab.ci_cfg_load(
-        gen_gitlab_cargo_pipeline.generate_gitlab_yaml_for_all_crates(
-            rust_workspace=os.path.join(repo.repo_root(), "rs")
-        )
+        gen_pipeline.generate_gitlab_yaml_for_all_crates(rust_workspace=os.path.join(repo.repo_root(), "rs"))
     )
-    gitlab.ci_cfg_load(
-        gen_gitlab_cargo_pipeline.generate_gitlab_yaml_for_noop(rust_workspace=os.path.join(repo.repo_root(), "rs"))
-    )
+    gitlab.ci_cfg_load(gen_pipeline.generate_gitlab_yaml_for_noop(rust_workspace=os.path.join(repo.repo_root(), "rs")))
 
     if args.cfg_validate:
         gitlab.ci_cfg_lint()

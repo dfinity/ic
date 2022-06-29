@@ -10,7 +10,7 @@ gen-cargo-pipeline:
       ssh-add -L
       cd gitlab-ci/src/gen_gitlab_cargo_pipeline
       $SHELL_WRAPPER nix-shell --run "
-        python gen_gitlab_cargo_pipeline.py ../../../rs/ ../../../ic-os -v --out=../../../child-pipeline.yml
+        python gen_pipeline.py ../../../rs/ ../../../ic-os -v --out=../../../child-pipeline.yml
       " ../shell.nix
       cd -
       # slots: zh=48 (22%), sf=64 (29%), ch=108 (49%)
