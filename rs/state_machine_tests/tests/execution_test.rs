@@ -430,3 +430,30 @@ fn test_state_machine_consumes_instructions() {
         consumed
     );
 }
+
+#[test]
+fn test_set_stable_memory() {
+    let env = StateMachine::new();
+
+    let from_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+
+    env.execute_ingress(from_id, "inc", vec![]).unwrap();
+    let val = env.query(from_id, "read", vec![]).unwrap().bytes();
+    assert_eq!(to_int(val), 1);
+
+    env.execute_ingress(from_id, "grow_page", vec![]).unwrap();
+    env.execute_ingress(from_id, "persist", vec![]).unwrap();
+
+    let memory = env.stable_memory(from_id);
+    assert_eq!(memory.len(), 65536);
+
+    let to_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+    env.set_stable_memory(to_id, &memory);
+
+    env.execute_ingress(to_id, "load", vec![]).unwrap();
+    let val = env.query(to_id, "read", vec![]).unwrap().bytes();
+    assert_eq!(to_int(val), 1);
+
+    let to_memory = env.stable_memory(to_id);
+    assert_eq!(memory, to_memory);
+}

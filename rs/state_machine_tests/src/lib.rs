@@ -39,7 +39,11 @@ use ic_registry_routing_table::{
     routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, RoutingTable,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::page_map::Buffer;
+use ic_replicated_state::{
+    canister_state::{NumWasmPages, WASM_PAGE_SIZE_IN_BYTES},
+    Memory, PageMap, ReplicatedState,
+};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_metrics::fetch_histogram_stats;
 use ic_test_utilities_registry::{
@@ -985,5 +989,64 @@ impl StateMachine {
             .get_subnet_ids(self.registry_client.get_latest_version())
             .unwrap()
             .unwrap()
+    }
+
+    /// Returns a stable memory snapshot of the specified canister.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if:
+    ///   * The specified canister does not exist.
+    ///   * The specified canister does not have a module installed.
+    pub fn stable_memory(&self, canister_id: CanisterId) -> Vec<u8> {
+        let replicated_state = self.state_manager.get_latest_state().take();
+        let memory = &replicated_state
+            .canister_state(&canister_id)
+            .unwrap_or_else(|| panic!("Canister {} does not exist", canister_id))
+            .execution_state
+            .as_ref()
+            .unwrap_or_else(|| panic!("Canister {} has no module", canister_id))
+            .stable_memory;
+
+        let mut dst = vec![0u8; memory.size.get() * WASM_PAGE_SIZE_IN_BYTES];
+        let buffer = Buffer::new(memory.page_map.clone());
+        buffer.read(&mut dst, 0);
+        dst
+    }
+
+    /// Sets the content of the stable memory for the specified canister.
+    ///
+    /// If the `data` is not aligned to the Wasm page boundary, this function will extend the stable
+    /// memory to have the minimum number of Wasm pages that fit all of the `data`.
+    ///
+    /// # Notes
+    ///
+    ///   * Avoid changing the stable memory of arbitrary canisters, they might be not prepared for
+    ///     that. Consider upgrading the canister to an empty Wasm module, setting the stable
+    ///     memory, and upgrading back to the original module instead.
+    ///   * `set_stable_memory(ID, stable_memory(ID))` does not change the canister state.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if:
+    ///   * The specified canister does not exist.
+    ///   * The specified canister does not have a module installed.
+    pub fn set_stable_memory(&self, canister_id: CanisterId, data: &[u8]) {
+        let (height, mut replicated_state) = self.state_manager.take_tip();
+        let canister_state = replicated_state
+            .canister_state_mut(&canister_id)
+            .unwrap_or_else(|| panic!("Canister {} does not exist", canister_id));
+        let size = (data.len() + WASM_PAGE_SIZE_IN_BYTES - 1) / WASM_PAGE_SIZE_IN_BYTES;
+        let memory = Memory::new(PageMap::from(data), NumWasmPages::new(size));
+        canister_state
+            .execution_state
+            .as_mut()
+            .unwrap_or_else(|| panic!("Canister {} has no module", canister_id))
+            .stable_memory = memory;
+        self.state_manager.commit_and_certify(
+            replicated_state,
+            height.increment(),
+            CertificationScope::Full,
+        );
     }
 }
