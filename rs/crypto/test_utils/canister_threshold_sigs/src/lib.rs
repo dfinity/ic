@@ -3,19 +3,19 @@
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
 use ic_crypto_internal_threshold_sig_ecdsa::IDkgDealingInternal;
-use ic_interfaces::crypto::{BasicSigner, IDkgProtocol, MultiSigVerifier, MultiSigner};
+use ic_interfaces::crypto::{BasicSigner, IDkgProtocol};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgMultiSignedDealing, IDkgReceivers, IDkgTranscript,
+    BatchSignedIDkgDealing, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript,
     IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
     IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::PreSignatureQuadruple;
 use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaSigInputs;
 use ic_types::crypto::{AlgorithmId, KeyPurpose};
-use ic_types::signature::BasicSignature;
+use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use rand::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
@@ -151,50 +151,55 @@ pub fn create_signed_dealings(
         .collect()
 }
 
-pub fn multisign_signed_dealing(
+pub fn batch_sign_signed_dealing(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
-    signed_dealing: &SignedIDkgDealing,
-) -> IDkgMultiSignedDealing {
+    signed_dealing: SignedIDkgDealing,
+) -> BatchSignedIDkgDealing {
+    let signers = params.receivers().get();
+    batch_signature_from_signers(
+        params.registry_version(),
+        crypto_components,
+        signed_dealing,
+        signers,
+    )
+}
+
+pub fn batch_signature_from_signers(
+    registry_version: RegistryVersion,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    signed_dealing: SignedIDkgDealing,
+    signers: &BTreeSet<NodeId>,
+) -> BatchSignedIDkgDealing {
     let signature = {
-        let signatures: BTreeMap<_, _> = params
-            .receivers()
-            .get()
-            .iter()
-            .map(|signer_id| {
-                let signature = crypto_for(*signer_id, crypto_components)
-                    .sign_multi(signed_dealing, *signer_id, params.registry_version())
-                    .expect("failed to generate multi-signature share");
+        let mut signatures_map = BTreeMap::new();
+        for signer in signers {
+            let signature = crypto_for(*signer, crypto_components)
+                .sign_basic(&signed_dealing, *signer, registry_version)
+                .expect("failed to generate basic-signature");
+            signatures_map.insert(*signer, signature);
+        }
 
-                (*signer_id, signature)
-            })
-            .collect();
-
-        let combiner_id = random_receiver_id(params);
-        crypto_for(combiner_id, crypto_components)
-            .combine_multi_sig_individuals(signatures, params.registry_version())
-            .expect("failed to combine individual signatures")
+        BasicSignatureBatch { signatures_map }
     };
-
-    IDkgMultiSignedDealing {
+    BatchSignedIDkgDealing {
+        content: signed_dealing,
         signature,
-        signers: params.receivers().get().clone(),
-        signed_dealing: signed_dealing.clone(),
     }
 }
 
-pub fn multisign_signed_dealings(
+pub fn batch_sign_signed_dealings(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
-    signed_dealings: &BTreeMap<NodeId, SignedIDkgDealing>,
-) -> BTreeMap<NodeId, IDkgMultiSignedDealing> {
+    signed_dealings: BTreeMap<NodeId, SignedIDkgDealing>,
+) -> BTreeMap<NodeId, BatchSignedIDkgDealing> {
     signed_dealings
-        .iter()
+        .into_iter()
         .map(|(dealer_id, signed_dealing)| {
             let multisigned_dealing =
-                multisign_signed_dealing(params, crypto_components, signed_dealing);
+                batch_sign_signed_dealing(params, crypto_components, signed_dealing);
 
-            (*dealer_id, multisigned_dealing)
+            (dealer_id, multisigned_dealing)
         })
         .collect()
 }
@@ -202,7 +207,7 @@ pub fn multisign_signed_dealings(
 pub fn create_transcript(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
-    dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
     creator_id: NodeId,
 ) -> IDkgTranscript {
     crypto_for(creator_id, crypto_components)
@@ -302,7 +307,7 @@ pub fn run_idkg_and_create_and_verify_transcript(
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
 ) -> IDkgTranscript {
     let dealings = load_previous_transcripts_and_create_signed_dealings(params, crypto_components);
-    let multisigned_dealings = multisign_signed_dealings(params, crypto_components, &dealings);
+    let multisigned_dealings = batch_sign_signed_dealings(params, crypto_components, dealings);
     let transcript_creator = params.dealers().get().iter().next().unwrap();
     let transcript = create_transcript(
         params,

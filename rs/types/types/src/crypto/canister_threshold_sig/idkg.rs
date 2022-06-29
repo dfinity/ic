@@ -3,10 +3,8 @@ use crate::consensus::get_faults_tolerated;
 use crate::crypto::canister_threshold_sig::error::{
     IDkgParamsValidationError, IDkgTranscriptIdError, InitialIDkgDealingsValidationError,
 };
-use crate::crypto::{
-    AlgorithmId, CombinedMultiSigOf, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
-};
-use crate::signature::{BasicSignature, MultiSignatureShare};
+use crate::crypto::{AlgorithmId, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator};
+use crate::signature::{BasicSignature, BasicSignatureBatch};
 use crate::{Height, NodeId, NumberOfNodes, RegistryVersion};
 use ic_base_types::SubnetId;
 use ic_crypto_internal_types::NodeIndex;
@@ -640,7 +638,7 @@ pub struct IDkgTranscript {
     pub transcript_id: IDkgTranscriptId,
     pub receivers: IDkgReceivers,
     pub registry_version: RegistryVersion,
-    pub verified_dealings: BTreeMap<NodeIndex, IDkgMultiSignedDealing>,
+    pub verified_dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
     pub transcript_type: IDkgTranscriptType,
     pub algorithm_id: AlgorithmId,
     #[serde(with = "serde_bytes")]
@@ -688,16 +686,14 @@ impl IDkgTranscript {
     pub fn dealer_id_for_index(&self, index: NodeIndex) -> Option<NodeId> {
         self.verified_dealings
             .get(&index)
-            .map(|verified_dealing| verified_dealing.signed_dealing.dealer_id())
+            .map(|verified_dealing| verified_dealing.dealer_id())
     }
 
     /// Returns the index of the dealer with the given ID, or `None` if there is no such index.
     pub fn index_for_dealer_id(&self, dealer_id: NodeId) -> Option<NodeIndex> {
         self.verified_dealings
             .iter()
-            .find(|(_index, verified_dealing)| {
-                verified_dealing.signed_dealing.dealer_id() == dealer_id
-            })
+            .find(|(_index, verified_dealing)| verified_dealing.dealer_id() == dealer_id)
             .map(|(index, _signed_dealing)| *index)
     }
 
@@ -737,10 +733,6 @@ impl IDkgTranscript {
                 params.receivers(),
             ));
         }
-        //////////////////////////////////////////////////////////////
-        // TODO (CRP-1382): Check equality of dealers in params and transcript
-        // once the transcript has a dealers field. Also add a respective test.
-        //////////////////////////////////////////////////////////////
         if self.registry_version != params.registry_version() {
             return Err(format!(
                 "mismatching registry versions in transcript ({:?}) and params ({:?})",
@@ -784,9 +776,7 @@ impl IDkgTranscript {
         let dealer_index_to_dealer_id: BTreeMap<NodeIndex, NodeId> = self
             .verified_dealings
             .iter()
-            .map(|(dealer_index, verified_dealing)| {
-                (*dealer_index, verified_dealing.signed_dealing.dealer_id())
-            })
+            .map(|(dealer_index, verified_dealing)| (*dealer_index, verified_dealing.dealer_id()))
             .collect();
         for (dealer_index, dealer_id) in dealer_index_to_dealer_id {
             let dealer_index_in_params = params.dealer_index(dealer_id).ok_or_else(|| {
@@ -803,8 +793,8 @@ impl IDkgTranscript {
             }
         }
         for (dealer_index, signed_dealing) in &self.verified_dealings {
-            let ineligible_signers: BTreeSet<NodeId> = signed_dealing
-                .signers
+            let signers: BTreeSet<NodeId> = signed_dealing.signers();
+            let ineligible_signers: BTreeSet<NodeId> = signers
                 .difference(params.receivers.get())
                 .copied()
                 .collect();
@@ -885,7 +875,7 @@ pub struct IDkgDealingSupport {
     pub transcript_id: IDkgTranscriptId,
     pub dealer_id: NodeId,
     pub dealing_hash: CryptoHashOf<SignedIDkgDealing>,
-    pub sig_share: MultiSignatureShare<SignedIDkgDealing>,
+    pub sig_share: BasicSignature<SignedIDkgDealing>,
 }
 
 impl Display for IDkgDealingSupport {
@@ -898,12 +888,29 @@ impl Display for IDkgDealingSupport {
     }
 }
 
-/// Dealing of an IDkg sharing, along with a combined multisignature.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub struct IDkgMultiSignedDealing {
-    pub signature: CombinedMultiSigOf<SignedIDkgDealing>,
-    pub signers: BTreeSet<NodeId>,
-    pub signed_dealing: SignedIDkgDealing,
+/// IDKG Dealing signed from the dealer, along with a batch of basic signatures in support from the receivers.
+pub type BatchSignedIDkgDealing = Signed<SignedIDkgDealing, BasicSignatureBatch<SignedIDkgDealing>>;
+
+impl BatchSignedIDkgDealing {
+    pub fn idkg_dealing(&self) -> &IDkgDealing {
+        &self.content.content
+    }
+
+    pub fn dealer_id(&self) -> NodeId {
+        self.content.signature.signer
+    }
+
+    pub fn signed_idkg_dealing(&self) -> &SignedIDkgDealing {
+        &self.content
+    }
+
+    pub fn signers(&self) -> BTreeSet<NodeId> {
+        self.signature.signatures_map.keys().copied().collect()
+    }
+
+    pub fn signers_count(&self) -> usize {
+        self.signature.signatures_map.len()
+    }
 }
 
 /// Complaint against an individual IDkg dealing in a transcript.

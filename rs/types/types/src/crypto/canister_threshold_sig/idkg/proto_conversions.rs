@@ -2,18 +2,17 @@ use crate::crypto::canister_threshold_sig::error::{
     ExtendedDerivationPathSerializationError, InitialIDkgDealingsValidationError,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
-    IDkgDealing, IDkgMultiSignedDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
+    BatchSignedIDkgDealing, IDkgDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
     IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType, InitialIDkgDealings,
     SignedIDkgDealing,
 };
 use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
-use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf};
-use crate::signature::BasicSignature;
+use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf};
+use crate::signature::{BasicSignature, BasicSignatureBatch};
 use crate::{node_id_into_protobuf, node_id_try_from_protobuf, Height, NodeIndex};
 use ic_base_types::{
     subnet_id_into_protobuf, subnet_id_try_from_protobuf, NodeId, PrincipalId, RegistryVersion,
 };
-use ic_protobuf::registry::subnet::v1::DealerTuple as DealerTupleProto;
 use ic_protobuf::registry::subnet::v1::ExtendedDerivationPath as ExtendedDerivationPathProto;
 use ic_protobuf::registry::subnet::v1::IDkgDealing as IDkgDealingProto;
 use ic_protobuf::registry::subnet::v1::IDkgSignedDealingTuple as IDkgSignedDealingTupleProto;
@@ -23,6 +22,7 @@ use ic_protobuf::registry::subnet::v1::IDkgTranscriptOperation as IDkgTranscript
 use ic_protobuf::registry::subnet::v1::IDkgTranscriptParams as IDkgTranscriptParamsProto;
 use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
 use ic_protobuf::registry::subnet::v1::VerifiedIDkgDealing as VerifiedIDkgDealingProto;
+use ic_protobuf::registry::subnet::v1::{DealerTuple as DealerTupleProto, SignatureTuple};
 use ic_protobuf::types::v1::NodeId as NodeIdProto;
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
 use std::collections::{BTreeMap, BTreeSet};
@@ -394,19 +394,29 @@ fn signed_idkg_dealing_tuple_proto(
 
 fn verified_idkg_dealing_proto(
     dealer_index: &NodeIndex,
-    signed_dealing: &IDkgMultiSignedDealing,
+    signed_dealing: &BatchSignedIDkgDealing,
 ) -> VerifiedIDkgDealingProto {
     VerifiedIDkgDealingProto {
         dealer_index: *dealer_index as u32,
-        signature: signed_dealing.signature.as_ref().0.clone(),
-        signers: signed_dealing
-            .signers
-            .iter()
-            .map(|node_id| node_id_into_protobuf(*node_id))
-            .collect(),
         signed_dealing_tuple: Some(signed_idkg_dealing_tuple_proto(
-            &signed_dealing.signed_dealing,
+            signed_dealing.signed_idkg_dealing(),
         )),
+        support_tuples: signed_dealing
+            .signature
+            .signatures_map
+            .iter()
+            .map(|(signer, signature)| signature_tuple_proto(*signer, signature.clone()))
+            .collect(),
+    }
+}
+
+fn signature_tuple_proto(
+    signer: NodeId,
+    signature: BasicSigOf<SignedIDkgDealing>,
+) -> SignatureTuple {
+    SignatureTuple {
+        signer: Some(node_id_into_protobuf(signer)),
+        signature: signature.get().0,
     }
 }
 
@@ -442,32 +452,43 @@ fn signed_idkg_dealing_struct(
 
 fn verified_dealings_map(
     verified_protos: &[VerifiedIDkgDealingProto],
-) -> Result<BTreeMap<NodeIndex, IDkgMultiSignedDealing>, InitialIDkgDealingsValidationError> {
+) -> Result<BTreeMap<NodeIndex, BatchSignedIDkgDealing>, InitialIDkgDealingsValidationError> {
     let mut result = BTreeMap::new();
-    for proto in verified_protos.iter() {
+    for proto in verified_protos {
         let node_index = proto.dealer_index;
         let signed_dealing = signed_idkg_dealing_struct(&proto.signed_dealing_tuple)?;
-        let signers: Result<Vec<_>, _> = proto
-            .signers
-            .iter()
-            .map(|node_id| node_id_struct(&Some(node_id.clone())))
-            .collect();
-        let signers = BTreeSet::from_iter(signers?.iter().cloned());
-        let multi_signed_dealing = IDkgMultiSignedDealing {
-            signature: CombinedMultiSigOf::new(CombinedMultiSig(proto.signature.clone())),
-            signers,
-            signed_dealing,
+        let batch_signed_dealing = BatchSignedIDkgDealing {
+            content: signed_dealing,
+            signature: basic_signature_batch_struct(&proto.support_tuples)?,
         };
-        result.insert(node_index, multi_signed_dealing);
+        result.insert(node_index, batch_signed_dealing);
     }
     Ok(result)
+}
+
+fn basic_signature_batch_struct(
+    signature_batch: &[SignatureTuple],
+) -> Result<BasicSignatureBatch<SignedIDkgDealing>, InitialIDkgDealingsValidationError> {
+    let mut signatures_map = BTreeMap::new();
+    for tuple in signature_batch {
+        let signer = node_id_struct(&tuple.signer)?;
+        let signature = BasicSigOf::new(BasicSig(tuple.signature.clone()));
+        if signatures_map.insert(signer, signature).is_some() {
+            return Err(
+                InitialIDkgDealingsValidationError::MultipleSupportSharesFromSameReceiver {
+                    node_id: signer,
+                },
+            );
+        };
+    }
+    Ok(BasicSignatureBatch { signatures_map })
 }
 
 fn initial_dealings_vec(
     dealing_tuple_protos: &[IDkgSignedDealingTupleProto],
 ) -> Result<Vec<SignedIDkgDealing>, InitialIDkgDealingsValidationError> {
     let mut result = Vec::new();
-    for proto in dealing_tuple_protos.iter() {
+    for proto in dealing_tuple_protos {
         let signed_dealing = signed_idkg_dealing_struct(&Some(proto.clone()))?;
         result.push(signed_dealing);
     }

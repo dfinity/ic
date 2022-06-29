@@ -161,12 +161,14 @@ message VerifiedIDkgDealing {
   reserved "requested_height";
   reserved 5;
   reserved "dealing_tuple";
+  reserved 2;
+  reserved "signature";
+  reserved 3;
+  reserved "signers";
 
   uint32 dealer_index = 1;
-  // Multi signature and the corresponding signers.
-  bytes signature = 2;
-  repeated types.v1.NodeId signers = 3;
   IDkgSignedDealingTuple signed_dealing_tuple = 6;
+  repeated SignatureTuple support_tuples = 7;
 }
 
 message IDkgTranscript {
@@ -183,6 +185,11 @@ message IDkgTranscript {
 message DealerTuple {
   types.v1.NodeId dealer_id = 1;
   uint32 dealer_index = 2;
+}
+
+message SignatureTuple {
+  types.v1.NodeId signer = 1;
+  bytes signature = 2;
 }
 
 enum IDkgTranscriptOperation {

@@ -5,16 +5,14 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     test_utils::corrupt_dealing_for_all_recipients, EccScalar, IDkgDealingInternal, MEGaCiphertext,
 };
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    build_params_from_previous, create_and_verify_signed_dealing, create_signed_dealings,
-    generate_key_transcript, generate_presig_quadruple, load_input_transcripts, load_transcript,
-    multisign_signed_dealings, node_id, random_dealer_id, random_dealer_id_excluding,
-    random_node_id_excluding, random_receiver_for_inputs, random_receiver_id,
-    random_receiver_id_excluding, run_idkg_and_create_and_verify_transcript,
+    batch_sign_signed_dealings, batch_signature_from_signers, build_params_from_previous,
+    create_and_verify_signed_dealing, create_signed_dealings, generate_key_transcript,
+    generate_presig_quadruple, load_input_transcripts, load_transcript, node_id, random_dealer_id,
+    random_dealer_id_excluding, random_node_id_excluding, random_receiver_for_inputs,
+    random_receiver_id, random_receiver_id_excluding, run_idkg_and_create_and_verify_transcript,
     CanisterThresholdSigTestEnvironment,
 };
-use ic_interfaces::crypto::{
-    IDkgProtocol, MultiSigVerifier, MultiSigner, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
-};
+use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
 use ic_test_utilities::crypto::{
     crypto_for, dummy_idkg_transcript_id_for_tests, temp_crypto_components_for,
 };
@@ -25,15 +23,15 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgMultiSignedDealing, IDkgReceivers,
+    BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers,
     IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
-    IDkgUnmaskedTranscriptOrigin,
+    IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaCombinedSignature,
     ThresholdEcdsaSigInputs,
 };
-use ic_types::crypto::{AlgorithmId, CombinedMultiSig, CombinedMultiSigOf, CryptoError};
+use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoError};
 use ic_types::{NodeId, NodeIndex, Randomness, RegistryVersion};
 use rand::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
@@ -118,7 +116,7 @@ fn should_fail_create_transcript_without_enough_dealings() {
 
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
 
-    let dealings = params
+    let dealings: BTreeMap<NodeId, SignedIDkgDealing> = params
         .dealers()
         .get()
         .iter()
@@ -129,11 +127,11 @@ fn should_fail_create_transcript_without_enough_dealings() {
         })
         .collect();
 
-    let multisigned_dealings =
-        multisign_signed_dealings(&params, &env.crypto_components, &dealings);
+    let batch_signed_dealings =
+        batch_sign_signed_dealings(&params, &env.crypto_components, dealings.clone());
     let creator_id = random_receiver_id(&params);
     let result = crypto_for(creator_id, &env.crypto_components)
-        .create_transcript(&params, &multisigned_dealings);
+        .create_transcript(&params, &batch_signed_dealings);
     let err = result.unwrap_err();
     assert!(matches!(
         err,
@@ -161,11 +159,11 @@ fn should_fail_create_transcript_with_mislabeled_dealers() {
         })
         .collect();
 
-    let multisigned_dealings =
-        multisign_signed_dealings(&params, &env.crypto_components, &dealings);
+    let batch_signed_dealings =
+        batch_sign_signed_dealings(&params, &env.crypto_components, dealings);
     let creator_id = random_receiver_id(&params);
     let result = crypto_for(creator_id, &env.crypto_components)
-        .create_transcript(&params, &multisigned_dealings);
+        .create_transcript(&params, &batch_signed_dealings);
     let err = result.unwrap_err();
     assert!(matches!(
         err,
@@ -181,8 +179,8 @@ fn should_fail_create_transcript_with_signature_by_disallowed_receiver() {
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
 
     let signed_dealings = create_signed_dealings(&params, &env.crypto_components);
-    let multisigned_dealings =
-        multisign_signed_dealings(&params, &env.crypto_components, &signed_dealings);
+    let batch_signed_dealings =
+        batch_sign_signed_dealings(&params, &env.crypto_components, signed_dealings);
 
     // Remove one of the original receivers from the params
     // so that we have a valid sig on the dealing, but `create_transcript` will not
@@ -202,7 +200,7 @@ fn should_fail_create_transcript_with_signature_by_disallowed_receiver() {
 
     let creator_id = random_receiver_id(&modified_params);
     let result = crypto_for(creator_id, &env.crypto_components)
-        .create_transcript(&modified_params, &multisigned_dealings);
+        .create_transcript(&modified_params, &batch_signed_dealings);
     let err = result.unwrap_err();
     assert!(matches!(
         err,
@@ -220,10 +218,10 @@ fn should_fail_create_transcript_without_enough_signatures() {
     let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
 
     let signed_dealings = create_signed_dealings(&params, &env.crypto_components);
-    let insufficient_multisigned_dealings = signed_dealings
-        .iter()
+    let insufficient_batch_signed_dealings = signed_dealings
+        .into_iter()
         .map(|(dealer_id, signed_dealing)| {
-            let multisigned_dealing = {
+            let signature_batch = {
                 let signers: BTreeSet<_> = params
                     .receivers()
                     .get()
@@ -232,44 +230,21 @@ fn should_fail_create_transcript_without_enough_signatures() {
                     .cloned()
                     .collect();
 
-                let signature = {
-                    let signatures: BTreeMap<_, _> = signers
-                        .iter()
-                        .map(|signer_id| {
-                            let signature = crypto_for(*signer_id, &env.crypto_components)
-                                .sign_multi(signed_dealing, *signer_id, params.registry_version())
-                                .expect("failed to generate multi-signature share");
-
-                            (*signer_id, signature)
-                        })
-                        .collect();
-
-                    let combiner_id = **params
-                        .receivers()
-                        .get()
-                        .iter()
-                        .choose_multiple(&mut thread_rng(), 1)
-                        .get(0)
-                        .expect("receivers is empty");
-                    crypto_for(combiner_id, &env.crypto_components)
-                        .combine_multi_sig_individuals(signatures, params.registry_version())
-                        .expect("failed to combine individual signatures")
-                };
-
-                IDkgMultiSignedDealing {
-                    signature,
-                    signers,
-                    signed_dealing: signed_dealing.clone(),
-                }
+                batch_signature_from_signers(
+                    params.registry_version(),
+                    &env.crypto_components,
+                    signed_dealing,
+                    &signers,
+                )
             };
 
-            (*dealer_id, multisigned_dealing)
+            (dealer_id, signature_batch)
         })
         .collect();
 
     let creator_id = random_receiver_id(&params);
     let result = crypto_for(creator_id, &env.crypto_components)
-        .create_transcript(&params, &insufficient_multisigned_dealings);
+        .create_transcript(&params, &insufficient_batch_signed_dealings);
     let err = result.unwrap_err();
     assert!(matches!(
         err,
@@ -295,20 +270,24 @@ fn should_fail_create_transcript_with_bad_signature() {
         })
         .collect();
 
-    let mut multisigned_dealings =
-        multisign_signed_dealings(&params, &env.crypto_components, &dealings);
-    // Erase the multisig on each dealing
-    for (_, dealing) in multisigned_dealings.iter_mut() {
-        dealing.signature = CombinedMultiSigOf::new(CombinedMultiSig(vec![0; 48]));
+    let mut batch_signed_dealings =
+        batch_sign_signed_dealings(&params, &env.crypto_components, dealings);
+    // Erase the basic signature batch on each dealing
+    for (_, dealing) in batch_signed_dealings.iter_mut() {
+        let mut batch_map = BTreeMap::new();
+        for (signer, _) in dealing.signature.signatures_map.iter() {
+            batch_map.insert(*signer, BasicSigOf::new(BasicSig(vec![0; 64])));
+        }
+        dealing.signature.signatures_map = batch_map;
     }
 
     let creator_id = random_receiver_id(&params);
     let result = crypto_for(creator_id, &env.crypto_components)
-        .create_transcript(&params, &multisigned_dealings);
+        .create_transcript(&params, &batch_signed_dealings);
     assert!(matches!(
         result,
-        Err(IDkgCreateTranscriptError::InvalidMultisignature {
-            crypto_error: CryptoError::MalformedSignature { .. }
+        Err(IDkgCreateTranscriptError::InvalidSignatureBatch {
+            crypto_error: CryptoError::SignatureVerification { .. }
         })
     ));
 }
@@ -1687,8 +1666,8 @@ fn should_fail_verify_opening_when_dealing_is_missing() {
     let dealings = transcript.verified_dealings.clone();
     let (dealer_index, _signed_dealing) = dealings
         .iter()
-        .find(|(_index, multi_signed_dealing)| {
-            multi_signed_dealing.signed_dealing.dealer_id() == complaint.dealer_id
+        .find(|(_index, batch_signed_dealing)| {
+            batch_signed_dealing.dealer_id() == complaint.dealer_id
         })
         .expect("Inconsistent transcript");
     transcript.verified_dealings.remove(dealer_index);
@@ -1829,7 +1808,7 @@ fn fake_sig_inputs(nodes: &BTreeSet<NodeId>) -> ThresholdEcdsaSigInputs {
 }
 
 fn corrupt_signed_dealings_for_all_receivers(
-    dealings: &mut BTreeMap<NodeIndex, IDkgMultiSignedDealing>,
+    dealings: &mut BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
     indices: &[NodeIndex],
 ) {
     dealings
@@ -1839,12 +1818,11 @@ fn corrupt_signed_dealings_for_all_receivers(
 }
 
 /// Corrupts the dealing by multiplying the ephemeral_key EccPoint with a random node index
-fn corrupt_signed_dealing_for_all_receivers(signed_dealing: &mut IDkgMultiSignedDealing) {
+fn corrupt_signed_dealing_for_all_receivers(signed_dealing: &mut BatchSignedIDkgDealing) {
     let invalidated_internal_dealing_raw = {
-        let internal_dealing = IDkgDealingInternal::deserialize(
-            &signed_dealing.signed_dealing.content.internal_dealing_raw,
-        )
-        .expect("failed to deserialize internal dealing");
+        let internal_dealing =
+            IDkgDealingInternal::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)
+                .expect("failed to deserialize internal dealing");
 
         let randomness = ic_types::Randomness::from(thread_rng().gen::<[u8; 32]>());
 
@@ -1855,23 +1833,22 @@ fn corrupt_signed_dealing_for_all_receivers(signed_dealing: &mut IDkgMultiSigned
             .serialize()
             .expect("failed to serialize internal dealing")
     };
-    signed_dealing.signed_dealing.content.internal_dealing_raw = invalidated_internal_dealing_raw;
+    signed_dealing.content.content.internal_dealing_raw = invalidated_internal_dealing_raw;
 }
 
 /// Corrupts the dealing by modifying the ciphertext intended for the specified receiver.
 fn corrupt_signed_dealing_for_one_receiver(
     dealing_index_to_corrupt: NodeIndex,
-    dealings: &mut BTreeMap<NodeIndex, IDkgMultiSignedDealing>,
+    dealings: &mut BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
     receiver_index: NodeIndex,
 ) {
     let mut signed_dealing = dealings
         .get_mut(&dealing_index_to_corrupt)
         .unwrap_or_else(|| panic!("Missing dealing at index {:?}", dealing_index_to_corrupt));
     let invalidated_internal_dealing_raw = {
-        let mut internal_dealing = IDkgDealingInternal::deserialize(
-            &signed_dealing.signed_dealing.content.internal_dealing_raw,
-        )
-        .expect("failed to deserialize internal dealing");
+        let mut internal_dealing =
+            IDkgDealingInternal::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)
+                .expect("failed to deserialize internal dealing");
         match internal_dealing.ciphertext {
             MEGaCiphertext::Single(ref mut ctext) => {
                 let corrupted_ctext = corrupt_ecc_scalar(&ctext.ctexts[receiver_index as usize]);
@@ -1887,7 +1864,7 @@ fn corrupt_signed_dealing_for_one_receiver(
             .serialize()
             .expect("failed to serialize internal dealing")
     };
-    signed_dealing.signed_dealing.content.internal_dealing_raw = invalidated_internal_dealing_raw;
+    signed_dealing.content.content.internal_dealing_raw = invalidated_internal_dealing_raw;
 }
 
 fn check_dealer_indexes(params: &IDkgTranscriptParams, transcript: &IDkgTranscript) {

@@ -747,7 +747,7 @@ pub(crate) mod test_utils {
             transcript_id,
             dealer_id,
             dealing_hash: ic_crypto::crypto_hash(&dealing),
-            sig_share: MultiSignatureShare::fake(signer),
+            sig_share: BasicSignature::fake(signer),
         };
         (dealing, support)
     }

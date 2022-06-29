@@ -158,13 +158,10 @@ pub struct IDkgTranscriptId {
 pub struct VerifiedIDkgDealing {
     #[prost(uint32, tag="1")]
     pub dealer_index: u32,
-    /// Multi signature and the corresponding signers.
-    #[prost(bytes="vec", tag="2")]
-    pub signature: ::prost::alloc::vec::Vec<u8>,
-    #[prost(message, repeated, tag="3")]
-    pub signers: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
     #[prost(message, optional, tag="6")]
     pub signed_dealing_tuple: ::core::option::Option<IDkgSignedDealingTuple>,
+    #[prost(message, repeated, tag="7")]
+    pub support_tuples: ::prost::alloc::vec::Vec<SignatureTuple>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgTranscript {
@@ -193,6 +190,13 @@ pub struct DealerTuple {
     pub dealer_id: ::core::option::Option<super::super::super::types::v1::NodeId>,
     #[prost(uint32, tag="2")]
     pub dealer_index: u32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SignatureTuple {
+    #[prost(message, optional, tag="1")]
+    pub signer: ::core::option::Option<super::super::super::types::v1::NodeId>,
+    #[prost(bytes="vec", tag="2")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgTranscriptParams {

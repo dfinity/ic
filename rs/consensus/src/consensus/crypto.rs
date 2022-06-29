@@ -9,6 +9,7 @@ use ic_types::{
         CryptoError,
     },
 };
+use std::collections::BTreeMap;
 
 /// A trait that unifies the individual signing and verification interface for
 /// both threshold and multi signatures. It is parameterized by the following:
@@ -283,6 +284,55 @@ impl<Message: Signable, C: MultiSigner<Message> + MultiSigVerifier<Message>>
     }
 }
 
+impl<Message: Signable, C: BasicSigVerifier<Message>>
+    Aggregate<Message, BasicSignature<Message>, RegistryVersion, BasicSignatureBatch<Message>>
+    for C
+{
+    fn as_aggregate(
+        &self,
+    ) -> &dyn Aggregate<
+        Message,
+        BasicSignature<Message>,
+        RegistryVersion,
+        BasicSignatureBatch<Message>,
+    > {
+        self
+    }
+
+    fn aggregate(
+        &self,
+        shares: Vec<&BasicSignature<Message>>,
+        _selector: RegistryVersion,
+    ) -> CryptoResult<BasicSignatureBatch<Message>> {
+        let mut signatures_map = BTreeMap::new();
+        for share in shares {
+            if signatures_map
+                .insert(share.signer, share.signature.clone())
+                .is_some()
+            {
+                return Err(CryptoError::InvalidArgument {
+                    message: format!(
+                        "Multiple batch contributions from node ID: {:?}",
+                        share.signer
+                    ),
+                });
+            }
+        }
+        Ok(BasicSignatureBatch { signatures_map })
+    }
+
+    fn verify_aggregate(
+        &self,
+        message: &Signed<Message, BasicSignatureBatch<Message>>,
+        selector: RegistryVersion,
+    ) -> ValidationResult<CryptoError> {
+        for (signer, signature) in message.signature.signatures_map.iter() {
+            self.verify_basic_sig(signature, &message.content, *signer, selector)?
+        }
+        Ok(())
+    }
+}
+
 impl<Message, C: MultiSigner<CryptoHashOf<Message>> + MultiSigVerifier<CryptoHashOf<Message>>>
     Aggregate<
         Message,
@@ -386,7 +436,7 @@ pub trait ConsensusCrypto:
     SignVerify<HashedBlock, BasicSignature<Block>, RegistryVersion>
     + SignVerify<NotarizationContent, MultiSignatureShare<NotarizationContent>, RegistryVersion>
     + SignVerify<FinalizationContent, MultiSignatureShare<FinalizationContent>, RegistryVersion>
-    + SignVerify<SignedIDkgDealing, MultiSignatureShare<SignedIDkgDealing>, RegistryVersion>
+    + SignVerify<SignedIDkgDealing, BasicSignature<SignedIDkgDealing>, RegistryVersion>
     + SignVerify<IDkgDealing, BasicSignature<IDkgDealing>, RegistryVersion>
     + SignVerify<EcdsaComplaintContent, BasicSignature<EcdsaComplaintContent>, RegistryVersion>
     + SignVerify<EcdsaOpeningContent, BasicSignature<EcdsaOpeningContent>, RegistryVersion>
@@ -414,9 +464,9 @@ pub trait ConsensusCrypto:
         MultiSignature<FinalizationContent>,
     > + Aggregate<
         SignedIDkgDealing,
-        MultiSignatureShare<SignedIDkgDealing>,
+        BasicSignature<SignedIDkgDealing>,
         RegistryVersion,
-        MultiSignature<SignedIDkgDealing>,
+        BasicSignatureBatch<SignedIDkgDealing>,
     > + Aggregate<
         RandomBeaconContent,
         ThresholdSignatureShare<RandomBeaconContent>,

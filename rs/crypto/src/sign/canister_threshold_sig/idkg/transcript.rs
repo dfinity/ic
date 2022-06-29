@@ -1,9 +1,9 @@
 //! Implementations of IDkgProtocol related to transcripts
+use crate::sign::basic_sig::BasicSigVerifierInternal;
 use crate::sign::canister_threshold_sig::idkg::complaint::verify_complaint;
 use crate::sign::canister_threshold_sig::idkg::utils::{
     get_mega_pubkey, index_and_dealing_of_dealer,
 };
-use crate::sign::multi_sig::MultiSigVerifierInternal;
 use ic_crypto_internal_csp::api::CspIDkgProtocol;
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_threshold_sig_ecdsa::{
@@ -16,10 +16,12 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgMultiSignedDealing, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
+    BatchSignedIDkgDealing, IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
     IDkgTranscriptType,
 };
+use ic_types::crypto::CryptoError;
 use ic_types::{NodeId, NodeIndex, RegistryVersion};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -28,13 +30,20 @@ pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
     csp_client: &C,
     registry: &Arc<dyn RegistryClient>,
     params: &IDkgTranscriptParams,
-    dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
 ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
     ensure_sufficient_dealings_collected(params, dealings)?;
     ensure_dealers_allowed_by_params(params, dealings)?;
     ensure_signers_allowed_by_params(params, dealings)?;
     ensure_sufficient_signatures_collected(params, dealings)?;
-    verify_multisignatures(csp_client, registry, dealings, params.registry_version())?;
+    for dealing in dealings.values() {
+        verify_signature_batch(
+            csp_client,
+            &Arc::clone(registry),
+            dealing,
+            params.registry_version(),
+        )?;
+    }
 
     let signed_dealings_by_index = dealings_by_index_from_dealings(dealings, params)?;
 
@@ -89,32 +98,22 @@ pub fn verify_transcript<C: CspIDkgProtocol + CspSigner>(
         })?;
 
     for (dealer_index, signed_dealing) in &transcript.verified_dealings {
-        if signed_dealing.signers.len() < transcript.verification_threshold().get() as usize {
+        let signers_count = signed_dealing.signers_count();
+        if signers_count < transcript.verification_threshold().get() as usize {
             return Err(IDkgVerifyTranscriptError::InvalidArgument(format!(
                 "insufficient number of signers ({}<{}) for dealing of dealer with index {}",
-                signed_dealing.signers.len(),
+                signers_count,
                 transcript.verification_threshold(),
                 dealer_index
             )));
         }
         // Note that signer eligibility is checked in `transcript.verify_consistency_with_params`
-        MultiSigVerifierInternal::verify_multi_sig_combined(
+        verify_signature_batch(
             csp_client,
-            Arc::clone(registry),
-            &signed_dealing.signature,
-            &signed_dealing.signed_dealing,
-            signed_dealing.signers.clone(),
+            &Arc::clone(registry),
+            signed_dealing,
             params.registry_version(),
-        )
-        .map_err(|crypto_error| {
-            IDkgVerifyTranscriptError::InvalidDealingMultiSignature {
-                error: format!(
-                    "invalid combined multi-signature of dealing of dealer with index {}: {}",
-                    dealer_index, crypto_error
-                ),
-                crypto_error,
-            }
-        })?;
+        )?;
     }
 
     let internal_transcript_operation =
@@ -338,7 +337,7 @@ pub fn verify_opening<C: CspIDkgProtocol>(
 
 fn ensure_sufficient_dealings_collected(
     params: &IDkgTranscriptParams,
-    dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
 ) -> Result<(), IDkgCreateTranscriptError> {
     if dealings.len() < params.collection_threshold().get() as usize {
         Err(IDkgCreateTranscriptError::UnsatisfiedCollectionThreshold {
@@ -352,7 +351,7 @@ fn ensure_sufficient_dealings_collected(
 
 fn ensure_dealers_allowed_by_params(
     params: &IDkgTranscriptParams,
-    dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
 ) -> Result<(), IDkgCreateTranscriptError> {
     for id in dealings.keys() {
         if !params.dealers().get().contains(id) {
@@ -365,29 +364,29 @@ fn ensure_dealers_allowed_by_params(
 
 fn ensure_signers_allowed_by_params(
     params: &IDkgTranscriptParams,
-    dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
 ) -> Result<(), IDkgCreateTranscriptError> {
     for dealing in dealings.values() {
-        for signer in &dealing.signers {
-            if !params.receivers().get().contains(signer) {
-                return Err(IDkgCreateTranscriptError::SignerNotAllowed { node_id: *signer });
+        for signer in dealing.signers() {
+            if !params.receivers().get().contains(&signer) {
+                return Err(IDkgCreateTranscriptError::SignerNotAllowed { node_id: signer });
             }
         }
     }
-
     Ok(())
 }
 
 fn ensure_sufficient_signatures_collected(
     params: &IDkgTranscriptParams,
-    dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
 ) -> Result<(), IDkgCreateTranscriptError> {
     for (dealer, dealing) in dealings {
-        if dealing.signers.len() < params.verification_threshold().get() as usize {
+        let signers_count = dealing.signers_count();
+        if signers_count < params.verification_threshold().get() as usize {
             return Err(
                 IDkgCreateTranscriptError::UnsatisfiedVerificationThreshold {
                     threshold: params.verification_threshold().get(),
-                    signature_count: dealing.signers.len(),
+                    signature_count: signers_count,
                     dealer_id: *dealer,
                 },
             );
@@ -397,39 +396,19 @@ fn ensure_sufficient_signatures_collected(
     Ok(())
 }
 
-fn verify_multisignatures<C: CspSigner>(
-    csp_client: &C,
-    registry: &Arc<dyn RegistryClient>,
-    dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
-    registry_version: RegistryVersion,
-) -> Result<(), IDkgCreateTranscriptError> {
-    for dealing in dealings.values() {
-        MultiSigVerifierInternal::verify_multi_sig_combined(
-            csp_client,
-            Arc::clone(registry),
-            &dealing.signature,
-            &dealing.signed_dealing,
-            dealing.signers.clone(),
-            registry_version,
-        )
-        .map_err(|e| IDkgCreateTranscriptError::InvalidMultisignature { crypto_error: e })?;
-    }
-
-    Ok(())
-}
-
 /// Convert values in the dealings map from IDkgDealings to IDkgDealingInternals
 fn internal_dealings_from_signed_dealings(
-    dealings: &BTreeMap<NodeIndex, IDkgMultiSignedDealing>,
+    dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
 ) -> Result<BTreeMap<NodeIndex, IDkgDealingInternal>, IDkgCreateTranscriptError> {
     dealings
         .iter()
-        .map(|(index, d)| {
-            let internal_dealing =
-                IDkgDealingInternal::deserialize(&d.signed_dealing.content.internal_dealing_raw)
-                    .map_err(|e| IDkgCreateTranscriptError::SerializationError {
-                        internal_error: format!("{:?}", e),
-                    })?;
+        .map(|(index, signed_dealing)| {
+            let internal_dealing = IDkgDealingInternal::deserialize(
+                &signed_dealing.idkg_dealing().internal_dealing_raw,
+            )
+            .map_err(|e| IDkgCreateTranscriptError::SerializationError {
+                internal_error: format!("{:?}", e),
+            })?;
             Ok((*index, internal_dealing))
         })
         .collect()
@@ -443,9 +422,9 @@ fn internal_dealings_from_signed_dealings(
 ///
 /// Only the first collection_threshold dealings are returned
 fn dealings_by_index_from_dealings(
-    dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
     params: &IDkgTranscriptParams,
-) -> Result<BTreeMap<NodeIndex, IDkgMultiSignedDealing>, IDkgCreateTranscriptError> {
+) -> Result<BTreeMap<NodeIndex, BatchSignedIDkgDealing>, IDkgCreateTranscriptError> {
     dealings
         .iter()
         .take(params.collection_threshold().get() as usize)
@@ -459,7 +438,7 @@ fn dealings_by_index_from_dealings(
 }
 
 fn internal_dealings_from_verified_dealings(
-    verified_dealings: &BTreeMap<NodeIndex, IDkgMultiSignedDealing>,
+    verified_dealings: &BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
 ) -> Result<
     BTreeMap<NodeIndex, IDkgDealingInternal>,
     InternalDealingsFromVerifiedDealingsSerializationError,
@@ -569,6 +548,67 @@ fn ensure_matching_transcript_ids_and_dealer_ids(
                 });
             }
         }
+    }
+    Ok(())
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VerifySignatureBatchError {
+    InvalidSignatureBatch {
+        error: String,
+        crypto_error: CryptoError,
+    },
+}
+
+impl From<VerifySignatureBatchError> for IDkgVerifyTranscriptError {
+    fn from(verify_signature_batch_error: VerifySignatureBatchError) -> Self {
+        match verify_signature_batch_error {
+            VerifySignatureBatchError::InvalidSignatureBatch {
+                error,
+                crypto_error,
+            } => IDkgVerifyTranscriptError::InvalidDealingSignatureBatch {
+                error,
+                crypto_error,
+            },
+        }
+    }
+}
+
+impl From<VerifySignatureBatchError> for IDkgCreateTranscriptError {
+    fn from(verify_signature_batch_error: VerifySignatureBatchError) -> Self {
+        match verify_signature_batch_error {
+            VerifySignatureBatchError::InvalidSignatureBatch { crypto_error, .. } => {
+                IDkgCreateTranscriptError::InvalidSignatureBatch { crypto_error }
+            }
+        }
+    }
+}
+
+fn verify_signature_batch<C: CspSigner>(
+    csp_client: &C,
+    registry: &Arc<dyn RegistryClient>,
+    dealing: &BatchSignedIDkgDealing,
+    registry_version: RegistryVersion,
+) -> Result<(), VerifySignatureBatchError> {
+    for (signer, signature) in dealing.signature.signatures_map.iter() {
+        BasicSigVerifierInternal::verify_basic_sig(
+            csp_client,
+            Arc::clone(registry),
+            signature,
+            dealing.signed_idkg_dealing(),
+            *signer,
+            registry_version,
+        )
+        .map_err(
+            |crypto_error| VerifySignatureBatchError::InvalidSignatureBatch {
+                error: format!(
+                    "Invalid basic signature batch on dealing from dealer with id {}: {}",
+                    dealing.dealer_id(),
+                    crypto_error
+                ),
+                crypto_error,
+            },
+        )?;
     }
     Ok(())
 }

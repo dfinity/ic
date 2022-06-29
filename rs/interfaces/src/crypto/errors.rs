@@ -123,7 +123,7 @@ impl ErrorReplication for IDkgVerifyTranscriptError {
             // rue, as validity checks of arguments are stable across replicas
             IDkgVerifyTranscriptError::InvalidArgument(_) => true,
             // Whether this is a replicated error depends on the underlying crypto error
-            IDkgVerifyTranscriptError::InvalidDealingMultiSignature { crypto_error, .. } => {
+            IDkgVerifyTranscriptError::InvalidDealingSignatureBatch { crypto_error, .. } => {
                 crypto_error.is_replicated()
             }
             // true, as (de)serialization is stable across replicas

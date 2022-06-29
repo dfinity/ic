@@ -64,6 +64,7 @@ pub enum InitialIDkgDealingsValidationError {
     InvalidTranscriptOperation,
     MismatchingDealing,
     MultipleDealingsFromSameDealer { node_id: NodeId },
+    MultipleSupportSharesFromSameReceiver { node_id: NodeId },
     UnsatisfiedCollectionThreshold { threshold: u32, dealings_count: u32 },
 }
 impl_display_using_debug!(InitialIDkgDealingsValidationError);
@@ -105,7 +106,7 @@ pub enum IDkgCreateTranscriptError {
         signature_count: usize,
         dealer_id: NodeId,
     },
-    InvalidMultisignature {
+    InvalidSignatureBatch {
         crypto_error: CryptoError,
     },
 }
@@ -114,7 +115,7 @@ impl_display_using_debug!(IDkgCreateTranscriptError);
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgVerifyTranscriptError {
     InvalidArgument(String),
-    InvalidDealingMultiSignature {
+    InvalidDealingSignatureBatch {
         error: String,
         crypto_error: CryptoError,
     },
