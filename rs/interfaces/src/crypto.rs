@@ -67,8 +67,8 @@ pub trait Crypto:
     + MultiSigner<NotarizationContent>
     + MultiSigVerifier<NotarizationContent>
     // SignedIDkgDealing
-    + MultiSigner<SignedIDkgDealing>
-    + MultiSigVerifier<SignedIDkgDealing>
+    + BasicSigner<SignedIDkgDealing>
+    + BasicSigVerifier<SignedIDkgDealing>
     // IDkgDealing
     + BasicSigner<IDkgDealing>
     + BasicSigVerifier<IDkgDealing>
@@ -130,8 +130,8 @@ impl<T> Crypto for T where
         + MultiSigVerifier<FinalizationContent>
         + MultiSigner<NotarizationContent>
         + MultiSigVerifier<NotarizationContent>
-        + MultiSigner<SignedIDkgDealing>
-        + MultiSigVerifier<SignedIDkgDealing>
+        + BasicSigner<SignedIDkgDealing>
+        + BasicSigVerifier<SignedIDkgDealing>
         + BasicSigner<IDkgDealing>
         + BasicSigVerifier<IDkgDealing>
         + BasicSigner<EcdsaComplaintContent>

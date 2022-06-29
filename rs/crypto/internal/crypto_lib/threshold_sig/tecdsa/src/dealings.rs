@@ -1,6 +1,6 @@
 use crate::*;
 use core::fmt::{self, Debug};
-use ic_types::crypto::canister_threshold_sig::idkg::IDkgMultiSignedDealing;
+use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use ic_types::NumberOfNodes;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -457,10 +457,10 @@ impl IDkgDealingInternal {
     }
 }
 
-impl TryFrom<&IDkgMultiSignedDealing> for IDkgDealingInternal {
+impl TryFrom<&BatchSignedIDkgDealing> for IDkgDealingInternal {
     type Error = ThresholdEcdsaError;
 
-    fn try_from(signed_dealing: &IDkgMultiSignedDealing) -> ThresholdEcdsaResult<Self> {
-        Self::deserialize(&signed_dealing.signed_dealing.content.internal_dealing_raw)
+    fn try_from(signed_dealing: &BatchSignedIDkgDealing) -> ThresholdEcdsaResult<Self> {
+        Self::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)
     }
 }

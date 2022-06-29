@@ -10,7 +10,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealing, IDkgMultiSignedDealing, IDkgOpening, IDkgTranscript,
+    BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript,
     IDkgTranscriptParams,
 };
 use ic_types::NodeId;
@@ -126,7 +126,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
     fn create_transcript(
         &self,
         params: &IDkgTranscriptParams,
-        dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+        dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
         let logger = new_logger!(&self.logger;
             crypto.trait_name => "IDkgProtocol",

@@ -1,14 +1,14 @@
 use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::random_transcript_id;
 use crate::crypto::canister_threshold_sig::idkg::{
-    IDkgDealers, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgMultiSignedDealing, IDkgReceivers,
+    BatchSignedIDkgDealing, IDkgDealers, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers,
     IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
     IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
-use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf};
-use crate::signature::BasicSignature;
+use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf};
+use crate::signature::{BasicSignature, BasicSignatureBatch};
 use crate::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use maplit::{btreemap, btreeset};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 type Itt = IDkgTranscriptType;
 type Imto = IDkgMaskedTranscriptOrigin;
@@ -157,7 +157,7 @@ fn should_fail_on_insufficient_num_of_dealings() {
     let (mut transcript, mut params) = valid_transcript_and_params();
     params.dealers = dealers(btreeset! {node_id(1), node_id(2), node_id(3), node_id(4)});
     transcript.verified_dealings =
-        btreemap! {0 => multi_signed_dealing(node_id(42), params.receivers.get().clone())};
+        btreemap! {0 => batch_signed_dealing(node_id(42), params.receivers.get().clone())};
 
     let result = transcript.verify_consistency_with_params(&params);
 
@@ -169,7 +169,7 @@ fn should_fail_on_dealing_from_non_dealer() {
     let (mut transcript, mut params) = valid_transcript_and_params();
     params.dealers = dealers(btreeset! {node_id(1), node_id(2), node_id(3)});
     transcript.verified_dealings =
-        btreemap! {0 => multi_signed_dealing(node_id(999), params.receivers.get().clone())};
+        btreemap! {0 => batch_signed_dealing(node_id(999), params.receivers.get().clone())};
 
     let result = transcript.verify_consistency_with_params(&params);
 
@@ -181,7 +181,7 @@ fn should_fail_on_mismatching_dealer_indexes() {
     let (mut transcript, mut params) = valid_transcript_and_params();
     params.dealers = dealers(btreeset! {node_id(3), node_id(1), node_id(2)});
     transcript.verified_dealings =
-        btreemap! {0 => multi_signed_dealing(node_id(2), params.receivers.get().clone())};
+        btreemap! {0 => batch_signed_dealing(node_id(2), params.receivers.get().clone())};
 
     let result = transcript.verify_consistency_with_params(&params);
 
@@ -201,8 +201,9 @@ fn should_fail_on_ineligible_signer() {
         .verified_dealings
         .get_mut(&first_dealer_index)
         .unwrap()
-        .signers
-        .insert(non_receiver);
+        .signature
+        .signatures_map
+        .insert(non_receiver, BasicSigOf::from(BasicSig(vec![])));
 
     let result = transcript.verify_consistency_with_params(&params);
 
@@ -221,9 +222,9 @@ fn valid_transcript_and_params() -> (IDkgTranscript, IDkgTranscriptParams) {
 
     let transcript = IDkgTranscript {
         verified_dealings: btreemap! {
-            0 => multi_signed_dealing(node_id(42), receivers.get().clone()),
-            1 => multi_signed_dealing(node_id(43), receivers.get().clone()),
-            2 => multi_signed_dealing(node_id(44), receivers.get().clone()),
+            0 => batch_signed_dealing(node_id(42), receivers.get().clone()),
+            1 => batch_signed_dealing(node_id(43), receivers.get().clone()),
+            2 => batch_signed_dealing(node_id(44), receivers.get().clone()),
         },
         transcript_id,
         receivers: receivers.clone(),
@@ -246,7 +247,7 @@ fn valid_transcript_and_params() -> (IDkgTranscript, IDkgTranscriptParams) {
     (transcript, params)
 }
 
-fn multi_signed_dealing(dealer_id: NodeId, signers: BTreeSet<NodeId>) -> IDkgMultiSignedDealing {
+fn batch_signed_dealing(dealer_id: NodeId, signers: BTreeSet<NodeId>) -> BatchSignedIDkgDealing {
     let dealing = IDkgDealing {
         transcript_id: dummy_transcript_id(),
         internal_dealing_raw: dummy_internal_dealing_raw(),
@@ -258,19 +259,22 @@ fn multi_signed_dealing(dealer_id: NodeId, signers: BTreeSet<NodeId>) -> IDkgMul
             signer: dealer_id,
         },
     };
-    IDkgMultiSignedDealing {
-        signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![])),
-        signers,
-        signed_dealing,
+    let mut signatures_map = BTreeMap::new();
+    for signer in signers {
+        signatures_map.insert(signer, BasicSigOf::from(BasicSig(vec![])));
+    }
+    BatchSignedIDkgDealing {
+        content: signed_dealing,
+        signature: BasicSignatureBatch { signatures_map },
     }
 }
 
 fn dummy_transcript() -> IDkgTranscript {
     IDkgTranscript {
         verified_dealings: btreemap! {
-            0 => multi_signed_dealing(node_id(42), BTreeSet::new()),
-            1 => multi_signed_dealing(node_id(43), BTreeSet::new()),
-            3 => multi_signed_dealing(node_id(45), BTreeSet::new())
+            0 => batch_signed_dealing(node_id(42), BTreeSet::new()),
+            1 => batch_signed_dealing(node_id(43), BTreeSet::new()),
+            3 => batch_signed_dealing(node_id(45), BTreeSet::new())
         },
         transcript_id: dummy_transcript_id(),
         receivers: dummy_receivers(),

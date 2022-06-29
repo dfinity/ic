@@ -14,10 +14,8 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptType,
     SignedIDkgDealing,
 };
-use ic_types::crypto::{
-    AlgorithmId, BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, KeyPurpose,
-};
-use ic_types::signature::BasicSignature;
+use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, KeyPurpose};
+use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::{registry::RegistryClientError, Height, Randomness, RegistryVersion};
 use rand::{thread_rng, Rng};
 use std::collections::BTreeSet;
@@ -34,7 +32,7 @@ fn should_call_csp_with_correct_arguments() {
     let mut verified_dealings = BTreeMap::new();
     verified_dealings.insert(
         dealer_index,
-        multi_signed_dealing_with(internal_dealing_raw.clone(), DEALER),
+        batch_signed_dealing_with(internal_dealing_raw.clone(), DEALER),
     );
     let transcript = IDkgTranscript {
         transcript_id,
@@ -157,7 +155,7 @@ fn should_fail_if_complainer_missing_in_transcript() {
 
     let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
-    verified_dealings.insert(0, multi_signed_dealing_with_invalid_internal(NODE_1));
+    verified_dealings.insert(0, batch_signed_dealing_with_invalid_internal(NODE_1));
     let transcript = IDkgTranscript {
         transcript_id,
         receivers: receivers_missing_complainer_id,
@@ -190,7 +188,7 @@ fn should_fail_if_deserializing_complaint_fails() {
 
     let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
-    verified_dealings.insert(0, multi_signed_dealing(NODE_1));
+    verified_dealings.insert(0, batch_signed_dealing(NODE_1));
     let transcript = IDkgTranscript {
         transcript_id,
         receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
@@ -220,7 +218,7 @@ fn should_fail_if_deserializing_complaint_fails() {
 #[test]
 fn should_fail_if_deserializing_dealing_fails() {
     let mut verified_dealings = BTreeMap::new();
-    verified_dealings.insert(0, multi_signed_dealing_with_invalid_internal(NODE_1));
+    verified_dealings.insert(0, batch_signed_dealing_with_invalid_internal(NODE_1));
 
     let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let transcript = IDkgTranscript {
@@ -255,7 +253,7 @@ fn should_fail_if_complainer_mega_pubkey_not_in_registry() {
 
     let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
-    verified_dealings.insert(0, multi_signed_dealing(NODE_1));
+    verified_dealings.insert(0, batch_signed_dealing(NODE_1));
     let transcript = IDkgTranscript {
         transcript_id,
         receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
@@ -293,7 +291,7 @@ fn should_fail_if_complainer_mega_pubkey_is_malformed() {
 
     let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
-    verified_dealings.insert(0, multi_signed_dealing(NODE_1));
+    verified_dealings.insert(0, batch_signed_dealing(NODE_1));
     let transcript = IDkgTranscript {
         transcript_id,
         receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
@@ -332,7 +330,7 @@ fn should_fail_if_complainer_mega_pubkey_algorithm_is_unsupported() {
 
     let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
-    verified_dealings.insert(0, multi_signed_dealing(NODE_1));
+    verified_dealings.insert(0, batch_signed_dealing(NODE_1));
     let transcript = IDkgTranscript {
         transcript_id,
         receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
@@ -369,7 +367,7 @@ fn should_fail_if_registry_client_returns_error() {
 
     let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
-    verified_dealings.insert(0, multi_signed_dealing(NODE_1));
+    verified_dealings.insert(0, batch_signed_dealing(NODE_1));
     let transcript = IDkgTranscript {
         transcript_id,
         receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
@@ -403,7 +401,7 @@ fn should_fail_if_registry_client_returns_error() {
 fn should_return_ok_if_csp_returns_ok() {
     let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
-    verified_dealings.insert(0, multi_signed_dealing(NODE_1));
+    verified_dealings.insert(0, batch_signed_dealing(NODE_1));
     let transcript = IDkgTranscript {
         transcript_id,
         receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
@@ -430,7 +428,7 @@ fn should_return_ok_if_csp_returns_ok() {
 fn should_return_error_if_csp_returns_error() {
     let transcript_id = IDkgTranscriptId::new(SUBNET_42, 27, Height::new(12));
     let mut verified_dealings = BTreeMap::new();
-    verified_dealings.insert(0, multi_signed_dealing(NODE_1));
+    verified_dealings.insert(0, batch_signed_dealing(NODE_1));
     let transcript = IDkgTranscript {
         transcript_id,
         receivers: IDkgReceivers::new(node_set(&[NODE_1])).unwrap(),
@@ -459,14 +457,14 @@ fn node_set(nodes: &[NodeId]) -> BTreeSet<NodeId> {
     nodes.iter().copied().collect()
 }
 
-fn multi_signed_dealing(dealer_id: NodeId) -> IDkgMultiSignedDealing {
-    multi_signed_dealing_with(valid_internal_dealing_raw(), dealer_id)
+fn batch_signed_dealing(dealer_id: NodeId) -> BatchSignedIDkgDealing {
+    batch_signed_dealing_with(valid_internal_dealing_raw(), dealer_id)
 }
 
-fn multi_signed_dealing_with(
+fn batch_signed_dealing_with(
     internal_dealing_raw: Vec<u8>,
     dealer_id: NodeId,
-) -> IDkgMultiSignedDealing {
+) -> BatchSignedIDkgDealing {
     let dealing = IDkgDealing {
         transcript_id: IDkgTranscriptId::new(SUBNET_42, 1234, Height::new(123)),
         internal_dealing_raw,
@@ -478,14 +476,15 @@ fn multi_signed_dealing_with(
             signer: dealer_id,
         },
     };
-    IDkgMultiSignedDealing {
-        signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![])),
-        signers: BTreeSet::new(),
-        signed_dealing,
+    BatchSignedIDkgDealing {
+        content: signed_dealing,
+        signature: BasicSignatureBatch {
+            signatures_map: BTreeMap::new(),
+        },
     }
 }
 
-fn multi_signed_dealing_with_invalid_internal(dealer_id: NodeId) -> IDkgMultiSignedDealing {
+fn batch_signed_dealing_with_invalid_internal(dealer_id: NodeId) -> BatchSignedIDkgDealing {
     let dealing = IDkgDealing {
         transcript_id: IDkgTranscriptId::new(SUBNET_42, 1234, Height::new(123)),
         internal_dealing_raw: vec![],
@@ -497,10 +496,11 @@ fn multi_signed_dealing_with_invalid_internal(dealer_id: NodeId) -> IDkgMultiSig
             signer: dealer_id,
         },
     };
-    IDkgMultiSignedDealing {
-        signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![])),
-        signers: BTreeSet::new(),
-        signed_dealing,
+    BatchSignedIDkgDealing {
+        content: signed_dealing,
+        signature: BasicSignatureBatch {
+            signatures_map: BTreeMap::new(),
+        },
     }
 }
 

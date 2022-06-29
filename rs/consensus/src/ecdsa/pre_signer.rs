@@ -15,12 +15,12 @@ use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{EcdsaBlockReader, EcdsaMessage};
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgDealingSupport, IDkgMultiSignedDealing, IDkgTranscript, IDkgTranscriptId,
+    BatchSignedIDkgDealing, IDkgDealingSupport, IDkgTranscript, IDkgTranscriptId,
     IDkgTranscriptOperation, IDkgTranscriptParams, SignedIDkgDealing,
 };
 use ic_types::crypto::CryptoHashOf;
 use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::signature::MultiSignature;
+use ic_types::signature::BasicSignatureBatch;
 use ic_types::{Height, NodeId, SubnetId};
 
 use prometheus::IntCounterVec;
@@ -826,7 +826,7 @@ impl EcdsaPreSignerImpl {
         support: &IDkgDealingSupport,
     ) -> EcdsaChangeSet {
         self.crypto
-            .verify_multi_sig_individual(
+            .verify_basic_sig(
                 &support.sig_share.signature,
                 signed_dealing,
                 support.sig_share.signer,
@@ -1083,16 +1083,14 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
 
                 // Aggregate the support shares per dealing
                 for dealing_state in transcript_state.dealing_state.into_values() {
-                    if let Some(multi_sig) = self.crypto_aggregate_dealing_support(
+                    if let Some(sig_batch) = self.crypto_aggregate_dealing_support(
                         transcript_params,
                         &dealing_state.support_shares,
                     ) {
                         let dealer_id = dealing_state.signed_dealing.dealer_id();
-                        let signers: BTreeSet<NodeId> = multi_sig.signers.into_iter().collect();
-                        let verified_dealing = IDkgMultiSignedDealing {
-                            signature: multi_sig.signature,
-                            signers,
-                            signed_dealing: dealing_state.signed_dealing,
+                        let verified_dealing = BatchSignedIDkgDealing {
+                            content: dealing_state.signed_dealing,
+                            signature: sig_batch,
                         };
                         completed_dealings.insert(dealer_id, verified_dealing);
                     }
@@ -1114,7 +1112,7 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
         &self,
         transcript_params: &IDkgTranscriptParams,
         support_shares: &[IDkgDealingSupport],
-    ) -> Option<MultiSignature<SignedIDkgDealing>> {
+    ) -> Option<BasicSignatureBatch<SignedIDkgDealing>> {
         // Check if we have enough shares for aggregation
         if support_shares.len() < (transcript_params.verification_threshold().get() as usize) {
             self.metrics
@@ -1157,7 +1155,7 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
     fn crypto_create_transcript(
         &self,
         transcript_params: &IDkgTranscriptParams,
-        verified_dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+        verified_dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
     ) -> Option<IDkgTranscript> {
         // Check if we have enough dealings to create transcript
         if verified_dealings.len() < (transcript_params.collection_threshold().get() as usize) {

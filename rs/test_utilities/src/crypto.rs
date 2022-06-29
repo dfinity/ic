@@ -577,7 +577,7 @@ impl IDkgProtocol for CryptoReturningOk {
     fn create_transcript(
         &self,
         params: &IDkgTranscriptParams,
-        verified_dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+        verified_dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
         let mut receivers = BTreeSet::new();
         receivers.insert(node_test_id(0));

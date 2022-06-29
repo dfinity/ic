@@ -10,7 +10,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealing, IDkgMultiSignedDealing, IDkgOpening, IDkgTranscript,
+    BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscript,
     IDkgTranscriptParams,
 };
 use ic_types::crypto::canister_threshold_sig::{
@@ -76,7 +76,7 @@ pub trait IDkgProtocol {
     fn create_transcript(
         &self,
         params: &IDkgTranscriptParams,
-        dealings: &BTreeMap<NodeId, IDkgMultiSignedDealing>,
+        dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError>;
 
     /// Verify the multisignature on each dealing in the transcript.
