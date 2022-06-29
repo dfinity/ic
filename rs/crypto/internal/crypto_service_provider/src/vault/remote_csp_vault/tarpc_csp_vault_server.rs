@@ -79,12 +79,17 @@ where
 {
     let (tx, rx) = tokio::sync::oneshot::channel();
     thread_pool_handle.execute(move || {
+        if tx.is_closed() {
+            // Do not start the job if the associated receiver handle was
+            // dropped in the meanwhile (e.g., because the client closed
+            // the connection or the client's RPC framework cancelled the
+            // future due to a timeout).
+            return;
+        }
         let result = job();
-        let _ = tx.send(result);
-        // Errors in `send` occur if the receiver dropped (e.g., because the
-        // client closes the connection or the client's RPC framework
-        // cancels the future due to a timeout) and are considered legitimate
-        // and are thus ignored.
+        let _ = tx.send(result); // Errors occur if the associated receiver
+                                 // handle was dropped and are considered
+                                 // legitimate and are thus ignored.
     });
     rx.await.expect("the sender was dropped")
 }
