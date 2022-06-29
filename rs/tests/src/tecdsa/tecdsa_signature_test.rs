@@ -306,19 +306,35 @@ pub(crate) async fn get_signature(
         key_id,
     };
 
-    // Ask for a signature.
-    let reply = uni_can
-        .forward_with_cycles_to(
-            &Principal::management_canister(),
-            "sign_with_ecdsa",
-            Encode!(&signature_request).unwrap(),
-            cycles,
-        )
-        .await?;
-
-    let signature = SignWithECDSAReply::decode(&reply)
-        .expect("failed to decode SignWithECDSAReply")
-        .signature;
+    let mut count = 0;
+    let signature = loop {
+        // Ask for a signature.
+        let res = uni_can
+            .forward_with_cycles_to(
+                &Principal::management_canister(),
+                "sign_with_ecdsa",
+                Encode!(&signature_request).unwrap(),
+                cycles,
+            )
+            .await;
+        match res {
+            Ok(reply) => {
+                let signature = SignWithECDSAReply::decode(&reply)
+                    .expect("failed to decode SignWithECDSAReply")
+                    .signature;
+                break signature;
+            }
+            Err(err) => {
+                count += 1;
+                if count < 20 {
+                    debug!(ctx.logger, "sign_with_ecdsa returns {}, try again...", err);
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                } else {
+                    return Err(err);
+                }
+            }
+        }
+    };
     info!(ctx.logger, "sign_with_ecdsa returns {:?}", signature);
 
     Ok(Signature::from_compact(&signature).expect("Response is not a valid signature"))
@@ -768,7 +784,6 @@ pub fn test_threshold_ecdsa_life_cycle(handle: IcHandle, ctx: &ic_fondue::pot::C
             .await
             .unwrap();
         assert_eq!(public_key, new_public_key);
-        /* TODO this part of the test may fail, make it robust CON-826
         let new_signature = get_signature(
             &message_hash,
             ECDSA_SIGNATURE_FEE,
@@ -778,6 +793,6 @@ pub fn test_threshold_ecdsa_life_cycle(handle: IcHandle, ctx: &ic_fondue::pot::C
         )
         .await
         .unwrap();
-        verify_signature(&message_hash, &public_key, &new_signature);*/
+        verify_signature(&message_hash, &public_key, &new_signature);
     });
 }
