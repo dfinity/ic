@@ -5,6 +5,7 @@ use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::IDkgProtocolCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
+use ic_crypto_internal_logmon::metrics::MetricsDomain;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     compute_secret_shares, compute_secret_shares_with_openings,
     create_dealing as tecdsa_create_dealing, gen_keypair, generate_complaints, open_dealing,
@@ -38,12 +39,13 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         transcript_operation: &IDkgTranscriptOperationInternal,
     ) -> Result<IDkgDealingInternal, IDkgCreateDealingError> {
         debug!(self.logger; crypto.method_name => "idkg_create_dealing");
+        let start_time = self.metrics.now();
 
         let seed = Randomness::from(self.rng_write_lock().gen::<[u8; 32]>());
 
         let tecdsa_shares = self.get_secret_shares(transcript_operation)?;
 
-        tecdsa_create_dealing(
+        let result = tecdsa_create_dealing(
             algorithm_id,
             context_data,
             dealer_index,
@@ -54,7 +56,13 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         )
         .map_err(|e| IDkgCreateDealingError::InternalError {
             internal_error: format!("{:?}", e),
-        })
+        });
+        self.metrics.observe_csp_local_duration_seconds(
+            MetricsDomain::IDkgProtocol,
+            "idkg_create_dealing",
+            start_time,
+        );
+        result
     }
 
     fn idkg_verify_dealing_private(
@@ -67,11 +75,12 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         context_data: &[u8],
     ) -> Result<(), IDkgVerifyDealingPrivateError> {
         debug!(self.logger; crypto.method_name => "idkg_verify_dealing_private");
+        let start_time = self.metrics.now();
 
         let (receiver_public_key, receiver_secret_key) =
             self.mega_keyset_from_sks(&receiver_key_id)?;
 
-        Ok(privately_verify_dealing(
+        let result = Ok(privately_verify_dealing(
             algorithm_id,
             dealing,
             &receiver_secret_key,
@@ -79,7 +88,13 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
             context_data,
             dealer_index,
             receiver_index,
-        )?)
+        )?);
+        self.metrics.observe_csp_local_duration_seconds(
+            MetricsDomain::IDkgProtocol,
+            "idkg_verify_dealing_private",
+            start_time,
+        );
+        result
     }
 
     fn idkg_load_transcript(
@@ -90,64 +105,72 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         key_id: &KeyId,
         transcript: &IDkgTranscriptInternal,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
-        // If secret share has already been stored in the C-SKS, nothing to do
-        if self
+        let start_time = self.metrics.now();
+        let result = if self
             .commitment_opening_from_sks(transcript.combined_commitment.commitment())
             .is_ok()
         {
-            return Ok(BTreeMap::new());
-        }
+            // If secret share has already been stored in the C-SKS, nothing to do
+            Ok(BTreeMap::new())
+        } else {
+            let (public_key, private_key) = self.mega_keyset_from_sks(key_id)?;
 
-        let (public_key, private_key) = self.mega_keyset_from_sks(key_id)?;
+            let compute_secret_shares_result = compute_secret_shares(
+                dealings,
+                transcript,
+                context_data,
+                receiver_index,
+                &private_key,
+                &public_key,
+            );
 
-        let compute_secret_shares_result = compute_secret_shares(
-            dealings,
-            transcript,
-            context_data,
-            receiver_index,
-            &private_key,
-            &public_key,
+            match compute_secret_shares_result {
+                Ok(opening) => {
+                    let opening_bytes =
+                        CommitmentOpeningBytes::try_from(&opening).map_err(|e| {
+                            IDkgLoadTranscriptError::SerializationError {
+                                internal_error: format!("{:?}", e),
+                            }
+                        })?;
+                    self.canister_sks_write_lock().insert_or_replace(
+                        commitment_key_id(transcript.combined_commitment.commitment()),
+                        CspSecretKey::IDkgCommitmentOpening(opening_bytes),
+                        Some(IDKG_THRESHOLD_KEYS_SCOPE),
+                    );
+                    Ok(BTreeMap::new())
+                }
+                Err(IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued) => {
+                    let randomness = Randomness::from(self.csprng.write().gen::<[u8; 32]>());
+                    let complaints = generate_complaints(
+                        dealings,
+                        context_data,
+                        receiver_index,
+                        &private_key,
+                        &public_key,
+                        Seed::from_randomness(&randomness),
+                    )?;
+                    Ok(complaints)
+                }
+                Err(IDkgComputeSecretSharesInternalError::InsufficientOpenings(_, _)) => {
+                    Err(IDkgLoadTranscriptError::InsufficientOpenings {
+                        internal_error: format!("{:?}", compute_secret_shares_result),
+                    })
+                }
+                Err(IDkgComputeSecretSharesInternalError::InvalidCiphertext(_))
+                | Err(IDkgComputeSecretSharesInternalError::UnableToReconstruct(_))
+                | Err(IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(_)) => {
+                    Err(IDkgLoadTranscriptError::InvalidArguments {
+                        internal_error: format!("{:?}", compute_secret_shares_result),
+                    })
+                }
+            }
+        };
+        self.metrics.observe_csp_local_duration_seconds(
+            MetricsDomain::IDkgProtocol,
+            "idkg_load_transcript",
+            start_time,
         );
-
-        match compute_secret_shares_result {
-            Ok(opening) => {
-                let opening_bytes = CommitmentOpeningBytes::try_from(&opening).map_err(|e| {
-                    IDkgLoadTranscriptError::SerializationError {
-                        internal_error: format!("{:?}", e),
-                    }
-                })?;
-                self.canister_sks_write_lock().insert_or_replace(
-                    commitment_key_id(transcript.combined_commitment.commitment()),
-                    CspSecretKey::IDkgCommitmentOpening(opening_bytes),
-                    Some(IDKG_THRESHOLD_KEYS_SCOPE),
-                );
-                Ok(BTreeMap::new())
-            }
-            Err(IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued) => {
-                let randomness = Randomness::from(self.csprng.write().gen::<[u8; 32]>());
-                let complaints = generate_complaints(
-                    dealings,
-                    context_data,
-                    receiver_index,
-                    &private_key,
-                    &public_key,
-                    Seed::from_randomness(&randomness),
-                )?;
-                Ok(complaints)
-            }
-            Err(IDkgComputeSecretSharesInternalError::InsufficientOpenings(_, _)) => {
-                Err(IDkgLoadTranscriptError::InsufficientOpenings {
-                    internal_error: format!("{:?}", compute_secret_shares_result),
-                })
-            }
-            Err(IDkgComputeSecretSharesInternalError::InvalidCiphertext(_))
-            | Err(IDkgComputeSecretSharesInternalError::UnableToReconstruct(_))
-            | Err(IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(_)) => {
-                Err(IDkgLoadTranscriptError::InvalidArguments {
-                    internal_error: format!("{:?}", compute_secret_shares_result),
-                })
-            }
-        }
+        result
     }
 
     fn idkg_load_transcript_with_openings(
@@ -159,56 +182,66 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         key_id: &KeyId,
         transcript: &IDkgTranscriptInternal,
     ) -> Result<(), IDkgLoadTranscriptError> {
-        // If secret share has already been stored in the C-SKS, nothing to do
-        if self
+        let start_time = self.metrics.now();
+
+        let result = if self
             .commitment_opening_from_sks(transcript.combined_commitment.commitment())
             .is_ok()
         {
-            return Ok(());
-        }
-
-        let (public_key, private_key) = self.mega_keyset_from_sks(key_id)?;
-        let compute_secret_shares_with_openings_result = compute_secret_shares_with_openings(
-            dealings,
-            openings,
-            transcript,
-            context_data,
-            receiver_index,
-            &private_key,
-            &public_key,
+            // If secret share has already been stored in the C-SKS, nothing to do
+            Ok(())
+        } else {
+            let (public_key, private_key) = self.mega_keyset_from_sks(key_id)?;
+            let compute_secret_shares_with_openings_result = compute_secret_shares_with_openings(
+                dealings,
+                openings,
+                transcript,
+                context_data,
+                receiver_index,
+                &private_key,
+                &public_key,
+            );
+            match compute_secret_shares_with_openings_result {
+                Ok(opening) => {
+                    let opening_bytes =
+                        CommitmentOpeningBytes::try_from(&opening).map_err(|e| {
+                            IDkgLoadTranscriptError::SerializationError {
+                                internal_error: format!("{:?}", e),
+                            }
+                        })?;
+                    self.canister_sks_write_lock().insert_or_replace(
+                        commitment_key_id(transcript.combined_commitment.commitment()),
+                        CspSecretKey::IDkgCommitmentOpening(opening_bytes),
+                        Some(IDKG_THRESHOLD_KEYS_SCOPE),
+                    );
+                    Ok(())
+                }
+                Err(IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued) => {
+                    Err(IDkgLoadTranscriptError::InvalidArguments {
+                        internal_error: "An invalid dealing with no openings was provided"
+                            .to_string(),
+                    })
+                }
+                Err(IDkgComputeSecretSharesInternalError::InsufficientOpenings(_, _)) => {
+                    Err(IDkgLoadTranscriptError::InsufficientOpenings {
+                        internal_error: format!("{:?}", compute_secret_shares_with_openings_result),
+                    })
+                }
+                Err(IDkgComputeSecretSharesInternalError::InvalidCiphertext(_))
+                | Err(IDkgComputeSecretSharesInternalError::UnableToReconstruct(_))
+                | Err(IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(_)) => {
+                    Err(IDkgLoadTranscriptError::InvalidArguments {
+                        internal_error: format!("{:?}", compute_secret_shares_with_openings_result),
+                    })
+                }
+            }
+        };
+        self.metrics.observe_csp_local_duration_seconds(
+            MetricsDomain::IDkgProtocol,
+            "idkg_load_transcript_with_openings",
+            start_time,
         );
-        match compute_secret_shares_with_openings_result {
-            Ok(opening) => {
-                let opening_bytes = CommitmentOpeningBytes::try_from(&opening).map_err(|e| {
-                    IDkgLoadTranscriptError::SerializationError {
-                        internal_error: format!("{:?}", e),
-                    }
-                })?;
-                self.canister_sks_write_lock().insert_or_replace(
-                    commitment_key_id(transcript.combined_commitment.commitment()),
-                    CspSecretKey::IDkgCommitmentOpening(opening_bytes),
-                    Some(IDKG_THRESHOLD_KEYS_SCOPE),
-                );
-                Ok(())
-            }
-            Err(IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued) => {
-                Err(IDkgLoadTranscriptError::InvalidArguments {
-                    internal_error: "An invalid dealing with no openings was provided".to_string(),
-                })
-            }
-            Err(IDkgComputeSecretSharesInternalError::InsufficientOpenings(_, _)) => {
-                Err(IDkgLoadTranscriptError::InsufficientOpenings {
-                    internal_error: format!("{:?}", compute_secret_shares_with_openings_result),
-                })
-            }
-            Err(IDkgComputeSecretSharesInternalError::InvalidCiphertext(_))
-            | Err(IDkgComputeSecretSharesInternalError::UnableToReconstruct(_))
-            | Err(IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(_)) => {
-                Err(IDkgLoadTranscriptError::InvalidArguments {
-                    internal_error: format!("{:?}", compute_secret_shares_with_openings_result),
-                })
-            }
-        }
+        result
     }
 
     fn idkg_gen_mega_key_pair(
@@ -216,6 +249,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         algorithm_id: AlgorithmId,
     ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
         debug!(self.logger; crypto.method_name => "idkg_gen_mega_key_pair");
+        let start_time = self.metrics.now();
 
         let seed = Randomness::from(self.rng_write_lock().gen::<[u8; 32]>());
 
@@ -238,6 +272,11 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
             mega_key_id(&public_key),
         );
 
+        self.metrics.observe_csp_local_duration_seconds(
+            MetricsDomain::IDkgProtocol,
+            "idkg_gen_mega_key_pair",
+            start_time,
+        );
         Ok(public_key)
     }
 
@@ -249,6 +288,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         opener_index: NodeIndex,
         opener_key_id: &KeyId,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
+        let start_time = self.metrics.now();
         let (opener_public_key, opener_private_key) = self
             .mega_keyset_from_sks(opener_key_id)
             .map_err(|e| match e {
@@ -261,7 +301,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                     internal_error: format!("{:?}", e),
                 },
             })?;
-        open_dealing(
+        let result = open_dealing(
             &dealing,
             context_data,
             dealer_index,
@@ -271,7 +311,13 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         )
         .map_err(|e| IDkgOpenTranscriptError::InternalError {
             internal_error: format!("{:?}", e),
-        })
+        });
+        self.metrics.observe_csp_local_duration_seconds(
+            MetricsDomain::IDkgProtocol,
+            "idkg_open_dealing",
+            start_time,
+        );
+        result
     }
 
     fn idkg_retain_threshold_keys_if_present(
@@ -279,10 +325,15 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         active_key_ids: BTreeSet<KeyId>,
     ) -> Result<(), IDkgRetainThresholdKeysError> {
         debug!(self.logger; crypto.method_name => "idkg_retain_threshold_keys_if_present");
-
+        let start_time = self.metrics.now();
         self.canister_sks_write_lock().retain(
             |key_id, _| active_key_ids.contains(key_id),
             IDKG_THRESHOLD_KEYS_SCOPE,
+        );
+        self.metrics.observe_csp_local_duration_seconds(
+            MetricsDomain::IDkgProtocol,
+            "idkg_retain_threshold_keys_if_present",
+            start_time,
         );
         Ok(())
     }

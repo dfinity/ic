@@ -12,6 +12,7 @@ use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
 use ic_crypto_internal_csp::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider, Csp};
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake,
@@ -354,8 +355,12 @@ impl TempCspVaultServer {
             let _enter_guard = tokio_runtime.handle().enter();
             UnixListener::bind(&vault_socket_path).expect("failed to bind")
         };
-        let server = TarpcCspVaultServerImpl::new(crypto_root, listener, no_op_logger());
-
+        let server = TarpcCspVaultServerImpl::new(
+            crypto_root,
+            listener,
+            no_op_logger(),
+            Arc::new(CryptoMetrics::none()),
+        );
         let join_handle = tokio_runtime.handle().spawn(server.run());
 
         Self {

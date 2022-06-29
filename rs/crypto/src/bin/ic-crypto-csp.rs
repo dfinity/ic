@@ -1,6 +1,8 @@
 use clap::Parser;
 use ic_config::{Config, ConfigSource};
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_logger::{info, new_replica_logger_from_config};
+use ic_metrics::MetricsRegistry;
 use std::os::unix::io::FromRawFd;
 use std::path::PathBuf;
 
@@ -45,8 +47,9 @@ async fn main() {
     // We abort the whole program with a core dump if a single thread panics.
     // This way we can capture all the context if a critical error happens.
     abort_on_panic();
-
-    ic_crypto_internal_csp::run_csp_vault_server(sks_dir, systemd_socket_listener, logger).await;
+    let metrics = CryptoMetrics::new(Some(&MetricsRegistry::global()));
+    ic_crypto_internal_csp::run_csp_vault_server(sks_dir, systemd_socket_listener, logger, metrics)
+        .await;
 }
 
 /// Aborts the whole program with a core dump if a single thread panics.

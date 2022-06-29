@@ -4942,6 +4942,7 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-interfaces",
  "ic-logger",
+ "ic-metrics",
  "ic-protobuf",
  "ic-test-utilities-compare-dirs",
  "ic-types 0.8.0",
@@ -4985,6 +4986,7 @@ name = "ic-crypto-internal-csp-test-utils"
 version = "0.8.0"
 dependencies = [
  "ic-crypto-internal-csp",
+ "ic-crypto-internal-logmon",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-logger",
@@ -5032,6 +5034,8 @@ version = "0.8.0"
 dependencies = [
  "ic-metrics",
  "prometheus 0.12.0",
+ "strum 0.23.0",
+ "strum_macros 0.23.1",
 ]
 
 [[package]]

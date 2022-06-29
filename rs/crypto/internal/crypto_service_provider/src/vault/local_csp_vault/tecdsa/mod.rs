@@ -3,6 +3,7 @@ use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::ThresholdEcdsaSignerCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
+use ic_crypto_internal_logmon::metrics::MetricsDomain;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     sign_share as tecdsa_sign_share, CombinedCommitment, CommitmentOpening, IDkgTranscriptInternal,
     ThresholdEcdsaSigShareInternal,
@@ -29,6 +30,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
         key_times_lambda: &IDkgTranscriptInternal,
         algorithm_id: AlgorithmId,
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
+        let start_time = self.metrics.now();
         let lambda_share =
             self.combined_commitment_opening_from_sks(&lambda_masked.combined_commitment)?;
         let kappa_times_lambda_share =
@@ -36,7 +38,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
         let key_times_lambda_share =
             self.combined_commitment_opening_from_sks(&key_times_lambda.combined_commitment)?;
 
-        tecdsa_sign_share(
+        let result = tecdsa_sign_share(
             &derivation_path.into(),
             hashed_message,
             *nonce,
@@ -49,7 +51,13 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
         )
         .map_err(|e| ThresholdEcdsaSignShareError::InternalError {
             internal_error: format!("{:?}", e),
-        })
+        });
+        self.metrics.observe_csp_local_duration_seconds(
+            MetricsDomain::ThresholdEcdsa,
+            "ecdsa_sign_share",
+            start_time,
+        );
+        result
     }
 }
 

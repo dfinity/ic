@@ -1,5 +1,6 @@
 use super::*;
 use async_trait::async_trait;
+use ic_crypto_internal_logmon::metrics::MetricsDomain;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, MalformedPeerCertificateError, TlsClientHandshakeError,
@@ -36,6 +37,7 @@ where
             crypto.allowed_tls_clients => format!("{:?}", allowed_clients),
         );
         debug!(logger; crypto.description => "start",);
+        let start_time = self.metrics.now();
         let result = rustls::server_handshake::perform_tls_server_handshake(
             &self.csp,
             self.node_id,
@@ -45,6 +47,11 @@ where
             registry_version,
         )
         .await;
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::TlsHandshake,
+            "perform_tls_server_handshake",
+            start_time,
+        );
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
@@ -95,6 +102,7 @@ where
             crypto.allowed_tls_clients => "all clients allowed",
         );
         debug!(logger; crypto.description => "start",);
+        let start_time = self.metrics.now();
         let result = rustls::server_handshake::perform_tls_server_handshake_without_client_auth(
             &self.csp,
             self.node_id,
@@ -103,6 +111,11 @@ where
             registry_version,
         )
         .await;
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::TlsHandshake,
+            "perform_tls_server_handshake_without_client_auth",
+            start_time,
+        );
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
@@ -152,6 +165,7 @@ where
             crypto.tls_server => format!("{}", server),
         );
         debug!(logger; crypto.description => "start",);
+        let start_time = self.metrics.now();
         let result = rustls::client_handshake::perform_tls_client_handshake(
             &self.csp,
             self.node_id,
@@ -161,6 +175,11 @@ where
             registry_version,
         )
         .await;
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::TlsHandshake,
+            "perform_tls_client_handshake",
+            start_time,
+        );
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),

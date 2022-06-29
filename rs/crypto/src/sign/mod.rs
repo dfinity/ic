@@ -50,6 +50,7 @@ pub use canister_threshold_sig::{
 mod tests;
 // TODO: Remove this indirection:
 pub(crate) use ic_crypto_internal_csp::imported_utilities::sign_utils as utils;
+use ic_crypto_internal_logmon::metrics::MetricsDomain;
 
 impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentFatClient<C> {
     fn sign_basic(
@@ -64,12 +65,18 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentFa
             crypto.registry_version => registry_version.get(),
         );
         debug!(logger; crypto.description => "start",);
+        let start_time = self.metrics.now();
         let result = BasicSignerInternal::sign_basic(
             &self.csp,
             self.registry_client.clone(),
             message,
             signer,
             registry_version,
+        );
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::BasicSignature,
+            "sign_basic",
+            start_time,
         );
         debug!(logger;
             crypto.description => "end",
@@ -155,12 +162,18 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigner<H> for CryptoComponentFa
             crypto.registry_version => registry_version.get(),
         );
         debug!(logger; crypto.description => "start",);
+        let start_time = self.metrics.now();
         let result = MultiSignerInternal::sign_multi(
             &self.csp,
             Arc::clone(&self.registry_client),
             message,
             signer,
             registry_version,
+        );
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::MultiSignature,
+            "sign_multi",
+            start_time,
         );
         debug!(logger;
             crypto.description => "end",
@@ -275,11 +288,17 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for CryptoCompone
             crypto.dkg_id => format!("{}", dkg_id),
         );
         debug!(logger; crypto.description => "start",);
+        let start_time = self.metrics.now();
         let result = ThresholdSignerInternal::sign_threshold(
             &self.lockable_threshold_sig_data_store,
             &self.csp,
             message,
             dkg_id,
+        );
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::ThresholdSignature,
+            "sign_threshold",
+            start_time,
         );
         debug!(logger;
             crypto.description => "end",
@@ -462,7 +481,13 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentFatClient
         debug!(logger;
             crypto.description => "start",
         );
+        let start_time = self.metrics.now();
         let result = canister_threshold_sig::ecdsa::sign_share(&self.csp, &self.node_id, inputs);
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::ThresholdEcdsa,
+            "sign_share",
+            start_time,
+        );
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),

@@ -1,6 +1,8 @@
 use crate::files::mk_temp_dir_with_permissions;
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_logger::replica_logger::no_op_logger;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::net::UnixListener;
 
 /// Creates a temporary file; it is the caller's responsibility to delete it
@@ -40,6 +42,7 @@ pub fn start_new_remote_csp_vault_server_for_test(rt_handle: &tokio::runtime::Ha
         sks_dir.path(),
         listener,
         no_op_logger(),
+        Arc::new(CryptoMetrics::none()),
     );
     rt_handle.spawn(async move {
         let _move_temp_dir_here_to_ensure_it_is_not_cleaned_up = sks_dir;
