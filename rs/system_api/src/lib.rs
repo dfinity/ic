@@ -1660,7 +1660,7 @@ impl SystemApi for SystemApiImpl {
                             *call_context_id,
                             Some(self.sandbox_safe_system_state.canister_id),
                             Some(callee),
-                            Cycles::from(0),
+                            Cycles::zero(),
                             on_reply,
                             on_reject,
                             None,

@@ -792,7 +792,7 @@ fn test_stats_induct_message_to_self() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: request_size,
-        cycles: Cycles::from(0),
+        cycles: Cycles::zero(),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // We now have reservations (for the same request) in both the input and the
@@ -808,7 +808,7 @@ fn test_stats_induct_message_to_self() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: request_size,
-        cycles: Cycles::from(0),
+        cycles: Cycles::zero(),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Memory usage stats unchanged, as the reservations are still there.
@@ -841,7 +841,7 @@ fn test_stats_induct_message_to_self() {
         response_count: 1,
         reserved_slots: -1,
         size_bytes: response_size,
-        cycles: Cycles::from(0),
+        cycles: Cycles::zero(),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Consumed input queue reservation but response is still there (in input queue
@@ -857,7 +857,7 @@ fn test_stats_induct_message_to_self() {
         response_count: 1,
         reserved_slots: 0,
         size_bytes: response_size,
-        cycles: Cycles::from(0),
+        cycles: Cycles::zero(),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Zero response bytes, zero reservations.

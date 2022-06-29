@@ -155,7 +155,7 @@ impl CyclesAccountManager {
 
             // Round up the memory fee.
             if total_memory_fee > 0 && total_memory_fee < one_gib as u128 {
-                Cycles::from(1)
+                Cycles::new(1)
             } else {
                 Cycles::from((total_memory_fee + one_gib as u128 - 1) / one_gib as u128)
             }
@@ -330,7 +330,7 @@ impl CyclesAccountManager {
         let cycles = self.compute_allocation_cost(compute_allocation, duration);
 
         // Can charge all the way to the empty account (zero cycles)
-        self.consume_with_threshold(system_state, cycles, Cycles::from(0))
+        self.consume_with_threshold(system_state, cycles, Cycles::zero())
     }
 
     /// The cost of compute allocation, per round
@@ -485,7 +485,7 @@ impl CyclesAccountManager {
         let cycles_amount = self.memory_cost(bytes, duration);
 
         // Can charge all the way to the empty account (zero cycles)
-        self.consume_with_threshold(system_state, cycles_amount, Cycles::from(0))
+        self.consume_with_threshold(system_state, cycles_amount, Cycles::zero())
     }
 
     /// The cost of using `bytes` worth of memory.
@@ -673,7 +673,7 @@ impl CyclesAccountManager {
         let cycles_available = if *cycles_balance > threshold {
             *cycles_balance - threshold
         } else {
-            Cycles::from(0)
+            Cycles::zero()
         };
 
         if cycles > cycles_available {
@@ -814,7 +814,7 @@ impl IngressInductionCost {
     /// Returns the cost of inducting an ingress message in [`Cycles`].
     pub fn cost(&self) -> Cycles {
         match self {
-            Self::Free => Cycles::from(0),
+            Self::Free => Cycles::zero(),
             Self::Fee { cost, .. } => *cost,
         }
     }

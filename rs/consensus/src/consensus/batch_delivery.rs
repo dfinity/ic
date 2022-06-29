@@ -276,7 +276,7 @@ pub fn generate_execution_responses_for_expired_canister_http_responses(
             responses.push(Response {
                 originator: request.request.sender,
                 respondent: request.request.receiver,
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
                 originator_reply_callback: *callback_id,
                 response_payload: ic_types::messages::Payload::Reject(
                     ic_types::messages::RejectContext {
@@ -306,7 +306,7 @@ pub fn generate_execution_responses_for_canister_http_responses(
                 originator: request.request.sender,
                 respondent: request.request.receiver,
                 originator_reply_callback: content.id,
-                refund: Cycles::from(0),
+                refund: Cycles::zero(),
                 response_payload: match &content.content {
                     CanisterHttpResponseContent::Success(data) => {
                         ic_types::messages::Payload::Data(data.clone())

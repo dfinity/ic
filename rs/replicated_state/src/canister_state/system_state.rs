@@ -254,7 +254,7 @@ impl SystemState {
         Self::new(
             canister_id,
             controller,
-            Cycles::from(0),
+            Cycles::zero(),
             NumSeconds::from(0),
             CanisterStatus::Stopped,
         )

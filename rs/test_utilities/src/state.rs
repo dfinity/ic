@@ -431,7 +431,7 @@ impl CallContextBuilder {
             self.call_origin,
             self.responded,
             false,
-            Cycles::from(0),
+            Cycles::zero(),
             self.time,
         )
     }

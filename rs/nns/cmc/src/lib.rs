@@ -212,10 +212,10 @@ mod tests {
         assert_eq!(
             (TokensToCycles {
                 xdr_permyriad_per_icp: 10_000,
-                cycles_per_xdr: 1234.into()
+                cycles_per_xdr: Cycles::new(1234)
             })
             .to_cycles(Tokens::new(1, 0).unwrap()),
-            1234.into()
+            Cycles::new(1234)
         );
 
         assert_eq!(

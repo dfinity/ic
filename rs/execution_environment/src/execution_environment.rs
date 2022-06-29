@@ -1181,7 +1181,7 @@ impl ExecutionEnvironmentImpl {
             Some(canister_state) => {
                 self.cycles_account_manager
                     .add_cycles(canister_state.system_state.balance_mut(), msg.take_cycles());
-                (Ok(EmptyBlob::encode()), Cycles::from(0))
+                (Ok(EmptyBlob::encode()), Cycles::zero())
             }
         }
     }

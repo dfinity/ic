@@ -80,7 +80,7 @@ fn can_deposit_cycles_via_the_management_canister() {
         let canister_id = test.create_universal_canister_with_args(vec![], num_cycles);
 
         // Create another canister with some cycles and ICP tokens.
-        let cycles_for_new_canister = CANISTER_CREATION_FEE + Cycles::from(100_000_000);
+        let cycles_for_new_canister = CANISTER_CREATION_FEE + Cycles::new(100_000_000);
         let new_canister_id_payload = test
             .ingress(
                 canister_id,
@@ -105,7 +105,7 @@ fn can_deposit_cycles_via_the_management_canister() {
             test.canister_state(&new_canister_id).system_state.balance();
 
         // Deposit cycles to the new canister.
-        let cycles_to_deposit = Cycles::from(200_000_000);
+        let cycles_to_deposit = Cycles::new(200_000_000);
         test.ingress(
             canister_id,
             "update",

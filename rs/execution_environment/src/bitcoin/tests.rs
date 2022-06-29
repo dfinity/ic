@@ -797,12 +797,12 @@ fn get_current_fee_percentiles_rejects_if_feature_not_enabled() {
             "None", // Bitcoin feature is disabled.
             BitcoinState::default(),
             BitcoinNetwork::Testnet,
-            Cycles::from(1000),
+            Cycles::new(1000),
             Payload::Reject(RejectContext {
                 code: RejectCode::CanisterReject,
                 message: String::from("The bitcoin API is not enabled on this subnet."),
             }),
-            Cycles::from(1000),
+            Cycles::new(1000),
         );
     });
 }

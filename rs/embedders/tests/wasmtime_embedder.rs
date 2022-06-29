@@ -4,7 +4,10 @@ use ic_replicated_state::Global;
 use ic_test_utilities::{
     mock_time, types::ids::user_test_id, wasmtime_instance::WasmtimeInstanceBuilder,
 };
-use ic_types::methods::{FuncRef, WasmMethod};
+use ic_types::{
+    methods::{FuncRef, WasmMethod},
+    Cycles,
+};
 
 #[cfg(test)]
 mod test {
@@ -280,7 +283,7 @@ mod test {
             .with_api_type(ic_system_api::ApiType::update(
                 mock_time(),
                 vec![],
-                0.into(),
+                Cycles::zero(),
                 PrincipalId::new_user_test_id(0),
                 0.into(),
             ))
@@ -325,7 +328,7 @@ mod test {
             .with_api_type(ic_system_api::ApiType::update(
                 mock_time(),
                 vec![],
-                0.into(),
+                Cycles::zero(),
                 PrincipalId::new_user_test_id(0),
                 0.into(),
             ))
@@ -355,7 +358,7 @@ mod test {
             .with_api_type(ic_system_api::ApiType::update(
                 mock_time(),
                 vec![],
-                0.into(),
+                Cycles::zero(),
                 PrincipalId::new_user_test_id(0),
                 0.into(),
             ))

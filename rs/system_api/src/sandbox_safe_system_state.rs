@@ -64,7 +64,7 @@ impl Default for SystemStateChanges {
             new_certified_data: None,
             callback_updates: vec![],
             cycles_balance_change: CyclesBalanceChange::zero(),
-            cycles_consumed: Cycles::from(0),
+            cycles_consumed: Cycles::zero(),
             call_context_balance_taken: BTreeMap::new(),
             request_slots_used: BTreeMap::new(),
             requests: vec![],
@@ -328,12 +328,12 @@ impl SandboxSafeSystemState {
         let initial_available = *self
             .call_context_balances
             .get(&call_context_id)
-            .unwrap_or(&Cycles::from(0));
+            .unwrap_or(&Cycles::zero());
         let already_taken = *self
             .system_state_changes
             .call_context_balance_taken
             .get(&call_context_id)
-            .unwrap_or(&Cycles::from(0));
+            .unwrap_or(&Cycles::zero());
         initial_available - already_taken
     }
 
@@ -395,7 +395,7 @@ impl SandboxSafeSystemState {
                     self.system_state_changes
                         .call_context_balance_taken
                         .get(&call_context_id)
-                        .unwrap_or(&Cycles::from(0))
+                        .unwrap_or(&Cycles::zero())
                         .get(),
                 )
                 .unwrap(),
@@ -407,7 +407,7 @@ impl SandboxSafeSystemState {
             .system_state_changes
             .call_context_balance_taken
             .entry(call_context_id)
-            .or_insert_with(|| Cycles::from(0)) += amount_to_accept;
+            .or_insert_with(|| Cycles::zero()) += amount_to_accept;
 
         self.cycles_account_manager
             .add_cycles(&mut new_balance, amount_to_accept);

@@ -345,9 +345,8 @@ impl IngressManager {
                 cost: ingress_cost,
             }) => match state.canister_state(&payer) {
                 Some(canister) => {
-                    let cumulative_ingress_cost = cycles_needed
-                        .entry(payer)
-                        .or_insert_with(|| Cycles::from(0));
+                    let cumulative_ingress_cost =
+                        cycles_needed.entry(payer).or_insert_with(|| Cycles::zero());
                     if let Err(err) = self.cycles_account_manager.can_withdraw_cycles(
                         &canister.system_state,
                         *cumulative_ingress_cost + ingress_cost,
@@ -1392,7 +1391,7 @@ mod tests {
                         CanisterStateBuilder::default()
                             .with_canister_id(canister_test_id(1))
                             // No cycles
-                            .with_cycles(0)
+                            .with_cycles(0u128)
                             .build(),
                     )
                     .build(),
@@ -1455,7 +1454,7 @@ mod tests {
                         CanisterStateBuilder::default()
                             .with_canister_id(canister_test_id(0))
                             // Not enough cycles
-                            .with_cycles(0)
+                            .with_cycles(0u128)
                             .build(),
                     )
                     .build(),
@@ -1642,7 +1641,7 @@ mod tests {
                     .with_canister(
                         CanisterStateBuilder::new()
                             .with_canister_id(canister_test_id(2))
-                            .with_cycles(0)
+                            .with_cycles(0u128)
                             .build(),
                     )
                     .build(),

@@ -9,7 +9,7 @@ fn call_context_origin() {
     let cb_id = CallbackId::from(1);
     let cc_id = ccm.new_call_context(
         CallOrigin::CanisterUpdate(id, cb_id),
-        Cycles::from(10),
+        Cycles::new(10),
         Time::from_nanos_since_unix_epoch(0),
     );
     assert_eq!(
@@ -27,18 +27,18 @@ fn call_context_handling() {
     // On two incoming calls
     let call_context_id1 = call_context_manager.new_call_context(
         CallOrigin::CanisterUpdate(canister_test_id(123), CallbackId::from(1)),
-        Cycles::from(0),
+        Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
     );
     let call_context_id2 = call_context_manager.new_call_context(
         CallOrigin::CanisterUpdate(canister_test_id(123), CallbackId::from(2)),
-        Cycles::from(0),
+        Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
     );
 
     let call_context_id3 = call_context_manager.new_call_context(
         CallOrigin::CanisterUpdate(canister_test_id(123), CallbackId::from(3)),
-        Cycles::from(0),
+        Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
     );
 
@@ -47,7 +47,7 @@ fn call_context_handling() {
     assert_eq!(
         call_context_manager.on_canister_result(call_context_id3, Ok(None)),
         CallContextAction::NoResponse {
-            refund: Cycles::from(0),
+            refund: Cycles::zero(),
         }
     );
 
@@ -72,7 +72,7 @@ fn call_context_handling() {
         call_context_id1,
         None,
         None,
-        Cycles::from(0),
+        Cycles::zero(),
         WasmClosure::new(0, 1),
         WasmClosure::new(2, 3),
         None,
@@ -81,7 +81,7 @@ fn call_context_handling() {
         call_context_id1,
         None,
         None,
-        Cycles::from(0),
+        Cycles::zero(),
         WasmClosure::new(4, 5),
         WasmClosure::new(6, 7),
         None,
@@ -95,7 +95,7 @@ fn call_context_handling() {
         call_context_id2,
         None,
         None,
-        Cycles::from(0),
+        Cycles::zero(),
         WasmClosure::new(8, 9),
         WasmClosure::new(10, 11),
         None,
@@ -148,7 +148,7 @@ fn call_context_handling() {
             .on_canister_result(call_context_id1, Ok(Some(WasmResult::Reply(vec![1])))),
         CallContextAction::Reply {
             payload: vec![1],
-            refund: Cycles::from(0),
+            refund: Cycles::zero(),
         }
     );
 
@@ -200,7 +200,7 @@ fn call_context_handling() {
             .on_canister_result(call_context_id2, Ok(Some(WasmResult::Reply(vec![])))),
         CallContextAction::Reply {
             payload: vec![],
-            refund: Cycles::from(0),
+            refund: Cycles::zero(),
         }
     );
     assert_eq!(call_context_manager.call_contexts().len(), 1);
@@ -240,17 +240,17 @@ fn withdraw_cycles_fails_when_not_enough_available_cycles() {
     let cb_id = CallbackId::from(1);
     let cc_id = ccm.new_call_context(
         CallOrigin::CanisterUpdate(id, cb_id),
-        Cycles::from(30),
+        Cycles::new(30),
         Time::from_nanos_since_unix_epoch(0),
     );
 
     assert_eq!(
         ccm.call_context_mut(cc_id)
             .unwrap()
-            .withdraw_cycles(Cycles::from(40)),
+            .withdraw_cycles(Cycles::new(40)),
         Err(CallContextError::InsufficientCyclesInCall {
-            available: Cycles::from(30),
-            requested: Cycles::from(40),
+            available: Cycles::new(30),
+            requested: Cycles::new(40),
         })
     );
 }
@@ -262,14 +262,14 @@ fn withdraw_cycles_succeeds_when_enough_available_cycles() {
     let cb_id = CallbackId::from(1);
     let cc_id = ccm.new_call_context(
         CallOrigin::CanisterUpdate(id, cb_id),
-        Cycles::from(30),
+        Cycles::new(30),
         Time::from_nanos_since_unix_epoch(0),
     );
 
     assert_eq!(
         ccm.call_context_mut(cc_id)
             .unwrap()
-            .withdraw_cycles(Cycles::from(25)),
+            .withdraw_cycles(Cycles::new(25)),
         Ok(())
     );
 }

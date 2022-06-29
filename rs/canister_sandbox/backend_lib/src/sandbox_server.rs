@@ -162,7 +162,7 @@ mod tests {
             CanisterStatusView::Running,
             NumSeconds::from(3600),
             MemoryAllocation::BestEffort,
-            Cycles::from(1_000_000),
+            Cycles::new(1_000_000),
             BTreeMap::new(),
             CyclesAccountManager::new(
                 NumInstructions::from(1_000_000_000),
@@ -201,7 +201,7 @@ mod tests {
             api_type: ApiType::update(
                 Time::from_nanos_since_unix_epoch(0),
                 incoming_payload.to_vec(),
-                Cycles::from(0),
+                Cycles::zero(),
                 PrincipalId::try_from([0].as_ref()).unwrap(),
                 CallContextId::from(0),
             ),

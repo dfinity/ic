@@ -79,12 +79,6 @@ impl From<u64> for Cycles {
     }
 }
 
-impl From<i32> for Cycles {
-    fn from(input: i32) -> Self {
-        Self::new(input as u128)
-    }
-}
-
 impl From<&Vec<u8>> for Cycles {
     fn from(bytes: &Vec<u8>) -> Self {
         Self::new(u128::from_le_bytes(bytes.as_slice().try_into().unwrap()))
@@ -147,14 +141,6 @@ impl Mul<u64> for Cycles {
     }
 }
 
-impl Mul<i32> for Cycles {
-    type Output = Self;
-
-    fn mul(self, rhs: i32) -> Self {
-        Self(self.0.saturating_mul(Cycles::from(rhs).0))
-    }
-}
-
 impl Mul<usize> for Cycles {
     type Output = Self;
 
@@ -209,9 +195,9 @@ mod test {
 
     #[test]
     fn test_addition() {
-        assert_eq!(Cycles::from(0) + Cycles::from(0), Cycles::from(0));
+        assert_eq!(Cycles::zero() + Cycles::zero(), Cycles::zero());
         assert_eq!(
-            Cycles::from(0) + Cycles::from(std::u128::MAX),
+            Cycles::zero() + Cycles::from(std::u128::MAX),
             Cycles::from(std::u128::MAX)
         );
         assert_eq!(
@@ -219,45 +205,45 @@ mod test {
             Cycles::from(std::u128::MAX)
         );
         assert_eq!(
-            Cycles::from(std::u128::MAX) + Cycles::from(10),
+            Cycles::from(std::u128::MAX) + Cycles::from(10u128),
             Cycles::from(std::u128::MAX)
         );
     }
 
     #[test]
     fn test_multiplication() {
-        assert_eq!(Cycles::from(0) * Cycles::from(0), Cycles::from(0));
+        assert_eq!(Cycles::zero() * Cycles::zero(), Cycles::zero());
         assert_eq!(
-            Cycles::from(0) * Cycles::from(std::u128::MAX),
-            Cycles::from(0)
+            Cycles::zero() * Cycles::from(std::u128::MAX),
+            Cycles::zero()
         );
         assert_eq!(
             Cycles::from(std::u128::MAX) * Cycles::from(std::u128::MAX),
             Cycles::from(std::u128::MAX)
         );
         assert_eq!(
-            Cycles::from(std::u128::MAX) * Cycles::from(10),
+            Cycles::from(std::u128::MAX) * Cycles::from(10u128),
             Cycles::from(std::u128::MAX)
         );
     }
 
     #[test]
     fn test_subtraction() {
-        assert_eq!(Cycles::from(0) - Cycles::from(0), Cycles::from(0));
+        assert_eq!(Cycles::zero() - Cycles::zero(), Cycles::zero());
         assert_eq!(
-            Cycles::from(0) - Cycles::from(std::u128::MAX),
-            Cycles::from(0)
+            Cycles::zero() - Cycles::from(std::u128::MAX),
+            Cycles::zero()
         );
         assert_eq!(
             Cycles::from(std::u128::MAX) - Cycles::from(std::u128::MAX),
-            Cycles::from(0)
+            Cycles::zero()
         );
         assert_eq!(
-            Cycles::from(std::u128::MAX) - Cycles::from(10),
+            Cycles::from(std::u128::MAX) - Cycles::from(10u128),
             Cycles::from(std::u128::MAX - 10)
         );
-        assert_eq!(Cycles::from(0) - Cycles::from(10), Cycles::from(0));
-        assert_eq!(Cycles::from(10) - Cycles::from(20), Cycles::from(0));
+        assert_eq!(Cycles::zero() - Cycles::from(10u128), Cycles::zero());
+        assert_eq!(Cycles::from(10u128) - Cycles::from(20u128), Cycles::zero());
     }
 
     #[test]
