@@ -761,6 +761,25 @@ impl Hypervisor {
         }
     }
 
+    #[doc(hidden)]
+    pub fn new_for_testing(
+        metrics_registry: &MetricsRegistry,
+        own_subnet_id: SubnetId,
+        own_subnet_type: SubnetType,
+        log: ReplicaLogger,
+        cycles_account_manager: Arc<CyclesAccountManager>,
+        wasm_executor: Arc<dyn WasmExecutor>,
+    ) -> Self {
+        Self {
+            wasm_executor,
+            metrics: Arc::new(HypervisorMetrics::new(metrics_registry)),
+            own_subnet_id,
+            own_subnet_type,
+            log,
+            cycles_account_manager,
+        }
+    }
+
     #[cfg(test)]
     pub fn compile_count(&self) -> u64 {
         self.metrics.compile.get_sample_count()

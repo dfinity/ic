@@ -51,6 +51,8 @@ use scheduler_metrics::*;
 const MAX_BITCOIN_REQUESTS_PER_ROUND: usize = 5;
 
 #[cfg(test)]
+pub(crate) mod test_utilities;
+#[cfg(test)]
 pub(crate) mod tests;
 
 #[derive(Clone)]
