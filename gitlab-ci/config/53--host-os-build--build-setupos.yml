@@ -17,13 +17,8 @@ setup-os-diskimg:
 
       cd "${CI_PROJECT_DIR}"/ic-os/setupos
 
-      # NOTE: To be reverted in calendar week 26
-      #"$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=guest-os --out=guestos --git-rev="${VERSION}"
-      #"$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=host-os --out=hostos --git-rev="${VERSION}"
-
-      # NOTE: This is currently hardcoded to a specific blessed version
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=guest-os --out=guestos --blessed-only --git-rev 75327e7e84d2c89770a49e775c7fd9e3e0af8e79
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=host-os --out=hostos --blessed-only --git-rev 75327e7e84d2c89770a49e775c7fd9e3e0af8e79
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=guest-os --out=guestos --git-rev="${VERSION}"
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py --remote-path=host-os --out=hostos --git-rev="${VERSION}"
 
       BUILD_OUT="build-out/disk-img"
       BUILD_TMP="build-tmp"
