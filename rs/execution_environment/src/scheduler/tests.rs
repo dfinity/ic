@@ -1,7 +1,14 @@
-use super::*;
+use super::{
+    test_utilities::{ingress, SchedulerTestBuilder},
+    *,
+};
 #[cfg(test)]
 use crate::execution_environment::{CanisterHeartbeatError, MockExecutionEnvironment};
-use crate::{execution_environment::ExecuteMessageResult, ExecutionResponse};
+use crate::{
+    execution_environment::ExecuteMessageResult,
+    scheduler::test_utilities::{on_response, other_side},
+    ExecutionResponse,
+};
 use candid::Encode;
 use ic_base_types::NumSeconds;
 use ic_btc_types::Network;
@@ -11,7 +18,7 @@ use ic_ic00_types::{BitcoinGetBalanceArgs, CanisterIdRecord, Method};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_logger::replica_logger::no_op_logger;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::QUEUE_INDEX_NONE,
@@ -19,15 +26,16 @@ use ic_replicated_state::{
     CallOrigin, ExportedFunctions,
 };
 use ic_replicated_state::{CanisterStatus, SubnetTopology};
+
 use ic_test_utilities::execution_environment::test_registry_settings;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     history::MockIngressHistory,
     mock_time,
     state::{
-        arb_replicated_state, get_initial_state, get_initial_system_subnet_state,
-        get_running_canister, get_stopped_canister, get_stopping_canister, initial_execution_state,
-        new_canister_state, CallContextBuilder, CanisterStateBuilder, ReplicatedStateBuilder,
+        arb_replicated_state, get_initial_state, get_running_canister, get_stopped_canister,
+        get_stopping_canister, initial_execution_state, new_canister_state, CallContextBuilder,
+        CanisterStateBuilder, ReplicatedStateBuilder,
     },
     types::{
         ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
@@ -38,8 +46,8 @@ use ic_test_utilities::{
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
 };
-use ic_types::messages::{CallContextId, Payload, Response, StopCanisterContext};
-use ic_types::methods::{Callback, SystemMethod, WasmClosure};
+use ic_types::messages::StopCanisterContext;
+use ic_types::methods::SystemMethod;
 use ic_types::{
     ingress::WasmResult, methods::WasmMethod, time::UNIX_EPOCH, ComputeAllocation, Cycles, NumBytes,
 };
@@ -81,322 +89,131 @@ fn assert_floats_are_equal(val0: f64, val1: f64) {
 
 #[test]
 fn can_fully_execute_canisters_with_one_input_message_each() {
-    let num_instructions_consumed_per_msg = NumInstructions::from(5);
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::from(1 << 30),
-            max_instructions_per_message: num_instructions_consumed_per_msg
-                + NumInstructions::from(1),
+            max_instructions_per_message: NumInstructions::from(5),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 3,
-        message_num_per_canister: 1,
-    };
-    let exec_env = default_exec_env_mock(
-        &scheduler_test_fixture,
-        3,
-        num_instructions_consumed_per_msg,
-        NumBytes::new(0),
-    );
-    let exec_env = Arc::new(exec_env);
+        })
+        .build();
 
-    let ingress_history_writer = default_ingress_history_writer_mock(3);
-    let ingress_history_writer = Arc::new(ingress_history_writer);
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(
-                scheduler_test_fixture.canister_num,
-                scheduler_test_fixture.message_num_per_canister,
-            );
+    for _ in 0..3 {
+        let canister_id = test.create_canister();
+        test.send_ingress(canister_id, ingress(5));
+    }
 
-            let round = ExecutionRound::from(1);
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                round,
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            for canister_state in state.canisters_iter() {
-                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
-                assert_eq!(
-                    canister_state.scheduler_state.last_full_execution_round,
-                    round
-                );
-                assert_eq!(
-                    canister_state
-                        .system_state
-                        .canister_metrics
-                        .skipped_round_due_to_no_messages,
-                    0
-                );
-                assert_eq!(canister_state.system_state.canister_metrics.executed, 1);
-                assert_eq!(
-                    canister_state
-                        .system_state
-                        .canister_metrics
-                        .interruped_during_execution,
-                    0
-                );
-            }
-        },
-        ingress_history_writer,
-        exec_env,
-    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    for canister in test.state().canisters_iter() {
+        assert_eq!(canister.system_state.queues().ingress_queue_size(), 0);
+        assert_eq!(
+            canister.scheduler_state.last_full_execution_round,
+            test.last_round()
+        );
+        let canister_metrics = &canister.system_state.canister_metrics;
+        assert_eq!(canister_metrics.skipped_round_due_to_no_messages, 0);
+        assert_eq!(canister_metrics.executed, 1);
+        assert_eq!(canister_metrics.interruped_during_execution, 0);
+    }
 }
 
 #[test]
 fn stops_executing_messages_when_heap_delta_capacity_reached() {
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
             subnet_heap_delta_capacity: NumBytes::from(10),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 1,
-        message_num_per_canister: 2,
-    };
-    let exec_env = Arc::new(default_exec_env_mock(
-        &scheduler_test_fixture,
-        2,
-        NumInstructions::from(10),
-        NumBytes::new(4096),
-    ));
-    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(2));
+        })
+        .build();
 
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(
-                scheduler_test_fixture.canister_num,
-                scheduler_test_fixture.message_num_per_canister,
-            );
+    let canister_id = test.create_canister();
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
 
-            let round = ExecutionRound::from(1);
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                round,
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            for canister_state in state.canisters_iter_mut() {
-                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
-            }
-
-            for canister_state in state.canisters_iter_mut() {
-                canister_state.push_ingress(
-                    SignedIngressBuilder::new()
-                        .canister_id(canister_state.canister_id())
-                        .build()
-                        .into(),
-                );
-            }
-            let round = ExecutionRound::from(2);
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                round,
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-
-            for canister_state in state.canisters_iter_mut() {
-                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 1);
-            }
-
-            assert_eq!(
-                scheduler
-                    .metrics
-                    .round_skipped_due_to_current_heap_delta_above_limit
-                    .get(),
-                1
-            );
-        },
-        ingress_history_writer,
-        exec_env,
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.ingress_queue_size(canister_id), 1);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get(),
+        1
     );
 }
 
 #[test]
 fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached() {
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
             subnet_heap_delta_capacity: NumBytes::from(10),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 1,
-        message_num_per_canister: 2,
-    };
-    let exec_env = Arc::new(default_exec_env_mock(
-        &scheduler_test_fixture,
-        3,
-        NumInstructions::from(10),
-        NumBytes::new(4096),
-    ));
-    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(3));
+        })
+        .build();
 
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(
-                scheduler_test_fixture.canister_num,
-                scheduler_test_fixture.message_num_per_canister,
-            );
+    let canister_id = test.create_canister();
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
 
-            let round = ExecutionRound::from(1);
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                round,
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            for canister_state in state.canisters_iter_mut() {
-                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
-            }
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+    assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
+    assert_eq!(test.ingress_queue_size(canister_id), 1);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get(),
+        1
+    );
 
-            for canister_state in state.canisters_iter_mut() {
-                canister_state.push_ingress(
-                    SignedIngressBuilder::new()
-                        .canister_id(canister_state.canister_id())
-                        .build()
-                        .into(),
-                );
-            }
-            let round = ExecutionRound::from(2);
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                round,
-                ExecutionRoundType::CheckpointRound,
-                &test_registry_settings(),
-            );
-
-            assert_eq!(NumBytes::from(0), state.metadata.heap_delta_estimate);
-
-            for canister_state in state.canisters_iter_mut() {
-                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 1);
-            }
-
-            let round = ExecutionRound::from(3);
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                round,
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-
-            for canister_state in state.canisters_iter_mut() {
-                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
-            }
-
-            assert_eq!(
-                scheduler
-                    .metrics
-                    .round_skipped_due_to_current_heap_delta_above_limit
-                    .get(),
-                1
-            );
-        },
-        ingress_history_writer,
-        exec_env,
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get(),
+        1
     );
 }
 
 #[test]
 fn canister_gets_heap_delta_rate_limited() {
-    let heap_delta_rate_limit = SchedulerConfig::application_subnet().heap_delta_rate_limit;
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
+            subnet_heap_delta_capacity: NumBytes::from(10),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 1,
-        message_num_per_canister: 1,
-    };
-    let exec_env = Arc::new(default_exec_env_mock(
-        &scheduler_test_fixture,
-        1,
-        NumInstructions::from(10),
-        NumBytes::new(4096),
-    ));
-    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(1));
+        })
+        .build();
+    let heap_delta_rate_limit = SchedulerConfig::application_subnet().heap_delta_rate_limit;
 
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(
-                scheduler_test_fixture.canister_num,
-                scheduler_test_fixture.message_num_per_canister,
-            );
+    let canister_id = test.create_canister();
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.canister_state_mut(canister_id)
+        .scheduler_state
+        .heap_delta_debit = heap_delta_rate_limit * 2 - NumBytes::from(1);
 
-            let canister = state.canisters_iter_mut().next().unwrap();
-            canister.scheduler_state.heap_delta_debit =
-                heap_delta_rate_limit * 2 - NumBytes::from(1);
+    // Current heap delta debit is over the limit, so the canister shouldn't run.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.ingress_queue_size(canister_id), 1);
 
-            // Current heap delta debit is over the limit, so the canister shouldn't run.
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                ExecutionRound::from(1),
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            assert_eq!(
-                state
-                    .canisters_iter_mut()
-                    .next()
-                    .unwrap()
-                    .system_state
-                    .queues()
-                    .ingress_queue_size(),
-                1
-            );
-
-            // After getting a single round of credits we should be below the limit and able
-            // to run.
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                ExecutionRound::from(2),
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            assert_eq!(
-                state
-                    .canisters_iter_mut()
-                    .next()
-                    .unwrap()
-                    .system_state
-                    .queues()
-                    .ingress_queue_size(),
-                0
-            );
-        },
-        ingress_history_writer,
-        exec_env,
-    );
+    // After getting a single round of credits we should be below the limit and able
+    // to run.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
 }
 
 /// This test ensures that inner_loop() breaks out of the loop when the loop did
@@ -407,67 +224,30 @@ fn inner_loop_stops_when_no_instructions_consumed() {
     // max_instructions_per_round. This message is executed in the first
     // iteration of the loop and in the second iteration of the loop, no
     // instructions are consumed.
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 1,
-        message_num_per_canister: 1,
-    };
-    let exec_env = Arc::new(default_exec_env_mock(
-        &scheduler_test_fixture,
-        1,
-        scheduler_test_fixture
-            .scheduler_config
-            .max_instructions_per_message,
-        NumBytes::new(4096),
-    ));
-    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(1));
+        })
+        .build();
 
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(
-                scheduler_test_fixture.canister_num,
-                scheduler_test_fixture.message_num_per_canister,
-            );
+    let canister_id = test.create_canister();
+    test.send_ingress(canister_id, ingress(50));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-            let round = ExecutionRound::from(1);
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                round,
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            for canister_state in state.canisters_iter_mut() {
-                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
-            }
-            assert_eq!(scheduler.metrics.execute_round_called.get(), 1);
-            assert_eq!(
-                scheduler
-                    .metrics
-                    .inner_round_loop_consumed_max_instructions
-                    .get(),
-                0
-            );
-            assert_eq!(
-                scheduler
-                    .metrics
-                    .inner_loop_consumed_non_zero_instructions_count
-                    .get(),
-                1
-            );
-        },
-        ingress_history_writer,
-        exec_env,
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+    let metrics = &test.scheduler().metrics;
+    assert_eq!(metrics.execute_round_called.get(), 1);
+    assert_eq!(metrics.inner_round_loop_consumed_max_instructions.get(), 0);
+    assert_eq!(
+        metrics
+            .inner_loop_consumed_non_zero_instructions_count
+            .get(),
+        1
     );
 }
 
@@ -478,195 +258,98 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
     // Create a canister with 3 input messages. 2 of them consume all of
     // max_instructions_per_round. The 2 messages are executed in the first
     // iteration of the loop and then the loop breaks.
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 1,
-        message_num_per_canister: 3,
-    };
-    let exec_env = Arc::new(default_exec_env_mock(
-        &scheduler_test_fixture,
-        2,
-        scheduler_test_fixture
-            .scheduler_config
-            .max_instructions_per_message,
-        NumBytes::new(4096),
-    ));
-    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(2));
+        })
+        .build();
 
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(
-                scheduler_test_fixture.canister_num,
-                scheduler_test_fixture.message_num_per_canister,
-            );
+    let canister_id = test.create_canister();
+    test.send_ingress(canister_id, ingress(50));
+    test.send_ingress(canister_id, ingress(50));
+    test.send_ingress(canister_id, ingress(50));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-            let round = ExecutionRound::from(1);
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                round,
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            for canister_state in state.canisters_iter_mut() {
-                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 1);
-            }
-            assert_eq!(scheduler.metrics.execute_round_called.get(), 1);
-            assert_eq!(
-                scheduler
-                    .metrics
-                    .inner_round_loop_consumed_max_instructions
-                    .get(),
-                1
-            );
-            assert_eq!(
-                scheduler
-                    .metrics
-                    .inner_loop_consumed_non_zero_instructions_count
-                    .get(),
-                1
-            );
-        },
-        ingress_history_writer,
-        exec_env,
+    assert_eq!(test.ingress_queue_size(canister_id), 1);
+    let metrics = &test.scheduler().metrics;
+    assert_eq!(metrics.execute_round_called.get(), 1);
+    assert_eq!(metrics.inner_round_loop_consumed_max_instructions.get(), 1);
+    assert_eq!(
+        metrics
+            .inner_loop_consumed_non_zero_instructions_count
+            .get(),
+        1
     );
 }
 
-fn setup_routing_table() -> (SubnetId, RoutingTable) {
-    let subnet_id = subnet_test_id(1);
-    let routing_table = RoutingTable::try_from(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
-    })
-    .unwrap();
-    (subnet_id, routing_table)
-}
-
-/// Creates state with two canisters. Source canister has a message for
-/// destination canister in its output queue. Ensures that
-/// `induct_messages_on_same_subnet()` moves the message from source to
-/// destination canister.
 #[test]
 fn basic_induct_messages_on_same_subnet_works() {
-    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(0));
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    // Creates two canisters: caller and callee.
+    // Sends three ingress messages to the caller, where each message calls the
+    // callee and in the response callback makes another call to the callee.
+    // Everything should be executed within a single round thanks to the
+    // same-subnet message induction.
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
-            max_instructions_per_round: NumInstructions::from(1),
-            max_instructions_per_message: NumInstructions::from(1),
+            max_instructions_per_round: NumInstructions::new(1000),
+            max_instructions_per_message: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
-            ..SchedulerConfig::system_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 2,
-        message_num_per_canister: 0,
-    };
-    let exec_env = Arc::new(default_exec_env_mock(
-        &scheduler_test_fixture,
-        0,
-        NumInstructions::from(1),
-        NumBytes::new(0),
-    ));
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(2, 0);
-            let mut canisters = state.take_canister_states();
-            let mut canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
-            let source_canister_id = canister_ids.pop().unwrap();
-            let dest_canister_id = canister_ids.pop().unwrap();
+            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
 
-            let source_canister = canisters.get_mut(&source_canister_id).unwrap();
-            source_canister
-                .push_output_request(
-                    RequestBuilder::default()
-                        .sender(source_canister_id)
-                        .receiver(dest_canister_id)
-                        .build()
-                        .into(),
-                )
-                .unwrap();
-            state.put_canister_states(canisters);
+    let caller = test.create_canister();
+    let callee = test.create_canister();
+    let message = ingress(50).call(
+        other_side(callee, 50),
+        on_response(50).call(other_side(callee, 50), on_response(50)),
+    );
+    test.send_ingress(caller, message.clone());
+    test.send_ingress(caller, message.clone());
+    test.send_ingress(caller, message);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-            let (own_subnet_id, routing_table) = setup_routing_table();
-            state.metadata.network_topology.routing_table = Arc::new(routing_table);
-            state.metadata.own_subnet_id = own_subnet_id;
-            scheduler.induct_messages_on_same_subnet(&mut state);
-            let mut canisters = state.take_canister_states();
-            let source_canister = canisters.remove(&source_canister_id).unwrap();
-            let dest_canister = canisters.remove(&dest_canister_id).unwrap();
-            assert!(!source_canister.has_output());
-            assert!(dest_canister.has_input());
-        },
-        ingress_history_writer,
-        exec_env,
-    )
+    // All messages should be executed in a single round.
+    assert_eq!(test.ingress_queue_size(caller), 0);
+    let number_of_messages = test
+        .scheduler()
+        .metrics
+        .msg_execution_duration
+        .get_sample_count();
+    // Three ingress messages, six calls, six responses.
+    assert_eq!(number_of_messages, 3 + 6 + 6);
 }
 
-/// Creates state with one canister. The canister has a message for a
-/// canister on another subnet in its output queue. Ensures that
-/// `induct_messages_on_same_subnet()` does not move the message.
 #[test]
 fn induct_messages_on_same_subnet_handles_foreign_subnet() {
-    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(0));
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    // Creates one canister. The canister performs a cross-net call. The
+    // cross-net message should remain in the output queue of the caller and
+    // should not be inducted.
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
-            max_instructions_per_round: NumInstructions::from(1),
-            max_instructions_per_message: NumInstructions::from(1),
+            max_instructions_per_round: NumInstructions::new(1000),
+            max_instructions_per_message: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
-            ..SchedulerConfig::system_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 2,
-        message_num_per_canister: 0,
-    };
-    let exec_env = Arc::new(default_exec_env_mock(
-        &scheduler_test_fixture,
-        0,
-        NumInstructions::from(1),
-        NumBytes::new(0),
-    ));
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(1, 0);
-            let mut canisters = state.take_canister_states();
-            let mut canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
-            let source_canister_id = canister_ids.pop().unwrap();
-            let source_canister = canisters.get_mut(&source_canister_id).unwrap();
-            source_canister
-                .push_output_request(
-                    RequestBuilder::default()
-                        .sender(source_canister_id)
-                        .receiver(canister_test_id(0xffff))
-                        .build()
-                        .into(),
-                )
-                .unwrap();
-            state.put_canister_states(canisters);
+            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
 
-            let (own_subnet_id, routing_table) = setup_routing_table();
-            state.metadata.network_topology.routing_table = Arc::new(routing_table);
-            state.metadata.own_subnet_id = own_subnet_id;
+    let caller = test.create_canister();
+    let callee = test.xnet_canister_id();
+    let message = ingress(50).call(other_side(callee, 50), on_response(50));
+    test.send_ingress(caller, message);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-            scheduler.induct_messages_on_same_subnet(&mut state);
-
-            let mut canisters = state.take_canister_states();
-            let source_canister = canisters.remove(&source_canister_id).unwrap();
-            assert!(source_canister.has_output());
-        },
-        ingress_history_writer,
-        exec_env,
-    )
+    assert!(test.canister_state(caller).has_output());
 }
 
 /// Creates state with one canister. The canister has a message for itself.
@@ -674,58 +357,40 @@ fn induct_messages_on_same_subnet_handles_foreign_subnet() {
 /// moves the message.
 #[test]
 fn induct_messages_to_self_works() {
-    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(0));
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    // Sends three ingress messages to a canister, where each message calls the
+    // same canister and in the response callback makes another self-call.
+    // Everything should be executed within a single round thanks to the
+    // same-subnet message induction.
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
-            max_instructions_per_round: NumInstructions::from(1),
-            max_instructions_per_message: NumInstructions::from(1),
+            max_instructions_per_round: NumInstructions::new(1000),
+            max_instructions_per_message: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
-            ..SchedulerConfig::system_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 2,
-        message_num_per_canister: 0,
-    };
-    let exec_env = Arc::new(default_exec_env_mock(
-        &scheduler_test_fixture,
-        0,
-        NumInstructions::from(1),
-        NumBytes::new(0),
-    ));
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(1, 0);
-            let mut canisters = state.take_canister_states();
-            let mut canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
-            let source_canister_id = canister_ids.pop().unwrap();
-            let source_canister = canisters.get_mut(&source_canister_id).unwrap();
-            source_canister
-                .push_output_request(
-                    RequestBuilder::default()
-                        .sender(source_canister_id)
-                        .receiver(source_canister_id)
-                        .build()
-                        .into(),
-                )
-                .unwrap();
-            state.put_canister_states(canisters);
+            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
 
-            let (own_subnet_id, routing_table) = setup_routing_table();
-            state.metadata.network_topology.routing_table = Arc::new(routing_table);
-            state.metadata.own_subnet_id = own_subnet_id;
+    let canister_id = test.create_canister();
+    let message = ingress(50).call(
+        other_side(canister_id, 50),
+        on_response(50).call(other_side(canister_id, 50), on_response(50)),
+    );
+    test.send_ingress(canister_id, message.clone());
+    test.send_ingress(canister_id, message.clone());
+    test.send_ingress(canister_id, message);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-            scheduler.induct_messages_on_same_subnet(&mut state);
-
-            let mut canisters = state.take_canister_states();
-            let source_canister = canisters.remove(&source_canister_id).unwrap();
-            assert!(!source_canister.has_output());
-            assert!(source_canister.has_input());
-        },
-        ingress_history_writer,
-        exec_env,
-    )
+    // All messages should be executed in a single round.
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+    let number_of_messages = test
+        .scheduler()
+        .metrics
+        .msg_execution_duration
+        .get_sample_count();
+    // Three ingress messages, six calls, six responses.
+    assert_eq!(number_of_messages, 3 + 6 + 6);
 }
 
 /// Creates state with two canisters. Source canister has two requests for
@@ -740,110 +405,80 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
     // Runs a test with the given `available_memory` (expected to be limited to 2
     // requests plus epsilon). Checks that the limit is enforced on application
     // subnets and ignored on system subnets.
-    let run_test = |subnet_available_memory, subnet_type| {
-        let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(0));
-        let scheduler_test_fixture = SchedulerTestFixture {
-            scheduler_config: SchedulerConfig {
+    let run_test = |subnet_available_memory: AvailableMemory, subnet_type| {
+        let mut test = SchedulerTestBuilder::new()
+            .with_scheduler_config(SchedulerConfig {
                 scheduler_cores: 1,
-                max_instructions_per_round: NumInstructions::from(1),
-                max_instructions_per_message: NumInstructions::from(1),
+                max_instructions_per_round: NumInstructions::new(1),
+                max_instructions_per_message: NumInstructions::new(1),
                 instruction_overhead_per_message: NumInstructions::from(0),
                 ..SchedulerConfig::application_subnet()
-            },
-            metrics_registry: MetricsRegistry::new(),
-            canister_num: 2,
-            message_num_per_canister: 0,
-        };
+            })
+            .with_subnet_total_memory(subnet_available_memory.get_total_memory() as u64)
+            .with_subnet_message_memory(subnet_available_memory.get_message_memory() as u64)
+            // Canisters can have up to 5 outstanding requests (plus epsilon). I.e. for
+            // source canister, 4 outgoing + 1 incoming request plus small responses.
+            .with_max_canister_memory_size(MAX_RESPONSE_COUNT_BYTES as u64 * 55 / 10)
+            .with_subnet_type(subnet_type)
+            .build();
 
-        let mut exec_env = MockExecutionEnvironment::new();
-        exec_env
-            .expect_subnet_available_memory()
-            .times(..)
-            .return_const(subnet_available_memory);
-        // Canisters can have up to 5 outstanding requests (plus epsilon). I.e. for
-        // source canister, 4 outgoing + 1 incoming request plus small responses.
-        exec_env
-            .expect_max_canister_memory_size()
-            .times(..)
-            .return_const(NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64 * 55 / 10));
-        let exec_env = Arc::new(exec_env);
+        let source = test.create_canister();
+        let dest = test.create_canister();
 
-        scheduler_test(
-            &scheduler_test_fixture,
-            |scheduler| {
-                let mut state = match subnet_type {
-                    SubnetType::Application => get_initial_state(2, 0),
-                    SubnetType::System => get_initial_system_subnet_state(2, 0),
-                    _ => unreachable!(),
-                };
-                let mut canisters = state.take_canister_states();
-                let mut canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
-                let source_canister_id = canister_ids.pop().unwrap();
-                let dest_canister_id = canister_ids.pop().unwrap();
+        let source_canister = test.canister_state_mut(source);
+        let self_request = RequestBuilder::default()
+            .sender(source)
+            .receiver(source)
+            .build();
+        source_canister
+            .push_output_request(self_request.clone().into())
+            .unwrap();
+        source_canister
+            .push_output_request(self_request.into())
+            .unwrap();
+        let other_request = RequestBuilder::default()
+            .sender(source)
+            .receiver(dest)
+            .build();
+        source_canister
+            .push_output_request(other_request.clone().into())
+            .unwrap();
+        source_canister
+            .push_output_request(other_request.into())
+            .unwrap();
+        test.induct_messages_on_same_subnet();
 
-                let source_canister = canisters.get_mut(&source_canister_id).unwrap();
-                let self_request = RequestBuilder::default()
-                    .sender(source_canister_id)
-                    .receiver(source_canister_id)
-                    .build();
-                source_canister
-                    .push_output_request(self_request.clone().into())
-                    .unwrap();
-                source_canister
-                    .push_output_request(self_request.into())
-                    .unwrap();
-                let other_request = RequestBuilder::default()
-                    .sender(source_canister_id)
-                    .receiver(dest_canister_id)
-                    .build();
-                source_canister
-                    .push_output_request(other_request.clone().into())
-                    .unwrap();
-                source_canister
-                    .push_output_request(other_request.into())
-                    .unwrap();
-                state.put_canister_states(canisters);
-
-                let (own_subnet_id, routing_table) = setup_routing_table();
-                state.metadata.network_topology.routing_table = Arc::new(routing_table);
-                state.metadata.own_subnet_id = own_subnet_id;
-
-                scheduler.induct_messages_on_same_subnet(&mut state);
-
-                let mut canisters = state.take_canister_states();
-                let source_canister = canisters.remove(&source_canister_id).unwrap();
-                let dest_canister = canisters.remove(&dest_canister_id).unwrap();
-                let source_canister_queues = source_canister.system_state.queues();
-                let dest_canister_queues = dest_canister.system_state.queues();
-                if subnet_type == SubnetType::Application {
-                    // Only one message should have been inducted from each queue: we first induct
-                    // messages to self and hit the canister memory limit (1 more reserved slot);
-                    // then induct messages for `dest_canister` and hit the subnet memory limit (2
-                    // more reserved slots, minus the 1 before).
-                    assert_eq!(2, source_canister_queues.output_message_count());
-                    assert_eq!(1, source_canister_queues.input_queues_message_count());
-                    assert_eq!(1, dest_canister_queues.input_queues_message_count());
-                } else {
-                    // On a system subnet, with no message memory limits, all messages should have
-                    // been inducted.
-                    assert_eq!(0, source_canister_queues.output_message_count());
-                    assert_eq!(2, source_canister_queues.input_queues_message_count());
-                    assert_eq!(2, dest_canister_queues.input_queues_message_count());
-                }
-            },
-            ingress_history_writer,
-            exec_env,
-        )
+        let source_canister = test.canister_state(source);
+        let dest_canister = test.canister_state(dest);
+        let source_canister_queues = source_canister.system_state.queues();
+        let dest_canister_queues = dest_canister.system_state.queues();
+        if subnet_type == SubnetType::Application {
+            // Only one message should have been inducted from each queue: we first induct
+            // messages to self and hit the canister memory limit (1 more reserved slot);
+            // then induct messages for `dest_canister` and hit the subnet memory limit (2
+            // more reserved slots, minus the 1 before).
+            assert_eq!(2, source_canister_queues.output_message_count());
+            assert_eq!(1, source_canister_queues.input_queues_message_count());
+            assert_eq!(1, dest_canister_queues.input_queues_message_count());
+        } else {
+            // On a system subnet, with no message memory limits, all messages should have
+            // been inducted.
+            assert_eq!(0, source_canister_queues.output_message_count());
+            assert_eq!(2, source_canister_queues.input_queues_message_count());
+            assert_eq!(2, dest_canister_queues.input_queues_message_count());
+        }
     };
 
-    // Subnet has memory for 2 more requests (plus epsilon, for small responses).
+    // Subnet has memory for 4 initial requests and 2 additional requests (plus
+    // epsilon, for small responses).
     run_test(
-        AvailableMemory::new(MAX_RESPONSE_COUNT_BYTES as i64 * 25 / 10, 1 << 30),
+        AvailableMemory::new(MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10, 1 << 30),
         SubnetType::Application,
     );
-    // Subnet has message memory for 2 more requests (plus epsilon, for small responses).
+    // Subnet has memory for 4 initial requests and 2 additional requests (plus
+    // epsilon, for small responses).
     run_test(
-        AvailableMemory::new(1 << 30, MAX_RESPONSE_COUNT_BYTES as i64 * 25 / 10),
+        AvailableMemory::new(1 << 30, MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10),
         SubnetType::Application,
     );
 
@@ -859,94 +494,20 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
 fn test_message_limit_from_message_overhead() {
     // Create two canisters on the same subnet. When each one receives a
     // message, it sends a message to the other so that they ping-pong forever.
-    let canister0 = canister_test_id(0);
-    let canister1 = canister_test_id(1);
-    let mut exec_env = MockExecutionEnvironment::new();
-    // Return sufficiently large subnet and canister memory limits.
-    exec_env
-        .expect_subnet_available_memory()
-        .times(..)
-        .return_const(*SUBNET_AVAILABLE_MEMORY);
-    exec_env
-        .expect_max_canister_memory_size()
-        .times(..)
-        .return_const(MAX_CANISTER_MEMORY_SIZE);
-    exec_env
-        .expect_subnet_memory_capacity()
-        .times(..)
-        .return_const(SUBNET_MEMORY_CAPACITY);
-    exec_env
-        .expect_execute_canister_message()
-        .times(..)
-        .returning(move |mut canister, instruction_limit, msg, _, _, _| {
-            let mut exec_result = ExecutionResponse::Empty;
-            if let CanisterInputMessage::Request(req) = &msg {
-                exec_result = ExecutionResponse::Request(Response {
-                    originator: req.sender,
-                    respondent: req.receiver,
-                    originator_reply_callback: req.sender_reply_callback,
-                    refund: Cycles::from(0u64),
-                    response_payload: Payload::Data(vec![]),
-                })
-            }
-
-            match msg {
-                CanisterInputMessage::Response(msg) => {
-                    canister
-                        .system_state
-                        .call_context_manager_mut()
-                        .unwrap()
-                        .unregister_callback(msg.originator_reply_callback)
-                        .unwrap();
-                }
-                CanisterInputMessage::Request(_) | CanisterInputMessage::Ingress(_) => {
-                    let canister_id = canister.canister_id();
-                    let other_canister = if canister_id == canister0 {
-                        canister1
-                    } else {
-                        canister0
-                    };
-                    let callback_id = canister
-                        .system_state
-                        .call_context_manager_mut()
-                        .unwrap()
-                        .register_callback(Callback {
-                            call_context_id: CallContextId::new(0),
-                            originator: None,
-                            respondent: None,
-                            cycles_sent: Cycles::from(0u64),
-                            on_reply: WasmClosure::new(0, 0),
-                            on_reject: WasmClosure::new(0, 0),
-                            on_cleanup: None,
-                        });
-                    canister
-                        .push_output_request(
-                            RequestBuilder::new()
-                                .sender(canister_id)
-                                .receiver(other_canister)
-                                .sender_reply_callback(callback_id)
-                                .build()
-                                .into(),
-                        )
-                        .unwrap();
-                }
-            }
-            ExecuteMessageResult {
-                canister: canister.clone(),
-                num_instructions_left: instruction_limit,
-                response: exec_result,
-                heap_delta: NumBytes::from(0),
-            }
-        });
-    let exec_env = Arc::new(exec_env);
     let scheduler_config = SchedulerConfig {
         scheduler_cores: 1,
-        instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
         max_instructions_per_message: NumInstructions::from(5_000_000_000),
         max_instructions_per_round: NumInstructions::from(7_000_000_000),
         instruction_overhead_per_message: NumInstructions::from(2_000_000),
+        instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
         ..SchedulerConfig::application_subnet()
     };
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(scheduler_config.clone())
+        .build();
+
+    let canister0 = test.create_canister();
+    let canister1 = test.create_canister();
 
     // There are 7B instructions allowed per round, but we won't execute a
     // message unless we know there are 5B instructions left since that is the
@@ -959,54 +520,29 @@ fn test_message_limit_from_message_overhead() {
         / scheduler_config.instruction_overhead_per_message
         + 1;
 
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config,
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 2,
-        message_num_per_canister: 0,
-    };
+    let mut callee = canister0;
+    let mut call = other_side(callee, 0);
 
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = ReplicatedStateBuilder::new()
-                .with_canister(
-                    CanisterStateBuilder::new()
-                        .with_canister_id(canister_test_id(0))
-                        .with_ingress(
-                            SignedIngressBuilder::new()
-                                .canister_id(canister0)
-                                .build()
-                                .into(),
-                        )
-                        .build(),
-                )
-                .with_canister(
-                    CanisterStateBuilder::new()
-                        .with_canister_id(canister_test_id(1))
-                        .build(),
-                )
-                .build();
-            let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
-                CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => scheduler.own_subnet_id,
-            }).unwrap());
-            state.metadata.network_topology.routing_table = routing_table;
+    for _ in 0..expected_number_of_messages * 10 {
+        callee = if callee == canister1 {
+            canister0
+        } else {
+            canister1
+        };
+        call = other_side(callee, 0).call(call, on_response(0));
+    }
 
-            let round = ExecutionRound::from(1);
-            scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                round,
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            let number_of_messages = scheduler.metrics.msg_execution_duration.get_sample_count();
-            assert_eq!(number_of_messages, expected_number_of_messages);
-        },
-        Arc::new(MockIngressHistory::new()),
-        exec_env,
-    );
+    let message = ingress(0).call(call, on_response(0));
+    test.send_ingress(canister0, message);
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    let number_of_messages = test
+        .scheduler()
+        .metrics
+        .msg_execution_duration
+        .get_sample_count();
+    assert_eq!(number_of_messages, expected_number_of_messages);
 }
 
 /// A test to ensure that there are multiple iterations of the loop in
@@ -1016,138 +552,34 @@ fn test_multiple_iterations_of_inner_loop() {
     // Create two canisters on the same subnet. In the first iteration, the
     // first sends a message to the second. In the second iteration, the second
     // executes the received message.
-    let mut exec_env = MockExecutionEnvironment::new();
-    // Return sufficiently large subnet and canister memory limits.
-    exec_env
-        .expect_subnet_available_memory()
-        .times(..)
-        .return_const(*SUBNET_AVAILABLE_MEMORY);
-    exec_env
-        .expect_max_canister_memory_size()
-        .times(..)
-        .return_const(MAX_CANISTER_MEMORY_SIZE);
-    exec_env
-        .expect_subnet_memory_capacity()
-        .times(..)
-        .return_const(SUBNET_MEMORY_CAPACITY);
-    exec_env
-        .expect_execute_canister_message()
-        .times(2)
-        .returning(move |mut canister, _, msg, _, _, _| {
-            let canister0 = canister_test_id(0);
-            let canister1 = canister_test_id(1);
-            let canister_id = canister.canister_id();
-            if canister_id == canister0 {
-                canister
-                    .push_output_request(
-                        RequestBuilder::new()
-                            .sender(canister0)
-                            .receiver(canister1)
-                            .build()
-                            .into(),
-                    )
-                    .unwrap();
-                if let CanisterInputMessage::Ingress(msg) = msg {
-                    ExecuteMessageResult {
-                        canister: canister.clone(),
-                        num_instructions_left: NumInstructions::new(0),
-                        response: ExecutionResponse::Ingress((
-                            msg.message_id.clone(),
-                            IngressStatus::Known {
-                                receiver: canister.canister_id().get(),
-                                user_id: user_test_id(0),
-                                time: mock_time(),
-                                state: IngressState::Processing,
-                            },
-                        )),
-                        heap_delta: NumBytes::from(1),
-                    }
-                } else {
-                    unreachable!("Only ingress messages are expected.")
-                }
-            } else if canister_id == canister1 {
-                ExecuteMessageResult {
-                    canister,
-                    num_instructions_left: NumInstructions::from(0),
-                    response: ExecutionResponse::Empty,
-                    heap_delta: NumBytes::from(1),
-                }
-            } else {
-                unreachable!(
-                    "message should be directed to {} or {}",
-                    canister0, canister1
-                );
-            }
-        });
-    let exec_env = Arc::new(exec_env);
-    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(1));
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
             max_instructions_per_round: NumInstructions::new(200),
             max_instructions_per_message: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 2,
-        message_num_per_canister: 0,
-    };
+        })
+        .build();
 
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(
-                scheduler_test_fixture.canister_num,
-                scheduler_test_fixture.message_num_per_canister,
-            );
-            let routing_table = Arc::new(RoutingTable::try_from(btreemap! {
-                CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => scheduler.own_subnet_id,
-            }).unwrap());
-            state.metadata.network_topology.routing_table = routing_table;
+    let canister0 = test.create_canister();
+    let canister1 = test.create_canister();
 
-            let canister_id = canister_test_id(0);
-            state
-                .canister_state_mut(&canister_id)
-                .unwrap()
-                .push_ingress(
-                    SignedIngressBuilder::new()
-                        .canister_id(canister_id)
-                        .build()
-                        .into(),
-                );
+    let message = ingress(50).call(other_side(canister1, 50), on_response(50));
+    test.send_ingress(canister0, message);
 
-            let round = ExecutionRound::from(1);
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                round,
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            for canister_state in state.canisters_iter_mut() {
-                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
-            }
-            assert_eq!(scheduler.metrics.execute_round_called.get(), 1);
-            assert_eq!(
-                scheduler
-                    .metrics
-                    .inner_round_loop_consumed_max_instructions
-                    .get(),
-                0
-            );
-            assert_eq!(
-                scheduler
-                    .metrics
-                    .inner_loop_consumed_non_zero_instructions_count
-                    .get(),
-                2
-            );
-        },
-        ingress_history_writer,
-        exec_env,
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    let metrics = &test.scheduler().metrics;
+
+    assert_eq!(metrics.execute_round_called.get(), 1);
+    assert_eq!(metrics.inner_round_loop_consumed_max_instructions.get(), 0);
+    assert_eq!(
+        metrics
+            .inner_loop_consumed_non_zero_instructions_count
+            .get(),
+        3
     );
 }
 
@@ -1158,44 +590,8 @@ fn test_multiple_iterations_of_inner_loop() {
 #[test]
 fn canister_can_run_for_multiple_iterations() {
     // Create a canister which sends a message to itself on each iteration.
-    let mut exec_env = MockExecutionEnvironment::new();
-    exec_env
-        .expect_subnet_available_memory()
-        .times(..)
-        .return_const(*SUBNET_AVAILABLE_MEMORY);
-    exec_env
-        .expect_max_canister_memory_size()
-        .times(..)
-        .return_const(MAX_CANISTER_MEMORY_SIZE);
-    exec_env
-        .expect_subnet_memory_capacity()
-        .times(..)
-        .return_const(SUBNET_MEMORY_CAPACITY);
-    exec_env
-        .expect_execute_canister_message()
-        .times(..)
-        .returning(move |mut canister, _, _, _, _, _| {
-            let canister_id = canister.canister_id();
-            canister
-                .push_output_request(
-                    RequestBuilder::new()
-                        .sender(canister_id)
-                        .receiver(canister_id)
-                        .build()
-                        .into(),
-                )
-                .unwrap();
-            ExecuteMessageResult {
-                canister,
-                num_instructions_left: NumInstructions::from(0),
-                response: ExecutionResponse::Empty,
-                heap_delta: NumBytes::from(1),
-            }
-        });
-    let exec_env = Arc::new(exec_env);
-    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(0));
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
             // The number of instructions will limit the canister to running at most 6 times.
             max_instructions_per_round: NumInstructions::new(300),
@@ -1203,285 +599,158 @@ fn canister_can_run_for_multiple_iterations() {
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 1,
-        message_num_per_canister: 0,
-    };
+        })
+        .build();
 
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(
-                scheduler_test_fixture.canister_num,
-                scheduler_test_fixture.message_num_per_canister,
-            );
+    let canister = test.create_canister();
 
-            let canister_id = canister_test_id(0);
-            state
-                .canister_state_mut(&canister_id)
-                .unwrap()
-                .push_ingress(
-                    SignedIngressBuilder::new()
-                        .canister_id(canister_id)
-                        .build()
-                        .into(),
-                );
+    let mut call = other_side(canister, 50).dirty_pages(1);
+    for _ in 0..10 {
+        call = other_side(canister, 50)
+            .dirty_pages(1)
+            .call(call, on_response(0));
+    }
 
-            let round = ExecutionRound::from(1);
-            scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                round,
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            // Verify that we actually ran 6 iterations.
-            assert_eq!(
-                scheduler
-                    .metrics
-                    .inner_loop_consumed_non_zero_instructions_count
-                    .get(),
-                6
-            );
-        },
-        ingress_history_writer,
-        exec_env,
+    test.send_ingress(canister, ingress(50).call(call, on_response(0)));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Verify that we actually ran 6 iterations.
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .inner_loop_consumed_non_zero_instructions_count
+            .get(),
+        6
     );
 }
 
 #[test]
 fn validate_consumed_instructions_metric() {
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
             max_instructions_per_message: NumInstructions::from(50),
             max_instructions_per_round: NumInstructions::from(400),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 1,
-        message_num_per_canister: 2,
-    };
-    let exec_env = Arc::new(default_exec_env_mock(
-        &scheduler_test_fixture,
-        2,
-        scheduler_test_fixture
-            .scheduler_config
-            .max_instructions_per_message,
-        NumBytes::new(4096),
-    ));
-    let ingress_history_writer = Arc::new(default_ingress_history_writer_mock(2));
+        })
+        .build();
 
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(
-                scheduler_test_fixture.canister_num,
-                scheduler_test_fixture.message_num_per_canister,
-            );
+    let canister = test.create_canister();
+    test.send_ingress(canister, ingress(50).dirty_pages(1));
+    test.send_ingress(canister, ingress(50).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-            let round = ExecutionRound::from(1);
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                round,
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            for canister_state in state.canisters_iter_mut() {
-                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
-            }
-            assert_eq!(
-                scheduler
-                    .metrics
-                    .instructions_consumed_per_round
-                    .get_sample_count(),
-                2
-            );
-            assert_floats_are_equal(
-                scheduler
-                    .metrics
-                    .instructions_consumed_per_round
-                    .get_sample_sum(),
-                100_f64,
-            );
-            assert_eq!(
-                scheduler
-                    .metrics
-                    .instructions_consumed_per_message
-                    .get_sample_count(),
-                2
-            );
-            assert_floats_are_equal(
-                scheduler
-                    .metrics
-                    .instructions_consumed_per_message
-                    .get_sample_sum(),
-                100_f64,
-            );
-        },
-        ingress_history_writer,
-        exec_env,
+    let metrics = &test.scheduler().metrics;
+
+    assert_eq!(
+        metrics.instructions_consumed_per_round.get_sample_count(),
+        2
+    );
+    assert_floats_are_equal(
+        metrics.instructions_consumed_per_round.get_sample_sum(),
+        100_f64,
+    );
+    assert_eq!(
+        metrics.instructions_consumed_per_message.get_sample_count(),
+        2
+    );
+    assert_floats_are_equal(
+        metrics.instructions_consumed_per_message.get_sample_sum(),
+        100_f64,
     );
 }
 
 #[test]
 fn only_charge_for_allocation_after_specified_duration() {
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig::application_subnet(),
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 1,
-        message_num_per_canister: 0,
-    };
-    let exec_env = default_exec_env_mock(
-        &scheduler_test_fixture,
-        0,
-        scheduler_test_fixture
-            .scheduler_config
-            .max_instructions_per_message,
-        NumBytes::new(0),
-    );
-    let exec_env = Arc::new(exec_env);
+    let mut test = SchedulerTestBuilder::new().build();
 
-    let ingress_history_writer = default_ingress_history_writer_mock(0);
-    let ingress_history_writer = Arc::new(ingress_history_writer);
-    let prev_time = Time::from_nanos_since_unix_epoch(1_000_000_000_000);
+    // Charging handles time=0 as a special case, so it should be set to some
+    // non-zero time.
+    let initial_time = Time::from_nanos_since_unix_epoch(1_000_000_000_000);
+    test.state_mut().metadata.batch_time = initial_time;
+    test.state_mut().metadata.time_of_last_allocation_charge = initial_time;
+
+    let time_between_batches = test
+        .scheduler()
+        .cycles_account_manager
+        .duration_between_allocation_charges()
+        / 2;
+
+    // Just enough memory to cost us one cycle per second.
+    let bytes_per_cycle = (1_u128 << 30)
+        .checked_div(
+            CyclesAccountManagerConfig::application_subnet()
+                .gib_storage_per_second_fee
+                .get(),
+        )
+        .unwrap() as u64
+        + 1;
+
     let initial_cycles = 1_000_000;
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let time_between_batches = scheduler
-                .cycles_account_manager
-                .duration_between_allocation_charges()
-                / 2;
-            // Just enough memory to cost us one cycle per second.
-            let bytes_per_cycle = (1_u128 << 30)
-                .checked_div(
-                    CyclesAccountManagerConfig::application_subnet()
-                        .gib_storage_per_second_fee
-                        .get(),
-                )
-                .unwrap() as u64
-                + 1;
-            let mut state = ReplicatedStateBuilder::new()
-                .with_canister(
-                    CanisterStateBuilder::new()
-                        .with_memory_allocation(NumBytes::from(bytes_per_cycle))
-                        .with_cycles(initial_cycles)
-                        .build(),
-                )
-                .with_time(prev_time + time_between_batches)
-                .with_time_of_last_allocation(prev_time)
-                .build();
 
-            // Don't charge because the time since the last charge is too small.
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                ExecutionRound::from(1),
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            let canister_state = state.canisters_iter().next().unwrap();
-            assert_eq!(canister_state.system_state.balance().get(), initial_cycles);
+    let canister = test.create_canister_with(
+        Cycles::new(initial_cycles),
+        ComputeAllocation::zero(),
+        MemoryAllocation::Reserved(NumBytes::from(bytes_per_cycle)),
+    );
 
-            // The time of the current batch is now long enough that allocation charging
-            // should be triggered.
-            state.metadata.batch_time += time_between_batches;
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                ExecutionRound::from(1),
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            let canister_state = state.canisters_iter().next().unwrap();
-            assert_eq!(
-                canister_state.system_state.balance().get(),
-                initial_cycles - 10
-            );
-        },
-        ingress_history_writer,
-        exec_env,
+    // Don't charge because the time since the last charge is too small.
+    test.state_mut().metadata.batch_time += time_between_batches;
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    assert_eq!(
+        test.canister_state(canister).system_state.balance().get(),
+        initial_cycles
+    );
+
+    // The time of the current batch is now long enough that allocation charging
+    // should be triggered.
+    test.state_mut().metadata.batch_time += time_between_batches;
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.canister_state(canister).system_state.balance().get(),
+        initial_cycles - 10,
     );
 }
 
 #[test]
-fn dont_execute_any_canisters_if_not_enough_cycles() {
-    let num_instructions_consumed_per_msg = NumInstructions::from(5);
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
+    let instructions_per_message = NumInstructions::from(5);
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
-            max_instructions_per_round: num_instructions_consumed_per_msg
-                - NumInstructions::from(1),
-            max_instructions_per_message: num_instructions_consumed_per_msg,
+            max_instructions_per_round: instructions_per_message - NumInstructions::from(1),
+            max_instructions_per_message: instructions_per_message,
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 3,
-        message_num_per_canister: 1,
-    };
-    let exec_env = default_exec_env_mock(
-        &scheduler_test_fixture,
-        0,
-        scheduler_test_fixture
-            .scheduler_config
-            .max_instructions_per_message,
-        NumBytes::new(0),
-    );
-    let exec_env = Arc::new(exec_env);
+        })
+        .build();
 
-    let ingress_history_writer = default_ingress_history_writer_mock(0);
-    let ingress_history_writer = Arc::new(ingress_history_writer);
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(
-                scheduler_test_fixture.canister_num,
-                scheduler_test_fixture.message_num_per_canister,
-            );
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                ExecutionRound::from(1),
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            for canister_state in state.canisters_iter() {
-                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 1);
-                assert_eq!(
-                    canister_state.scheduler_state.last_full_execution_round,
-                    ExecutionRound::from(0)
-                );
-                assert_eq!(
-                    canister_state
-                        .system_state
-                        .canister_metrics
-                        .skipped_round_due_to_no_messages,
-                    0
-                );
-                assert_eq!(canister_state.system_state.canister_metrics.executed, 0);
-                assert_eq!(
-                    canister_state
-                        .system_state
-                        .canister_metrics
-                        .interruped_during_execution,
-                    0
-                );
-            }
-        },
-        ingress_history_writer,
-        exec_env,
-    );
+    for _ in 0..3 {
+        let canister = test.create_canister();
+        test.send_ingress(canister, ingress(instructions_per_message.get()));
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    for canister_state in test.state().canisters_iter() {
+        let system_state = &canister_state.system_state;
+        assert_eq!(system_state.queues().ingress_queue_size(), 1);
+        assert_eq!(
+            canister_state.scheduler_state.last_full_execution_round,
+            ExecutionRound::from(0)
+        );
+        assert_eq!(
+            system_state
+                .canister_metrics
+                .skipped_round_due_to_no_messages,
+            0
+        );
+        assert_eq!(system_state.canister_metrics.executed, 0);
+        assert_eq!(system_state.canister_metrics.interruped_during_execution, 0);
+    }
 }
 
 // Creates an initial state with some canisters that contain very few cycles.
@@ -1489,318 +758,175 @@ fn dont_execute_any_canisters_if_not_enough_cycles() {
 // uninstalled.
 #[test]
 fn canisters_with_insufficient_cycles_are_uninstalled() {
-    let num_instructions_consumed_per_msg = NumInstructions::from(5);
-    let num_canisters = 3;
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
-            scheduler_cores: 1,
-            max_instructions_per_round: num_instructions_consumed_per_msg
-                - NumInstructions::from(1),
-            max_instructions_per_message: num_instructions_consumed_per_msg,
-            instruction_overhead_per_message: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: num_canisters,
-        message_num_per_canister: 0,
-    };
-    let exec_env = default_exec_env_mock(
-        &scheduler_test_fixture,
-        0,
-        scheduler_test_fixture
-            .scheduler_config
-            .max_instructions_per_message,
-        NumBytes::new(0),
-    );
-    let exec_env = Arc::new(exec_env);
+    let mut test = SchedulerTestBuilder::new().build();
+    for _ in 0..3 {
+        test.create_canister_with(
+            Cycles::new(100),
+            ComputeAllocation::zero(),
+            MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        );
+    }
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
+    test.state_mut().metadata.time_of_last_allocation_charge = initial_time;
+    test.state_mut().metadata.batch_time = initial_time
+        + test
+            .scheduler()
+            .cycles_account_manager
+            .duration_between_allocation_charges();
 
-    let ingress_history_writer = default_ingress_history_writer_mock(0);
-    let ingress_history_writer = Arc::new(ingress_history_writer);
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(0, 0);
-            // Set the cycles balance of all canisters to small enough amount so
-            // that they cannot pay for their resource usage but also do not set
-            // it to 0 as that is a simpler test.
-            for i in 0..num_canisters {
-                let canister_state = CanisterStateBuilder::new()
-                    .with_canister_id(canister_test_id(i))
-                    .with_cycles(Cycles::from(100))
-                    .with_wasm(vec![1; 1 << 30])
-                    .build();
-                state.put_canister_state(canister_state);
-            }
-            state.metadata.time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
-            state.metadata.batch_time = state.metadata.time_of_last_allocation_charge
-                + scheduler
-                    .cycles_account_manager
-                    .duration_between_allocation_charges();
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                ExecutionRound::from(1),
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-
-            for (_, canister) in state.canister_states.iter() {
-                assert!(canister.execution_state.is_none());
-                assert_eq!(
-                    canister.scheduler_state.compute_allocation,
-                    ComputeAllocation::zero()
-                );
-                assert_eq!(
-                    canister.system_state.memory_allocation,
-                    MemoryAllocation::BestEffort
-                );
-            }
-            assert_eq!(
-                scheduler
-                    .metrics
-                    .num_canisters_uninstalled_out_of_cycles
-                    .get() as u64,
-                num_canisters
-            );
-        },
-        ingress_history_writer,
-        exec_env,
+    for (_, canister) in test.state().canister_states.iter() {
+        assert!(canister.execution_state.is_none());
+        assert_eq!(
+            canister.scheduler_state.compute_allocation,
+            ComputeAllocation::zero()
+        );
+        assert_eq!(
+            canister.system_state.memory_allocation,
+            MemoryAllocation::BestEffort
+        );
+    }
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .num_canisters_uninstalled_out_of_cycles
+            .get() as u64,
+        3
     );
 }
 
 #[test]
-fn can_execute_messages_with_just_enough_cycles() {
+fn can_execute_messages_with_just_enough_instructions() {
     // In this test we have 3 canisters with 1 message each and the maximum allowed
     // round cycles is 3 times the instructions consumed by each message. Thus, we
     // expect that we have just enough instructions to execute all messages.
-    let num_instructions_consumed_per_msg = NumInstructions::from(5);
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
-            max_instructions_per_round: num_instructions_consumed_per_msg * 3,
-            max_instructions_per_message: num_instructions_consumed_per_msg,
+            max_instructions_per_round: NumInstructions::from(50 * 3),
+            max_instructions_per_message: NumInstructions::from(50),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 3,
-        message_num_per_canister: 1,
-    };
-    let exec_env = default_exec_env_mock(
-        &scheduler_test_fixture,
-        3,
-        scheduler_test_fixture
-            .scheduler_config
-            .max_instructions_per_message,
-        NumBytes::new(0),
-    );
-    let exec_env = Arc::new(exec_env);
+        })
+        .build();
 
-    let ingress_history_writer = default_ingress_history_writer_mock(3);
-    let ingress_history_writer = Arc::new(ingress_history_writer);
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(
-                scheduler_test_fixture.canister_num,
-                scheduler_test_fixture.message_num_per_canister,
-            );
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                ExecutionRound::from(1),
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            for canister_state in state.canisters_iter() {
-                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
-                assert_eq!(
-                    canister_state.scheduler_state.last_full_execution_round,
-                    ExecutionRound::from(1)
-                );
-                assert_eq!(
-                    canister_state
-                        .system_state
-                        .canister_metrics
-                        .skipped_round_due_to_no_messages,
-                    0
-                );
-                assert_eq!(canister_state.system_state.canister_metrics.executed, 1);
-                assert_eq!(
-                    canister_state
-                        .system_state
-                        .canister_metrics
-                        .interruped_during_execution,
-                    0
-                );
-            }
-        },
-        ingress_history_writer,
-        exec_env,
-    );
+    // Bump the round number up to 1.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    for _ in 0..3 {
+        let canister = test.create_canister();
+        test.send_ingress(canister, ingress(50));
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    for canister_state in test.state().canisters_iter() {
+        let system_state = &canister_state.system_state;
+        assert_eq!(system_state.queues().ingress_queue_size(), 0);
+        assert_eq!(
+            canister_state.scheduler_state.last_full_execution_round,
+            ExecutionRound::from(1)
+        );
+        assert_eq!(
+            system_state
+                .canister_metrics
+                .skipped_round_due_to_no_messages,
+            0
+        );
+        assert_eq!(system_state.canister_metrics.executed, 1);
+        assert_eq!(system_state.canister_metrics.interruped_during_execution, 0);
+    }
 }
 
 #[test]
 fn execute_only_canisters_with_messages() {
-    let num_instructions_consumed_per_msg = NumInstructions::from(5);
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
-            max_instructions_per_round: NumInstructions::from(1 << 30),
-            max_instructions_per_message: num_instructions_consumed_per_msg
-                + NumInstructions::from(1),
+            max_instructions_per_round: NumInstructions::from(1000),
+            max_instructions_per_message: NumInstructions::from(50),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 3,
-        message_num_per_canister: 1,
-    };
-    let exec_env = default_exec_env_mock(
-        &scheduler_test_fixture,
-        3,
-        num_instructions_consumed_per_msg,
-        NumBytes::new(0),
-    );
-    let exec_env = Arc::new(exec_env);
+        })
+        .build();
 
-    let ingress_history_writer = default_ingress_history_writer_mock(3);
-    let ingress_history_writer = Arc::new(ingress_history_writer);
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(
-                scheduler_test_fixture.canister_num,
-                scheduler_test_fixture.message_num_per_canister,
-            );
-            state.put_canister_state(new_canister_state(
-                canister_test_id(3),
-                user_test_id(24).get(),
-                *INITIAL_CYCLES,
-                NumSeconds::from(100_000),
-            ));
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                ExecutionRound::from(1),
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            for canister_state in state.canisters_iter() {
-                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
-                // We won't update `last_full_execution_round` for the canister without any
-                // input messages.
-                if canister_state.canister_id() == canister_test_id(3) {
-                    assert_eq!(
-                        canister_state.scheduler_state.last_full_execution_round,
-                        ExecutionRound::from(0)
-                    );
-                    assert_eq!(
-                        canister_state
-                            .system_state
-                            .canister_metrics
-                            .skipped_round_due_to_no_messages,
-                        1
-                    );
-                } else {
-                    assert_eq!(
-                        canister_state.scheduler_state.last_full_execution_round,
-                        ExecutionRound::from(1)
-                    );
-                    assert_eq!(
-                        canister_state
-                            .system_state
-                            .canister_metrics
-                            .skipped_round_due_to_no_messages,
-                        0
-                    );
-                    assert_eq!(canister_state.system_state.canister_metrics.executed, 1);
-                    assert_eq!(
-                        canister_state
-                            .system_state
-                            .canister_metrics
-                            .interruped_during_execution,
-                        0
-                    );
-                }
-            }
-        },
-        ingress_history_writer,
-        exec_env,
+    // Bump up the round number to 1.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    let idle = test.create_canister();
+    let active = test.create_canister();
+    test.send_ingress(active, ingress(50));
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // We won't update `last_full_execution_round` for the canister without any
+    // input messages.
+    let idle = test.canister_state(idle);
+    assert_eq!(
+        idle.scheduler_state.last_full_execution_round,
+        ExecutionRound::from(0)
     );
+    assert_eq!(
+        idle.system_state
+            .canister_metrics
+            .skipped_round_due_to_no_messages,
+        1
+    );
+
+    let active = test.canister_state(active);
+    let system_state = &active.system_state;
+    assert_eq!(
+        active.scheduler_state.last_full_execution_round,
+        ExecutionRound::from(1)
+    );
+    assert_eq!(
+        system_state
+            .canister_metrics
+            .skipped_round_due_to_no_messages,
+        0
+    );
+    assert_eq!(active.system_state.canister_metrics.executed, 1);
+    assert_eq!(system_state.canister_metrics.interruped_during_execution, 0);
 }
 
 #[test]
 fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
-    let num_instructions_consumed_per_msg = NumInstructions::from(5);
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 1,
-            max_instructions_per_round: NumInstructions::from(1 << 30),
-            max_instructions_per_message: num_instructions_consumed_per_msg,
-            instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 3,
-        message_num_per_canister: 5,
-    };
-    let exec_env = default_exec_env_mock(
-        &scheduler_test_fixture,
-        15,
-        num_instructions_consumed_per_msg,
-        NumBytes::new(0),
-    );
-    let exec_env = Arc::new(exec_env);
+        })
+        .build();
 
-    let ingress_history_writer = default_ingress_history_writer_mock(15);
-    let ingress_history_writer = Arc::new(ingress_history_writer);
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(
-                scheduler_test_fixture.canister_num,
-                scheduler_test_fixture.message_num_per_canister,
-            );
-            let round = ExecutionRound::from(4);
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                round,
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            for canister_state in state.canisters_iter() {
-                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
-                assert_eq!(
-                    canister_state.scheduler_state.last_full_execution_round,
-                    round
-                );
-                assert_eq!(
-                    canister_state
-                        .system_state
-                        .canister_metrics
-                        .skipped_round_due_to_no_messages,
-                    0
-                );
-                assert_eq!(canister_state.system_state.canister_metrics.executed, 1);
-                assert_eq!(
-                    canister_state
-                        .system_state
-                        .canister_metrics
-                        .interruped_during_execution,
-                    0
-                );
-            }
-        },
-        ingress_history_writer,
-        exec_env,
-    );
+    // Bump the round number to 1.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    for _ in 0..3 {
+        let canister = test.create_canister();
+        for _ in 0..5 {
+            test.send_ingress(canister, ingress(50));
+        }
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    for canister_state in test.state().canisters_iter() {
+        let system_state = &canister_state.system_state;
+        assert_eq!(system_state.queues().ingress_queue_size(), 0);
+        assert_eq!(
+            canister_state.scheduler_state.last_full_execution_round,
+            ExecutionRound::new(1)
+        );
+        assert_eq!(
+            system_state
+                .canister_metrics
+                .skipped_round_due_to_no_messages,
+            0
+        );
+        assert_eq!(system_state.canister_metrics.executed, 1);
+        assert_eq!(system_state.canister_metrics.interruped_during_execution, 0);
+    }
 }
 
 #[test]
@@ -1809,68 +935,45 @@ fn can_fully_execute_canisters_deterministically_until_out_of_cycles() {
     // instructions that an execution round can consume is 51 (per core). Each
     // message consumes 5 instructions, therefore we can execute fully 1
     // canister per core in one round.
-    let num_instructions_consumed_per_msg = NumInstructions::from(5);
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(51),
-            max_instructions_per_message: num_instructions_consumed_per_msg,
+            max_instructions_per_message: NumInstructions::from(5),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 5,
-        message_num_per_canister: 10,
-    };
-    let exec_env = default_exec_env_mock(
-        &scheduler_test_fixture,
-        20,
-        num_instructions_consumed_per_msg,
-        NumBytes::new(0),
-    );
-    let exec_env = Arc::new(exec_env);
+        })
+        .build();
 
-    let ingress_history_writer = default_ingress_history_writer_mock(20);
-    let ingress_history_writer = Arc::new(ingress_history_writer);
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(
-                scheduler_test_fixture.canister_num,
-                scheduler_test_fixture.message_num_per_canister,
+    // Bump up the round number to 1.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    for _ in 0..5 {
+        let canister = test.create_canister();
+        for _ in 0..10 {
+            test.send_ingress(canister, ingress(5));
+        }
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    let mut executed_canisters = 0;
+    for canister in test.state().canisters_iter() {
+        if canister.system_state.queues().ingress_queue_size() == 0 {
+            assert_eq!(
+                canister.scheduler_state.last_full_execution_round,
+                ExecutionRound::from(1)
             );
-            let round = ExecutionRound::from(1);
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                round,
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
+            executed_canisters += 1;
+        } else {
+            assert_eq!(canister.system_state.queues().ingress_queue_size(), 10);
+            assert_eq!(
+                canister.scheduler_state.last_full_execution_round,
+                ExecutionRound::from(0)
             );
-            for canister_state in state.canisters_iter() {
-                let id = &canister_state.canister_id();
-                if id == &canister_test_id(0) || id == &canister_test_id(1) {
-                    assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
-                    assert_eq!(
-                        canister_state.scheduler_state.last_full_execution_round,
-                        round
-                    );
-                } else {
-                    assert_eq!(
-                        canister_state.system_state.queues().ingress_queue_size(),
-                        10
-                    );
-                    assert_eq!(
-                        canister_state.scheduler_state.last_full_execution_round,
-                        ExecutionRound::from(0)
-                    );
-                }
-            }
-        },
-        ingress_history_writer,
-        exec_env,
-    );
+        }
+    }
+    assert_eq!(executed_canisters, 2);
 }
 
 #[test]
@@ -1880,63 +983,42 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
     // executes 1 canister until we don't have any instructions left anymore. Since
     // each message consumes 5 instructions, we can execute 3 messages from each
     // canister.
-    let num_instructions_consumed_per_msg = NumInstructions::from(5);
-    let scheduler_test_fixture = SchedulerTestFixture {
-        scheduler_config: SchedulerConfig {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(18),
-            max_instructions_per_message: num_instructions_consumed_per_msg,
+            max_instructions_per_message: NumInstructions::from(5),
             instruction_overhead_per_message: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
-        },
-        metrics_registry: MetricsRegistry::new(),
-        canister_num: 2,
-        message_num_per_canister: 10,
-    };
-    let exec_env = default_exec_env_mock(
-        &scheduler_test_fixture,
-        6,
-        num_instructions_consumed_per_msg,
-        NumBytes::new(0),
-    );
-    let exec_env = Arc::new(exec_env);
+        })
+        .build();
 
-    let ingress_history_writer = default_ingress_history_writer_mock(6);
-    let ingress_history_writer = Arc::new(ingress_history_writer);
-    scheduler_test(
-        &scheduler_test_fixture,
-        |scheduler| {
-            let mut state = get_initial_state(
-                scheduler_test_fixture.canister_num,
-                scheduler_test_fixture.message_num_per_canister,
-            );
-            let round = ExecutionRound::from(1);
-            state = scheduler.execute_round(
-                state,
-                Randomness::from([0; 32]),
-                BTreeMap::new(),
-                round,
-                ExecutionRoundType::OrdinaryRound,
-                &test_registry_settings(),
-            );
-            for canister_state in state.canisters_iter() {
-                assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 7);
-                assert_ne!(
-                    canister_state
-                        .system_state
-                        .canister_metrics
-                        .interruped_during_execution,
-                    0
-                );
-                assert_eq!(
-                    canister_state.scheduler_state.last_full_execution_round,
-                    round
-                );
-            }
-        },
-        ingress_history_writer,
-        exec_env,
-    );
+    // Bump up the round number to 1.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    for _ in 0..2 {
+        let canister = test.create_canister();
+        for _ in 0..10 {
+            test.send_ingress(canister, ingress(5));
+        }
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    for canister in test.state().canisters_iter() {
+        assert_eq!(canister.system_state.queues().ingress_queue_size(), 7);
+        assert_ne!(
+            canister
+                .system_state
+                .canister_metrics
+                .interruped_during_execution,
+            0
+        );
+        assert_eq!(
+            canister.scheduler_state.last_full_execution_round,
+            ExecutionRound::from(1)
+        );
+    }
 }
 
 #[test]
