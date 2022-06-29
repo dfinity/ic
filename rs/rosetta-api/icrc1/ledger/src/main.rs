@@ -87,7 +87,7 @@ fn icrc1_balance_of(account: Account) -> u64 {
 #[update]
 #[candid_method(update)]
 async fn icrc1_transfer(arg: TransferArg) -> Result<BlockHeight, TransferError> {
-    let (block_idx, _hash) = Access::with_ledger_mut(|ledger| {
+    let block_idx = Access::with_ledger_mut(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
         let from_account = Account {
             of: PrincipalId::from(ic_cdk::api::caller()),
@@ -129,9 +129,14 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<BlockHeight, TransferError> 
             Transaction::transfer(from_account, to_account, amount, expected_fee, now)
         };
 
-        apply_transaction(ledger, tx, now).map_err(TransferError::from)
+        let (block_idx, _) = apply_transaction(ledger, tx, now)?;
+        Ok(block_idx)
     })?;
-    // TODO(ROSETTA1-304): certify tip
+
+    // NB. we need to set the certified data before the first async call to make sure that the
+    // blockchain state agrees with the certificate while archiving is in progress.
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+
     archive_blocks::<Access>(MAX_MESSAGE_SIZE).await;
     Ok(block_idx)
 }
