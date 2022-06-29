@@ -151,6 +151,7 @@ def generate_report(base, githash, timestamp):
             print("Workload generator summaray files: ", files)
             evaluated_summaries = None
             if len(files) > 0:
+                files = sorted(files)
                 evaluated_summaries = report.evaluate_summaries(files)
                 (
                     failure_rate,
@@ -336,11 +337,18 @@ def generate_report(base, githash, timestamp):
     else:
         if len(wg_failure_rates) > 0:
 
+            # Generate one plot for the failure rate of each workload generator
+            # For each of the failure rates, we need to find out which workload generator this failure rate is from.
+            # The order in which they are stored in the list should be the same in each round thanks for
+            # sorting the workload generators summaries for each round.
             num_workload_generators = len(wg_failure_rates[0])
             for workload_generator_id in range(num_workload_generators):
-                workload_generators_idx_in_iterations = [host[workload_generator_id] for host in wg_summaries]
+                workload_generators_idx_in_iterations = [
+                    list_of_hosts[workload_generator_id] for list_of_hosts in wg_summaries
+                ]
                 counts = Counter(workload_generators_idx_in_iterations)
-                # Each of those should have only one entry
+                # Each of those should have only one entry, otherwise, the order of failure rates
+                # for the workload generators isn't the same in each iteration!
                 assert len(counts) == 1
 
                 # With that, we can then also determine the label:
