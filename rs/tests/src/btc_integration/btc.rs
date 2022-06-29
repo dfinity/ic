@@ -3,7 +3,7 @@ Title:: Bitcoin integration test
 end::catalog[] */
 
 use std::io::Read;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 
 use crate::nns::NnsExt;
 use crate::util::{self /* runtime_from_url */};
@@ -48,7 +48,7 @@ docker run -v bitcoind-data:/bitcoin/.bitcoin --name=bitcoind-node -d \
     let btc_node_ipv6 = universal_vm.ipv6;
 
     InternetComputer::new()
-        .with_bitcoind_addr(IpAddr::V6(btc_node_ipv6))
+        .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), 8332))
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(
             Subnet::new(SubnetType::Application)

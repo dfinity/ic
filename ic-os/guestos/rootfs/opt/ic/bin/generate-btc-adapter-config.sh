@@ -94,10 +94,19 @@ if [ "${OUT_FILE}" == "" ]; then
 fi
 
 # BITCOIND_ADDR indicates that we are in system test environment. No socks proxy needed.
+# bitcoin_addr.conf should be formatted like this: key 'bitcoind_addr', comma separated values, NO "" around addresses, NO trailing ',' AND spaces
+# Example: bitcoind_addr=seed.bitcoin.sipa.be,regtest.random.me,regtest.random.org
+#
+# Bash explanation:
+# ${bitcoind_addr:+\"${bitcoind_addr//,/\",\"}\"}
+# ${parameter:+word}: If parameter is null or unset, nothing is substituted, otherwise the expansion of word is substituted.
+# word: \"${bitcoind_addr//,/\",\"}\" Adds surrounding "" and matches and replaces all ',' with '","'
 if [ "${BITCOIND_ADDR_FILE}" != "" -a -e "${BITCOIND_ADDR_FILE}" ]; then
+    read_bitcoind_addr_variables "${BITCOIND_ADDR_FILE}"
     echo '{
-        "network": '"${BITCOIN_NETWORK}"',
-        "dns_seeds": ['"${DNS_SEEDS}"'],
+        "network": "regtest",
+        "dns_seeds": [],
+        "nodes": ['"${bitcoind_addr:+\"${bitcoind_addr//,/\",\"}\"}"'],
         "logger": {
             "format": "json",
             "level": "info"
@@ -107,7 +116,6 @@ else
     echo '{
         "network": '"${BITCOIN_NETWORK}"',
         "dns_seeds": ['"${DNS_SEEDS}"'],
-        "socks_proxy": '\"${SOCKS_PROXY}\"',
         "logger": {
             "format": "json",
             "level": "info"

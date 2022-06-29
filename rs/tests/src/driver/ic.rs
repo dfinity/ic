@@ -17,7 +17,7 @@ use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::{Ipv6Addr, SocketAddr};
 use std::path::Path;
 use std::time::Duration;
 
@@ -35,7 +35,7 @@ pub struct InternetComputer {
     pub unassigned_nodes: Vec<Node>,
     pub ssh_readonly_access_to_unassigned_nodes: Vec<String>,
     name: String,
-    pub bitcoind_addr: Option<IpAddr>,
+    pub bitcoind_addr: Option<SocketAddr>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -138,7 +138,7 @@ impl InternetComputer {
         self.name.clone()
     }
 
-    pub fn with_bitcoind_addr(mut self, bitcoind_addr: IpAddr) -> Self {
+    pub fn with_bitcoind_addr(mut self, bitcoind_addr: SocketAddr) -> Self {
         self.bitcoind_addr = Some(bitcoind_addr);
         self
     }
