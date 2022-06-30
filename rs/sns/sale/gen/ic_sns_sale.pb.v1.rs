@@ -51,6 +51,8 @@ pub struct Init {
     /// occurs. Must be smaller than or equal to `max_icp_e8s`.
     #[prost(uint64, tag="10")]
     pub min_icp_e8s: u64,
+    #[prost(string, repeated, tag="11")]
+    pub fallback_controller_principal_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -125,7 +127,9 @@ pub struct State {
     /// The current lifecycle state of the sale.
     #[prost(enumeration="Lifecycle", tag="3")]
     pub lifecycle: i32,
-    /// Set by the set_open_time_window Candid method.
+    /// Initially, empty. Later, set by the set_open_time_window Candid method,
+    /// while the canister is in the Pending state. This eventually allows the
+    /// canister to enter the Open state.
     #[prost(message, optional, tag="4")]
     pub open_time_window: ::core::option::Option<TimeWindow>,
 }

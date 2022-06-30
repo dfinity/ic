@@ -69,6 +69,7 @@ impl SnsInitPayload {
             min_participant_icp_e8s: Some(MIN_PARTICIPANT_ICP_E8S_DEFAULT),
             min_icp_e8s: None,
             max_participant_icp_e8s: None,
+            fallback_controller_principal_ids: vec![],
         }
     }
 
@@ -184,6 +185,7 @@ impl SnsInitPayload {
                 .max_participant_icp_e8s
                 .expect("Field max_participants_icp_e8s cannot be None"),
             min_icp_e8s: self.min_icp_e8s.expect("Field min_icp_e8s cannot be None"),
+            fallback_controller_principal_ids: self.fallback_controller_principal_ids.clone(),
         }
     }
 
@@ -229,6 +231,7 @@ impl SnsInitPayload {
             self.validate_transaction_fee_e8s(),
             self.validate_min_icp_e8s(),
             self.validate_max_participant_icp_e8s(),
+            self.validate_fallback_controller_principal_ids(),
         ];
 
         let defect_msg = validation_fns
@@ -400,13 +403,25 @@ impl SnsInitPayload {
             Ok(())
         }
     }
+
+    fn validate_fallback_controller_principal_ids(&self) -> Result<(), String> {
+        if self.fallback_controller_principal_ids.is_empty() {
+            return Err(
+                "At least one principal ID must be supplied as a fallback controller \
+                 in case the initial token swap fails."
+                    .to_string(),
+            );
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod test {
     use crate::pb::v1::{InitialTokenDistribution, TokenDistribution};
     use crate::{SnsCanisterIds, SnsInitPayload, MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH};
-    use ic_base_types::CanisterId;
+    use ic_base_types::{ic_types::principal::Principal, CanisterId, PrincipalId};
     use ic_sns_governance::governance::ValidGovernanceProto;
     use ledger_canister::{AccountIdentifier, Tokens};
     use maplit::hashset;
@@ -432,6 +447,10 @@ mod test {
             initial_token_distribution: Some(create_valid_initial_token_distribution()),
             min_icp_e8s: Some(100),
             max_participant_icp_e8s: Some(1_000_000_000),
+            fallback_controller_principal_ids: vec![Principal::from(
+                PrincipalId::new_user_test_id(1_552_301),
+            )
+            .to_text()],
             ..SnsInitPayload::with_default_values()
         }
     }

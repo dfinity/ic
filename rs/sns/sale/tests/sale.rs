@@ -40,8 +40,9 @@ pub const SNS_GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1380);
 pub const SNS_LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(1571);
 pub const ICP_LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(1630);
 
+/// Returns a valid Init.
 fn init() -> Init {
-    Init {
+    let result = Init {
         // TODO: should fail until canister ids have been changed to something real.
         nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
         sns_governance_canister_id: SNS_GOVERNANCE_CANISTER_ID.to_string(),
@@ -52,7 +53,19 @@ fn init() -> Init {
         min_participants: 3,
         min_participant_icp_e8s: 100 * E8,
         max_participant_icp_e8s: 1000000 * E8,
-    }
+        fallback_controller_principal_ids: vec![i2principal_id_string(1230578)],
+    };
+
+    assert!(result.is_valid(), "{result:#?}");
+
+    result
+}
+
+#[test]
+fn fallback_controller_principal_ids_must_not_be_empty() {
+    let mut init = init();
+    init.fallback_controller_principal_ids.clear();
+    assert!(!init.is_valid(), "{init:#?}");
 }
 
 /// Expectation of one call on the mock Ledger.
@@ -948,6 +961,7 @@ async fn test_finalize_sale() {
         min_participant_icp_e8s: 1,
         max_participant_icp_e8s: 100,
         min_participants: 1,
+        fallback_controller_principal_ids: vec![i2principal_id_string(4242)],
     });
     let nns_governance = PrincipalId::from(init.as_ref().unwrap().nns_governance());
     let mut sale = Sale {

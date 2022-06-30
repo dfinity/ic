@@ -23,6 +23,7 @@ type GetCanisterStatusResponse = record { canister_cycle_balance : nat64 };
 type GetStateResponse = record { sale : opt Sale; derived : opt DerivedState };
 type Init = record {
   min_participant_icp_e8s : nat64;
+  fallback_controller_principal_ids : vec text;
   max_icp_e8s : nat64;
   min_participants : nat32;
   nns_governance_canister_id : text;

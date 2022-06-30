@@ -10,7 +10,7 @@ use crate::pb::v1::{
 use candid::Encode;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_base_types::CanisterId;
+use ic_base_types::{ic_types::principal::Principal, CanisterId, PrincipalId};
 use ic_sns_init::pb::v1::{InitialTokenDistribution, SnsInitPayload, TokenDistribution};
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_types::{Cycles, SubnetId};
@@ -151,6 +151,10 @@ impl SnsWasmCanister {
             // TODO(NNS1-1435 NNS1-1436): reminder.
             min_icp_e8s: Some(100),
             max_participant_icp_e8s: Some(1_000_000_000),
+            fallback_controller_principal_ids: vec![Principal::from(
+                PrincipalId::new_user_test_id(1_929_883),
+            )
+            .to_text()],
             ..SnsInitPayload::with_default_values()
         }
         .validate()
@@ -384,24 +388,12 @@ impl UpgradePath {
 
 #[cfg(test)]
 mod test {
-    use crate::canister_api::CanisterApi;
-    use crate::pb::hash_to_hex_string;
-    use crate::pb::v1::{
-        add_wasm_response,
-        add_wasm_response::{AddWasmError, AddWasmOk},
-        AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns,
-        GetNextSnsVersionResponse, GetWasmRequest, ListDeployedSnsesRequest,
-        ListDeployedSnsesResponse, SnsCanisterIds, SnsCanisterType, SnsVersion,
-    };
-    use crate::sns_wasm::{SnsWasm, SnsWasmCanister, SnsWasmStorage};
+    use super::*;
     use async_trait::async_trait;
     use ic_crypto_sha::Sha256;
     use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
-    use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
-    use std::cell::RefCell;
     use std::str::FromStr;
-    use std::sync::Arc;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     struct TestCanisterApi {
         canisters_created: Arc<Mutex<u64>>,

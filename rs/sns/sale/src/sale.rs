@@ -1023,12 +1023,13 @@ impl Init {
     }
 
     pub fn is_valid(&self) -> bool {
-        // TODO: check that the canister IDs are valid.
+        // TODO: check that the (canister) principal IDs are valid.
         //
         !self.nns_governance_canister_id.is_empty()
             && !self.sns_governance_canister_id.is_empty()
             && !self.sns_ledger_canister_id.is_empty()
             && !self.icp_ledger_canister_id.is_empty()
+            && !self.fallback_controller_principal_ids.is_empty()
             && self.min_participants > 0
             && self.min_participant_icp_e8s > 0
             && self.max_participant_icp_e8s >= self.min_participant_icp_e8s

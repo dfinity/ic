@@ -90,7 +90,6 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
 # Must be a string length between {} and {} characters
 #
 # Example: Bitcoin
-
 #"##,
                 MIN_TOKEN_NAME_LENGTH, MAX_TOKEN_NAME_LENGTH
             ),
@@ -125,7 +124,6 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
 #     distributions:
 #       fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe: 500000000
 #   swap: 6000000000
-
 #"##
             .to_string(),
         ),
@@ -156,6 +154,18 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
             ),
         ),
         (
+            Regex::new(r"min_icp_e8s*").unwrap(),
+            r##"#
+# The total number of ICP that is required for this token sale to take
+# place. This number divided by the number of SNS tokens for sale gives the
+# seller's reserve price for the sale, i.e., the minimum number of ICP per SNS
+# tokens that the seller of SNS tokens is willing to accept. If this amount is
+# not achieved, the sale will be aborted (instead of committed) when the due
+# date/time occurs. Must be smaller than or equal to `max_icp_e8s`.
+#"##
+            .to_string(),
+        ),
+        (
             Regex::new(r"max_icp_e8s*").unwrap(),
             r##"#
 # This field has no default, a value must be provided by the user.
@@ -181,6 +191,24 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
 #"##,
                 MIN_PARTICIPANT_ICP_E8S_DEFAULT
             ),
+        ),
+        (
+            Regex::new(r"max_participant_icp_e8s*").unwrap(),
+            r##"#
+# The maximum amount of ICP that each buyer can contribute. Must be greater than
+# or equal to `min_participant_icp_e8s` and less than or equal to
+# `max_icp_e8s`. Can effectively be disabled by setting it to `max_icp_e8s`.
+#"##
+            .to_string(),
+        ),
+        (
+            Regex::new(r"fallback_controller_principal_ids.*").unwrap(),
+            r##"#
+# If the swap fails, control of the dapp canister(s) will be set to these
+# principal IDs. In most use-cases, this would be the same as the original set
+# of controller(s). Must not be empty.
+#"##
+            .to_string(),
         ),
     ];
 
