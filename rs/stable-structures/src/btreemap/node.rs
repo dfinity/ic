@@ -228,6 +228,16 @@ impl Node {
         entry
     }
 
+    /// Searches for the key in the node's entries.
+    ///
+    /// If the key is found then `Result::Ok` is returned, containing the index
+    /// of the matching key. If the value is not found then `Result::Err` is
+    /// returned, containing the index where a matching key could be inserted
+    /// while maintaining sorted order.
+    pub fn get_key_idx(&mut self, key: &[u8]) -> Result<usize, usize> {
+        self.entries.binary_search_by(|e| e.0.as_slice().cmp(key))
+    }
+
     /// Returns the size of a node in bytes.
     ///
     /// See the documentation of [`Node`] for the memory layout.
