@@ -893,7 +893,7 @@ pub mod governance {
         /// All operations are allowed.
         Normal = 1,
         /// In this mode, various operations are not allowed in order to ensure the
-        /// integrity of the initial token sale.
+        /// integrity of the initial token swap.
         PreInitializationSwap = 2,
     }
 }

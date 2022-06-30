@@ -1,6 +1,6 @@
 use crate::pb::v1::{
-    set_mode_call_result, BuyerState, CanisterCallError, DerivedState, FinalizeSaleResponse, Init,
-    Lifecycle, Sale, SetModeCallResult, SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, State,
+    set_mode_call_result, BuyerState, CanisterCallError, DerivedState, FinalizeSwapResponse, Init,
+    Lifecycle, SetModeCallResult, SetOpenTimeWindowRequest, SetOpenTimeWindowResponse, State, Swap,
     SweepResult, TimeWindow,
 };
 use async_trait::async_trait;
@@ -23,12 +23,12 @@ use ledger_canister::Tokens;
 // As a sanity check, start and end time cannot be less than this.
 pub const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1640995200;
 
-pub const LOG_PREFIX: &str = "[Sale] ";
+pub const LOG_PREFIX: &str = "[Swap] ";
 
 pub const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
 
 lazy_static! {
-    // The duration of a sale can be as little as 1 day, and at most 90 days.
+    // The duration of a swap can be as little as 1 day, and at most 90 days.
     static ref VALID_DURATION_RANGE: RangeInclusive<Duration> = Duration::days(1)..=Duration::days(90);
 }
 
@@ -73,19 +73,19 @@ pub trait SnsGovernanceClient {
 
 /**
 
-State diagram for the sale canister's state.
+State diagram for the swap canister's state.
 
 ```text
           has_sns_amount &&                                 sufficient_participantion &&
-            now >= init.start_timestamp_seconds               (sale_due || icp_target_reached)
+            now >= init.start_timestamp_seconds               (swap_due || icp_target_reached)
 PENDING ------------------------------------------> OPEN ------------------------------------------> COMMITTED
  |                                                    |                                                   |
- |                                                    | sale_due && not sufficient_participation          |
+ |                                                    | swap_due && not sufficient_participation          |
  |                                                    v                                                   v
  |                                                   ABORTED ---------------------------------------> <DELETED>
  |                                                    ^
  |                                                    |
- +--------------------- sale_due  --------------------+
+ +--------------------- swap_due  --------------------+
 ```
 
 Here `sufficient_participation` means that the minimum number of
@@ -93,7 +93,7 @@ participants `min_participants` has been reached, each contributing
 between `min_participant_icp_e8s` and `max_participant_icp_e8s`, and
 their total contributions add up to at least `min_icp_e8s`.
 
-The 'sale' canister smart contract is used to perform a type of
+The 'swap' canister smart contract is used to perform a type of
 single-price auction (SNS/ICP) of one token type SNS for another token
 type ICP (this is typically ICP, but can be treatd as a variable) at a
 specific date/time in the future.
@@ -102,11 +102,11 @@ Such a single-price auction is typically used to decentralize an SNS,
 i.e., to ensure that a sufficient number of governance tokens of the
 SNS are distributed among different participants.
 
-The dramatis personae of the 'sale' canister are as follows:
+The dramatis personae of the 'swap' canister are as follows:
 
-- The sale canister itself.
+- The swap canister itself.
 
-- The NNS governance canister - which is the only principal that can open the sale.
+- The NNS governance canister - which is the only principal that can open the swap.
 
 - The governance canister of the SNS to be decentralized.
 
@@ -116,41 +116,41 @@ The dramatis personae of the 'sale' canister are as follows:
 - The ICP ledger cansiter, or more generally of the base currency of
   the auction.
 
-When the sale canister is initialized, it must be configured with
+When the swap canister is initialized, it must be configured with
 the canister IDs of the other four participant canisters, the date/time
 at which the token swap will take place, and configuration parmeters
-for the amount of SNS tokens for sale, the minimal number of
+for the amount of SNS tokens being offered, the minimal number of
 participants, the minimum number of base tokens (ICP) of each
 paricipant, as well as the target number of base tokens (ICP) of the
-sale.
+swap.
 
 Step 0. The canister is created, specifying all initalization
 parameters, which are henceforth fixed for the lifetime of the
 canister.
 
-Step 1 (State 'pending'). The sale canister is loaded with the right
+Step 1 (State 'pending'). The swap canister is loaded with the right
 amount of SNS tokens.
 
-Step 2. (State 'open'). The sale is open for paricipants who can enter
+Step 2. (State 'open'). The swap is open for paricipants who can enter
 into the auction with a number of ICP tokens until either the target
 amount has been reached or the auction is due, i.e., the date/time of
 the auction has been reached. .
 
 Step 3a. (State 'committed'). Tokens are allocated to partcipants at a
-single clearing price, i.e., the number of SNS tokens for sale divided
-by the number of ICP tokens entered into the auction. In this state,
+single clearing price, i.e., the number of SNS tokens being offered divided
+by the total number of ICP tokens contributed to the swap. In this state,
 participants can withdraw their tokens to form a neuron in the
 governance canister of the SNS.
 
 Step 3b. (State 'aborted'). If the minimum number of base tokens have
-not been reached before the due date/time, the sale is aborted. .
+not been reached before the due date/time, the swap is aborted. .
 
-The 'sale' canister can be deleted when all tokens registered with the
-'sale' canister have been disbursed to their rightful owners.
+The 'swap' canister can be deleted when all tokens registered with the
+'swap' canister have been disbursed to their rightful owners.
 */
-impl Sale {
+impl Swap {
     /// Create state from an `Init` object. If `init` is valid, the
-    /// sale is created in the 'pending' lifecycle state; otherwise,
+    /// swap is created in the 'pending' lifecycle state; otherwise,
     /// it is created in the 'aborted' lifecycle state.
     pub fn new(init: Init) -> Self {
         let lifecycle = if init.is_valid() {
@@ -185,8 +185,8 @@ impl Sale {
     // --- state transition functions ------------------------------------------
     //
 
-    /// If the sale is 'open', try to commit or abort the
-    /// sale. Returns true if a transition was made and false
+    /// If the swap is 'open', try to commit or abort the
+    /// swap. Returns true if a transition was made and false
     /// otherwise.
     pub fn try_commit_or_abort(&mut self, now_seconds: u64) -> bool {
         if self.can_commit(now_seconds) {
@@ -195,7 +195,7 @@ impl Sale {
         }
         let lifecycle = self.state().lifecycle();
         if (lifecycle == Lifecycle::Open || lifecycle == Lifecycle::Pending)
-            && self.sale_due(now_seconds)
+            && self.swap_due(now_seconds)
             && !self.sufficient_participation()
         {
             self.abort(now_seconds);
@@ -247,7 +247,7 @@ impl Sale {
     pub fn open(&mut self, now_timestamp_seconds: u64) -> Result<(), String> {
         if self.state().lifecycle() != Lifecycle::Pending {
             return Err(
-                "Invalid lifecycle state to 'open' the sale; must be 'pending'".to_string(),
+                "Invalid lifecycle state to 'open' the swap; must be 'pending'".to_string(),
             );
         }
 
@@ -264,7 +264,8 @@ impl Sale {
 
         if !self.sns_amount_available() {
             return Err(
-                "Cannot 'open', because the tokens for sale have not yet been received".to_string(),
+                "Cannot 'open', because the tokens being offered have not yet been received"
+                    .to_string(),
             );
         }
 
@@ -272,20 +273,20 @@ impl Sale {
         Ok(())
     }
 
-    /// Precondition: lifecycle == Open && sufficient_participation && (sale_due || icp_target_reached)
+    /// Precondition: lifecycle == Open && sufficient_participation && (swap_due || icp_target_reached)
     ///
     /// Postcondition: lifecycle == Committed
     fn commit(&mut self, now_seconds: u64) {
         assert!(self.state().lifecycle() == Lifecycle::Open);
         assert!(self.sufficient_participation());
-        assert!(self.sale_due(now_seconds) || self.icp_target_reached());
+        assert!(self.swap_due(now_seconds) || self.icp_target_reached());
         // We are selling SNS tokens for the base token (ICP), or, in
         // general, whatever token the ledger referred to as the ICP
         // ledger holds.
-        let sns_for_sale_e8s = self.state().sns_token_e8s as u128;
-        // This must hold as the sale cannot transition to state
-        // 'Open' without tokens for sale.
-        assert!(sns_for_sale_e8s > 0);
+        let sns_being_offered_e8s = self.state().sns_token_e8s as u128;
+        // This must hold as the swap cannot transition to state
+        // 'Open' without transferring tokens being offered to the swap canister.
+        assert!(sns_being_offered_e8s > 0);
         // Note that this value has to be > 0 as we have > 0
         // participants each with > 0 ICP contributed.
         let total_buyer_icp_e8s = self.state().buyer_total_icp_e8s() as u128;
@@ -298,9 +299,9 @@ impl Sale {
         // ===            This is where the actual swap happens              ===
         // =====================================================================
         for (_, state) in state_mut.buyers.iter_mut() {
-            // If we divide SNS (sns_for_sale_e8s) with ICP
+            // If we divide SNS (sns_being_offered_e8s) with ICP
             // (total_buyer_icp_e8s), we get the price of SNS tokens in
-            // ICP tokens for the sale, i.e., the fractional number of
+            // ICP tokens for the swap, i.e., the fractional number of
             // SNS token the buyer get for one ICP token.
             //
             // The amount of token received by a buyer is the amount
@@ -310,32 +311,32 @@ impl Sale {
             // entered times the price SNS/ICP, we first multiply and
             // then divide, to avoid loss of precision. Also, we
             // perform the operation in u128 to prevent loss of precision.
-            let amount_sns_e8s_u128 = sns_for_sale_e8s
+            let amount_sns_e8s_u128 = sns_being_offered_e8s
                 .saturating_mul(state.amount_icp_e8s as u128)
                 .saturating_div(total_buyer_icp_e8s as u128);
             // Note that state.amount_icp_e8s <= total_buyer_icp_e8s,
-            // whence amount_sns_e8s <= sns_for_sale_e8s <=
+            // whence amount_sns_e8s <= sns_being_offered_e8s <=
             // u64::MAX.
             assert!(amount_sns_e8s_u128 <= u64::MAX as u128);
             let x = amount_sns_e8s_u128 as u64;
             state.amount_sns_e8s = x;
             total_sns_tokens_sold = total_sns_tokens_sold.saturating_add(x);
         }
-        assert!(total_sns_tokens_sold <= sns_for_sale_e8s as u64);
-        println!("{}INFO: token sale committed; {} participants receive a total of {} out of {} (change {});",
+        assert!(total_sns_tokens_sold <= sns_being_offered_e8s as u64);
+        println!("{}INFO: token swap committed; {} participants receive a total of {} out of {} (change {});",
 		 LOG_PREFIX,
 		 state_mut.buyers.len(),
 		 total_sns_tokens_sold,
 		 state_mut.sns_token_e8s,
 		 state_mut.sns_token_e8s - total_sns_tokens_sold);
-        // Note: we set 'sns_token_e8s' to zero when the sale is
+        // Note: we set 'sns_token_e8s' to zero when the swap is
         // concluded even if there is some change to spare due to
         // accumulated rounding errors.
         state_mut.sns_token_e8s = 0;
         state_mut.set_lifecycle(Lifecycle::Committed);
     }
 
-    /// Precondition: lifecycle IN {Open, Pending} && sale_due && not sufficient_participation
+    /// Precondition: lifecycle IN {Open, Pending} && swap_due && not sufficient_participation
     ///
     /// Postcondition: lifecycle == Aborted
     fn abort(&mut self, now_seconds: u64) {
@@ -343,7 +344,7 @@ impl Sale {
             self.state().lifecycle() == Lifecycle::Open
                 || self.state().lifecycle() == Lifecycle::Pending
         );
-        assert!(self.sale_due(now_seconds));
+        assert!(self.swap_due(now_seconds));
         assert!(!self.sufficient_participation());
         self.state_mut().sns_token_e8s = 0;
         self.state_mut().set_lifecycle(Lifecycle::Aborted);
@@ -357,16 +358,16 @@ impl Sale {
 
     Transfers IN - these transfers happen on ledger canisters (ICP or
     SNS tokens) and cannot be restricted based on the state of the
-    sale canister. Thus, the sale cansiter can only be notified about
+    swap canister. Thus, the swap cansiter can only be notified about
     transfers happening on these canisters.
 
      */
 
     /// In state Pending, this method can be called to refresh the
-    /// amount "for sale" from the relevant ledger canister.
+    /// amount of SNS tokens being offered from the relevant ledger canister.
     ///
     /// It is assumed that prior to calling this method, tokens have
-    /// been transfer to the sale canister (this cansiter) on the
+    /// been transfer to the swap canister (this cansiter) on the
     /// ledger of `init.sns_ledger_canister_id`. This transfer is
     /// performed by the Governance cansiter of the SNS or
     /// pre-decentralization token holders.
@@ -377,13 +378,12 @@ impl Sale {
     ) -> Result<(), String> {
         if self.state().lifecycle() != Lifecycle::Pending {
             return Err(
-                "The token amount 'for sale' can only be refreshed in the 'pending' state"
+                "The token amount being offered can only be refreshed in the 'pending' state"
                     .to_string(),
             );
         }
         // Look for the token balanace of 'this' canister.
         let account = AccountIdentifier::new(this_canister.get(), None);
-        // Look on the 'for sale' ledger.
         let e8s = ledger_stub(self.init().sns_ledger())
             .account_balance(account)
             .await
@@ -392,7 +392,7 @@ impl Sale {
         // Recheck lifecycle state after await.
         if self.state().lifecycle() != Lifecycle::Pending {
             return Err(
-                "The token amount 'for sale' can only be refreshed in the 'pending' state"
+                "The token amount being offered can only be refreshed in the 'pending' state"
                     .to_string(),
             );
         }
@@ -413,7 +413,7 @@ impl Sale {
     /// of ICP a buyer has contributed from the ICP ledger canister.
     ///
     /// It is assumed that prior to calling this method, tokens have
-    /// been transfer by the buyer to a subaccount of the sale
+    /// been transfer by the buyer to a subaccount of the swap
     /// canister (this cansiter) on the ICP ledger.
     pub async fn refresh_buyer_token_e8s(
         &mut self,
@@ -428,7 +428,7 @@ impl Sale {
             );
         }
         if self.icp_target_reached() {
-            return Err("The ICP target for this token sale has already been reached.".to_string());
+            return Err("The ICP target for this token swap has already been reached.".to_string());
         }
         // Look for the token balanace of the specified principal's subaccount on 'this' canister.
         let account = AccountIdentifier::new(this_canister.get(), Some(Subaccount::from(&buyer)));
@@ -501,7 +501,7 @@ impl Sale {
         );
         if requested_increment_e8s >= max_increment_e8s {
             println!(
-                "{}LOG: sale has reached ICP target of {}",
+                "{}LOG: swap has reached ICP target of {}",
                 LOG_PREFIX, max_icp_e8s
             );
         }
@@ -531,7 +531,7 @@ impl Sale {
     ) -> TransferResult {
         if self.state().lifecycle() != Lifecycle::Committed {
             return TransferResult::Failure(
-                "Tokens can only be claimed when the sale is 'committed'".to_string(),
+                "Tokens can only be claimed when the swap is 'committed'".to_string(),
             );
         }
         // TODO: get rid of logically unneccessary clone
@@ -560,7 +560,7 @@ impl Sale {
     ) -> TransferResult {
         if self.state().lifecycle() != Lifecycle::Aborted {
             return TransferResult::Failure(
-                "Tokens can only be refunded when the sale is 'aborted'".to_string(),
+                "Tokens can only be refunded when the swap is 'aborted'".to_string(),
             );
         }
         // TODO: get rid of logically unneccessary clone
@@ -576,33 +576,33 @@ impl Sale {
         }
     }
 
-    /// Distributes funds, and if the sale was successful, creates neurons. Returns
+    /// Distributes funds, and if the swap was successful, creates neurons. Returns
     /// a summary of (sub)actions that were performed.
     ///
-    /// If the sale is not over yet, panics.
+    /// If the swap is not over yet, panics.
     ///
-    /// If sale was successful (i.e. it is in the Lifecycle::Committed phase), then
+    /// If swap was successful (i.e. it is in the Lifecycle::Committed phase), then
     /// ICP is sent to the SNS governance canister, and SNS tokens are sent to SNS
     /// neuron ledger accounts (i.e. subaccounts of SNS governance for the principal
     /// that funded the neuron).
     ///
-    /// If the sale ended unsuccessfully (i.e. it is in the Lifecycle::Aborted
+    /// If the swap ended unsuccessfully (i.e. it is in the Lifecycle::Aborted
     /// phase), then ICP is send back to the buyers.
     pub async fn finalize(
         &mut self,
         sns_governance_client: &mut impl SnsGovernanceClient,
         ledger_factory: impl Fn(CanisterId) -> Box<dyn Ledger>,
-    ) -> FinalizeSaleResponse {
+    ) -> FinalizeSwapResponse {
         let lifecycle = self.state().lifecycle();
         assert!(
             lifecycle == Lifecycle::Committed || lifecycle == Lifecycle::Aborted,
-            "Sale can only be finalized in the committed or aborted states - was {:?}",
+            "Swap can only be finalized in the committed or aborted states - was {:?}",
             lifecycle
         );
 
         let sweep_icp = self.sweep_icp(DEFAULT_TRANSFER_FEE, &ledger_factory).await;
         if lifecycle != Lifecycle::Committed {
-            return FinalizeSaleResponse {
+            return FinalizeSwapResponse {
                 sweep_icp: Some(sweep_icp),
                 sweep_sns: None,
                 create_neuron: None,
@@ -621,7 +621,7 @@ impl Sale {
             )
             .await;
 
-        FinalizeSaleResponse {
+        FinalizeSwapResponse {
             sweep_icp: Some(sweep_icp),
             sweep_sns: Some(sweep_sns),
             create_neuron: Some(create_neuron),
@@ -684,13 +684,13 @@ impl Sale {
         )
     }
 
-    /// Requests a refund of ICP tokens transferred to the Sale
+    /// Requests a refund of ICP tokens transferred to the Swap
     /// cansiter in error. This method only works if this
     /// canister is in the 'committed' or 'aborted' state.
     ///
     /// The request is to refund `amount` tokens for `principal`
     /// (using `fee` as fee) on the ICP ledger. The specified amount
-    /// of tokens is transferred from `subaccount(sale_canister, P)`
+    /// of tokens is transferred from `subaccount(swap_canister, P)`
     /// to `P`, where `P` is the specified principal.
     ///
     /// Note that this function cannot mutate `self` - it only
@@ -698,7 +698,7 @@ impl Sale {
     /// caller to ensure the correctness of the parameters.
     ///
     /// This method is secure because it only transfers tokens from a
-    /// principal's subaccount (of the Sale canister) to the
+    /// principal's subaccount (of the Swap canister) to the
     /// principal's own account, i.e., the tokens were held in escrow
     /// for the principal (buyer) before the call and are returned to
     /// the same principal. Moreover, this method can only be called
@@ -706,7 +706,7 @@ impl Sale {
     /// parties cannot make many small transfers to drain the
     /// principal's tokens by multiple fees, and, second, so a third
     /// party cannot return the buyer's token that they intended to
-    /// use to join the sale.
+    /// use to join the swap.
     pub async fn error_refund_icp(
         &self,
         principal: PrincipalId,
@@ -718,12 +718,12 @@ impl Sale {
             || self.state().lifecycle() == Lifecycle::Committed)
         {
             return TransferResult::Failure(
-                "Error refunds can only be performed when the sale is 'aborted' or 'committed'"
+                "Error refunds can only be performed when the swap is 'aborted' or 'committed'"
                     .to_string(),
             );
         }
         if let Some(buyer_state) = self.state().buyers.get(&principal.to_string()) {
-            // This buyer has participated in the sale, but all ICP
+            // This buyer has participated in the swap, but all ICP
             // has already been disbursed, either back to the buyer
             // (aborted) or to the SNS Governance canister
             // (committed). Any ICP in this buyer's subaccount must
@@ -825,7 +825,7 @@ impl Sale {
         }
     }
 
-    /// In state 'committed'. Transfer SNS tokens from the sale
+    /// In state 'committed'. Transfer SNS tokens from the swap
     /// canister to each buyer.
     ///
     /// Returns the following values:
@@ -884,12 +884,12 @@ impl Sale {
     /// Returns the set of principals for which a neuron may need to be
     /// created together with the number of principals skipped.
     ///
-    /// If the sale is not committed, this results in an empty vector,
-    /// i.e., all principals are skipped. If the sale is committed, it
+    /// If the swap is not committed, this results in an empty vector,
+    /// i.e., all principals are skipped. If the swap is committed, it
     /// returns all principals for which the SNS tokens have been
     /// disbursed.
     ///
-    /// The sale does not keep track of which neurons that actually
+    /// The swap does not keep track of which neurons that actually
     /// have been created; instead it relies on neuron creation being
     /// idempotent.
     pub fn principals_for_create_neuron(&self) -> (u32, Vec<PrincipalId>) {
@@ -926,7 +926,7 @@ impl Sale {
         false
     }
 
-    /// The amount of tokens for sale (`state.sns_token_e8s`) is
+    /// The amount of tokens being offered (`state.sns_being_offered_e8s`) is
     /// greater than zero.
     pub fn sns_amount_available(&self) -> bool {
         if let Some(state) = &self.state {
@@ -935,9 +935,8 @@ impl Sale {
         false
     }
 
-    /// The paramter `now_seconds` is greater than or equal to the
-    /// initialization parameter for the token sale timestamp.
-    pub fn sale_due(&self, now_seconds: u64) -> bool {
+    /// The paramter `now_seconds` is greater than or equal to end_timestamp_seconds.
+    pub fn swap_due(&self, now_seconds: u64) -> bool {
         let window = match self.state().open_time_window {
             Some(window) => window,
             None => {
@@ -962,7 +961,7 @@ impl Sale {
     }
 
     /// The total number of ICP contributed by all buyers is at least
-    /// the target ICP of the sale.
+    /// the target ICP of the swap.
     pub fn icp_target_reached(&self) -> bool {
         if let Some(init) = &self.init {
             if let Some(state) = &self.state {
@@ -972,7 +971,7 @@ impl Sale {
         false
     }
 
-    /// Returns true if the sale can be committed at the specified
+    /// Returns true if the swap can be committed at the specified
     /// timestamp, and false otherwise.
     pub fn can_commit(&self, now_seconds: u64) -> bool {
         if self.state().lifecycle() != Lifecycle::Open {
@@ -984,7 +983,7 @@ impl Sale {
         if !self.sufficient_participation() {
             return false;
         }
-        if !(self.sale_due(now_seconds) || self.icp_target_reached()) {
+        if !(self.swap_due(now_seconds) || self.icp_target_reached()) {
             return false;
         }
         true

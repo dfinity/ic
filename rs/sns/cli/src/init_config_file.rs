@@ -110,7 +110,7 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
 #    - token_distributions: A map between PrincipalId and amount, a neuron will be created for
 #    each PrincipalId with the given amount
 #
-# -Swap is of type u64 and specifies the amount of token that will be up for sale.
+# -Swap is of type u64 and specifies the amount of token that will be offered during the swap.
 #
 # Example:
 # initial_token_distribution:
@@ -169,7 +169,7 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
             Regex::new(r"max_icp_e8s*").unwrap(),
             r##"#
 # This field has no default, a value must be provided by the user.
-# Amount targeted by the sale, if the amount is reached the sale is triggered.
+# Amount targeted by the swap, if the amount is reached the swap is triggered.
 # Must be at least min_participants * min_participant_icp_e8.
 #"##
             .to_string(),
@@ -178,7 +178,7 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
             Regex::new(r"min_participants*").unwrap(),
             r##"#
 # This field has no default, a value must be provided by the user.
-# Minimum number of participants for the sale to take place. Must be greater than zero.
+# Minimum number of participants for the swap to take place. Must be greater than zero.
 #"##
             .to_string(),
         ),

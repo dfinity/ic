@@ -452,11 +452,11 @@ async fn get_root_canister_status_(_: ()) -> CanisterStatusResultV2 {
     .await
 }
 
-/// Sets the mode. Only the sale canister is allowed to call this.
+/// Sets the mode. Only the swap canister is allowed to call this.
 ///
-/// In practice, the only mode that the sale canister would ever choose is
+/// In practice, the only mode that the swap canister would ever choose is
 /// Normal. Also, in practice, the current value of mode should be
-/// PreInitializationSwap.  whenever the sale canister calls this.
+/// PreInitializationSwap.  whenever the swap canister calls this.
 #[export_name = "canister_update set_mode"]
 fn set_mode() {
     println!("{}set_mode", log_prefix());

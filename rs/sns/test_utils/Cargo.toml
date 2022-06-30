@@ -17,7 +17,7 @@ ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
-ic-sns-sale = { path = "../sale" }
+ic-sns-swap = { path = "../swap" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 lazy_static = "1.4.0"

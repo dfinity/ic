@@ -17,7 +17,7 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-root = { path = "../root" }
-ic-sns-sale = { path = "../sale" }
+ic-sns-swap = { path = "../swap" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 maplit = "1.0.2"
 num = "0.4.0"

@@ -29,11 +29,11 @@
     },
     "sns_swap": {
       "build": [
-        "cargo build --manifest-path ../../Cargo.toml --target wasm32-unknown-unknown --profile canister-release --bin sns-sale-canister",
-        "ic-cdk-optimizer ../../target/wasm32-unknown-unknown/canister-release/sns-sale-canister.wasm -o ../../target/wasm32-unknown-unknown/canister-release/sns-sale-canister-opt.wasm"
+        "cargo build --manifest-path ../../Cargo.toml --target wasm32-unknown-unknown --profile canister-release --bin sns-swap-canister",
+        "ic-cdk-optimizer ../../target/wasm32-unknown-unknown/canister-release/sns-swap-canister.wasm -o ../../target/wasm32-unknown-unknown/canister-release/sns-swap-canister-opt.wasm"
       ],
-      "candid": "../sale/canister/sale.did",
-      "wasm": "../../target/wasm32-unknown-unknown/canister-release/sns-sale-canister-opt.wasm",
+      "candid": "../swap/canister/swap.did",
+      "wasm": "../../target/wasm32-unknown-unknown/canister-release/sns-swap-canister-opt.wasm",
       "type": "custom"
     }
   }

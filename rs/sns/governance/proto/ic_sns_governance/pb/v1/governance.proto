@@ -893,7 +893,7 @@ message Governance {
     MODE_NORMAL = 1;
 
     // In this mode, various operations are not allowed in order to ensure the
-    // integrity of the initial token sale.
+    // integrity of the initial token swap.
     MODE_PRE_INITIALIZATION_SWAP = 2;
   }
 

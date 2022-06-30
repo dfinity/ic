@@ -1,4 +1,4 @@
-use ic_sns_sale_protobuf_generator::{generate_prost_files, ProtoPaths};
+use ic_sns_swap_protobuf_generator::{generate_prost_files, ProtoPaths};
 use std::path::PathBuf;
 
 fn main() {
@@ -7,7 +7,7 @@ fn main() {
             .expect("CARGO_MANIFEST_DIR env variable is not defined"),
     );
     let out = manifest_dir.join("../gen");
-    let sale_proto = manifest_dir.join("../proto");
+    let swap_proto = manifest_dir.join("../proto");
 
     match std::fs::remove_dir_all(&out) {
         Ok(_) => (),
@@ -18,5 +18,5 @@ fn main() {
             e
         ),
     }
-    generate_prost_files(ProtoPaths { sale: &sale_proto }, out.as_ref());
+    generate_prost_files(ProtoPaths { swap: &swap_proto }, out.as_ref());
 }

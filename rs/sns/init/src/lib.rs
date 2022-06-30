@@ -13,7 +13,7 @@ use ic_sns_governance::pb::v1::{
     Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
 };
 use ic_sns_root::pb::v1::SnsRootCanister;
-use ic_sns_sale::pb::v1::Init;
+use ic_sns_swap::pb::v1::Init;
 use ledger_canister::{AccountIdentifier, ArchiveOptions, LedgerCanisterInitPayload, Tokens};
 use maplit::{btreemap, hashmap, hashset};
 use std::collections::{BTreeMap, HashMap};

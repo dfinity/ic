@@ -519,15 +519,15 @@ impl Governance {
             panic!("Unknown mode: {}", mode);
         }
 
-        if !self.is_sale_canister(caller) {
-            panic!("Caller must be the sale canister.");
+        if !self.is_swap_canister(caller) {
+            panic!("Caller must be the swap canister.");
         }
 
         self.proto.mode = mode as i32;
     }
 
-    fn is_sale_canister(&self, _id: &PrincipalId) -> bool {
-        // TODO: How do we know the sale canister's ID? Presumably, this would
+    fn is_swap_canister(&self, _id: &PrincipalId) -> bool {
+        // TODO: How do we know the swap canister's ID? Presumably, this would
         // be stored is some field in self.proto, but where do we get the value
         // to store in that field? For the time being, returning false is the
         // safest thing to do.
@@ -2939,7 +2939,7 @@ impl Governance {
             })?;
 
         self.mode()
-            .allows_manage_neuron_command_or_err(command, self.is_sale_canister(caller))?;
+            .allows_manage_neuron_command_or_err(command, self.is_swap_canister(caller))?;
 
         // All operations on a neuron exclude each other.
         let _hold = self.lock_neuron_for_command(

@@ -206,7 +206,7 @@ members = [
   "sns/integration_tests",
   "sns/root",
   "sns/root/protobuf_generator",
-  "sns/sale",
+  "sns/swap",
   "sns/test_utils",
   "stable-structures",
   "starter",

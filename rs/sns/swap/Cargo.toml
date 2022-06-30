@@ -1,18 +1,18 @@
 [package]
-name = "ic-sns-sale"
+name = "ic-sns-swap"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "sns-sale-canister"
+name = "sns-swap-canister"
 path = "canister/canister.rs"
 
 [lib]
 path = "src/lib.rs"
 
 [[test]]
-name = "sale-test"
-path = "tests/sale.rs"
+name = "swap-test"
+path = "tests/swap.rs"
 
 [dependencies]
 # This MUST be kept in sync with build-info-build in the [build-dependencies] section!
@@ -66,7 +66,7 @@ proptest = "1.0"
 pretty_assertions = "1.0"
 ic-base-types = { path = "../../types/base_types", features = ["test"] }
 ic-nns-common = { path = "../../nns/common", features = ["test"] }
-ic-sns-sale-protobuf-generator = { path = "./protobuf_generator" }
+ic-sns-swap-protobuf-generator = { path = "./protobuf_generator" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister", features = ["test"] }
 futures = "0.3.13"
 maplit = "1.0.2"

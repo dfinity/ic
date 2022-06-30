@@ -1,5 +1,5 @@
 [package]
-name = "ic-sns-sale-protobuf-generator"
+name = "ic-sns-swap-protobuf-generator"
 version = "0.8.0"
 edition = "2021"
 
