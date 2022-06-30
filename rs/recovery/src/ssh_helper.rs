@@ -11,6 +11,10 @@ const SSH_ARGS: &[&str] = &[
     "StrictHostKeyChecking=no",
     "-o",
     "NumberOfPasswordPrompts=0",
+    "-o",
+    "ConnectionAttempts=30",
+    "-o",
+    "ConnectTimeout=60",
     "-A",
 ];
 

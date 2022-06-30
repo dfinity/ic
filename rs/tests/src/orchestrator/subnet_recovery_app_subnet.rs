@@ -42,7 +42,7 @@ use std::convert::TryFrom;
 use std::env;
 
 const DKG_INTERVAL: u64 = 9;
-const SUBNET_SIZE: usize = 4;
+const SUBNET_SIZE: usize = 3;
 
 pub fn config_same_nodes() -> InternetComputer {
     InternetComputer::new()
@@ -62,13 +62,18 @@ pub fn setup_same_nodes(env: TestEnv) {
 
 pub fn setup_failover_nodes(env: TestEnv) {
     config_same_nodes()
-        .with_unassigned_nodes(4)
+        .with_unassigned_nodes(3)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 }
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 
     let master_version = match env::var("IC_VERSION_ID") {
         Ok(ver) => ver,
@@ -119,7 +124,6 @@ pub fn test(env: TestEnv) {
         app_node.get_ip_addr()
     );
     info!(logger, "app node URL: {}", app_node.get_public_url());
-    app_node.await_status_is_healthy().unwrap();
 
     info!(logger, "Ensure app subnet is functional");
     let msg = "subnet recovery works!";
