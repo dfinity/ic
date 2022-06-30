@@ -136,6 +136,10 @@ ext4_image(
     },
     file_contexts = ":file_contexts",
     partition_size = "3G",
+    strip_paths = [
+        "/run",
+        "/boot",
+    ],
     # This image currently depends on //:binaries that changes almost always as it depends on //rs:all_sources,
     # therefore cache hits are very rare. Do not upload it to the remote cache for now as it takes long.
     tags = ["no-remote-cache"],

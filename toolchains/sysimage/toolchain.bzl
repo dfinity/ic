@@ -119,6 +119,9 @@ def _ext4_image_impl(ctx):
         args.append(input_target.files.to_list()[0].path + ":" + install_target)
         inputs += input_target.files.to_list()
 
+    if len(ctx.attr.strip_paths) > 0:
+        args += ["--strip-paths"] + ctx.attr.strip_paths
+
     ctx.actions.run(
         executable = tool.path,
         arguments = args,
@@ -143,6 +146,7 @@ ext4_image = rule(
             allow_files = True,
             mandatory = False,
         ),
+        "strip_paths": attr.string_list(),
         "partition_size": attr.string(
             mandatory = True,
         ),

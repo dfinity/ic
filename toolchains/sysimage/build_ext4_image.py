@@ -91,6 +91,17 @@ def read_fakeroot_state(statefile):
     return entry_by_inode
 
 
+def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
+    for path in strip_paths:
+        if path[0] == "/":
+            path = path[1:]
+
+        target_dir = os.path.join(fs_basedir, path)
+        for entry in os.listdir(target_dir):
+            del_path = os.path.join(target_dir, entry)
+            subprocess.run(["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf", del_path])
+
+
 def install_extra_files(fs_basedir, fakeroot_statefile, extra_files):
     for extra_file in extra_files:
         source_file, install_target, mode = extra_file.split(":")
@@ -195,6 +206,14 @@ def make_argparser():
         type=str,
     )
     parser.add_argument(
+        "--strip-paths",
+        metavar="strip_paths",
+        type=str,
+        nargs="*",
+        default=[],
+        help="Directories to be cleared from the tree; expects a list of full paths",
+    )
+    parser.add_argument(
         "extra_files",
         metavar="extra_files",
         type=str,
@@ -212,6 +231,7 @@ def main():
     image_size = parse_size(args.size)
     limit_prefix = args.path
     file_contexts_file = args.file_contexts
+    strip_paths = args.strip_paths
     extra_files = args.extra_files
     if limit_prefix and limit_prefix[0] == "/":
         limit_prefix = limit_prefix[1:]
@@ -234,6 +254,7 @@ def main():
     # the fs image. Wrap everything in fakeroot so permissions and
     # ownership will be preserved while unpacking (see below).
     prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix)
+    strip_files(fs_basedir, fakeroot_statefile, strip_paths)
     install_extra_files(fs_basedir, fakeroot_statefile, extra_files)
 
     # Now build the basic filesystem image. Wrap again in fakeroot
