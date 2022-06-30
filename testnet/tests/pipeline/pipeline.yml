@@ -568,12 +568,14 @@ wasm-generator-nightly:
   variables:
     NUMBER_OF_CANISTERS: 1000
     cd_target_env: "NIGHTLY"
+    SYSTEM_TESTS_TIMEOUT: "7200"  # 2 h
   timeout: 3 hours
 
 wasm-generator-slo:
   extends: .system-tests-wasm-generator
   variables:
     NUMBER_OF_CANISTERS: 2000
+    SYSTEM_TESTS_TIMEOUT: "7200"  # 2 h
     cd_target_env: "SLO"
   timeout: 3 hours
 
