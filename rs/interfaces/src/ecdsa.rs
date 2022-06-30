@@ -2,7 +2,9 @@
 
 use crate::artifact_pool::UnvalidatedArtifact;
 use ic_types::artifact::{EcdsaMessageAttribute, EcdsaMessageId, PriorityFn};
-use ic_types::consensus::ecdsa::{EcdsaComplaint, EcdsaMessage, EcdsaOpening, EcdsaSigShare};
+use ic_types::consensus::ecdsa::{
+    EcdsaComplaint, EcdsaMessage, EcdsaOpening, EcdsaSigShare, EcdsaStats,
+};
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
 
 // TODO: purge/remove from validated
@@ -64,6 +66,9 @@ pub trait EcdsaPool: Send + Sync {
 
     /// Return a reference to the unvalidated PoolSection.
     fn unvalidated(&self) -> &dyn EcdsaPoolSection;
+
+    /// Returns reference to the stats. The stats are not persisted.
+    fn stats(&self) -> &dyn EcdsaStats;
 }
 
 /// Artifact pool for the ECDSA messages (update interface)

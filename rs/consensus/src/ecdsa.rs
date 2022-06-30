@@ -194,11 +194,13 @@ pub(crate) mod payload_builder;
 pub(crate) mod payload_verifier;
 pub(crate) mod pre_signer;
 pub(crate) mod signer;
+pub mod stats;
 pub(crate) mod utils;
 
 pub use payload_builder::make_bootstrap_summary;
 pub(crate) use payload_builder::{create_data_payload, create_summary_payload};
 pub(crate) use payload_verifier::{validate_payload, PermanentError, TransientError};
+pub use stats::EcdsaStatsImpl;
 
 /// Similar to consensus, we don't fetch artifacts too far ahead in future.
 const LOOK_AHEAD: u64 = 10;
