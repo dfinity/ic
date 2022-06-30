@@ -211,72 +211,6 @@ fn execute_get_utxos(
     );
 }
 
-// TODO: refactor tests same way it was done in RUN-192.
-fn execute_send_transaction(
-    exec_env: &ExecutionEnvironmentImpl,
-    bitcoin_feature: &str,
-    bitcoin_state: BitcoinState,
-    bitcoin_send_transaction_args: BitcoinSendTransactionArgs,
-    payment: Cycles,
-    expected_payload: Payload,
-    expected_refund: Cycles,
-) {
-    let mut state = ReplicatedStateBuilder::new()
-        .with_subnet_id(subnet_test_id(1))
-        .with_canister(
-            CanisterStateBuilder::new()
-                .with_canister_id(canister_test_id(0))
-                .build(),
-        )
-        .with_subnet_features(SubnetFeatures::from_str(bitcoin_feature).unwrap())
-        .with_bitcoin_state(bitcoin_state)
-        .build();
-
-    state
-        .subnet_queues_mut()
-        .push_input(
-            QUEUE_INDEX_NONE,
-            RequestBuilder::new()
-                .sender(canister_test_id(0))
-                .receiver(ic00::IC_00)
-                .method_name(Method::BitcoinSendTransaction)
-                .method_payload(bitcoin_send_transaction_args.encode())
-                .payment(payment)
-                .build()
-                .into(),
-            InputQueueType::RemoteSubnet,
-        )
-        .unwrap();
-
-    let mut state = exec_env
-        .execute_subnet_message(
-            state.subnet_queues_mut().pop_input().unwrap(),
-            state,
-            MAX_NUM_INSTRUCTIONS,
-            &mut mock_random_number_generator(),
-            &BTreeMap::new(),
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            &test_registry_settings(),
-        )
-        .0;
-
-    let subnet_id = subnet_test_id(1);
-    assert_eq!(
-        state
-            .subnet_queues_mut()
-            .pop_canister_output(&canister_test_id(0))
-            .unwrap()
-            .1,
-        ResponseBuilder::new()
-            .originator(canister_test_id(0))
-            .respondent(CanisterId::new(subnet_id.get()).unwrap())
-            .response_payload(expected_payload)
-            .refund(expected_refund)
-            .build()
-            .into()
-    );
-}
-
 #[test]
 fn get_balance_feature_not_enabled() {
     // Bitcoin testnet feature is disabled by default.
@@ -1046,103 +980,126 @@ fn get_current_fee_percentiles_cache() {
 
 #[test]
 fn send_transaction_rejects_if_feature_not_enabled() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _| {
-        let bitcoin_send_transaction_args = BitcoinSendTransactionArgs {
+    // Bitcoin testnet feature is disabled by default.
+    let cycles_given = Cycles::new(100_000_000);
+    let mut test = ExecutionTestBuilder::new()
+        .with_caller(subnet_test_id(1), canister_test_id(10))
+        .build();
+    test.inject_call_to_ic00(
+        Method::BitcoinSendTransaction,
+        BitcoinSendTransactionArgs {
             transaction: vec![],
             network: BitcoinNetwork::Testnet,
-        };
-        execute_send_transaction(
-            &exec_env,
-            "None", // Bitcoin feature is disabled.
-            BitcoinState::default(),
-            bitcoin_send_transaction_args,
-            Cycles::new(123),
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterReject,
-                message: String::from("The bitcoin API is not enabled on this subnet."),
-            }),
-            Cycles::new(123), // whatever cycles are sent are refunded back.
-        );
-    });
+        }
+        .encode(),
+        cycles_given,
+    );
+    test.execute_all();
+
+    let response = test.get_xnet_response(0);
+    assert_eq!(
+        get_reject_message(response),
+        "The bitcoin API is not enabled on this subnet.".to_string()
+    );
+    // Refund all given cycles, since the feature was not enabled.
+    assert_eq!(response.refund, cycles_given);
 }
 
 #[test]
 fn send_transaction_malformed_transaction() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _| {
-        let transaction = vec![1, 2, 3];
-        let bitcoin_send_transaction_args = BitcoinSendTransactionArgs {
-            transaction: transaction.clone(),
+    let transaction = vec![1, 2, 3];
+    let tx_len = transaction.len() as u64;
+    let mut test = ExecutionTestBuilder::new()
+        .with_caller(subnet_test_id(1), canister_test_id(10))
+        .with_subnet_features("bitcoin_testnet")
+        .build();
+    test.inject_call_to_ic00(
+        Method::BitcoinSendTransaction,
+        BitcoinSendTransactionArgs {
+            transaction,
             network: BitcoinNetwork::Testnet,
-        };
-        execute_send_transaction(
-            &exec_env,
-            "bitcoin_testnet", // Bitcoin testnet is enabled.
-            BitcoinState::default(),
-            bitcoin_send_transaction_args,
-            SEND_TRANSACTION_FEE_BASE + Cycles::from(transaction.len() as u64) * SEND_TRANSACTION_FEE_PER_BYTE,
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterReject,
-                message: String::from(
-                    "bitcoin_send_transaction failed: Can't deserialize transaction because it's malformed.",
-                ),
-            }),
-            Cycles::new(0),
-        );
-    });
+        }
+        .encode(),
+        SEND_TRANSACTION_FEE_BASE + Cycles::from(tx_len) * SEND_TRANSACTION_FEE_PER_BYTE,
+    );
+    test.execute_all();
+
+    let response = test.get_xnet_response(0);
+    assert_eq!(
+        get_reject_message(response),
+        "bitcoin_send_transaction failed: Can't deserialize transaction because it's malformed."
+            .to_string()
+    );
+    // No refund, assumed request to be executed, but it's a gray area, difficult to be sure.
+    assert_eq!(response.refund, Cycles::zero());
 }
 
 #[test]
 fn send_transaction_succeeds() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _| {
-        // Create a fake transaction that passes verification check.
-        let tx = TransactionBuilder::coinbase()
-            .with_output(&random_p2pkh_address(Network::Testnet), 1_000)
-            .build();
-        let bitcoin_send_transaction_args = BitcoinSendTransactionArgs {
-            transaction: tx.serialize(),
+    // Create a fake transaction that passes verification check.
+    let tx = TransactionBuilder::coinbase()
+        .with_output(&random_p2pkh_address(Network::Testnet), 1_000)
+        .build()
+        .serialize();
+    let mut test = ExecutionTestBuilder::new()
+        .with_caller(subnet_test_id(1), canister_test_id(10))
+        .with_subnet_features("bitcoin_testnet")
+        .build();
+    test.inject_call_to_ic00(
+        Method::BitcoinSendTransaction,
+        BitcoinSendTransactionArgs {
+            transaction: tx.clone(),
             network: BitcoinNetwork::Testnet,
-        };
-        execute_send_transaction(
-            &exec_env,
-            "bitcoin_testnet", // Bitcoin testnet is enabled.
-            BitcoinState::default(),
-            bitcoin_send_transaction_args,
-            SEND_TRANSACTION_FEE_BASE
-                + Cycles::from(tx.serialize().len() as u64) * SEND_TRANSACTION_FEE_PER_BYTE,
-            Payload::Data(EmptyBlob::encode()),
-            Cycles::zero(),
-        );
-    });
+        }
+        .encode(),
+        SEND_TRANSACTION_FEE_BASE + Cycles::from(tx.len() as u64) * SEND_TRANSACTION_FEE_PER_BYTE,
+    );
+    test.execute_all();
+
+    let response = test.get_xnet_response(0);
+    assert_eq!(
+        response.response_payload,
+        Payload::Data(EmptyBlob::encode()),
+    );
+    assert_eq!(response.refund, Cycles::zero());
 }
 
 #[test]
 fn send_transaction_cycles_charging() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _| {
-        for network in [BitcoinNetwork::Mainnet, BitcoinNetwork::Testnet] {
-            for transaction in [vec![], vec![0; 1], vec![0; 10], vec![0; 100], vec![0; 1000]] {
-                let transaction_len = transaction.len();
-                let bitcoin_send_transaction_args = BitcoinSendTransactionArgs {
+    for network in [BitcoinNetwork::Mainnet, BitcoinNetwork::Testnet] {
+        for transaction in [vec![], vec![0; 1], vec![0; 10], vec![0; 100], vec![0; 1000]] {
+            let tx_len = transaction.len() as u64;
+            let initial_balance = Cycles::new(100_000_000_000);
+            let mut test = ExecutionTestBuilder::new()
+                .with_caller(subnet_test_id(1), canister_test_id(10))
+                .with_subnet_features(&format!("bitcoin_{}", network)) // bitcoin feature is enabled for this network.
+                .build();
+            test.state_mut()
+                .put_bitcoin_state(BitcoinState::new(network));
+            test.inject_call_to_ic00(
+                Method::BitcoinSendTransaction,
+                BitcoinSendTransactionArgs {
                     transaction,
                     network,
-                };
+                }
+                .encode(),
+                initial_balance,
+            );
+            test.execute_all();
 
-                let initial_balance = Cycles::new(100_000_000_000);
-                execute_send_transaction(
-                    &exec_env,
-                    &format!("bitcoin_{}", network), // bitcoin feature is enabled for this network.
-                    BitcoinState::new(network),
-                    bitcoin_send_transaction_args,
-                    initial_balance,
-                    Payload::Reject(RejectContext {
-                        code: RejectCode::CanisterReject,
-                        message: String::from(
-                            "bitcoin_send_transaction failed: Can't deserialize transaction because it's malformed.",
-                        ),
-                    }),
-                    // the expected fee is deducted from the balance.
-                    initial_balance - (SEND_TRANSACTION_FEE_BASE + Cycles::from(transaction_len as u64) * SEND_TRANSACTION_FEE_PER_BYTE)
-                );
-            }
+            let response = test.get_xnet_response(0);
+            assert_eq!(
+                response.refund,
+                // the expected fee is deducted from the balance.
+                initial_balance
+                    - (SEND_TRANSACTION_FEE_BASE
+                        + Cycles::from(tx_len) * SEND_TRANSACTION_FEE_PER_BYTE)
+            );
+            assert_eq!(
+                get_reject_message(response),
+                "bitcoin_send_transaction failed: Can't deserialize transaction because it's malformed."
+                    .to_string()
+            );
         }
-    });
+    }
 }
