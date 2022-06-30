@@ -57,6 +57,10 @@ message Init {
   // sale will be aborted (instead of committed) when the due date/time
   // occurs. Must be smaller than or equal to `max_icp_e8s`.
   uint64 min_icp_e8s = 10;
+
+  // If the sale is aborted, control of the canister(s) should be set to these
+  // principal(s). Must not be empty.
+  repeated string fallback_controller_principal_ids = 11;
 }
 
 message BuyerState {
