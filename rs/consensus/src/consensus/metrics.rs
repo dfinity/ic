@@ -708,3 +708,110 @@ impl EcdsaComplaintMetrics {
         self.complaint_errors.with_label_values(&[label]).inc();
     }
 }
+
+#[derive(Clone)]
+pub struct EcdsaTranscriptMetrics {
+    pub active_transcripts: IntGauge,
+    pub support_validation_duration: HistogramVec,
+    pub support_validation_total_duration: HistogramVec,
+    pub support_aggregation_duration: HistogramVec,
+    pub support_aggregation_total_duration: HistogramVec,
+    pub create_transcript_duration: HistogramVec,
+    pub create_transcript_total_duration: HistogramVec,
+    pub transcript_e2e_latency: HistogramVec,
+}
+
+impl EcdsaTranscriptMetrics {
+    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+        Self {
+            active_transcripts: metrics_registry
+                .int_gauge("ecdsa_active_transcripts", "Currently active transcripts"),
+            support_validation_duration: metrics_registry.histogram_vec(
+                "ecdsa_support_validation_duration",
+                "Support validation duration, in msec",
+                decimal_buckets(0, 2),
+                &["type"],
+            ),
+            support_validation_total_duration: metrics_registry.histogram_vec(
+                "ecdsa_support_validation_total_duration",
+                "Total support validation duration, in msec",
+                decimal_buckets(0, 4),
+                &["type"],
+            ),
+            support_aggregation_duration: metrics_registry.histogram_vec(
+                "ecdsa_support_aggregation_duration",
+                "Support aggregation duration, in msec",
+                decimal_buckets(0, 2),
+                &["type"],
+            ),
+            support_aggregation_total_duration: metrics_registry.histogram_vec(
+                "ecdsa_support_aggregation_total_duration",
+                "Total support aggregation duration, in msec",
+                decimal_buckets(0, 4),
+                &["type"],
+            ),
+            create_transcript_duration: metrics_registry.histogram_vec(
+                "ecdsa_create_transcript_duration",
+                "Time to create transcript, in msec",
+                decimal_buckets(0, 5),
+                &["type"],
+            ),
+            create_transcript_total_duration: metrics_registry.histogram_vec(
+                "ecdsa_create_transcript_total_duration",
+                "Total time to create transcript, in msec",
+                decimal_buckets(0, 5),
+                &["type"],
+            ),
+            transcript_e2e_latency: metrics_registry.histogram_vec(
+                "ecdsa_transcript_e2e_latency",
+                "End to end latency to build the transcript, in sec",
+                decimal_buckets(0, 3),
+                &["type"],
+            ),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct EcdsaSignatureMetrics {
+    pub active_signatures: IntGauge,
+    pub sig_share_validation_duration: Histogram,
+    pub sig_share_validation_total_duration: Histogram,
+    pub sig_share_aggregation_duration: Histogram,
+    pub sig_share_aggregation_total_duration: Histogram,
+    pub signature_e2e_latency: Histogram,
+}
+
+impl EcdsaSignatureMetrics {
+    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+        Self {
+            active_signatures: metrics_registry
+                .int_gauge("ecdsa_active_signatures", "Currently active signatures"),
+            sig_share_validation_duration: metrics_registry.histogram(
+                "ecdsa_sig_share_validation_duration",
+                "Sig share validation duration, in msec",
+                decimal_buckets(0, 2),
+            ),
+            sig_share_validation_total_duration: metrics_registry.histogram(
+                "ecdsa_sig_share_validation_total_duration",
+                "Total sig share validation duration, in msec",
+                decimal_buckets(0, 4),
+            ),
+            sig_share_aggregation_duration: metrics_registry.histogram(
+                "ecdsa_sig_share_aggregation_duration",
+                "Sig share aggregation duration, in msec",
+                decimal_buckets(0, 2),
+            ),
+            sig_share_aggregation_total_duration: metrics_registry.histogram(
+                "ecdsa_sig_share_aggregation_total_duration",
+                "Total sig share aggregation duration, in msec",
+                decimal_buckets(0, 4),
+            ),
+            signature_e2e_latency: metrics_registry.histogram(
+                "ecdsa_signature_e2e_latency",
+                "End to end latency to build the signature, in sec",
+                decimal_buckets(0, 3),
+            ),
+        }
+    }
+}

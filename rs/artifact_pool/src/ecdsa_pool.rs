@@ -22,6 +22,7 @@ use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::catchup::CUPWithOriginalProtobuf;
 use ic_types::consensus::ecdsa::{
     EcdsaComplaint, EcdsaMessage, EcdsaMessageHash, EcdsaMessageType, EcdsaOpening, EcdsaSigShare,
+    EcdsaStats, EcdsaStatsNoOp,
 };
 use ic_types::consensus::BlockPayload;
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
@@ -198,14 +199,16 @@ impl MutableEcdsaPoolSection for InMemoryEcdsaPoolSection {
 pub struct EcdsaPoolImpl {
     validated: Box<dyn MutableEcdsaPoolSection>,
     unvalidated: Box<dyn MutableEcdsaPoolSection>,
+    stats: Box<dyn EcdsaStats>,
     log: ReplicaLogger,
 }
 
 impl EcdsaPoolImpl {
-    pub fn new(
+    pub fn new_with_stats(
         config: ArtifactPoolConfig,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
+        stats: Box<dyn EcdsaStats>,
     ) -> Self {
         let validated = match config.persistent_pool_backend {
             PersistentPoolBackend::Lmdb(lmdb_config) => Box::new(
@@ -231,8 +234,17 @@ impl EcdsaPoolImpl {
                 POOL_ECDSA,
                 POOL_TYPE_UNVALIDATED,
             )),
+            stats,
             log,
         }
+    }
+
+    pub fn new(
+        config: ArtifactPoolConfig,
+        log: ReplicaLogger,
+        metrics_registry: MetricsRegistry,
+    ) -> Self {
+        Self::new_with_stats(config, log, metrics_registry, Box::new(EcdsaStatsNoOp {}))
     }
 
     // Populates the validated pool with the initial dealings from the CUP.
@@ -273,6 +285,10 @@ impl EcdsaPool for EcdsaPoolImpl {
 
     fn unvalidated(&self) -> &dyn EcdsaPoolSection {
         self.unvalidated.as_pool_section()
+    }
+
+    fn stats(&self) -> &dyn EcdsaStats {
+        self.stats.as_ref()
     }
 }
 

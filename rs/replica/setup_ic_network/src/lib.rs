@@ -500,7 +500,12 @@ pub fn init_artifact_pools(
         log.clone(),
     )));
 
-    let mut ecdsa_pool = EcdsaPoolImpl::new(config.clone(), log.clone(), registry.clone());
+    let mut ecdsa_pool = EcdsaPoolImpl::new_with_stats(
+        config.clone(),
+        log.clone(),
+        registry.clone(),
+        Box::new(ecdsa::EcdsaStatsImpl::new(registry.clone())),
+    );
     ecdsa_pool.add_initial_dealings(&catch_up_package);
     let ecdsa_pool = Arc::new(RwLock::new(ecdsa_pool));
 

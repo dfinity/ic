@@ -13,7 +13,7 @@ use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
-use ic_types::consensus::ecdsa::{EcdsaBlockReader, EcdsaMessage};
+use ic_types::consensus::ecdsa::{EcdsaBlockReader, EcdsaMessage, EcdsaStats};
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgDealingSupport, IDkgTranscript, IDkgTranscriptId,
     IDkgTranscriptOperation, IDkgTranscriptParams, SignedIDkgDealing,
@@ -421,6 +421,7 @@ impl EcdsaPreSignerImpl {
                                 transcript_params,
                                 signed_dealing,
                                 &support,
+                                ecdsa_pool.stats(),
                             );
                             ret.append(&mut changes);
                         }
@@ -824,31 +825,34 @@ impl EcdsaPreSignerImpl {
         transcript_params: &IDkgTranscriptParams,
         signed_dealing: &SignedIDkgDealing,
         support: &IDkgDealingSupport,
+        stats: &dyn EcdsaStats,
     ) -> EcdsaChangeSet {
-        self.crypto
-            .verify_basic_sig(
-                &support.sig_share.signature,
-                signed_dealing,
-                support.sig_share.signer,
-                transcript_params.registry_version(),
-            )
-            .map_or_else(
-                |error| {
-                    self.metrics.pre_sign_errors_inc("verify_dealing_support");
-                    vec![EcdsaChangeAction::HandleInvalid(
-                        id.clone(),
-                        format!(
-                            "Support validation failed: {}, error = {:?}",
-                            support, error
-                        ),
-                    )]
-                },
-                |_| {
-                    self.metrics
-                        .pre_sign_metrics_inc("dealing_support_received");
-                    vec![EcdsaChangeAction::MoveToValidated(id.clone())]
-                },
-            )
+        let start = std::time::Instant::now();
+        let ret = self.crypto.verify_basic_sig(
+            &support.sig_share.signature,
+            signed_dealing,
+            support.sig_share.signer,
+            transcript_params.registry_version(),
+        );
+        stats.record_support_validation(support, start.elapsed());
+
+        ret.map_or_else(
+            |error| {
+                self.metrics.pre_sign_errors_inc("verify_dealing_support");
+                vec![EcdsaChangeAction::HandleInvalid(
+                    id.clone(),
+                    format!(
+                        "Support validation failed: {}, error = {:?}",
+                        support, error
+                    ),
+                )]
+            },
+            |_| {
+                self.metrics
+                    .pre_sign_metrics_inc("dealing_support_received");
+                vec![EcdsaChangeAction::MoveToValidated(id.clone())]
+            },
+        )
     }
 
     /// Helper to load the transcripts the given transcript is dependent on.
@@ -934,6 +938,7 @@ impl EcdsaPreSigner for EcdsaPreSignerImpl {
     ) -> EcdsaChangeSet {
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let metrics = self.metrics.clone();
+        ecdsa_pool.stats().update_active_transcripts(&block_reader);
 
         let send_dealings = || {
             timed_call(
@@ -1125,30 +1130,38 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
             signatures.push(&support_share.sig_share);
         }
 
-        self.crypto
-            .aggregate(signatures, transcript_params.registry_version())
-            .map_or_else(
-                |error| {
-                    warn!(
-                        self.log,
-                        "Failed to aggregate: transcript_id = {:?}, error = {:?}",
-                        transcript_params.transcript_id(),
-                        error
-                    );
-                    self.metrics
-                        .transcript_builder_errors_inc("aggregate_dealing_support");
-                    None
-                },
-                |multi_sig| {
-                    self.metrics.transcript_builder_metrics_inc_by(
-                        support_shares.len() as u64,
-                        "support_aggregated",
-                    );
-                    self.metrics
-                        .transcript_builder_metrics_inc("dealing_aggregated");
-                    Some(multi_sig)
-                },
-            )
+        let start = std::time::Instant::now();
+        let ret = self
+            .crypto
+            .aggregate(signatures, transcript_params.registry_version());
+        self.ecdsa_pool.stats().record_support_aggregation(
+            transcript_params,
+            support_shares,
+            start.elapsed(),
+        );
+
+        ret.map_or_else(
+            |error| {
+                warn!(
+                    self.log,
+                    "Failed to aggregate: transcript_id = {:?}, error = {:?}",
+                    transcript_params.transcript_id(),
+                    error
+                );
+                self.metrics
+                    .transcript_builder_errors_inc("aggregate_dealing_support");
+                None
+            },
+            |multi_sig| {
+                self.metrics.transcript_builder_metrics_inc_by(
+                    support_shares.len() as u64,
+                    "support_aggregated",
+                );
+                self.metrics
+                    .transcript_builder_metrics_inc("dealing_aggregated");
+                Some(multi_sig)
+            },
+        )
     }
 
     /// Helper to create the transcript from the verified dealings
@@ -1164,25 +1177,31 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
             return None;
         }
 
-        IDkgProtocol::create_transcript(&*self.crypto, transcript_params, verified_dealings)
-            .map_or_else(
-                |error| {
-                    warn!(
-                        self.log,
-                        "Failed to create transcript: transcript_id = {:?}, error = {:?}",
-                        transcript_params.transcript_id(),
-                        error
-                    );
-                    self.metrics
-                        .transcript_builder_errors_inc("create_transcript");
-                    None
-                },
-                |transcript| {
-                    self.metrics
-                        .transcript_builder_metrics_inc("transcript_created");
-                    Some(transcript)
-                },
-            )
+        let start = std::time::Instant::now();
+        let ret =
+            IDkgProtocol::create_transcript(&*self.crypto, transcript_params, verified_dealings);
+        self.ecdsa_pool
+            .stats()
+            .record_transcript_creation(transcript_params, start.elapsed());
+
+        ret.map_or_else(
+            |error| {
+                warn!(
+                    self.log,
+                    "Failed to create transcript: transcript_id = {:?}, error = {:?}",
+                    transcript_params.transcript_id(),
+                    error
+                );
+                self.metrics
+                    .transcript_builder_errors_inc("create_transcript");
+                None
+            },
+            |transcript| {
+                self.metrics
+                    .transcript_builder_metrics_inc("transcript_created");
+                Some(transcript)
+            },
+        )
     }
 
     /// Helper to get the validated dealings.

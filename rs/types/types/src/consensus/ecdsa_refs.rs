@@ -902,6 +902,15 @@ impl IDkgTranscriptOperationRef {
             }
         }
     }
+
+    pub fn as_str(&self) -> String {
+        match self {
+            Self::Random => "Random".to_string(),
+            Self::ReshareOfMasked(_) => "ReshareOfMasked".to_string(),
+            Self::ReshareOfUnmasked(_) => "ReshareOfMasked".to_string(),
+            Self::UnmaskedTimesMasked(_, _) => "UnmaskedTimesMasked".to_string(),
+        }
+    }
 }
 
 impl From<&IDkgTranscriptOperationRef> for pb::IDkgTranscriptOperationRef {

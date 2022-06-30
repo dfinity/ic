@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::{self, Display, Formatter};
+use std::time::Duration;
 use strum_macros::EnumIter;
 
 pub use crate::consensus::ecdsa_refs::{
@@ -19,7 +20,7 @@ use crate::crypto::canister_threshold_sig::error::IDkgTranscriptIdError;
 use crate::crypto::{
     canister_threshold_sig::idkg::{
         IDkgComplaint, IDkgDealingSupport, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
-        InitialIDkgDealings, SignedIDkgDealing,
+        IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
     },
     canister_threshold_sig::{ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigShare},
     CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
@@ -1114,4 +1115,71 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaPayload {
         ret.update_refs(height);
         Ok(ret)
     }
+}
+
+///
+/// Processing/updates for a particular entity like TranscriptId is scattered across
+/// several paths, called from different contexts (e.g)
+///     - EcdsaPreSigner builds the dealings/support shares (ECDSA component context),
+///       across several calls to on_state_change()
+///     - EcdsaTranscriptBuilder builds the verified dealings/transcripts (payload builder context),
+///       across possibly several calls to get_completed_transcript()
+///
+/// The ECDSA stats unifies the relevant metrics for an entity, so that these can be accessed
+/// from the different paths. This helps answer higher level queries
+/// (e.g) total time spent in stages like support share validation/ aggregation, per transcript.
+///
+pub trait EcdsaStats: Send + Sync {
+    /// Updates the set of transcripts being tracked currently.
+    fn update_active_transcripts(&self, block_reader: &dyn EcdsaBlockReader);
+
+    /// Records the time taken to verify the support share received for a dealing.
+    fn record_support_validation(&self, support: &IDkgDealingSupport, duration: Duration);
+
+    /// Records the time taken to aggregate the support shares for a dealing.
+    fn record_support_aggregation(
+        &self,
+        transcript_params: &IDkgTranscriptParams,
+        support_shares: &[IDkgDealingSupport],
+        duration: Duration,
+    );
+
+    /// Records the time taken to create the transcript.
+    fn record_transcript_creation(
+        &self,
+        transcript_params: &IDkgTranscriptParams,
+        duration: Duration,
+    );
+
+    /// Updates the set of signature requests being tracked currently.
+    fn update_active_signature_requests(&self, block_reader: &dyn EcdsaBlockReader);
+
+    /// Records the time taken to verify the signature share received for a request.
+    fn record_sig_share_validation(&self, request_id: &RequestId, duration: Duration);
+
+    /// Records the time taken to aggregate the signature shares for a request.
+    fn record_sig_share_aggregation(&self, request_id: &RequestId, duration: Duration);
+}
+
+/// For testing
+pub struct EcdsaStatsNoOp {}
+impl EcdsaStats for EcdsaStatsNoOp {
+    fn update_active_transcripts(&self, _block_reader: &dyn EcdsaBlockReader) {}
+    fn record_support_validation(&self, _support: &IDkgDealingSupport, _duration: Duration) {}
+    fn record_support_aggregation(
+        &self,
+        _transcript_params: &IDkgTranscriptParams,
+        _support_shares: &[IDkgDealingSupport],
+        _duration: Duration,
+    ) {
+    }
+    fn record_transcript_creation(
+        &self,
+        _transcript_params: &IDkgTranscriptParams,
+        _duration: Duration,
+    ) {
+    }
+    fn update_active_signature_requests(&self, _block_reader: &dyn EcdsaBlockReader) {}
+    fn record_sig_share_validation(&self, _request_id: &RequestId, _duration: Duration) {}
+    fn record_sig_share_aggregation(&self, _request_id: &RequestId, _duration: Duration) {}
 }

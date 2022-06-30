@@ -13,7 +13,9 @@ use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
-use ic_types::consensus::ecdsa::{EcdsaBlockReader, EcdsaMessage, EcdsaSigShare, RequestId};
+use ic_types::consensus::ecdsa::{
+    EcdsaBlockReader, EcdsaMessage, EcdsaSigShare, EcdsaStats, RequestId,
+};
 use ic_types::crypto::canister_threshold_sig::{
     error::ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCombinedSignature,
     ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
@@ -146,8 +148,12 @@ impl EcdsaSignerImpl {
                             format!("Duplicate share: {}", share),
                         ))
                     } else {
-                        let mut changes =
-                            self.crypto_verify_signature_share(&id, sig_inputs, &share);
+                        let mut changes = self.crypto_verify_signature_share(
+                            &id,
+                            sig_inputs,
+                            &share,
+                            ecdsa_pool.stats(),
+                        );
                         ret.append(&mut changes);
                     }
                 }
@@ -261,14 +267,18 @@ impl EcdsaSignerImpl {
         id: &EcdsaMessageId,
         sig_inputs: &ThresholdEcdsaSigInputs,
         share: &EcdsaSigShare,
+        stats: &dyn EcdsaStats,
     ) -> EcdsaChangeSet {
-        ThresholdEcdsaSigVerifier::verify_sig_share(
+        let start = std::time::Instant::now();
+        let ret = ThresholdEcdsaSigVerifier::verify_sig_share(
             &*self.crypto,
             share.signer_id,
             sig_inputs,
             &share.share,
-        )
-        .map_or_else(
+        );
+        stats.record_sig_share_validation(&share.request_id, start.elapsed());
+
+        ret.map_or_else(
             |error| {
                 if error.is_replicated() {
                     self.metrics.sign_errors_inc("verify_sig_share_permanent");
@@ -329,6 +339,9 @@ impl EcdsaSigner for EcdsaSignerImpl {
     ) -> EcdsaChangeSet {
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let metrics = self.metrics.clone();
+        ecdsa_pool
+            .stats()
+            .update_active_signature_requests(&block_reader);
 
         let send_signature_shares = || {
             timed_call(
@@ -398,8 +411,13 @@ impl<'a> EcdsaSignatureBuilderImpl<'a> {
         request_id: &RequestId,
         inputs: &ThresholdEcdsaSigInputs,
         shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
+        stats: &dyn EcdsaStats,
     ) -> Option<ThresholdEcdsaCombinedSignature> {
-        ThresholdEcdsaSigVerifier::combine_sig_shares(&*self.crypto, inputs, shares).map_or_else(
+        let start = std::time::Instant::now();
+        let ret = ThresholdEcdsaSigVerifier::combine_sig_shares(&*self.crypto, inputs, shares);
+        stats.record_sig_share_aggregation(request_id, start.elapsed());
+
+        ret.map_or_else(
             |error| {
                 match error {
                     ThresholdEcdsaCombineSigSharesError::UnsatisfiedReconstructionThreshold {
@@ -457,6 +475,7 @@ impl<'a> EcdsaSignatureBuilder for EcdsaSignatureBuilderImpl<'a> {
                 request_id,
                 state.signature_inputs,
                 &state.signature_shares,
+                self.ecdsa_pool.stats(),
             ) {
                 completed_signatures.push((*request_id, signature));
             }
