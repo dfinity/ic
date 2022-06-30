@@ -59,7 +59,7 @@ pub struct NNSRecoverySameNodesArgs {
 pub struct NNSRecoverySameNodes {
     step_iterator: Box<dyn Iterator<Item = StepType>>,
     pub params: NNSRecoverySameNodesArgs,
-    recovery: Recovery,
+    pub recovery: Recovery,
     test: bool,
     logger: Logger,
     new_state_dir: PathBuf,
