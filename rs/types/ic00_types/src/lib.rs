@@ -195,7 +195,7 @@ impl Payload<'_> for CanisterStatusResult {}
 ///     controller: principal;
 ///     memory_size: nat;
 ///     cycles: nat;
-///     idle_cycles_burned_per_second: nat;
+///     idle_cycles_burned_per_day: nat;
 /// })`
 #[derive(CandidType, Debug, Deserialize, Eq, PartialEq)]
 pub struct CanisterStatusResultV2 {
@@ -208,7 +208,7 @@ pub struct CanisterStatusResultV2 {
     // this is for compat with Spec 0.12/0.13
     balance: Vec<(Vec<u8>, candid::Nat)>,
     freezing_threshold: candid::Nat,
-    idle_cycles_burned_per_second: candid::Nat,
+    idle_cycles_burned_per_day: candid::Nat,
 }
 
 impl CanisterStatusResultV2 {
@@ -223,7 +223,7 @@ impl CanisterStatusResultV2 {
         compute_allocation: u64,
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
-        idle_cycles_burned_per_second: u128,
+        idle_cycles_burned_per_day: u128,
     ) -> Self {
         Self {
             status,
@@ -242,7 +242,7 @@ impl CanisterStatusResultV2 {
                 freezing_threshold,
             ),
             freezing_threshold: candid::Nat::from(freezing_threshold),
-            idle_cycles_burned_per_second: candid::Nat::from(idle_cycles_burned_per_second),
+            idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),
         }
     }
 
@@ -274,8 +274,8 @@ impl CanisterStatusResultV2 {
         self.freezing_threshold.0.to_u64().unwrap()
     }
 
-    pub fn idle_cycles_burned_per_second(&self) -> u128 {
-        self.idle_cycles_burned_per_second.0.to_u128().unwrap()
+    pub fn idle_cycles_burned_per_day(&self) -> u128 {
+        self.idle_cycles_burned_per_day.0.to_u128().unwrap()
     }
 }
 
