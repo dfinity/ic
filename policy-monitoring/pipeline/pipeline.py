@@ -146,7 +146,7 @@ class Pipeline:
 
         assert group.gid in self.stat and "monpoly" in self.stat[group.gid]
 
-        print(f"Checking MFOTL policy from `{self.policies_path}` ...")
+        eprint(f"Checking MFOTL policy from `{self.policies_path}` ...")
 
         self.stat[group.gid]["monpoly"] = dict()
 
@@ -177,7 +177,7 @@ class Pipeline:
                 if formula not in self.repros[group.gid]:
                     self.repros[group.gid][formula] = set()
                 else:
-                    print(f"REPRO WARNING: multiple violations of policy {formula} by group name {group.gid}")
+                    eprint(f"REPRO WARNING: multiple violations of policy {formula} by group name {group.gid}")
 
                 s: Set[Tuple[str, ...]]
                 s = self.repros[group.gid][formula]
@@ -280,7 +280,7 @@ class Pipeline:
         eprint("Inferring global infra done.")
         return infra
 
-    def _run_single_group(self, group: Group):
+    def _run_single_group(self, group: Group) -> None:
         # Init statistics object for this group name
         self.stat[group.gid] = {
             "pre_processor": dict(),
@@ -293,6 +293,11 @@ class Pipeline:
         # a GlobalInfra object.
         if True or is_raw_stream_reusable(self.modes):  # FIXME
             group.logs = list(group.logs)
+
+        # TODO: implement stream probing (current approach works for static lists)
+        if len(group.logs) == 0:
+            eprint(f"Skipping {str(group)} containing no logs")
+            return
 
         if Mode.raw in self.modes:
             self.art_manager.save_raw_logs(group)
@@ -309,7 +314,7 @@ class Pipeline:
             self.stat[group.gid]["global_infra"] = infra.to_dict()
             group.global_infra = infra
             self.art_manager.save_global_infra(group)
-        elif UniversalPreProcessor.is_global_infra_required(self.formulas):
+        elif UniversalPreProcessor.is_global_infra_required(self.formulas) or Mode.pre_processor_test in self.modes:
             infra = self.infer_global_infra(group)
             group.global_infra = infra
             self.art_manager.save_global_infra(group)
@@ -317,7 +322,11 @@ class Pipeline:
             eprint("No global infra required")
             infra = None
 
-        pproc = UniversalPreProcessor(infra, self.formulas)
+        if Mode.pre_processor_test in self.modes:
+            pproc = UniversalPreProcessor(infra, None)
+        else:
+            pproc = UniversalPreProcessor(infra, self.formulas)
+
         event_stream = pproc.run(group.logs)
 
         if multiple_preprocessing_needed(self.modes):
@@ -336,12 +345,17 @@ class Pipeline:
         self.stat[group.gid]["pre_processor"] = pproc.stat
 
     def _run_liveness_check(self, group: Group):
-        pproc = UniversalPreProcessor(infra=None, formulas=self.formulas)
+        eprint("Starting liveness check ...")
+        # Pre-process events that don't require global infra
+        pproc = UniversalPreProcessor(
+            infra=None, formulas=set(UniversalPreProcessor.get_supported_formulas_wo_global_infra())
+        )
         event_stream = pproc.run(group.logs)
         self.check_pipeline_alive(group, pproc, event_stream)
+        eprint("Liveness check completed.")
 
     def run(self, groups: Dict[str, Group]):
-        print("Starting policy monitoring ...")
+        eprint("Starting policy monitoring ...")
 
         # Ensure that groups are processed in a deterministic order
         det_groups = list(map(lambda x: x[1], sorted(groups.items(), key=lambda x: x[0])))
@@ -353,7 +367,7 @@ class Pipeline:
             self._run_liveness_check(det_groups[0])  # pick single arbitrary group
             self.liveness_checked = True
 
-        print("Policy monitoring completed.")
+        eprint("Policy monitoring completed.")
 
     def reproduce_all_violations(self):
         rm = ReproManager(self.repros, self.stat)

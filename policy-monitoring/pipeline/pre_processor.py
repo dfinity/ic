@@ -1,5 +1,6 @@
 import functools
 import time
+from abc import abstractmethod
 from typing import Any
 from typing import Dict
 from typing import FrozenSet
@@ -90,6 +91,7 @@ class PreProcessor:
         }
         self._elapsed_time = 0.0
 
+    @abstractmethod
     def get_formulas(self) -> Dict[str, OutcomeHandler]:
         """
         Returns a dict of (name: OutcomeHandler) pairs for the MFOTL formulas that
@@ -99,6 +101,7 @@ class PreProcessor:
         """
         ...
 
+    @abstractmethod
     def process_log_entry(self, doc: EsDoc) -> Iterable[str]:
         """
         Returns a generator of events (in string representation) corresponding
@@ -156,6 +159,47 @@ class PreProcessor:
 
 
 class DeclarativePreProcessor(PreProcessor):
+
+    LOG_EVENTS = frozenset(
+        [
+            "log",
+            "reboot",
+            "p2p__node_added",
+            "p2p__node_removed",
+            "deliver_batch",
+            "consensus_finalized",
+            "move_block_proposal",
+            "ControlPlane_accept_error",
+            "ControlPlane_accept_aborted",
+            "ControlPlane_spawn_accept_task",
+            "ControlPlane_tls_server_handshake_failed",
+            "registry__node_added_to_subnet",
+            "registry__node_removed_from_subnet",
+            "CUP_share_proposed",
+            "replica_diverged",
+            "finalized",
+        ]
+    )
+
+    PREAMBLE_EVENTS = frozenset(
+        [
+            "p2p__original_subnet_type",
+            "p2p__originally_in_subnet",
+            # "p2p__originally_unassigned"  TODO: not supported yet
+        ]
+    )
+
+    GLOBAL_INFRA_BASED_EVENTS = frozenset(
+        [
+            "reboot",
+            "p2p__original_subnet_type",
+            "p2p__originally_unassigned",
+            "p2p__originally_in_subnet",
+            "registry__node_added_to_subnet",
+            "registry__node_removed_from_subnet",
+        ]
+    )
+
     class UnknownPredicateError(Exception):
         """Predicate name is unknown"""
 
@@ -231,17 +275,6 @@ class DeclarativePreProcessor(PreProcessor):
 
         raise DeclarativePreProcessor.UnknownPreambleEventNameError(pred)
 
-    GLOBAL_INFRA_BASED_EVENTS = frozenset(
-        [
-            "reboot",
-            "p2p__original_subnet_type",
-            "p2p__originally_unassigned",
-            "p2p__originally_in_subnet",
-            "registry__node_added_to_subnet",
-            "registry__node_removed_from_subnet",
-        ]
-    )
-
     def __init__(
         self,
         name: str,
@@ -266,32 +299,16 @@ class DeclarativePreProcessor(PreProcessor):
 
 
 class UniversalPreProcessor(DeclarativePreProcessor):
-
-    _PREDS = frozenset(
-        [
-            "log",
-            "reboot",
-            "p2p__node_added",
-            "p2p__node_removed",
-            "deliver_batch",
-            "consensus_finalized",
-            "move_block_proposal",
-            "ControlPlane_accept_error",
-            "ControlPlane_accept_aborted",
-            "ControlPlane_spawn_accept_task",
-            "ControlPlane_tls_server_handshake_failed",
-            "registry__node_added_to_subnet",
-            "registry__node_removed_from_subnet",
-            "CUP_share_proposed",
-            "replica_diverged",
-            "finalized",
-        ]
-    )
+    """Pre-processor that requires only the events needed for specifiec policies"""
 
     _POLICIES: Dict[str, Dict[str, FrozenSet[str]]]
     _POLICIES = {
         "artifact_pool_latency": {
-            "preambles": frozenset([]),
+            "preambles": frozenset(
+                [
+                    "p2p__original_subnet_type",
+                ]
+            ),
             "dependencies": frozenset(
                 [
                     "p2p__node_added",
@@ -304,7 +321,11 @@ class UniversalPreProcessor(DeclarativePreProcessor):
             ),
         },
         "unauthorized_connections": {
-            "preambles": frozenset([]),
+            "preambles": frozenset(
+                [
+                    "p2p__originally_in_subnet",
+                ]
+            ),
             "dependencies": frozenset(
                 [
                     "ControlPlane_accept_error",
@@ -382,6 +403,15 @@ class UniversalPreProcessor(DeclarativePreProcessor):
         """Returns list of all the formulas supported by this pre-processor"""
         return sorted(list(UniversalPreProcessor._POLICIES.keys()))
 
+    @staticmethod
+    def get_supported_formulas_wo_global_infra() -> List[str]:
+        return list(
+            filter(
+                lambda f: not UniversalPreProcessor.is_global_infra_required(set([f])),
+                UniversalPreProcessor.get_supported_formulas(),
+            )
+        )
+
     def __init__(self, infra: Optional[GlobalInfra], formulas: Optional[Set[str]] = None):
 
         if formulas is None:
@@ -407,7 +437,4 @@ class UniversalPreProcessor(DeclarativePreProcessor):
             required_predicates=required_predicates,
         )
 
-        if formulas is None:
-            self.formulas = self._FORMULAS
-        else:
-            self.formulas = {f: NORMAL for f in formulas}
+        self.formulas = {f: NORMAL for f in formulas}

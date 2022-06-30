@@ -17,10 +17,14 @@ from pipeline.pipeline import Pipeline
 from pipeline.pre_processor import UniversalPreProcessor
 from util import docker
 from util import env
-from util.print import eprint
+
+
+DEFAULT_MAINNET_ES_ENDPOINT = "elasticsearch.mercury.dfinity.systems"
+DEFAULT_TESTNET_ES_ENDPOINT = "elasticsearch-v4.testnet.dfinity.systems"
 
 
 def main():
+    # === Phase I: Handle CLI arguments ===
     parser = argparse.ArgumentParser(
         description="Process streams of IC replica logs via MonPoly",
     )
@@ -81,6 +85,18 @@ def main():
     )
     parser.add_argument("--gitlab_token", "-t", type=str, help="Gitlab token with read-api rights")
     parser.add_argument(
+        "--pre_master_pipeline",
+        "-pmp",
+        type=str,
+        help="Specifies Gitlab pipeline ID for which pre-master system tests should be monitored",
+    )
+    parser.add_argument(
+        "--farm_log_for_test",
+        "-fl",
+        type=str,
+        help="Specifies path to a test driver's log file that contains group names that should be monitored",
+    )
+    parser.add_argument(
         "--slack_service_id",
         "-s",
         type=str,
@@ -114,10 +130,15 @@ def main():
         help="Directory in which the pipeline artifacts should be stored",
     )
     args = parser.parse_args()
+    args_by_name = vars(args)
 
     # Detect meaningless option combinations
-    if args.mainnet and args.group_names:
-        print("Option --group_names should not be used together with --mainnet")
+    conflicting_modes = set(
+        filter(lambda x: args_by_name[x], ["mainnet", "group_names", "pre_master_pipeline", "farm_log_for_test"])
+    )
+    conflicting_modes_disjunction = " or ".join(map(lambda x: f"--{x}", conflicting_modes))
+    if len(conflicting_modes) > 1:
+        print(f"Only one of the options should be used at the same time: {conflicting_modes_disjunction}")
         exit(1)
     if args.mainnet and not args.limit_time:
         print("Option --limit_time should be specified together with --mainnet")
@@ -139,7 +160,12 @@ def main():
         exit(0)
 
     # Read environment variables
-    elasticsearch_endpoint = env.extract_value(args.elasticsearch_endpoint, "ELASTICSEARCH_ENDPOINT", secret=False)
+    elasticsearch_endpoint = env.extract_value_with_default(
+        args.elasticsearch_endpoint,
+        "ELASTICSEARCH_ENDPOINT",
+        default=(DEFAULT_MAINNET_ES_ENDPOINT if args.mainnet else DEFAULT_TESTNET_ES_ENDPOINT),
+        secret=False,
+    )
     gitlab_token = env.extract_value(args.gitlab_token, "GITLAB_ACCESS_TOKEN")
     slack_token = env.extract_value(args.slack_service_id, "IC_SLACK_POLICY_MONITORING_ALERTS_SERVICE")
     liveness_slack_token = env.extract_value(
@@ -149,6 +175,15 @@ def main():
         args.artifacts, "MONPOLY_PIPELINE_ARTIFACTS", default="./artifacts", secret=False
     )
 
+    # === Phase II: Obtain the following objectgs: ===
+    # . signature
+    # . slack
+    # . liveness_slack
+    # . (optional) docker_starter
+    # . project_root
+    # . artifact_manager
+    # . monpoly_pipeline
+    # . groups
     signature = env.generate_signature()
 
     def warn_no_slack(service_name: str, option: str) -> None:
@@ -195,10 +230,10 @@ def main():
     with_docker = not args.without_docker
 
     try:
-        art_manager = ArtifactManager(project_root, Path(artifacts_location), signature)
-        p = Pipeline(
+        artifact_manager = ArtifactManager(project_root, Path(artifacts_location), signature)
+        monpoly_pipeline = Pipeline(
             policies_path=str(project_root.joinpath("mfotl-policies")),
-            art_manager=art_manager,
+            art_manager=artifact_manager,
             modes=set(args.mode),
             alert_service=slack,
             liveness_channel=liveness_slack,
@@ -211,42 +246,37 @@ def main():
         if args.read:
             groups = file_io.read_logs(log_file=args.read)
         else:
-
-            def report_es_endpoint(scenario: str, endpoint: str) -> None:
-                eprint(f"Choosing {scenario} Elasticsearch endpoint for mainnet logs: {endpoint}")
-
-            if not elasticsearch_endpoint and args.mainnet:
-                es_url = "elasticsearch.mercury.dfinity.systems"
-                report_es_endpoint("MAINNET", es_url)
-            elif not elasticsearch_endpoint and not args.mainnet:
-                es_url = "elasticsearch.testnet.dfinity.systems"
-                report_es_endpoint("TESTNET", es_url)
-            else:
-                es_url = elasticsearch_endpoint
-                report_es_endpoint("CUSTOM", es_url)
-
             if args.mainnet:
-                es = Es(es_url, alert_service=slack, mainnet=True)
+                es = Es(elasticsearch_endpoint, alert_service=slack, mainnet=True)
                 gid = "mainnet"
                 groups = {gid: Group(gid)}
             else:
-                es = Es(es_url, alert_service=slack, mainnet=False)
+                es = Es(elasticsearch_endpoint, alert_service=slack, mainnet=False)
                 if args.group_names:
                     groups = {gid: Group(gid) for gid in args.group_names}
                 else:
-                    if gitlab_token is None:
-                        print(
-                            "Please specify at least one of the following options: --gitlab_token, --mainnet, --group_names"
-                        )
+                    if gitlab_token is not None:
+                        ci = Ci(url="https://gitlab.com", project="dfinity-lab/public/ic", token=gitlab_token)
+                        if not args.pre_master_pipeline:
+                            groups = ci.get_regular_groups()
+                        else:
+                            # Monitor all system tests from the pre-master pipeline with ID args.pre_master_pipeline
+                            groups = Ci.get_premaster_groups_for_pipeline(
+                                args.pre_master_pipeline, include_pattern=None
+                            )
+                    elif args.farm_log_for_test is not None:
+                        # Relying upon args.farm_log_for_test for end-to-end testing the pipeline implementation
+                        groups = Ci.get_groups_from_farm_log(args.farm_log_for_test)
+                    else:
+                        print(f"Please specify at least one of the following options: {conflicting_modes_disjunction}")
                         exit(1)
-                    ci = Ci(url="https://gitlab.com", project="dfinity-lab/public/ic", token=gitlab_token)
-                    groups = ci.get_hourly_group_names()
 
             es.download_logs(groups, limit_per_group=args.limit, minutes_per_group=args.limit_time)
 
-        p.run(groups)
-        p.reproduce_all_violations()
-        p.save_statistics()
+        # === Phase III: Run the pipeline ===
+        monpoly_pipeline.run(groups)
+        monpoly_pipeline.reproduce_all_violations()
+        monpoly_pipeline.save_statistics()
 
     except Exception:
         trace = traceback.format_exc()

@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from typing import Iterable
 from typing import Optional
 from typing import Tuple
@@ -28,6 +29,7 @@ class Event:
         assert self.doc is not None, "cannot read unix_ts without Event.doc"
         return self.doc.unix_ts()
 
+    @abstractmethod
     def compile_params(self) -> Iterable[Tuple[str, ...]]:
         ...
 

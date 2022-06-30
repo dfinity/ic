@@ -67,12 +67,12 @@ class DummyAlertService(AlertService):
         with_logging=True,
     ) -> None:
 
+        # we're printing to STDOUT; no need to pring anything into STDERR as well
+        del with_logging
+
         message = self._form_message(text, level, url)
 
         print(
             f"Warning: alert `{short_text}` cannot be sent via Slack (DummyAlertService has been requested).\nAlert message:"
         )
         print(message, flush=True)
-
-        if with_logging:
-            eprint(f"{message}", end="\n\n")
