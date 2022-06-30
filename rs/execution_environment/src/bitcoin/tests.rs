@@ -1,137 +1,32 @@
-use crate::{ExecutionEnvironment, ExecutionEnvironmentImpl, Hypervisor, IngressHistoryWriterImpl};
 use bitcoin::{
     blockdata::constants::genesis_block, util::psbt::serialize::Serialize, Address, Network,
 };
 use candid::Encode;
 use ic_btc_test_utils::{random_p2pkh_address, BlockBuilder, TransactionBuilder};
 use ic_btc_types::{GetUtxosResponse, OutPoint, Satoshi, Utxo, UtxosFilter};
-use ic_config::execution_environment;
-use ic_error_types::RejectCode;
 use ic_ic00_types::{
-    self as ic00, BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
+    BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
     BitcoinNetwork, BitcoinSendTransactionArgs, EmptyBlob, Method, Payload as Ic00Payload,
 };
 use ic_interfaces::execution_environment::AvailableMemory;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_metrics::MetricsRegistry;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_registry_subnet_features::SubnetFeatures;
-use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    bitcoin_state::BitcoinState,
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    ReplicatedState,
-};
-use ic_replicated_state::{
-    canister_state::QUEUE_INDEX_NONE, InputQueueType, NetworkTopology, SubnetTopology,
-};
-use ic_test_utilities::execution_environment::{test_registry_settings, ExecutionTestBuilder};
-use ic_test_utilities::{
-    crypto::mock_random_number_generator,
-    cycles_account_manager::CyclesAccountManagerBuilder,
-    state::{CanisterStateBuilder, ReplicatedStateBuilder},
-    types::{
-        ids::{canister_test_id, subnet_test_id},
-        messages::{RequestBuilder, ResponseBuilder},
-    },
-    with_test_replica_logger,
-};
+use ic_replicated_state::bitcoin_state::BitcoinState;
+use ic_test_utilities::execution_environment::ExecutionTestBuilder;
+use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
-    messages::{Payload, RejectContext, RequestOrResponse, Response},
-    CanisterId, Cycles, NumInstructions, SubnetId,
+    messages::{Payload, Response},
+    Cycles,
 };
 use lazy_static::lazy_static;
-use maplit::btreemap;
-use std::collections::BTreeMap;
-use std::str::FromStr;
-use std::{convert::TryFrom, sync::Arc};
-use tempfile::TempDir;
+use std::sync::Arc;
 
 // TODO(EXC-1153): Refactor to avoid copying these constants from bitcoin.rs
 const SEND_TRANSACTION_FEE_BASE: Cycles = Cycles::new(5_000_000_000);
 const SEND_TRANSACTION_FEE_PER_BYTE: Cycles = Cycles::new(20_000_000);
 
-const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
         AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into();
-}
-// TODO(EXC-1120): This is copied from `tests/execution_environment.rs`.
-// Refactor the code so that this method is defined only once.
-fn initial_state(
-    subnet_type: SubnetType,
-) -> (TempDir, SubnetId, Arc<NetworkTopology>, ReplicatedState) {
-    let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
-    let subnet_id = subnet_test_id(1);
-    let routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xff) } => subnet_id,
-        })
-        .unwrap(),
-    );
-    let mut replicated_state = ReplicatedState::new_rooted_at(
-        subnet_id,
-        SubnetType::Application,
-        tmpdir.path().to_path_buf(),
-    );
-    replicated_state.metadata.network_topology.routing_table = Arc::clone(&routing_table);
-    replicated_state.metadata.network_topology.subnets.insert(
-        subnet_id,
-        SubnetTopology {
-            subnet_type,
-            ..SubnetTopology::default()
-        },
-    );
-    (
-        tmpdir,
-        subnet_id,
-        Arc::new(replicated_state.metadata.network_topology.clone()),
-        replicated_state,
-    )
-}
-
-// TODO(EXC-1120): This is copied from `tests/execution_environment.rs`.
-// Refactor the code so that this method is defined only once.
-fn with_setup<F>(subnet_type: SubnetType, f: F)
-where
-    F: FnOnce(ExecutionEnvironmentImpl, ReplicatedState, SubnetId, Arc<NetworkTopology>),
-{
-    with_test_replica_logger(|log| {
-        let (_, subnet_id, network_topology, state) = initial_state(subnet_type);
-        let metrics_registry = MetricsRegistry::new();
-        let cycles_account_manager = Arc::new(
-            CyclesAccountManagerBuilder::new()
-                .with_subnet_id(subnet_id)
-                .build(),
-        );
-        let hypervisor = Hypervisor::new(
-            execution_environment::Config::default(),
-            &metrics_registry,
-            subnet_id,
-            subnet_type,
-            log.clone(),
-            Arc::clone(&cycles_account_manager),
-        );
-        let hypervisor = Arc::new(hypervisor);
-        let ingress_history_writer = IngressHistoryWriterImpl::new(
-            execution_environment::Config::default(),
-            log.clone(),
-            &metrics_registry,
-        );
-        let ingress_history_writer = Arc::new(ingress_history_writer);
-        let exec_env = ExecutionEnvironmentImpl::new(
-            log,
-            hypervisor,
-            ingress_history_writer,
-            &metrics_registry,
-            subnet_id,
-            subnet_type,
-            1,
-            execution_environment::Config::default(),
-            cycles_account_manager,
-        );
-        f(exec_env, state, subnet_id, network_topology)
-    });
 }
 
 fn get_reject_message(response: &Arc<Response>) -> String {
@@ -139,76 +34,6 @@ fn get_reject_message(response: &Arc<Response>) -> String {
         Payload::Data(_) => panic!("Expected Reject"),
         Payload::Reject(reject) => reject.message.clone(),
     }
-}
-
-// TODO: refactor tests same way it was done in RUN-192.
-fn execute_get_utxos(
-    exec_env: &ExecutionEnvironmentImpl,
-    bitcoin_get_utxos_args: BitcoinGetUtxosArgs,
-    bitcoin_feature: &str,
-    bitcoin_state: BitcoinState,
-    cycles_given: Cycles,
-    expected_payload: Payload,
-    expected_refund: Cycles,
-) {
-    let mut state = ReplicatedStateBuilder::new()
-        .with_subnet_id(subnet_test_id(1))
-        .with_canister(
-            CanisterStateBuilder::new()
-                .with_canister_id(canister_test_id(0))
-                .build(),
-        )
-        .with_subnet_features(SubnetFeatures::from_str(bitcoin_feature).unwrap())
-        .with_bitcoin_state(bitcoin_state)
-        .build();
-
-    state
-        .subnet_queues_mut()
-        .push_input(
-            QUEUE_INDEX_NONE,
-            RequestOrResponse::Request(
-                RequestBuilder::new()
-                    .sender(canister_test_id(0))
-                    .receiver(ic00::IC_00)
-                    .method_name(Method::BitcoinGetUtxos)
-                    .method_payload(bitcoin_get_utxos_args.encode())
-                    .payment(cycles_given)
-                    .build()
-                    .into(),
-            ),
-            InputQueueType::RemoteSubnet,
-        )
-        .unwrap();
-
-    let mut state = exec_env
-        .execute_subnet_message(
-            state.subnet_queues_mut().pop_input().unwrap(),
-            state,
-            MAX_NUM_INSTRUCTIONS,
-            &mut mock_random_number_generator(),
-            &BTreeMap::new(),
-            MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-            &test_registry_settings(),
-        )
-        .0;
-
-    let subnet_id = subnet_test_id(1);
-    assert_eq!(
-        state
-            .subnet_queues_mut()
-            .pop_canister_output(&canister_test_id(0))
-            .unwrap()
-            .1,
-        RequestOrResponse::Response(
-            ResponseBuilder::new()
-                .originator(canister_test_id(0))
-                .respondent(CanisterId::new(subnet_id.get()).unwrap())
-                .response_payload(expected_payload)
-                .refund(expected_refund)
-                .build()
-                .into()
-        )
-    );
 }
 
 #[test]
@@ -501,160 +326,170 @@ fn get_balance_rejects_large_min_confirmations() {
 
 #[test]
 fn get_utxos_rejects_if_feature_not_enabled() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _| {
-        let network = BitcoinNetwork::Testnet;
-        let address = String::from("not an address");
-
-        let bitcoin_get_utxos_args = BitcoinGetUtxosArgs {
-            address,
-            network,
+    // Bitcoin testnet feature is disabled by default.
+    let cycles_given = Cycles::new(100_000_000);
+    let mut test = ExecutionTestBuilder::new()
+        .with_caller(subnet_test_id(1), canister_test_id(10))
+        .build();
+    test.inject_call_to_ic00(
+        Method::BitcoinGetUtxos,
+        BitcoinGetUtxosArgs {
+            address: String::from("not an address"),
+            network: BitcoinNetwork::Testnet,
             filter: None,
-        };
-        let cycles_given = Cycles::new(100_000_000);
+        }
+        .encode(),
+        cycles_given,
+    );
+    test.execute_all();
 
-        execute_get_utxos(
-            &exec_env,
-            bitcoin_get_utxos_args,
-            "None", // Bitcoin feature is disabled.
-            BitcoinState::default(),
-            cycles_given,
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterReject,
-                message: String::from("The bitcoin API is not enabled on this subnet."),
-            }),
-            Cycles::new(100_000_000),
-        );
-    });
+    let response = test.get_xnet_response(0);
+    assert_eq!(
+        get_reject_message(response),
+        "The bitcoin API is not enabled on this subnet.".to_string()
+    );
+    // Refund all given cycles, since the feature was not enabled.
+    assert_eq!(response.refund, cycles_given);
 }
 
 #[test]
 fn get_utxos_rejects_if_address_is_malformed() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _| {
-        let bitcoin_get_utxos_args = BitcoinGetUtxosArgs {
-            address: String::from("not an address"),
+    let address = String::from("not an address");
+    let mut test = ExecutionTestBuilder::new()
+        .with_caller(subnet_test_id(1), canister_test_id(10))
+        .with_subnet_features("bitcoin_testnet")
+        .build();
+    test.inject_call_to_ic00(
+        Method::BitcoinGetUtxos,
+        BitcoinGetUtxosArgs {
+            address,
             network: BitcoinNetwork::Testnet,
             filter: None,
-        };
-        let cycles_given = Cycles::new(100_000_000);
+        }
+        .encode(),
+        Cycles::new(100_000_000),
+    );
+    test.execute_all();
 
-        execute_get_utxos(
-            &exec_env,
-            bitcoin_get_utxos_args,
-            "bitcoin_testnet", // Bitcoin testnet is enabled.
-            BitcoinState::default(),
-            cycles_given,
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterReject,
-                message: String::from("bitcoin_get_utxos failed: Malformed address."),
-            }),
-            Cycles::zero(),
-        );
-    });
+    let response = test.get_xnet_response(0);
+    assert_eq!(
+        get_reject_message(response),
+        "bitcoin_get_utxos failed: Malformed address.".to_string()
+    );
+    // No refund, assumed request to be executed, but it's a gray area, difficult to be sure.
+    assert_eq!(response.refund, Cycles::zero());
 }
 
 #[test]
 fn get_utxos_rejects_large_min_confirmations() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _| {
-        let bitcoin_get_utxos_args = BitcoinGetUtxosArgs {
+    let min_confirmations = 1_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_caller(subnet_test_id(1), canister_test_id(10))
+        .with_subnet_features("bitcoin_testnet")
+        .build();
+    test.inject_call_to_ic00(
+        Method::BitcoinGetUtxos,
+        BitcoinGetUtxosArgs {
             address: random_p2pkh_address(Network::Testnet).to_string(),
             network: BitcoinNetwork::Testnet,
-            filter: Some(UtxosFilter::MinConfirmations(1000)),
-        };
-        let cycles_given = Cycles::new(100_000_000);
+            filter: Some(UtxosFilter::MinConfirmations(min_confirmations)),
+        }
+        .encode(),
+        Cycles::new(100_000_000),
+    );
+    test.execute_all();
 
-        execute_get_utxos(
-            &exec_env,
-            bitcoin_get_utxos_args,
-            "bitcoin_testnet", // Bitcoin testnet is enabled.
-            BitcoinState::default(),
-            cycles_given,
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterReject,
-                message: String::from("bitcoin_get_utxos failed: The requested min_confirmations is too large. Given: 1000, max supported: 1")
-            }),
-            Cycles::zero()
-        );
-    });
+    let response = test.get_xnet_response(0);
+    assert_eq!(
+        get_reject_message(response),
+        "bitcoin_get_utxos failed: The requested min_confirmations is too large. Given: 1000, max supported: 1".to_string()
+    );
+    // No refund, assumed request to be executed, but it's a gray area, difficult to be sure.
+    assert_eq!(response.refund, Cycles::zero());
 }
 
 #[test]
 fn get_utxos_of_valid_request_succeeds() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _| {
-        let address = random_p2pkh_address(Network::Testnet);
+    let address = random_p2pkh_address(Network::Testnet);
+    let coinbase_tx = TransactionBuilder::coinbase()
+        .with_output(&address, 1000)
+        .build();
+    let block_0 = BlockBuilder::genesis()
+        .with_transaction(coinbase_tx.clone())
+        .build();
+    let bitcoin_state = BitcoinState::from(ic_btc_canister::state::State::new(
+        2,
+        Network::Testnet,
+        block_0.clone(),
+    ));
 
-        let coinbase_tx = TransactionBuilder::coinbase()
-            .with_output(&address, 1000)
-            .build();
-        let block_0 = BlockBuilder::genesis()
-            .with_transaction(coinbase_tx.clone())
-            .build();
-
-        let bitcoin_state = BitcoinState::from(ic_btc_canister::state::State::new(
-            2,
-            Network::Testnet,
-            block_0.clone(),
-        ));
-
-        let bitcoin_get_utxos_args = BitcoinGetUtxosArgs {
+    let mut test = ExecutionTestBuilder::new()
+        .with_caller(subnet_test_id(1), canister_test_id(10))
+        .with_subnet_features("bitcoin_testnet")
+        .build();
+    test.state_mut().put_bitcoin_state(bitcoin_state);
+    test.inject_call_to_ic00(
+        Method::BitcoinGetUtxos,
+        BitcoinGetUtxosArgs {
             address: address.to_string(),
             network: BitcoinNetwork::Testnet,
             filter: Some(UtxosFilter::MinConfirmations(1)),
-        };
+        }
+        .encode(),
+        Cycles::new(200_000_000),
+    );
+    test.execute_all();
 
-        let cycles_given = Cycles::new(200_000_000);
-
-        execute_get_utxos(
-            &exec_env,
-            bitcoin_get_utxos_args,
-            "bitcoin_testnet", // Bitcoin testnet is enabled.
-            bitcoin_state,
-            cycles_given,
-            Payload::Data(
-                Encode!(&GetUtxosResponse {
-                    utxos: vec![Utxo {
-                        outpoint: OutPoint {
-                            txid: coinbase_tx.txid().to_vec(),
-                            vout: 0
-                        },
-                        value: 1000,
-                        height: 0,
-                    }],
-                    tip_block_hash: block_0.block_hash().to_vec(),
-                    tip_height: 0,
-                    next_page: None,
-                })
-                .unwrap(),
-            ),
-            Cycles::new(100_000_000), // Sent 200M cycles, should receive 100M as a refund.
-        );
-    });
+    let response = test.get_xnet_response(0);
+    assert_eq!(
+        response.response_payload,
+        Payload::Data(
+            Encode!(&GetUtxosResponse {
+                utxos: vec![Utxo {
+                    outpoint: OutPoint {
+                        txid: coinbase_tx.txid().to_vec(),
+                        vout: 0
+                    },
+                    value: 1000,
+                    height: 0,
+                }],
+                tip_block_hash: block_0.block_hash().to_vec(),
+                tip_height: 0,
+                next_page: None,
+            })
+            .unwrap()
+        )
+    );
+    // Sent 200M cycles, should receive 100M as a refund.
+    assert_eq!(response.refund, Cycles::new(100_000_000));
 }
 
 #[test]
 fn get_utxos_not_enough_cycles() {
-    with_setup(SubnetType::Application, |exec_env, _, _, _| {
-        let address = random_p2pkh_address(Network::Testnet);
-        let bitcoin_state = BitcoinState::default();
-        let bitcoin_get_utxos_args = BitcoinGetUtxosArgs {
-            address: address.to_string(),
+    let cycles_given = Cycles::new(10_000);
+    let mut test = ExecutionTestBuilder::new()
+        .with_caller(subnet_test_id(1), canister_test_id(10))
+        .with_subnet_features("bitcoin_testnet")
+        .build();
+    test.inject_call_to_ic00(
+        Method::BitcoinGetUtxos,
+        BitcoinGetUtxosArgs {
+            address: random_p2pkh_address(Network::Testnet).to_string(),
             network: BitcoinNetwork::Testnet,
             filter: Some(UtxosFilter::MinConfirmations(1)),
-        };
-        let cycles_given = Cycles::new(10_000);
+        }
+        .encode(),
+        cycles_given,
+    );
+    test.execute_all();
 
-        execute_get_utxos(
-            &exec_env,
-            bitcoin_get_utxos_args,
-            "bitcoin_testnet", // Bitcoin testnet is enabled.
-            bitcoin_state,
-            cycles_given,
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterReject,
-                message: String::from("Received 10000 cycles. 100000000 cycles are required."),
-            }),
-            cycles_given,
-        );
-    });
+    let response = test.get_xnet_response(0);
+    assert_eq!(
+        get_reject_message(response),
+        "Received 10000 cycles. 100000000 cycles are required.".to_string()
+    );
+    // Refund all given cycles, since it was not enough to execute the request.
+    assert_eq!(response.refund, cycles_given);
 }
 
 #[test]
