@@ -30,10 +30,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use std::convert::TryFrom;
-use std::mem::swap;
 
 const DKG_INTERVAL: u64 = 9;
-const SUBNET_SIZE: usize = 4;
+const SUBNET_SIZE: usize = 3;
 
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
@@ -75,7 +74,7 @@ pub fn test(env: TestEnv) {
 
     // choose a node from the nns subnet
     let mut nns_nodes = topo_snapshot.root_subnet().nodes();
-    let mut upload_node = nns_nodes.next().expect("there is no NNS node");
+    let upload_node = nns_nodes.next().expect("there is no NNS node");
 
     upload_node
         .install_nns_canisters()
@@ -90,7 +89,7 @@ pub fn test(env: TestEnv) {
     );
 
     // get another one for the download node
-    let mut download_node = nns_nodes.next().expect("there is no NNS node");
+    let download_node = nns_nodes.next().expect("there is no NNS node");
     info!(
         logger,
         "NNS node for download: {} ({:?})",
@@ -129,7 +128,7 @@ pub fn test(env: TestEnv) {
         upload_node: Some(upload_node.get_ip_addr()),
     };
 
-    let subnet_recovery =
+    let mut subnet_recovery =
         NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args, true);
 
     // let's take f+1 nodes and break them.
@@ -171,7 +170,10 @@ pub fn test(env: TestEnv) {
     let dn_node_metrics = get_node_metrics(&logger, &download_node.get_ip_addr())
         .expect("Missing metrics for download node");
     if dn_node_metrics.finalization_height < up_node_metrics.finalization_height {
-        swap(&mut download_node, &mut upload_node);
+        // swap the two nodes, so that download one has highest height in the subnet
+        subnet_recovery.params.download_node = Some(upload_node.get_ip_addr());
+        subnet_recovery.params.upload_node = Some(download_node.get_ip_addr());
+        subnet_recovery.recovery.admin_helper.nns_url = download_node.get_public_url();
     }
 
     info!(
