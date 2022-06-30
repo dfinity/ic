@@ -141,6 +141,9 @@ impl<M: Memory + Clone, K: Storable, V: Storable> StableBTreeMap<M, K, V> {
             });
         }
 
+        let key = key.to_vec();
+        let value = value.to_vec();
+
         let root = if self.root_addr == NULL {
             // No root present. Allocate one.
             let node = self.allocate_node(NodeType::Leaf);
@@ -149,7 +152,15 @@ impl<M: Memory + Clone, K: Storable, V: Storable> StableBTreeMap<M, K, V> {
             node
         } else {
             // Load the root from memory.
-            let root = self.load_node(self.root_addr);
+            let mut root = self.load_node(self.root_addr);
+
+            // Check if the key already exists in the root.
+            if let Ok(idx) = root.get_key_idx(&key) {
+                // The key exists. Overwrite it and return the previous value.
+                let (_, previous_value) = root.swap_entry(idx, (key, value));
+                root.save(&self.memory);
+                return Ok(Some(V::from_bytes(previous_value)));
+            }
 
             // If the root is full, we need to introduce a new node as the root.
             //
@@ -176,9 +187,7 @@ impl<M: Memory + Clone, K: Storable, V: Storable> StableBTreeMap<M, K, V> {
             }
         };
 
-        Ok(self
-            .insert_nonfull(root, key.to_vec(), value.to_vec())
-            .map(V::from_bytes))
+        Ok(self.insert_nonfull(root, key, value).map(V::from_bytes))
     }
 
     // Inserts an entry into a node that is *not full*.
@@ -217,16 +226,22 @@ impl<M: Memory + Clone, K: Storable, V: Storable> StableBTreeMap<M, K, V> {
                         // The node is an internal node.
                         // Load the child that we should add the entry to.
                         let mut child = self.load_node(node.children[idx]);
+
                         if child.is_full() {
+                            // Check if the key already exists in the child.
+                            if let Ok(idx) = child.get_key_idx(&key) {
+                                // The key exists. Overwrite it and return the previous value.
+                                let (_, previous_value) = child.swap_entry(idx, (key, value));
+                                child.save(&self.memory);
+                                return Some(previous_value);
+                            }
+
                             // The child is full. Split the child.
                             self.split_child(&mut node, idx);
 
                             // The children have now changed. Search again for
                             // the child where we need to store the entry in.
-                            let idx = node
-                                .entries
-                                .binary_search_by(|e| e.0.cmp(&key))
-                                .unwrap_or_else(|idx| idx);
+                            let idx = node.get_key_idx(&key).unwrap_or_else(|idx| idx);
                             child = self.load_node(node.children[idx]);
                         }
 
@@ -923,6 +938,67 @@ mod test {
         assert_eq!(btree.get(&vec![1, 2, 3]), Some(vec![4, 5, 6]));
         assert_eq!(btree.get(&vec![4, 5]), Some(vec![7, 8, 9, 10]));
         assert_eq!(btree.get(&vec![]), Some(vec![11]));
+    }
+
+    #[test]
+    fn insert_overwrite_median_key_in_full_child_node() {
+        let mem = make_memory();
+        let mut btree = StableBTreeMap::new(mem, 5, 5);
+
+        for i in 1..=17 {
+            assert_eq!(btree.insert(vec![i], vec![]), Ok(None));
+        }
+
+        // The result should look like this:
+        //                [6]
+        //               /   \
+        // [1, 2, 3, 4, 5]   [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+
+        let root = btree.load_node(btree.root_addr);
+        assert_eq!(root.node_type, NodeType::Internal);
+        assert_eq!(root.entries, vec![(vec![6], vec![])]);
+        assert_eq!(root.children.len(), 2);
+
+        // The right child should now be full, with the median key being "12"
+        let right_child = btree.load_node(root.children[1]);
+        assert!(right_child.is_full());
+        let median_index = right_child.entries.len() / 2;
+        assert_eq!(right_child.entries[median_index].0, vec![12]);
+
+        // Overwrite the median key.
+        assert_eq!(btree.insert(vec![12], vec![1, 2, 3]), Ok(Some(vec![])));
+
+        // The key is overwritten successfully.
+        assert_eq!(btree.get(&vec![12]), Some(vec![1, 2, 3]));
+
+        // The child has not been split and is still full.
+        let right_child = btree.load_node(root.children[1]);
+        assert_eq!(right_child.node_type, NodeType::Leaf);
+        assert!(right_child.is_full());
+    }
+
+    #[test]
+    fn insert_overwrite_key_in_full_root_node() {
+        let mem = make_memory();
+        let mut btree = StableBTreeMap::new(mem, 5, 5);
+
+        for i in 1..=11 {
+            assert_eq!(btree.insert(vec![i], vec![]), Ok(None));
+        }
+
+        // We now have a root that is full and looks like this:
+        //
+        // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+        let root = btree.load_node(btree.root_addr);
+        assert!(root.is_full());
+
+        // Overwrite an element in the root. It should NOT cause the node to be split.
+        assert_eq!(btree.insert(vec![6], vec![4, 5, 6]), Ok(Some(vec![])));
+
+        let root = btree.load_node(btree.root_addr);
+        assert_eq!(root.node_type, NodeType::Leaf);
+        assert_eq!(btree.get(&vec![6]), Some(vec![4, 5, 6]));
+        assert_eq!(root.entries.len(), 11);
     }
 
     #[test]
