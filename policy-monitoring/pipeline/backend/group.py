@@ -16,3 +16,7 @@ class Group:
         self.gid = gid
         self.url = url
         self.global_infra = global_infra
+
+    def __str__(self) -> str:
+        """Logging-friendly representation"""
+        return f"<Group gid={self.gid}>"

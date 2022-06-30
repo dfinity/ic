@@ -8,6 +8,8 @@ class Mode(Enum):
 
     universal_policy = "universal_policy"
 
+    pre_processor_test = "pre_processor_test"
+
     check_pipeline_liveness = "check_pipeline_liveness"
 
     def __str__(self):
