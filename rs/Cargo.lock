@@ -7577,7 +7577,7 @@ dependencies = [
  "ic-sns-governance",
  "ic-sns-init-proto-generator",
  "ic-sns-root",
- "ic-sns-sale",
+ "ic-sns-swap",
  "ic-test-utilities-compare-dirs",
  "ledger-canister",
  "maplit",
@@ -7665,7 +7665,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-sns-sale"
+name = "ic-sns-swap"
 version = "0.1.0"
 dependencies = [
  "assert_matches",
@@ -7694,7 +7694,7 @@ dependencies = [
  "ic-nns-common",
  "ic-protobuf",
  "ic-sns-governance",
- "ic-sns-sale-protobuf-generator",
+ "ic-sns-swap-protobuf-generator",
  "ic-types 0.8.0",
  "lazy_static",
  "ledger-canister",
@@ -7712,7 +7712,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-sns-sale-protobuf-generator"
+name = "ic-sns-swap-protobuf-generator"
 version = "0.8.0"
 dependencies = [
  "prost-build 0.10.4",
@@ -7736,7 +7736,7 @@ dependencies = [
  "ic-sns-governance",
  "ic-sns-init",
  "ic-sns-root",
- "ic-sns-sale",
+ "ic-sns-swap",
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "lazy_static",

@@ -1,24 +1,24 @@
-// This file contains the Protobuf definitions for the 'sale' canister
-// which can be used for an initial token sale (swap/auction) to
+// This file contains the Protobuf definitions for the 'swap' canister
+// which can be used for an initial token swap (swap/auction) to
 // decentralise an application running on the IC, turning it into a
 // dapp.
 
 syntax = "proto3";
 
-package ic_sns_sale.pb.v1;
+package ic_sns_swap.pb.v1;
 
 // The initialisation data of the canister. Always specified on
 // canister creation, and cannot be modified afterwards.
 //
-// If the initialization parameters are incorrect, the sale will
+// If the initialization parameters are incorrect, the swap will
 // immediately become aborted.
 message Init {
   // The canister ID of the NNS governance canister. This is the only
-  // principal that can open the sale.
+  // principal that can open the swap.
   string nns_governance_canister_id = 1;
 
   // The canister ID of the governance canister of the SNS that this
-  // token sale pertains to.
+  // token swap pertains to.
   string sns_governance_canister_id = 2;
 
   // The ledger canister of the SNS.
@@ -29,13 +29,13 @@ message Init {
   // so, in principle, any token type can be used as base token.
   string icp_ledger_canister_id = 4;
   
-  // The number of ICP that is "targetted" by this token sale. If this
-  // amount is achieved, the sale can be triggered immediately,
+  // The number of ICP that is "targetted" by this token swap. If this
+  // amount is achieved, the swap can be triggered immediately,
   // without waiting for the due date (end_timestamp_seconds). Must be
   // at least `min_participants * min_participant_icp_e8s`.
   uint64 max_icp_e8s = 5;
   
-  // The minimum number of buyers that must participate for the sale
+  // The minimum number of buyers that must participate for the swap
   // to take place. Must be greater than zero.
   uint32 min_participants = 7;
   
@@ -49,16 +49,16 @@ message Init {
   // setting it to `max_icp_e8s`.
   uint64 max_participant_icp_e8s = 9;
 
-  // The total number of ICP that is required for this token sale to
-  // take place. This number divided by the number of SNS tokens for
-  // sale gives the seller's reserve price for the sale, i.e., the
+  // The total number of ICP that is required for this token swap to
+  // take place. This number divided by the number of SNS tokens being
+  // offered gives the seller's reserve price for the swap, i.e., the
   // minimum number of ICP per SNS tokens that the seller of SNS
   // tokens is willing to accept. If this amount is not achieved, the
-  // sale will be aborted (instead of committed) when the due date/time
+  // swap will be aborted (instead of committed) when the due date/time
   // occurs. Must be smaller than or equal to `max_icp_e8s`.
   uint64 min_icp_e8s = 10;
 
-  // If the sale is aborted, control of the canister(s) should be set to these
+  // If the swap is aborted, control of the canister(s) should be set to these
   // principal(s). Must not be empty.
   repeated string fallback_controller_principal_ids = 11;
 }
@@ -70,13 +70,13 @@ message BuyerState {
   // initialization. Can never be more than
   // `init.max_participant_icp_e8s`. Will be set to zero once the
   // tokens have been transferred out - either to the governance
-  // canister when the sale is committed or (back) to the buyer when
-  // the sale is aborted.
+  // canister when the swap is committed or (back) to the buyer when
+  // the swap is aborted.
   //
   // Invariant between canisters:
   //
   //  ```text
-  //  amount_icp_e8 <= icp_ledger.balance_of(subaccount(sale_canister, P)),
+  //  amount_icp_e8 <= icp_ledger.balance_of(subaccount(swap_canister, P)),
   //  ```
   //
   // where `P` is the principal ID associated with this buyer's state.
@@ -98,8 +98,8 @@ message BuyerState {
   uint64 amount_sns_e8s = 2;
 
   // Only used in state Committed or Aborted: ICP tokens are being
-  // transferred either to the governance canister when the sale is
-  // committed or to the buyer when the sale is aborted.
+  // transferred either to the governance canister when the swap is
+  // committed or to the buyer when the swap is aborted.
   bool icp_disbursing = 3;
 
   // Only used in state Committed, when a transfer of
@@ -107,8 +107,8 @@ message BuyerState {
   bool sns_disbursing = 4;
 }
 
-// Lifecycle states of the sale cansiter's world state. The details of
-// their meanings is provided in the documentation of the `Sale`.
+// Lifecycle states of the swap cansiter's world state. The details of
+// their meanings is provided in the documentation of the `Swap`.
 enum Lifecycle {
   // Canister is incorrectly configured. Not a real lifecycle state.
   LIFECYCLE_UNSPECIFIED = 0;
@@ -121,36 +121,36 @@ enum Lifecycle {
   //   2. The current time is not before start_timestamp_seconds, which is set
   //      via the set_open_time_window Candid method.
   LIFECYCLE_PENDING     = 1;
-  // Users can register for the token sale.
+  // Users can register for the token swap.
   LIFECYCLE_OPEN        = 2;
-  // The token sale price has been determined and buyers can collect
+  // The token price has been determined and buyers can collect
   // their tokens.
   LIFECYCLE_COMMITTED   = 3;
-  // The token sale has been aborted.
+  // The token swap has been aborted.
   LIFECYCLE_ABORTED     = 4;
 }
 
-// Mutable state of the sale canister.
+// Mutable state of the swap canister.
 message State {
   // The number of tokens (of `init.sns_ledger_canister_id`) that are
-  // for sale. The tokens are held in escrow for the the Governance
+  // being offered. The tokens are held in escrow for the the Governance
   // canister.
   //
   // Invariant:
   // ```text
-  // state.sns_token_e8s <= token_ledger.balance_of(<sale-canister>)
+  // state.sns_token_e8s <= token_ledger.balance_of(<swap-canister>)
   // ```
   //
-  // When the sale is committed or aborted, this value is set to
+  // When the swap is committed or aborted, this value is set to
   // zero. Any remaining balance, either due to fractions or due to an
-  // aborted sale can be reclaimed by the Governance canister.
+  // aborted swap can be reclaimed by the Governance canister.
   uint64 sns_token_e8s = 1;
   // Invariant:
   // ```text
   // state.buyer_total_icp_e8s <= init.max_icp_e8s
   // ```
   map<string, BuyerState> buyers = 2;
-  // The current lifecycle state of the sale.
+  // The current lifecycle state of the swap.
   Lifecycle lifecycle = 3;
 
   // Initially, empty. Later, set by the set_open_time_window Candid method,
@@ -164,8 +164,8 @@ message TimeWindow {
   uint64 end_timestamp_seconds = 2;
 }
 
-// The complete state of the sale canister.
-message Sale {
+// The complete state of the swap canister.
+message Swap {
   Init init = 1;
   State state = 2;
 }
@@ -193,7 +193,7 @@ message GetCanisterStatusResponse {
 // TODO: introduce a limits on the number of buyers to include?
 message GetStateRequest {}
 message GetStateResponse {
-  Sale sale = 1;
+  Swap swap = 1;
   DerivedState derived = 2;
 }
 
@@ -203,23 +203,24 @@ message DerivedState {
   float sns_tokens_per_icp = 2;
 }
 
-// See `open_sale` for details.
+// See `set_open_time_window` for details.
 message SetOpenTimeWindowRequest {
   // Duration must be between 1 and 90 days.
   TimeWindow open_time_window = 1;
 }
-// Response if the sale was successfully opened.
+// Response if setting the open time window succeeded.
 message SetOpenTimeWindowResponse {}
 
 
-// The can notify the sale canister about tokens 'for sale' having
-// been transferred in.
+// Informs the swap canister that the swap has been funded. That is, the initial
+// pot of tokens being offered has been transferred to the swap canister.
 //
 // Only in lifecycle state 'pending'.
 message RefreshSnsTokensRequest {}
 message RefreshSnsTokensResponse {}
 
-// The buyer notifies the sale cansiter about an ICP transfer.
+// Informs the swap canister that a buyer has sent funds to participate in the
+// swap.
 //
 // Only in lifecycle state 'open'.
 message RefreshBuyerTokensRequest {
@@ -228,11 +229,11 @@ message RefreshBuyerTokensRequest {
 }
 message RefreshBuyerTokensResponse {}
 
-// Once a sale is committed or aborted, the tokens need to be
-// distributed, and, if the sale was committed, neurons created.
-message FinalizeSaleRequest {}
+// Once a swap is committed or aborted, the tokens need to be
+// distributed, and, if the swap was committed, neurons created.
+message FinalizeSwapRequest {}
 
-message FinalizeSaleResponse {
+message FinalizeSwapResponse {
   SweepResult sweep_icp = 1;
   SweepResult sweep_sns = 2;
   SweepResult create_neuron = 3;

@@ -67,7 +67,7 @@ impl governance::Mode {
     pub fn allows_manage_neuron_command_or_err(
         &self,
         command: &manage_neuron::Command,
-        caller_is_sale_canister: bool,
+        caller_is_swap_canister: bool,
     ) -> Result<(), GovernanceError> {
         use governance::Mode;
         match self {
@@ -76,7 +76,7 @@ impl governance::Mode {
             Mode::PreInitializationSwap => {
                 Self::manage_neuron_command_is_allowed_in_pre_initialization_swap_or_err(
                     command,
-                    caller_is_sale_canister,
+                    caller_is_swap_canister,
                 )
             }
         }
@@ -84,7 +84,7 @@ impl governance::Mode {
 
     fn manage_neuron_command_is_allowed_in_pre_initialization_swap_or_err(
         command: &manage_neuron::Command,
-        caller_is_sale_canister: bool,
+        caller_is_swap_canister: bool,
     ) -> Result<(), GovernanceError> {
         use manage_neuron::Command as C;
         let ok = match command {
@@ -94,7 +94,7 @@ impl governance::Mode {
             | C::AddNeuronPermissions(_)
             | C::RemoveNeuronPermissions(_) => true,
 
-            C::ClaimOrRefresh(_) => caller_is_sale_canister,
+            C::ClaimOrRefresh(_) => caller_is_swap_canister,
 
             _ => false,
         };
@@ -108,8 +108,8 @@ impl governance::Mode {
             format!(
                 "Because governance is currently in PreInitializationSwap mode, \
                  manage_neuron commands of this type are not allowed \
-                 (caller_is_sale_canister={}). command: {:#?}",
-                caller_is_sale_canister, command,
+                 (caller_is_swap_canister={}). command: {:#?}",
+                caller_is_swap_canister, command,
             ),
         ))
     }
@@ -1425,7 +1425,7 @@ pub(crate) mod tests {
                 Command::DisburseMaturity (Default::default()),
             ];
 
-            // Only the sale canister is allowed to do this in PreInitializationSwap.
+            // Only the swap canister is allowed to do this in PreInitializationSwap.
             let claim_or_refresh = Command::ClaimOrRefresh(Default::default());
 
             (allowed_in_pre_initialization_swap, disallowed_in_pre_initialization_swap, claim_or_refresh)
@@ -1435,10 +1435,10 @@ pub(crate) mod tests {
     #[should_panic]
     #[test]
     fn test_mode_allows_manage_neuron_command_or_err_unspecified_kaboom() {
-        let caller_is_sale_canister = true;
+        let caller_is_swap_canister = true;
         let innocuous_command = &MANAGE_NEURON_COMMANDS.0[0];
         let _clippy = governance::Mode::Unspecified
-            .allows_manage_neuron_command_or_err(innocuous_command, caller_is_sale_canister);
+            .allows_manage_neuron_command_or_err(innocuous_command, caller_is_swap_canister);
     }
 
     #[test]
@@ -1448,9 +1448,9 @@ pub(crate) mod tests {
         commands.push(MANAGE_NEURON_COMMANDS.2.clone());
 
         for command in commands {
-            for caller_is_sale_canister in [true, false] {
+            for caller_is_swap_canister in [true, false] {
                 let result = governance::Mode::Normal
-                    .allows_manage_neuron_command_or_err(&command, caller_is_sale_canister);
+                    .allows_manage_neuron_command_or_err(&command, caller_is_swap_canister);
                 assert!(result.is_ok(), "{:#?}", result);
             }
         }
@@ -1460,9 +1460,9 @@ pub(crate) mod tests {
     fn test_mode_allows_manage_neuron_command_or_err_pre_initialization_swap_ok() {
         let allowed = &MANAGE_NEURON_COMMANDS.0;
         for command in allowed {
-            for caller_is_sale_canister in [true, false] {
+            for caller_is_swap_canister in [true, false] {
                 let result = PreInitializationSwap
-                    .allows_manage_neuron_command_or_err(command, caller_is_sale_canister);
+                    .allows_manage_neuron_command_or_err(command, caller_is_swap_canister);
                 assert!(result.is_ok(), "{:#?}", result);
             }
         }
@@ -1472,9 +1472,9 @@ pub(crate) mod tests {
     fn test_mode_allows_manage_neuron_command_or_err_pre_initialization_swap_verboten() {
         let disallowed = &MANAGE_NEURON_COMMANDS.1;
         for command in disallowed {
-            for caller_is_sale_canister in [true, false] {
+            for caller_is_swap_canister in [true, false] {
                 let result = PreInitializationSwap
-                    .allows_manage_neuron_command_or_err(command, caller_is_sale_canister);
+                    .allows_manage_neuron_command_or_err(command, caller_is_swap_canister);
                 assert!(result.is_err(), "{:#?}", result);
             }
         }
@@ -1484,14 +1484,14 @@ pub(crate) mod tests {
     fn test_mode_allows_manage_neuron_command_or_err_pre_initialization_swap_claim_or_refresh() {
         let claim_or_refresh = &MANAGE_NEURON_COMMANDS.2;
 
-        let caller_is_sale_canister = false;
+        let caller_is_swap_canister = false;
         let result = PreInitializationSwap
-            .allows_manage_neuron_command_or_err(claim_or_refresh, caller_is_sale_canister);
+            .allows_manage_neuron_command_or_err(claim_or_refresh, caller_is_swap_canister);
         assert!(result.is_err(), "{:#?}", result);
 
-        let caller_is_sale_canister = true;
+        let caller_is_swap_canister = true;
         let result = PreInitializationSwap
-            .allows_manage_neuron_command_or_err(claim_or_refresh, caller_is_sale_canister);
+            .allows_manage_neuron_command_or_err(claim_or_refresh, caller_is_swap_canister);
         assert!(result.is_ok(), "{:#?}", result);
     }
 

@@ -19,7 +19,7 @@ use ic_sns_governance::pb::v1::{
 };
 use ic_sns_governance::pb::v1::{ListNervousSystemFunctionsResponse, RewardEvent};
 use ic_sns_root::pb::v1::SnsRootCanister;
-use ic_sns_sale::pb::v1::Init;
+use ic_sns_swap::pb::v1::Init;
 use ledger_canister as ledger;
 use ledger_canister::{
     protobuf::AccountIdentifier as AccountIdentifierProto, tokens_from_proto, AccountBalanceArgs,

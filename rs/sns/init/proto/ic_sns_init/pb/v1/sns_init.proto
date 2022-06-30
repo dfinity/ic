@@ -61,11 +61,11 @@ message SnsInitPayload {
   // }
   optional InitialTokenDistribution initial_token_distribution = 6;
 
-  // Amount targeted by the sale, if the amount is reached the sale is triggered. Must be at least
+  // Amount targeted by the swap, if the amount is reached the swap is triggered. Must be at least
   // min_participants * min_participant_icp_e8.
   optional uint64 max_icp_e8s = 7;
 
-  // Minimum number of participants for the sale to take place. Must be greater than zero.
+  // Minimum number of participants for the swap to take place. Must be greater than zero.
   optional uint32 min_participants = 9;
 
   // The minimum amount of icp that each buyer must contribute to participate.
@@ -77,12 +77,12 @@ message SnsInitPayload {
   // setting it to `max_icp_e8s`.
   optional uint64 max_participant_icp_e8s = 11;
 
-  // The total number of ICP that is required for this token sale to
-  // take place. This number divided by the number of SNS tokens for
-  // sale gives the seller's reserve price for the sale, i.e., the
+  // The total number of ICP that is required for this token swap to
+  // take place. This number divided by the number of SNS tokens being
+  // offered gives the seller's reserve price for the swap, i.e., the
   // minimum number of ICP per SNS tokens that the seller of SNS
   // tokens is willing to accept. If this amount is not achieved, the
-  // sale will be aborted (instead of committed) when the due date/time
+  // swap will be aborted (instead of committed) when the due date/time
   // occurs. Must be smaller than or equal to `max_icp_e8s`.
   optional uint64 min_icp_e8s = 12;
 

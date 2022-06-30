@@ -28,14 +28,14 @@ use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
 use ic_sns_governance::pb::v1::{ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse};
-use ic_sns_sale::pb::v1::{
-    CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSaleRequest,
-    FinalizeSaleResponse, GetCanisterStatusRequest, GetCanisterStatusResponse, GetStateRequest,
+use ic_sns_swap::pb::v1::{
+    CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest,
+    FinalizeSwapResponse, GetCanisterStatusRequest, GetCanisterStatusResponse, GetStateRequest,
     GetStateResponse, Init, Lifecycle, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
-    RefreshSnsTokensRequest, RefreshSnsTokensResponse, Sale, SetOpenTimeWindowRequest,
-    SetOpenTimeWindowResponse,
+    RefreshSnsTokensRequest, RefreshSnsTokensResponse, SetOpenTimeWindowRequest,
+    SetOpenTimeWindowResponse, Swap,
 };
-use ic_sns_sale::sale::{SnsGovernanceClient, LOG_PREFIX};
+use ic_sns_swap::swap::{SnsGovernanceClient, LOG_PREFIX};
 use ledger_canister::Tokens;
 use ledger_canister::DEFAULT_TRANSFER_FEE;
 
@@ -52,22 +52,22 @@ const STABLE_MEM_BUFFER_SIZE: u32 = 1024 * 1024; // 1MiB
 // =============================================================================
 
 /// The global state of the this canister.
-static mut SALE: Option<Sale> = None;
+static mut SWAP: Option<Swap> = None;
 
 /// Returns an immutable reference to the global state.
 ///
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
-fn sale() -> &'static Sale {
-    unsafe { SALE.as_ref().expect("Canister not initialized!") }
+fn swap() -> &'static Swap {
+    unsafe { SWAP.as_ref().expect("Canister not initialized!") }
 }
 
 /// Returns a mutable reference to the global state.
 ///
 /// This should only be called once the global state has been initialized, which
 /// happens in `canister_init` or `canister_post_upgrade`.
-fn sale_mut() -> &'static mut Sale {
-    unsafe { SALE.as_mut().expect("Canister not initialized!") }
+fn swap_mut() -> &'static mut Swap {
+    unsafe { SWAP.as_mut().expect("Canister not initialized!") }
 }
 
 // =============================================================================
@@ -84,14 +84,14 @@ fn get_state() {
 #[candid_method(query, rename = "get_state")]
 fn get_state_(_arg: GetStateRequest) -> GetStateResponse {
     GetStateResponse {
-        sale: Some(sale().clone()),
-        derived: Some(sale().derived_state()),
+        swap: Some(swap().clone()),
+        derived: Some(swap().derived_state()),
     }
 }
 
 /// Sets the window of time when buyers can participate.
 ///
-/// See Sale.set_open_time_window.
+/// See Swap.set_open_time_window.
 #[export_name = "canister_update set_open_time_window"]
 fn set_open_time_window() {
     over(candid_one, set_open_time_window_)
@@ -101,33 +101,33 @@ fn set_open_time_window() {
 #[candid_method(update, rename = "set_open_time_window")]
 fn set_open_time_window_(request: SetOpenTimeWindowRequest) -> SetOpenTimeWindowResponse {
     println!("{}set_open_time_window", LOG_PREFIX);
-    sale_mut().set_open_time_window(caller(), now_seconds(), &request)
+    swap_mut().set_open_time_window(caller(), now_seconds(), &request)
 }
 
-/// See `Sale.refresh_sns_token_e8s`.
+/// See `Swap.refresh_sns_token_e8s`.
 #[export_name = "canister_update refresh_sns_tokens"]
 fn refresh_sns_tokens() {
     over_async(candid_one, refresh_sns_tokens_)
 }
 
-/// See `Sale.refresh_sns_token_e8`.
+/// See `Swap.refresh_sns_token_e8`.
 #[candid_method(update, rename = "refresh_sns_tokens")]
 async fn refresh_sns_tokens_(_: RefreshSnsTokensRequest) -> RefreshSnsTokensResponse {
     println!("{}refresh_sns_tokens", LOG_PREFIX);
     let ledger_factory = &create_real_ledger;
-    match sale_mut().refresh_sns_token_e8s(id(), ledger_factory).await {
+    match swap_mut().refresh_sns_token_e8s(id(), ledger_factory).await {
         Ok(()) => RefreshSnsTokensResponse {},
         Err(msg) => panic!("{}", msg),
     }
 }
 
-/// See `Sale.refresh_buyer_token_e8`.
+/// See `Swap.refresh_buyer_token_e8`.
 #[export_name = "canister_update refresh_buyer_tokens"]
 fn refresh_buyer_tokens() {
     over_async(candid_one, refresh_buyer_tokens_)
 }
 
-/// See `Sale.refresh_buyer_token_e8`.
+/// See `Swap.refresh_buyer_token_e8`.
 #[candid_method(update, rename = "refresh_buyer_tokens")]
 async fn refresh_buyer_tokens_(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTokensResponse {
     println!("{}refresh_buyer_tokens", LOG_PREFIX);
@@ -137,7 +137,7 @@ async fn refresh_buyer_tokens_(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTo
         PrincipalId::from_str(&arg.buyer).unwrap()
     };
     let ledger_factory = &create_real_ledger;
-    match sale_mut()
+    match swap_mut()
         .refresh_buyer_token_e8s(p, id(), ledger_factory)
         .await
     {
@@ -187,20 +187,20 @@ impl SnsGovernanceClient for RealSnsGovernanceClient {
     }
 }
 
-/// See Sale.finalize.
-#[export_name = "canister_update finalize_sale"]
-fn finalize_sale() {
-    over_async(candid_one, finalize_sale_)
+/// See Swap.finalize.
+#[export_name = "canister_update finalize_swap"]
+fn finalize_swap() {
+    over_async(candid_one, finalize_swap_)
 }
 
-/// See Sale.finalize.
-#[candid_method(update, rename = "finalize_sale")]
-async fn finalize_sale_(_arg: FinalizeSaleRequest) -> FinalizeSaleResponse {
+/// See Swap.finalize.
+#[candid_method(update, rename = "finalize_swap")]
+async fn finalize_swap_(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
     // Helpers.
-    let mut sns_governance_client = RealSnsGovernanceClient::new(sale().init().sns_governance());
+    let mut sns_governance_client = RealSnsGovernanceClient::new(swap().init().sns_governance());
     let ledger_factory = create_real_ledger;
 
-    sale_mut()
+    swap_mut()
         .finalize(&mut sns_governance_client, ledger_factory)
         .await
 }
@@ -212,7 +212,7 @@ fn error_refund_icp() {
 
 #[candid_method(update, rename = "error_refund_icp")]
 async fn error_refund_icp_(arg: ErrorRefundIcpRequest) -> ErrorRefundIcpResponse {
-    sale()
+    swap()
         .error_refund_icp(
             caller(),
             Tokens::from_e8s(arg.icp_e8s),
@@ -268,20 +268,20 @@ fn do_get_canister_status(
 // ===               Canister helper & boilerplate methods                   ===
 // =============================================================================
 
-/// Advances the sale. I.e. tries to move it into a more advanced phase in its
+/// Advances the swap. I.e. tries to move it into a more advanced phase in its
 /// Lifecycle.
 #[export_name = "canister_heartbeat"]
 fn canister_heartbeat() {
     let now = now_seconds();
 
-    // Try to open the sale.
-    if sale_mut().state().lifecycle() == Lifecycle::Pending {
-        let result = sale_mut().open(now);
+    // Try to open the swap.
+    if swap_mut().state().lifecycle() == Lifecycle::Pending {
+        let result = swap_mut().open(now);
 
         // Log result.
         match result {
             Ok(()) => {
-                println!("The sale has been successfully opened.");
+                println!("The swap has been successfully opened.");
             }
             Err(err) => {
                 let squelch = err.contains("start time");
@@ -295,8 +295,8 @@ fn canister_heartbeat() {
         }
     }
 
-    if sale_mut().try_commit_or_abort(now) {
-        println!("{}Sale committed/aborted at timestamp {}", LOG_PREFIX, now);
+    if swap_mut().try_commit_or_abort(now) {
+        println!("{}Swap committed/aborted at timestamp {}", LOG_PREFIX, now);
     }
 }
 
@@ -328,14 +328,14 @@ fn canister_init() {
 #[candid_method(init)]
 fn canister_init_(init_payload: Init) {
     dfn_core::printer::hook();
-    let sale = Sale::new(init_payload);
+    let swap = Swap::new(init_payload);
     unsafe {
         assert!(
-            SALE.is_none(),
+            SWAP.is_none(),
             "{}Trying to initialize an already initialized canister!",
             LOG_PREFIX
         );
-        SALE = Some(sale);
+        SWAP = Some(swap);
     }
     println!("{}Initialized", LOG_PREFIX);
 }
@@ -347,7 +347,7 @@ fn canister_init_(init_payload: Init) {
 fn canister_pre_upgrade() {
     println!("{}Executing pre upgrade", LOG_PREFIX);
     let mut writer = BufferedStableMemWriter::new(STABLE_MEM_BUFFER_SIZE);
-    sale()
+    swap()
         .encode(&mut writer)
         .expect("Error. Couldn't serialize canister pre-upgrade.");
     writer.flush();
@@ -360,7 +360,7 @@ fn canister_post_upgrade() {
     dfn_core::printer::hook();
     println!("{}Executing post upgrade", LOG_PREFIX);
     let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
-    match Sale::decode(reader) {
+    match Swap::decode(reader) {
         Err(err) => {
             panic!(
                 "{}Error deserializing canister state post-upgrade. \
@@ -370,11 +370,11 @@ fn canister_post_upgrade() {
         }
         Ok(proto) => unsafe {
             assert!(
-                SALE.is_none(),
+                SWAP.is_none(),
                 "{}Trying to post-upgrade an already initialized canister!",
                 LOG_PREFIX
             );
-            SALE = Some(proto);
+            SWAP = Some(proto);
         },
     }
 }
@@ -405,9 +405,9 @@ mod tests {
 
     /// A test that fails if the API was updated but the candid definition was not.
     #[test]
-    fn check_sale_candid_file() {
+    fn check_swap_candid_file() {
         let governance_did =
-            String::from_utf8(std::fs::read("canister/sale.did").unwrap()).unwrap();
+            String::from_utf8(std::fs::read("canister/swap.did").unwrap()).unwrap();
 
         // See comments in main above
         candid::export_service!();
@@ -415,9 +415,9 @@ mod tests {
 
         if governance_did != expected {
             panic!(
-                "Generated candid definition does not match canister/sale.did. \
-                 Run `cargo run --bin sns-sale-canister > canister/sale.did` in \
-                 rs/sns/sale to update canister/sale.did."
+                "Generated candid definition does not match canister/swap.did. \
+                 Run `cargo run --bin sns-swap-canister > canister/swap.did` in \
+                 rs/sns/swap to update canister/swap.did."
             )
         }
     }
