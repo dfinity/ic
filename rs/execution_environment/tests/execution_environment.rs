@@ -668,8 +668,8 @@ fn get_running_canister_status_from_another_canister() {
         test.execution_state(canister).memory_usage()
     );
     assert_eq!(
-        Cycles::new(csr.idle_cycles_burned_per_second()),
-        test.idle_cycles_burned_per_second(canister)
+        Cycles::new(csr.idle_cycles_burned_per_day()),
+        test.idle_cycles_burned_per_day(canister)
     );
 }
 
@@ -679,7 +679,8 @@ fn get_canister_status_from_another_canister_when_memory_low() {
     let controller = test.universal_canister().unwrap();
     let binary = wabt::wat2wasm("(module)").unwrap();
     let canister = test.create_canister(Cycles::new(1_000_000_000_000));
-    test.install_canister_with_allocation(canister, binary, None, Some(150))
+    let memory_allocation = NumBytes::from(150);
+    test.install_canister_with_allocation(canister, binary, None, Some(memory_allocation.get()))
         .unwrap();
     let canister_status_args = Encode!(&CanisterIdRecord::from(canister)).unwrap();
     let get_canister_status = wasm()
@@ -693,7 +694,20 @@ fn get_canister_status_from_another_canister_when_memory_low() {
     let result = test.ingress(controller, "update", get_canister_status);
     let reply = get_reply(result);
     let csr = CanisterStatusResultV2::decode(&reply).unwrap();
-    assert_eq!(csr.idle_cycles_burned_per_second(), 1);
+    let one_gib: u128 = 1 << 30;
+    let seconds_per_day = 24 * 3600;
+    assert_eq!(
+        csr.idle_cycles_burned_per_day(),
+        (memory_allocation.get() as u128
+            * seconds_per_day
+            * test
+                .cycles_account_manager()
+                .gib_storage_per_second_fee()
+                .get()
+            + one_gib
+            - 1)
+            / one_gib
+    );
 }
 
 #[test]

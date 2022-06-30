@@ -188,7 +188,7 @@ impl ExecutionTest {
             .unwrap_or(&Cycles::new(0))
     }
 
-    pub fn idle_cycles_burned_per_second(&self, canister_id: CanisterId) -> Cycles {
+    pub fn idle_cycles_burned_per_day(&self, canister_id: CanisterId) -> Cycles {
         let memory_usage = self.execution_state(canister_id).memory_usage();
         let memory_allocation = self
             .canister_state(canister_id)

@@ -121,6 +121,11 @@ impl CyclesAccountManager {
         self.config.ingress_message_reception_fee
     }
 
+    /// Returns the fee for storing a GiB of data per second.
+    pub fn gib_storage_per_second_fee(&self) -> Cycles {
+        self.config.gib_storage_per_second_fee
+    }
+
     /// Returns the fee per byte of ingress message received in [`Cycles`].
     pub fn ingress_byte_received_fee(&self) -> Cycles {
         self.config.ingress_byte_reception_fee
@@ -136,33 +141,36 @@ impl CyclesAccountManager {
         self.config.xnet_byte_transmission_fee * Cycles::from(payload_size.get())
     }
 
-    // Returns the idle resource consumption rate in cycles per second.
+    // Returns the idle resource consumption rate in cycles per day.
     pub fn idle_cycles_burned_rate(
         &self,
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,
     ) -> Cycles {
-        let one_gib = 1 << 30;
+        let one_gib: u128 = 1 << 30;
+        let seconds_per_day = 24 * 60 * 60;
 
         let memory_fee = {
             let memory = match memory_allocation {
                 MemoryAllocation::Reserved(bytes) => bytes,
                 MemoryAllocation::BestEffort => memory_usage,
             };
-            let total_memory_fee =
-                memory.get() as u128 * self.config.gib_storage_per_second_fee.get();
+            let total_memory_fee = memory.get() as u128
+                * seconds_per_day
+                * self.config.gib_storage_per_second_fee.get();
 
             // Round up the memory fee.
-            if total_memory_fee > 0 && total_memory_fee < one_gib as u128 {
+            if total_memory_fee > 0 && total_memory_fee < one_gib {
                 Cycles::new(1)
             } else {
-                Cycles::from((total_memory_fee + one_gib as u128 - 1) / one_gib as u128)
+                Cycles::from((total_memory_fee + one_gib - 1) / one_gib)
             }
         };
 
         let compute_fee = Cycles::from(
             compute_allocation.as_percent() as u128
+                * seconds_per_day
                 * self.config.compute_percent_allocated_per_second_fee.get(),
         );
 
