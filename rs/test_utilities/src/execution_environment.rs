@@ -903,7 +903,7 @@ pub struct ExecutionTestBuilder {
     manual_execution: bool,
     rate_limiting_of_instructions: bool,
     allocatable_compute_capacity_in_percent: usize,
-    subnet_features: &'static str,
+    subnet_features: String,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -933,7 +933,7 @@ impl Default for ExecutionTestBuilder {
             manual_execution: false,
             rate_limiting_of_instructions: false,
             allocatable_compute_capacity_in_percent: 100,
-            subnet_features: "",
+            subnet_features: String::default(),
         }
     }
 }
@@ -1027,9 +1027,9 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_subnet_features(self, subnet_features: &'static str) -> Self {
+    pub fn with_subnet_features(self, subnet_features: &str) -> Self {
         Self {
-            subnet_features,
+            subnet_features: String::from(subnet_features),
             ..self
         }
     }
@@ -1098,7 +1098,7 @@ impl ExecutionTestBuilder {
             state.metadata.own_subnet_features = SubnetFeatures::default();
         } else {
             state.metadata.own_subnet_features =
-                SubnetFeatures::from_str(self.subnet_features).unwrap();
+                SubnetFeatures::from_str(&self.subnet_features).unwrap();
         }
 
         let metrics_registry = MetricsRegistry::new();
