@@ -28,13 +28,14 @@ pub fn generate_suite_execution_contract(suite: &Suite) -> TestSuiteContract {
             TestSet::Parallel(ref tests) => tests,
         };
         for test in all_tests.iter() {
-            let is_skipped = test.execution_mode == ExecutionMode::Skip;
-            tests_results_for_pot.push(TestSuiteContract {
-                name: test.name.clone(),
-                is_skipped,
-                alert_channels: vec![],
-                children: vec![],
-            });
+            if test.execution_mode != ExecutionMode::Ignore {
+                tests_results_for_pot.push(TestSuiteContract {
+                    name: test.name.clone(),
+                    is_skipped: test.execution_mode == ExecutionMode::Skip,
+                    alert_channels: vec![],
+                    children: vec![],
+                });
+            }
         }
         pot_results.push(TestSuiteContract {
             name: pot.name.clone(),

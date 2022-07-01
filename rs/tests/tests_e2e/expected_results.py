@@ -23,6 +23,46 @@ suite_contract_to_succeed = {
     ],
 }
 
+suite_contract_include_pattern_case_1 = {
+    "name": "suite_to_succeed",
+    "is_skipped": False,
+    "alert_channels": [],
+    "children": [
+        {
+            "name": "pot_success_1",
+            "is_skipped": False,
+            "alert_channels": [],
+            "children": [{"name": "test_success_1", "is_skipped": False, "alert_channels": [], "children": []}],
+        },
+        {
+            "name": "pot_success_2",
+            "is_skipped": False,
+            "alert_channels": [],
+            "children": [{"name": "test_success_1", "is_skipped": False, "alert_channels": [], "children": []}],
+        },
+    ],
+}
+
+suite_contract_include_pattern_case_2 = {
+    "name": "suite_to_fail",
+    "is_skipped": False,
+    "alert_channels": [],
+    "children": [
+        {
+            "name": "pot_fail_1",
+            "is_skipped": False,
+            "alert_channels": [],
+            "children": [{"name": "test_success_1", "is_skipped": False, "alert_channels": [], "children": []}],
+        },
+        {
+            "name": "pot_success_3",
+            "is_skipped": False,
+            "alert_channels": [],
+            "children": [{"name": "test_success_1", "is_skipped": False, "alert_channels": [], "children": []}],
+        },
+    ],
+}
+
 suite_contract_to_fail = {
     "name": "suite_to_fail",
     "is_skipped": False,
@@ -230,6 +270,94 @@ suite_result_to_timeout = {
         },
         {
             "name": "pot_success_2",
+            "started_at": mock.ANY,
+            "duration": mock.ANY,
+            "result": "Passed",
+            "children": [
+                {
+                    "name": "test_success_1",
+                    "started_at": mock.ANY,
+                    "duration": mock.ANY,
+                    "result": "Passed",
+                    "children": [],
+                    "alert_channels": [],
+                }
+            ],
+            "alert_channels": [],
+        },
+    ],
+    "alert_channels": [],
+}
+
+suite_result_include_pattern_case_1 = {
+    "name": "suite_to_succeed",
+    "started_at": mock.ANY,
+    "duration": mock.ANY,
+    "result": "Passed",
+    "children": [
+        {
+            "name": "pot_success_1",
+            "started_at": mock.ANY,
+            "duration": mock.ANY,
+            "result": "Passed",
+            "children": [
+                {
+                    "name": "test_success_1",
+                    "started_at": mock.ANY,
+                    "duration": mock.ANY,
+                    "result": "Passed",
+                    "children": [],
+                    "alert_channels": [],
+                },
+            ],
+            "alert_channels": [],
+        },
+        {
+            "name": "pot_success_2",
+            "started_at": mock.ANY,
+            "duration": mock.ANY,
+            "result": "Passed",
+            "children": [
+                {
+                    "name": "test_success_1",
+                    "started_at": mock.ANY,
+                    "duration": mock.ANY,
+                    "result": "Passed",
+                    "children": [],
+                    "alert_channels": [],
+                }
+            ],
+            "alert_channels": [],
+        },
+    ],
+    "alert_channels": [],
+}
+
+suite_result_include_pattern_case_2 = {
+    "name": "suite_to_fail",
+    "started_at": mock.ANY,
+    "duration": mock.ANY,
+    "result": "Passed",
+    "children": [
+        {
+            "name": "pot_fail_1",
+            "started_at": mock.ANY,
+            "duration": mock.ANY,
+            "result": "Passed",
+            "children": [
+                {
+                    "name": "test_success_1",
+                    "started_at": mock.ANY,
+                    "duration": mock.ANY,
+                    "result": "Passed",
+                    "children": [],
+                    "alert_channels": [],
+                },
+            ],
+            "alert_channels": [],
+        },
+        {
+            "name": "pot_success_3",
             "started_at": mock.ANY,
             "duration": mock.ANY,
             "result": "Passed",
