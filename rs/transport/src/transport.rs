@@ -78,6 +78,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock, Weak};
@@ -108,7 +109,10 @@ impl TransportImpl {
             control_plane_metrics: ControlPlaneMetrics::new(metrics_registry.clone()),
             send_queue_metrics: SendQueueMetrics::new(metrics_registry),
             log,
-            client_state: RwLock::new(None),
+
+            peer_map: RwLock::new(HashMap::new()),
+            accept_ports: RwLock::new(HashMap::new()),
+            event_handler: RwLock::new(None),
             weak_self: RwLock::new(Weak::new()),
         });
         *arc.weak_self.write().unwrap() = Arc::downgrade(&arc);
@@ -163,12 +167,8 @@ impl Transport for TransportImpl {
         flow_tag: FlowTag,
         message: TransportPayload,
     ) -> Result<(), TransportErrorCode> {
-        let client_state = self.client_state.read().unwrap();
-        let client_state = match client_state.as_ref() {
-            Some(client_state) => client_state,
-            None => return Err(TransportErrorCode::TransportClientNotFound),
-        };
-        let peer_state = match client_state.peer_map.get(peer_id) {
+        let peer_map = self.peer_map.read().unwrap();
+        let peer_state = match peer_map.get(peer_id) {
             Some(peer_state) => peer_state,
             None => return Err(TransportErrorCode::TransportClientNotFound),
         };
@@ -183,10 +183,8 @@ impl Transport for TransportImpl {
     }
 
     fn clear_send_queues(&self, peer_id: &NodeId) {
-        let mut client_state = self.client_state.write().unwrap();
-        let client_state = client_state.as_mut().expect("Transport client not found");
-        let peer_state = client_state
-            .peer_map
+        let mut peer_map = self.peer_map.write().unwrap();
+        let peer_state = peer_map
             .get_mut(peer_id)
             .expect("Transport client not found");
         peer_state

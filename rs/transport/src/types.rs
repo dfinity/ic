@@ -84,8 +84,13 @@ pub(crate) struct TransportImpl {
     pub node_ip: IpAddr,
     /// Configuration
     pub config: TransportConfig,
-    /// Map of clients to their corresponding state
-    pub client_state: RwLock<Option<ClientState>>,
+
+    /// Ports used to accept connections for this transport-client
+    pub accept_ports: RwLock<HashMap<FlowTag, ServerPortState>>,
+    /// Mapping of peers to their corresponding state
+    pub peer_map: RwLock<HashMap<NodeId, PeerState>>,
+    /// Event handler to report back to the transport client
+    pub event_handler: RwLock<Option<Arc<dyn AsyncTransportEventHandler>>>,
 
     // Crypto and data required for TLS handshakes
     /// Clients that are allowed to connect to this node
@@ -118,16 +123,6 @@ pub(crate) enum ConnectionRole {
 
     /// We are the server
     Server,
-}
-
-/// Per transport-client state
-pub(crate) struct ClientState {
-    /// Ports used to accept connections for this transport-client
-    pub accept_ports: HashMap<FlowTag, ServerPortState>,
-    /// Mapping of peers to their corresponding state
-    pub peer_map: HashMap<NodeId, PeerState>,
-    /// Event handler to report back to the transport client
-    pub event_handler: Arc<dyn AsyncTransportEventHandler>,
 }
 
 /// State about the server ports we are listening on

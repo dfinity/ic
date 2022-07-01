@@ -9,8 +9,8 @@
 //! [`TransportImpl`](../types/struct.TransportImpl.html).
 
 use crate::types::{
-    ClientState, Connecting, ConnectionRole, ConnectionState, FlowState, PeerState, QueueSize,
-    ServerPort, ServerPortState, TransportImpl,
+    Connecting, ConnectionRole, ConnectionState, FlowState, PeerState, QueueSize, ServerPort,
+    ServerPortState, TransportImpl,
 };
 use crate::utils::{get_flow_ips, get_flow_label, SendQueueImpl};
 use ic_base_types::{NodeId, RegistryVersion};
@@ -42,10 +42,7 @@ impl TransportImpl {
         peer_record: &NodeRecord,
         registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode> {
-        let mut client_state = self.client_state.write().unwrap();
-        let client_state = client_state
-            .as_mut()
-            .ok_or(TransportErrorCode::TransportClientNotFound)?;
+        let mut peer_map = self.peer_map.write().unwrap();
         let role = Self::connection_role(&self.node_id, peer_id);
         // If we are the server, we should add the peer to the allowed_clients.
         if role == ConnectionRole::Server {
@@ -59,18 +56,14 @@ impl TransportImpl {
             peer_id,
             registry_version
         );
-        self.start_peer(peer_id, peer_record, client_state, role)
+        self.start_peer(peer_id, peer_record, &mut peer_map, role)
     }
 
     /// Stops connection to a peer
     pub(crate) fn stop_peer_connections(&self, peer_id: &NodeId) -> Result<(), TransportErrorCode> {
         self.allowed_clients.write().unwrap().remove(peer_id);
-        let mut client_state = self.client_state.write().unwrap();
-        let client_state = client_state
-            .as_mut()
-            .ok_or(TransportErrorCode::TransportClientNotFound)?;
-        let peer_state = client_state
-            .peer_map
+        let mut peer_map = self.peer_map.write().unwrap();
+        let peer_state = peer_map
             .get(peer_id)
             .ok_or(TransportErrorCode::PeerNotFound)?;
 
@@ -89,7 +82,7 @@ impl TransportImpl {
                 )
             }
         }
-        client_state.peer_map.remove(peer_id);
+        peer_map.remove(peer_id);
 
         info!(
             self.log,
@@ -104,10 +97,10 @@ impl TransportImpl {
         &self,
         peer_id: &NodeId,
         peer_record: &NodeRecord,
-        client_state: &mut ClientState,
+        peer_map: &mut HashMap<NodeId, PeerState>,
         role: ConnectionRole,
     ) -> Result<(), TransportErrorCode> {
-        if client_state.peer_map.get(peer_id).is_some() {
+        if peer_map.get(peer_id).is_some() {
             return Err(TransportErrorCode::PeerAlreadyRegistered);
         }
 
@@ -147,7 +140,7 @@ impl TransportImpl {
             }
         }
         if role == ConnectionRole::Server {
-            client_state.peer_map.insert(*peer_id, peer_state);
+            peer_map.insert(*peer_id, peer_state);
             return Ok(());
         }
 
@@ -213,7 +206,7 @@ impl TransportImpl {
                 .insert(flow_endpoint.flow_tag.into(), flow_state);
         }
 
-        client_state.peer_map.insert(*peer_id, peer_state);
+        peer_map.insert(*peer_id, peer_state);
         Ok(())
     }
 
@@ -402,12 +395,8 @@ impl TransportImpl {
             .with_label_values(&[&flow_id.peer_id.to_string(), &flow_id.flow_tag.to_string()])
             .inc();
 
-        let mut client_state = self.client_state.write().unwrap();
-        let client_state = client_state
-            .as_mut()
-            .ok_or(TransportErrorCode::TransportClientNotFound)?;
-        let peer_state = client_state
-            .peer_map
+        let mut peer_map = self.peer_map.write().unwrap();
+        let peer_state = peer_map
             .get_mut(&flow_id.peer_id)
             .ok_or(TransportErrorCode::PeerNotFound)?;
         let flow_state = peer_state
@@ -436,7 +425,12 @@ impl TransportImpl {
             );
         } else {
             // reconnect if we have a listener
-            if client_state.accept_ports.contains_key(&flow_id.flow_tag) {
+            if self
+                .accept_ports
+                .read()
+                .unwrap()
+                .contains_key(&flow_id.flow_tag)
+            {
                 let socket_addr = sa.peer_addr;
                 let connecting_task = self.spawn_connect_task(
                     flow_id.flow_tag,
@@ -744,11 +738,6 @@ impl TransportImpl {
 
     /// Initilizes a client
     pub(crate) fn init_client(&self, event_handler: Arc<dyn AsyncTransportEventHandler>) {
-        let mut client_state = self.client_state.write().unwrap();
-        if client_state.is_some() {
-            panic!("Transport client already registered.");
-        }
-
         // Creating the listeners requres that we are within a tokio runtime context.
         let _rt_enter_guard = self.tokio_runtime.enter();
         // Bind to the server ports.
@@ -773,11 +762,8 @@ impl TransportImpl {
             let accept_task = self.spawn_accept_task(flow_tag, tcp_listener);
             accept_ports.insert(flow_tag, ServerPortState { accept_task });
         }
-        client_state.replace(ClientState {
-            accept_ports,
-            peer_map: HashMap::new(),
-            event_handler,
-        });
+        *self.accept_ports.write().unwrap() = accept_ports;
+        *self.event_handler.write().unwrap() = Some(event_handler);
     }
 }
 
