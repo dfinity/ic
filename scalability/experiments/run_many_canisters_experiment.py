@@ -96,7 +96,6 @@ if __name__ == "__main__":
 
     exp = ManyCanistersExperiment()
 
-    exp.start_experiment()
     exp.run_experiment({})
     exp.write_summary_file("run_many_canisters_experiment", {}, [0], "requests / s")
 

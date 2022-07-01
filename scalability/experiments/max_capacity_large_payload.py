@@ -34,7 +34,6 @@ if __name__ == "__main__":
     experiment_name = os.path.basename(__file__).replace(".py", "")
 
     exp = run_system_baseline_experiment.BaselineExperiment()
-    exp.start_experiment()
 
     failure_rate = 0.0
     t_median = 0.0

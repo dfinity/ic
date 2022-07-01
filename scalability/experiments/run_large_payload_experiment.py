@@ -44,8 +44,6 @@ class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
 
     def run_iterations(self, iterations=None):
         """Run heavy memory experiment in defined iterations."""
-        self.start_experiment()
-
         print(f"🚀  running with {iterations}kb sized response messages")
         results = []
         rps_max = 0

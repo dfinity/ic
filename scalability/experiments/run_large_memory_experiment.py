@@ -86,8 +86,6 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
 
     def run_iterations(self, iterations=None):
         """Run heavy memory experiment in defined iterations."""
-        self.start_experiment()
-
         failure_rate = 0.0
         t_median = 0.0
         run = True

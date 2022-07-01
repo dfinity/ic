@@ -107,6 +107,8 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
                 workload_generator_machines = self.get_hostnames(
                     FLAGS.wg_subnet, f"http://[{wg_testnet_nns_host}]:8080"
                 )
+                if workload_generator_machines is None:
+                    raise Exception(f"Could not find any machines in subnet {FLAGS.wg_subnet} in {FLAGS.wg_testnet}")
 
         if self.num_workload_gen > 0 and self.num_workload_gen > len(workload_generator_machines):
             raise Exception(
@@ -130,6 +132,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
             else self.__get_subnet_for_target()
         )
 
+        assert len(self.machines) > 0
         print(f"Running against an IC {self.target_nodes} from {self.machines}")
 
         super().init()
@@ -342,7 +345,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
                         cmd_file.write(cmd + "\n")
                 break
             except FileExistsError:
-                print("Failed to open - file already exists")
+                print(f"Failed to open - file {filename} already exists, trying next sequential file name.")
 
         print(f"🚚  Running workload generator with {commands}")
         load.start()

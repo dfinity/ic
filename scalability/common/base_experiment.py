@@ -77,10 +77,12 @@ class BaseExperiment:
         self.canister = []
         self.metrics = []
 
-        self.t_experiment_start = None
+        self.t_experiment_start = int(time.time())
         self.iteration = 0
 
         self.request_type = request_type
+        # List of PIDs to wait for when terminating the benchmark
+        self.pids_to_finish = []
 
     def get_ic_version(self, m):
         """Retrieve the IC version from the given machine m."""
@@ -193,6 +195,7 @@ class BaseExperiment:
         """Start a new iteration of the experiment."""
         self.iteration += 1
         self.t_iter_start = int(time.time())
+        print("Starting iteration at: ", time.time() - self.t_experiment_start)
 
         # Create output directory
         self.iter_outdir = "{}/{}".format(self.out_dir, self.iteration)
@@ -208,6 +211,14 @@ class BaseExperiment:
     def end_iteration(self, configuration={}):
         """End a new iteration of the experiment."""
         self.t_iter_end = int(time.time())
+        print(
+            (
+                "Ending iteration at: ",
+                time.time() - self.t_experiment_start,
+                " - duration:",
+                self.t_iter_end - self.t_iter_start,
+            )
+        )
 
         for m in self.metrics:
             m.end_iteration(self)
@@ -224,12 +235,13 @@ class BaseExperiment:
                 )
             )
 
-    def start_experiment(self):
-        """Start the experiment."""
-        self.t_experiment_start = int(time.time())
-
     def end_experiment(self):
         """End the experiment."""
+        print("Waiting for unfinished PIDs")
+        for pid in self.pids_to_finish:
+            pid.wait()
+        for m in self.metrics:
+            m.end_benchmark(self)
         print(
             f"Experiment finished. Generating report like: python3 common/generate_report.py --base_dir='results/' --git_revision='{self.git_hash}' --timestamp='{self.out_dir_timestamp}'"
         )
@@ -249,7 +261,7 @@ class BaseExperiment:
         if nns_url is None:
             nns_url = self._get_nns_url()
         if nns_url not in self.cached_topologies:
-            print("Getting topology from ic-admin")
+            print(f"Getting topology from ic-admin ({nns_url})")
             res = subprocess.check_output(
                 [self._get_ic_admin_path(), "--nns-url", nns_url, "get-topology"], encoding="utf-8"
             )
@@ -291,14 +303,15 @@ class BaseExperiment:
         """Store info for the target machine in the experiment output directory."""
         if FLAGS.no_instrument:
             return
-        for (cmd, name) in [("lscpu", "lscpu"), ("free -h", "free"), ("df -h", "df")]:
-            p = ssh.run_ssh(
-                self.get_machine_to_instrument(),
-                cmd,
-                f_stdout=os.path.join(self.out_dir, f"{name}.stdout.txt"),
-                f_stderr=os.path.join(self.out_dir, f"{name}.stderr.txt"),
+        for (cmd, name) in [("lscpu", "lscpu"), ("free -h", "free"), ("df -h", "df"), ("uname -r", "uname")]:
+            self.pids_to_finish.append(
+                ssh.run_ssh(
+                    self.get_machine_to_instrument(),
+                    cmd,
+                    f_stdout=os.path.join(self.out_dir, f"{name}.stdout.txt"),
+                    f_stderr=os.path.join(self.out_dir, f"{name}.stderr.txt"),
+                )
             )
-            p.wait()
 
     def get_node_ip_address(self, nodeid, nns_url=None):
         """Get HTTP endpoint for the given node."""
@@ -425,8 +438,11 @@ class BaseExperiment:
         cmd = [self.workload_generator_path, f"http://[{target}]:8080", "-n", "1", "-r", "1"]
         if this_canister_name != "counter":
             canister_in_artifacts = os.path.join(self.artifacts_path, f"../canisters/{this_canister_name}.wasm")
+            canister_in_repo = os.path.join(f"canisters/{this_canister_name}.wasm")
             if os.path.exists(canister_in_artifacts):
                 cmd += ["--canister", canister_in_artifacts]
+            elif os.path.exists(canister_in_repo):
+                cmd += ["--canister", canister_in_repo]
             else:
                 cmd += ["--canister", this_canister]
         try:

@@ -67,8 +67,6 @@ class GossipExperiment(workload_experiment.WorkloadExperiment):
         #     Measure success
         #     Repeat
 
-        self.start_experiment()
-
         run = True
         iteration = 0
         subnet_size_max = 0
@@ -191,7 +189,6 @@ if __name__ == "__main__":
     exp = GossipExperiment()
     print(exp.get_subnet_members(1))
 
-    exp.start_experiment()
     num_nodes_installed = []
 
     while len(exp.get_unassigned_nodes()) > 0:

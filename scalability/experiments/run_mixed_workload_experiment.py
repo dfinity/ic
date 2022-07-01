@@ -117,6 +117,7 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
         """Exercise the experiment with specified iterations."""
         results = []
         for d in iterations:
+            print(f"🚀 Running with total load {d}")
             config = {"load_total": d}
             res, aggregated = self.run_experiment(config)
             results.append((config, res, aggregated))
@@ -146,9 +147,9 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
 
 
 if __name__ == "__main__":
-    misc.parse_command_line_args()
     exp = MixedWorkloadExperiment()
+    iterations = misc.get_iterations(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 2)
+    print(f"🚀 Running with iterations: {iterations}")
     exp.init_experiment()
-    iterations = misc.get_iterations(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 1)
     exp.run_iterations(iterations)
     exp.end_experiment()
