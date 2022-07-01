@@ -102,6 +102,11 @@ fn icrc1_balance_of(account: Account) -> u64 {
 async fn icrc1_transfer(arg: TransferArg) -> Result<BlockHeight, TransferError> {
     let block_idx = Access::with_ledger_mut(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let created_at_time = arg
+            .created_at_time
+            .map(TimeStamp::from_nanos_since_unix_epoch)
+            .unwrap_or(now);
+
         let from_account = Account {
             of: PrincipalId::from(ic_cdk::api::caller()),
             subaccount: arg.from_subaccount,
@@ -126,12 +131,12 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<BlockHeight, TransferError> 
                     min_burn_amount: ledger.transfer_fee().get_e8s(),
                 });
             }
-            Transaction::burn(from_account, amount, now)
+            Transaction::burn(from_account, amount, created_at_time)
         } else if &from_account == ledger.minting_account() {
             if fee.is_some() && fee != Some(Tokens::ZERO) {
                 return Err(TransferError::BadFee { expected_fee: 0 });
             }
-            Transaction::mint(to_account, amount, now)
+            Transaction::mint(to_account, amount, created_at_time)
         } else {
             let expected_fee = ledger.transfer_fee();
             if fee.is_some() && fee != Some(expected_fee) {
@@ -139,7 +144,13 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<BlockHeight, TransferError> 
                     expected_fee: expected_fee.get_e8s(),
                 });
             }
-            Transaction::transfer(from_account, to_account, amount, expected_fee, now)
+            Transaction::transfer(
+                from_account,
+                to_account,
+                amount,
+                expected_fee,
+                created_at_time,
+            )
         };
 
         let (block_idx, _) = apply_transaction(ledger, tx, now)?;

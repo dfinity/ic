@@ -16,6 +16,7 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
+use std::time::{Duration, SystemTime};
 
 const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
@@ -91,25 +92,18 @@ fn metadata(env: &StateMachine, ledger: CanisterId) -> BTreeMap<String, Value> {
     .collect()
 }
 
-fn transfer(
+fn send_transfer(
     env: &StateMachine,
     ledger: CanisterId,
-    from: Account,
-    to: Account,
-    amount: u64,
+    from: PrincipalId,
+    arg: &TransferArg,
 ) -> Result<BlockHeight, TransferError> {
     Decode!(
         &env.execute_ingress_as(
-            from.of,
+            from,
             ledger,
             "icrc1_transfer",
-            Encode!(&TransferArg {
-                from_subaccount: from.subaccount,
-                to_principal: to.of,
-                to_subaccount: to.subaccount,
-                fee: None,
-                amount,
-            })
+            Encode!(arg)
             .unwrap()
         )
         .expect("failed to tranfer funds")
@@ -117,6 +111,28 @@ fn transfer(
         Result<BlockHeight, TransferError>
     )
     .expect("failed to decode transfer response")
+}
+
+fn transfer(
+    env: &StateMachine,
+    ledger: CanisterId,
+    from: Account,
+    to: Account,
+    amount: u64,
+) -> Result<BlockHeight, TransferError> {
+    send_transfer(
+        env,
+        ledger,
+        from.of,
+        &TransferArg {
+            from_subaccount: from.subaccount,
+            to_principal: to.of,
+            to_subaccount: to.subaccount,
+            fee: None,
+            created_at_time: None,
+            amount,
+        },
+    )
 }
 
 fn list_archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo> {
@@ -284,6 +300,60 @@ fn test_single_transfer() {
 
     assert_eq!(9_000_000u64 - FEE, balance_of(&env, canister_id, p1.into()));
     assert_eq!(6_000_000u64, balance_of(&env, canister_id, p2.into()));
+}
+
+#[test]
+fn test_tx_time_bounds() {
+    let env = StateMachine::new();
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let canister_id = install_ledger(&env, vec![(Account::from(p1), 10_000_000)]);
+
+    let now = env
+        .time()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
+    let tx_window = Duration::from_secs(24 * 60 * 60).as_nanos() as u64;
+
+    assert_eq!(
+        Err(TransferError::TooOld {
+            allowed_window_nanos: tx_window
+        }),
+        send_transfer(
+            &env,
+            canister_id,
+            p1,
+            &TransferArg {
+                from_subaccount: None,
+                to_principal: p2,
+                to_subaccount: None,
+                fee: None,
+                amount: 1_000_000,
+                created_at_time: Some(now - tx_window - 1),
+            }
+        )
+    );
+
+    assert_eq!(
+        Err(TransferError::CreatedInFuture),
+        send_transfer(
+            &env,
+            canister_id,
+            p1,
+            &TransferArg {
+                from_subaccount: None,
+                to_principal: p2,
+                to_subaccount: None,
+                fee: None,
+                amount: 1_000_000,
+                created_at_time: Some(now + Duration::from_secs(5 * 60).as_nanos() as u64),
+            }
+        )
+    );
+
+    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1.into()));
+    assert_eq!(0u64, balance_of(&env, canister_id, p2.into()));
 }
 
 #[test]

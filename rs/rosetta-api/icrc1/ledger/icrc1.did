@@ -9,7 +9,7 @@ type Tokens = nat64;
 
 type Account = record {
     of : principal;
-    subaccout : opt Subaccount;
+    subaccount : opt Subaccount;
 };
 
 type TransferArg = record {
@@ -17,16 +17,18 @@ type TransferArg = record {
     to_principal : principal;
     to_subaccount : opt Subaccount;
     amount : Tokens;
+    fee : opt Tokens;
+    created_at_time: opt Timestamp;
 };
 
 type TransferError = variant {
     BadFee : record { expected_fee : Tokens };
     BadBurn : record { min_burn_amount : Tokens };
     InsufficientFunds : record { balance : Tokens };
-    TxTooOld : record { allowed_window_nanos : Duration };
-    TxCreatedInFuture;
-    TxThrottled;
-    TxDuplicate : record { duplicate_of : BlockIndex };
+    TooOld : record { allowed_window_nanos : Duration };
+    CreatedInFuture;
+    Throttled;
+    Duplicate : record { duplicate_of : BlockIndex };
     GenericError : record { error_code : nat64; message : text };
 };
 

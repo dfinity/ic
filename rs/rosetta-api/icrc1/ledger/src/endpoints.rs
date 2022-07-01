@@ -12,10 +12,10 @@ pub enum TransferError {
     BadFee { expected_fee: u64 },
     BadBurn { min_burn_amount: u64 },
     InsufficientFunds { balance: u64 },
-    TxTooOld { allowed_window_nanos: u64 },
-    TxCreatedInFuture,
-    TxThrottled,
-    TxDuplicate { duplicate_of: BlockHeight },
+    TooOld { allowed_window_nanos: u64 },
+    CreatedInFuture,
+    Throttled,
+    Duplicate { duplicate_of: BlockHeight },
     GenericError { error_code: u64, message: String },
 }
 
@@ -33,22 +33,27 @@ impl From<CoreTransferError> for TransferError {
             },
             LTE::TxTooOld {
                 allowed_window_nanos,
-            } => TE::TxTooOld {
+            } => TE::TooOld {
                 allowed_window_nanos,
             },
-            LTE::TxCreatedInFuture => TE::TxCreatedInFuture,
-            LTE::TxThrottled => TE::TxThrottled,
-            LTE::TxDuplicate { duplicate_of } => TE::TxDuplicate { duplicate_of },
+            LTE::TxCreatedInFuture => TE::CreatedInFuture,
+            LTE::TxThrottled => TE::Throttled,
+            LTE::TxDuplicate { duplicate_of } => TE::Duplicate { duplicate_of },
         }
     }
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub struct TransferArg {
+    #[serde(default)]
     pub from_subaccount: Option<Subaccount>,
     pub to_principal: PrincipalId,
+    #[serde(default)]
     pub to_subaccount: Option<Subaccount>,
+    #[serde(default)]
     pub fee: Option<u64>,
+    #[serde(default)]
+    pub created_at_time: Option<u64>,
     pub amount: u64,
 }
 
@@ -65,8 +70,11 @@ impl TransferArg {
 pub struct ApproveTransferArg {
     pub from_subaccount: Option<Subaccount>,
     pub to_principal: PrincipalId,
+    #[serde(default)]
     pub fee: Option<u64>,
+    #[serde(default)]
     pub created_at_time: Option<u64>,
+    #[serde(default)]
     pub expires_at_time: Option<u64>,
     pub amount: u64,
 }
@@ -86,6 +94,7 @@ pub enum ApproveTransferError {
 pub struct CommitTransferArg {
     pub approval: ApprovalId,
     pub to_principal: PrincipalId,
+    #[serde(default)]
     pub to_subaccount: Option<Subaccount>,
     pub amount: u64,
 }
