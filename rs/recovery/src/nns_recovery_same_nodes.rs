@@ -60,7 +60,6 @@ pub struct NNSRecoverySameNodes {
     step_iterator: Box<dyn Iterator<Item = StepType>>,
     pub params: NNSRecoverySameNodesArgs,
     pub recovery: Recovery,
-    test: bool,
     logger: Logger,
     new_state_dir: PathBuf,
 }
@@ -80,7 +79,6 @@ impl NNSRecoverySameNodes {
             step_iterator: Box::new(StepType::iter()),
             params: subnet_args,
             recovery,
-            test,
             logger,
             new_state_dir,
         }
@@ -177,9 +175,6 @@ impl RecoveryIterator<StepType> for NNSRecoverySameNodes {
             )),
 
             StepType::WaitForCUP => {
-                if !self.test {
-                    return Err(RecoveryError::StepSkipped);
-                }
                 if let Some(node_ip) = self.params.upload_node {
                     Ok(Box::new(self.recovery.get_wait_for_cup_step(node_ip)))
                 } else {
