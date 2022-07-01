@@ -9,6 +9,7 @@ use ic_interfaces::registry::RegistryClient;
 use ic_nns_test_utils::itest_helpers::{local_test_on_nns_subnet, set_up_sns_wasm_canister};
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_keys::make_subnet_list_record_key;
+use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
@@ -117,16 +118,20 @@ fn test_canisters_are_created_and_installed() {
             .update_(
                 "deploy_new_sns",
                 bytes,
-                Encode!(&DeployNewSnsRequest {}).unwrap(),
+                Encode!(&DeployNewSnsRequest {
+                    sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing())
+                })
+                .unwrap(),
             )
             .await
             .unwrap();
 
         let response = Decode!(&result, DeployNewSnsResponse).unwrap();
 
-        let governance_canister_id = canister_test_id(1);
-        let root_canister_id = canister_test_id(2);
+        let root_canister_id = canister_test_id(1);
+        let governance_canister_id = canister_test_id(2);
         let ledger_canister_id = canister_test_id(3);
+        let swap_canister_id = canister_test_id(4);
 
         assert_eq!(
             response,
@@ -136,7 +141,7 @@ fn test_canisters_are_created_and_installed() {
                     governance: Some(governance_canister_id.get()),
                     root: Some(root_canister_id.get()),
                     ledger: Some(ledger_canister_id.get()),
-                    swap: Some(canister_test_id(4).get())
+                    swap: Some(swap_canister_id.get())
                 })
             }
         );
@@ -156,6 +161,10 @@ fn test_canisters_are_created_and_installed() {
             .await
             .unwrap();
 
+        // We know from a successful response that the init_payload is in fact sent correctly
+        // through CanisterApiImpl::install_wasm, since governance has to know root canister_id
+        // in order to respond to root's request for its own status from governance
+        // more detailed coverage of the initialization parameters is done through unit tests
         let mut response =
             Decode!(&result, Vec<(String, PrincipalId, CanisterStatusResultV2)>).unwrap();
 

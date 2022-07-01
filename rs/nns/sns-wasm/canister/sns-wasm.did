@@ -2,6 +2,7 @@ type AddWasmError = record { error : text };
 type AddWasmOk = record { hash : vec nat8 };
 type AddWasmRequest = record { hash : vec nat8; wasm : opt SnsWasm };
 type AddWasmResponse = record { result : opt Result };
+type DeployNewSnsRequest = record { sns_init_payload : opt SnsInitPayload };
 type DeployNewSnsResponse = record {
   subnet_id : opt principal;
   canisters : opt SnsCanisterIds;
@@ -11,6 +12,11 @@ type GetNextSnsVersionRequest = record { current_version : opt SnsVersion };
 type GetNextSnsVersionResponse = record { next_version : opt SnsVersion };
 type GetWasmRequest = record { hash : vec nat8 };
 type GetWasmResponse = record { wasm : opt SnsWasm };
+type InitialTokenDistribution = record {
+  swap : nat64;
+  developers : opt TokenDistribution;
+  treasury : opt TokenDistribution;
+};
 type ListDeployedSnsesResponse = record { instances : vec DeployedSns };
 type Result = variant { Ok : AddWasmOk; Error : AddWasmError };
 type SnsCanisterIds = record {
@@ -19,6 +25,20 @@ type SnsCanisterIds = record {
   ledger : opt principal;
   governance : opt principal;
 };
+type SnsInitPayload = record {
+  min_participant_icp_e8s : opt nat64;
+  fallback_controller_principal_ids : vec text;
+  token_symbol : opt text;
+  max_icp_e8s : opt nat64;
+  neuron_minimum_stake_e8s : opt nat64;
+  min_participants : opt nat32;
+  transaction_fee_e8s : opt nat64;
+  initial_token_distribution : opt InitialTokenDistribution;
+  token_name : opt text;
+  max_participant_icp_e8s : opt nat64;
+  proposal_reject_cost_e8s : opt nat64;
+  min_icp_e8s : opt nat64;
+};
 type SnsVersion = record {
   root_wasm_hash : vec nat8;
   ledger_wasm_hash : vec nat8;
@@ -26,9 +46,13 @@ type SnsVersion = record {
 };
 type SnsWasm = record { wasm : vec nat8; canister_type : int32 };
 type SnsWasmCanisterInitPayload = record { sns_subnet_ids : vec principal };
+type TokenDistribution = record {
+  distributions : vec record { text; nat64 };
+  total_e8s : nat64;
+};
 service : (SnsWasmCanisterInitPayload) -> {
   add_wasm : (AddWasmRequest) -> (AddWasmResponse);
-  deploy_new_sns : (record {}) -> (DeployNewSnsResponse);
+  deploy_new_sns : (DeployNewSnsRequest) -> (DeployNewSnsResponse);
   get_next_sns_version : (GetNextSnsVersionRequest) -> (
       GetNextSnsVersionResponse,
     ) query;

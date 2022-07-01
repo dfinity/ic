@@ -1,7 +1,7 @@
 pub mod distributions;
 pub mod pb;
 
-use crate::pb::v1::{InitialTokenDistribution, SnsInitPayload};
+use crate::pb::v1::{InitialTokenDistribution, SnsInitPayload, TokenDistribution};
 use anyhow::anyhow;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_constants::{
@@ -55,9 +55,9 @@ impl SnsInitPayload {
     /// Due to conflict with the prost derived macros on the generated Rust structs, this method
     /// acts like `SnsInitPayload::default()` except that it will provide default "real" values
     /// for default-able parameters.
-    pub fn with_default_values() -> SnsInitPayload {
+    pub fn with_default_values() -> Self {
         let nervous_system_parameters_default = NervousSystemParameters::with_default_values();
-        SnsInitPayload {
+        Self {
             transaction_fee_e8s: nervous_system_parameters_default.transaction_fee_e8s,
             token_name: None,
             token_symbol: None,
@@ -70,6 +70,32 @@ impl SnsInitPayload {
             min_icp_e8s: None,
             max_participant_icp_e8s: None,
             fallback_controller_principal_ids: vec![],
+        }
+    }
+
+    /// This gives us some values that work for testing but would not be useful
+    /// in a real world scenario.  They are only meant to validate, not be sensible.
+    pub fn with_valid_values_for_testing() -> Self {
+        Self {
+            token_symbol: Some("TEST".to_string()),
+            token_name: Some("PlaceHolder".to_string()),
+            initial_token_distribution: Some(InitialTokenDistribution {
+                developers: Some(TokenDistribution {
+                    total_e8s: 100,
+                    distributions: Default::default(),
+                }),
+                treasury: Some(TokenDistribution {
+                    total_e8s: 100,
+                    distributions: Default::default(),
+                }),
+                swap: 100,
+            }),
+            max_icp_e8s: Some(1_000_000_000),
+            min_participants: Some(1),
+            min_icp_e8s: Some(100),
+            max_participant_icp_e8s: Some(1_000_000_000),
+            fallback_controller_principal_ids: vec!["aa-aaaa".to_string()],
+            ..SnsInitPayload::with_default_values()
         }
     }
 

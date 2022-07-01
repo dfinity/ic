@@ -3,6 +3,7 @@ syntax = "proto3";
 package ic_sns_wasm.pb.v1;
 
 import "ic_base_types/pb/v1/types.proto";
+import "ic_sns_init/pb/v1/sns_init.proto";
 
 // The type of canister a particular WASM is intended to be installed on
 enum SnsCanisterType {
@@ -54,7 +55,9 @@ message GetWasmResponse {
 }
 
 // Payload to deploy a new SNS.
-message DeployNewSnsRequest {}
+message DeployNewSnsRequest {
+  ic_sns_init.pb.v1.SnsInitPayload sns_init_payload = 1;
+}
 
 // The response to creating a new SNS.
 message DeployNewSnsResponse {
