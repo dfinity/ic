@@ -1,5 +1,5 @@
-use crate::Call;
 use crate::CallInterface;
+use crate::{wasm, Call};
 use candid::{CandidType, Deserialize, Encode, Principal};
 use std::convert::TryFrom;
 
@@ -122,6 +122,35 @@ pub fn update_settings<C: AsRef<[u8]>>(canister_id: C) -> CandidCallBuilder<Upda
             settings: CanisterSettings::default(),
         },
         call: Call::new(Principal::management_canister(), "update_settings"),
+    }
+}
+
+/// Gets the bitcoin balance of an `address`.
+///
+/// Example usage:
+///
+/// ```
+/// use ic_universal_canister::{wasm, management, CallInterface};
+///
+/// let address = String::from("my_address");
+///
+/// wasm().call(
+///     management::bitcoin_get_balance(address, None)
+/// );
+/// ```
+pub fn bitcoin_get_balance(
+    address: String,
+    min_confirmations: Option<u32>,
+) -> CandidCallBuilder<GetBalanceRequest> {
+    CandidCallBuilder {
+        args: GetBalanceRequest {
+            address,
+            network: Network::Regtest,
+            min_confirmations,
+        },
+        call: Call::new(Principal::management_canister(), "bitcoin_get_balance")
+            .cycles((0, 100_000_000))
+            .on_reject(wasm().reject_message().reject()),
     }
 }
 
@@ -300,6 +329,20 @@ pub struct CanisterSettings {
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
     pub freezing_threshold: Option<candid::Nat>,
+}
+
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq)]
+pub enum Network {
+    Mainnet,
+    Testnet,
+    Regtest,
+}
+
+#[derive(CandidType, Debug, Deserialize, PartialEq)]
+pub struct GetBalanceRequest {
+    pub address: String,
+    pub network: Network,
+    pub min_confirmations: Option<u32>,
 }
 
 // A call to the management canister with the following candid args:

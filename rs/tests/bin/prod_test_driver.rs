@@ -13,9 +13,9 @@ use ic_tests::driver::pot_dsl::*;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::test_suites::test_suite::get_e2e_suites;
 use ic_tests::{
-    api_test, basic_health_test, boundary_nodes_integration, canister_http, consensus, execution,
-    ledger_tests, message_routing, networking, nns_tests, orchestrator, rosetta_test,
-    spec_compliance, tecdsa, wasm_generator_test, workload_counter_canister_test,
+    api_test, basic_health_test, boundary_nodes_integration, btc_integration, canister_http,
+    consensus, execution, ledger_tests, message_routing, networking, nns_tests, orchestrator,
+    rosetta_test, spec_compliance, tecdsa, wasm_generator_test, workload_counter_canister_test,
 };
 use regex::Regex;
 use std::collections::HashMap;
@@ -286,15 +286,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     ),
                 ]),
             ),
-            /*
-            Disabled due to flakiness
             pot_with_setup(
                 "btc_pot",
                 btc_integration::btc::config,
                 par(vec![
-                    sys_t("btc_test", btc_integration::btc::test),
+                    sys_t("btc_get_balance", btc_integration::btc::get_balance),
                 ]),
-            ),*/
+            ),
             /*
             pot_with_setup(
                 "boundary_nodes_pot",
