@@ -183,8 +183,6 @@ if __name__ == "__main__":
     misc.parse_command_line_args()
     exp = StatesyncExperiment()
 
-    exp.start_experiment()
-
     state_sync_duration = exp.run_experiment({})
 
     exp.write_summary_file(

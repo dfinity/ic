@@ -76,7 +76,6 @@ class Test_Experiment(TestCase):
 
         exp.canister_ids = {"counter": ["abc"]}
         exp.init_experiment()
-        exp.start_experiment()
         exp.run_experiment({})
 
         exp.subnet_id = "abc"

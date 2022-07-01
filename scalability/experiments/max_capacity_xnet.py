@@ -24,7 +24,6 @@ gflags.DEFINE_integer("max_iterations", 25, "Maximum number of iterations")
 if __name__ == "__main__":
     exp = run_xnet_experiment.XnetExperiment()
 
-    exp.start_experiment()
     rps_iterations = []
 
     max_capacity = None

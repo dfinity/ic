@@ -312,8 +312,6 @@ class XnetExperiment(base_experiment.BaseExperiment):
 if __name__ == "__main__":
     exp = XnetExperiment()
 
-    exp.start_experiment()
-
     total_rate = FLAGS.target_rps
     subnet_to_subnet_rate = int(math.ceil(FLAGS.target_rps / (exp.num_subnets - 1)))
     canister_to_subnet_rate = int(math.ceil(subnet_to_subnet_rate / FLAGS.num_canisters_per_subnet))

@@ -79,8 +79,6 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
         if iterations is None:
             iterations = []
 
-        self.start_experiment()
-
         run = True
         iteration = 0
         rps_max = 0

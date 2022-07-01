@@ -22,3 +22,7 @@ class Metric(object):
     def end_iteration(self, exp):
         """Benchmark iteration is started."""
         print("{} ending".format(self.name))
+
+    def end_benchmark(self, exp):
+        """Benchmark is finished."""
+        print("{} terminating".format(self.name))

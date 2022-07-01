@@ -17,7 +17,7 @@ class WorkloadDescription(NamedTuple):
     call_method: str
     rps: int
     duration: int
-    raw_payload: str
+    raw_payload: bytes
     json_payload: str
     arguments: list
     start_delay: int
@@ -37,7 +37,7 @@ def workload_description_from_dict(values: list, canister_ids: dict):
             call_method=value.get("call_method", None),
             rps=int(value.get("rps", -1)),
             duration=int(value.get("duration", 300)),
-            raw_payload=value.get("raw_payload", None),
+            raw_payload=value["raw_payload"].encode("utf-8") if "raw_payload" in value else None,
             json_payload=value.get("json_payload", None),
             arguments=value.get("arguments", []),
             start_delay=int(value.get("start_delay", 0)),
