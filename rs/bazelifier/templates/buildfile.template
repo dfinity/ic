@@ -39,7 +39,7 @@ rust_binary(
     deps = DEPENDENCIES + [":{{ target_name }}"],
     aliases = ALIASES
 )
-{%- endfor %}
+{% endfor %}
 
 {% if gen_tests -%}
 rust_test(
