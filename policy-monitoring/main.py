@@ -256,14 +256,17 @@ def main():
                     groups = {gid: Group(gid) for gid in args.group_names}
                 else:
                     if gitlab_token is not None:
-                        ci = Ci(url="https://gitlab.com", project="dfinity-lab/public/ic", token=gitlab_token)
-                        if not args.pre_master_pipeline:
-                            groups = ci.get_regular_groups()
-                        else:
+                        if args.pre_master_pipeline:
                             # Monitor all system tests from the pre-master pipeline with ID args.pre_master_pipeline
                             groups = Ci.get_premaster_groups_for_pipeline(
                                 args.pre_master_pipeline, include_pattern=None
                             )
+                        else:
+                            # Monitor all system tests from the regular pipelines (hourly, nightly)
+                            groups = Ci(
+                                url="https://gitlab.com", project="dfinity-lab/public/ic", token=gitlab_token
+                            ).get_regular_groups()
+
                     elif args.farm_log_for_test is not None:
                         # Relying upon args.farm_log_for_test for end-to-end testing the pipeline implementation
                         groups = Ci.get_groups_from_farm_log(args.farm_log_for_test)

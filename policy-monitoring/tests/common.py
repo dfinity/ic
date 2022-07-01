@@ -5,7 +5,9 @@ from importlib.util import spec_from_file_location
 from os.path import isdir
 from os.path import isfile
 from os.path import join
+from typing import Dict
 from typing import List
+from typing import Optional
 
 from monpoly.monpoly import AlertHandlerParams
 from monpoly.monpoly import ErrorHandlerParams
@@ -69,11 +71,13 @@ def run_test(prefix: str, test: str, instance: str, local_sig_file=True):
         log_gen_file = str(join(test_dir, "input.py"))
         assert isfile(log_gen_file), f"cannot find input.log nor input.py in {str(test_dir)}"
 
-        print(" Generating input.log using input.py ...", end="", flush=True)
+        print(" Generating input.log using input.py ...", end=None, flush=True)
 
         module_name = log_gen_file.replace(".py", "").replace("/", ".")
         spec = spec_from_file_location(module_name, log_gen_file)
+        assert spec is not None, "module spec not found"
         module = module_from_spec(spec)
+        assert spec.loader is not None, "uninitialized module spec loaded"
         spec.loader.exec_module(module)
         module.gen(log_file)
 
@@ -90,11 +94,11 @@ def run_test(prefix: str, test: str, instance: str, local_sig_file=True):
 
     expected_exit_code_file_path = str(join(test_dir, "expected_exit_code.txt"))
     with open(expected_exit_code_file_path, "r") as expected_exit_code_file:
-        expected_exit_code = list(map(lambda x: x.strip("\n"), expected_exit_code_file.readlines()))
+        expected_exit_code_lines = list(map(lambda x: x.strip("\n"), expected_exit_code_file.readlines()))
 
-    assert len(expected_exit_code) == 1, "%s should contain exactly one line" % expected_exit_code_file_path
+    assert len(expected_exit_code_lines) == 1, "%s should contain exactly one line" % expected_exit_code_file_path
 
-    expected_exit_code = expected_exit_code[-1]
+    expected_exit_code = expected_exit_code_lines[-1]
 
     actual_stdout = []
 
@@ -108,7 +112,7 @@ def run_test(prefix: str, test: str, instance: str, local_sig_file=True):
         print("{{{ Experiencing Monpoly error [%s] %s }}}" % (arg.source, arg.message), flush=True)
         actual_stderr.append(arg.message)
 
-    actual_exit_status = {"code": None}
+    actual_exit_status: Dict[str, Optional[str]] = {"code": None}
 
     def exit_handler(arg: ExitHandlerParams) -> None:
         print("{{{ Monpoly exited with code %s }}}" % arg.exit_code, flush=True)

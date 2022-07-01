@@ -303,6 +303,7 @@ class ReplicaDoc(EsDoc):
                 except ValueError:
                     sys.stderr.write(f"WARNING: found invalid IPv6 data center mask: {ip_str}\n")
                     continue
+                assert isinstance(ip, ipaddress.IPv6Network)
                 res.append(ip)
             return res
 
@@ -389,7 +390,7 @@ class ReplicaDoc(EsDoc):
         if not m or len(m.groups()) < 1:
             return None
         else:
-            return ReplicaDoc.CatchUpPackageShare(height=m.group(1))
+            return ReplicaDoc.CatchUpPackageShare(height=int(m.group(1)))
 
     class ControlPlaneAcceptParams:
         """Data class"""

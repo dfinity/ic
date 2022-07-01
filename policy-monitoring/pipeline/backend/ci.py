@@ -67,6 +67,10 @@ class Ci:
     def job_url(job) -> str:
         return job._attrs["web_url"]
 
+    @staticmethod
+    def job_to_str(job) -> str:
+        return f"GitLabJob<created_at={job.created_at}, url={Ci.job_url(job)}, name={job.name}>"
+
     def get_last_hourly_jobs(self, page_size=1_000) -> List[gitlab.base.RESTObject]:
         now = datetime.now(pytz.utc)
         jobs: List[gitlab.base.RESTObject]
@@ -143,15 +147,14 @@ class Ci:
         trace: str, include_pattern: Optional[str] = None, job_url: Optional[str] = None
     ) -> Optional[Dict[str, Group]]:
         groups: Dict[str, Group] = dict()
-        group_names = re.findall("creating group \\\\\\'(.*?)\\\\\\'", trace)
+        group_names = re.findall("creating group '(.*)'", trace)
         if not group_names:
-            group_names = re.findall("creating group '(.*)'", trace)
-            if not group_names:
-                return None
+            return None
+        eprint(f"Found {len(group_names)} group(s)")
         gid: str
         for gid in group_names:
             if include_pattern is None or re.match(include_pattern, gid):
-                eprint(f" + {gid}")
+                eprint(f" + {gid}", end="\n", flush=True)
                 groups[gid] = Group(gid, url=job_url)
         return groups
 
@@ -161,17 +164,22 @@ class Ci:
         groups: Dict[str, Group] = dict()
         for job in jobs:
             eprint(f"Searching for group names for job `{job.name}` ...")
-            trace = str(job.trace())
+            trace = job.trace().decode("utf-8")
             jurl = Ci.job_url(job)
             new_groups = self._get_groups_from_trace(trace, include_pattern=include_pattern, job_url=jurl)
             if not new_groups:
                 eprint(f"Warning: cannot find test group name for job {jurl}")
+            else:
+                intersect = set(new_groups.keys()).intersection(groups.keys())
+                assert set() == intersect, f"duplicate groups found: {', '.join(intersect)}"
+                groups.update(new_groups)
         return groups
 
     def get_regular_groups(self) -> Dict[str, Group]:
         """Returns: Map from group names to Groups (corresponding to hourly and nightly system tests)"""
         jobs = self.get_last_hourly_jobs()
-        eprint(f"Found {len(jobs)} jobs")
+        jobs_str = "\n".join(map(lambda j: Ci.job_to_str(j), jobs))
+        eprint(f"Found {len(jobs)} jobs:\n{jobs_str}")
         return self._get_group_names_from_jobs(jobs)
 
     def get_premaster_groups_for_pipeline(

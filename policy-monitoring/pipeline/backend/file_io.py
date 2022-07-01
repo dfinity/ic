@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import Dict
 
+from pipeline.es_doc import EsDoc
 from util.print import eprint
 
-from ..es_doc import EsDoc
 from .group import Group
 
 
