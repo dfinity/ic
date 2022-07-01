@@ -114,6 +114,9 @@ class EsDoc:
     def is_host_reboot(self) -> bool:
         return self.is_systemd() and self.message() == "Starting IC replica..."
 
+    def is_host_reboot_intent(self) -> bool:
+        return self.is_systemd() and self.message() == "Shutting down orchestrator..."
+
     def is_replica(self) -> bool:
         if self.component_identifier() != "orchestrator":
             return False

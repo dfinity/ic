@@ -108,7 +108,24 @@ class RebootEvent(InfraEvent):
         else:
             host_addr = self.doc.host_addr()
             if not self.infra.is_known_host(host_addr):
-                raise GlobalInfra.Error(f"cannot map host {str(host_addr)} to data center\n")
+                raise GlobalInfra.Error(f"cannot map host {str(host_addr)} to data center")
+            data_center_prefix = self.infra.get_host_dc(host_addr)
+            return [(str(host_addr), str(data_center_prefix))]
+
+
+class RebootIntentEvent(InfraEvent):
+    doc: EsDoc
+
+    def __init__(self, doc: EsDoc, infra: GlobalInfra):
+        super().__init__(name="reboot_intent", doc=doc, infra=infra)
+
+    def compile_params(self) -> Iterable[Tuple[str, ...]]:
+        if not self.doc.is_host_reboot_intent():
+            return []
+        else:
+            host_addr = self.doc.host_addr()
+            if not self.infra.is_known_host(host_addr):
+                raise GlobalInfra.Error(f"cannot map host {str(host_addr)} to data center")
             data_center_prefix = self.infra.get_host_dc(host_addr)
             return [(str(host_addr), str(data_center_prefix))]
 

@@ -122,18 +122,24 @@ class Pipeline:
         if found_expected_violation:
             self.liveness_channel.alert(
                 level="✅🍏✅🍏✅🍏✅",
-                text="Policy monitoring pipeline status: operational (see reports in #ic-policy-alerts)",
+                text=(
+                    f"Policy monitoring pipeline status: operational (see reports in #ic-policy-alerts)\n"
+                    f"Repro:\n"
+                    f"```\n{repro(monitor)}"
+                ),
                 short_text="Policy monitoring pipeline status: 🍏",
             )
         else:
             self.liveness_channel.alert(
                 level="🔥💀🔥💀🔥💀🔥",
-                text=f"Monpoly did not report expected violation in policy"
-                f" '{formula}'. This indicates that the policy monitoring"
-                f" pipeline is broken.\n"
-                f"Repro:\n"
-                f"```\n{repro(monitor)}\n"
-                f"```\nTest logs: <{group.url}>\n",
+                text=(
+                    f"Monpoly did not report expected violation in policy"
+                    f" '{formula}'. This indicates that the policy monitoring"
+                    f" pipeline is broken.\n"
+                    f"Repro:\n"
+                    f"```\n{repro(monitor)}\n"
+                    f"```\nTest logs: <{group.url}>\n"
+                ),
                 short_text="💀 Policy monitoring pipeline broken 💀",
             )
 

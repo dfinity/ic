@@ -28,6 +28,7 @@ from .event import NodeMembershipEvent
 from .event import OriginallyInSubnetPreambleEvent
 from .event import OriginalSubnetTypePreambleEvent
 from .event import RebootEvent
+from .event import RebootIntentEvent
 from .event import RegistryNodeAddedEvent
 from .event import RegistryNodeRemovedEvent
 from .event import RegistrySubnetCreatedEvent
@@ -220,6 +221,9 @@ class DeclarativePreProcessor(PreProcessor):
         if pred == "reboot":
             assert self._infra is not None, f"{pred} event requires global infra"
             return RebootEvent(doc, self._infra)
+        if pred == "reboot_intent":
+            assert self._infra is not None, f"{pred} event requires global infra"
+            return RebootIntentEvent(doc, self._infra)
         if pred == "p2p__node_added":
             return NodeMembershipEvent(doc, verb="added")
         if pred == "p2p__node_removed":
@@ -303,23 +307,24 @@ class UniversalPreProcessor(DeclarativePreProcessor):
 
     _POLICIES: Dict[str, Dict[str, FrozenSet[str]]]
     _POLICIES = {
-        "artifact_pool_latency": {
-            "preambles": frozenset(
-                [
-                    "p2p__original_subnet_type",
-                ]
-            ),
-            "dependencies": frozenset(
-                [
-                    "p2p__node_added",
-                    "p2p__node_removed",
-                    "registry__subnet_created",
-                    "registry__subnet_updated",
-                    "validated_BlockProposal_Added",
-                    "validated_BlockProposal_Moved",
-                ]
-            ),
-        },
+        # Disabled because violations are not actionable
+        # "artifact_pool_latency": {
+        #     "preambles": frozenset(
+        #         [
+        #             "p2p__original_subnet_type",
+        #         ]
+        #     ),
+        #     "dependencies": frozenset(
+        #         [
+        #             "p2p__node_added",
+        #             "p2p__node_removed",
+        #             "registry__subnet_created",
+        #             "registry__subnet_updated",
+        #             "validated_BlockProposal_Added",
+        #             "validated_BlockProposal_Moved",
+        #         ]
+        #     ),
+        # },
         "unauthorized_connections": {
             "preambles": frozenset(
                 [
