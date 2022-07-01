@@ -66,6 +66,7 @@ pub struct GetWasmResponse {
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeployNewSnsRequest {
+    /// The initial payload to initialize the SNS with.
     #[prost(message, optional, tag="1")]
     pub sns_init_payload: ::core::option::Option<::ic_sns_init::pb::v1::SnsInitPayload>,
 }

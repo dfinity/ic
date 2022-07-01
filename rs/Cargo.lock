@@ -7487,6 +7487,7 @@ dependencies = [
  "ic-sns-init",
  "ic-sns-root",
  "ic-sns-test-utils",
+ "ic-sns-wasm",
  "ledger-canister",
  "maplit",
  "on_wire",

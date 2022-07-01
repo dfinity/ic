@@ -19,6 +19,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-nervous-system-common = {path = "../../nervous_system/common"}
 ic-nns-constants = { path = "../../nns/constants" }
+ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-protobuf = { path = "../../protobuf" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-init = { path = "../init" }
@@ -35,4 +36,3 @@ serde_json = "1.0.79"
 serde_yaml = "0.8.24"
 regex = "1.5.6"
 url = "2.2.0"
-
