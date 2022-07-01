@@ -1,3 +1,4 @@
+use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::{
     canister_settings::CanisterSettings,
     hypervisor::Hypervisor,
@@ -15,13 +16,14 @@ use ic_ic00_types::{
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, ExecutionParameters, HypervisorError, IngressHistoryWriter,
+    SubnetAvailableMemory,
 };
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CallOrigin, CanisterState, CanisterStatus, Memory, NetworkTopology, ReplicatedState,
-    SchedulerState, SystemState,
+    CallOrigin, CanisterState, CanisterStatus, NetworkTopology, ReplicatedState, SchedulerState,
+    SystemState,
 };
 use ic_state_layout::{CanisterLayout, CheckpointLayout, RwPolicy};
 use ic_types::nominal_cycles::NominalCycles;
@@ -42,6 +44,67 @@ pub(crate) struct InstallCodeResult {
     pub heap_delta: NumBytes,
     pub old_wasm_hash: Option<[u8; 32]>,
     pub new_wasm_hash: Option<[u8; 32]>,
+}
+
+/// Data structure used as result for most of canister installation
+/// or upgrade routines. It contains:
+/// - old_canister: an original, almost unmodified canister state,
+/// which can be used to abort paused execution.
+/// - response: a result of the current stage of the computation.
+///
+/// * If response is of type Paused, then old_canister is actually modified,
+/// and contains changes necessary for initiating execution of canister installation,
+/// re-installation or upgrade and any specific changes required for
+/// initiating their subroutines (such as withdrawing of execution cycles).
+/// Moreover, if it is a subsequent pause, old_canister may contain changes
+/// made by components outside of this module (such as scheduler, message routing etc),
+/// during the previous pause events.
+/// * If the response is of type Result with Err, then old_canister is either
+/// unmodified original version of the canister from before the execution of
+/// install_code, or a version with changes reverted/undone (except the changes
+/// that came from outside of this module during pausing; these changes are not undone).
+/// * If the response is of type Result with successful execution, then
+/// old_canister contains the same almost unmodified version of the canister as
+/// Paused variant would. The result itself contains also a new, modified version
+/// of the canister. The new_cansiter contains cumulative changes made by
+/// install/upgrade subroutines, as well as outside changes made the old_canister
+/// in case the execution was paused and resumed before reaching this Result.
+#[derive(Debug)]
+pub(crate) struct DtsInstallCodeResult {
+    pub old_canister: CanisterState,
+    pub response: InstallCodeResponse,
+}
+
+/// This enum represents possible variants of results of install code
+/// execution routines. It is analogous to ExecutionResponse.
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug)]
+pub(crate) enum InstallCodeResponse {
+    Result(
+        (
+            NumInstructions,
+            Result<(InstallCodeResult, CanisterState), CanisterManagerError>,
+        ),
+    ),
+    Paused(Box<dyn PausedInstallCodeExecution>),
+}
+
+/// Represent a paused execution of install code routine,
+/// that can be resumed or aborted.
+pub(crate) trait PausedInstallCodeExecution: std::fmt::Debug {
+    /// Resumes a paused install code execution.
+    fn resume(
+        self: Box<Self>,
+        old_canister: CanisterState,
+        subnet_available_memory: SubnetAvailableMemory,
+        network_topology: &NetworkTopology,
+        hypervisor: &Hypervisor,
+        cycles_account_manager: &CyclesAccountManager,
+        log: &ReplicaLogger,
+    ) -> DtsInstallCodeResult;
+
+    // Aborts the paused execution.
+    fn abort(self: Box<Self>);
 }
 
 /// The different return types from `stop_canister()` function below.
@@ -530,6 +593,63 @@ impl CanisterManager {
         }
     }
 
+    #[doc(hidden)]
+    /// This function is a wrapper on install_code_dts, which allows to perform
+    /// canister installation or upgrade with an assumption that Pause doesn't happen.
+    /// Currently CanisterManager tests use it extensively.
+    #[cfg(test)]
+    pub(crate) fn install_code(
+        &self,
+        context: InstallCodeContext,
+        state: &mut ReplicatedState,
+        execution_parameters: ExecutionParameters,
+    ) -> (
+        NumInstructions,
+        Result<InstallCodeResult, CanisterManagerError>,
+        Option<CanisterState>,
+    ) {
+        let time = state.time();
+        let canister_layout_path = state.path().to_path_buf();
+        let compute_allocation_used = state.total_compute_allocation();
+        let memory_taken = state.total_memory_taken();
+        let network_topology = state.metadata.network_topology.clone();
+
+        let old_canister = match state.take_canister_state(&context.canister_id) {
+            None => {
+                return (
+                    execution_parameters.total_instruction_limit,
+                    Err(CanisterManagerError::CanisterNotFound(context.canister_id)),
+                    None,
+                );
+            }
+            Some(canister) => canister,
+        };
+        let dts_res = self.install_code_dts(
+            context,
+            old_canister,
+            time,
+            canister_layout_path,
+            compute_allocation_used,
+            memory_taken,
+            &network_topology,
+            execution_parameters,
+        );
+        let (instructions_left, result, canister) = match dts_res.response {
+            InstallCodeResponse::Result((instructions_left, result)) => {
+                let (result, canister) = match result {
+                    Ok((result, new_canister)) => (Ok(result), new_canister),
+                    Err(err) => (Err(err), dts_res.old_canister),
+                };
+                (instructions_left, result, canister)
+            }
+            InstallCodeResponse::Paused(_) => {
+                unreachable!("DTS is not enabled in tests yet");
+            }
+        };
+
+        (instructions_left, result, Some(canister))
+    }
+
     /// Installs code to a canister.
     ///
     /// Only the controller of the canister can install code.
@@ -547,59 +667,70 @@ impl CanisterManager {
     ///    Used for upgrading a canister while providing a mechanism to
     ///    preserve its state.
     ///
-    /// This function is atomic. In case an error is thrown, the state is
-    /// unmodified.
-    pub(crate) fn install_code(
+    /// This function is atomic. Either all of its subroutines succeed,
+    /// or the changes made to old_canister are reverted to the state
+    /// from before execution of the first one.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn install_code_dts(
         &self,
         context: InstallCodeContext,
-        state: &mut ReplicatedState,
+        mut old_canister: CanisterState,
+        time: Time,
+        canister_layout_path: PathBuf,
+        compute_allocation_used: u64,
+        memory_taken: NumBytes,
+        network_topology: &NetworkTopology,
         mut execution_parameters: ExecutionParameters,
-    ) -> (
-        NumInstructions,
-        Result<InstallCodeResult, CanisterManagerError>,
-    ) {
-        // Copy necessary bits out of the `ReplicatedState`. This is because further
-        // below, we take a mutable reference to the old canister state while it
-        // is held inside state. Then Rust's borrow checker prevents us from
-        // calling further methods on the state.
-        let time = state.time();
-        let canister_layout_path = state.path().to_path_buf();
-        let compute_allocation_used = state.total_compute_allocation();
-        let memory_taken = state.total_memory_taken();
-        let network_topology = &state.metadata.network_topology.clone();
+    ) -> DtsInstallCodeResult {
+        // TODO(RUN-221): Validate the compute and memory allocation after the
+        // entire execution completes, Because it could be the case that while
+        // the execution is in progress, the available compute and memory
+        // allocation changes.
 
         // Perform a battery of validation checks.
-        let old_canister = match state.canister_state_mut(&context.canister_id) {
-            None => {
-                return (
-                    execution_parameters.total_instruction_limit,
-                    Err(CanisterManagerError::CanisterNotFound(context.canister_id)),
-                );
-            }
-            Some(canister) => canister,
-        };
         if let Err(err) = self.validate_compute_allocation(
             compute_allocation_used,
-            old_canister,
+            &old_canister,
             context.compute_allocation,
         ) {
-            return (execution_parameters.total_instruction_limit, Err(err));
+            return DtsInstallCodeResult {
+                old_canister,
+                response: InstallCodeResponse::Result((
+                    execution_parameters.total_instruction_limit,
+                    Err(err),
+                )),
+            };
         }
         if let Err(err) =
-            self.validate_memory_allocation(memory_taken, old_canister, context.memory_allocation)
+            self.validate_memory_allocation(memory_taken, &old_canister, context.memory_allocation)
         {
-            return (execution_parameters.total_instruction_limit, Err(err));
+            return DtsInstallCodeResult {
+                old_canister,
+                response: InstallCodeResponse::Result((
+                    execution_parameters.total_instruction_limit,
+                    Err(err),
+                )),
+            };
         }
-        if let Err(err) = self.validate_controller(old_canister, &context.sender) {
-            return (execution_parameters.total_instruction_limit, Err(err));
+        if let Err(err) = self.validate_controller(&old_canister, &context.sender) {
+            return DtsInstallCodeResult {
+                old_canister,
+                response: InstallCodeResponse::Result((
+                    execution_parameters.total_instruction_limit,
+                    Err(err),
+                )),
+            };
         }
         match context.mode {
             CanisterInstallMode::Install => {
                 if old_canister.execution_state.is_some() {
-                    return (
-                        execution_parameters.total_instruction_limit,
-                        Err(CanisterManagerError::CanisterNonEmpty(context.canister_id)),
-                    );
+                    return DtsInstallCodeResult {
+                        old_canister,
+                        response: InstallCodeResponse::Result((
+                            execution_parameters.total_instruction_limit,
+                            Err(CanisterManagerError::CanisterNonEmpty(context.canister_id)),
+                        )),
+                    };
                 }
             }
             CanisterInstallMode::Reinstall | CanisterInstallMode::Upgrade => {}
@@ -608,12 +739,14 @@ impl CanisterManager {
         if old_canister.scheduler_state.install_code_debit.get() > 0
             && self.config.rate_limiting_of_instructions == FlagStatus::Enabled
         {
-            return (
-                execution_parameters.total_instruction_limit,
-                Err(CanisterManagerError::InstallCodeRateLimited(
-                    old_canister.system_state.canister_id,
+            let can_id = old_canister.system_state.canister_id;
+            return DtsInstallCodeResult {
+                old_canister,
+                response: InstallCodeResponse::Result((
+                    execution_parameters.total_instruction_limit,
+                    Err(CanisterManagerError::InstallCodeRateLimited(can_id)),
                 )),
-            );
+            };
         }
 
         // All validation checks have passed. Reserve cycles on the old canister
@@ -632,83 +765,68 @@ impl CanisterManager {
             compute_allocation,
             execution_parameters.total_instruction_limit,
         ) {
-            return (
-                execution_parameters.total_instruction_limit,
-                Err(CanisterManagerError::InstallCodeNotEnoughCycles(err)),
-            );
+            return DtsInstallCodeResult {
+                old_canister,
+                response: InstallCodeResponse::Result((
+                    execution_parameters.total_instruction_limit,
+                    Err(CanisterManagerError::InstallCodeNotEnoughCycles(err)),
+                )),
+            };
         }
 
         // Copy bits out of context as the calls below are going to consume it.
-        let canister_id = context.canister_id;
         let mode = context.mode;
         let instruction_limit = execution_parameters.total_instruction_limit;
 
-        let (instructions_left, result) = match context.mode {
-            CanisterInstallMode::Install | CanisterInstallMode::Reinstall => self.install(
+        let res = match context.mode {
+            CanisterInstallMode::Install | CanisterInstallMode::Reinstall => execute_install(
                 context,
                 old_canister,
                 time,
-                canister_layout_path,
+                canister_layout_path.clone(),
                 execution_parameters,
                 network_topology,
+                &self.hypervisor,
+                &self.log,
             ),
-            CanisterInstallMode::Upgrade => self.upgrade(
+            CanisterInstallMode::Upgrade => execute_upgrade(
                 context,
                 old_canister,
                 time,
-                canister_layout_path,
+                canister_layout_path.clone(),
                 execution_parameters,
                 network_topology,
+                &self.hypervisor,
+                &self.log,
             ),
         };
 
-        let instructions_consumed = instruction_limit - instructions_left;
-
-        let result = match result {
-            Ok((heap_delta, mut new_canister)) => {
-                // Refund the left over execution cycles to the new canister and
-                // replace the old canister with the new one.
-                let old_wasm_hash = self.get_wasm_hash(old_canister);
-                let new_wasm_hash = self.get_wasm_hash(&new_canister);
-                self.cycles_account_manager.refund_execution_cycles(
-                    &mut new_canister.system_state,
-                    instructions_left,
+        match res.response {
+            InstallCodeResponse::Result((instructions_left, result)) => finish_install_code(
+                res.old_canister,
+                instruction_limit,
+                instructions_left,
+                result,
+                &self.cycles_account_manager,
+                mode,
+                canister_layout_path,
+                &self.config,
+                &self.log,
+            ),
+            InstallCodeResponse::Paused(paused_install_code_execution) => {
+                let paused_execution = Box::new(PausedInstallCode {
+                    paused_install_code_execution,
                     instruction_limit,
-                );
-                if self.config.rate_limiting_of_instructions == FlagStatus::Enabled {
-                    new_canister.scheduler_state.install_code_debit += instructions_consumed;
+                    mode,
+                    canister_layout_path,
+                    config: self.config.clone(),
+                });
+                DtsInstallCodeResult {
+                    old_canister: res.old_canister,
+                    response: InstallCodeResponse::Paused(paused_execution),
                 }
-                state.put_canister_state(new_canister);
-                // We managed to create a new canister and will be dropping the
-                // older one. So we get rid of the previous heap to make sure it
-                // doesn't interfere with the new deltas and replace the old
-                // canister with the new one.
-                truncate_canister_heap(&self.log, state.path(), canister_id);
-                if mode != CanisterInstallMode::Upgrade {
-                    truncate_canister_stable_memory(&self.log, state.path(), canister_id);
-                }
-
-                Ok(InstallCodeResult {
-                    heap_delta,
-                    old_wasm_hash,
-                    new_wasm_hash,
-                })
             }
-            Err(err) => {
-                // the install / upgrade failed. Refund the left over cycles to
-                // the old canister and leave it in the state.
-                if self.config.rate_limiting_of_instructions == FlagStatus::Enabled {
-                    old_canister.scheduler_state.install_code_debit += instructions_consumed;
-                }
-                self.cycles_account_manager.refund_execution_cycles(
-                    &mut old_canister.system_state,
-                    instructions_left,
-                    instruction_limit,
-                );
-                Err(err)
-            }
-        };
-        (instructions_left, result)
+        }
     }
 
     /// Uninstalls code from a canister.
@@ -1016,288 +1134,6 @@ impl CanisterManager {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn install(
-        &self,
-        context: InstallCodeContext,
-        old_canister: &CanisterState,
-        time: Time,
-        canister_layout_path: PathBuf,
-        mut execution_parameters: ExecutionParameters,
-        network_topology: &NetworkTopology,
-    ) -> (
-        NumInstructions,
-        Result<(NumBytes, CanisterState), CanisterManagerError>,
-    ) {
-        let canister_id = context.canister_id;
-        let layout = canister_layout(&canister_layout_path, &canister_id);
-
-        let system_state = old_canister.system_state.clone();
-
-        let (instructions_from_compilation, execution_state) = match self
-            .hypervisor
-            .create_execution_state(context.wasm_module, layout.raw_path(), canister_id)
-        {
-            Ok(result) => result,
-            Err(err) => {
-                return (
-                    execution_parameters.total_instruction_limit,
-                    Err((canister_id, err).into()),
-                );
-            }
-        };
-
-        let instructions_left = deduct_compilation_instructions(
-            execution_parameters.total_instruction_limit,
-            instructions_from_compilation,
-        );
-        execution_parameters.total_instruction_limit = instructions_left;
-        execution_parameters.slice_instruction_limit = instructions_left;
-
-        let scheduler_state = old_canister.scheduler_state.clone();
-        let mut new_canister =
-            CanisterState::new(system_state, Some(execution_state), scheduler_state);
-
-        // Update allocations.  This must happen after we have created the new
-        // execution state so that we fairly account for the memory requirements
-        // of the new wasm module.
-        if let Some(compute_allocation) = context.compute_allocation {
-            new_canister.scheduler_state.compute_allocation = compute_allocation;
-            execution_parameters.compute_allocation = compute_allocation;
-        }
-
-        // While the memory allocation can still be included in the context, we need to
-        // try to take it from there. Otherwise, we should use the current memory
-        // allocation of the canister.
-        let desired_memory_allocation = match context.memory_allocation {
-            Some(allocation) => allocation,
-            None => new_canister.system_state.memory_allocation,
-        };
-        if let MemoryAllocation::Reserved(bytes) = desired_memory_allocation {
-            if bytes < new_canister.memory_usage(self.config.own_subnet_type) {
-                return (
-                    execution_parameters.total_instruction_limit,
-                    Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
-                        canister_id,
-                        memory_allocation_given: desired_memory_allocation,
-                        memory_usage_needed: new_canister.memory_usage(self.config.own_subnet_type),
-                    }),
-                );
-            }
-            execution_parameters.canister_memory_limit = bytes;
-        }
-        new_canister.system_state.memory_allocation = desired_memory_allocation;
-
-        let mut total_heap_delta = NumBytes::from(0);
-
-        // Run (start)
-        let (new_canister, instructions_left, result) = self.hypervisor.execute_canister_start(
-            new_canister,
-            execution_parameters.clone(),
-            network_topology,
-        );
-        info!(
-            self.log,
-            "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
-            canister_id,
-            execution_parameters.total_instruction_limit - instructions_left,
-            instructions_left
-        );
-        match result {
-            Ok(heap_delta) => {
-                total_heap_delta += heap_delta;
-            }
-            Err(err) => return (instructions_left, Err((canister_id, err).into())),
-        }
-
-        execution_parameters.total_instruction_limit = instructions_left;
-        execution_parameters.slice_instruction_limit = instructions_left;
-
-        // Run canister_init
-        let (new_canister, instructions_left, result) = self.hypervisor.execute_canister_init(
-            new_canister,
-            context.sender,
-            context.arg.as_slice(),
-            time,
-            execution_parameters.clone(),
-            network_topology,
-        );
-        info!(
-            self.log,
-            "Executing (canister_init) on canister {} consumed {} instructions.  {} instructions are left.",
-            canister_id,
-            execution_parameters.total_instruction_limit - instructions_left,
-            instructions_left
-        );
-        match result {
-            Ok(heap_delta) => {
-                total_heap_delta += heap_delta;
-                (instructions_left, Ok((total_heap_delta, new_canister)))
-            }
-            Err(err) => (instructions_left, Err((canister_id, err).into())),
-        }
-    }
-
-    fn upgrade(
-        &self,
-        context: InstallCodeContext,
-        old_canister: &CanisterState,
-        time: Time,
-        canister_layout_path: PathBuf,
-        mut execution_parameters: ExecutionParameters,
-        network_topology: &NetworkTopology,
-    ) -> (
-        NumInstructions,
-        Result<(NumBytes, CanisterState), CanisterManagerError>,
-    ) {
-        let canister_id = context.canister_id;
-        let new_canister = old_canister.clone();
-        let mut total_heap_delta = NumBytes::from(0);
-        // Call pre-upgrade hook on the canister.
-        let (mut new_canister, instructions_left, res) =
-            self.hypervisor.execute_canister_pre_upgrade(
-                new_canister,
-                context.sender,
-                time,
-                execution_parameters.clone(),
-                network_topology,
-            );
-        info!(
-            self.log,
-            "Executing (canister_pre_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
-            canister_id,
-            execution_parameters.total_instruction_limit - instructions_left,
-            instructions_left
-        );
-        match res {
-            Ok(heap_delta) => {
-                total_heap_delta += heap_delta;
-            }
-            Err(err) => return (instructions_left, Err((canister_id, err).into())),
-        }
-
-        // Replace the execution state of the canister with a new execution state, but
-        // persist the stable memory (if it exists).
-        let layout = canister_layout(&canister_layout_path, &canister_id);
-        let (instructions_from_compilation, execution_state) = match self
-            .hypervisor
-            .create_execution_state(context.wasm_module, layout.raw_path(), canister_id)
-        {
-            Err(err) => return (instructions_left, Err((canister_id, err).into())),
-            Ok((instructions_from_compilation, mut execution_state)) => {
-                let stable_memory = match new_canister.execution_state {
-                    Some(es) => es.stable_memory,
-                    None => Memory::default(),
-                };
-                execution_state.stable_memory = stable_memory;
-                (instructions_from_compilation, execution_state)
-            }
-        };
-        new_canister.execution_state = Some(execution_state);
-
-        let instructions_left =
-            deduct_compilation_instructions(instructions_left, instructions_from_compilation);
-        execution_parameters.total_instruction_limit = instructions_left;
-        execution_parameters.slice_instruction_limit = instructions_left;
-
-        // Update allocations.  This must happen after we have created the new
-        // execution state so that we fairly account for the memory requirements
-        // of the new wasm module.
-        if let Some(compute_allocation) = context.compute_allocation {
-            new_canister.scheduler_state.compute_allocation = compute_allocation;
-            execution_parameters.compute_allocation = compute_allocation;
-        }
-
-        // While the memory allocation can still be included in the context, we need to
-        // try to take it from there. Otherwise, we should use the current memory
-        // allocation of the canister.
-        let desired_memory_allocation = match context.memory_allocation {
-            Some(allocation) => allocation,
-            None => new_canister.system_state.memory_allocation,
-        };
-        if let MemoryAllocation::Reserved(bytes) = desired_memory_allocation {
-            if bytes < new_canister.memory_usage(self.config.own_subnet_type) {
-                return (
-                    instructions_left,
-                    Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
-                        canister_id,
-                        memory_allocation_given: desired_memory_allocation,
-                        memory_usage_needed: new_canister.memory_usage(self.config.own_subnet_type),
-                    }),
-                );
-            }
-            execution_parameters.canister_memory_limit = bytes;
-        }
-        new_canister.system_state.memory_allocation = desired_memory_allocation;
-
-        // Run (start)
-        let (new_canister, instructions_left, result) = self.hypervisor.execute_canister_start(
-            new_canister,
-            execution_parameters.clone(),
-            network_topology,
-        );
-        info!(
-            self.log,
-            "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
-            canister_id,
-            execution_parameters.total_instruction_limit - instructions_left,
-            instructions_left
-        );
-        execution_parameters.total_instruction_limit = instructions_left;
-        execution_parameters.slice_instruction_limit = instructions_left;
-        match result {
-            Ok(heap_delta) => {
-                total_heap_delta += heap_delta;
-            }
-            Err(err) => return (instructions_left, Err((context.canister_id, err).into())),
-        }
-
-        // Call post-upgrade hook on the upgraded canister.
-        let (new_canister, instructions_left, result) =
-            self.hypervisor.execute_canister_post_upgrade(
-                new_canister,
-                context.sender,
-                context.arg.as_slice(),
-                time,
-                execution_parameters.clone(),
-                network_topology,
-            );
-        info!(
-            self.log,
-            "Executing (canister_post_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
-            canister_id,
-            execution_parameters.total_instruction_limit - instructions_left,
-            instructions_left
-        );
-        match result {
-            Ok(heap_delta) => {
-                total_heap_delta += heap_delta;
-            }
-            Err(err) => return (instructions_left, Err((canister_id, err).into())),
-        }
-        if old_canister.system_state.queues().input_queues_stats()
-            != new_canister.system_state.queues().input_queues_stats()
-        {
-            error!(
-                self.log,
-                "Input queues changed after upgrade. Before: {:?}. After: {:?}",
-                old_canister.system_state.queues().input_queues_stats(),
-                new_canister.system_state.queues().input_queues_stats()
-            );
-            return (
-                instructions_left,
-                Err(CanisterManagerError::Hypervisor(
-                    new_canister.canister_id(),
-                    HypervisorError::ContractViolation(
-                        "Input queues changed after upgrade".to_string(),
-                    ),
-                )),
-            );
-        }
-
-        (instructions_left, Ok((total_heap_delta, new_canister)))
-    }
-
     /// Creates a new canister with the cycles amount specified and inserts it
     /// into `ReplicatedState`.
     ///
@@ -1564,14 +1400,15 @@ impl CanisterManager {
             .canister_state(&canister_id)
             .ok_or(CanisterManagerError::CanisterNotFound(canister_id))
     }
-
-    pub(crate) fn get_wasm_hash(&self, canister: &CanisterState) -> Option<[u8; 32]> {
-        canister
-            .execution_state
-            .as_ref()
-            .map(|execution_state| execution_state.wasm_binary.binary.module_hash())
-    }
 }
+
+pub(crate) fn get_wasm_hash(canister: &CanisterState) -> Option<[u8; 32]> {
+    canister
+        .execution_state
+        .as_ref()
+        .map(|execution_state| execution_state.wasm_binary.binary.module_hash())
+}
+
 #[doc(hidden)] // pub for usage in tests
 pub(crate) fn canister_layout(
     state_path: &Path,
@@ -1955,15 +1792,140 @@ impl TryFrom<(CanisterSettings, usize)> for ValidatedCanisterSettings {
     }
 }
 
-fn deduct_compilation_instructions(
+// Finalizes execution of the `install_code` message that could have run
+// multiple rounds due to determnistic time slicing.
+#[allow(clippy::too_many_arguments)]
+fn finish_install_code(
+    mut old_canister: CanisterState,
+    instruction_limit: NumInstructions,
     instructions_left: NumInstructions,
-    instructions_from_compilation: NumInstructions,
-) -> NumInstructions {
-    NumInstructions::from(
-        instructions_left
-            .get()
-            .saturating_sub(instructions_from_compilation.get()),
-    )
+    result: Result<(InstallCodeResult, CanisterState), CanisterManagerError>,
+    cycles_account_manager: &CyclesAccountManager,
+    mode: CanisterInstallMode,
+    canister_layout_path: PathBuf,
+    config: &CanisterMgrConfig,
+    log: &ReplicaLogger,
+) -> DtsInstallCodeResult {
+    let canister_id = old_canister.canister_id();
+    let instructions_consumed = instruction_limit - instructions_left;
+    let result = match result {
+        Ok((res, mut new_canister)) => {
+            // Refund the left over execution cycles to the new canister and
+            // replace the old canister with the new one.
+            let old_wasm_hash = get_wasm_hash(&old_canister);
+            let new_wasm_hash = get_wasm_hash(&new_canister);
+            cycles_account_manager.refund_execution_cycles(
+                &mut new_canister.system_state,
+                instructions_left,
+                instruction_limit,
+            );
+            if config.rate_limiting_of_instructions == FlagStatus::Enabled {
+                new_canister.scheduler_state.install_code_debit += instructions_consumed;
+            }
+
+            // We managed to create a new canister and will be dropping the
+            // older one. So we get rid of the previous heap to make sure it
+            // doesn't interfere with the new deltas and replace the old
+            // canister with the new one.
+            truncate_canister_heap(log, canister_layout_path.as_path(), canister_id);
+            if mode != CanisterInstallMode::Upgrade {
+                truncate_canister_stable_memory(log, canister_layout_path.as_path(), canister_id);
+            }
+
+            Ok((
+                InstallCodeResult {
+                    heap_delta: res.heap_delta,
+                    old_wasm_hash,
+                    new_wasm_hash,
+                },
+                new_canister,
+            ))
+        }
+        Err(err) => {
+            // the install / upgrade failed. Refund the left over cycles to
+            // the old canister and leave it in the state.
+            if config.rate_limiting_of_instructions == FlagStatus::Enabled {
+                old_canister.scheduler_state.install_code_debit += instructions_consumed;
+            }
+            cycles_account_manager.refund_execution_cycles(
+                &mut old_canister.system_state,
+                instructions_left,
+                instruction_limit,
+            );
+            Err(err)
+        }
+    };
+
+    // TODO(RUN-221): Copy parts of `old_canister_state` that could have changed
+    // externally into the new canister state in `result`.
+
+    DtsInstallCodeResult {
+        old_canister,
+        response: InstallCodeResponse::Result((instructions_left, result)),
+    }
+}
+
+/// Struct used to hold necessary information for the
+/// deterministic time slicing execution of install code routine.
+/// Install code can be executed in three modes - Install, Reinstall and upgrade
+/// This struct saves PausedInstallCodeExecution (as opposed to PausedWasmExecution),
+/// which represents paused state of one of the subroutines of either (re)install
+/// or upgrade paths.
+#[derive(Debug)]
+struct PausedInstallCode {
+    paused_install_code_execution: Box<dyn PausedInstallCodeExecution>,
+    instruction_limit: NumInstructions,
+    mode: CanisterInstallMode,
+    canister_layout_path: PathBuf,
+    config: CanisterMgrConfig,
+}
+
+impl PausedInstallCodeExecution for PausedInstallCode {
+    fn resume(
+        self: Box<Self>,
+        old_canister: CanisterState,
+        subnet_available_memory: SubnetAvailableMemory,
+        network_topology: &NetworkTopology,
+        hypervisor: &Hypervisor,
+        cycles_account_manager: &CyclesAccountManager,
+        log: &ReplicaLogger,
+    ) -> DtsInstallCodeResult {
+        let res = self.paused_install_code_execution.resume(
+            old_canister,
+            subnet_available_memory,
+            network_topology,
+            hypervisor,
+            cycles_account_manager,
+            log,
+        );
+        match res.response {
+            InstallCodeResponse::Result((instructions_left, result)) => finish_install_code(
+                res.old_canister,
+                self.instruction_limit,
+                instructions_left,
+                result,
+                cycles_account_manager,
+                self.mode,
+                self.canister_layout_path,
+                &self.config,
+                log,
+            ),
+            InstallCodeResponse::Paused(paused_install_code_execution) => {
+                let paused_execution = Box::new(PausedInstallCode {
+                    paused_install_code_execution,
+                    ..*self
+                });
+                DtsInstallCodeResult {
+                    old_canister: res.old_canister,
+                    response: InstallCodeResponse::Paused(paused_execution),
+                }
+            }
+        }
+    }
+
+    fn abort(self: Box<Self>) {
+        todo!()
+    }
 }
 
 #[cfg(test)]

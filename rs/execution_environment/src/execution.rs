@@ -7,5 +7,8 @@ pub mod response;
 pub mod nonreplicated_query;
 mod nonreplicated_response;
 
+pub mod install;
+pub mod upgrade;
+
 // Common helpers.
 pub(crate) mod common;

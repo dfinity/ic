@@ -304,44 +304,43 @@ fn install_canister_makes_subnet_oversubscribed() {
             .0
             .unwrap();
 
-        assert!(canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id1)
-                    .compute_allocation(ComputeAllocation::try_from(50).unwrap())
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .is_ok());
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id1)
+                .compute_allocation(ComputeAllocation::try_from(50).unwrap())
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
-        assert!(canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id2)
-                    .compute_allocation(ComputeAllocation::try_from(25).unwrap())
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .is_ok());
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id2)
+                .compute_allocation(ComputeAllocation::try_from(25).unwrap())
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
+        let (num_instructions, res, canister) = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id3)
+                .wasm_module(
+                    ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
+                )
+                .compute_allocation(ComputeAllocation::try_from(30).unwrap())
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
         assert_eq!(
-            canister_manager.install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id3)
-                    .wasm_module(
-                        ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
-                    )
-                    .compute_allocation(ComputeAllocation::try_from(30).unwrap())
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            ),
+            (num_instructions, res),
             (
                 MAX_NUM_INSTRUCTIONS,
                 Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {
@@ -351,8 +350,8 @@ fn install_canister_makes_subnet_oversubscribed() {
             )
         );
 
-        // Canister should still be in the replicated state.
-        assert!(state.canister_state(&canister_id3).is_some());
+        // Canister state should still be returned.
+        assert_eq!(canister.unwrap().canister_id(), canister_id3);
     });
 }
 
@@ -373,7 +372,8 @@ fn upgrade_non_existing_canister_fails() {
             ),
             (
                 MAX_NUM_INSTRUCTIONS,
-                Err(CanisterManagerError::CanisterNotFound(canister_id))
+                Err(CanisterManagerError::CanisterNotFound(canister_id)),
+                None
             )
         );
     });
@@ -396,18 +396,19 @@ fn upgrade_canister_with_no_wasm_fails() {
             .0
             .unwrap();
 
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .mode(CanisterInstallMode::Upgrade)
+                .wasm_module(
+                    ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
+                )
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
         assert_eq!(
-            canister_manager.install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .mode(CanisterInstallMode::Upgrade)
-                    .wasm_module(
-                        ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
-                    )
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            ),
+            (res.0, res.1),
             (
                 MAX_NUM_INSTRUCTIONS,
                 Err(CanisterManagerError::Hypervisor(
@@ -448,6 +449,7 @@ fn can_update_compute_allocation_during_upgrade() {
             EXECUTION_PARAMETERS.clone(),
         );
         assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
         assert_eq!(
             state
@@ -458,27 +460,22 @@ fn can_update_compute_allocation_during_upgrade() {
             ComputeAllocation::try_from(60).unwrap()
         );
 
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id1)
+                .compute_allocation(ComputeAllocation::try_from(80).unwrap())
+                .mode(CanisterInstallMode::Upgrade)
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
         // Upgrade the canister to allocation of 80%.
-        assert!(canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id1)
-                    .compute_allocation(ComputeAllocation::try_from(80).unwrap())
-                    .mode(CanisterInstallMode::Upgrade)
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .is_ok());
+        assert!(res.1.is_ok());
 
+        assert_eq!(res.2.as_ref().unwrap().canister_id(), canister_id1);
         assert_eq!(
-            state
-                .canister_state(&canister_id1)
-                .unwrap()
-                .scheduler_state
-                .compute_allocation,
+            res.2.unwrap().scheduler_state.compute_allocation,
             ComputeAllocation::try_from(80).unwrap()
         );
     });
@@ -523,59 +520,57 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
             .0
             .unwrap();
 
-        assert!(canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id1)
-                    .compute_allocation(ComputeAllocation::try_from(50).unwrap())
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .is_ok());
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id1)
+                .compute_allocation(ComputeAllocation::try_from(50).unwrap())
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        state.put_canister_state(res.2.unwrap());
+        assert!(res.1.is_ok());
 
-        assert!(canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id2)
-                    .compute_allocation(ComputeAllocation::try_from(25).unwrap())
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .is_ok());
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id2)
+                .compute_allocation(ComputeAllocation::try_from(25).unwrap())
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        state.put_canister_state(res.2.unwrap());
+        assert!(res.1.is_ok());
 
-        assert!(canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id3)
-                    .compute_allocation(ComputeAllocation::try_from(20).unwrap())
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .is_ok());
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id3)
+                .compute_allocation(ComputeAllocation::try_from(20).unwrap())
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id3)
+                .wasm_module(
+                    ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
+                )
+                .compute_allocation(ComputeAllocation::try_from(30).unwrap())
+                .mode(CanisterInstallMode::Upgrade)
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
         assert_eq!(
-            canister_manager.install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id3)
-                    .wasm_module(
-                        ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
-                    )
-                    .compute_allocation(ComputeAllocation::try_from(30).unwrap())
-                    .mode(CanisterInstallMode::Upgrade)
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            ),
+            (res.0, res.1),
             (
                 MAX_NUM_INSTRUCTIONS,
                 Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {
@@ -585,8 +580,7 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
             )
         );
 
-        // Canister should still be in the replicated state.
-        assert!(state.canister_state(&canister_id3).is_some());
+        state.put_canister_state(res.2.unwrap());
 
         assert_eq!(
             state
@@ -656,51 +650,49 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
             .0
             .unwrap();
 
-        canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id1)
-                    .memory_allocation(
-                        MemoryAllocation::try_from(NumBytes::from(MEMORY_CAPACITY.get() / 2))
-                            .unwrap(),
-                    )
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id1)
+                .memory_allocation(
+                    MemoryAllocation::try_from(NumBytes::from(MEMORY_CAPACITY.get() / 2)).unwrap(),
+                )
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
-        canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id2)
-                    .memory_allocation(
-                        MemoryAllocation::try_from(NumBytes::from(MEMORY_CAPACITY.get() / 2))
-                            .unwrap(),
-                    )
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id2)
+                .memory_allocation(
+                    MemoryAllocation::try_from(NumBytes::from(MEMORY_CAPACITY.get() / 2)).unwrap(),
+                )
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id3)
+                .wasm_module(
+                    ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
+                )
+                .memory_allocation(MemoryAllocation::try_from(NumBytes::from(1)).unwrap())
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        state.put_canister_state(res.2.unwrap());
         assert_eq!(
-            canister_manager.install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id3)
-                    .wasm_module(
-                        ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
-                    )
-                    .memory_allocation(MemoryAllocation::try_from(NumBytes::from(1)).unwrap())
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            ),
+            (res.0, res.1),
             (
                 MAX_NUM_INSTRUCTIONS,
                 Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
@@ -734,19 +726,18 @@ fn can_update_memory_allocation_during_upgrade() {
 
         let initial_memory_allocation =
             MemoryAllocation::try_from(NumBytes::from(1 << 30)).unwrap();
-        canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id)
-                    .compute_allocation(ComputeAllocation::try_from(60).unwrap())
-                    .memory_allocation(initial_memory_allocation)
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id)
+                .compute_allocation(ComputeAllocation::try_from(60).unwrap())
+                .memory_allocation(initial_memory_allocation)
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
         assert_eq!(
             state
@@ -757,20 +748,19 @@ fn can_update_memory_allocation_during_upgrade() {
         );
 
         let final_memory_allocation = MemoryAllocation::try_from(NumBytes::from(2 << 30)).unwrap();
-        canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id)
-                    .compute_allocation(ComputeAllocation::try_from(60).unwrap())
-                    .memory_allocation(final_memory_allocation)
-                    .mode(CanisterInstallMode::Upgrade)
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id)
+                .compute_allocation(ComputeAllocation::try_from(60).unwrap())
+                .memory_allocation(final_memory_allocation)
+                .mode(CanisterInstallMode::Upgrade)
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
         assert_eq!(
             state
@@ -807,20 +797,19 @@ fn install_code_preserves_messages() {
         state.put_canister_state(canister_state_builder.build());
 
         // Install the canister with new wasm.
-        canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_test_id(0))
-                    .wasm_module(
-                        ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
-                    )
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_test_id(0))
+                .wasm_module(
+                    ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
+                )
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
         // Check the ingress messages are still in the queue.
         let canister = state
@@ -944,31 +933,32 @@ fn cannot_install_non_empty_canister() {
             .unwrap();
 
         // Install a wasm module. Should succeed.
-        canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id)
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id)
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
         // Install again. Should fail.
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id)
+                .wasm_module(
+                    ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
+                )
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        state.put_canister_state(res.2.unwrap());
         assert_eq!(
-            canister_manager.install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id)
-                    .wasm_module(
-                        ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
-                    )
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            ),
+            (res.0, res.1),
             (
                 MAX_NUM_INSTRUCTIONS,
                 Err(CanisterManagerError::CanisterNonEmpty(canister_id))
@@ -998,19 +988,21 @@ fn install_code_with_wrong_controller_fails() {
 
         for mode in CanisterInstallMode::iter() {
             // Try to install_code with canister_test_id 2. Should fail.
+            let res = canister_manager.install_code(
+                InstallCodeContextBuilder::default()
+                    .sender(canister_test_id(2).get())
+                    .canister_id(canister_id)
+                    .wasm_module(
+                        ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
+                    )
+                    .mode(*mode)
+                    .build(),
+                &mut state,
+                EXECUTION_PARAMETERS.clone(),
+            );
+            state.put_canister_state(res.2.unwrap());
             assert_eq!(
-                canister_manager.install_code(
-                    InstallCodeContextBuilder::default()
-                        .sender(canister_test_id(2).get())
-                        .canister_id(canister_id)
-                        .wasm_module(
-                            ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
-                        )
-                        .mode(*mode)
-                        .build(),
-                    &mut state,
-                    EXECUTION_PARAMETERS.clone(),
-                ),
+                (res.0, res.1),
                 (
                     MAX_NUM_INSTRUCTIONS,
                     Err(CanisterManagerError::CanisterInvalidController {
@@ -1128,18 +1120,17 @@ fn reinstall_on_empty_canister_succeeds() {
             .unwrap();
 
         // Reinstalling an empty canister should succeed.
-        assert!(canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id)
-                    .mode(CanisterInstallMode::Reinstall)
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .is_ok());
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id)
+                .mode(CanisterInstallMode::Reinstall)
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
         // Canister should still be in the replicated state.
         assert!(state.canister_state(&canister_id).is_some());
@@ -1227,16 +1218,18 @@ fn install_puts_canister_back_after_invalid_wasm() {
             .unwrap();
 
         // Installation should be rejected.
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id)
+                .wasm_module(wasm)
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        state.put_canister_state(res.2.unwrap());
         assert_eq!(
-            canister_manager.install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id)
-                    .wasm_module(wasm)
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            ),
+            (res.0, res.1),
             (
                 MAX_NUM_INSTRUCTIONS,
                 Err(CanisterManagerError::Hypervisor(
@@ -1270,17 +1263,16 @@ fn reinstall_clears_stable_memory() {
             .0
             .unwrap();
 
-        canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id)
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id)
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
         // Write something into the canister's stable memory.
         let mut canister = state.take_canister_state(&canister_id).unwrap();
@@ -1312,18 +1304,17 @@ fn reinstall_clears_stable_memory() {
         state.put_canister_state(canister);
 
         // Reinstall the canister.
-        canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id)
-                    .mode(CanisterInstallMode::Reinstall)
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id)
+                .mode(CanisterInstallMode::Reinstall)
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
         // Stable memory should now be empty.
         let canister = state.take_canister_state(&canister_id).unwrap();
@@ -2143,22 +2134,22 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
             res.1,
             Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
         );
+        state.put_canister_state(res.2.unwrap());
 
         // Install the canister.
-        canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id)
-                    .wasm_module(
-                        ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
-                    )
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id)
+                .wasm_module(
+                    ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
+                )
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
         // Attempt to re-install with low memory allocation should fail.
         let memory_allocation = MemoryAllocation::try_from(NumBytes::from(50)).unwrap();
@@ -2200,20 +2191,19 @@ fn upgrading_a_canister_with_not_enough_memory_allocation_fails() {
             .0
             .unwrap();
 
-        canister_manager
-            .install_code(
-                InstallCodeContextBuilder::default()
-                    .sender(sender)
-                    .canister_id(canister_id)
-                    .wasm_module(
-                        ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
-                    )
-                    .build(),
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
+        let res = canister_manager.install_code(
+            InstallCodeContextBuilder::default()
+                .sender(sender)
+                .canister_id(canister_id)
+                .wasm_module(
+                    ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec(),
+                )
+                .build(),
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
         // Give just 10 bytes which should be small enough.
         let memory_allocation = MemoryAllocation::try_from(NumBytes::from(10)).unwrap();
@@ -2359,26 +2349,25 @@ fn failed_upgrade_hooks_consume_instructions() {
             .0
             .unwrap();
 
-        canister_manager
-            .install_code(
-                InstallCodeContext {
-                    sender,
-                    canister_id,
-                    wasm_module: initial_wasm,
-                    arg: vec![],
-                    compute_allocation: None,
-                    memory_allocation: None,
-                    mode: CanisterInstallMode::Install,
-                    query_allocation: QueryAllocation::default(),
-                },
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
+        let res = canister_manager.install_code(
+            InstallCodeContext {
+                sender,
+                canister_id,
+                wasm_module: initial_wasm,
+                arg: vec![],
+                compute_allocation: None,
+                memory_allocation: None,
+                mode: CanisterInstallMode::Install,
+                query_allocation: QueryAllocation::default(),
+            },
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
         let compilation_cost = wasm_compilation_cost(&upgrade_wasm);
-        let (instructions_left, result) = canister_manager.install_code(
+        let (instructions_left, result, _) = canister_manager.install_code(
             InstallCodeContext {
                 sender,
                 canister_id,
@@ -2489,7 +2478,7 @@ fn failed_install_hooks_consume_instructions() {
             .unwrap();
 
         let compilation_cost = wasm_compilation_cost(&wasm);
-        let (instructions_left, result) = canister_manager.install_code(
+        let (instructions_left, result, _) = canister_manager.install_code(
             InstallCodeContext {
                 sender,
                 canister_id,
@@ -2593,7 +2582,7 @@ fn install_code_respects_instruction_limit() {
     let wasm = wabt::wat2wasm(wasm).unwrap();
 
     // Too few instructions result in failed installation.
-    let (instructions_left, result) = canister_manager.install_code(
+    let (instructions_left, result, canister) = canister_manager.install_code(
         InstallCodeContext {
             sender,
             canister_id,
@@ -2611,6 +2600,7 @@ fn install_code_respects_instruction_limit() {
             ..EXECUTION_PARAMETERS.clone()
         },
     );
+    state.put_canister_state(canister.unwrap());
     assert_matches!(
         result,
         Err(CanisterManagerError::Hypervisor(
@@ -2621,7 +2611,7 @@ fn install_code_respects_instruction_limit() {
     assert_eq!(instructions_left, NumInstructions::from(0));
 
     // Enough instructions result in successful installation.
-    let (instructions_left, result) = canister_manager.install_code(
+    let (instructions_left, result, canister) = canister_manager.install_code(
         InstallCodeContext {
             sender,
             canister_id,
@@ -2641,9 +2631,10 @@ fn install_code_respects_instruction_limit() {
     );
     assert!(result.is_ok());
     assert_eq!(instructions_left, NumInstructions::from(1));
+    state.put_canister_state(canister.unwrap());
 
     // Too few instructions result in failed upgrade.
-    let (instructions_left, result) = canister_manager.install_code(
+    let (instructions_left, result, canister) = canister_manager.install_code(
         InstallCodeContext {
             sender,
             canister_id,
@@ -2661,6 +2652,7 @@ fn install_code_respects_instruction_limit() {
             ..EXECUTION_PARAMETERS.clone()
         },
     );
+    state.put_canister_state(canister.unwrap());
     assert_matches!(
         result,
         Err(CanisterManagerError::Hypervisor(
@@ -2671,7 +2663,7 @@ fn install_code_respects_instruction_limit() {
     assert_eq!(instructions_left, NumInstructions::from(0));
 
     // Enough instructions result in successful upgrade.
-    let (instructions_left, result) = canister_manager.install_code(
+    let (instructions_left, result, _) = canister_manager.install_code(
         InstallCodeContext {
             sender,
             canister_id,
@@ -2735,7 +2727,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .build();
     let compilation_cost = wasm_compilation_cost(&install_code_context.wasm_module);
 
-    let (instructions_left, res) = canister_manager.install_code(
+    let (instructions_left, res, canister) = canister_manager.install_code(
         InstallCodeContextBuilder::default()
             .mode(CanisterInstallMode::Install)
             .sender(controller.into())
@@ -2744,6 +2736,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         &mut state,
         EXECUTION_PARAMETERS.clone(),
     );
+    state.put_canister_state(canister.unwrap());
 
     // Installation is free, since there is no `(start)` or `canister_init` to run.
     assert_eq!(instructions_left, MAX_NUM_INSTRUCTIONS - compilation_cost);
@@ -2765,7 +2758,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
 
     // 2. REINSTALL
 
-    let (instructions_left, res) = canister_manager.install_code(
+    let (instructions_left, res, canister) = canister_manager.install_code(
         InstallCodeContextBuilder::default()
             .mode(CanisterInstallMode::Reinstall)
             .sender(controller.into())
@@ -2774,6 +2767,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         &mut state,
         EXECUTION_PARAMETERS.clone(),
     );
+    state.put_canister_state(canister.unwrap());
 
     // Installation is free, since there is no `(start)` or `canister_init` to run.
     assert_eq!(instructions_left, MAX_NUM_INSTRUCTIONS - compilation_cost);
@@ -2795,7 +2789,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
 
     // 3. UPGRADE
 
-    let (instructions_left, res) = canister_manager.install_code(
+    let (instructions_left, res, canister) = canister_manager.install_code(
         InstallCodeContextBuilder::default()
             .mode(CanisterInstallMode::Upgrade)
             .sender(controller.into())
@@ -2804,6 +2798,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         &mut state,
         EXECUTION_PARAMETERS.clone(),
     );
+    state.put_canister_state(canister.unwrap());
 
     // Installation is free, since there is no `canister_pre/post_upgrade`
     assert_eq!(instructions_left, MAX_NUM_INSTRUCTIONS - compilation_cost);
@@ -2846,23 +2841,22 @@ fn lower_memory_allocation_than_usage_fails() {
             .0
             .unwrap();
 
-        canister_manager
-            .install_code(
-                InstallCodeContext {
-                    sender,
-                    canister_id,
-                    wasm_module: wasm,
-                    arg: vec![],
-                    compute_allocation: None,
-                    memory_allocation: None,
-                    mode: CanisterInstallMode::Install,
-                    query_allocation: QueryAllocation::default(),
-                },
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
+        let res = canister_manager.install_code(
+            InstallCodeContext {
+                sender,
+                canister_id,
+                wasm_module: wasm,
+                arg: vec![],
+                compute_allocation: None,
+                memory_allocation: None,
+                mode: CanisterInstallMode::Install,
+                query_allocation: QueryAllocation::default(),
+            },
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
         let settings = CanisterSettings::new(
             None,
@@ -2915,23 +2909,23 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
             .unwrap();
 
         // The memory allocation is too low, install should fail.
+        let res = canister_manager.install_code(
+            InstallCodeContext {
+                sender,
+                canister_id,
+                wasm_module: wasm.clone(),
+                arg: vec![],
+                compute_allocation: None,
+                memory_allocation: None,
+                mode: CanisterInstallMode::Install,
+                query_allocation: QueryAllocation::default(),
+            },
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        state.put_canister_state(res.2.unwrap());
         assert_matches!(
-            canister_manager
-                .install_code(
-                    InstallCodeContext {
-                        sender,
-                        canister_id,
-                        wasm_module: wasm.clone(),
-                        arg: vec![],
-                        compute_allocation: None,
-                        memory_allocation: None,
-                        mode: CanisterInstallMode::Install,
-                        query_allocation: QueryAllocation::default(),
-                    },
-                    &mut state,
-                    EXECUTION_PARAMETERS.clone(),
-                )
-                .1,
+            res.1,
             Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
         );
 
@@ -3009,23 +3003,22 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
             .0
             .unwrap();
 
-        canister_manager
-            .install_code(
-                InstallCodeContext {
-                    sender,
-                    canister_id,
-                    wasm_module: wasm,
-                    arg: vec![],
-                    compute_allocation: None,
-                    memory_allocation: None,
-                    mode: CanisterInstallMode::Install,
-                    query_allocation: QueryAllocation::default(),
-                },
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
+        let res = canister_manager.install_code(
+            InstallCodeContext {
+                sender,
+                canister_id,
+                wasm_module: wasm,
+                arg: vec![],
+                compute_allocation: None,
+                memory_allocation: None,
+                mode: CanisterInstallMode::Install,
+                query_allocation: QueryAllocation::default(),
+            },
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
         // Try to upgrade to a wasm module that has bigger memory requirements. It
         // should fail...
@@ -3035,25 +3028,25 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
         )"#;
         let wasm = wabt::wat2wasm(wat).unwrap();
 
+        let res = canister_manager.install_code(
+            InstallCodeContext {
+                sender,
+                canister_id,
+                wasm_module: wasm.clone(),
+                arg: vec![],
+                compute_allocation: None,
+                memory_allocation: None,
+                mode: CanisterInstallMode::Upgrade,
+                query_allocation: QueryAllocation::default(),
+            },
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
         assert_matches!(
-            canister_manager
-                .install_code(
-                    InstallCodeContext {
-                        sender,
-                        canister_id,
-                        wasm_module: wasm.clone(),
-                        arg: vec![],
-                        compute_allocation: None,
-                        memory_allocation: None,
-                        mode: CanisterInstallMode::Upgrade,
-                        query_allocation: QueryAllocation::default(),
-                    },
-                    &mut state,
-                    EXECUTION_PARAMETERS.clone(),
-                )
-                .1,
+            res.1,
             Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
         );
+        state.put_canister_state(res.2.unwrap());
 
         // Update memory allocation to a big enough value via canister settings. The
         // upgrade should succeed.
@@ -3229,23 +3222,22 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
             .0
             .unwrap();
 
-        canister_manager
-            .install_code(
-                InstallCodeContext {
-                    sender,
-                    canister_id,
-                    wasm_module: wasm.clone(),
-                    arg: vec![],
-                    compute_allocation: None,
-                    memory_allocation: None,
-                    mode: CanisterInstallMode::Install,
-                    query_allocation: QueryAllocation::default(),
-                },
-                &mut state,
-                EXECUTION_PARAMETERS.clone(),
-            )
-            .1
-            .unwrap();
+        let res = canister_manager.install_code(
+            InstallCodeContext {
+                sender,
+                canister_id,
+                wasm_module: wasm.clone(),
+                arg: vec![],
+                compute_allocation: None,
+                memory_allocation: None,
+                mode: CanisterInstallMode::Install,
+                query_allocation: QueryAllocation::default(),
+            },
+            &mut state,
+            EXECUTION_PARAMETERS.clone(),
+        );
+        assert!(res.1.is_ok());
+        state.put_canister_state(res.2.unwrap());
 
         // Set memory allocation to 0.
         let settings = CanisterSettings::new(
