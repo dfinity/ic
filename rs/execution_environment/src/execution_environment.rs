@@ -1,3 +1,4 @@
+use crate::canister_manager::{CanisterManagerError, InstallCodeResponse};
 use crate::execution::{
     heartbeat::execute_heartbeat, nonreplicated_query::execute_non_replicated_query,
     response::execute_response,
@@ -366,71 +367,12 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             }
 
             Ok(Ic00Method::InstallCode) => {
-                let (res, instructions_left) = match InstallCodeArgs::decode(payload) {
-                    Err(err) => (Err(candid_error_to_user_error(err)), instructions_limit),
-                    Ok(args) => match InstallCodeContext::try_from((*msg.sender(), args)) {
-                        Err(err) => (Err(err.into()), instructions_limit),
-                        Ok(install_context) => {
-                            let canister_id = install_context.canister_id;
-                            info!(
-                                self.log,
-                                "Start executing install_code message on canister {:?}, contains module {:?}",
-                                canister_id,
-                                install_context.wasm_module.is_empty().to_string(),
-                            );
-
-                            // Start logging execution time for `install_code`.
-                            let timer = Timer::start();
-
-                            let execution_parameters = ExecutionParameters {
-                                total_instruction_limit: instructions_limit,
-                                slice_instruction_limit: instructions_limit,
-                                canister_memory_limit: self.config.max_canister_memory_size,
-                                subnet_available_memory,
-                                compute_allocation: ComputeAllocation::default(),
-                                subnet_type: state.metadata.own_subnet_type,
-                                execution_mode: ExecutionMode::Replicated,
-                            };
-
-                            let (instructions_left, result) = self.canister_manager.install_code(
-                                install_context,
-                                &mut state,
-                                execution_parameters,
-                            );
-
-                            let execution_duration = timer.elapsed();
-
-                            let result = match result {
-                                Ok(result) => {
-                                    state.metadata.heap_delta_estimate += result.heap_delta;
-
-                                    info!(
-                                        self.log,
-                                        "Finished executing install_code message on canister {:?} after {:?}, old wasm hash {:?}, new wasm hash {:?}",
-                                        canister_id,
-                                        execution_duration,
-                                        result.old_wasm_hash,
-                                        result.new_wasm_hash,
-                                    );
-
-                                    (Ok(EmptyBlob::encode()), instructions_left)
-                                }
-                                Err(err) => {
-                                    info!(
-                                        self.log,
-                                        "Finished executing install_code message on canister {:?} after {:?} with error: {:?}",
-                                        canister_id,
-                                        execution_duration,
-                                        err
-                                    );
-                                    (Err(err.into()), instructions_left)
-                                }
-                            };
-
-                            result
-                        }
-                    },
-                };
+                let (res, instructions_left) = self.execute_install_code(
+                    &msg,
+                    &mut state,
+                    instructions_limit,
+                    subnet_available_memory,
+                );
                 (Some((res, msg.take_cycles())), instructions_left)
             }
 
@@ -1710,6 +1652,116 @@ impl ExecutionEnvironmentImpl {
                 registry_version,
             });
         Ok(())
+    }
+
+    fn execute_install_code(
+        &self,
+        msg: &RequestOrIngress,
+        state: &mut ReplicatedState,
+        instructions_limit: NumInstructions,
+        subnet_available_memory: SubnetAvailableMemory,
+    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
+        let payload = msg.method_payload();
+        let install_context = match InstallCodeArgs::decode(payload) {
+            Err(err) => return (Err(candid_error_to_user_error(err)), instructions_limit),
+            Ok(args) => match InstallCodeContext::try_from((*msg.sender(), args)) {
+                Err(err) => return (Err(err.into()), instructions_limit),
+                Ok(install_context) => install_context,
+            },
+        };
+
+        let canister_id = install_context.canister_id;
+        info!(
+            self.log,
+            "Start executing install_code message on canister {:?}, contains module {:?}",
+            canister_id,
+            install_context.wasm_module.is_empty().to_string(),
+        );
+
+        // Start logging execution time for `install_code`.
+        let timer = Timer::start();
+
+        let execution_parameters = ExecutionParameters {
+            total_instruction_limit: instructions_limit,
+            slice_instruction_limit: instructions_limit,
+            canister_memory_limit: self.config.max_canister_memory_size,
+            subnet_available_memory,
+            compute_allocation: ComputeAllocation::default(),
+            subnet_type: state.metadata.own_subnet_type,
+            execution_mode: ExecutionMode::Replicated,
+        };
+
+        let time = state.time();
+        let canister_layout_path = state.path().to_path_buf();
+        let compute_allocation_used = state.total_compute_allocation();
+        let memory_taken = state.total_memory_taken();
+        let network_topology = state.metadata.network_topology.clone();
+
+        let (instructions_left, result) =
+            match state.take_canister_state(&install_context.canister_id) {
+                None => (
+                    execution_parameters.total_instruction_limit,
+                    Err(CanisterManagerError::CanisterNotFound(
+                        install_context.canister_id,
+                    )),
+                ),
+                Some(old_canister) => {
+                    let dts_res = self.canister_manager.install_code_dts(
+                        install_context,
+                        old_canister,
+                        time,
+                        canister_layout_path,
+                        compute_allocation_used,
+                        memory_taken,
+                        &network_topology,
+                        execution_parameters,
+                    );
+                    let (instructions_left, result, canister) = match dts_res.response {
+                        InstallCodeResponse::Result((instructions_left, result)) => {
+                            let (result, canister) = match result {
+                                Ok((result, new_canister)) => (Ok(result), new_canister),
+                                Err(err) => (Err(err), dts_res.old_canister),
+                            };
+                            (instructions_left, result, canister)
+                        }
+                        InstallCodeResponse::Paused(_) => {
+                            unimplemented!();
+                        }
+                    };
+                    state.put_canister_state(canister);
+                    (instructions_left, result)
+                }
+            };
+
+        let execution_duration = timer.elapsed();
+
+        let result = match result {
+            Ok(result) => {
+                state.metadata.heap_delta_estimate += result.heap_delta;
+
+                info!(
+                    self.log,
+                    "Finished executing install_code message on canister {:?} after {:?}, old wasm hash {:?}, new wasm hash {:?}",
+                    canister_id,
+                    execution_duration,
+                    result.old_wasm_hash,
+                    result.new_wasm_hash,
+                );
+
+                (Ok(EmptyBlob::encode()), instructions_left)
+            }
+            Err(err) => {
+                info!(
+                    self.log,
+                    "Finished executing install_code message on canister {:?} after {:?} with error: {:?}",
+                    canister_id,
+                    execution_duration,
+                    err
+                );
+                (Err(err.into()), instructions_left)
+            }
+        };
+        result
     }
 
     /// For testing purposes only.

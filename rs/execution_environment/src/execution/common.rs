@@ -10,7 +10,7 @@ use ic_replicated_state::{CallContextAction, CallOrigin, CanisterState};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{CallbackId, MessageId, Payload, RejectContext, Response};
 use ic_types::methods::WasmMethod;
-use ic_types::{Cycles, Time, UserId};
+use ic_types::{Cycles, NumInstructions, Time, UserId};
 
 use crate::execution_environment::ExecutionResponse;
 
@@ -267,4 +267,15 @@ pub(crate) fn validate_method(
         }
     }
     Ok(())
+}
+
+pub(crate) fn deduct_compilation_instructions(
+    instructions_left: NumInstructions,
+    instructions_from_compilation: NumInstructions,
+) -> NumInstructions {
+    NumInstructions::from(
+        instructions_left
+            .get()
+            .saturating_sub(instructions_from_compilation.get()),
+    )
 }
