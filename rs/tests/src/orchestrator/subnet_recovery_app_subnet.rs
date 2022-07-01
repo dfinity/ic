@@ -31,10 +31,9 @@ use crate::orchestrator::utils::rw_message::{can_install_canister, can_read_msg,
 use crate::orchestrator::utils::upgrade::assert_assigned_replica_version;
 use crate::util::*;
 use ic_base_types::NodeId;
-use ic_cup_explorer::get_catchup_content;
-use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType};
-use ic_recovery::file_sync_helper;
+use ic_recovery::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
 use ic_recovery::RecoveryArgs;
+use ic_recovery::{file_sync_helper, get_node_metrics};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
@@ -230,39 +229,30 @@ pub fn test(env: TestEnv) {
     );
     assert!(!can_install_canister(&app_node.get_public_url()));
 
+    let download_node = env
+        .topology_snapshot()
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+        .expect("there is no application subnet")
+        .nodes()
+        .filter_map(|n| get_node_metrics(&logger, &n.get_ip_addr()).map(|m| (n, m)))
+        .max_by_key(|(_, metric)| metric.finalization_height)
+        .unwrap();
+
+    subnet_recovery.params.download_node = Some(download_node.0.get_ip_addr());
+    info!(
+        logger,
+        "Chose as download node: {:?}", subnet_recovery.params.download_node
+    );
+
     info!(
         logger,
         "Starting recovery of subnet {}",
         subnet_id.to_string()
     );
 
-    while let Some((step_type, step)) = subnet_recovery.next() {
+    for (step_type, step) in subnet_recovery {
         info!(logger, "Next step: {:?}", step_type);
-        if matches!(step_type, StepType::ValidateReplayOutput) {
-            // Replay output has to be validated differently since prometheus doesn't work here
-            let state_params = subnet_recovery
-                .get_recovery_api()
-                .get_replay_output()
-                .expect("Failed to get replay output");
-
-            // Sanity check to confirm that replay actually did something
-            let cup_content = block_on(get_catchup_content(&app_node.get_public_url()))
-                .expect("Couldn't fetch catchup package")
-                .expect("No CUP found");
-
-            let (cup_height, _cup_hash) = (
-                Height::from(cup_content.random_beacon.unwrap().height),
-                cup_content.state_hash,
-            );
-
-            assert!(
-                cup_height <= state_params.height,
-                "CUP height is above the replay height."
-            );
-
-            // Continue, so we don't execute the iterator's ValidateReplayOutput step
-            continue;
-        }
 
         info!(logger, "{}", step.descr());
         step.exec()
