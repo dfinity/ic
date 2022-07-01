@@ -13,7 +13,6 @@ mod handle_stop_dissolve;
 mod neuron_response;
 
 use core::ops::Deref;
-use ic_ledger_client_core::certification::VerificationInfo;
 use std::convert::TryFrom;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -25,9 +24,10 @@ use log::{debug, error, warn};
 use reqwest::Client;
 
 use dfn_candid::CandidOne;
-use ic_ledger_client_core::blocks::Blocks;
-use ic_ledger_client_core::canister_access::CanisterAccess;
-use ic_ledger_client_core::ledger_blocks_sync::{
+use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
+use ic_ledger_canister_blocks_synchronizer::canister_access::CanisterAccess;
+use ic_ledger_canister_blocks_synchronizer::certification::VerificationInfo;
+use ic_ledger_canister_blocks_synchronizer::ledger_blocks_sync::{
     LedgerBlocksSynchronizer, LedgerBlocksSynchronizerMetrics,
 };
 use ic_nns_governance::pb::v1::{manage_neuron::NeuronIdOrSubaccount, GovernanceError, NeuronInfo};

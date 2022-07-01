@@ -1,8 +1,10 @@
-use ic_ledger_client_core::{
+use ic_ledger_canister_blocks_synchronizer::{
     balance_book::BalanceBook,
     store::{BlockStoreError, SQLiteStore},
 };
-use ic_ledger_client_core_test_utils::{create_tmp_dir, init_test_logger, sample_data::Scribe};
+use ic_ledger_canister_blocks_synchronizer_test_utils::{
+    create_tmp_dir, init_test_logger, sample_data::Scribe,
+};
 use ic_ledger_core::Tokens;
 use ledger_canister::{AccountIdentifier, BlockHeight};
 use std::{collections::BTreeMap, path::Path};

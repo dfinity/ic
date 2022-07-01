@@ -2,8 +2,8 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use ic_ledger_core::block::EncodedBlock;
-use ledger_canister::{BlockHeight, TipOfChainRes};
+use ic_ledger_core::block::{BlockHeight, EncodedBlock};
+use ledger_canister::TipOfChainRes;
 
 use crate::canister_access::CanisterAccess;
 

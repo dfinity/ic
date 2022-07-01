@@ -6,11 +6,14 @@ use dfn_core::{
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
-use ic_ledger_core::{
+use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
-    block::{BlockType, EncodedBlock},
     ledger::{archive_blocks, find_block_in_archive, LedgerAccess},
+};
+use ic_ledger_core::{
+    block::{BlockHeight, BlockType, EncodedBlock},
     timestamp::TimeStamp,
+    tokens::{Tokens, DECIMAL_PLACES},
 };
 use ledger_canister::*;
 use std::{

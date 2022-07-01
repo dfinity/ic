@@ -30,7 +30,7 @@ use dfn_protobuf::protobuf;
 use ed25519_dalek::Signer;
 use ic_canister_client::Sender;
 use ic_fondue::ic_manager::IcHandle;
-use ic_ledger_client_core_test_utils::sample_data::acc_id;
+use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::acc_id;
 use ic_nervous_system_common::ledger;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};

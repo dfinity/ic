@@ -8,19 +8,20 @@ filegroup(
 )
 
 rust_library(
-    name = "ledger_core",
+    name = "ledger_canister_core",
     srcs = glob(["src/**"]),
-    crate_name = "ic_ledger_core",
+    crate_name = "ic_ledger_canister_core",
     edition = "2018",
+    proc_macro_deps = [
+        "@crate_index//:async-trait",
+    ],
     deps = [
         "//rs/constants",
-        "//rs/crypto/sha",
+        "//rs/rosetta-api/ledger_core",
         "//rs/types/base_types",
         "//rs/types/ic00_types",
         "//rs/utils",
         "@crate_index//:candid",
-        "@crate_index//:hex",
         "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
     ],
 )

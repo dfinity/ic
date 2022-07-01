@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use core::ops::Deref;
 
-use ic_ledger_core::block::{BlockType, EncodedBlock, HashOf};
-use ledger_canister::{Block, BlockHeight, TipOfChainRes};
+use ic_ledger_core::block::{BlockHeight, BlockType, EncodedBlock, HashOf};
+use ledger_canister::{Block, TipOfChainRes};
 use log::{debug, error, info, trace};
 use tokio::sync::RwLock;
 

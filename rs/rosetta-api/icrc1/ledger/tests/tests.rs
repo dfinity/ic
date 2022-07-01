@@ -6,8 +6,8 @@ use ic_icrc1_ledger::{
     endpoints::{ArchiveInfo, TransferArg, TransferError, Value},
     InitArgs,
 };
+use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::{
-    archive::ArchiveOptions,
     block::{BlockHeight, BlockType, HashOf},
     Tokens,
 };
@@ -407,7 +407,7 @@ fn transaction_hashes_are_unique() {
     let mut runner = TestRunner::default();
     runner
         .run(&(arb_transaction(), arb_transaction()), |(lhs, rhs)| {
-            use ic_ledger_core::ledger::LedgerTransaction;
+            use ic_ledger_canister_core::ledger::LedgerTransaction;
 
             prop_assume!(lhs != rhs);
             prop_assert_ne!(lhs.hash(), rhs.hash());

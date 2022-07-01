@@ -4,14 +4,14 @@ use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client_sender::Sender;
+use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::{
-    archive::ArchiveOptions,
-    block::{BlockType, EncodedBlock},
+    block::{BlockHeight, BlockType, EncodedBlock},
     timestamp::TimeStamp,
 };
 use ledger_canister::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Archives, BinaryAccountBalanceArgs,
-    Block, BlockArg, BlockHeight, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError,
+    Block, BlockArg, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError,
     GetBlocksRes, GetBlocksResult, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, Memo,
     NotifyCanisterArgs, Operation, QueryBlocksResponse, SendArgs, Subaccount, Tokens,
     TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,

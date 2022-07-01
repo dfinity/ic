@@ -1,13 +1,14 @@
 use crate::{
     archive::{Archive, ArchiveCanisterWasm, ArchiveOptions},
-    block::{BlockHeight, BlockType, EncodedBlock, HashOf},
     runtime::Runtime,
-    timestamp::TimeStamp,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::sync::{Arc, RwLock};
+
+use ic_ledger_core::block::{BlockHeight, BlockType, EncodedBlock, HashOf};
+use ic_ledger_core::timestamp::TimeStamp;
 
 /// Stores a chain of transactions with their metadata
 #[derive(Serialize, Deserialize, Debug)]

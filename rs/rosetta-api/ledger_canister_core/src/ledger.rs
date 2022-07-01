@@ -1,16 +1,13 @@
-use crate::{
-    archive::ArchiveCanisterWasm,
-    balances::{BalanceError, Balances, BalancesStore},
-    block::{BlockHeight, BlockType, EncodedBlock, HashOf},
-    blockchain::Blockchain,
-    runtime::Runtime,
-    timestamp::TimeStamp,
-    tokens::Tokens,
-};
+use crate::{archive::ArchiveCanisterWasm, blockchain::Blockchain, runtime::Runtime};
 use ic_base_types::CanisterId;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::time::Duration;
+
+use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore};
+use ic_ledger_core::block::{BlockHeight, BlockType, EncodedBlock, HashOf};
+use ic_ledger_core::timestamp::TimeStamp;
+use ic_ledger_core::tokens::Tokens;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransactionInfo<TransactionType> {

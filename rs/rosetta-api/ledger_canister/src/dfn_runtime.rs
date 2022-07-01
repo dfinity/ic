@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use dfn_core::api::Funds;
 use ic_base_types::CanisterId;
-use ic_ledger_core::runtime::Runtime;
+use ic_ledger_canister_core::runtime::Runtime;
 
 #[derive(Debug)]
 pub struct DfnRuntime;

@@ -11,6 +11,7 @@ ciborium = { git = "https://github.com/enarx/ciborium", rev = "e719537c99b564c36
 hex = "0.4.2"
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = { path = "../../crypto/sha" }
+ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
 serde = "1.0"
 serde_bytes = "0.11"

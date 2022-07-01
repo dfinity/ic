@@ -10,6 +10,7 @@ filegroup(
 DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/rosetta-api/ledger_core",
+    "//rs/rosetta-api/ledger_canister_core",
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",

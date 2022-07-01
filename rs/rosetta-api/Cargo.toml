@@ -25,8 +25,9 @@ ic-crypto-sha = {path = "../crypto/sha/"}
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 ic-interfaces = { path = "../interfaces" }
+ic-ledger-canister-blocks-synchronizer = { path = "ledger_canister_blocks_synchronizer" }
+ic-ledger-canister-core = { path = "ledger_canister_core" }
 ic-ledger-core = { path = "ledger_core" }
-ic-ledger-client-core = { path = "ledger_client_core" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-nns-governance = { path = "../nns/governance" }
@@ -53,7 +54,7 @@ url = "2.2.1"
 ic-cdk = { version = "0.5.1" }
 ed25519-dalek = "1.0.1"
 ic-nns-governance = { path = "../nns/governance" }
-ic-ledger-client-core-test-utils = { path = "ledger_client_core/test_utils" }
+ic-ledger-canister-blocks-synchronizer-test-utils = { path = "ledger_canister_blocks_synchronizer/test_utils" }
 ic-rosetta-test-utils = { path = "test_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-types = { path = "../types/types" }

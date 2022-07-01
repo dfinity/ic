@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::TryFrom;
 
-use ic_ledger_client_core::store::BlockStoreError;
+use ic_ledger_canister_blocks_synchronizer::store::BlockStoreError;
 
 /// Each Rosetta `Error` has a "retriable" flag and optional "details"
 /// Rosetta error code and message are determined by the `ApiError` variant.
@@ -110,9 +110,9 @@ impl From<BlockStoreError> for ApiError {
     }
 }
 
-impl From<ic_ledger_client_core::errors::Error> for ApiError {
-    fn from(e: ic_ledger_client_core::errors::Error) -> Self {
-        use ic_ledger_client_core::errors::Error;
+impl From<ic_ledger_canister_blocks_synchronizer::errors::Error> for ApiError {
+    fn from(e: ic_ledger_canister_blocks_synchronizer::errors::Error) -> Self {
+        use ic_ledger_canister_blocks_synchronizer::errors::Error;
         match e {
             Error::InvalidBlockId(err) => ApiError::invalid_block_id(err),
             Error::InternalError(err) => ApiError::internal_error(err),

@@ -2,8 +2,8 @@ use candid::types::number::{Int, Nat};
 use candid::CandidType;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::{Account, ApprovalId, Subaccount};
+use ic_ledger_canister_core::ledger::TransferError as CoreTransferError;
 use ic_ledger_core::block::BlockHeight;
-use ic_ledger_core::ledger::TransferError as CoreTransferError;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
 
@@ -21,7 +21,7 @@ pub enum TransferError {
 
 impl From<CoreTransferError> for TransferError {
     fn from(err: CoreTransferError) -> Self {
-        use ic_ledger_core::ledger::TransferError as LTE;
+        use ic_ledger_canister_core::ledger::TransferError as LTE;
         use TransferError as TE;
 
         match err {

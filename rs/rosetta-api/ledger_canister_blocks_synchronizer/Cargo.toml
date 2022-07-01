@@ -6,13 +6,32 @@ edition = "2018"
 description = "Synchronizes a local copy of the ledger blocks with the ledger"
 
 [dependencies]
+async-trait = "0.1.41"
+candid = "0.7.4"
 clap = { version = "3.1.6", features = ["derive"] }
+dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
+ic-canister-client = { path = "../../canister_client" }
+ic-certified-vars = { path = "../../certified_vars" }
+ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
-ic-ledger-client-core = { path = "../ledger_client_core" }
 ic-types = { path = "../../types/types" }
+ledger-canister = { path = "../ledger_canister" }
+log = "0.4.14"
+on_wire = {path = "../../rust_canisters/on_wire"}
+rusqlite = "~0.25.4"
+serde = "1.0"
 tokio = { version = "1.15.0", features = ["full"] }
 url = "2.2.1"
+
+[dev-dependencies]
+actix-rt = "2.2.0"
+actix-web = { version = "4.0.1", default_features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies"] }
+ic-ledger-canister-blocks-synchronizer-test-utils = { path = "test_utils" }
+serde_bytes = "0.11"
 
 [[bin]]
 path = "src/main.rs"
 name = "ledger_blocks_synch"
+
+[lib]
+path = "src/lib.rs"

@@ -10,7 +10,7 @@ filegroup(
 DEPENDENCIES = [
     "//rs/canister_client",
     "//rs/rosetta-api/ledger_canister",
-    "//rs/rosetta-api/ledger_client_core",
+    "//rs/rosetta-api/ledger_canister_blocks_synchronizer:ledger_canister_blocks_synchronizer_lib",
     "//rs/rosetta-api/ledger_core",
     "//rs/types/types",
     "@crate_index//:ed25519-dalek",
@@ -31,7 +31,7 @@ rust_library(
     name = "test_utils",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate_name = "ic_ledger_client_core_test_utils",
+    crate_name = "ic_ledger_canister_blocks_synchronizer_test_utils",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,

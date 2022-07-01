@@ -1,0 +1,73 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]) + ["//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils:sources"],
+)
+
+DEPENDENCIES = [
+    "//rs/canister_client",
+    "//rs/certified_vars",
+    "//rs/rosetta-api/ledger_canister",
+    "//rs/rosetta-api/ledger_canister_core",
+    "//rs/rosetta-api/ledger_core",
+    "//rs/rust_canisters/dfn_protobuf",
+    "//rs/rust_canisters/on_wire",
+    "//rs/types/types",
+    "@crate_index//:candid",
+    "@crate_index//:log",
+    "@crate_index//:rusqlite",
+    "@crate_index//:serde",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+]
+
+PROC_MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+TEST_DEPENDENCIES = [
+    "@crate_index//:actix-rt",
+    "@crate_index//:actix-web",
+    "//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
+]
+
+rust_binary(
+    name = "ledger_canister_blocks_synchronizer",
+    srcs = ["src/main.rs"],
+    edition = "2018",
+    proc_macro_deps = PROC_MACRO_DEPENDENCIES,
+    deps = [
+        "//rs/rosetta-api/ledger_canister_blocks_synchronizer:ledger_canister_blocks_synchronizer_lib",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/types/types",
+        "@crate_index//:clap",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
+)
+
+rust_library(
+    name = "ledger_canister_blocks_synchronizer_lib",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_ledger_canister_blocks_synchronizer",
+    edition = "2018",
+    proc_macro_deps = PROC_MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "ledger_canister_blocks_synchronizer_test",
+    crate = ":ledger_canister_blocks_synchronizer_lib",
+    edition = "2018",
+    deps = TEST_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "ledger_canister_blocks_synchronizer_test_suite",
+    srcs = glob(["tests/**"]),
+    edition = "2018",
+    deps = [":ledger_canister_blocks_synchronizer_lib"] + DEPENDENCIES + TEST_DEPENDENCIES,
+)

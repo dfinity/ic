@@ -2,17 +2,16 @@ use candid::CandidType;
 use dfn_protobuf::ProtoBuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
-pub use ic_ledger_core::{
-    archive::{ArchiveCanisterWasm, ArchiveOptions},
-    balances::{BalanceError, Balances, BalancesStore},
-    block::BlockHeight,
-    tokens::{Tokens, DECIMAL_PLACES, TOKEN_SUBDIVIDABLE_BY},
+pub use ic_ledger_canister_core::archive::{ArchiveCanisterWasm, ArchiveOptions};
+use ic_ledger_canister_core::ledger::{
+    self as core_ledger, LedgerData, LedgerTransaction, TransactionInfo,
 };
 use ic_ledger_core::{
+    balances::{BalanceError, Balances, BalancesStore},
     block::{BlockType, EncodedBlock, HashOf, HASH_LENGTH},
-    ledger::{self as core_ledger, LedgerData, LedgerTransaction, TransactionInfo},
     timestamp::TimeStamp,
 };
+pub use ic_ledger_core::{block::BlockHeight, tokens::Tokens, tokens::TOKEN_SUBDIVIDABLE_BY};
 use intmap::IntMap;
 use lazy_static::lazy_static;
 use on_wire::{FromWire, IntoWire};
@@ -37,7 +36,7 @@ pub use validate_endpoints::{tokens_from_proto, tokens_into_proto};
 
 use crate::dfn_runtime::DfnRuntime;
 use dfn_core::api::now;
-use ic_ledger_core::blockchain::Blockchain;
+use ic_ledger_canister_core::blockchain::Blockchain;
 
 /// Note that the Ledger can be deployed with a
 /// different transaction fee. Clients that want to use the Ledger should query
@@ -465,7 +464,7 @@ impl Ledger {
             now,
         )
         .map_err(|e| {
-            use core_ledger::TransferError as CTE;
+            use ic_ledger_canister_core::ledger::TransferError as CTE;
             use PaymentError::TransferError as PTE;
             use TransferError as TE;
 
@@ -757,7 +756,7 @@ impl LedgerCanisterInitPayloadBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_ledger_core::archive::Archive;
+    use ic_ledger_canister_core::archive::Archive;
     use std::sync::Arc;
     use std::time::{Duration, SystemTime};
 

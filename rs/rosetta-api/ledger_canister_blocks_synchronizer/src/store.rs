@@ -7,8 +7,8 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::balance_book::BalanceBook;
-use ic_ledger_core::block::{BlockType, EncodedBlock, HashOf};
-use ledger_canister::{AccountIdentifier, Block, BlockHeight, Tokens};
+use ic_ledger_core::block::{BlockHeight, BlockType, EncodedBlock, HashOf};
+use ledger_canister::{AccountIdentifier, Block, Tokens};
 
 #[derive(candid::CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct HashedBlock {
