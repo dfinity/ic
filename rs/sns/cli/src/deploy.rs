@@ -1,10 +1,14 @@
 //! Contains the logic for deploying SNS canisters
 
+use candid::parser::value::IDLValue;
+use candid::Decode;
+use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_nns_constants::ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_init::{SnsCanisterIds, SnsCanisterInitPayloads};
+use ic_sns_wasm::pb::v1::DeployNewSnsRequest;
 use std::str::FromStr;
 
 use crate::{call_dfx, get_identity, hex_encode_candid, DeployArgs};
@@ -112,7 +116,22 @@ impl SnsWasmSnsDeployer {
 
     /// Deploy this to the specified network using the SNS-WASM canister
     pub fn deploy(&self) {
-        // let init_args = hex_encode_candid(&self.sns_init_payload);
+        let request = DeployNewSnsRequest {
+            sns_init_payload: Some(self.sns_init_payload.clone()),
+        };
+
+        // Get a string representing the IDL of a DeployNewSnsRequest by
+        // encoding it to bytes and decoding it to an IDLValue. The decoded
+        // IDLValue does not know the field names, but that's ok.
+        let request_idl = format!(
+            "({},)",
+            Decode!(
+                &Encode!(&request).expect("Couldn't encode DeployNewSnsRequest"),
+                IDLValue
+            )
+            .expect("Couldn't decode DeployNewSnsRequest")
+        );
+
         call_dfx(&[
             "canister",
             "--network",
@@ -120,14 +139,13 @@ impl SnsWasmSnsDeployer {
             "call",
             &self.sns_wasms_canister_id.to_string(),
             "deploy_new_sns",
-            // TODO(NNS1-1473) Add initialization parameter support
-            "(record {},)",
+            &request_idl,
         ]);
     }
 }
 
 /// Responsible for deploying SNS canisters
-pub struct SnsDeployer {
+pub struct DirectSnsDeployerForTests {
     pub args: DeployArgs,
     pub sns_canister_payloads: SnsCanisterInitPayloads,
     pub sns_canisters: SnsCanisterIds,
@@ -135,7 +153,7 @@ pub struct SnsDeployer {
     pub dfx_identity: PrincipalId,
 }
 
-impl SnsDeployer {
+impl DirectSnsDeployerForTests {
     pub fn new(args: DeployArgs, sns_init_payload: SnsInitPayload) -> Self {
         let sns_canisters = lookup_or_else_create_canisters(&args);
         let sns_canister_payloads = match sns_init_payload.build_canister_payloads(&sns_canisters) {

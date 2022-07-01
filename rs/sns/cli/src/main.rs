@@ -3,7 +3,7 @@
 mod deploy;
 mod init_config_file;
 
-use crate::deploy::{SnsDeployer, SnsWasmSnsDeployer};
+use crate::deploy::{DirectSnsDeployerForTests, SnsWasmSnsDeployer};
 use crate::init_config_file::InitConfigFileArgs;
 use candid::{CandidType, Encode, IDLArgs};
 use clap::Parser;
@@ -28,9 +28,11 @@ struct CliArgs {
 
 #[derive(Debug, Parser)]
 enum SubCommand {
-    /// Deploy an sns
+    /// Deploy an sns through the sns-wasms canister.
     Deploy(DeployArgs),
-    DeployToSnsSubnet(DeployArgs),
+    /// Deploy an sns directly to a subnet, skipping the sns-wasms canister.
+    /// For use in tests only.
+    DeploySkippingSnsWasmsForTests(DeployArgs),
     /// Display the balance of a given account.
     AccountBalance(AccountBalanceArgs),
     /// Manage the config file where the initial sns parameters are set.
@@ -113,24 +115,27 @@ fn main() {
 
     match args.sub_command {
         SubCommand::Deploy(args) => deploy(args),
-        SubCommand::DeployToSnsSubnet(args) => deploy_to_sns_subnet(args),
+        SubCommand::DeploySkippingSnsWasmsForTests(args) => {
+            deploy_skipping_sns_wasms_for_tests(args)
+        }
         SubCommand::AccountBalance(args) => print_account_balance(args),
         SubCommand::InitConfigFile(args) => init_config_file::exec(args),
     }
 }
 
-/// Deploy an SNS with the given DeployArgs.
+/// Deploy via SNS-WASM canister.
 fn deploy(args: DeployArgs) {
     args.validate();
     let sns_init_payload = args.generate_sns_init_payload();
-    SnsDeployer::new(args, sns_init_payload).deploy()
+    SnsWasmSnsDeployer::new(args, sns_init_payload).deploy();
 }
 
-/// Deploy via SNS-WASM canister (to protected SNS Subnet)
-fn deploy_to_sns_subnet(args: DeployArgs) {
+/// Deploy an SNS with the given DeployArgs to a local subnet or a testnet,
+/// skipping sns-wams. Does not work on mainnet.
+fn deploy_skipping_sns_wasms_for_tests(args: DeployArgs) {
     args.validate();
     let sns_init_payload = args.generate_sns_init_payload();
-    SnsWasmSnsDeployer::new(args, sns_init_payload).deploy();
+    DirectSnsDeployerForTests::new(args, sns_init_payload).deploy()
 }
 
 /// Print the Ledger account balance of the principal in `AccountBalanceArgs` if given, else
