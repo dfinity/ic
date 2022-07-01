@@ -2,7 +2,7 @@
 
 use crate::{
     body::BodyReceiverLayer,
-    common::{cbor_response, make_plaintext_response},
+    common::{cbor_response, make_plaintext_response, poll_ready},
     types::{to_legacy_request_type, ApiReqType},
     validator_executor::ValidatorExecutor,
     EndpointService, HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
@@ -74,13 +74,7 @@ impl Service<Vec<u8>> for QueryService {
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match self.query_execution_service.poll_ready(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(r) => Poll::Ready({
-                r.expect("Can't panic on Infallible");
-                Ok(())
-            }),
-        }
+        poll_ready(self.query_execution_service.poll_ready(cx))
     }
 
     fn call(&mut self, body: Vec<u8>) -> Self::Future {

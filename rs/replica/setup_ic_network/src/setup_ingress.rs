@@ -13,26 +13,13 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
-    time::Duration,
 };
 use threadpool::ThreadPool;
 use tower::{util::BoxCloneService, Service, ServiceBuilder};
 
-/// Max number of inflight requests into P2P. Note each each requests requires a
-/// dedicated thread to execute on so this number should be relatively small.
+/// Max number of inflight requests that add artifacts into the ArtifactManager.
 // Do not increase the number until we get to the root cause of NET-743.
-const MAX_INFLIGHT_INGRESS_MESSAGES: usize = 1;
-/// Max ingress messages per second that can go into P2P.
-// There is some internal contention inside P2P (NET-743). We achieve lower
-// throughput if we process messages one after the other.
-const MAX_INGRESS_MESSAGES_PER_SECOND: u64 = 100;
-
-/// Max number of ingress message we can buffer until the P2P layer is ready to
-/// accept them.
-// The latency SLO for 'call' requests is set for 2s. Given the rate limiter of
-// 100 per second this buffer should not be bigger than 200. We are conservite
-// setting it to 100.
-const MAX_BUFFERED_INGRESS_MESSAGES: usize = 100;
+const MAX_INFLIGHT_INGRESS_MESSAGES: usize = 50;
 
 // Each message for each flow is being executed on the same code path. Unless those codepaths are
 // lock free (which is not the case because Gossip has locks) there is no point in having more
@@ -77,9 +64,7 @@ impl IngressEventHandler {
 
         BoxCloneService::new(
             ServiceBuilder::new()
-                .buffer(MAX_BUFFERED_INGRESS_MESSAGES)
                 .concurrency_limit(MAX_INFLIGHT_INGRESS_MESSAGES)
-                .rate_limit(MAX_INGRESS_MESSAGES_PER_SECOND, Duration::from_secs(1))
                 .service(base_service),
         )
     }
