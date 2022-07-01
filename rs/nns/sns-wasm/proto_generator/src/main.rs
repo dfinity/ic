@@ -9,6 +9,7 @@ fn main() {
     let out = &manifest_dir.join("../gen");
     let sns_wasm_proto = manifest_dir.join("../proto");
     let base_types_proto = manifest_dir.join("../../../types/base_types/proto");
+    let sns_init_proto = manifest_dir.join("../../../sns/init/proto");
 
     match std::fs::remove_dir_all(&out) {
         Ok(_) => (),
@@ -23,6 +24,7 @@ fn main() {
         ProtoPaths {
             sns_wasm: &sns_wasm_proto,
             base_types: &base_types_proto,
+            sns_init: &sns_init_proto,
         },
         out.as_ref(),
     );

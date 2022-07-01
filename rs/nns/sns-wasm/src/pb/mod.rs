@@ -71,11 +71,11 @@ impl TryFrom<SnsCanisterIds> for ic_sns_init::SnsCanisterIds {
 
     fn try_from(ids: SnsCanisterIds) -> Result<Self, Self::Error> {
         Ok(ic_sns_init::SnsCanisterIds {
+            root: ids.root.ok_or_else(|| "Root missing".to_string())?,
             governance: ids
                 .governance
                 .ok_or_else(|| "Governance missing".to_string())?,
             ledger: ids.ledger.ok_or_else(|| "Ledger missing".to_string())?,
-            root: ids.root.ok_or_else(|| "Root missing".to_string())?,
             swap: ids.swap.ok_or_else(|| "Swap missing".to_string())?,
         })
     }

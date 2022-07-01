@@ -4,6 +4,7 @@ use std::path::Path;
 #[derive(Debug)]
 pub struct ProtoPaths<'a> {
     pub sns_wasm: &'a Path,
+    pub sns_init: &'a Path,
     pub base_types: &'a Path,
 }
 
@@ -16,6 +17,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.out_dir(out);
 
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
+    config.extern_path(".ic_sns_init.pb.v1", "::ic-sns-init::pb::v1");
 
     // Add universally needed types to all definitions in this namespace
     config.type_attribute(
@@ -26,7 +28,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     ic_sns_type_attr(&mut config, "SnsVersion", "#[derive(Eq, Hash)]");
 
     config
-        .compile_protos(&proto_files, &[proto.base_types, proto.sns_wasm])
+        .compile_protos(
+            &proto_files,
+            &[proto.base_types, proto.sns_init, proto.sns_wasm],
+        )
         .unwrap();
 }
 

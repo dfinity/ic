@@ -2,6 +2,7 @@ use crate::state_test_helpers::{query, update};
 use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::CanisterId;
+use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
     GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetWasmRequest, GetWasmResponse,
@@ -64,12 +65,16 @@ pub fn add_wasm(
 pub fn deploy_new_sns(
     env: &StateMachine,
     sns_wasm_canister_id: CanisterId,
+    sns_init_payload: SnsInitPayload,
 ) -> DeployNewSnsResponse {
     let response = update(
         env,
         sns_wasm_canister_id,
         "deploy_new_sns",
-        Encode!(&DeployNewSnsRequest {}).unwrap(),
+        Encode!(&DeployNewSnsRequest {
+            sns_init_payload: Some(sns_init_payload)
+        })
+        .unwrap(),
     )
     .unwrap();
 
@@ -109,6 +114,7 @@ pub fn get_next_sns_version(
     Decode!(&response_bytes, GetNextSnsVersionResponse).unwrap()
 }
 
+/// Builds the SnsWasm for the root canister.
 pub fn build_root_sns_wasm() -> SnsWasm {
     let root_wasm =
         Project::cargo_bin_maybe_use_path_relative_to_rs("sns/root", "sns-root-canister", &[]);
@@ -118,6 +124,7 @@ pub fn build_root_sns_wasm() -> SnsWasm {
     }
 }
 
+/// Builds the SnsWasm for the governance canister.
 pub fn build_governance_sns_wasm() -> SnsWasm {
     let governance_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
         "sns/governance",
@@ -130,6 +137,7 @@ pub fn build_governance_sns_wasm() -> SnsWasm {
     }
 }
 
+/// Builds the SnsWasm for the ledger canister.
 pub fn build_ledger_sns_wasm() -> SnsWasm {
     let ledger_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
         "rosetta-api/ledger_canister",

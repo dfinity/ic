@@ -10,8 +10,7 @@ use crate::pb::v1::{
 use candid::Encode;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_base_types::{ic_types::principal::Principal, CanisterId, PrincipalId};
-use ic_sns_init::pb::v1::{InitialTokenDistribution, SnsInitPayload, TokenDistribution};
+use ic_base_types::CanisterId;
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_types::{Cycles, SubnetId};
 use std::cell::RefCell;
@@ -121,7 +120,7 @@ impl SnsWasmCanister {
     pub async fn deploy_new_sns(
         thread_safe_sns: &'static LocalKey<RefCell<SnsWasmCanister>>,
         canister_api: &impl CanisterApi,
-        _deploy_new_sns_payload: DeployNewSnsRequest,
+        deploy_new_sns_payload: DeployNewSnsRequest,
     ) -> DeployNewSnsResponse {
         let subnet_id =
             thread_safe_sns.with(|sns_canister| sns_canister.borrow().get_available_sns_subnet());
@@ -130,37 +129,13 @@ impl SnsWasmCanister {
         // TODO(NNS1-1437) Delete these canisters if any step fails
         let canisters = Self::create_sns_canisters(canister_api, subnet_id).await;
 
-        // TODO(NNS1-1435 NNS1-1436) take initial parameters and put them into this structure
-        let initial_payloads = SnsInitPayload {
-            // We have placeholder values to get this to compile before we take real params
-            token_symbol: Some("FAKE".to_string()),
-            token_name: Some("PlaceHolder".to_string()),
-            initial_token_distribution: Some(InitialTokenDistribution {
-                developers: Some(TokenDistribution {
-                    total_e8s: 100,
-                    distributions: Default::default(),
-                }),
-                treasury: Some(TokenDistribution {
-                    total_e8s: 100,
-                    distributions: Default::default(),
-                }),
-                swap: 100,
-            }),
-            max_icp_e8s: Some(1_000_000_000),
-            min_participants: Some(1),
-            // TODO(NNS1-1435 NNS1-1436): reminder.
-            min_icp_e8s: Some(100),
-            max_participant_icp_e8s: Some(1_000_000_000),
-            fallback_controller_principal_ids: vec![Principal::from(
-                PrincipalId::new_user_test_id(1_929_883),
-            )
-            .to_text()],
-            ..SnsInitPayload::with_default_values()
-        }
-        .validate()
-        .unwrap()
-        .build_canister_payloads(&canisters.clone().try_into().unwrap())
-        .unwrap();
+        let initial_payloads = deploy_new_sns_payload
+            .sns_init_payload
+            .unwrap()
+            .validate()
+            .unwrap()
+            .build_canister_payloads(&canisters.clone().try_into().unwrap())
+            .unwrap();
 
         let latest_wasms =
             thread_safe_sns.with(|sns_wasms| sns_wasms.borrow().get_latest_version_wasms());
@@ -254,12 +229,12 @@ impl SnsWasmCanister {
     ) -> SnsCanisterIds {
         // TODO(NNS1-1437) How many cycles should each canister be allocated
         let this_canister_id = canister_api.local_canister_id().get();
-        let governance = canister_api
+        let root = canister_api
             .create_canister(subnet_id, this_canister_id, Cycles::new(1_000_000_000))
             .await
             .unwrap();
 
-        let root = canister_api
+        let governance = canister_api
             .create_canister(subnet_id, this_canister_id, Cycles::new(1_000_000_000))
             .await
             .unwrap();
@@ -390,9 +365,12 @@ impl UpgradePath {
 mod test {
     use super::*;
     use async_trait::async_trait;
+    use candid::{Decode, Encode};
+    use ic_base_types::PrincipalId;
     use ic_crypto_sha::Sha256;
+    use ic_sns_init::pb::v1::SnsInitPayload;
     use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
-    use std::str::FromStr;
+    use ledger_canister::LedgerCanisterInitPayload;
     use std::sync::{Arc, Mutex};
 
     struct TestCanisterApi {
@@ -475,8 +453,17 @@ mod test {
     /// Add some placeholder wasms with different values so we can test
     /// that each value is installed into the correct spot
     fn add_mock_wasms(canister: &mut SnsWasmCanister) {
-        let governance = SnsWasm {
+        let root = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_type: i32::from(SnsCanisterType::Root),
+        };
+        let root_hash = root.sha256_hash();
+        canister.add_wasm(AddWasmRequest {
+            wasm: Some(root),
+            hash: root_hash.to_vec(),
+        });
+        let governance = SnsWasm {
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 1],
             canister_type: i32::from(SnsCanisterType::Governance),
         };
         let governance_hash = governance.sha256_hash();
@@ -485,22 +472,13 @@ mod test {
             hash: governance_hash.to_vec(),
         });
         let ledger = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 1],
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 2],
             canister_type: i32::from(SnsCanisterType::Ledger),
         };
         let ledger_hash = ledger.sha256_hash();
         canister.add_wasm(AddWasmRequest {
             wasm: Some(ledger),
             hash: ledger_hash.to_vec(),
-        });
-        let root = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 2],
-            canister_type: i32::from(SnsCanisterType::Root),
-        };
-        let root_hash = root.sha256_hash();
-        canister.add_wasm(AddWasmRequest {
-            wasm: Some(root),
-            hash: root_hash.to_vec(),
         });
     }
 
@@ -736,62 +714,107 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_deploy_new_sns_to_subnet_creates_canisters_and_installs() {
-        let test_id = subnet_test_id(1);
+    async fn test_deploy_new_sns_to_subnet_creates_canisters_and_installs_with_correct_params() {
         thread_local! {
             static CANISTER_WRAPPER: RefCell<SnsWasmCanister> = RefCell::new(new_wasm_canister()) ;
         }
-        let canister_api = new_canister_api();
 
+        let test_id = subnet_test_id(1);
         CANISTER_WRAPPER.with(|c| {
             c.borrow_mut().set_sns_subnets(vec![test_id]);
             add_mock_wasms(&mut c.borrow_mut());
         });
 
+        let init_payload = SnsInitPayload::with_valid_values_for_testing();
+        let canister_api = new_canister_api();
+
         let response = SnsWasmCanister::deploy_new_sns(
             &CANISTER_WRAPPER,
             &canister_api,
-            DeployNewSnsRequest {},
+            DeployNewSnsRequest {
+                sns_init_payload: Some(init_payload.clone()),
+            },
         )
         .await;
+
+        let root_id = canister_test_id(1);
+        let governance_id = canister_test_id(2);
+        let ledger_id = canister_test_id(3);
+        let swap_id = canister_test_id(4);
 
         assert_eq!(
             response,
             DeployNewSnsResponse {
                 subnet_id: Some(test_id.get()),
                 canisters: Some(SnsCanisterIds {
-                    governance: Some(canister_test_id(1).get()),
-                    root: Some(canister_test_id(2).get()),
-                    ledger: Some(canister_test_id(3).get()),
-                    swap: Some(canister_test_id(4).get())
+                    root: Some(root_id.get()),
+                    governance: Some(governance_id.get()),
+                    ledger: Some(ledger_id.get()),
+                    swap: Some(swap_id.get())
                 })
             }
         );
 
-        // This is our weak test that the intended wasms get installed to the right canisters
-        let canisters_installed = &*canister_api.install_wasm_calls.lock().unwrap();
-        let canisters_with_wasms: Vec<(CanisterId, Vec<u8>)> = canisters_installed
-            .iter()
-            .map(|(a, b, _)| (*a, b.clone()))
-            .collect();
+        let wasms_payloads = init_payload
+            .validate()
+            .unwrap()
+            .build_canister_payloads(
+                &SnsCanisterIds {
+                    root: Some(root_id.get()),
+                    governance: Some(governance_id.get()),
+                    ledger: Some(ledger_id.get()),
+                    swap: Some(swap_id.get()),
+                }
+                .try_into()
+                .unwrap(),
+            )
+            .unwrap();
 
-        // We do not assert the bytes for the initialization here because it makes this test very fragile
+        // Now we assert that the expected canisters got the expected wasms with expected init params
+        let SnsCanisterInitPayloads {
+            root,
+            governance,
+            ledger,
+            ..
+        } = wasms_payloads;
+
+        let root_args = canister_api.install_wasm_calls.lock().unwrap().remove(0);
         assert_eq!(
-            canisters_with_wasms,
-            vec![
-                (
-                    CanisterId::from_str("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap(),
-                    vec![0, 97, 115, 109, 1, 0, 0, 2],
-                ),
-                (
-                    CanisterId::from_str("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap(),
-                    vec![0, 97, 115, 109, 1, 0, 0, 0],
-                ),
-                (
-                    CanisterId::from_str("r7inp-6aaaa-aaaaa-aaabq-cai").unwrap(),
-                    vec![0, 97, 115, 109, 1, 0, 0, 1],
-                )
-            ]
+            root_args,
+            (
+                // root
+                root_id,
+                vec![0, 97, 115, 109, 1, 0, 0, 0],
+                Encode!(&root).unwrap()
+            )
+        );
+
+        let governance_args = canister_api.install_wasm_calls.lock().unwrap().remove(0);
+        assert_eq!(
+            governance_args,
+            (
+                // governance
+                governance_id,
+                vec![0, 97, 115, 109, 1, 0, 0, 1],
+                Encode!(&governance).unwrap()
+            )
+        );
+        // We actually Decode! here because LedgerCanisterInitPayload uses hashset and hashmap
+        // which have non-deterministic ordering (and therefore serialization results)
+        let (ledger_canister, ledger_wasm, ledger_init_args) =
+            canister_api.install_wasm_calls.lock().unwrap().remove(0);
+        assert_eq!(
+            (
+                ledger_canister,
+                ledger_wasm,
+                Decode!(&ledger_init_args, LedgerCanisterInitPayload).unwrap()
+            ),
+            (
+                // ledger
+                ledger_id,
+                vec![0, 97, 115, 109, 1, 0, 0, 2],
+                ledger
+            )
         );
     }
 
@@ -811,7 +834,9 @@ mod test {
         let root_canister_1 = SnsWasmCanister::deploy_new_sns(
             &CANISTER_WRAPPER,
             &canister_api,
-            DeployNewSnsRequest {},
+            DeployNewSnsRequest {
+                sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing()),
+            },
         )
         .await
         .canisters
@@ -822,7 +847,9 @@ mod test {
         let root_canister_2 = SnsWasmCanister::deploy_new_sns(
             &CANISTER_WRAPPER,
             &canister_api,
-            DeployNewSnsRequest {},
+            DeployNewSnsRequest {
+                sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing()),
+            },
         )
         .await
         .canisters
