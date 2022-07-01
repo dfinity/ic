@@ -361,13 +361,9 @@ impl TransportImpl {
             );
             return;
         }
-        let event_handler = {
-            let mut client_state = self.client_state.write().unwrap();
-            let client_state = match client_state.as_mut() {
-                Some(client_state) => client_state,
-                _ => return,
-            };
-            client_state.event_handler.clone()
+        let event_handler = match self.event_handler.read().unwrap().as_ref() {
+            Some(event_handler) => event_handler.clone(),
+            _ => return,
         };
         let _ = event_handler
             .call(TransportEvent::StateChange(
@@ -388,15 +384,14 @@ impl TransportImpl {
         reader: Box<TlsReadHalf>,
         writer: Box<TlsWriteHalf>,
     ) -> Result<Arc<dyn AsyncTransportEventHandler>, TransportErrorCode> {
-        let mut client_state = self.client_state.write().unwrap();
-        let client_state = match client_state.as_mut() {
-            Some(client_state) => client_state,
+        let event_handler = match self.event_handler.read().unwrap().as_ref() {
+            Some(event_handler) => event_handler.clone(),
             None => return Err(TransportErrorCode::TransportClientNotFound),
         };
-        let event_handler = client_state.event_handler.clone();
 
-        let peer_state = match client_state.peer_map.get_mut(&flow_id.peer_id) {
-            Some(client_state) => client_state,
+        let mut peer_map = self.peer_map.write().unwrap();
+        let peer_state = match peer_map.get_mut(&flow_id.peer_id) {
+            Some(peer_state) => peer_state,
             None => return Err(TransportErrorCode::TransportClientNotFound),
         };
         let flow_state = match peer_state.flow_map.get_mut(&flow_id.flow_tag) {
