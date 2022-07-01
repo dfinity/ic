@@ -6,7 +6,7 @@ use ledger_canister::{
     DEFAULT_TRANSFER_FEE,
 };
 
-use ic_ledger_client_core::store::HashedBlock;
+use ic_ledger_canister_blocks_synchronizer::store::HashedBlock;
 
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use rand_distr::Distribution;

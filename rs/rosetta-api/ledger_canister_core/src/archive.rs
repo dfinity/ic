@@ -1,4 +1,4 @@
-use crate::{block::EncodedBlock, runtime::Runtime, spawn};
+use crate::{runtime::Runtime, spawn};
 use candid::{CandidType, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::IC_00;
@@ -7,6 +7,8 @@ use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
+
+use ic_ledger_core::block::EncodedBlock;
 
 fn default_cycles_for_archive_creation() -> u64 {
     0

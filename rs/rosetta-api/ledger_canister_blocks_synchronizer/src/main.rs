@@ -4,7 +4,7 @@ use std::{
 };
 
 use clap::Parser;
-use ic_ledger_client_core::{
+use ic_ledger_canister_blocks_synchronizer::{
     canister_access::CanisterAccess,
     ledger_blocks_sync::{LedgerBlocksSynchronizer, LedgerBlocksSynchronizerMetrics},
 };

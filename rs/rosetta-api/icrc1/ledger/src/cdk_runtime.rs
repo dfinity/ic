@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ledger_core::runtime::Runtime;
+use ic_ledger_canister_core::runtime::Runtime;
 use std::convert::TryFrom;
 
 #[derive(Debug)]

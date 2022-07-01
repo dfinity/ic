@@ -10,12 +10,10 @@ use ic_icrc1_ledger::{
     },
     InitArgs, Ledger,
 };
-use ic_ledger_core::{
-    block::BlockHeight,
-    ledger::{apply_transaction, archive_blocks, LedgerAccess, LedgerData, LedgerTransaction},
-    timestamp::TimeStamp,
-    tokens::Tokens,
+use ic_ledger_canister_core::ledger::{
+    apply_transaction, archive_blocks, LedgerAccess, LedgerData, LedgerTransaction,
 };
+use ic_ledger_core::{block::BlockHeight, timestamp::TimeStamp, tokens::Tokens};
 use std::cell::RefCell;
 
 const MAX_MESSAGE_SIZE: usize = 1024 * 1024;

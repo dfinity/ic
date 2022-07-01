@@ -1,9 +1,13 @@
-use ledger_canister::{AccountIdentifier, BalancesStore, BlockHeight, Tokens};
+use ic_ledger_core::{
+    balances::{Balances, BalancesStore},
+    block::BlockHeight,
+};
+use ledger_canister::{AccountIdentifier, Tokens};
 use std::collections::HashMap;
 
 use crate::errors::Error;
 
-pub type BalanceBook = ledger_canister::Balances<AccountIdentifier, ClientBalancesStore>;
+pub type BalanceBook = Balances<AccountIdentifier, ClientBalancesStore>;
 
 const EMPTY_HISTORY: [(BlockHeight, Tokens); 0] = [];
 

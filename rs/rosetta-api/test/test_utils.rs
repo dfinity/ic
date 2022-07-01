@@ -1,9 +1,10 @@
 mod basic_tests;
 mod rosetta_cli_tests;
 
-use ic_ledger_client_core_test_utils::sample_data::{acc_id, Scribe};
+use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::{acc_id, Scribe};
+use ic_ledger_canister_core::ledger::LedgerTransaction;
+use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_core::{block::BlockType, ledger::LedgerTransaction};
 use ic_rosetta_api::errors::ApiError;
 use ic_rosetta_api::models::{
     AccountBalanceRequest, EnvelopePair, PartialBlockIdentifier, SignedTransaction,
@@ -16,8 +17,8 @@ use ledger_canister::{
 use tokio::sync::RwLock;
 
 use async_trait::async_trait;
-use ic_ledger_client_core::blocks::Blocks;
-use ic_ledger_client_core::store::HashedBlock;
+use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
+use ic_ledger_canister_blocks_synchronizer::store::HashedBlock;
 
 use ic_rosetta_api::convert::{from_arg, to_model_account_identifier};
 use ic_rosetta_api::ledger_client::LedgerAccess;

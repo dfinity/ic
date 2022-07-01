@@ -1,5 +1,5 @@
 [package]
-name = "ic-ledger-client-core-test-utils"
+name = "ic-ledger-canister-blocks-synchronizer-test-utils"
 version = "0.1.0"
 authors = ["The Internet Computer Project Developers"]
 edition = "2018"
@@ -8,8 +8,8 @@ edition = "2018"
 ed25519-dalek = "1.0.1"
 ic-canister-client = { path = "../../../canister_client" }
 ic-cdk = { version = "0.5.1" }
+ic-ledger-canister-blocks-synchronizer = { path = "../" }
 ic-ledger-core = { path = "../../ledger_core" }
-ic-ledger-client-core = { path = "../" }
 ic-types = { path = "../../../types/types" }
 ledger-canister = {path = "../../ledger_canister"}
 log = "0.4.14"
@@ -18,4 +18,3 @@ rand = "0.7"
 rand_distr = "0.3.0"
 tempfile = "3.1.0"
 tokio = { version = "1.15.0", features = ["full"] }
-

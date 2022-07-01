@@ -8,12 +8,14 @@ use candid::{
     CandidType,
 };
 use ic_icrc1::{Account, Block, LedgerBalances, Transaction};
-use ic_ledger_core::{
+use ic_ledger_canister_core::{
     archive::{ArchiveCanisterWasm, ArchiveOptions},
-    balances::Balances,
-    block::{BlockHeight, HashOf},
     blockchain::Blockchain,
     ledger::{apply_transaction, LedgerData, TransactionInfo},
+};
+use ic_ledger_core::{
+    balances::Balances,
+    block::{BlockHeight, HashOf},
     timestamp::TimeStamp,
     tokens::Tokens,
 };

@@ -3,10 +3,10 @@ pub mod hash;
 use candid::CandidType;
 use ciborium::tag::Required;
 use ic_base_types::PrincipalId;
+use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::{
     balances::{BalanceError, Balances, BalancesStore},
     block::{BlockType, EncodedBlock, HashOf},
-    ledger::LedgerTransaction,
     timestamp::TimeStamp,
     tokens::Tokens,
 };
