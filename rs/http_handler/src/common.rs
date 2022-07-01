@@ -9,12 +9,24 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::messages::MessageId;
 use ic_validator::RequestValidationError;
 use serde::Serialize;
+use std::convert::Infallible;
 use std::sync::Arc;
+use std::task::Poll;
 use tower::{load_shed::error::Overloaded, BoxError};
 
 pub const CONTENT_TYPE_HTML: &str = "text/html";
 pub const CONTENT_TYPE_CBOR: &str = "application/cbor";
 pub const CONTENT_TYPE_PROTOBUF: &str = "application/x-protobuf";
+
+pub(crate) fn poll_ready(r: Poll<Result<(), Infallible>>) -> Poll<Result<(), BoxError>> {
+    match r {
+        Poll::Pending => Poll::Pending,
+        Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
+        Poll::Ready(Err(_infallible)) => {
+            panic!("Can't enter match arm when Infallible");
+        }
+    }
+}
 
 pub(crate) fn make_plaintext_response(status: StatusCode, message: String) -> Response<Body> {
     let mut resp = Response::new(Body::from(message));

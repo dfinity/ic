@@ -2,7 +2,10 @@
 
 use crate::{
     body::BodyReceiverLayer,
-    common::{get_cors_headers, make_plaintext_response, make_response, map_box_error_to_response},
+    common::{
+        get_cors_headers, make_plaintext_response, make_response, map_box_error_to_response,
+        poll_ready,
+    },
     types::{to_legacy_request_type, ApiReqType},
     validator_executor::ValidatorExecutor,
     EndpointService, HttpError, HttpHandlerMetrics, IngressFilterService, UNKNOWN_LABEL,
@@ -128,7 +131,7 @@ impl Service<Vec<u8>> for CallService {
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.ingress_sender.poll_ready(cx)
+        poll_ready(self.ingress_sender.poll_ready(cx))
     }
 
     fn call(&mut self, body: Vec<u8>) -> Self::Future {
@@ -230,7 +233,7 @@ impl Service<Vec<u8>> for CallService {
 
             let ingress_log_entry = msg.log_entry();
             let response = match ingress_sender.call(msg).await {
-                Err(err) => map_box_error_to_response(err),
+                Err(_) => panic!("Can't panic on Infallible"),
                 Ok(Err(IngressError::Overloaded)) => make_plaintext_response(
                     StatusCode::SERVICE_UNAVAILABLE,
                     "Service is overloaded, try again later.".to_string(),
