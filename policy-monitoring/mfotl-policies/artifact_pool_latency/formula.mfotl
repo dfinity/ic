@@ -1,5 +1,7 @@
-(* How long does it take until a block proposal created at one node_id has been
-   added to validated pool of more than ⅔ of the nodes in the same subnet_id?
+(* The time until a block proposal created at one node_id has been added to the 
+   validated pool of more than ⅔ of the nodes in the same subnet_id must not exceed:
+   . 3s for System subnets,
+   . 1s for Application and VerifiedApplication subnets
 
   Relevant events:
   - p2p__originally_in_subnet(node_addr:string, node_addr:string, subnet_id:string)
@@ -63,11 +65,5 @@ LET subnet_type_map(subnet_id, subnet_type) =
   ((NOT subnet_type_assoc(subnet_id, _)) SINCE subnet_type_assoc(subnet_id, subnet_type))
 IN
 
-LET stats(block, subnet_id, time, avg_time, max_time) =
-  time_per_block(block, subnet_id, time)
-  AND (avg_time <- AVG time; subnet_id ONCE time_per_block(block, subnet_id, time))
-  AND (max_time <- MAX time; subnet_id ONCE time_per_block(block, subnet_id, time))
-IN
-
-(stats(block, subnet_id, time, avg_time, max_time) AND subnet_type_map(subnet_id, "System") AND avg_time > 3000.0)
-OR (stats(block, subnet_id, time, avg_time, max_time) AND (subnet_type_map(subnet_id, "Application") OR subnet_type_map(subnet_id, "VerifiedApplication")) AND avg_time > 1000.0)
+(time_per_block(block, subnet_id, time) AND subnet_type_map(subnet_id, "System") AND time > 3000)
+OR (time_per_block(block, subnet_id, time) AND (subnet_type_map(subnet_id, "Application") OR subnet_type_map(subnet_id, "VerifiedApplication")) AND time > 1000)

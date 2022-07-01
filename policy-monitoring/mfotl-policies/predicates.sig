@@ -41,6 +41,7 @@ ControlPlane_tls_server_handshake_failed(node_id:string,
 
 
 reboot(ip_addr:string, data_center_prefix:string)
+reboot_intent(ip_addr:string, data_center_prefix:string)
 
 finalized(node_id:string, subnet_id:string, height:int, hash:string, replica_version:string)
 
