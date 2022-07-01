@@ -2,9 +2,12 @@ use candid::candid_method;
 use ic_base_types::PrincipalId;
 use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
-use ic_icrc1::{Account, Transaction};
+use ic_icrc1::{Account, ApprovalId, Transaction};
 use ic_icrc1_ledger::{
-    endpoints::{ArchiveInfo, TransferArg, TransferError, Value},
+    endpoints::{
+        ApprovalDetails, ApproveTransferArg, ApproveTransferError, ArchiveInfo, CommitTransferArg,
+        CommitTransferError, RevokeApprovalError, TransferArg, TransferError, Value,
+    },
     InitArgs, Ledger,
 };
 use ic_ledger_core::{
@@ -151,6 +154,30 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<BlockHeight, TransferError> 
 
     archive_blocks::<Access>(MAX_MESSAGE_SIZE).await;
     Ok(block_idx)
+}
+
+#[update(name = "icrc1_approveTransfer")]
+#[candid_method(update, rename = "icrc1_approveTransfer")]
+fn icrc1_approve_transfer(_arg: ApproveTransferArg) -> Result<ApprovalId, ApproveTransferError> {
+    unimplemented!()
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc1_allowance(_approval_id: ApprovalId) -> Option<ApprovalDetails> {
+    unimplemented!()
+}
+
+#[update(name = "icrc1_commitTransfer")]
+#[candid_method(update, rename = "icrc1_commitTransfer")]
+fn icrc1_commit_transfer(_arg: CommitTransferArg) -> Result<BlockHeight, CommitTransferError> {
+    unimplemented!()
+}
+
+#[update(name = "icrc1_revokeApproval")]
+#[candid_method(update, rename = "icrc1_revokeApproval")]
+fn icrc1_revoke_approval(_approval_id: ApprovalId) -> Result<BlockHeight, RevokeApprovalError> {
+    unimplemented!()
 }
 
 #[query]
