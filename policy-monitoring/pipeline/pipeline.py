@@ -361,6 +361,8 @@ class Pipeline:
         eprint("Liveness check completed.")
 
     def run(self, groups: Dict[str, Group]):
+        assert len(groups) > 0
+
         eprint("Starting policy monitoring ...")
 
         # Ensure that groups are processed in a deterministic order

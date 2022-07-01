@@ -7,14 +7,15 @@ from typing import Dict
 from typing import Iterator
 from typing import List
 from typing import Optional
+from typing import Union
 
 from elasticsearch import Elasticsearch
 from elasticsearch import exceptions
+from pipeline.alert import AlertService
+from pipeline.es_doc import EsDoc
 from util.print import assert_with_trace
 from util.print import eprint
 
-from ..alert import AlertService
-from ..es_doc import EsDoc
 from .group import Group
 
 
@@ -40,7 +41,7 @@ class Es:
     _DEFAULT_PAGE_SIZE = 10_000
 
     @staticmethod
-    def _bookmark(last_hit) -> List[str]:
+    def _bookmark(last_hit) -> List[Union[None, float, int, str]]:
         # [last_hit[0], str(last_hit[1])]
         return [last_hit[0]]
 
@@ -169,8 +170,8 @@ class Es:
         if self.mainnet:
             assert_with_trace(window_minutes is not None, "[window_minutes] must be specified since Es.mainnet is true")
             upper_bound = 24 * 60
-            assert_with_trace(window_minutes <= upper_bound, f"[window_minutes] should not exceed {upper_bound}")
-            indices = self.find_mainnet_inidices(window_minutes)
+            assert_with_trace(window_minutes <= upper_bound, f"[window_minutes] should not exceed {upper_bound}")  # type: ignore
+            indices = self.find_mainnet_inidices(window_minutes)  # type: ignore
         else:
             indices = self.find_testnet_indices(tag=group_name)
             if len(indices) == 0:
@@ -223,12 +224,12 @@ class Es:
 
         if self.mainnet:
             assert_with_trace(window_minutes is not None, "[window_minutes] must be specified since Es.mainnet is true")
-            query = Es._time_slice_query(window_minutes)
+            query = Es._time_slice_query(window_minutes)  # type: ignore
         else:
             query = Es._precise_query(tag)
 
         try:
-            response = self.es.search(index=indices, size=page_size, sort=Es._SORTER, query=query)
+            response = self.es.search(index=indices, size=page_size, sort=Es._SORTER, query=query)  # type: ignore
         except exceptions.TransportError as error:
             msg = (
                 "ES query failed.\n"
@@ -258,7 +259,7 @@ class Es:
             bookmark = Es._bookmark(last_hit)
 
             response = self.es.search(
-                index=indices, size=page_size, sort=Es._SORTER, query=query, search_after=bookmark
+                index=indices, size=page_size, sort=Es._SORTER, query=query, search_after=bookmark  # type: ignore
             )
             docs = response["hits"]["hits"]
 

@@ -1,7 +1,7 @@
 from typing import Iterable
 from typing import Optional
 
-from ..global_infra import GlobalInfra
+from pipeline.global_infra import GlobalInfra
 
 
 class Group:
