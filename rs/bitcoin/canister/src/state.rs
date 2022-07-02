@@ -2,16 +2,13 @@ use crate::{proto, PageMapMemory};
 use bitcoin::{hashes::Hash, Block, Network, OutPoint, Script, TxOut, Txid};
 use ic_btc_types::Height;
 use ic_protobuf::bitcoin::v1;
-use ic_replicated_state::page_map::PersistenceError;
-use ic_replicated_state::{
-    bitcoin_state::{
-        AdapterQueues, BitcoinState as ReplicatedBitcoinState, FeePercentilesCache, UnstableBlocks,
-        UtxoSet as ReplicatedUtxoSet,
-    },
-    page_map::PageMap,
+use ic_replicated_state::bitcoin_state::{
+    AdapterQueues, BitcoinState as ReplicatedBitcoinState, FeePercentilesCache, UnstableBlocks,
+    UtxoSet as ReplicatedUtxoSet,
 };
+use ic_replicated_state::page_map::PersistenceError;
 use ic_state_layout::{AccessPolicy, ProtoFileWith, RwPolicy};
-use stable_structures::{Memory, StableBTreeMap};
+use stable_structures::StableBTreeMap;
 use std::collections::BTreeMap;
 use std::{convert::TryFrom, path::Path};
 
@@ -116,43 +113,27 @@ impl From<ReplicatedBitcoinState> for State {
             unstable_blocks: state.unstable_blocks,
             utxos: UtxoSet {
                 utxos: Utxos {
-                    small_utxos: load_or_initialize_btree(
-                        utxos_small,
+                    small_utxos: StableBTreeMap::init(
+                        PageMapMemory::new(utxos_small),
                         UTXO_KEY_SIZE,
                         UTXO_VALUE_MAX_SIZE_SMALL,
                     ),
-                    medium_utxos: load_or_initialize_btree(
-                        utxos_medium,
+                    medium_utxos: StableBTreeMap::init(
+                        PageMapMemory::new(utxos_medium),
                         UTXO_KEY_SIZE,
                         UTXO_VALUE_MAX_SIZE_MEDIUM,
                     ),
                     large_utxos: state.utxo_set.utxos_large,
                 },
                 network: state.utxo_set.network,
-                address_to_outpoints: load_or_initialize_btree(
-                    address_outpoints,
+                address_to_outpoints: StableBTreeMap::init(
+                    PageMapMemory::new(address_outpoints),
                     MAX_ADDRESS_OUTPOINT_SIZE,
                     0,
                 ),
             },
             fee_percentiles_cache: state.fee_percentiles_cache,
         }
-    }
-}
-
-fn load_or_initialize_btree(
-    page_map: PageMap,
-    max_key_size: u32,
-    max_value_size: u32,
-) -> StableBTreeMap<PageMapMemory, Vec<u8>, Vec<u8>> {
-    let memory = PageMapMemory::new(page_map);
-    let mut dst = vec![0; 3];
-    memory.read(0, &mut dst);
-    if dst == vec![0; 3] {
-        // Uninitialized. Create a new stable btreemap.
-        StableBTreeMap::new(memory, max_key_size, max_value_size)
-    } else {
-        StableBTreeMap::load(memory)
     }
 }
 

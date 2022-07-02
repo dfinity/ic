@@ -63,6 +63,28 @@ impl BTreeHeader {
 impl<M: Memory + Clone, K: Storable, V: Storable> StableBTreeMap<M, K, V> {
     /// Initializes a `StableBTreeMap`.
     ///
+    /// If the memory provided already contains a `StableBTreeMap`, then that
+    /// map is loaded. Otherwise, a new `StableBTreeMap` instance is created.
+    pub fn init(memory: M, max_key_size: u32, max_value_size: u32) -> Self {
+        if memory.size() == 0 {
+            // Memory is empty. Create a new map.
+            return StableBTreeMap::new(memory, max_key_size, max_value_size);
+        }
+
+        // Check if the magic in the memory corresponds to a StableBTreeMap.
+        let mut dst = vec![0; 3];
+        memory.read(0, &mut dst);
+        if dst != MAGIC {
+            // No StableBTreeMap found. Create a new instance.
+            StableBTreeMap::new(memory, max_key_size, max_value_size)
+        } else {
+            // The memory already contains a StableBTreeMap. Load it.
+            StableBTreeMap::load(memory)
+        }
+    }
+
+    /// Creates a new instance a `StableBTreeMap`.
+    ///
     /// The given `memory` is assumed to be exclusively reserved for this data
     /// structure and that it starts at address zero. Typically `memory` will
     /// be an instance of `RestrictedMemory`.
@@ -903,6 +925,20 @@ mod test {
     // A helper method to succinctly create an entry.
     fn e(x: u8) -> (Vec<u8>, Vec<u8>) {
         (vec![x], vec![])
+    }
+
+    #[test]
+    fn init_preserves_data() {
+        let mem = make_memory();
+        let mut btree = StableBTreeMap::init(mem.clone(), 3, 4);
+        assert_eq!(btree.insert(vec![1, 2, 3], vec![4, 5, 6]), Ok(None));
+        assert_eq!(btree.get(&vec![1, 2, 3]), Some(vec![4, 5, 6]));
+
+        // Reload the btree
+        let btree = StableBTreeMap::init(mem, 3, 4);
+
+        // Data still exists.
+        assert_eq!(btree.get(&vec![1, 2, 3]), Some(vec![4, 5, 6]));
     }
 
     #[test]
