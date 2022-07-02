@@ -1,7 +1,14 @@
 pub mod btreemap;
-pub use btreemap::StableBTreeMap;
+#[cfg(target_arch = "wasm32")]
+mod ic0_memory; // Memory API for canisters.
+pub mod storable;
 mod types;
 pub mod vec_mem;
+
+pub use btreemap::StableBTreeMap;
+#[cfg(target_arch = "wasm32")]
+pub use ic0_memory::Ic0StableMemory;
+pub use storable::Storable;
 use types::Address;
 pub use vec_mem::VectorMemory;
 
@@ -95,6 +102,7 @@ fn write_struct<T, M: Memory>(t: &T, addr: Address, memory: &M) {
 /// RestrictedMemory creates a limited view of another memory.  This
 /// allows one to divide the main memory into non-intersecting ranges
 /// and use different layouts in each region.
+#[derive(Clone)]
 pub struct RestrictedMemory<M: Memory> {
     page_range: core::ops::Range<u64>,
     memory: M,
@@ -154,31 +162,5 @@ impl<M: Memory> Memory for RestrictedMemory<M> {
     fn write(&self, offset: u64, src: &[u8]) {
         self.memory
             .write(self.page_range.start * WASM_PAGE_SIZE + offset, src)
-    }
-}
-
-/// A trait with convenience methods for storing an element into a stable structure.
-pub trait Storable {
-    /// Converts an element into bytes.
-    ///
-    /// NOTE: `Cow` is used here to avoid unnecessary cloning.
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]>;
-
-    /// Converts bytes into an element.
-    ///
-    /// NOTE: The bytes are passed as a `Vec<u8>` as opposed to `&[u8]` because
-    /// in the vast majority of cases, the caller will no longer need the bytes,
-    /// and passing a `Vec<u8>` prevents unnecessary cloning.
-    fn from_bytes(bytes: Vec<u8>) -> Self;
-}
-
-// An implementation of `Storable` for `Vec<u8>`
-impl Storable for Vec<u8> {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        std::borrow::Cow::Borrowed(self)
-    }
-
-    fn from_bytes(bytes: Vec<u8>) -> Self {
-        bytes
     }
 }
