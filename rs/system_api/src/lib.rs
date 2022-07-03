@@ -17,7 +17,6 @@ use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     memory_required_to_push_request, page_map::PAGE_SIZE, Memory, NumWasmPages, PageIndex,
-    StateError,
 };
 use ic_sys::PageBytes;
 use ic_types::{
@@ -1046,14 +1045,10 @@ impl SystemApiImpl {
             reservation_bytes,
         ) {
             Ok(()) => Ok(0),
-            Err((StateError::QueueFull { .. }, request))
-            | Err((StateError::CanisterOutOfCycles(_), request)) => {
+            Err(request) => {
                 self.memory_usage
                     .deallocate_memory(reservation_bytes, reservation_bytes);
                 abort(request, &mut self.sandbox_safe_system_state)
-            }
-            Err((err, _)) => {
-                unreachable!("Unexpected error while pushing to output queue: {}", err)
             }
         }
     }

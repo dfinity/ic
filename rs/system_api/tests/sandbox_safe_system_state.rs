@@ -1,9 +1,9 @@
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, SystemApi};
+use ic_interfaces::execution_environment::SystemApi;
 use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{StateError, SystemState};
+use ic_replicated_state::SystemState;
 use ic_system_api::sandbox_safe_system_state::SandboxSafeSystemState;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -35,15 +35,8 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
         .build();
 
-    let xnet_cost = cycles_account_manager.xnet_call_performed_fee();
     let request_payload_cost =
         cycles_account_manager.xnet_call_bytes_transmitted_fee(request.payload_size_bytes());
-    let response_reservation =
-        cycles_account_manager.xnet_call_bytes_transmitted_fee(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
-    let total_cost = xnet_cost
-        + request_payload_cost
-        + response_reservation
-        + cycles_account_manager.execution_cost(MAX_NUM_INSTRUCTIONS);
 
     // Set cycles balance low enough that not even the cost for transferring
     // the request is covered.
@@ -64,15 +57,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
             request.clone(),
             NumBytes::from(0),
         ),
-        Err((
-            StateError::CanisterOutOfCycles(CanisterOutOfCyclesError {
-                canister_id: canister_test_id(0),
-                available: request_payload_cost - Cycles::new(10),
-                requested: total_cost,
-                threshold: Cycles::zero(),
-            }),
-            request
-        ))
+        Err(request)
     );
 }
 
@@ -115,15 +100,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
             request.clone(),
             NumBytes::from(0),
         ),
-        Err((
-            StateError::CanisterOutOfCycles(CanisterOutOfCyclesError {
-                canister_id: canister_test_id(0),
-                available: total_cost - Cycles::new(10),
-                requested: total_cost,
-                threshold: Cycles::zero(),
-            }),
-            request
-        ))
+        Err(request)
     );
 }
 

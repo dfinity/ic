@@ -8,8 +8,7 @@ use ic_logger::{info, ReplicaLogger};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::DEFAULT_QUEUE_CAPACITY, CanisterStatus, NetworkTopology, StateError,
-    SystemState,
+    canister_state::DEFAULT_QUEUE_CAPACITY, CanisterStatus, NetworkTopology, SystemState,
 };
 use ic_types::{
     messages::{CallContextId, CallbackId, Request},
@@ -439,26 +438,28 @@ impl SandboxSafeSystemState {
         result
     }
 
-    /// Only public for use in tests
-    #[doc(hidden)]
     pub fn push_output_request(
         &mut self,
         canister_current_memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,
         msg: Request,
         msg_bytes: NumBytes,
-    ) -> Result<(), (StateError, Request)> {
+    ) -> Result<(), Request> {
         let mut new_balance = self.cycles_balance();
-        if let Err(err) = self.cycles_account_manager.withdraw_request_cycles(
-            self.canister_id,
-            &mut new_balance,
-            self.freeze_threshold,
-            self.memory_allocation,
-            canister_current_memory_usage,
-            compute_allocation,
-            &msg,
-        ) {
-            return Err((StateError::CanisterOutOfCycles(err), msg));
+        if self
+            .cycles_account_manager
+            .withdraw_request_cycles(
+                self.canister_id,
+                &mut new_balance,
+                self.freeze_threshold,
+                self.memory_allocation,
+                canister_current_memory_usage,
+                compute_allocation,
+                &msg,
+            )
+            .is_err()
+        {
+            return Err(msg);
         }
         let initial_available_slots = self
             .available_request_slots
@@ -470,12 +471,7 @@ impl SandboxSafeSystemState {
             .entry(msg.receiver)
             .or_insert(0);
         if *used_slots >= *initial_available_slots {
-            return Err((
-                StateError::QueueFull {
-                    capacity: DEFAULT_QUEUE_CAPACITY,
-                },
-                msg,
-            ));
+            return Err(msg);
         }
         self.system_state_changes.requests.push(msg);
         self.system_state_changes.allocated_request_bytes += msg_bytes;
