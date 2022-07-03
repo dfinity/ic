@@ -647,7 +647,7 @@ impl TestWasmExecutorCore {
                 request,
                 NumBytes::from(0),
             )
-            .map_err(|err| err.0.to_string())?;
+            .map_err(|req| format!("Failed pushing request {:?} to output queue.", req))?;
         self.messages.insert(call_message_id, call.other_side);
         self.messages.insert(response_message_id, call.on_response);
         Ok(())
