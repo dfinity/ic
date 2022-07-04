@@ -1,4 +1,3 @@
-pub mod firewall;
 pub mod firewall_priority;
 pub mod network_reliability;
 pub mod network_robustness;

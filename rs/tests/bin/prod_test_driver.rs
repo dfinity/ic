@@ -309,18 +309,12 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ]),
             ),
              */
-            pot(
-                "firewall_pot",
-                networking::firewall::config(),
-                par(vec![t(
-                    "change_to_firewall_rules_takes_effect",
-                    networking::firewall::change_to_firewall_rules_takes_effect,
-                )])
-            ),
-            pot(
+            pot_with_setup(
                 "firewall_priority_pot",
-                networking::firewall_priority::config(),
-                par(vec![t("firewall_priority", networking::firewall_priority::override_firewall_rules_with_priority)]),
+                networking::firewall_priority::config,
+                par(vec![
+                    sys_t("firewall_priority", networking::firewall_priority::override_firewall_rules_with_priority),
+                ]),
             ),
             /*
             pot(
