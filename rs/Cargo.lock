@@ -5801,6 +5801,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-icrc1-client"
+version = "0.8.0"
+dependencies = [
+ "async-trait",
+ "candid",
+ "ic-base-types",
+ "ic-icrc1",
+ "ic-ledger-core",
+ "serde",
+]
+
+[[package]]
 name = "ic-icrc1-ledger"
 version = "0.8.0"
 dependencies = [
@@ -5815,6 +5827,7 @@ dependencies = [
  "ic-cdk-macros",
  "ic-crypto-tree-hash",
  "ic-icrc1",
+ "ic-icrc1-client",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-state-machine-tests",

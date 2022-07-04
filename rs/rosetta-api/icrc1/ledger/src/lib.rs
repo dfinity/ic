@@ -1,12 +1,11 @@
 pub mod cdk_runtime;
-pub mod endpoints;
 
 use crate::cdk_runtime::CdkRuntime;
-use crate::endpoints::Value;
 use candid::{
     types::number::{Int, Nat},
     CandidType,
 };
+use ic_icrc1::endpoints::Value;
 use ic_icrc1::{Account, Block, LedgerBalances, Transaction};
 use ic_ledger_canister_core::{
     archive::{ArchiveCanisterWasm, ArchiveOptions},

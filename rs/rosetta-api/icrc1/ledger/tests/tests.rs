@@ -1,11 +1,11 @@
 use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::PrincipalId;
-use ic_icrc1::{Account, Block, CandidBlock, CandidOperation, Operation, Transaction};
-use ic_icrc1_ledger::{
+use ic_icrc1::{
     endpoints::{ArchiveInfo, TransferArg, TransferError, Value},
-    InitArgs,
+    Account, Block, CandidBlock, CandidOperation, Operation, Transaction,
 };
+use ic_icrc1_ledger::InitArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::{
     block::{BlockHeight, BlockType, HashOf},

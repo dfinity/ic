@@ -1,11 +1,12 @@
 use candid::types::number::{Int, Nat};
 use candid::CandidType;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::{Account, ApprovalId, Subaccount};
 use ic_ledger_canister_core::ledger::TransferError as CoreTransferError;
 use ic_ledger_core::block::BlockHeight;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
+
+use crate::{Account, ApprovalId, Subaccount};
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub enum TransferError {
