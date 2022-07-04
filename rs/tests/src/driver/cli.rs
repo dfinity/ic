@@ -29,9 +29,6 @@ pub struct ProcessTestsArgs {
         help = "Path to a working directory of the test driver."
     )]
     working_dir: PathBuf,
-
-    #[clap(long = "test-result-dir", help = "Path to the test result directory.")]
-    test_result_dir: PathBuf,
 }
 
 #[derive(clap::Args, Debug)]
@@ -179,7 +176,6 @@ impl ProcessTestsArgs {
     pub fn validate(self) -> Result<ValidatedCliProcessTestsArgs> {
         Ok(ValidatedCliProcessTestsArgs {
             working_dir: self.working_dir,
-            test_result_dir: self.test_result_dir,
         })
     }
 }
@@ -263,7 +259,6 @@ fn parse_pattern(p: Option<String>) -> Result<Option<Regex>, regex::Error> {
 #[derive(Clone, Debug)]
 pub struct ValidatedCliProcessTestsArgs {
     pub working_dir: PathBuf,
-    pub test_result_dir: PathBuf,
 }
 
 #[derive(Clone, Debug)]

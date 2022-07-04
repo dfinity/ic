@@ -43,10 +43,6 @@ class TestRunSystemTests(unittest.TestCase):
         self.script_path = os.path.join(root_ic_dir, "rs/tests/run-system-tests.py")
         self.suite_contract_wildcard = f"{self.env['TMPDIR']}/**/system_env/{SUITE_EXECUTION_CONTRACT_FILE}"
         self.suite_result_wildcard = f"{self.env['TMPDIR']}/**/{SUITE_RESULT_FILE}"
-        # For CI runs test-results.json is saved in a different location - CI_PROJECT_DIR.
-        # TODO: Make path of test-results.json same for CI and local runs: https://dfinity.atlassian.net/browse/VER-1699
-        if "CI_JOB_ID" in self.env:
-            self.suite_result_wildcard = f"{root_ic_dir}/**/{SUITE_RESULT_FILE}"
 
     # Executed for each test.
     def tearDown(self) -> None:

@@ -66,7 +66,7 @@ fn process_test_results(validated_args: ValidatedCliProcessTestsArgs) -> anyhow:
     // Walk over all test result files and update suite object with corresponding results.
     let test_depth_level: usize = 1;
     let pot_depth_level: usize = 3;
-    for entry in WalkDir::new(working_dir) {
+    for entry in WalkDir::new(&working_dir) {
         let path: PathBuf = entry.unwrap().into_path();
         let file_name: &str = path.file_name().unwrap().to_str().unwrap();
         if !file_name.contains(config::TEST_RESULT_FILE) {
@@ -115,9 +115,7 @@ fn process_test_results(validated_args: ValidatedCliProcessTestsArgs) -> anyhow:
     // Recursively infer suite and pot level results from individual tests results.
     propagate_children_results_to_parents(&mut suite_result);
     // Save the final result file of the test suite.
-    let suite_result_file = validated_args
-        .test_result_dir
-        .join(config::TEST_SUITE_RESULT_FILE);
+    let suite_result_file = working_dir.join(config::TEST_SUITE_RESULT_FILE);
     let content = serde_json::to_string_pretty(&suite_result)
         .unwrap_or_else(|e| panic!("Could not serialize suite result to string. error={:?}", e));
     fs::write(suite_result_file, content)
