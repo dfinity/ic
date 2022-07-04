@@ -1,6 +1,8 @@
 #![allow(clippy::unwrap_used)]
-use crate::keygen_utils::TestKeygenCrypto;
+
+use crate::keygen_utils::{add_public_key_to_registry, add_tls_cert_to_registry, TestKeygenCrypto};
 use ic_config::crypto::CryptoConfig;
+use ic_config::logger::{Config as LoggerConfig, LogTarget};
 use ic_crypto::utils::{
     get_node_keys_or_generate_if_missing, NodeKeysToGenerate, TempCryptoComponent,
 };
@@ -8,9 +10,11 @@ use ic_crypto::CryptoComponent;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
     get_temp_file_path, start_new_remote_csp_vault_server_for_test,
 };
+use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
 use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
 use ic_interfaces::crypto::{KeyManager, PublicKeyRegistrationStatus};
 use ic_logger::replica_logger::no_op_logger;
+use ic_logger::{LoggerImpl, ReplicaLogger};
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -21,6 +25,9 @@ use ic_test_utilities::crypto::temp_dir::temp_dir;
 use ic_test_utilities::types::ids::node_test_id;
 use ic_types::crypto::{AlgorithmId, CryptoError, KeyPurpose};
 use ic_types::RegistryVersion;
+use openssl::asn1::Asn1Time;
+use rand::SeedableRng;
+use rand_chacha::ChaChaRng;
 use std::sync::Arc;
 use strum::IntoEnumIterator;
 
@@ -28,6 +35,7 @@ mod keygen_utils;
 mod parallelism;
 
 const REG_V1: RegistryVersion = RegistryVersion::new(1);
+const REG_V2: RegistryVersion = RegistryVersion::new(2);
 const NODE_ID: u64 = 42;
 
 #[test]
@@ -845,6 +853,289 @@ fn algorithm_id_should_match_algorithm_id_proto() {
         AlgorithmId::MegaSecp256k1 as i32,
         AlgorithmIdProto::MegaSecp256k1 as i32
     );
+}
+
+fn get_logger(log_filename: &std::path::Path) -> LoggerImpl {
+    let log_target_file = LogTarget::File(log_filename.to_path_buf());
+    let logger_config = LoggerConfig {
+        target: log_target_file,
+        ..Default::default()
+    };
+    LoggerImpl::new(&logger_config, "check_keys_with_registry_test".to_string())
+}
+
+#[test]
+fn should_fail_check_keys_with_registry_and_log_error_if_node_signing_public_keys_do_not_match() {
+    let temp_dir = tempfile::Builder::new()
+        .prefix("ic_crypto_")
+        .tempdir()
+        .expect("failed to create temporary crypto directory");
+    let log_filename = temp_dir.path().join("logfile");
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let logger = get_logger(&log_filename);
+    let replica_logger = ReplicaLogger::from(ic_logger::replica_logger::LogEntryLogger::from(
+        logger.root.clone(),
+    ));
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_logger(replica_logger)
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .build();
+
+    let node_signing_pk_without_corresponding_secret_key = {
+        let mut nspk = crypto_component.node_public_keys().node_signing_pk.unwrap();
+        nspk.key_value[0] ^= 0xff; // flip some bits
+        nspk
+    };
+
+    add_public_key_to_registry(
+        node_signing_pk_without_corresponding_secret_key,
+        crypto_component.get_node_id(),
+        KeyPurpose::NodeSigning,
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+    registry_client.reload();
+
+    let result = crypto_component.check_keys_with_registry(REG_V2);
+    // Drop `logger.async_log_guard` to make sure that low-priority log messages (such as
+    // `warn` that we are looking for) will be flushed to the log file on disk before we try
+    // to read it.
+    drop(logger.async_log_guard);
+
+    assert!(
+        matches!(result, Err(CryptoError::SecretKeyNotFound {algorithm, .. })
+            if algorithm == AlgorithmId::Ed25519
+        )
+    );
+
+    let contents = std::fs::read_to_string(log_filename).expect("failed to read log file");
+    assert!(contents.contains("node signing public key mismatch between local and registry copies"));
+}
+
+#[test]
+fn should_fail_check_keys_with_registry_and_log_error_if_committee_signing_public_keys_do_not_match(
+) {
+    let temp_dir = tempfile::Builder::new()
+        .prefix("ic_crypto_")
+        .tempdir()
+        .expect("failed to create temporary crypto directory");
+    let log_filename = temp_dir.path().join("logfile");
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let logger = get_logger(&log_filename);
+    let replica_logger = ReplicaLogger::from(ic_logger::replica_logger::LogEntryLogger::from(
+        logger.root.clone(),
+    ));
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_logger(replica_logger)
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .build();
+    let committee_signing_pk_without_corresponding_secret_key = {
+        let mut cspk = crypto_component
+            .node_public_keys()
+            .committee_signing_pk
+            .unwrap();
+        cspk.key_value[0] ^= 0xff; // flip some bits
+        cspk
+    };
+
+    add_public_key_to_registry(
+        committee_signing_pk_without_corresponding_secret_key,
+        crypto_component.get_node_id(),
+        KeyPurpose::CommitteeSigning,
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+    registry_client.reload();
+
+    let result = crypto_component.check_keys_with_registry(REG_V2);
+    drop(logger.async_log_guard);
+
+    assert!(
+        matches!(result, Err(CryptoError::SecretKeyNotFound {algorithm, .. })
+            if algorithm == AlgorithmId::MultiBls12_381
+        )
+    );
+
+    let contents = std::fs::read_to_string(log_filename).expect("failed to read log file");
+    assert!(contents
+        .contains("committee signing public key mismatch between local and registry copies"));
+}
+
+#[test]
+fn should_fail_check_keys_with_registry_and_log_error_if_dkg_dealing_encryption_keys_do_not_match()
+{
+    let temp_dir = tempfile::Builder::new()
+        .prefix("ic_crypto_")
+        .tempdir()
+        .expect("failed to create temporary crypto directory");
+    let log_filename = temp_dir.path().join("logfile");
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let logger = get_logger(&log_filename);
+    let replica_logger = ReplicaLogger::from(ic_logger::replica_logger::LogEntryLogger::from(
+        logger.root.clone(),
+    ));
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_logger(replica_logger)
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .build();
+    let dkg_dealing_encryption_pk_without_corresponding_secret_key = {
+        let mut ddepk = crypto_component
+            .node_public_keys()
+            .dkg_dealing_encryption_pk
+            .unwrap();
+        ddepk.key_value[0] ^= 0xff; // flip some bits
+        ddepk
+    };
+
+    add_public_key_to_registry(
+        dkg_dealing_encryption_pk_without_corresponding_secret_key,
+        crypto_component.get_node_id(),
+        KeyPurpose::DkgDealingEncryption,
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+    registry_client.reload();
+
+    let result = crypto_component.check_keys_with_registry(REG_V2);
+    drop(logger.async_log_guard);
+
+    assert!(
+        matches!(result, Err(CryptoError::SecretKeyNotFound {algorithm, .. })
+            if algorithm == AlgorithmId::Groth20_Bls12_381
+        )
+    );
+
+    let contents = std::fs::read_to_string(log_filename).expect("failed to read log file");
+    assert!(contents
+        .contains("NI-DKG dealing encryption key mismatch between local and registry copies"));
+}
+
+#[test]
+fn should_fail_check_keys_with_registry_and_log_error_if_tls_certs_do_not_match() {
+    let temp_dir = tempfile::Builder::new()
+        .prefix("ic_crypto_")
+        .tempdir()
+        .expect("failed to create temporary crypto directory");
+    let log_filename = temp_dir.path().join("logfile");
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let logger = get_logger(&log_filename);
+    let replica_logger = ReplicaLogger::from(ic_logger::replica_logger::LogEntryLogger::from(
+        logger.root.clone(),
+    ));
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_logger(replica_logger)
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .build();
+    let (tls_cert_without_corresponding_secret_key, tls_cert_der) = {
+        let mut csprng = ChaChaRng::from_seed([9u8; 32]);
+        let not_after = Asn1Time::days_from_now(31).expect("unable to create Asn1Time");
+        let common_name = "another_common_name";
+        let (x509_cert, _key_pair) =
+            generate_tls_key_pair_der(&mut csprng, common_name, &not_after)
+                .expect("error generating TLS key pair");
+        (
+            ic_crypto_tls_interfaces::TlsPublicKeyCert::new_from_der(x509_cert.bytes.clone())
+                .expect("generated X509 certificate has malformed DER encoding")
+                .to_proto(),
+            x509_cert.bytes,
+        )
+    };
+
+    add_tls_cert_to_registry(
+        tls_cert_without_corresponding_secret_key,
+        crypto_component.get_node_id(),
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+
+    registry_client.reload();
+
+    let result = crypto_component.check_keys_with_registry(REG_V2);
+    drop(logger.async_log_guard);
+
+    assert_eq!(
+        result.unwrap_err(),
+        CryptoError::TlsSecretKeyNotFound {
+            certificate_der: tls_cert_der,
+        }
+    );
+    let contents = std::fs::read_to_string(log_filename).expect("failed to read log file");
+    assert!(contents.contains("TLS certificate mismatch between local and registry copies"));
+}
+
+#[test]
+fn should_fail_check_keys_with_registry_and_log_error_if_idkg_dealing_encryption_keys_do_not_match()
+{
+    let temp_dir = tempfile::Builder::new()
+        .prefix("ic_crypto_")
+        .tempdir()
+        .expect("failed to create temporary crypto directory");
+    let log_filename = temp_dir.path().join("logfile");
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let logger = get_logger(&log_filename);
+    let replica_logger = ReplicaLogger::from(ic_logger::replica_logger::LogEntryLogger::from(
+        logger.root.clone(),
+    ));
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_logger(replica_logger)
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .build();
+    let idkg_dealing_encryption_pk_without_corresponding_secret_key = {
+        let mut idepk = crypto_component
+            .node_public_keys()
+            .idkg_dealing_encryption_pk
+            .unwrap();
+        idepk.key_value[0] ^= 0xff; // flip some bits
+        idepk
+    };
+
+    add_public_key_to_registry(
+        idkg_dealing_encryption_pk_without_corresponding_secret_key,
+        crypto_component.get_node_id(),
+        KeyPurpose::IDkgMEGaEncryption,
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+    registry_client.reload();
+
+    let result = crypto_component.check_keys_with_registry(REG_V2);
+    drop(logger.async_log_guard);
+
+    assert!(matches!(
+        result,
+        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
+    ));
+
+    let contents = std::fs::read_to_string(log_filename).expect("failed to read log file");
+    assert!(
+        contents.contains("iDKG dealing encryption key mismatch between local and registry copies")
+    );
+    assert!(contents.contains(format!("iDKG dealing encryption key of node {} is not properly set up in the registry for registry version", crypto_component.get_node_id()).as_str()));
 }
 
 fn new_tokio_runtime() -> tokio::runtime::Runtime {

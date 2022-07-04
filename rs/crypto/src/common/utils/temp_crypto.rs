@@ -25,6 +25,7 @@ use ic_interfaces::crypto::{
 };
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
+use ic_logger::ReplicaLogger;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -120,12 +121,14 @@ impl<C: CryptoServiceProvider> Deref for TempCryptoComponentGeneric<C> {
 pub struct TempCryptoBuilder {
     node_keys_to_generate: Option<NodeKeysToGenerate>,
     registry_client: Option<Arc<dyn RegistryClient>>,
+    registry_data: Option<Arc<ProtoRegistryDataProvider>>,
     registry_version: Option<RegistryVersion>,
     node_id: Option<NodeId>,
     start_remote_vault: bool,
     vault_server_runtime_handle: Option<tokio::runtime::Handle>,
     vault_client_runtime_handle: Option<tokio::runtime::Handle>,
     connected_remote_vault: Option<Arc<TempCspVaultServer>>,
+    logger: Option<ReplicaLogger>,
 }
 
 impl TempCryptoBuilder {
@@ -139,6 +142,23 @@ impl TempCryptoBuilder {
 
     pub fn with_registry(mut self, registry_client: Arc<dyn RegistryClient>) -> Self {
         self.registry_client = Some(registry_client);
+        self
+    }
+
+    /// If the `registry_client` is of type `FakeRegistryClient`, the caller may manually have to
+    /// call `registry_client.reload()` after calling `build()`.
+    pub fn with_registry_client_and_data(
+        mut self,
+        registry_client: Arc<dyn RegistryClient>,
+        registry_data: Arc<ProtoRegistryDataProvider>,
+    ) -> Self {
+        self.registry_client = Some(registry_client);
+        self.registry_data = Some(registry_data);
+        self
+    }
+
+    pub fn with_logger(mut self, logger: ReplicaLogger) -> Self {
+        self.logger = Some(logger);
         self
     }
 
@@ -207,14 +227,15 @@ impl TempCryptoBuilder {
             .generate_tls_keys_and_certificate
             .then(|| generate_tls_keys(&mut csp, node_id).to_proto());
 
-        let registry_client = if let Some(registry_client) = self.registry_client {
-            registry_client
-        } else {
+        let is_registry_data_provided = self.registry_data.is_some();
+        let registry_data = self
+            .registry_data
+            .unwrap_or_else(|| Arc::new(ProtoRegistryDataProvider::new()));
+        if is_registry_data_provided || self.registry_client.is_none() {
+            // add data. if a registry_client is provided, the caller has to reload it themselves.
             let registry_version = self
                 .registry_version
                 .unwrap_or(RegistryVersion::new(Self::DEFAULT_REGISTRY_VERSION));
-            let registry_data = Arc::new(ProtoRegistryDataProvider::new());
-
             if let Some(node_signing_pk) = &node_signing_pk {
                 registry_data
                     .add(
@@ -260,12 +281,12 @@ impl TempCryptoBuilder {
                     )
                     .expect("failed to add TLS certificate to registry");
             }
-
-            let registry_client =
-                Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-            registry_client.reload();
-            registry_client as Arc<dyn RegistryClient>
-        };
+        }
+        let registry_client = self.registry_client.unwrap_or_else(|| {
+            let fake_registry_client = Arc::new(FakeRegistryClient::new(registry_data));
+            fake_registry_client.reload();
+            fake_registry_client as Arc<dyn RegistryClient>
+        });
 
         let node_pubkeys = NodePublicKeys {
             version: 1,
@@ -299,12 +320,13 @@ impl TempCryptoBuilder {
         let opt_vault_client_runtime_handle = opt_remote_vault_environment
             .as_ref()
             .map(|data| data.vault_client_runtime.handle().clone());
+        let logger = self.logger.unwrap_or_else(|| no_op_logger());
         let crypto_component = CryptoComponent::new_with_fake_node_id(
             &config,
             opt_vault_client_runtime_handle,
             registry_client,
             node_id,
-            no_op_logger(),
+            logger,
         );
 
         TempCryptoComponent {
@@ -393,9 +415,11 @@ impl TempCryptoComponent {
             vault_server_runtime_handle: None,
             vault_client_runtime_handle: None,
             registry_client: None,
+            registry_data: None,
             node_keys_to_generate: None,
             registry_version: None,
             connected_remote_vault: None,
+            logger: None,
         }
     }
 
