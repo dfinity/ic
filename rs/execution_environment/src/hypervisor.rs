@@ -76,18 +76,23 @@ impl HypervisorMetrics {
         }
     }
 
-    fn observe(&self, api_type: &str, result: &WasmExecutionOutput) {
-        self.accessed_pages
-            .observe(result.instance_stats.accessed_pages as f64);
-        self.dirty_pages
-            .observe(result.instance_stats.dirty_pages as f64);
-        self.allocated_pages.set(allocated_pages_count() as i64);
+    fn observe(&self, api_type: &str, result: &WasmExecutionResult) {
+        let status = match result {
+            WasmExecutionResult::Finished(output, ..) => {
+                self.accessed_pages
+                    .observe(output.instance_stats.accessed_pages as f64);
+                self.dirty_pages
+                    .observe(output.instance_stats.dirty_pages as f64);
+                self.allocated_pages.set(allocated_pages_count() as i64);
 
-        let status = match &result.wasm_result {
-            Ok(Some(WasmResult::Reply(_))) => "success",
-            Ok(Some(WasmResult::Reject(_))) => "Reject",
-            Ok(None) => "NoResponse",
-            Err(e) => e.as_str(),
+                match &output.wasm_result {
+                    Ok(Some(WasmResult::Reply(_))) => "success",
+                    Ok(Some(WasmResult::Reject(_))) => "Reject",
+                    Ok(None) => "NoResponse",
+                    Err(e) => e.as_str(),
+                }
+            }
+            WasmExecutionResult::Paused(_) => "paused",
         };
         self.executed_messages
             .with_label_values(&[api_type, status])
@@ -622,6 +627,7 @@ impl Hypervisor {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);
         }
+        self.metrics.observe(api_type_str, &execution_result);
         let (output, system_state_changes) = match execution_result {
             WasmExecutionResult::Finished(output, system_state_changes) => {
                 (output, system_state_changes)
@@ -630,7 +636,6 @@ impl Hypervisor {
                 unreachable!("DTS is not enabled yet.");
             }
         };
-        self.metrics.observe(api_type_str, &output);
         system_state_changes.apply_changes(
             &mut system_state,
             network_topology,
@@ -653,6 +658,7 @@ impl Hypervisor {
         func_ref: FuncRef,
         execution_state: ExecutionState,
     ) -> (ExecutionState, WasmExecutionResult) {
+        let api_type_str = api_type.as_str();
         let static_system_state =
             SandboxSafeSystemState::new(&system_state, *self.cycles_account_manager);
 
@@ -669,6 +675,7 @@ impl Hypervisor {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);
         }
+        self.metrics.observe(api_type_str, &execution_result);
         (execution_state, execution_result)
     }
 }
