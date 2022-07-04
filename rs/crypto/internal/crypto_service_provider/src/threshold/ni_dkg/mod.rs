@@ -162,8 +162,15 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
         threshold: NumberOfNodes,
         number_of_receivers: NumberOfNodes,
         csp_dealings: BTreeMap<NodeIndex, CspNiDkgDealing>,
+        collection_threshold: NumberOfNodes,
     ) -> Result<CspNiDkgTranscript, ni_dkg_errors::CspDkgCreateTranscriptError> {
-        static_api::create_transcript(algorithm_id, threshold, number_of_receivers, csp_dealings)
+        static_api::create_transcript(
+            algorithm_id,
+            threshold,
+            number_of_receivers,
+            csp_dealings,
+            collection_threshold,
+        )
     }
 
     ///Create a CSP transcript from CSP resharing dealings
@@ -315,6 +322,7 @@ pub mod static_api {
         threshold: NumberOfNodes,
         number_of_receivers: NumberOfNodes,
         csp_dealings: BTreeMap<NodeIndex, CspNiDkgDealing>,
+        collection_threshold: NumberOfNodes,
     ) -> Result<CspNiDkgTranscript, ni_dkg_errors::CspDkgCreateTranscriptError> {
         match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
@@ -328,8 +336,12 @@ pub mod static_api {
                     },
                 )?;
                 // Call the specialised library method:
-                let transcript =
-                    clib::create_transcript(threshold, number_of_receivers, &csp_dealings)?;
+                let transcript = clib::create_transcript(
+                    threshold,
+                    number_of_receivers,
+                    &csp_dealings,
+                    collection_threshold,
+                )?;
                 // Generalise:
                 let transcript = CspNiDkgTranscript::Groth20_Bls12_381(transcript);
                 Ok(transcript)

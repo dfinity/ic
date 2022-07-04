@@ -32,8 +32,10 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 ///   dealers may provide receivers with invalid shares.
 ///
 /// # Errors
-/// * `CspDkgCreateTranscriptError::SizeError` if the threshold is too large for
-///   this machine.
+/// * `CspDkgCreateTranscriptError::SizeError` if `collection_threshold`  is
+///   too large for this machine.
+/// * `CspDkgCreateTranscriptError::InsufficientDealingsError` if `csp_dealings`
+///   contains less than `collection_threshold` dealings.
 /// * `CspDkgCreateTranscriptError::InvalidThresholdError` if the threshold is
 ///   either zero, or larger than the `number_of_receivers`.
 /// * `CspDkgCreateTranscriptError::InvalidDealingError` if `csp_dealings` is
@@ -45,15 +47,30 @@ pub fn create_transcript(
     threshold: NumberOfNodes,
     number_of_receivers: NumberOfNodes,
     csp_dealings: &BTreeMap<NodeIndex, g20::Dealing>,
+    collection_threshold: NumberOfNodes,
 ) -> Result<g20::Transcript, CspDkgCreateTranscriptError> {
-    let min_num_dealings = usize::try_from(threshold.get()).map_err(|_| {
+    let collection_threshold_usize = usize::try_from(collection_threshold.get()).map_err(|_| {
         CspDkgCreateTranscriptError::SizeError(SizeError {
-            message: format!("Threshold is too large for this machine: {}", threshold),
+            message: format!(
+                "collection threshold is too large for this machine: {}",
+                collection_threshold
+            ),
         })
     })?;
+    if csp_dealings.len() < collection_threshold_usize {
+        return Err(CspDkgCreateTranscriptError::InsufficientDealingsError(
+            InvalidArgumentError {
+                message: format!(
+                    "Insufficient dealings to create the transcript: found {} but required {} (=collection threshold).",
+                    csp_dealings.len(),
+                    collection_threshold_usize
+                ),
+            },
+        ));
+    }
     let csp_dealings = csp_dealings
         .iter()
-        .take(min_num_dealings)
+        .take(collection_threshold_usize)
         .map(|(index, dealing)| (*index, dealing))
         .collect();
     compute_transcript(threshold, number_of_receivers, &csp_dealings)

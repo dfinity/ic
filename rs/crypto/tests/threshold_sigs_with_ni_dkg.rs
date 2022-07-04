@@ -226,6 +226,8 @@ fn message() -> SignableMock {
 
 mod non_interactive_distributed_key_generation {
     use super::*;
+    use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
+    use ic_crypto_internal_types::NodeIndex;
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgDealing;
 
     #[test]
@@ -311,6 +313,72 @@ mod non_interactive_distributed_key_generation {
             transcript =
                 run_ni_dkg_and_create_single_transcript(config.get(), &env.crypto_components);
         }
+    }
+
+    // Test that transcripts have the correct/minimal size, i.e., that they
+    // contain exactly the minimal number of required dealings (i.e., the
+    // collection threshold) and exactly as many ciphertexts as receivers.
+    // This is tested for (1) a (non-reshared) high-threshold transcript, (2) a
+    // reshared high-threshold transcript, and (3) a (non-reshared)
+    // low-threshold transcript, because these are the cases relevant in
+    // practice.
+    #[test]
+    fn should_produce_transcripts_with_correct_size() {
+        let (initial_subnet_size, max_subnet_size, epochs) = (3, 5, 1);
+
+        // Test for high-threshold NI-DKG including resharing
+        let mut config = RandomNiDkgConfig::builder()
+            .subnet_size(initial_subnet_size)
+            .dkg_tag(NiDkgTag::HighThreshold)
+            .registry_version(REG_V1)
+            .build();
+        let mut env = NiDkgTestEnvironment::new_for_config(config.get());
+        let mut transcript =
+            run_ni_dkg_and_create_single_transcript(config.get(), &env.crypto_components);
+
+        assert_eq!(
+            number_of_dealings_in_transcript(&transcript) as NodeIndex,
+            config.get().collection_threshold().get()
+        );
+        assert_transcript_ciphertexts_have_length(
+            &transcript,
+            config.get().receivers().get().len(),
+        );
+
+        for _i in 0..epochs {
+            config = RandomNiDkgConfig::reshare(transcript, -2..=2, max_subnet_size);
+            env.update_for_config(config.get());
+            transcript =
+                run_ni_dkg_and_create_single_transcript(config.get(), &env.crypto_components);
+
+            assert_eq!(
+                number_of_dealings_in_transcript(&transcript) as NodeIndex,
+                config.get().collection_threshold().get()
+            );
+            assert_transcript_ciphertexts_have_length(
+                &transcript,
+                config.get().receivers().get().len(),
+            );
+        }
+
+        // Test for low-threshold NI-DKG without resharing
+        let config = RandomNiDkgConfig::builder()
+            .subnet_size(initial_subnet_size)
+            .dkg_tag(NiDkgTag::LowThreshold)
+            .registry_version(REG_V1)
+            .build();
+        let env = NiDkgTestEnvironment::new_for_config(config.get());
+        let transcript =
+            run_ni_dkg_and_create_single_transcript(config.get(), &env.crypto_components);
+
+        assert_eq!(
+            number_of_dealings_in_transcript(&transcript) as NodeIndex,
+            config.get().collection_threshold().get()
+        );
+        assert_transcript_ciphertexts_have_length(
+            &transcript,
+            config.get().receivers().get().len(),
+        );
     }
 
     // Test different scenarios for FS key deletion
@@ -598,5 +666,21 @@ mod non_interactive_distributed_key_generation {
                 (*node, transcript)
             })
             .collect()
+    }
+
+    fn number_of_dealings_in_transcript(transcript: &NiDkgTranscript) -> usize {
+        match &transcript.internal_csp_transcript {
+            CspNiDkgTranscript::Groth20_Bls12_381(t) => t.receiver_data.len(),
+        }
+    }
+
+    fn assert_transcript_ciphertexts_have_length(transcript: &NiDkgTranscript, length: usize) {
+        match &transcript.internal_csp_transcript {
+            CspNiDkgTranscript::Groth20_Bls12_381(transcript) => {
+                for ciphertext in transcript.receiver_data.values() {
+                    assert_eq!(ciphertext.len(), length);
+                }
+            }
+        }
     }
 }
