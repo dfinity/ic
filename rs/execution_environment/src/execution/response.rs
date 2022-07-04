@@ -5,12 +5,12 @@ use crate::execution_environment::{ExecuteMessageResult, ExecutionResponse, Paus
 use crate::Hypervisor;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
-use ic_replicated_state::{CallContext, CallOrigin, CanisterState, NetworkTopology};
+use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
 use ic_types::messages::{CallContextId, Payload, Response};
 use ic_types::{NumBytes, NumInstructions, Time};
 
+use crate::execution::common;
 use crate::execution::common::action_to_response;
-use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
     ExecutionParameters, HypervisorError, SubnetAvailableMemory, WasmExecutionOutput,
 };
@@ -187,8 +187,8 @@ pub fn execute_response(
     cycles_account_manager: &CyclesAccountManager,
 ) -> ExecuteMessageResult {
     let (callback, call_context) =
-        match get_call_context_and_callback(&mut canister, &response, logger) {
-            Some(call_context) => call_context,
+        match common::get_call_context_and_callback(&mut canister, &response, logger) {
+            Some((callback, call_context)) => (callback, call_context),
             None => {
                 return ExecuteMessageResult {
                     canister,
@@ -597,77 +597,4 @@ fn process_cleanup_result(
         response,
         heap_delta,
     }
-}
-
-// Helper function that extracts the corresponding callback and call context
-// from the `CallContextManager`.
-//
-// Calling this function will unregister the callback identified based on the callback id.
-// When the call context is marked as deleted, and there are no more outstanding
-// callbacks, it will also unregister the call context.
-fn get_call_context_and_callback(
-    canister: &mut CanisterState,
-    response: &Response,
-    logger: &ReplicaLogger,
-) -> Option<(Callback, CallContext)> {
-    let call_context_manager = match canister.status() {
-        CanisterStatusType::Stopped => {
-            // A canister by definition can only be stopped when no open call contexts.
-            // Hence, if we receive a response for a stopped canister then that is
-            // a either a bug in the code or potentially a faulty (or
-            // malicious) subnet generating spurious messages.
-            error!(
-                logger,
-                "[EXC-BUG] Stopped canister got a response.  originator {} respondent {}.",
-                response.originator,
-                response.respondent,
-            );
-            return None;
-        }
-        CanisterStatusType::Running | CanisterStatusType::Stopping => {
-            // We are sure there's a call context manager since the canister isn't stopped.
-            canister.system_state.call_context_manager_mut().unwrap()
-        }
-    };
-
-    let callback = match call_context_manager
-        .unregister_callback(response.originator_reply_callback)
-    {
-        Some(callback) => callback,
-        None => {
-            // Received an unknown callback ID. Nothing to do.
-            error!(
-                logger,
-                "[EXC-BUG] Canister got a response with unknown callback ID {}.  originator {} respondent {}.",
-                response.originator_reply_callback,
-                response.originator,
-                response.respondent,
-            );
-            return None;
-        }
-    };
-
-    let call_context_id = callback.call_context_id;
-    let call_context = match call_context_manager.call_context(call_context_id) {
-        Some(call_context) => call_context.clone(),
-        None => {
-            // Unknown call context. Nothing to do.
-            error!(
-                logger,
-                "[EXC-BUG] Canister got a response for unknown request.  originator {} respondent {} callback id {}.",
-                response.originator,
-                response.respondent,
-                response.originator_reply_callback,
-            );
-            return None;
-        }
-    };
-
-    // The call context is completely removed if there are no outstanding callbacks.
-    let num_outstanding_calls = call_context_manager.outstanding_calls(call_context_id);
-    if call_context.is_deleted() && num_outstanding_calls == 0 {
-        call_context_manager.unregister_call_context(call_context_id);
-    }
-
-    Some((callback, call_context))
 }

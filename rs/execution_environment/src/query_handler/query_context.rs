@@ -37,6 +37,7 @@
 
 use super::query_allocations::QueryAllocationsUsed;
 use crate::{
+    execution::common,
     execution::nonreplicated_query::execute_non_replicated_query,
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
@@ -45,19 +46,21 @@ use crate::{
 use ic_base_types::NumBytes;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
-    ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
+    ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
 };
 use ic_logger::{debug, error, fatal, warn, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
 };
+use ic_system_api::ApiType;
+use ic_types::methods::{FuncRef, WasmClosure};
 use ic_types::{
     ingress::WasmResult,
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response, UserQuery,
     },
-    CanisterId, Cycles, NumInstructions, NumMessages, QueryAllocation,
+    CanisterId, Cycles, NumInstructions, NumMessages, QueryAllocation, Time,
 };
 use std::{
     collections::BTreeMap,
@@ -417,27 +420,63 @@ impl<'a> QueryContext<'a> {
         measurement_scope: &MeasurementScope,
     ) -> (CanisterState, CallOrigin, CallContextAction) {
         let canister_id = canister.canister_id();
-        // As we have executed a request on the canister earlier, it must
-        // contain a call context manager hence the following should not fail.
-        let call_context_manager = canister
-            .system_state
-            .call_context_manager_mut()
-            .unwrap_or_else(|| {
-                fatal!(
-                    self.log,
-                    "Canister {}: Expected to find a CallContextmanager",
-                    canister_id
-                )
-            });
+        let (callback, call_context) =
+            match common::get_call_context_and_callback(&mut canister, &response, self.log) {
+                Some((callback, call_context)) => (callback, call_context),
+                None => {
+                    fatal!(
+                        self.log,
+                        "Canister {}: Expected to find a callback and call context",
+                        canister_id
+                    )
+                }
+            };
 
-        // Responses here are only those triggered by the Request that we sent,
-        // so we are sure these unwraps are safe.
-        let callback = call_context_manager
-            .unregister_callback(response.originator_reply_callback)
-            .unwrap();
-        let call_origin = call_context_manager
-            .call_origin(callback.call_context_id)
-            .unwrap();
+        let call_context_id = callback.call_context_id;
+        let call_responded = call_context.has_responded();
+        let call_origin = call_context.call_origin().clone();
+        // Validate that the canister has an `ExecutionState`.
+        if canister.execution_state.is_none() {
+            let action = canister
+                .system_state
+                .call_context_manager_mut()
+                .unwrap()
+                .on_canister_result(call_context_id, Err(HypervisorError::WasmModuleNotFound));
+            return (canister, call_origin, action);
+        }
+
+        let closure = match response.response_payload {
+            Payload::Data(_) => callback.on_reply.clone(),
+            Payload::Reject(_) => callback.on_reject.clone(),
+        };
+        let func_ref = match call_origin {
+            CallOrigin::Ingress(_, _)
+            | CallOrigin::CanisterUpdate(_, _)
+            | CallOrigin::Heartbeat => unreachable!("Unreachable in the QueryContext."),
+            CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
+                FuncRef::QueryClosure(closure)
+            }
+        };
+
+        let time = self.state.time();
+        // No cycles are refunded in a response to a query call.
+        let incoming_cycles = Cycles::zero();
+        let api_type = match response.response_payload {
+            Payload::Data(payload) => ApiType::reply_callback(
+                time,
+                payload.to_vec(),
+                incoming_cycles,
+                call_context_id,
+                call_responded,
+            ),
+            Payload::Reject(context) => ApiType::reject_callback(
+                time,
+                context,
+                incoming_cycles,
+                call_context_id,
+                call_responded,
+            ),
+        };
 
         let instruction_limit = self.max_instructions_per_message.min(
             self.query_allocations_used
@@ -447,17 +486,56 @@ impl<'a> QueryContext<'a> {
                 .into(),
         );
         let execution_parameters = self.execution_parameters(&canister, instruction_limit);
-        let (canister, instructions_left, action, _heap_delta) = self.hypervisor.execute_callback(
-            canister,
-            &call_origin,
-            callback,
-            response.response_payload,
-            // No cycles are refunded in a response to a query call.
-            Cycles::zero(),
-            self.state.time(),
-            Arc::clone(&self.network_topology),
-            execution_parameters,
+        let (output, output_execution_state, output_system_state) = self.hypervisor.execute(
+            api_type,
+            canister.system_state.clone(),
+            canister.memory_usage(self.own_subnet_type),
+            execution_parameters.clone(),
+            func_ref,
+            canister.execution_state.take().unwrap(),
+            &self.network_topology,
         );
+
+        let canister_current_memory_usage = canister.memory_usage(self.own_subnet_type);
+        canister.execution_state = Some(output_execution_state);
+
+        let (instructions_left, result) = match output.wasm_result {
+            result @ Ok(_) => {
+                // Executing the reply/reject closure succeeded.
+                canister.system_state = output_system_state;
+                (output.num_instructions_left, result)
+            }
+            Err(callback_err) => {
+                // A trap has occurred when executing the reply/reject closure.
+                // Execute the cleanup if it exists.
+                match callback.on_cleanup {
+                    None => {
+                        // No cleanup closure present. Return the callback error as-is.
+                        (output.num_instructions_left, Err(callback_err))
+                    }
+                    Some(cleanup_closure) => self.execute_cleanup(
+                        time,
+                        &mut canister,
+                        cleanup_closure,
+                        &call_origin,
+                        callback_err,
+                        canister_current_memory_usage,
+                        ExecutionParameters {
+                            total_instruction_limit: output.num_instructions_left,
+                            slice_instruction_limit: output.num_instructions_left,
+                            ..execution_parameters
+                        },
+                    ),
+                }
+            }
+        };
+
+        let action = canister
+            .system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .on_canister_result(call_context_id, result);
+
         let instructions_executed = instruction_limit - instructions_left;
         measurement_scope.add(instructions_executed, NumMessages::from(1));
         self.query_allocations_used
@@ -469,6 +547,63 @@ impl<'a> QueryContext<'a> {
             );
 
         (canister, call_origin, action)
+    }
+
+    /// Execute cleanup.
+    ///
+    /// Returns:
+    ///     - Number of instructions left.
+    ///     - A result containing the wasm result or relevant `HypervisorError`.
+    fn execute_cleanup(
+        &self,
+        time: Time,
+        canister: &mut CanisterState,
+        cleanup_closure: WasmClosure,
+        call_origin: &CallOrigin,
+        callback_err: HypervisorError,
+        canister_current_memory_usage: NumBytes,
+        execution_parameters: ExecutionParameters,
+    ) -> (NumInstructions, Result<Option<WasmResult>, HypervisorError>) {
+        let func_ref = match call_origin {
+            CallOrigin::Ingress(_, _)
+            | CallOrigin::CanisterUpdate(_, _)
+            | CallOrigin::Heartbeat => unreachable!("Unreachable in the QueryContext."),
+            CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
+                FuncRef::QueryClosure(cleanup_closure)
+            }
+        };
+        let (cleanup_output, output_execution_state, output_system_state) =
+            self.hypervisor.execute(
+                ApiType::Cleanup { time },
+                canister.system_state.clone(),
+                canister_current_memory_usage,
+                execution_parameters,
+                func_ref,
+                canister.execution_state.take().unwrap(),
+                &self.network_topology,
+            );
+
+        canister.execution_state = Some(output_execution_state);
+        match cleanup_output.wasm_result {
+            Ok(_) => {
+                // Executing the cleanup callback has succeeded.
+                canister.system_state = output_system_state;
+
+                // Note that, even though the callback has succeeded,
+                // the original callback error is returned.
+                (cleanup_output.num_instructions_left, Err(callback_err))
+            }
+            Err(cleanup_err) => {
+                // Executing the cleanup call back failed.
+                (
+                    cleanup_output.num_instructions_left,
+                    Err(HypervisorError::Cleanup {
+                        callback_err: Box::new(callback_err),
+                        cleanup_err: Box::new(cleanup_err),
+                    }),
+                )
+            }
+        }
     }
 
     // Executes a query sent from one canister to another. If a loop in the call
