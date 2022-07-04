@@ -47,12 +47,13 @@ class Es:
 
     stat: Dict[str, Dict[str, int]]
 
-    def __init__(self, es_url: str, alert_service: AlertService, mainnet: bool):
+    def __init__(self, es_url: str, alert_service: AlertService, mainnet: bool, fail=False):
         self.es_url = es_url
         self.es = Elasticsearch(es_url)
         self.alert_service = alert_service
         self.stat = {"raw_logs": dict()}
         self.mainnet = mainnet
+        self.fail = fail
 
     @staticmethod
     def _precise_query(tag: str):
@@ -79,6 +80,8 @@ class Es:
                     f"exception:\n{str(e)}\n"
                 )
                 eprint(msg)
+                if self.fail:
+                    raise e
                 self.alert_service.alert(
                     text=msg,
                     short_text=f"ES COUNT query failed for {index}",
@@ -139,6 +142,8 @@ class Es:
                     f"for MAINNET index {index}\n"
                     f"exception:\n{str(e)}\n"
                 )
+                if self.fail:
+                    raise e
                 self.alert_service.alert(
                     text=msg,
                     short_text="ES COUNT query failed for a MAINNET index",
@@ -230,7 +235,7 @@ class Es:
 
         try:
             response = self.es.search(index=indices, size=page_size, sort=Es._SORTER, query=query)  # type: ignore
-        except exceptions.TransportError as error:
+        except exceptions.TransportError as e:
             msg = (
                 "ES query failed.\n"
                 "If your Farm tests have started recently, try repeating "
@@ -240,7 +245,7 @@ class Es:
                 text=msg,
                 short_text=f"ES COUNT query failed for {','.join(indices)}",
             )
-            raise error
+            raise e
 
         docs = response["hits"]["hits"]
 

@@ -46,6 +46,7 @@ class Pipeline:
         docker_starter: Optional[str] = None,  # only used in alerts with repros
         global_infra: Optional[GlobalInfra] = None,
         formulas: Optional[Set[str]] = None,
+        fail=False,  # if True, raise exceptions instead of just sending Slack alerts
     ):
         # Corresponds to the name of
         # the [https://gitlab.com/ic-monitoring/mfotl-policies] repo
@@ -73,6 +74,8 @@ class Pipeline:
         self.liveness_checked = False
 
         self.formulas = formulas
+
+        self.fail = fail
 
     def check_pipeline_alive(self, group: Group, pproc: PreProcessor, event_stream: Iterable[str]) -> None:
 
@@ -272,6 +275,8 @@ class Pipeline:
                     # the -stop_at_first_viol flag is set
                     pass
                 except MonpolyException as e:
+                    if self.fail:
+                        raise e
                     self.slack.alert(
                         level="🏮",
                         text=f"Monpoly raised exception while running command `{e.cmd}`:\n```\n{str(e)}\n```",
