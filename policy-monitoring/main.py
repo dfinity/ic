@@ -97,6 +97,13 @@ def main():
         help="Specifies path to a test driver's log file that contains group names that should be monitored",
     )
     parser.add_argument(
+        "--fail",
+        "-f",
+        action="store_true",
+        default=False,
+        help="If an exception occurs, raise and fail rather than sending a Slack alert",
+    )
+    parser.add_argument(
         "--slack_service_id",
         "-s",
         type=str,
@@ -240,6 +247,7 @@ def main():
             docker=with_docker,
             docker_starter=docker_starter,
             formulas=set(args.policy) if args.policy else None,
+            fail=args.fail,
         )
 
         # Obtains logs for each group
@@ -247,11 +255,11 @@ def main():
             groups = file_io.read_logs(log_file=args.read)
         else:
             if args.mainnet:
-                es = Es(elasticsearch_endpoint, alert_service=slack, mainnet=True)
+                es = Es(elasticsearch_endpoint, alert_service=slack, mainnet=True, fail=args.fail)
                 gid = "mainnet"
                 groups = {gid: Group(gid)}
             else:
-                es = Es(elasticsearch_endpoint, alert_service=slack, mainnet=False)
+                es = Es(elasticsearch_endpoint, alert_service=slack, mainnet=False, fail=args.fail)
                 if args.group_names:
                     groups = {gid: Group(gid) for gid in args.group_names}
                 else:
@@ -281,7 +289,9 @@ def main():
         monpoly_pipeline.reproduce_all_violations()
         monpoly_pipeline.save_statistics()
 
-    except Exception:
+    except Exception as e:
+        if args.fail:
+            raise e
         trace = traceback.format_exc()
         error = "Policy monitoring pipeline stopped due to unhandled exception:\n```%s```" % trace
         sys.stderr.write(error + "\n")

@@ -1,17 +1,9 @@
 .build-and-test-monpoly-docker: &build-and-test-monpoly-docker |
-  docker build -t monpoly_pipeline ./policy-monitoring
-  MONPOLY_PIPELINE_INSTANCE=$(docker run -d -it --rm --entrypoint /bin/ash monpoly_pipeline)
+  docker build -t monpoly_pipeline:"${CI_COMMIT_SHA}" ./policy-monitoring
+  MONPOLY_PIPELINE_INSTANCE=$(docker run -d -it --rm --entrypoint /bin/ash monpoly_pipeline:"${CI_COMMIT_SHA}")
+  trap 'docker kill ${MONPOLY_PIPELINE_INSTANCE}' EXIT  # make sure the docker instance will be killed whenever we exit this block
   docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.monpoly_io
   docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.mfotl_sanity
-
-test-monpoly-docker:
-  extends:
-    - .ubuntu-nix-docker
-    - .rules-monpoly-test-only
-  stage: prod-tests
-  script:
-    - set -euo pipefail
-    - *build-and-test-monpoly-docker
 
 deploy-monpoly-docker:
   extends:
@@ -23,7 +15,7 @@ deploy-monpoly-docker:
     - TAG=$(date '+%Y-%m-%d-%H%M')
     - *build-and-test-monpoly-docker
     - docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
-    - docker tag monpoly_pipeline dfinity/monpoly_pipeline:"$TAG"
+    - docker tag monpoly_pipeline:"${CI_COMMIT_SHA}" dfinity/monpoly_pipeline:"$TAG"
     - docker push dfinity/monpoly_pipeline:"$TAG"
-    - docker tag monpoly_pipeline dfinity/monpoly_pipeline:latest
+    - docker tag monpoly_pipeline:"${CI_COMMIT_SHA}" dfinity/monpoly_pipeline:latest
     - docker push dfinity/monpoly_pipeline:latest

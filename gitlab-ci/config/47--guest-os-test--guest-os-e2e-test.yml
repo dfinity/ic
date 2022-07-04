@@ -101,8 +101,16 @@ e2e-workload-test:
   "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
       --git-rev="${IC_VERSION_ID}" --remote-path="guest-os/disk-img" \
       --out="ic-os/guestos/build-out/disk-img"
-  BASE_DIR="${CI_PROJECT_DIR}/working_dir/$(date +%Y%m%d_%H%M%S)"
+  DATE="$(date +%Y%m%d_%H%M%S)"
+  BASE_DIR="${CI_PROJECT_DIR}/working_dir/${DATE}"
   mkdir -p "$BASE_DIR"
+  echo "${DATE}" > "${CI_PROJECT_DIR}/working_dir/date.txt"
+  if [[ -z "${LOG_DEBUG_OVERRIDES:-}" ]]; then
+    LOG_DEBUG_OVERRIDES_OPTS=()
+  else
+    LOG_DEBUG_OVERRIDES_OPTS=("--log-debug-overrides" "${LOG_DEBUG_OVERRIDES}")
+  fi
+
   # Logs produced during execution of the system tests are stored away in a structured way, i.e. one file per test.
   # Unstructured logs, i.e. those which bypassed the logger and were outputed directly to stdout/stderr,
   # are forwarded to a separate file.
@@ -112,6 +120,7 @@ e2e-workload-test:
   "${CI_PROJECT_DIR}/rs/tests/run-system-tests.py" \
     --suite="${SUITE_NAME}" \
     --working-dir="${BASE_DIR}" \
+    "${LOG_DEBUG_OVERRIDES_OPTS[@]}" \
   | tee "${BASE_DIR}/unstructured-logs.log" \
   | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
 
@@ -140,13 +149,20 @@ e2e-workload-test:
   script:
     - *run-farm-based-test
 
+.with-monitoring:
+  variables:
+    # we need debug-level logs from the following components for IC policy monitoring
+    LOG_DEBUG_OVERRIDES: "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors,ic_consensus::consensus,ic_transport::control_plane"
+
 system-tests-pre-master:
   extends: .system-tests
   variables:
     SUITE_NAME: "pre_master"
 
 create-subnet-pre-master:
-  extends: .system-tests
+  extends:
+    - .system-tests
+    - .with-monitoring  # This pre-master suite is used for e2e checking of monpoly_pipeline
   variables:
     SUITE_NAME: "create_subnet_pre_master"
 
@@ -256,3 +272,27 @@ spec-compliance-pre-master:
       "$SHELL_WRAPPER" nix-shell -p "(import ./nix {}).ic-ref" --run "
         ${CI_PROJECT_DIR}/rs/tests/run-system-tests.py --suite=spec_compliance
       "
+
+.build-and-test-monpoly-docker-e2e: &build-and-test-monpoly-docker-e2e |
+  docker build -t monpoly_pipeline:"${CI_COMMIT_SHA}" ./policy-monitoring
+  DATE="$(cat "${CI_PROJECT_DIR}/working_dir/date.txt")"
+  TEST_DRIVER_LOG_DIR="${CI_PROJECT_DIR}/working_dir/${DATE}/system_env"
+  ls -alh "${TEST_DRIVER_LOG_DIR}"
+  MONPOLY_PIPELINE_INSTANCE=$(docker run -d -it --rm --entrypoint /bin/ash monpoly_pipeline:"${CI_COMMIT_SHA}")
+  trap 'docker kill ${MONPOLY_PIPELINE_INSTANCE}' EXIT  # make sure the docker instance will be killed whenever we exit this block
+  docker cp "${TEST_DRIVER_LOG_DIR}/test.log" "${MONPOLY_PIPELINE_INSTANCE}":/work
+  docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.monpoly_io
+  docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 -m tests.mfotl_sanity
+  docker exec "${MONPOLY_PIPELINE_INSTANCE}" ls -alh /work
+  docker exec "${MONPOLY_PIPELINE_INSTANCE}" python3 main.py --fail --farm_log_for_test test.log --mode universal_policy pre_processor_test
+
+test-monpoly-docker:
+  extends:
+    - .e2e-test-base
+  stage: prod-tests
+  allow_failure: true  # TODO: VER-1714
+  script:
+    - set -euo pipefail
+    - *build-and-test-monpoly-docker-e2e
+  needs:
+    - create-subnet-pre-master  # Use the logs produced by this system test in e2e tests of monpoly_pipeline
