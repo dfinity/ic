@@ -5,7 +5,6 @@ use ic_interfaces_transport::{
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_types::{NodeId, RegistryVersion};
-
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex, RwLock, Weak};
@@ -22,7 +21,7 @@ pub struct ThreadPort {
     id: NodeId,
     // Access to full hub to route messages across threads
     hub_access: HubAccess,
-    event_handler: RwLock<Option<Arc<dyn AsyncTransportEventHandler>>>,
+    event_handler: Mutex<Option<Arc<dyn AsyncTransportEventHandler>>>,
     log: ReplicaLogger,
     deferred: Mutex<HashMap<NodeId, Deferred>>,
     weak_self: RwLock<Weak<ThreadPort>>,
@@ -46,7 +45,7 @@ impl ThreadPort {
         let thread_port = Arc::new(Self {
             id,
             hub_access,
-            event_handler: RwLock::new(None),
+            event_handler: Mutex::new(None),
             log,
             deferred: Default::default(),
             weak_self: RwLock::new(Weak::new()),
@@ -124,7 +123,7 @@ impl ThreadPort {
         };
 
         // 2.
-        let event_handler = destination_node.event_handler.write().unwrap().clone();
+        let event_handler = destination_node.event_handler.lock().unwrap().clone();
 
         // 3.
         let event_handler = {
@@ -173,7 +172,7 @@ impl Hub {
 impl Transport for ThreadPort {
     fn set_event_handler(&self, event_handler: Arc<dyn AsyncTransportEventHandler>) {
         info!(self.log, "Node{} -> Client Registered", self.id);
-        *self.event_handler.write().unwrap() = Some(event_handler);
+        *self.event_handler.lock().unwrap() = Some(event_handler);
     }
 
     fn start_connections(

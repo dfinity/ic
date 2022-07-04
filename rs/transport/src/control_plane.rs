@@ -763,7 +763,7 @@ impl TransportImpl {
             accept_ports.insert(flow_tag, ServerPortState { accept_task });
         }
         *self.accept_ports.write().unwrap() = accept_ports;
-        *self.event_handler.write().unwrap() = Some(event_handler);
+        *self.event_handler.lock().unwrap() = Some(event_handler);
     }
 }
 

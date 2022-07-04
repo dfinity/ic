@@ -131,6 +131,7 @@ impl TransportImpl {
         mut send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
         mut writer: Box<TlsWriteHalf>,
         metrics: DataPlaneMetrics,
+        event_handler: Arc<dyn AsyncTransportEventHandler>,
         state: Weak<TransportImpl>,
     ) {
         let _updater = MetricsUpdater::new(metrics.clone(), true);
@@ -184,7 +185,7 @@ impl TransportImpl {
                     flow_id,
                     e,
                 );
-                state.on_disconnect(flow_id).await;
+                state.on_disconnect(flow_id, event_handler).await;
                 return;
             }
             // Flush the write
@@ -193,7 +194,7 @@ impl TransportImpl {
                     state.log,
                     "DataPlane::flow_write_task(): failed to flush: flow: {:?}, {:?}", flow_id, e,
                 );
-                state.on_disconnect(flow_id).await;
+                state.on_disconnect(flow_id, event_handler).await;
                 return;
             }
 
@@ -251,7 +252,7 @@ impl TransportImpl {
                         .with_label_values(&[&flow_label, &flow_tag])
                         .inc();
                 }
-                state.on_disconnect(flow_id).await;
+                state.on_disconnect(flow_id, event_handler).await;
                 return;
             }
 
@@ -353,7 +354,11 @@ impl TransportImpl {
     }
 
     /// Handle peer disconnect.
-    async fn on_disconnect(&self, flow_id: FlowId) {
+    async fn on_disconnect(
+        &self,
+        flow_id: FlowId,
+        event_handler: Arc<dyn AsyncTransportEventHandler>,
+    ) {
         if let Err(e) = self.retry_connection(&flow_id) {
             warn!(
                 self.log,
@@ -361,10 +366,6 @@ impl TransportImpl {
             );
             return;
         }
-        let event_handler = match self.event_handler.read().unwrap().as_ref() {
-            Some(event_handler) => event_handler.clone(),
-            _ => return,
-        };
         let _ = event_handler
             .call(TransportEvent::StateChange(
                 TransportStateChange::PeerFlowDown(FlowId {
@@ -381,14 +382,10 @@ impl TransportImpl {
         flow_id: FlowId,
         role: ConnectionRole,
         peer_addr: SocketAddr,
-        reader: Box<TlsReadHalf>,
-        writer: Box<TlsWriteHalf>,
-    ) -> Result<Arc<dyn AsyncTransportEventHandler>, TransportErrorCode> {
-        let event_handler = match self.event_handler.read().unwrap().as_ref() {
-            Some(event_handler) => event_handler.clone(),
-            None => return Err(TransportErrorCode::TransportClientNotFound),
-        };
-
+        tls_stream: TlsStream,
+        event_handler: Arc<dyn AsyncTransportEventHandler>,
+    ) -> Result<(), TransportErrorCode> {
+        let (tls_reader, tls_writer) = tls_stream.split();
         let mut peer_map = self.peer_map.write().unwrap();
         let peer_state = match peer_map.get_mut(&flow_id.peer_id) {
             Some(peer_state) => peer_state,
@@ -410,13 +407,15 @@ impl TransportImpl {
         let send_queue_reader = flow_state.send_queue.get_reader();
         let metrics_cl = self.data_plane_metrics.clone();
         let weak_self = self.weak_self.read().unwrap().clone();
+        let event_handler_cl = event_handler.clone();
         let write_task = self.tokio_runtime.spawn(async move {
             Self::flow_write_task(
                 flow_id_cl,
                 flow_label_cl,
                 send_queue_reader,
-                writer,
+                Box::new(tls_writer),
                 metrics_cl,
+                event_handler_cl,
                 weak_self,
             )
             .await;
@@ -432,7 +431,7 @@ impl TransportImpl {
                 flow_id_cl,
                 flow_label_cl,
                 event_handler_cl,
-                reader,
+                Box::new(tls_reader),
                 metrics_cl,
                 weak_self,
             )
@@ -446,7 +445,7 @@ impl TransportImpl {
             role,
         };
         flow_state.update(ConnectionState::Connected(connected_state));
-        Ok(event_handler)
+        Ok(())
     }
 
     /// Handle peer connection
@@ -459,16 +458,16 @@ impl TransportImpl {
         peer_addr: SocketAddr,
         tls_stream: TlsStream,
     ) -> Result<(), TransportErrorCode> {
-        let (tls_reader, tls_writer) = tls_stream.split();
+        let event_handler = self
+            .event_handler
+            .lock()
+            .unwrap()
+            .as_ref()
+            .ok_or(TransportErrorCode::TransportClientNotFound)?
+            .clone();
+
         let flow_id = FlowId { peer_id, flow_tag };
-        let _ = self
-            .on_connect_setup(
-                flow_id,
-                role,
-                peer_addr,
-                Box::new(tls_reader),
-                Box::new(tls_writer),
-            )
+        self.on_connect_setup(flow_id, role, peer_addr, tls_stream, event_handler.clone())
             .map_err(|e| {
                 warn!(
                     every_n_seconds => 30,
@@ -485,7 +484,8 @@ impl TransportImpl {
                     e
                 );
                 e
-            })?
+            })?;
+        let _ = event_handler
             // Notify the client that peer flow is up.
             .call(TransportEvent::StateChange(
                 TransportStateChange::PeerFlowUp(FlowId {
