@@ -20,6 +20,7 @@ thread_local! {
 async fn send_request(request: RemoteHttpRequest) -> Result<(), String> {
     let canister_http_headers = request
         .headers
+        .clone()
         .into_iter()
         .map(|header| HttpHeader {
             name: header.0,
@@ -32,9 +33,9 @@ async fn send_request(request: RemoteHttpRequest) -> Result<(), String> {
         url: request.url.clone(),
         http_method: HttpMethod::GET,
         body: Some(request.body.as_bytes().to_vec()),
-        transform_method_name: Some(request.transform),
+        transform_method_name: request.transform.clone(),
         headers: canister_http_headers,
-        max_response_bytes: Some(1000000),
+        max_response_bytes: request.max_response_size,
     };
 
     println!("send_request encoding CanisterHttpRequestArgs message.");
@@ -45,7 +46,7 @@ async fn send_request(request: RemoteHttpRequest) -> Result<(), String> {
         Principal::management_canister(),
         "http_request",
         &encoded_req[..],
-        0,
+        request.cycles,
     )
     .await
     {

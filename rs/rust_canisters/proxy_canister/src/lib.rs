@@ -6,14 +6,18 @@
 //! otherwise errors out.
 //!
 use candid::CandidType;
+use ic_ic00_types::HttpMethod;
 use serde::{Deserialize, Serialize};
 
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 pub struct RemoteHttpRequest {
     pub url: String,
     pub headers: Vec<(String, String)>,
+    pub method: HttpMethod,
     pub body: String,
-    pub transform: String,
+    pub transform: Option<String>,
+    pub max_response_size: Option<u64>,
+    pub cycles: u64,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Debug, Clone)]

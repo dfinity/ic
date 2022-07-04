@@ -1,6 +1,6 @@
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::util::{self};
+use crate::util::{self, create_and_install};
 use canister_test::Canister;
 use canister_test::Runtime;
 use ic_registry_subnet_features::SubnetFeatures;
@@ -63,7 +63,13 @@ pub fn create_proxy_canister<'a>(
     node: &IcNodeSnapshot,
 ) -> Canister<'a> {
     info!(&env.logger(), "Installing proxy_canister.");
-    let proxy_canister_id = node.create_and_install_canister_with_arg("proxy_canister.wasm", None);
+
+    // Create proxy canister with maximum canister cycles.
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    let proxy_canister_id = rt.block_on(create_and_install(
+        &node.build_default_agent(),
+        &env.load_wasm("proxy_canister.wasm"),
+    ));
     info!(
         &env.logger(),
         "proxy_canister {} installed", proxy_canister_id

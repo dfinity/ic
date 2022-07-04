@@ -20,6 +20,7 @@ use crate::canister_http::lib::*;
 use crate::driver::test_env::TestEnv;
 use crate::util::block_on;
 use dfn_candid::candid_one;
+use ic_ic00_types::HttpMethod;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::{error, info};
 
@@ -49,19 +50,28 @@ pub fn test(env: TestEnv) {
         );
 
         info!(&env.logger(), "Send an update call...");
-        let _updated = proxy_canister
+
+        let updated = proxy_canister
             .update_(
                 "send_request",
                 candid_one::<Result<(), String>, RemoteHttpRequest>,
                 RemoteHttpRequest {
                     url: url.to_string(),
                     headers: vec![],
+                    method: HttpMethod::GET,
                     body: "".to_string(),
-                    transform: "transform".to_string(),
+                    transform: Some("transform".to_string()),
+                    max_response_size: None,
+                    cycles: 500_000_000_000,
                 },
             )
             .await
-            .expect("Error");
+            .expect("Failed to send update call")
+            .expect("Update call failed");
+        info!(
+            &env.logger(),
+            "Canister Http update call response: {:?}", updated
+        );
 
         let _ = proxy_canister
             .query_(
