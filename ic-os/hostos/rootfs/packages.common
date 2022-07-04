@@ -36,6 +36,7 @@ lvm2
 net-tools
 nftables
 parted
+python-is-python3
 rsync
 sudo
 udev
