@@ -157,7 +157,7 @@
 /rs/rust_canisters/                     @dfinity-lab/teams/nns-team
 /rs/rust_canisters/memory_test/         @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/rust_canisters/response_payload_test/       @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/networking-team
-/rs/rust_canisters/proxy_canister       @dfinity-lab/teams/networking-team
+/rs/rust_canisters/proxy_canister/      @dfinity-lab/teams/networking-team
 /rs/scenario_tests/                     @dfinity-lab/teams/ic-testing-verification
 /rs/sns/                                @dfinity-lab/teams/nns-team
 /rs/stable-structures                   @dfinity-lab/teams/execution-owners
