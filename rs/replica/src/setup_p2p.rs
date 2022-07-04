@@ -16,7 +16,6 @@ use ic_interfaces_p2p::IngressIngestionService;
 use ic_logger::{info, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_p2p::P2PThreadJoiner;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replica_setup_ic_network::{
     create_networking_stack, init_artifact_pools, P2PStateSyncClient,
@@ -241,22 +240,12 @@ pub fn construct_ic_stack(
     );
     let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
 
-    let canister_http_adapter_client = if registry
-        .get_features(subnet_id, registry.get_latest_version())
-        .ok()
-        .flatten()
-        .map(|features| features.http_requests)
-        == Some(true)
-    {
-        ic_canister_http_adapter_client::setup_canister_http_client(
-            replica_logger.clone(),
-            rt_handle.clone(),
-            config.adapters_config.canister_http_uds_path,
-            execution_services.anonymous_query_handler.clone(),
-        )
-    } else {
-        Box::new(ic_canister_http_adapter_client::BrokenCanisterHttpClient {})
-    };
+    let canister_http_adapter_client = ic_canister_http_adapter_client::setup_canister_http_client(
+        replica_logger.clone(),
+        rt_handle.clone(),
+        config.adapters_config.canister_http_uds_path,
+        execution_services.anonymous_query_handler.clone(),
+    );
 
     let (ingress_ingestion_service, p2p_runner) = create_networking_stack(
         metrics_registry,

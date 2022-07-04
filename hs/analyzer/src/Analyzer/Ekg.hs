@@ -53,12 +53,15 @@ noErrorLogMessage =
     examine $ \o -> case getLog o of
       Nothing -> top
       Just l ->
-        bottomWhen (errOrCrit l && nonBoot l) $
+        bottomWhen (errOrCrit l && (not $ exceptions l)) $
           "unexpected log message: [" ++ logLevel l ++ "] " ++ logMessage l
   where
     errOrCrit l = logLevel l `elem` ["CRITICAL", "ERROR"]
-    -- in legacy system tests, we have to ignore such messages
-    nonBoot l = not $ "Could not confirm the boot" `isInfixOf` logMessage l
+    -- in legacy system tests, post-upgrade shell scripts fail due to environmental restrictions
+    bootConfirm l = "Could not confirm the boot" `isInfixOf` logMessage l
+    -- in legacy system tests, http adapter is not available due to environmental restrictions
+    httpAdapter l = "Unable to connect to the canister http adapter" `isInfixOf` logMessage l
+    exceptions l = bootConfirm l || httpAdapter l
 
 data Log = Log
   { logLevel :: !String,
