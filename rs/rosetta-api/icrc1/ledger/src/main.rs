@@ -2,14 +2,14 @@ use candid::candid_method;
 use ic_base_types::PrincipalId;
 use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
-use ic_icrc1::{Account, ApprovalId, Transaction};
-use ic_icrc1_ledger::{
+use ic_icrc1::{
     endpoints::{
         ApprovalDetails, ApproveTransferArg, ApproveTransferError, ArchiveInfo, CommitTransferArg,
         CommitTransferError, RevokeApprovalError, TransferArg, TransferError, Value,
     },
-    InitArgs, Ledger,
+    Account, ApprovalId, Transaction,
 };
+use ic_icrc1_ledger::{InitArgs, Ledger};
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerData, LedgerTransaction,
 };

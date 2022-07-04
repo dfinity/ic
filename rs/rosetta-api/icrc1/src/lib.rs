@@ -1,3 +1,4 @@
+pub mod endpoints;
 pub mod hash;
 
 use candid::CandidType;
