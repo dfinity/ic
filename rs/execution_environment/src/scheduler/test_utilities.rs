@@ -1,8 +1,9 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, VecDeque},
     convert::{TryFrom, TryInto},
     path::PathBuf,
     sync::{Arc, Mutex},
+    thread::{self, ThreadId},
     time::Duration,
 };
 
@@ -17,18 +18,22 @@ use ic_embedders::{
     wasm_executor::{WasmExecutionResult, WasmExecutor},
     WasmExecutionInput,
 };
+use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, Method, Payload};
 use ic_interfaces::execution_environment::{
-    CompilationResult, ExecutionRoundType, HypervisorResult, IngressHistoryWriter, InstanceStats,
-    Scheduler, WasmExecutionOutput,
+    CompilationResult, ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter,
+    InstanceStats, Scheduler, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::{self, WasmMetadata},
-    testing::CanisterQueuesTesting,
-    CanisterState, ExecutionState, ExportedFunctions, ReplicatedState,
+    canister_state::{
+        execution_state::{self, WasmMetadata},
+        QUEUE_INDEX_NONE,
+    },
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting},
+    CanisterState, ExecutionState, ExportedFunctions, InputQueueType, ReplicatedState,
 };
 use ic_system_api::{
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
@@ -39,13 +44,13 @@ use ic_test_utilities::{
     state::CanisterStateBuilder,
     types::{
         ids::{canister_test_id, subnet_test_id, user_test_id},
-        messages::SignedIngressBuilder,
+        messages::{RequestBuilder, SignedIngressBuilder},
     },
 };
 use ic_types::{
-    messages::{CallContextId, Request},
-    methods::{Callback, FuncRef, WasmClosure, WasmMethod},
-    ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumInstructions, Randomness,
+    messages::{CallContextId, Request, RequestOrResponse, Response},
+    methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
+    ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumInstructions, Randomness, Time,
     UserId,
 };
 use ic_wasm_types::CanisterModule;
@@ -90,6 +95,12 @@ pub(crate) struct SchedulerTest {
     wasm_executor: Arc<TestWasmExecutor>,
 }
 
+impl std::fmt::Debug for SchedulerTest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SchedulerTest").finish()
+    }
+}
+
 impl SchedulerTest {
     pub fn state(&self) -> &ReplicatedState {
         self.state.as_ref().unwrap()
@@ -118,6 +129,10 @@ impl SchedulerTest {
         ExecutionRound::new(self.round.get().max(1) - 1)
     }
 
+    pub fn advance_to_round(&mut self, round: ExecutionRound) {
+        self.round = round;
+    }
+
     pub fn scheduler(&self) -> &SchedulerImpl {
         &self.scheduler
     }
@@ -126,22 +141,41 @@ impl SchedulerTest {
         self.xnet_canister_id
     }
 
+    /// Returns how many instructions were executed by a canister on a thread
+    /// and in an execution round. The order of elements is important and
+    /// matches the execution order for a fixed thread.
+    pub fn executed_schedule(
+        &self,
+    ) -> Vec<(ThreadId, ExecutionRound, CanisterId, NumInstructions)> {
+        let wasm_executor = self.wasm_executor.core.lock().unwrap();
+        wasm_executor.schedule.clone()
+    }
+
     pub fn create_canister(&mut self) -> CanisterId {
         self.create_canister_with(
             self.initial_canister_cycles,
             ComputeAllocation::zero(),
             MemoryAllocation::BestEffort,
+            None,
         )
     }
 
+    /// Creates a canister with the given balance and allocations.
+    /// The `system_method` parameter can be used to optionally enable the
+    /// heartbeat by passing `Some(SystemMethod::CanisterHeartbeat)`.
+    /// In that case the heartbeat execution must be specified before each
+    /// round using `expect_heartbeat()`.
     pub fn create_canister_with(
         &mut self,
         cycles: Cycles,
         compute_allocation: ComputeAllocation,
         memory_allocation: MemoryAllocation,
+        system_method: Option<SystemMethod>,
     ) -> CanisterId {
         let canister_id = self.next_canister_id();
-        let wasm_source = vec![];
+        let wasm_source = system_method
+            .map(|x| x.to_string().as_bytes().to_vec())
+            .unwrap_or_default();
         let mut canister_state = CanisterStateBuilder::new()
             .with_canister_id(canister_id)
             .with_cycles(cycles)
@@ -149,6 +183,7 @@ impl SchedulerTest {
             .with_compute_allocation(compute_allocation)
             .with_memory_allocation(memory_allocation.bytes())
             .with_wasm(wasm_source.clone())
+            .with_freezing_threshold(100)
             .build();
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         canister_state.execution_state = Some(
@@ -157,6 +192,10 @@ impl SchedulerTest {
                 .unwrap()
                 .1,
         );
+        canister_state
+            .system_state
+            .controllers
+            .insert(self.xnet_canister_id.get());
         self.state
             .as_mut()
             .unwrap()
@@ -168,8 +207,140 @@ impl SchedulerTest {
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         let mut state = self.state.take().unwrap();
         let canister = state.canister_state_mut(&canister_id).unwrap();
-        wasm_executor.push_ingress(canister_id, canister, message);
+        wasm_executor.push_ingress(
+            canister_id,
+            canister,
+            message,
+            Time::from_nanos_since_unix_epoch(u64::MAX / 2),
+        );
         self.state = Some(state);
+    }
+
+    /// Injects a call from `self.xnet_canister_id()` to the management
+    /// canister. Note that this function doesn't support `InstallCode`
+    /// messages, because for such messages we additionally need to know
+    /// how many instructions the corresponding Wasm execution needs.
+    /// See `inject_install_code_call_to_ic00()`.
+    ///
+    /// Use `get_responses_to_injected_calls()` to obtain the response
+    /// after round execution.
+    pub fn inject_call_to_ic00<S: ToString>(
+        &mut self,
+        method_name: S,
+        method_payload: Vec<u8>,
+        payment: Cycles,
+    ) {
+        assert!(
+            method_name.to_string() != Method::InstallCode.to_string(),
+            "Use `inject_install_code_call_to_ic00()`."
+        );
+        let caller = self.xnet_canister_id();
+        self.state_mut()
+            .subnet_queues_mut()
+            .push_input(
+                QUEUE_INDEX_NONE,
+                RequestBuilder::new()
+                    .sender(caller)
+                    .receiver(CanisterId::ic_00())
+                    .method_name(method_name)
+                    .method_payload(method_payload)
+                    .payment(payment)
+                    .build()
+                    .into(),
+                InputQueueType::RemoteSubnet,
+            )
+            .unwrap();
+    }
+
+    /// Similar to `inject_call_to_ic00()` but supports `InstallCode` messages.
+    /// Example usage:
+    /// ```text
+    /// let upgrade = TestInstallCode::Upgrade {
+    ///     pre_upgrade: instructions(10),
+    ///     start: instructions(20),
+    ///     post_upgrade: instructions(30),
+    /// };
+    /// test.inject_install_code_call_to_ic00(canister, upgrade);
+    /// ```
+    ///
+    /// Use `get_responses_to_injected_calls()` to obtain the response
+    /// after round execution.
+    pub fn inject_install_code_call_to_ic00(
+        &mut self,
+        target: CanisterId,
+        install_code: TestInstallCode,
+    ) {
+        let mode = match &install_code {
+            TestInstallCode::Install { .. } => CanisterInstallMode::Install,
+            TestInstallCode::Reinstall { .. } => CanisterInstallMode::Reinstall,
+            TestInstallCode::Upgrade { .. } => CanisterInstallMode::Upgrade,
+        };
+
+        let message_payload = InstallCodeArgs {
+            mode,
+            canister_id: target.get(),
+            wasm_module: vec![],
+            arg: vec![],
+            compute_allocation: None,
+            memory_allocation: None,
+            query_allocation: None,
+        };
+
+        let caller = self.xnet_canister_id();
+        self.state_mut()
+            .subnet_queues_mut()
+            .push_input(
+                QUEUE_INDEX_NONE,
+                RequestBuilder::new()
+                    .sender(caller)
+                    .receiver(CanisterId::ic_00())
+                    .method_name(Method::InstallCode)
+                    .method_payload(message_payload.encode())
+                    .build()
+                    .into(),
+                InputQueueType::RemoteSubnet,
+            )
+            .unwrap();
+        let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
+        wasm_executor.push_install_code(target, install_code);
+    }
+
+    /// Returns all responses from the management canister to
+    /// `self.xnet_canister_id()`.
+    pub fn get_responses_to_injected_calls(&mut self) -> Vec<Response> {
+        let mut output: Vec<Response> = vec![];
+        let xnet_canister_id = self.xnet_canister_id;
+        let subnet_queue = self.state_mut().subnet_queues_mut();
+
+        while let Some((_, msg)) = subnet_queue.pop_canister_output(&xnet_canister_id) {
+            match msg {
+                RequestOrResponse::Request(request) => {
+                    panic!(
+                        "Expected the xnet message to be a Response, but got a Request: {:?}",
+                        request
+                    )
+                }
+                RequestOrResponse::Response(response) => {
+                    output.push((*response).clone());
+                }
+            }
+        }
+        output
+    }
+
+    /// Specifies heartbeat execution for the next round.
+    pub fn expect_heartbeat(&mut self, canister_id: CanisterId, heartbeat: TestMessage) {
+        assert!(
+            self.canister_state(canister_id)
+                .execution_state
+                .as_ref()
+                .unwrap()
+                .exports_method(&WasmMethod::System(SystemMethod::CanisterHeartbeat)),
+            "The canister should be created with \
+             `create_canister_with(.., Some(SystemMethod::Heartbeat))`"
+        );
+        let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
+        wasm_executor.push_heartbeat(canister_id, heartbeat);
     }
 
     pub fn execute_round(&mut self, round_type: ExecutionRoundType) {
@@ -215,6 +386,8 @@ pub(crate) struct SchedulerTestBuilder {
     subnet_message_memory: u64,
     max_canister_memory_size: u64,
     allocatable_compute_capacity_in_percent: usize,
+    rate_limiting_of_instructions: bool,
+    rate_limiting_of_heap_delta: bool,
     log: ReplicaLogger,
 }
 
@@ -237,6 +410,8 @@ impl Default for SchedulerTestBuilder {
             subnet_message_memory: subnet_total_memory,
             max_canister_memory_size,
             allocatable_compute_capacity_in_percent: 100,
+            rate_limiting_of_instructions: false,
+            rate_limiting_of_heap_delta: false,
             log: no_op_logger(),
         }
     }
@@ -286,6 +461,20 @@ impl SchedulerTestBuilder {
         }
     }
 
+    pub fn with_rate_limiting_of_instructions(self) -> Self {
+        Self {
+            rate_limiting_of_instructions: true,
+            ..self
+        }
+    }
+
+    pub fn with_rate_limiting_of_heap_delta(self) -> Self {
+        Self {
+            rate_limiting_of_heap_delta: true,
+            ..self
+        }
+    }
+
     pub fn build(self) -> SchedulerTest {
         let tmpdir = tempfile::Builder::new().prefix("test").tempdir().unwrap();
         let first_xnet_canister = u64::MAX / 2;
@@ -314,11 +503,23 @@ impl SchedulerTestBuilder {
             self.own_subnet_id,
             config,
         ));
+        let rate_limiting_of_instructions = if self.rate_limiting_of_instructions {
+            FlagStatus::Enabled
+        } else {
+            FlagStatus::Disabled
+        };
+        let rate_limiting_of_heap_delta = if self.rate_limiting_of_heap_delta {
+            FlagStatus::Enabled
+        } else {
+            FlagStatus::Disabled
+        };
         let config = ic_config::execution_environment::Config {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_memory_capacity: NumBytes::from(self.subnet_total_memory as u64),
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory as u64),
             max_canister_memory_size: NumBytes::from(self.max_canister_memory_size),
+            rate_limiting_of_instructions,
+            rate_limiting_of_heap_delta,
             ..ic_config::execution_environment::Config::default()
         };
         let wasm_executor = Arc::new(TestWasmExecutor::new());
@@ -356,8 +557,8 @@ impl SchedulerTestBuilder {
             bitcoin_canister,
             &metrics_registry,
             self.log,
-            FlagStatus::Enabled,
-            FlagStatus::Enabled,
+            rate_limiting_of_heap_delta,
+            rate_limiting_of_instructions,
         );
         SchedulerTest {
             state: Some(state),
@@ -424,6 +625,24 @@ struct TestCall {
     on_response: TestMessage,
 }
 
+/// Description of an `install_code` message.
+#[derive(Clone, Debug)]
+pub(crate) enum TestInstallCode {
+    Install {
+        start: TestMessage,
+        init: TestMessage,
+    },
+    Reinstall {
+        start: TestMessage,
+        init: TestMessage,
+    },
+    Upgrade {
+        pre_upgrade: TestMessage,
+        start: TestMessage,
+        post_upgrade: TestMessage,
+    },
+}
+
 /// A helper to create an ingress test message. Note that the canister id is not
 /// needed and will be specified by the function that enqueues the ingress.
 pub(crate) fn ingress(instructions: u64) -> TestMessage {
@@ -448,6 +667,17 @@ pub(crate) fn other_side(callee: CanisterId, instructions: u64) -> TestMessage {
 /// A helper to create the test message for handling the response of a call.
 /// Note that the canister id is not needed and is inferred from the context.
 pub(crate) fn on_response(instructions: u64) -> TestMessage {
+    TestMessage {
+        canister: None,
+        instructions: NumInstructions::from(instructions),
+        dirty_pages: 0,
+        calls: vec![],
+    }
+}
+
+/// A generic helper to describe a phase like `start`, `init`, `pre_upgrade`,
+/// `post_upgrade` of an install code message.
+pub(crate) fn instructions(instructions: u64) -> TestMessage {
     TestMessage {
         canister: None,
         instructions: NumInstructions::from(instructions),
@@ -505,6 +735,10 @@ impl WasmExecutor for TestWasmExecutor {
 //   test message and interprets its description.
 struct TestWasmExecutorCore {
     messages: HashMap<u32, TestMessage>,
+    install_code: HashMap<CanisterId, VecDeque<TestInstallCode>>,
+    current_install_code: Option<TestInstallCode>,
+    heartbeat: HashMap<CanisterId, VecDeque<TestMessage>>,
+    schedule: Vec<(ThreadId, ExecutionRound, CanisterId, NumInstructions)>,
     next_message_id: u32,
     round: ExecutionRound,
 }
@@ -513,6 +747,10 @@ impl TestWasmExecutorCore {
     fn new() -> Self {
         Self {
             messages: HashMap::new(),
+            install_code: HashMap::new(),
+            current_install_code: None,
+            heartbeat: HashMap::new(),
+            schedule: vec![],
             next_message_id: 0,
             round: ExecutionRound::new(0),
         }
@@ -530,7 +768,31 @@ impl TestWasmExecutorCore {
         ExecutionState,
         WasmExecutionResult,
     ) {
+        let thread_id = thread::current().id();
+        let canister_id = input.sandbox_safe_system_state.canister_id();
         let (_message_id, message, call_context_id) = self.take_message(&input);
+
+        // TODO(RUN-124): Use `slice_instruction_limit` and support DTS here.
+        let instruction_limit = input.execution_parameters.total_instruction_limit;
+        if message.instructions > instruction_limit {
+            let output = WasmExecutionOutput {
+                wasm_result: Err(HypervisorError::InstructionLimitExceeded),
+                num_instructions_left: NumInstructions::from(0),
+                instance_stats: InstanceStats {
+                    accessed_pages: 0,
+                    dirty_pages: 0,
+                },
+            };
+            let system_state_changes = SystemStateChanges::default();
+            self.schedule
+                .push((thread_id, self.round, canister_id, instruction_limit));
+            return (
+                None,
+                input.execution_state,
+                WasmExecutionResult::Finished(output, system_state_changes),
+            );
+        }
+        let instructions_left = instruction_limit - message.instructions;
 
         // Generate all the outgoing calls.
         let system_state_changes = self.perform_calls(
@@ -541,9 +803,6 @@ impl TestWasmExecutorCore {
             input.execution_parameters.compute_allocation,
         );
 
-        // TODO(RUN-124): Use `slice_instruction_limit` and support DTS here.
-        let instructions_left = input.execution_parameters.total_instruction_limit;
-        let instructions_left = instructions_left - message.instructions.min(instructions_left);
         let instance_stats = InstanceStats {
             accessed_pages: message.dirty_pages,
             dirty_pages: message.dirty_pages,
@@ -553,6 +812,8 @@ impl TestWasmExecutorCore {
             num_instructions_left: instructions_left,
             instance_stats,
         };
+        self.schedule
+            .push((thread_id, self.round, canister_id, message.instructions));
         (
             None,
             input.execution_state,
@@ -565,10 +826,22 @@ impl TestWasmExecutorCore {
         wasm_source: Vec<u8>,
         _canister_id: CanisterId,
     ) -> HypervisorResult<(CompilationResult, ExecutionState)> {
+        let mut exported_functions = vec![
+            WasmMethod::Update("update".into()),
+            WasmMethod::System(SystemMethod::CanisterPreUpgrade),
+            WasmMethod::System(SystemMethod::CanisterStart),
+            WasmMethod::System(SystemMethod::CanisterPostUpgrade),
+            WasmMethod::System(SystemMethod::CanisterInit),
+        ];
+        if !wasm_source.is_empty() {
+            let text = std::str::from_utf8(&wasm_source).unwrap();
+            let system_method = SystemMethod::try_from(text).unwrap();
+            exported_functions.push(WasmMethod::System(system_method));
+        }
         let execution_state = ExecutionState::new(
             Default::default(),
             execution_state::WasmBinary::new(CanisterModule::new(wasm_source)),
-            ExportedFunctions::new([WasmMethod::Update("update".into())].into()),
+            ExportedFunctions::new(exported_functions.into_iter().collect()),
             Default::default(),
             Default::default(),
             vec![],
@@ -658,6 +931,7 @@ impl TestWasmExecutorCore {
         &mut self,
         input: &WasmExecutionInput,
     ) -> (u32, TestMessage, Option<CallContextId>) {
+        let canister_id = input.sandbox_safe_system_state.canister_id();
         match &input.api_type {
             ApiType::Update {
                 incoming_payload,
@@ -681,12 +955,73 @@ impl TestWasmExecutorCore {
                 let message = self.messages.remove(&message_id).unwrap();
                 (message_id, message, Some(*call_context_id))
             }
-            ApiType::Heartbeat { .. } => {
-                todo!()
+            ApiType::Heartbeat {
+                call_context_id, ..
+            } => {
+                let message_id = self.next_message_id();
+                let message = self
+                    .heartbeat
+                    .get_mut(&canister_id)
+                    .unwrap()
+                    .pop_front()
+                    .unwrap();
+                (message_id, message, Some(*call_context_id))
             }
-            ApiType::Start => todo!(),
-            ApiType::Init { .. } => todo!(),
-            ApiType::PreUpgrade { .. } => todo!(),
+            ApiType::Start => {
+                let message_id = self.next_message_id();
+                let message = match self.current_install_code.clone() {
+                    Some(TestInstallCode::Upgrade { start, .. }) => start,
+                    _ => {
+                        // Starting a new `install_code`, get it from the deque.
+                        let install_code = self
+                            .install_code
+                            .get_mut(&canister_id)
+                            .unwrap()
+                            .pop_front()
+                            .unwrap();
+                        self.current_install_code = Some(install_code.clone());
+                        match install_code {
+                            TestInstallCode::Install { start, .. }
+                            | TestInstallCode::Reinstall { start, .. } => start,
+                            TestInstallCode::Upgrade { .. } => {
+                                unreachable!("Executing `start` before `pre_upgrade`")
+                            }
+                        }
+                    }
+                };
+                (message_id, message, None)
+            }
+            ApiType::Init { .. } => {
+                let message_id = self.next_message_id();
+                let install_code = self.current_install_code.take().unwrap();
+                let message = match install_code {
+                    TestInstallCode::Install { init, .. }
+                    | TestInstallCode::Reinstall { init, .. } => init,
+                    TestInstallCode::Upgrade { post_upgrade, .. } => {
+                        // `ApiType::Init` is reused for `post_upgrade`.
+                        post_upgrade
+                    }
+                };
+                (message_id, message, None)
+            }
+            ApiType::PreUpgrade { .. } => {
+                let message_id = self.next_message_id();
+                // Starting a new `install_code`, get it from the deque.
+                let install_code = self
+                    .install_code
+                    .get_mut(&canister_id)
+                    .unwrap()
+                    .pop_front()
+                    .unwrap();
+                self.current_install_code = Some(install_code.clone());
+                let message = match install_code {
+                    TestInstallCode::Install { .. } | TestInstallCode::Reinstall { .. } => {
+                        unreachable!("Requested pre_upgrade for (re-)install")
+                    }
+                    TestInstallCode::Upgrade { pre_upgrade, .. } => pre_upgrade,
+                };
+                (message_id, message, None)
+            }
             ApiType::ReplicatedQuery { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::InspectMessage { .. }
@@ -701,6 +1036,7 @@ impl TestWasmExecutorCore {
         canister_id: CanisterId,
         canister: &mut CanisterState,
         message: TestMessage,
+        expiry_time: Time,
     ) {
         let ingress_id = self.next_message_id();
         self.messages.insert(ingress_id, message);
@@ -709,9 +1045,24 @@ impl TestWasmExecutorCore {
                 .canister_id(canister_id)
                 .method_name("update")
                 .method_payload(encode_message_id_as_payload(ingress_id))
+                .expiry_time(expiry_time)
                 .build()
                 .into(),
         );
+    }
+
+    fn push_install_code(&mut self, canister_id: CanisterId, install_code: TestInstallCode) {
+        self.install_code
+            .entry(canister_id)
+            .or_default()
+            .push_back(install_code);
+    }
+
+    fn push_heartbeat(&mut self, canister_id: CanisterId, heartbeat: TestMessage) {
+        self.heartbeat
+            .entry(canister_id)
+            .or_default()
+            .push_back(heartbeat);
     }
 
     fn next_message_id(&mut self) -> u32 {
