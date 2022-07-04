@@ -5,7 +5,6 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
 use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
     CompilationResult, ExecutionParameters, HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
@@ -15,16 +14,14 @@ use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NetworkTopology;
 use ic_replicated_state::{
-    page_map::allocated_pages_count, CallContextAction, CallOrigin, CanisterState, ExecutionState,
-    SchedulerState, SystemState,
+    page_map::allocated_pages_count, CanisterState, ExecutionState, SchedulerState, SystemState,
 };
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{
     ingress::WasmResult,
-    messages::Payload,
-    methods::{Callback, FuncRef, SystemMethod, WasmMethod},
-    CanisterId, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
+    methods::{FuncRef, SystemMethod, WasmMethod},
+    CanisterId, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
 };
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::{path::PathBuf, sync::Arc};
@@ -128,204 +125,6 @@ impl Hypervisor {
 
     pub(crate) fn subnet_type(&self) -> SubnetType {
         self.own_subnet_type
-    }
-
-    /// Execute a callback.
-    ///
-    /// Callbacks are executed when a canister receives a response to an
-    /// outbound request it had made.
-    ///
-    /// Returns:
-    ///
-    /// - The updated `CanisterState` if the execution succeeded, otherwise
-    /// the old `CanisterState`.
-    ///
-    /// - Number of instructions left. This should be <= `instructions_limit`.
-    ///
-    /// - The size of the heap delta change that the execution produced.
-    ///
-    /// - A HypervisorResult that on success contains an optional wasm execution
-    ///   result or the relevant error if execution failed.
-    #[allow(clippy::type_complexity, clippy::too_many_arguments)]
-    pub fn execute_callback(
-        &self,
-        mut canister: CanisterState,
-        call_origin: &CallOrigin,
-        callback: Callback,
-        payload: Payload,
-        incoming_cycles: Cycles,
-        time: Time,
-        network_topology: Arc<NetworkTopology>,
-        execution_parameters: ExecutionParameters,
-    ) -> (CanisterState, NumInstructions, CallContextAction, NumBytes) {
-        // Validate that the canister is not stopped.
-        if canister.status() == CanisterStatusType::Stopped {
-            return (
-                canister,
-                execution_parameters.total_instruction_limit,
-                CallContextAction::Fail {
-                    error: HypervisorError::CanisterStopped,
-                    refund: Cycles::new(0),
-                },
-                NumBytes::from(0),
-            );
-        }
-
-        // Validate that the canister has an `ExecutionState`.
-        if canister.execution_state.is_none() {
-            let action = canister
-                .system_state
-                .call_context_manager_mut()
-                .unwrap()
-                .on_canister_result(
-                    callback.call_context_id,
-                    Err(HypervisorError::WasmModuleNotFound),
-                );
-            return (
-                canister,
-                execution_parameters.total_instruction_limit,
-                action,
-                NumBytes::from(0),
-            );
-        }
-
-        let call_responded = canister
-            .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .call_responded(callback.call_context_id)
-            // NOTE: Since we retrieved the `call_origin` earlier, we are now
-            // sure that a call context exists and that this unwrap is safe.
-            .unwrap();
-
-        let closure = match payload {
-            Payload::Data(_) => callback.on_reply,
-            Payload::Reject(_) => callback.on_reject,
-        };
-
-        let api_type = match payload {
-            Payload::Data(payload) => ApiType::reply_callback(
-                time,
-                payload.to_vec(),
-                incoming_cycles,
-                callback.call_context_id,
-                call_responded,
-            ),
-            Payload::Reject(context) => ApiType::reject_callback(
-                time,
-                context,
-                incoming_cycles,
-                callback.call_context_id,
-                call_responded,
-            ),
-        };
-
-        let func_ref = match call_origin {
-            CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _)
-            | CallOrigin::Heartbeat => FuncRef::UpdateClosure(closure),
-            CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
-                FuncRef::QueryClosure(closure)
-            }
-        };
-
-        let (output, output_execution_state, output_system_state) = self.execute(
-            api_type,
-            canister.system_state.clone(),
-            canister.memory_usage(self.own_subnet_type),
-            execution_parameters.clone(),
-            func_ref,
-            canister.execution_state.take().unwrap(),
-            &network_topology,
-        );
-
-        let canister_current_memory_usage = canister.memory_usage(self.own_subnet_type);
-        let call_origin = call_origin.clone();
-
-        canister.execution_state = Some(output_execution_state);
-        let (num_instr, num_bytes, result) = match output.wasm_result {
-            result @ Ok(_) => {
-                // Executing the reply/reject closure succeeded.
-                canister.system_state = output_system_state;
-                let heap_delta =
-                    NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
-                (output.num_instructions_left, heap_delta, result)
-            }
-            Err(callback_err) => {
-                // A trap has occurred when executing the reply/reject closure.
-                // Execute the cleanup if it exists.
-                match callback.on_cleanup {
-                    None => {
-                        // No cleanup closure present. Return the callback error as-is.
-                        (
-                            output.num_instructions_left,
-                            NumBytes::from(0),
-                            Err(callback_err),
-                        )
-                    }
-                    Some(cleanup_closure) => {
-                        let func_ref = match call_origin {
-                            CallOrigin::Ingress(_, _)
-                            | CallOrigin::CanisterUpdate(_, _)
-                            | CallOrigin::Heartbeat => FuncRef::UpdateClosure(cleanup_closure),
-                            CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
-                                FuncRef::QueryClosure(cleanup_closure)
-                            }
-                        };
-                        let (cleanup_output, output_execution_state, output_system_state) = self
-                            .execute(
-                                ApiType::Cleanup { time },
-                                canister.system_state.clone(),
-                                canister_current_memory_usage,
-                                ExecutionParameters {
-                                    total_instruction_limit: output.num_instructions_left,
-                                    slice_instruction_limit: output.num_instructions_left,
-                                    ..execution_parameters
-                                },
-                                func_ref,
-                                canister.execution_state.take().unwrap(),
-                                &network_topology,
-                            );
-
-                        canister.execution_state = Some(output_execution_state);
-                        match cleanup_output.wasm_result {
-                            Ok(_) => {
-                                // Executing the cleanup callback has succeeded.
-                                canister.system_state = output_system_state;
-                                let heap_delta = NumBytes::from(
-                                    (cleanup_output.instance_stats.dirty_pages * PAGE_SIZE) as u64,
-                                );
-
-                                // Note that, even though the callback has succeeded,
-                                // the original callback error is returned.
-                                (
-                                    cleanup_output.num_instructions_left,
-                                    heap_delta,
-                                    Err(callback_err),
-                                )
-                            }
-                            Err(cleanup_err) => {
-                                // Executing the cleanup call back failed.
-                                (
-                                    cleanup_output.num_instructions_left,
-                                    NumBytes::from(0),
-                                    Err(HypervisorError::Cleanup {
-                                        callback_err: Box::new(callback_err),
-                                        cleanup_err: Box::new(cleanup_err),
-                                    }),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        };
-        let action = canister
-            .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .on_canister_result(callback.call_context_id, result);
-        (canister, num_instr, action, num_bytes)
     }
 
     /// Executes the system method `canister_start`.
