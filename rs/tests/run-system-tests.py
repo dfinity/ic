@@ -90,12 +90,8 @@ def notify_slack(slack_message: str, ci_project_dir: str) -> int:
     return returncode
 
 
-def process_test_results_cmd(run_test_driver_cmd: List[str], working_dir: str, test_result_dir: str) -> List[str]:
-    return (
-        run_test_driver_cmd
-        + [PROCESS_TEST_RESULTS_SUBCOMMAND]
-        + [f"--working-dir={working_dir}", f"--test-result-dir={test_result_dir}"]
-    )
+def process_test_results_cmd(run_test_driver_cmd: List[str], working_dir: str) -> List[str]:
+    return run_test_driver_cmd + [PROCESS_TEST_RESULTS_SUBCOMMAND] + [f"--working-dir={working_dir}"]
 
 
 def _test_driver_local_run_cmd() -> List[str]:
@@ -318,14 +314,10 @@ def main(
             logging.info(f"Copying prebuilt artifacts from {ARTIFACT_DIR} to {_tmp}")
             shutil.copytree(ARTIFACT_DIR, _tmp)
         ARTIFACT_DIR = _tmp
-        RESULT_DIR = tempfile.mkdtemp(prefix="tmp_results_")
-        folders_to_remove.append(RESULT_DIR)
-        RESULT_FILE = f"{RESULT_DIR}/{TEST_RESULT_FILE}"
     else:
         ARTIFACT_DIR = f"{CI_PROJECT_DIR}/artifacts"
         RUN_CMD = [f"{ARTIFACT_DIR}/prod-test-driver"]
-        RESULT_DIR = CI_PROJECT_DIR
-        RESULT_FILE = f"{RESULT_DIR}/{TEST_RESULT_FILE}"
+    RESULT_FILE = f"{working_dir}/{TEST_RESULT_FILE}"
 
     SUMMARY_ARGS = [
         f"--test_results={RESULT_FILE}",
@@ -442,9 +434,7 @@ def main(
         else:
             logging.error(f"Failed to send slack timeout notification, exit code={returncode}.")
     # Process all test result files produced by the test-driver execution and infer overall suite execution success/failure.
-    process_results_cmd = process_test_results_cmd(
-        run_test_driver_cmd=RUN_CMD, working_dir=working_dir, test_result_dir=RESULT_DIR
-    )
+    process_results_cmd = process_test_results_cmd(run_test_driver_cmd=RUN_CMD, working_dir=working_dir)
     test_suite_returncode = run_command(command=process_results_cmd)
     # 0 - successful suite execution.
     # 1 - suite failed, case with some failed or interrupted tests.

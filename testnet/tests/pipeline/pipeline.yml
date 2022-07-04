@@ -445,7 +445,6 @@ icos-continuous-upgrade-nightly:
     when: always
     paths:
       - "$CI_PROJECT_DIR/working_dir/"
-      - "$CI_PROJECT_DIR/test-results.json"
   allow_failure: false
 
 .with-monitoring:
