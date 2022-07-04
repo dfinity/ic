@@ -82,6 +82,12 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                 registry_version,
             });
         }
+        self.compare_local_and_registry_public_keys_and_certificates(
+            self.node_public_keys().node_signing_pk.as_ref(),
+            &pk_proto,
+            registry_version,
+            "node signing public key",
+        );
         ensure_node_signing_key_material_is_set_up_correctly(pk_proto, &self.csp)?;
         Ok(())
     }
@@ -96,6 +102,12 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             KeyPurpose::CommitteeSigning,
             registry_version,
         )?;
+        self.compare_local_and_registry_public_keys_and_certificates(
+            self.node_public_keys().committee_signing_pk.as_ref(),
+            &pk_proto,
+            registry_version,
+            "committee signing public key",
+        );
         ensure_committee_signing_key_material_is_set_up_correctly(pk_proto, &self.csp)?;
         Ok(())
     }
@@ -110,6 +122,12 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             KeyPurpose::DkgDealingEncryption,
             registry_version,
         )?;
+        self.compare_local_and_registry_public_keys_and_certificates(
+            self.node_public_keys().dkg_dealing_encryption_pk.as_ref(),
+            &pk_proto,
+            registry_version,
+            "NI-DKG dealing encryption key",
+        );
         ensure_dkg_dealing_encryption_key_material_is_set_up_correctly(pk_proto, &self.csp)?;
         Ok(())
     }
@@ -137,6 +155,12 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             KeyPurpose::IDkgMEGaEncryption,
             registry_version,
         )?;
+        self.compare_local_and_registry_public_keys_and_certificates(
+            self.node_public_keys().idkg_dealing_encryption_pk.as_ref(),
+            &pk_proto,
+            registry_version,
+            "iDKG dealing encryption key",
+        );
         ensure_idkg_dealing_encryption_key_material_is_set_up_correctly(pk_proto, &self.csp)?;
         Ok(())
     }
@@ -152,8 +176,45 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                 node_id: self.node_id,
                 registry_version,
             })?;
+        self.compare_local_and_registry_public_keys_and_certificates(
+            self.node_public_keys().tls_certificate.as_ref(),
+            &public_key_cert,
+            registry_version,
+            "TLS certificate",
+        );
         ensure_tls_key_material_is_set_up_correctly(public_key_cert, &self.csp)?;
         Ok(())
+    }
+
+    fn compare_local_and_registry_public_keys_and_certificates<T: PartialEq>(
+        &self,
+        maybe_local_public_obj: Option<&T>,
+        registry_public_obj: &T,
+        registry_version: RegistryVersion,
+        obj_type: &str,
+    ) {
+        match maybe_local_public_obj {
+            None => warn!(
+                self.logger,
+                "{} of node {} exists in the registry but not locally \
+                    for registry version {}",
+                obj_type,
+                self.node_id,
+                registry_version
+            ),
+            Some(local_public_obj) => {
+                if registry_public_obj != local_public_obj {
+                    warn!(
+                        self.logger,
+                        "{} mismatch between local and registry copies \
+                         for node {}, for registry version {}",
+                        obj_type,
+                        self.node_id,
+                        registry_version
+                    )
+                }
+            }
+        }
     }
 }
 

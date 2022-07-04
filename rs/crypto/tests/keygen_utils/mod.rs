@@ -346,7 +346,7 @@ impl TestKeygenCrypto {
     }
 }
 
-fn add_tls_cert_to_registry(
+pub(crate) fn add_tls_cert_to_registry(
     cert: X509PublicKeyCert,
     node_id: NodeId,
     registry: Arc<ProtoRegistryDataProvider>,
@@ -361,7 +361,7 @@ fn add_tls_cert_to_registry(
         .expect("Could not add TLS cert key to registry");
 }
 
-fn add_public_key_to_registry(
+pub(crate) fn add_public_key_to_registry(
     public_key: PublicKey,
     node_id: NodeId,
     key_purpose: KeyPurpose,

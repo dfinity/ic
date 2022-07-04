@@ -7,3 +7,4 @@
 tests/
 ic_fondue/
 bitcoin/canister/src/examples/
+crypto/tests/
