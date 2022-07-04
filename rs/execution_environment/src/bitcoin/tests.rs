@@ -855,7 +855,7 @@ fn send_transaction_malformed_transaction() {
             network: BitcoinNetwork::Testnet,
         }
         .encode(),
-        SEND_TRANSACTION_FEE_BASE + Cycles::from(tx_len) * SEND_TRANSACTION_FEE_PER_BYTE,
+        SEND_TRANSACTION_FEE_BASE + SEND_TRANSACTION_FEE_PER_BYTE * tx_len as u64,
     );
     test.execute_all();
 
@@ -887,7 +887,7 @@ fn send_transaction_succeeds() {
             network: BitcoinNetwork::Testnet,
         }
         .encode(),
-        SEND_TRANSACTION_FEE_BASE + Cycles::from(tx.len() as u64) * SEND_TRANSACTION_FEE_PER_BYTE,
+        SEND_TRANSACTION_FEE_BASE + SEND_TRANSACTION_FEE_PER_BYTE * tx.serialize().len() as u64,
     );
     test.execute_all();
 
@@ -927,8 +927,7 @@ fn send_transaction_cycles_charging() {
                 response.refund,
                 // the expected fee is deducted from the balance.
                 initial_balance
-                    - (SEND_TRANSACTION_FEE_BASE
-                        + Cycles::from(tx_len) * SEND_TRANSACTION_FEE_PER_BYTE)
+                    - (SEND_TRANSACTION_FEE_BASE + SEND_TRANSACTION_FEE_PER_BYTE * tx_len as u64)
             );
             assert_eq!(
                 get_reject_message(response),

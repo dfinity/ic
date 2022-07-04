@@ -1846,7 +1846,7 @@ fn execute_response_refunds_cycles() {
         .originator(a_id)
         .respondent(b_id)
         .originator_reply_callback(CallbackId::from(1))
-        .refund(Cycles::new(2) * cycles_sent)
+        .refund(cycles_sent * 2u64)
         .build();
     let response_payload_size = response.payload_size_bytes();
 
