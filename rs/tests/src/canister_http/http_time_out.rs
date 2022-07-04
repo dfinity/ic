@@ -19,6 +19,7 @@ use crate::canister_http::lib::*;
 use crate::driver::test_env::TestEnv;
 use crate::util::*;
 use dfn_candid::candid_one;
+use ic_ic00_types::HttpMethod;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
 
@@ -37,8 +38,11 @@ pub fn test(env: TestEnv) {
         let request_to_succeed = RemoteHttpRequest {
             url: url_to_succeed.clone(),
             headers: vec![],
+            method: HttpMethod::GET,
             body: "".to_string(),
-            transform: "transform".to_string(),
+            transform: Some("transform".to_string()),
+            max_response_size: None,
+            cycles: 500_000_000_000,
         };
 
         info!(&logger, "Send an update call...");

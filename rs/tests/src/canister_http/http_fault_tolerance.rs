@@ -28,6 +28,7 @@ use crate::{
 use candid::Principal;
 use canister_test::Canister;
 use dfn_candid::candid_one;
+use ic_ic00_types::HttpMethod;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId};
@@ -123,8 +124,11 @@ pub fn test(env: TestEnv) {
                     RemoteHttpRequest {
                         url: url.to_string(),
                         headers: vec![],
+                        method: HttpMethod::GET,
                         body: "".to_string(),
-                        transform: "transform".to_string(),
+                        transform: Some("transform".to_string()),
+                        max_response_size: None,
+                        cycles: 500_000_000_000,
                     },
                 )
                 .await
