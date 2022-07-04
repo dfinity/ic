@@ -30,6 +30,7 @@ lshw
 lvm2
 net-tools
 parted
+python-is-python3
 sudo
 udev
 usbutils
