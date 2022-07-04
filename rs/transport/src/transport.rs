@@ -81,7 +81,7 @@ use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::str::FromStr;
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::{Arc, Mutex, RwLock, Weak};
 use tokio::runtime::Handle;
 
 impl TransportImpl {
@@ -112,7 +112,7 @@ impl TransportImpl {
 
             peer_map: RwLock::new(HashMap::new()),
             accept_ports: RwLock::new(HashMap::new()),
-            event_handler: RwLock::new(None),
+            event_handler: Mutex::new(None),
             weak_self: RwLock::new(Weak::new()),
         });
         *arc.weak_self.write().unwrap() = Arc::downgrade(&arc);

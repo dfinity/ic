@@ -14,7 +14,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::fmt::{self, Debug, Formatter};
 use std::net::IpAddr;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::{Arc, Mutex, RwLock, Weak};
 use tokio::runtime::Handle;
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
@@ -90,7 +90,7 @@ pub(crate) struct TransportImpl {
     /// Mapping of peers to their corresponding state
     pub peer_map: RwLock<HashMap<NodeId, PeerState>>,
     /// Event handler to report back to the transport client
-    pub event_handler: RwLock<Option<Arc<dyn AsyncTransportEventHandler>>>,
+    pub event_handler: Mutex<Option<Arc<dyn AsyncTransportEventHandler>>>,
 
     // Crypto and data required for TLS handshakes
     /// Clients that are allowed to connect to this node
