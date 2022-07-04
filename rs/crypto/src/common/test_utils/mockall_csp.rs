@@ -219,6 +219,7 @@ mock! {
             threshold: NumberOfNodes,
             number_of_receivers: NumberOfNodes,
             csp_dealings: BTreeMap<u32, CspNiDkgDealing>,
+            collection_threshold: NumberOfNodes,
         ) -> Result<CspNiDkgTranscript, CspDkgCreateTranscriptError>;
 
         fn create_resharing_transcript(

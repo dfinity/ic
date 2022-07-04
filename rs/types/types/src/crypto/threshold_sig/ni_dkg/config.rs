@@ -199,6 +199,21 @@ impl NiDkgConfig {
         &self.resharing_transcript
     }
 
+    /// Returns the collection threshold, i.e., the number of dealings to be
+    /// included in the transcript. While theoretically this is a lower bound,
+    /// the number of dealings in the transcript matches the collection
+    /// threshold exactly so that the transcript is not larger than necessary.
+    pub fn collection_threshold(&self) -> NumberOfNodes {
+        let max_corrupt_dealers_plus_one = self.max_corrupt_dealers + NumberOfNodes::from(1);
+        match &self.resharing_transcript {
+            Some(resharing_transcript) => std::cmp::max(
+                resharing_transcript.threshold.get(),
+                max_corrupt_dealers_plus_one,
+            ),
+            None => max_corrupt_dealers_plus_one,
+        }
+    }
+
     /// Ensures threshold > max_corrupt_receivers
     fn ensure_sufficient_threshold(
         threshold: NiDkgThreshold,

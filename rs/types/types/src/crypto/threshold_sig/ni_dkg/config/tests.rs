@@ -226,6 +226,61 @@ fn should_return_correct_config_values() {
 }
 
 #[test]
+fn should_return_correct_collection_threshold_when_not_resharing() {
+    fn config_with_n_max_corrupt_dealers(n: u32) -> NiDkgConfig {
+        NiDkgConfig::new(NiDkgConfigData {
+            max_corrupt_dealers: NumberOfNodes::new(n),
+            dealers: n_node_ids(n + 1),
+            resharing_transcript: None,
+            ..valid_dkg_config_data()
+        })
+        .unwrap()
+    }
+
+    for max_corrupt_dealers in 0..=50 {
+        assert_eq!(
+            config_with_n_max_corrupt_dealers(max_corrupt_dealers).collection_threshold(),
+            NumberOfNodes::new(max_corrupt_dealers + 1)
+        );
+    }
+}
+
+#[test]
+fn should_return_correct_collection_threshold_when_resharing() {
+    fn config_with_resharing_threshold_and_max_corrupt_dealers(
+        resharing_threshold: u32,
+        max_corrupt_dealers: u32,
+    ) -> NiDkgConfig {
+        let dealers = n_node_ids(std::cmp::max(resharing_threshold, max_corrupt_dealers + 1));
+        NiDkgConfig::new(NiDkgConfigData {
+            dealers: dealers.clone(),
+            max_corrupt_dealers: NumberOfNodes::new(max_corrupt_dealers),
+            resharing_transcript: Some(NiDkgTranscript {
+                threshold: dkg_threshold(resharing_threshold),
+                committee: NiDkgReceivers::new(dealers).unwrap(),
+                ..transcript()
+            }),
+            ..valid_dkg_config_data()
+        })
+        .unwrap()
+    }
+
+    for resharing_threshold in 1..=7 {
+        for max_corrupt_dealers in 0..=7 {
+            assert_eq!(
+                config_with_resharing_threshold_and_max_corrupt_dealers(
+                    resharing_threshold,
+                    max_corrupt_dealers
+                )
+                .collection_threshold()
+                .get(),
+                std::cmp::max(resharing_threshold, max_corrupt_dealers + 1),
+            );
+        }
+    }
+}
+
+#[test]
 // This is explicitly tested since this appears in debug log messages. The
 // message should be well readable and in particular contain hex encodings where
 // applicable.
@@ -283,6 +338,14 @@ fn set_of<T: Ord + Clone>(items: &[T]) -> BTreeSet<T> {
     let mut set = BTreeSet::new();
     for item in items {
         assert!(set.insert(item.clone()));
+    }
+    set
+}
+
+fn n_node_ids(n: u32) -> BTreeSet<NodeId> {
+    let mut set = BTreeSet::new();
+    for i in 1..=n {
+        set.insert(node_id(u64::from(i)));
     }
     set
 }

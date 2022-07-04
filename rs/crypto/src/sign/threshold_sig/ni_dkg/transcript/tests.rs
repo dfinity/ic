@@ -60,7 +60,12 @@ mod create_transcript {
 
         let result = create_transcript(&csp, &config, &verified_dealings);
 
-        assert_eq!(result, Err(insufficient_dealings_error("Too few dealings: got 2, need more than 3 (the maximum number of corrupt dealers).")));
+        assert_eq!(
+            result,
+            Err(insufficient_dealings_error(
+                "Too few dealings: got 2, need at least 4 (=collection threshold)."
+            ))
+        );
     }
 
     #[test]
@@ -104,7 +109,12 @@ mod create_transcript {
 
         let result = create_transcript(&csp, &config, &verified_dealings);
 
-        assert_eq!(result.unwrap_err(), insufficient_dealings_error("Too few dealings: got 2, need more than 2 (the maximum number of corrupt dealers)."));
+        assert_eq!(
+            result.unwrap_err(),
+            insufficient_dealings_error(
+                "Too few dealings: got 2, need at least 3 (=collection threshold)."
+            )
+        );
     }
 
     #[test]
@@ -136,14 +146,20 @@ mod create_transcript {
             threshold: THRESHOLD,
             ..minimal_dkg_config_data_without_resharing()
         });
+        let collection_threshold_ = config.collection_threshold();
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_create_transcript()
             .withf(
-                move |algorithm_id, threshold, number_of_receivers, csp_dealings| {
+                move |algorithm_id,
+                      threshold,
+                      number_of_receivers,
+                      csp_dealings,
+                      collection_threshold| {
                     *algorithm_id == AlgorithmId::NiDkg_Groth20_Bls12_381
                         && *threshold == THRESHOLD
                         && *number_of_receivers == NumberOfNodes::new(4)
                         && *csp_dealings == map_of(vec![(0, csp_dealing_1()), (2, csp_dealing_3())])
+                        && *collection_threshold == collection_threshold_
                 },
             )
             .times(1)
@@ -294,7 +310,9 @@ mod create_transcript_with_resharing {
 
         assert_eq!(
             error,
-            insufficient_dealings_error("Too few dealings for resharing: got 2, need at least 3 (threshold in re-sharing transcript).")
+            insufficient_dealings_error(
+                "Too few dealings: got 2, need at least 3 (=collection threshold)."
+            )
         )
     }
 

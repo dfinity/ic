@@ -860,6 +860,8 @@ pub trait NiDkgCspClient {
     /// * `number_of_receivers` is the number of receivers that should have
     ///   shares in each dealing.
     /// * `csp_dealings` are correct dealings.
+    /// * `collection_threshold` is the number of dealings to be included in
+    ///   the transcript.
     /// # Panics
     /// This method is not expected to panic.
     /// # Errors
@@ -871,7 +873,7 @@ pub trait NiDkgCspClient {
     /// * any `dealing` in `csp_dealings` does not match `number_of_receivers`.
     ///   (`InvalidDealingError`)
     /// * there are insufficient dealings to proceed safely.
-    ///   (`InsufficientDataError`)
+    ///   (`InsufficientDealingsError`)
     /// * the threshold, number of keys or dealings is unsupported by this
     ///   machine. (`SizeError`)
     fn create_transcript(
@@ -880,6 +882,7 @@ pub trait NiDkgCspClient {
         threshold: NumberOfNodes,
         number_of_receivers: NumberOfNodes,
         csp_dealings: BTreeMap<NodeIndex, CspNiDkgDealing>,
+        collection_threshold: NumberOfNodes,
     ) -> Result<CspNiDkgTranscript, ni_dkg_errors::CspDkgCreateTranscriptError>;
 
     /// Assembles all valid resharing dealings into a single record.

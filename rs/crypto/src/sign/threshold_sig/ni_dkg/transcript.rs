@@ -42,25 +42,15 @@ mod creation {
         config: &NiDkgConfig,
         verified_dealings: &NiDkgDealings,
     ) -> Result<(), DkgCreateTranscriptError> {
-        if verified_dealings.count() <= config.max_corrupt_dealers() {
-            return Err(DkgCreateTranscriptError::InsufficientDealings(
-                InvalidArgumentError { message:
-                                       format!("Too few dealings: got {}, need more than {} (the maximum number of corrupt dealers).", verified_dealings.count(), config.max_corrupt_dealers()),
-                }
-            ));
-        }
-        Ok(())
-    }
-
-    fn ensure_sufficiently_many_dealings_for_resharing(
-        verified_dealings: &NiDkgDealings,
-        resharing_transcript: &NiDkgTranscript,
-    ) -> Result<(), DkgCreateTranscriptError> {
-        if verified_dealings.count() < resharing_transcript.threshold.get() {
+        if verified_dealings.count() < config.collection_threshold() {
             return Err(DkgCreateTranscriptError::InsufficientDealings(
                 InvalidArgumentError {
-                    message: format!("Too few dealings for resharing: got {}, need at least {} (threshold in re-sharing transcript).", verified_dealings.count(), resharing_transcript.threshold.get()),
-                }
+                    message: format!(
+                        "Too few dealings: got {}, need at least {} (=collection threshold).",
+                        verified_dealings.count(),
+                        config.collection_threshold()
+                    ),
+                },
             ));
         }
         Ok(())
@@ -93,10 +83,6 @@ mod creation {
         verified_dealings: &NiDkgDealings,
     ) -> Result<CspNiDkgTranscript, DkgCreateTranscriptError> {
         if let Some(resharing_transcript) = &config.resharing_transcript() {
-            ensure_sufficiently_many_dealings_for_resharing(
-                verified_dealings,
-                resharing_transcript,
-            )?;
             return convert_dealings_and_call_create_resharing_transcript(
                 ni_dkg_csp_client,
                 config,
@@ -156,6 +142,7 @@ mod creation {
             config.threshold().get(),
             config.receivers().count(),
             csp_dealings,
+            config.collection_threshold(),
         )?)
     }
 

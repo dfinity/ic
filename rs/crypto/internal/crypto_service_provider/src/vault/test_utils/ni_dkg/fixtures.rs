@@ -169,6 +169,7 @@ pub struct MockDkgConfig {
     pub receivers: NiDkgReceivers,
     pub receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
     pub threshold: NiDkgThreshold,
+    pub non_resharing_collection_threshold: NumberOfNodes,
     pub epoch: Epoch,
     // If the transcript of the previous DKG phase is present, resharing DKG is performed.
     pub resharing_transcript: Option<CspNiDkgTranscript>,
@@ -247,6 +248,9 @@ impl MockDkgConfig {
             receiver_keys,
             threshold: NiDkgThreshold::new(NumberOfNodes::from(threshold as NodeIndex))
                 .expect("Invalid threshold"),
+            non_resharing_collection_threshold: NumberOfNodes::from(
+                max_corrupt_dealers as NodeIndex + 1,
+            ),
             epoch,
             resharing_transcript,
         }
@@ -394,6 +398,7 @@ impl StateWithTranscript {
         threshold: NumberOfNodes,
         number_of_receivers: NumberOfNodes,
         csp_dealings: BTreeMap<NodeIndex, CspNiDkgDealing>,
+        non_resharing_collection_threshold: NumberOfNodes,
         resharing_public_coefficients: Option<CspPublicCoefficients>,
     ) -> Result<CspNiDkgTranscript, ni_dkg_errors::CspDkgCreateReshareTranscriptError> {
         if let Some(resharing_public_coefficients) = resharing_public_coefficients {
@@ -410,6 +415,7 @@ impl StateWithTranscript {
                 threshold,
                 number_of_receivers,
                 csp_dealings,
+                non_resharing_collection_threshold,
             )
             .map_err(ni_dkg_errors::CspDkgCreateReshareTranscriptError::from)
         }
@@ -427,6 +433,7 @@ impl StateWithTranscript {
             config.threshold.get(),
             config.receivers.count(),
             verified_dealings,
+            config.non_resharing_collection_threshold,
             config
                 .resharing_transcript
                 .as_ref()
