@@ -22,7 +22,7 @@ pub struct ThreadPort {
     id: NodeId,
     // Access to full hub to route messages across threads
     hub_access: HubAccess,
-    client_map: RwLock<Option<ClientState>>,
+    event_handler: RwLock<Option<Arc<dyn AsyncTransportEventHandler>>>,
     log: ReplicaLogger,
     deferred: Mutex<HashMap<NodeId, Deferred>>,
     weak_self: RwLock<Weak<ThreadPort>>,
@@ -46,7 +46,7 @@ impl ThreadPort {
         let thread_port = Arc::new(Self {
             id,
             hub_access,
-            client_map: RwLock::new(None),
+            event_handler: RwLock::new(None),
             log,
             deferred: Default::default(),
             weak_self: RwLock::new(Weak::new()),
@@ -124,10 +124,7 @@ impl ThreadPort {
         };
 
         // 2.
-        let event_handler = {
-            let client_map = destination_node.client_map.write().unwrap();
-            client_map.as_ref().map(|s| s.event_handler.clone())
-        };
+        let event_handler = destination_node.event_handler.write().unwrap().clone();
 
         // 3.
         let event_handler = {
@@ -158,10 +155,6 @@ impl ThreadPort {
     }
 }
 
-struct ClientState {
-    event_handler: Arc<dyn AsyncTransportEventHandler>,
-}
-
 #[derive(Debug, Default)]
 pub struct Hub {
     ports: BTreeMap<NodeId, Arc<ThreadPort>>,
@@ -180,8 +173,7 @@ impl Hub {
 impl Transport for ThreadPort {
     fn set_event_handler(&self, event_handler: Arc<dyn AsyncTransportEventHandler>) {
         info!(self.log, "Node{} -> Client Registered", self.id);
-        let mut client_map = self.client_map.write().unwrap();
-        client_map.replace(ClientState { event_handler });
+        *self.event_handler.write().unwrap() = Some(event_handler);
     }
 
     fn start_connections(
