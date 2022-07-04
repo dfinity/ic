@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::{
     fmt,
-    ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign},
+    ops::{Add, AddAssign, Mul, Sub, SubAssign},
 };
 
 /// Struct to handle cycles on the IC. They are maintained as a
@@ -125,14 +125,6 @@ impl SubAssign for Cycles {
     }
 }
 
-impl Mul for Cycles {
-    type Output = Self;
-
-    fn mul(self, rhs: Self) -> Self {
-        Self(self.0.saturating_mul(rhs.0))
-    }
-}
-
 impl Mul<u64> for Cycles {
     type Output = Self;
 
@@ -146,12 +138,6 @@ impl Mul<usize> for Cycles {
 
     fn mul(self, rhs: usize) -> Self {
         Self(self.0.saturating_mul(Cycles::from(rhs as u128).0))
-    }
-}
-
-impl MulAssign for Cycles {
-    fn mul_assign(&mut self, rhs: Self) {
-        self.0 = self.0.saturating_mul(rhs.0)
     }
 }
 
@@ -212,17 +198,13 @@ mod test {
 
     #[test]
     fn test_multiplication() {
-        assert_eq!(Cycles::zero() * Cycles::zero(), Cycles::zero());
+        assert_eq!(Cycles::zero() * std::u64::MAX, Cycles::zero());
         assert_eq!(
-            Cycles::zero() * Cycles::from(std::u128::MAX),
-            Cycles::zero()
-        );
-        assert_eq!(
-            Cycles::from(std::u128::MAX) * Cycles::from(std::u128::MAX),
+            Cycles::from(std::u128::MAX) * std::u64::MAX,
             Cycles::from(std::u128::MAX)
         );
         assert_eq!(
-            Cycles::from(std::u128::MAX) * Cycles::from(10u128),
+            Cycles::from(std::u128::MAX) * 10u64,
             Cycles::from(std::u128::MAX)
         );
     }

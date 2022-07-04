@@ -138,7 +138,7 @@ impl CyclesAccountManager {
 
     /// Returns the fee per byte of transmitted xnet call in [`Cycles`].
     pub fn xnet_call_bytes_transmitted_fee(&self, payload_size: NumBytes) -> Cycles {
-        self.config.xnet_byte_transmission_fee * Cycles::from(payload_size.get())
+        self.config.xnet_byte_transmission_fee * payload_size.get()
     }
 
     // Returns the idle resource consumption rate in cycles per day.
@@ -349,8 +349,8 @@ impl CyclesAccountManager {
         duration: Duration,
     ) -> Cycles {
         self.config.compute_percent_allocated_per_second_fee
-            * Cycles::from(duration.as_secs())
-            * Cycles::from(compute_allocation.as_percent())
+            * duration.as_secs()
+            * compute_allocation.as_percent()
     }
 
     /// Computes the cost of inducting an ingress message.
@@ -546,10 +546,8 @@ impl CyclesAccountManager {
         // possible response + the fee for executing the largest allowed
         // response when it eventually arrives.
         let fee = self.config.xnet_call_fee
-            + self.config.xnet_byte_transmission_fee
-                * Cycles::from(request.payload_size_bytes().get())
-            + self.config.xnet_byte_transmission_fee
-                * Cycles::from(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get())
+            + self.config.xnet_byte_transmission_fee * request.payload_size_bytes().get()
+            + self.config.xnet_byte_transmission_fee * MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get()
             + self.execution_cost(self.max_num_instructions);
         self.withdraw_with_threshold(
             canister_id,
@@ -592,8 +590,7 @@ impl CyclesAccountManager {
                 );
             }
             Some(extra_bytes) => {
-                let cycles_to_refund =
-                    self.config.xnet_byte_transmission_fee * Cycles::from(extra_bytes);
+                let cycles_to_refund = self.config.xnet_byte_transmission_fee * extra_bytes;
                 self.refund_cycles(system_state, cycles_to_refund);
             }
         }
@@ -733,8 +730,7 @@ impl CyclesAccountManager {
     /// tests.
     #[doc(hidden)]
     pub fn convert_instructions_to_cycles(&self, num_instructions: NumInstructions) -> Cycles {
-        self.config.ten_update_instructions_execution_fee
-            * Cycles::from(num_instructions.get() / 10)
+        self.config.ten_update_instructions_execution_fee * (num_instructions.get() / 10)
     }
 
     /// Returns the cost of the provided `num_instructions` in `Cycles`.

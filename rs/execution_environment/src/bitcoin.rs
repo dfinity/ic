@@ -151,8 +151,8 @@ pub fn send_transaction(
         Ok(args) => args,
     };
 
-    let fee = SEND_TRANSACTION_FEE_BASE
-        + Cycles::from(args.transaction.len() as u64) * SEND_TRANSACTION_FEE_PER_BYTE;
+    let fee =
+        SEND_TRANSACTION_FEE_BASE + SEND_TRANSACTION_FEE_PER_BYTE * args.transaction.len() as u64;
 
     execute_bitcoin_endpoint(
         payload,
