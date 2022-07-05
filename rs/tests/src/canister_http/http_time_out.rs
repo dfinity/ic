@@ -88,9 +88,8 @@ pub fn test(env: TestEnv) {
             unwrapped_error.contains("RejectionCode: SysTransient"),
             "Expected SysTransient"
         );
-        assert!(unwrapped_error.contains(
-            "Message: Failed to connect: error trying to connect: Unsuccessful reply: TtlExpired"
-        ));
+        info!(&logger, "{unwrapped_error}");
+        assert!(unwrapped_error.contains("Failed to connect"));
 
         let httpbin_timeout = proxy_canister
             .query_(
