@@ -607,6 +607,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
             .with_default_vm_resources(Some(VmResources {
                 vcpus: Some(NrOfVCPUs::new(8)),
                 memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
+                boot_image_minimal_size_gibibytes: None,
             })),
         ],
     ));

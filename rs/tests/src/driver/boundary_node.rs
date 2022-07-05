@@ -112,6 +112,13 @@ impl BoundaryNode {
                 }
                 Some(disk_image) => From::from(disk_image.clone()),
             },
+            self.vm_resources
+                .boot_image_minimal_size_gibibytes
+                .or_else(|| {
+                    pot_setup
+                        .default_vm_resources
+                        .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes)
+                }),
             self.has_ipv4,
             self.vm_allocation.clone(),
             self.required_host_features.clone(),
