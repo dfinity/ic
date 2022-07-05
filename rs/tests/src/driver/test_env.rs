@@ -127,26 +127,6 @@ where
     }
 }
 
-pub trait HasBaseLogDir {
-    fn write_base_log_dir<P: AsRef<Path>>(&self, p: P) -> Result<()>;
-
-    /// Returns the base dir (if specified) where logs are to be stored. This is
-    /// to remain backwards compatible with the existing test setup. In the
-    /// future, the logs of tests will just be stored in the corresponding test
-    /// env which contains other artifacts too.
-    fn base_log_dir(&self) -> Option<PathBuf>;
-}
-
-impl HasBaseLogDir for TestEnv {
-    fn base_log_dir(&self) -> Option<PathBuf> {
-        self.read_json_object(BASE_LOG_DIR_PATH).ok()
-    }
-
-    fn write_base_log_dir<P: AsRef<Path>>(&self, p: P) -> Result<()> {
-        self.write_json_object(BASE_LOG_DIR_PATH, &p.as_ref())
-    }
-}
-
 pub trait HasTestPath {
     fn write_test_path(&self, test_path: &TestPath) -> Result<()>;
 
@@ -167,7 +147,6 @@ impl HasTestPath for TestEnv {
 }
 
 const TEST_PATH: &str = "test_path.json";
-const BASE_LOG_DIR_PATH: &str = "base_log_dir.path.json";
 /// Access the ic-prep working dir of an Internet Computer instance.
 pub trait HasIcPrepDir {
     /// Create the path for the ic-prep working directory for the internet

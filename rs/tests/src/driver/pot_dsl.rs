@@ -1,7 +1,6 @@
 use std::fmt::Display;
 use std::panic::{catch_unwind, UnwindSafe};
 
-use super::driver_setup::tee_logger;
 use super::farm::HostFeature;
 use super::ic::{VmAllocationStrategy, VmResources};
 use super::test_env_api::IcHandleConstructor;
@@ -75,7 +74,7 @@ where
 pub fn get_ic_handle_and_ctx(test_env: TestEnv) -> (IcHandle, Context) {
     let log = test_env.logger();
     let rng = rand_core::SeedableRng::seed_from_u64(42);
-    let test_ctx = Context::new(rng, tee_logger(&test_env, log));
+    let test_ctx = Context::new(rng, log);
     let ic_handle = test_env
         .ic_handle()
         .expect("Could not create ic handle from test env");
