@@ -112,6 +112,15 @@ pub struct ExecuteMessageResult {
     pub heap_delta: NumBytes,
 }
 
+/// Contains round-specific context necessary for resuming a paused execution.
+pub struct RoundContext<'a> {
+    pub subnet_available_memory: SubnetAvailableMemory,
+    pub network_topology: &'a NetworkTopology,
+    pub hypervisor: &'a Hypervisor,
+    pub cycles_account_manager: &'a CyclesAccountManager,
+    pub log: &'a ReplicaLogger,
+}
+
 /// Represent a paused execution that can be resumed or aborted.
 pub trait PausedExecution: std::fmt::Debug {
     /// Resumes a paused execution.
@@ -127,11 +136,7 @@ pub trait PausedExecution: std::fmt::Debug {
     fn resume(
         self: Box<Self>,
         canister: CanisterState,
-        subnet_available_memory: SubnetAvailableMemory,
-        network_topology: &NetworkTopology,
-        hypervisor: &Hypervisor,
-        cycles_account_manager: &CyclesAccountManager,
-        log: &ReplicaLogger,
+        round_context: RoundContext,
     ) -> ExecuteMessageResult;
 
     /// Aborts the paused execution.

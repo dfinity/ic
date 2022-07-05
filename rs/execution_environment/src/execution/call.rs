@@ -7,9 +7,10 @@
 use crate::execution::common::{
     action_to_response, validate_canister, validate_method, wasm_result_to_query_response,
 };
-use crate::execution_environment::{ExecuteMessageResult, ExecutionResponse, PausedExecution};
+use crate::execution_environment::{
+    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext,
+};
 use crate::hypervisor::Hypervisor;
-use ic_base_types::SubnetId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
 use ic_error_types::{ErrorCode, UserError};
@@ -214,40 +215,48 @@ fn execute_update_method(
         canister.execution_state.take().unwrap(),
     );
     canister.execution_state = Some(output_execution_state);
-    process_update_result(
-        canister,
-        result,
-        time,
-        hypervisor.subnet_id(),
+    let original = OriginalContext {
         call_context_id,
         call_origin,
+        time,
+        total_instruction_limit: execution_parameters.total_instruction_limit,
+    };
+    let round = RoundContext {
+        subnet_available_memory: execution_parameters.subnet_available_memory,
+        network_topology: &*network_topology,
+        hypervisor,
         cycles_account_manager,
-        network_topology.as_ref(),
         log,
-        execution_parameters.total_instruction_limit,
-    )
+    };
+    process_update_result(canister, result, original, round)
 }
 
 fn process_update_result(
     mut canister: CanisterState,
     result: WasmExecutionResult,
-    time: Time,
-    own_subnet_id: SubnetId,
-    call_context_id: CallContextId,
-    call_origin: CallOrigin,
-    cycles_account_manager: &CyclesAccountManager,
-    network_topology: &NetworkTopology,
-    log: &ReplicaLogger,
-    total_instruction_limit: NumInstructions,
+    original: OriginalContext,
+    round: RoundContext,
 ) -> ExecuteMessageResult {
     match result {
+        WasmExecutionResult::Paused(paused_wasm_execution) => {
+            let paused_execution = Box::new(PausedCallExecution {
+                paused_wasm_execution,
+                original,
+            });
+            ExecuteMessageResult {
+                canister,
+                num_instructions_left: NumInstructions::from(0),
+                response: ExecutionResponse::Paused(paused_execution),
+                heap_delta: NumBytes::from(0),
+            }
+        }
         WasmExecutionResult::Finished(output, system_state_changes) => {
             let heap_delta = if output.wasm_result.is_ok() {
                 system_state_changes.apply_changes(
                     &mut canister.system_state,
-                    network_topology,
-                    own_subnet_id,
-                    log,
+                    round.network_topology,
+                    round.hypervisor.subnet_id(),
+                    round.log,
                 );
                 NumBytes::from((output.instance_stats.dirty_pages * ic_sys::PAGE_SIZE) as u64)
             } else {
@@ -258,13 +267,19 @@ fn process_update_result(
                 .system_state
                 .call_context_manager_mut()
                 .unwrap()
-                .on_canister_result(call_context_id, output.wasm_result);
+                .on_canister_result(original.call_context_id, output.wasm_result);
 
-            let response = action_to_response(&canister, action, call_origin, time, log);
-            cycles_account_manager.refund_execution_cycles(
+            let response = action_to_response(
+                &canister,
+                action,
+                original.call_origin,
+                original.time,
+                round.log,
+            );
+            round.cycles_account_manager.refund_execution_cycles(
                 &mut canister.system_state,
                 output.num_instructions_left,
-                total_instruction_limit,
+                original.total_instruction_limit,
             );
             ExecuteMessageResult {
                 canister,
@@ -273,60 +288,37 @@ fn process_update_result(
                 heap_delta,
             }
         }
-        WasmExecutionResult::Paused(paused_wasm_execution) => {
-            let paused_execution = Box::new(PausedCallExecution {
-                paused_wasm_execution,
-                time,
-                call_context_id,
-                call_origin,
-                total_instruction_limit,
-            });
-            ExecuteMessageResult {
-                canister,
-                num_instructions_left: NumInstructions::from(0),
-                response: ExecutionResponse::Paused(paused_execution),
-                heap_delta: NumBytes::from(0),
-            }
-        }
     }
+}
+
+/// Context variables that remain the same throughput the entire deterministic
+/// time slicing execution of a call.
+#[derive(Debug)]
+struct OriginalContext {
+    call_context_id: CallContextId,
+    call_origin: CallOrigin,
+    time: Time,
+    total_instruction_limit: NumInstructions,
 }
 
 #[derive(Debug)]
 struct PausedCallExecution {
     paused_wasm_execution: Box<dyn PausedWasmExecution>,
-    time: Time,
-    call_context_id: CallContextId,
-    call_origin: CallOrigin,
-    total_instruction_limit: NumInstructions,
+    original: OriginalContext,
 }
 
 impl PausedExecution for PausedCallExecution {
     fn resume(
         self: Box<Self>,
         mut canister: CanisterState,
-        subnet_available_memory: SubnetAvailableMemory,
-        network_topology: &NetworkTopology,
-        hypervisor: &Hypervisor,
-        cycles_account_manager: &CyclesAccountManager,
-        log: &ReplicaLogger,
+        round: RoundContext,
     ) -> ExecuteMessageResult {
         let execution_state = canister.execution_state.take().unwrap();
         let (execution_state, result) = self
             .paused_wasm_execution
-            .resume(execution_state, subnet_available_memory);
+            .resume(execution_state, round.subnet_available_memory.clone());
         canister.execution_state = Some(execution_state);
-        process_update_result(
-            canister,
-            result,
-            self.time,
-            hypervisor.subnet_id(),
-            self.call_context_id,
-            self.call_origin,
-            cycles_account_manager,
-            network_topology,
-            log,
-            self.total_instruction_limit,
-        )
+        process_update_result(canister, result, self.original, round)
     }
 
     fn abort(self: Box<Self>) {
@@ -336,6 +328,7 @@ impl PausedExecution for PausedCallExecution {
 
 // Execute a query method from an inter-canister request
 // or from an ingress message.
+#[allow(clippy::too_many_arguments)]
 fn execute_query_method(
     mut canister: CanisterState,
     req: RequestOrIngress,
