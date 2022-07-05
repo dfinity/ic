@@ -1,89 +1,60 @@
 // This module defines how response callbacks are executed.
 // See https://smartcontracts.org/docs/interface-spec/index.html#_callback_invocation.
 
-use crate::execution_environment::{ExecuteMessageResult, ExecutionResponse, PausedExecution};
+use crate::execution_environment::{
+    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext,
+};
 use crate::Hypervisor;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
 use ic_types::messages::{CallContextId, Payload, Response};
-use ic_types::{NumBytes, NumInstructions, Time};
+use ic_types::{ComputeAllocation, NumBytes, NumInstructions, Time};
 
 use crate::execution::common;
 use crate::execution::common::action_to_response;
-use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorError, SubnetAvailableMemory, WasmExecutionOutput,
-};
+use ic_interfaces::execution_environment::{ExecutionMode, ExecutionParameters, HypervisorError};
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_system_api::ApiType;
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
-use ic_types::SubnetId;
 use prometheus::IntCounter;
 use std::sync::Arc;
+
+/// Context variables that remain the same throughput the entire deterministic
+/// time slicing execution of a response.
+#[derive(Clone, Debug)]
+struct OriginalContext {
+    callback: Callback,
+    call_context_id: CallContextId,
+    call_origin: CallOrigin,
+    canister_memory_limit: NumBytes,
+    compute_allocation: ComputeAllocation,
+    time: Time,
+    total_instruction_limit: NumInstructions,
+}
 
 /// Struct used to hold necessary information for the
 /// deterministic time slicing execution of a response.
 #[derive(Debug)]
 struct PausedResponseExecution {
     paused_wasm_execution: Box<dyn PausedWasmExecution>,
-    time: Time,
-    callback: Callback,
-    call_context_id: CallContextId,
-    call_origin: CallOrigin,
-    execution_parameters: ExecutionParameters,
-    canister_current_memory_usage: NumBytes,
+    original: OriginalContext,
 }
 
 impl PausedExecution for PausedResponseExecution {
     fn resume(
         self: Box<Self>,
         mut canister: CanisterState,
-        subnet_available_memory: SubnetAvailableMemory,
-        network_topology: &NetworkTopology,
-        hypervisor: &Hypervisor,
-        cycles_account_manager: &CyclesAccountManager,
-        logger: &ReplicaLogger,
+        current: RoundContext,
     ) -> ExecuteMessageResult {
         let execution_state = canister.execution_state.take().unwrap();
-        let (execution_state, wasm_execution_result) = self
+        let (execution_state, result) = self
             .paused_wasm_execution
-            .resume(execution_state, subnet_available_memory);
+            .resume(execution_state, current.subnet_available_memory.clone());
         canister.execution_state = Some(execution_state);
-
-        match wasm_execution_result {
-            WasmExecutionResult::Finished(response_output, system_state_changes) => {
-                process_response_result(
-                    self.time,
-                    canister,
-                    response_output,
-                    system_state_changes,
-                    self.callback,
-                    self.call_origin,
-                    self.call_context_id,
-                    hypervisor,
-                    network_topology,
-                    self.canister_current_memory_usage,
-                    self.execution_parameters,
-                    cycles_account_manager,
-                    logger,
-                )
-            }
-            WasmExecutionResult::Paused(paused_wasm_execution) => {
-                let paused_execution = Box::new(PausedResponseExecution {
-                    paused_wasm_execution,
-                    ..*self
-                });
-                ExecuteMessageResult {
-                    canister,
-                    num_instructions_left: NumInstructions::from(0),
-                    response: ExecutionResponse::Paused(paused_execution),
-                    heap_delta: NumBytes::from(0),
-                }
-            }
-        }
+        process_response_result(result, canister, self.original, current)
     }
 
     fn abort(self: Box<Self>) {
@@ -96,60 +67,22 @@ impl PausedExecution for PausedResponseExecution {
 #[derive(Debug)]
 struct PausedCleanupExecution {
     paused_wasm_execution: Box<dyn PausedWasmExecution>,
-    time: Time,
-    own_subnet_id: SubnetId,
-    call_context_id: CallContextId,
-    call_origin: CallOrigin,
     callback_err: HypervisorError,
-    slice_instruction_limit: NumInstructions,
+    original: OriginalContext,
 }
 
 impl PausedExecution for PausedCleanupExecution {
     fn resume(
         self: Box<Self>,
         mut canister: CanisterState,
-        subnet_available_memory: SubnetAvailableMemory,
-        network_topology: &NetworkTopology,
-        _hypervisor: &Hypervisor,
-        cycles_account_manager: &CyclesAccountManager,
-        logger: &ReplicaLogger,
+        current: RoundContext,
     ) -> ExecuteMessageResult {
         let execution_state = canister.execution_state.take().unwrap();
         let (execution_state, result) = self
             .paused_wasm_execution
-            .resume(execution_state, subnet_available_memory);
+            .resume(execution_state, current.subnet_available_memory.clone());
         canister.execution_state = Some(execution_state);
-
-        match result {
-            WasmExecutionResult::Finished(cleanup_output, system_state_changes) => {
-                process_cleanup_result(
-                    self.time,
-                    canister,
-                    cleanup_output,
-                    system_state_changes,
-                    self.own_subnet_id,
-                    self.call_origin,
-                    self.call_context_id,
-                    self.callback_err,
-                    network_topology,
-                    self.slice_instruction_limit,
-                    cycles_account_manager,
-                    logger,
-                )
-            }
-            WasmExecutionResult::Paused(paused_wasm_execution) => {
-                let paused_execution = Box::new(PausedCleanupExecution {
-                    paused_wasm_execution,
-                    ..*self
-                });
-                ExecuteMessageResult {
-                    canister,
-                    num_instructions_left: NumInstructions::from(0),
-                    response: ExecutionResponse::Paused(paused_execution),
-                    heap_delta: NumBytes::from(0),
-                }
-            }
-        }
+        process_cleanup_result(result, canister, self.callback_err, self.original, current)
     }
 
     fn abort(self: Box<Self>) {
@@ -174,6 +107,7 @@ impl PausedExecution for PausedCleanupExecution {
 /// - The size of the heap delta change that the execution produced.
 ///
 /// - A ExecResult that contains the response of the executed message.
+#[allow(clippy::too_many_arguments)]
 pub fn execute_response(
     mut canister: CanisterState,
     response: Arc<Response>,
@@ -181,13 +115,32 @@ pub fn execute_response(
     own_subnet_type: SubnetType,
     network_topology: Arc<NetworkTopology>,
     execution_parameters: ExecutionParameters,
-    logger: &ReplicaLogger,
+    log: &ReplicaLogger,
     error_counter: &IntCounter,
     hypervisor: &Hypervisor,
     cycles_account_manager: &CyclesAccountManager,
 ) -> ExecuteMessageResult {
+    let failure = |mut canister: CanisterState, response, instruction_limit| {
+        // Refund the canister with any cycles left after message execution.
+        cycles_account_manager.refund_execution_cycles(
+            &mut canister.system_state,
+            instruction_limit,
+            instruction_limit,
+        );
+        // TODO(RUN-59): We need to distinguish between instructions left from
+        // the total limit and instructions left from the slice limit.
+        ExecuteMessageResult {
+            canister,
+            num_instructions_left: instruction_limit,
+            response,
+            heap_delta: NumBytes::from(0),
+        }
+    };
+
+    let total_instruction_limit = execution_parameters.total_instruction_limit;
+
     let (callback, call_context) =
-        match common::get_call_context_and_callback(&mut canister, &response, logger) {
+        match common::get_call_context_and_callback(&mut canister, &response, log) {
             Some((callback, call_context)) => (callback, call_context),
             None => {
                 return ExecuteMessageResult {
@@ -212,7 +165,7 @@ pub fn execute_response(
     // then that indicates (potential malicious) faults.
     let refunded_cycles = if response.refund > callback.cycles_sent {
         error!(
-            logger,
+            log,
             "[EXC-BUG] Canister got a response with too many cycles.  originator {} respondent {} max cycles expected {} got {}.",
             response.originator,
             response.respondent,
@@ -233,7 +186,7 @@ pub fn execute_response(
     // have received the response, we can refund the cycles based on
     // the actual size of the response.
     cycles_account_manager.response_cycles_refund(
-        logger,
+        log,
         error_counter,
         &mut canister.system_state,
         &response,
@@ -241,150 +194,103 @@ pub fn execute_response(
 
     // If the call context was deleted (e.g. in uninstall), then do not execute anything.
     if is_call_context_deleted {
-        // Refund the canister with any cycles left after message execution.
-        cycles_account_manager.refund_execution_cycles(
-            &mut canister.system_state,
-            execution_parameters.slice_instruction_limit,
-            execution_parameters.slice_instruction_limit,
-        );
-        ExecuteMessageResult {
-            canister,
-            num_instructions_left: execution_parameters.slice_instruction_limit,
-            response: ExecutionResponse::Empty,
-            heap_delta: NumBytes::from(0),
-        }
-    } else {
-        // Validate that the canister has an `ExecutionState`.
-        if canister.execution_state.is_none() {
-            error!(
-                logger,
+        return failure(canister, ExecutionResponse::Empty, total_instruction_limit);
+    }
+
+    // Validate that the canister has an `ExecutionState`.
+    if canister.execution_state.is_none() {
+        error!(
+                log,
                 "[EXC-BUG] Canister {} is attempting to execute a response, but the execution state does not exist.",
                 canister.system_state.canister_id,
             );
 
-            let action = canister
-                .system_state
-                .call_context_manager_mut()
-                .unwrap()
-                .on_canister_result(
-                    callback.call_context_id,
-                    Err(HypervisorError::WasmModuleNotFound),
-                );
-            let response = action_to_response(&canister, action, call_origin, time, logger);
-
-            // Refund the canister with any cycles left after message execution.
-            cycles_account_manager.refund_execution_cycles(
-                &mut canister.system_state,
-                execution_parameters.slice_instruction_limit,
-                execution_parameters.slice_instruction_limit,
+        let action = canister
+            .system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .on_canister_result(
+                callback.call_context_id,
+                Err(HypervisorError::WasmModuleNotFound),
             );
-            return ExecuteMessageResult {
-                canister,
-                num_instructions_left: execution_parameters.slice_instruction_limit,
-                response,
-                heap_delta: NumBytes::from(0),
-            };
-        }
+        let response = action_to_response(&canister, action, call_origin, time, log);
 
-        let closure = match response.response_payload {
-            Payload::Data(_) => callback.on_reply.clone(),
-            Payload::Reject(_) => callback.on_reject.clone(),
-        };
-
-        let func_ref = match call_origin {
-            CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _)
-            | CallOrigin::Heartbeat => FuncRef::UpdateClosure(closure),
-            CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
-                FuncRef::QueryClosure(closure)
-            }
-        };
-
-        let api_type = match &response.response_payload {
-            Payload::Data(payload) => ApiType::reply_callback(
-                time,
-                payload.to_vec(),
-                refunded_cycles,
-                call_context_id,
-                call_context.has_responded(),
-            ),
-            Payload::Reject(context) => ApiType::reject_callback(
-                time,
-                context.clone(),
-                refunded_cycles,
-                call_context_id,
-                call_context.has_responded(),
-            ),
-        };
-
-        let (output_execution_state, result) = hypervisor.execute_dts(
-            api_type,
-            canister.system_state.clone(),
-            canister.memory_usage(own_subnet_type),
-            execution_parameters.clone(),
-            func_ref,
-            canister.execution_state.take().unwrap(),
-        );
-        let canister_current_memory_usage = canister.memory_usage(own_subnet_type);
-        canister.execution_state = Some(output_execution_state);
-
-        match result {
-            WasmExecutionResult::Finished(response_output, system_state_changes) => {
-                process_response_result(
-                    time,
-                    canister,
-                    response_output,
-                    system_state_changes,
-                    callback,
-                    call_origin,
-                    call_context_id,
-                    hypervisor,
-                    &network_topology,
-                    canister_current_memory_usage,
-                    execution_parameters,
-                    cycles_account_manager,
-                    logger,
-                )
-            }
-            WasmExecutionResult::Paused(paused_wasm_execution) => {
-                let paused_execution = Box::new(PausedResponseExecution {
-                    paused_wasm_execution,
-                    time,
-                    callback,
-                    call_context_id,
-                    call_origin,
-                    execution_parameters,
-                    canister_current_memory_usage,
-                });
-                ExecuteMessageResult {
-                    canister,
-                    num_instructions_left: NumInstructions::from(0),
-                    response: ExecutionResponse::Paused(paused_execution),
-                    heap_delta: NumBytes::from(0),
-                }
-            }
-        }
+        return failure(canister, response, total_instruction_limit);
     }
+
+    let closure = match response.response_payload {
+        Payload::Data(_) => callback.on_reply.clone(),
+        Payload::Reject(_) => callback.on_reject.clone(),
+    };
+
+    let func_ref = match call_origin {
+        CallOrigin::Ingress(_, _) | CallOrigin::CanisterUpdate(_, _) | CallOrigin::Heartbeat => {
+            FuncRef::UpdateClosure(closure)
+        }
+        CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => FuncRef::QueryClosure(closure),
+    };
+
+    let api_type = match &response.response_payload {
+        Payload::Data(payload) => ApiType::reply_callback(
+            time,
+            payload.to_vec(),
+            refunded_cycles,
+            call_context_id,
+            call_context.has_responded(),
+        ),
+        Payload::Reject(context) => ApiType::reject_callback(
+            time,
+            context.clone(),
+            refunded_cycles,
+            call_context_id,
+            call_context.has_responded(),
+        ),
+    };
+
+    let (output_execution_state, result) = hypervisor.execute_dts(
+        api_type,
+        canister.system_state.clone(),
+        canister.memory_usage(own_subnet_type),
+        execution_parameters.clone(),
+        func_ref,
+        canister.execution_state.take().unwrap(),
+    );
+
+    canister.execution_state = Some(output_execution_state);
+
+    let original = OriginalContext {
+        callback,
+        call_context_id,
+        call_origin,
+        canister_memory_limit: execution_parameters.canister_memory_limit,
+        compute_allocation: execution_parameters.compute_allocation,
+        time,
+        total_instruction_limit,
+    };
+
+    let current = RoundContext {
+        subnet_available_memory: execution_parameters.subnet_available_memory,
+        network_topology: &*network_topology,
+        hypervisor,
+        cycles_account_manager,
+        log,
+    };
+
+    process_response_result(result, canister, original, current)
 }
 
 // Helper function to execute response cleanup.
 //
 // Returns `ExecuteMessageResult`.
 fn execute_response_cleanup(
-    time: Time,
     mut canister: CanisterState,
     cleanup_closure: WasmClosure,
-    call_origin: CallOrigin,
-    call_context_id: CallContextId,
     callback_err: HypervisorError,
-    hypervisor: &Hypervisor,
-    network_topology: &NetworkTopology,
-    canister_current_memory_usage: NumBytes,
-    execution_parameters: ExecutionParameters,
-    cycles_account_manager: &CyclesAccountManager,
-    logger: &ReplicaLogger,
+    instructions_left: NumInstructions,
+    original: OriginalContext,
+    current: RoundContext,
 ) -> ExecuteMessageResult {
-    let func_ref = match call_origin {
+    let func_ref = match original.call_origin {
         CallOrigin::Ingress(_, _) | CallOrigin::CanisterUpdate(_, _) | CallOrigin::Heartbeat => {
             FuncRef::UpdateClosure(cleanup_closure)
         }
@@ -392,43 +298,43 @@ fn execute_response_cleanup(
             FuncRef::QueryClosure(cleanup_closure)
         }
     };
-
-    let (output_execution_state, result) = hypervisor.execute_dts(
-        ApiType::Cleanup { time },
+    let own_subnet_type = current.hypervisor.subnet_type();
+    let (output_execution_state, result) = current.hypervisor.execute_dts(
+        ApiType::Cleanup {
+            time: original.time,
+        },
         canister.system_state.clone(),
-        canister_current_memory_usage,
-        execution_parameters.clone(),
+        canister.memory_usage(own_subnet_type),
+        ExecutionParameters {
+            total_instruction_limit: instructions_left,
+            slice_instruction_limit: instructions_left,
+            canister_memory_limit: original.canister_memory_limit,
+            subnet_available_memory: current.subnet_available_memory.clone(),
+            compute_allocation: original.compute_allocation,
+            subnet_type: current.hypervisor.subnet_type(),
+            execution_mode: ExecutionMode::Replicated,
+        },
         func_ref,
         canister.execution_state.take().unwrap(),
     );
     canister.execution_state = Some(output_execution_state);
+    process_cleanup_result(result, canister, callback_err, original, current)
+}
 
+// Helper function to process the execution result of a response.
+//
+// Returns `ExecuteMessageResult`.
+fn process_response_result(
+    result: WasmExecutionResult,
+    mut canister: CanisterState,
+    original: OriginalContext,
+    current: RoundContext,
+) -> ExecuteMessageResult {
     match result {
-        WasmExecutionResult::Finished(cleanup_output, system_state_changes) => {
-            process_cleanup_result(
-                time,
-                canister,
-                cleanup_output,
-                system_state_changes,
-                hypervisor.subnet_id(),
-                call_origin,
-                call_context_id,
-                callback_err,
-                network_topology,
-                execution_parameters.slice_instruction_limit,
-                cycles_account_manager,
-                logger,
-            )
-        }
         WasmExecutionResult::Paused(paused_wasm_execution) => {
-            let paused_execution = Box::new(PausedCleanupExecution {
+            let paused_execution = Box::new(PausedResponseExecution {
                 paused_wasm_execution,
-                time,
-                own_subnet_id: hypervisor.subnet_id(),
-                call_context_id,
-                call_origin,
-                callback_err,
-                slice_instruction_limit: execution_parameters.slice_instruction_limit,
+                original,
             });
             ExecuteMessageResult {
                 canister,
@@ -437,164 +343,160 @@ fn execute_response_cleanup(
                 heap_delta: NumBytes::from(0),
             }
         }
-    }
-}
-
-// Helper function to process the execution result of a response.
-//
-// Returns `ExecuteMessageResult`.
-fn process_response_result(
-    time: Time,
-    mut canister: CanisterState,
-    response_output: WasmExecutionOutput,
-    system_state_changes: SystemStateChanges,
-    callback: Callback,
-    call_origin: CallOrigin,
-    call_context_id: CallContextId,
-    hypervisor: &Hypervisor,
-    network_topology: &NetworkTopology,
-    canister_current_memory_usage: NumBytes,
-    execution_parameters: ExecutionParameters,
-    cycles_account_manager: &CyclesAccountManager,
-    logger: &ReplicaLogger,
-) -> ExecuteMessageResult {
-    let (num_instructions_left, heap_delta, result) = match response_output.wasm_result {
-        Ok(_) => {
-            // Executing the reply/reject closure succeeded.
-            system_state_changes.apply_changes(
-                &mut canister.system_state,
-                network_topology,
-                hypervisor.subnet_id(),
-                logger,
-            );
-            let heap_delta =
-                NumBytes::from((response_output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
-            (
-                response_output.num_instructions_left,
-                heap_delta,
-                response_output.wasm_result.clone(),
-            )
-        }
-        Err(callback_err) => {
-            // A trap has occurred when executing the reply/reject closure.
-            // Execute the cleanup if it exists.
-            match callback.on_cleanup {
-                Some(cleanup_closure) => {
-                    return execute_response_cleanup(
-                        time,
-                        canister,
-                        cleanup_closure,
-                        call_origin,
-                        call_context_id,
-                        callback_err,
-                        hypervisor,
-                        network_topology,
-                        canister_current_memory_usage,
-                        ExecutionParameters {
-                            total_instruction_limit: response_output.num_instructions_left,
-                            slice_instruction_limit: response_output.num_instructions_left,
-                            ..execution_parameters
-                        },
-                        cycles_account_manager,
-                        logger,
+        WasmExecutionResult::Finished(response_output, system_state_changes) => {
+            let (num_instructions_left, heap_delta, result) = match response_output.wasm_result {
+                Ok(_) => {
+                    // Executing the reply/reject closure succeeded.
+                    system_state_changes.apply_changes(
+                        &mut canister.system_state,
+                        current.network_topology,
+                        current.hypervisor.subnet_id(),
+                        current.log,
                     );
-                }
-                None => {
-                    // No cleanup closure present. Return the callback error as-is.
+                    let heap_delta = NumBytes::from(
+                        (response_output.instance_stats.dirty_pages * PAGE_SIZE) as u64,
+                    );
                     (
-                        execution_parameters.slice_instruction_limit,
-                        NumBytes::from(0),
-                        Err(callback_err),
+                        response_output.num_instructions_left,
+                        heap_delta,
+                        response_output.wasm_result.clone(),
                     )
                 }
+                Err(callback_err) => {
+                    // A trap has occurred when executing the reply/reject closure.
+                    // Execute the cleanup if it exists.
+                    match original.callback.on_cleanup.clone() {
+                        Some(cleanup_closure) => {
+                            return execute_response_cleanup(
+                                canister,
+                                cleanup_closure,
+                                callback_err,
+                                response_output.num_instructions_left,
+                                original,
+                                current,
+                            );
+                        }
+                        None => {
+                            // No cleanup closure present. Return the callback error as-is.
+                            (
+                                response_output.num_instructions_left,
+                                NumBytes::from(0),
+                                Err(callback_err),
+                            )
+                        }
+                    }
+                }
+            };
+            let action = canister
+                .system_state
+                .call_context_manager_mut()
+                .unwrap()
+                .on_canister_result(original.call_context_id, result);
+            let response = action_to_response(
+                &canister,
+                action,
+                original.call_origin,
+                original.time,
+                current.log,
+            );
+
+            // Refund the canister with any cycles left after message execution.
+            current.cycles_account_manager.refund_execution_cycles(
+                &mut canister.system_state,
+                num_instructions_left,
+                original.total_instruction_limit,
+            );
+            ExecuteMessageResult {
+                canister,
+                num_instructions_left,
+                response,
+                heap_delta,
             }
         }
-    };
-    let action = canister
-        .system_state
-        .call_context_manager_mut()
-        .unwrap()
-        .on_canister_result(call_context_id, result);
-    let response = action_to_response(&canister, action, call_origin, time, logger);
-
-    // Refund the canister with any cycles left after message execution.
-    cycles_account_manager.refund_execution_cycles(
-        &mut canister.system_state,
-        num_instructions_left,
-        execution_parameters.slice_instruction_limit,
-    );
-    ExecuteMessageResult {
-        canister,
-        num_instructions_left,
-        response,
-        heap_delta,
     }
 }
 
 // Helper function to process the execution result of a cleanup callback.
 fn process_cleanup_result(
-    time: Time,
+    result: WasmExecutionResult,
     mut canister: CanisterState,
-    cleanup_output: WasmExecutionOutput,
-    system_state_changes: SystemStateChanges,
-    own_subnet_id: SubnetId,
-    call_origin: CallOrigin,
-    call_context_id: CallContextId,
     callback_err: HypervisorError,
-    network_topology: &NetworkTopology,
-    slice_instruction_limit: NumInstructions,
-    cycles_account_manager: &CyclesAccountManager,
-    logger: &ReplicaLogger,
+    original: OriginalContext,
+    current: RoundContext,
 ) -> ExecuteMessageResult {
-    let (num_instructions_left, heap_delta, result) = match cleanup_output.wasm_result {
-        Ok(_) => {
-            // Executing the cleanup callback has succeeded.
-            system_state_changes.apply_changes(
-                &mut canister.system_state,
-                network_topology,
-                own_subnet_id,
-                logger,
+    match result {
+        WasmExecutionResult::Paused(paused_wasm_execution) => {
+            let paused_execution = Box::new(PausedCleanupExecution {
+                paused_wasm_execution,
+                callback_err,
+                original,
+            });
+            ExecuteMessageResult {
+                canister,
+                num_instructions_left: NumInstructions::from(0),
+                response: ExecutionResponse::Paused(paused_execution),
+                heap_delta: NumBytes::from(0),
+            }
+        }
+        WasmExecutionResult::Finished(cleanup_output, system_state_changes) => {
+            let (num_instructions_left, heap_delta, result) = match cleanup_output.wasm_result {
+                Ok(_) => {
+                    // Executing the cleanup callback has succeeded.
+                    system_state_changes.apply_changes(
+                        &mut canister.system_state,
+                        current.network_topology,
+                        current.hypervisor.subnet_id(),
+                        current.log,
+                    );
+                    let heap_delta = NumBytes::from(
+                        (cleanup_output.instance_stats.dirty_pages * PAGE_SIZE) as u64,
+                    );
+
+                    // Note that, even though the callback has succeeded,
+                    // the original callback error is returned.
+                    (
+                        cleanup_output.num_instructions_left,
+                        heap_delta,
+                        Err(callback_err),
+                    )
+                }
+                Err(cleanup_err) => {
+                    // Executing the cleanup call back failed.
+                    (
+                        cleanup_output.num_instructions_left,
+                        NumBytes::from(0),
+                        Err(HypervisorError::Cleanup {
+                            callback_err: Box::new(callback_err),
+                            cleanup_err: Box::new(cleanup_err),
+                        }),
+                    )
+                }
+            };
+            let action = canister
+                .system_state
+                .call_context_manager_mut()
+                .unwrap()
+                .on_canister_result(original.call_context_id, result);
+            let response = action_to_response(
+                &canister,
+                action,
+                original.call_origin,
+                original.time,
+                current.log,
             );
-            let heap_delta =
-                NumBytes::from((cleanup_output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
 
-            // Note that, even though the callback has succeeded,
-            // the original callback error is returned.
-            (
-                cleanup_output.num_instructions_left,
+            // Refund the canister with any cycles left after message execution.
+            current.cycles_account_manager.refund_execution_cycles(
+                &mut canister.system_state,
+                num_instructions_left,
+                original.total_instruction_limit,
+            );
+            ExecuteMessageResult {
+                canister,
+                num_instructions_left,
+                response,
                 heap_delta,
-                Err(callback_err),
-            )
+            }
         }
-        Err(cleanup_err) => {
-            // Executing the cleanup call back failed.
-            (
-                cleanup_output.num_instructions_left,
-                NumBytes::from(0),
-                Err(HypervisorError::Cleanup {
-                    callback_err: Box::new(callback_err),
-                    cleanup_err: Box::new(cleanup_err),
-                }),
-            )
-        }
-    };
-    let action = canister
-        .system_state
-        .call_context_manager_mut()
-        .unwrap()
-        .on_canister_result(call_context_id, result);
-    let response = action_to_response(&canister, action, call_origin, time, logger);
-
-    // Refund the canister with any cycles left after message execution.
-    cycles_account_manager.refund_execution_cycles(
-        &mut canister.system_state,
-        num_instructions_left,
-        slice_instruction_limit,
-    );
-    ExecuteMessageResult {
-        canister,
-        num_instructions_left,
-        response,
-        heap_delta,
     }
 }
