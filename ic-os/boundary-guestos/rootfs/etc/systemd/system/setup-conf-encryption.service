@@ -1,0 +1,16 @@
+[Unit]
+Description=Cryptography Setup for conf_crypt
+DefaultDependencies=no
+After=boot.mount
+After=boot-grub.mount
+Requires=boot.mount
+Requires=boot-grub.mount
+Before=cryptsetup@var_crypt.service
+
+[Install]
+WantedBy=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/ic/bin/setup-conf-encryption.sh /dev/vda3

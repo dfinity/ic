@@ -75,7 +75,7 @@ function make_var_cryptsetup() {
     echo "Wants=blockdev@dev-mapper-var_crypt.target"
     echo "Conflicts=umount.target"
     echo "Before=cryptsetup.target"
-    echo "RequiresMountsFor=/boot/config/store.keyfile"
+    echo "RequiresMountsFor=/boot/grub/store.keyfile"
     echo "BindsTo=dev-${DEVICE}.device"
     echo "After=dev-${DEVICE}.device"
     echo "Before=umount.target"
