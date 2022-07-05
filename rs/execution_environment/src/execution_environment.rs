@@ -139,9 +139,8 @@ pub trait PausedExecution: std::fmt::Debug {
         round_context: RoundContext,
     ) -> ExecuteMessageResult;
 
-    /// Aborts the paused execution.
-    /// TODO(RUN-75): Add parameters and the return type.
-    fn abort(self: Box<Self>);
+    /// Aborts the paused execution and returns the original message.
+    fn abort(self: Box<Self>) -> CanisterInputMessage;
 }
 
 /// ExecutionEnvironment is the component responsible for executing messages

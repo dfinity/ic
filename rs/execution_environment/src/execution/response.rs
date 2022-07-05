@@ -7,6 +7,7 @@ use crate::execution_environment::{
 use crate::Hypervisor;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
+use ic_interfaces::messages::CanisterInputMessage;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
 use ic_types::messages::{CallContextId, Payload, Response};
 use ic_types::{ComputeAllocation, NumBytes, NumInstructions, Time};
@@ -33,6 +34,7 @@ struct OriginalContext {
     compute_allocation: ComputeAllocation,
     time: Time,
     total_instruction_limit: NumInstructions,
+    message: Arc<Response>,
 }
 
 /// Struct used to hold necessary information for the
@@ -57,8 +59,9 @@ impl PausedExecution for PausedResponseExecution {
         process_response_result(result, canister, self.original, current)
     }
 
-    fn abort(self: Box<Self>) {
-        todo!()
+    fn abort(self: Box<Self>) -> CanisterInputMessage {
+        self.paused_wasm_execution.abort();
+        CanisterInputMessage::Response(self.original.message)
     }
 }
 
@@ -85,8 +88,9 @@ impl PausedExecution for PausedCleanupExecution {
         process_cleanup_result(result, canister, self.callback_err, self.original, current)
     }
 
-    fn abort(self: Box<Self>) {
-        unimplemented!();
+    fn abort(self: Box<Self>) -> CanisterInputMessage {
+        self.paused_wasm_execution.abort();
+        CanisterInputMessage::Response(self.original.message)
     }
 }
 
@@ -266,6 +270,7 @@ pub fn execute_response(
         compute_allocation: execution_parameters.compute_allocation,
         time,
         total_instruction_limit,
+        message: response,
     };
 
     let current = RoundContext {
