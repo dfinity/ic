@@ -92,7 +92,13 @@ class Workload(threading.Thread):
         if num_load_generators <= 0:
             raise Exception("No workload generators registered for the current workload")
 
-        rps_per_machine = misc.distribute_load_to_n(self.workload.rps, num_load_generators)
+        # No command for machines that don't end up getting any workload assigned.
+        # That's iff num(machines) > rps
+        rps_per_machine = list(
+            filter(lambda x: x != 0, misc.distribute_load_to_n(self.workload.rps, num_load_generators))
+        )
+        if len(rps_per_machine) < 0:
+            raise Exception("Not using any workload generators, aborting")
 
         target_list = ",".join(f"http://[{target}]:8080" for target in self.target_machines)
         cmd = f'./ic-workload-generator "{target_list}"' f" -n {self.workload.duration} -p 9090 --no-status-check"
