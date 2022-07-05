@@ -5,20 +5,21 @@ notion-page](https://www.notion.so/Testing-Terminology-8cc0735dfcd945959f8d47cae
 
 ## System tests
 
-System Tests (declared in `rs/tests/bin/prod_test_driver.rs`) can involve all
+System tests (declared in `rs/tests/bin/prod_test_driver.rs`) can involve all
 components in combination in the form of a functioning IC. The test API is
 implemented in Rust.
 
-In System Tests, the smallest unit under test is a virtual machine. In
-particular, when deploying an Internet Computer instance, every node is
-instantiated as a virtual machine running the
-[ic-os](https://sourcegraph.com/github.com/dfinity/ic/-/tree/ic-os/guestos). The
-test driver allocates virtual machines using a backend service called
+The system test driver allows for the execution of arbitrary setup and test
+functions written in Rust. However, the accompanying APIs are geared towards
+instantiating and managing virtual machines on a backend service called
 [Farm](https://github.com/dfinity-lab/infra/tree/master/farm/). Farm actively
-manages all allocated resources. In particular, all virtual machines allocated
-by the test driver are collected after a maximum time-to-live.
+manages all allocated resources; e.g., all virtual machines allocated
+by the test driver are collected after the test driver finishes. When deploying
+an Internet Computer instance, every node is instantiated as a virtual machine
+running the
+[ic-os](https://sourcegraph.com/github.com/dfinity/ic/-/tree/ic-os/guestos).
 
-System Tests are organized in a hierarchy: every test belongs to a _pot_. A pot
+System tests are organized in a hierarchy: every test belongs to a _pot_. A pot
 declares the test system (Internet Computer under test). Multiple tests can run
 using the same test instance (of a pot) either in parallel or in sequence. Pots
 in turn are grouped into _test suites_.
@@ -84,11 +85,11 @@ IC_VERSION_ID=<version> ./run-system-tests.py --suite hourly --include-pattern b
 ```
 
 If your test is supposed to run for more than 50min, you need to set the 
-'SYSTEM_TESTS_TIMEOUT' environment variable to a suitable value in seconds.
+`SYSTEM_TESTS_TIMEOUT` environment variable to a suitable value in seconds.
 
 If you have further questions, please contact the testing team on #eng-testing.
 
-# How to write a System Test
+# How to write a system test
 
 Before progressing, it is worth understanding how system tests work
 conceptually and what makes them different from unit tests.
@@ -99,9 +100,9 @@ OS. E.g., it is not possible at the moment to test host os upgrades.
 
 Technically, the testing infrastructure can be used to deploy any kind of
 virtual machine (e.g. auxiliary services like rosetta node), provided the images
-are available in the correct format. However, typically, a setup procedure of a
-pot instantiates one Internet Computer instance and possibly some auxiliary
-virtual machines.
+are available in the correct format. Typically, however, a setup function of a
+pot is used to instantiate one Internet Computer instance and possibly some
+auxiliary virtual machines.
 
 When instantiating an IC, the IC is «bootstrapped». For all intends and
 purposes, this is the same procedure as was used when mainnet was launched:
@@ -112,10 +113,10 @@ topology of the network.
 
 A *test environment* is essentially a directory structure that contains
 information about the environment in which the test is executed. For example, it
-contains infrastructure configuration, such as the URL of Farm is located. Or,
-when a Internet Computer is deployed in the setup of a pot, the corresponding
-topology data is stored in the test env—which can then be picked up by the
-tests.
+contains infrastructure configuration, such as the URL where Farm is located.
+Or, when a Internet Computer is deployed in the setup of a pot, the
+corresponding topology data is stored in the test env—which can then be picked
+up by the tests.
 
 From the point of view of the test driver, both a test and a setup function are
 just procedures that operate on the test environment. They both have the
@@ -163,9 +164,9 @@ For more information about the test environment API, check out the module
 
 As stated in the previous section, any test works within a test environment.
 Before a test starts, the test driver «forks» the test environment of the
-corresponding pot setup; that just means, the directory is copied as is. Thus,
-every test *inherits* the environment of the pot's setup, but no two tests share
-the same test environment.
+corresponding pot setup; that is, the directory is copied as is. Thus, every
+test *inherits* the environment of the pot's setup, but no two tests share the
+same test environment.
 
 All tests environment are placed in the working directory of the test driver
 (see CLI options for more information). The working directory's structure
@@ -195,7 +196,11 @@ follows the hierarchical structure of the tests. For example:
 ## Example Test
 
 The `basic_health_test` is an example test that should act as guidance on how to
-use the test API.
+use the test API. **Note**: As every test environment is a copy of another test
+environment with the exception of the system environment, a test environment
+includes all the logs of the parent environment. As a consequence, a test
+environment contains all the logs of the system environment, up to the point
+where the test environment was created.
 
 ## Guiding principles when writing tests
 
@@ -216,9 +221,9 @@ like `basic_health_test`.
 
 ### A note on the CLI
 
-The System Tests are defined in `rs/tests/bin/prod-test-driver.rs`. The API of the tests themselves remains unchanged.
+The system tests are defined in `rs/tests/bin/prod-test-driver.rs`. The API of the tests themselves remains unchanged.
 
-For example, to run all the `pre-master` System Tests use:
+For example, to run all the `pre-master` system tests use:
 
 ```bash
 ./run-system-tests.py --suite pre_master --log-base-dir $(date +"%Y%m%d") 2>&1 | tee farm.log
@@ -226,7 +231,7 @@ For example, to run all the `pre-master` System Tests use:
 
 Note: This requires the commit to be built by CI/CD, i.e. it must be pushed to the remote and an MR has to be created. If the script can't find artifacts for the current commit, it will fail.
 
-Below is the usage of the "legacy" System Tests.
+Below is the usage of the "legacy" system tests.
 
 To run all tests, but still log debug-level messages to `my-log` we run:
 
@@ -265,7 +270,7 @@ In `fondue`, tests are organized in _pots_ of two different kinds:
 	its environment.
 
 
-## Legacy System Tests
+## Legacy system tests
 
 The `rs/tests` crate also hosts the so-called _legacy system tests_ declared in
 `rs/tests/src/main.rs`. The tests use largely the same API, however, the nodes
