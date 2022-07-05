@@ -53,7 +53,7 @@ impl CryptoMetrics {
     ) {
         if let (Some(metrics), Some(start_time)) = (&self.metrics, start_time) {
             metrics
-                .ic_crypto_lock_acquisition_duration_seconds
+                .crypto_lock_acquisition_duration_seconds
                 .with_label_values(&[name, access])
                 .observe(start_time.elapsed().as_secs_f64());
         }
@@ -71,8 +71,7 @@ impl CryptoMetrics {
         start_time: Option<Instant>,
     ) {
         if let (Some(metrics), Some(start_time)) = (&self.metrics, start_time) {
-            if let Some(domain_metrics) = metrics.ic_crypto_csp_local_duration_seconds.get(&domain)
-            {
+            if let Some(domain_metrics) = metrics.crypto_csp_local_duration_seconds.get(&domain) {
                 domain_metrics
                     .with_label_values(&[&format!("{}::{}", domain, method_name)])
                     .observe(start_time.elapsed().as_secs_f64());
@@ -93,7 +92,7 @@ impl CryptoMetrics {
         start_time: Option<Instant>,
     ) {
         if let (Some(metrics), Some(start_time)) = (&self.metrics, start_time) {
-            if let Some(domain_metrics) = metrics.ic_crypto_full_duration_seconds.get(&domain) {
+            if let Some(domain_metrics) = metrics.crypto_full_duration_seconds.get(&domain) {
                 domain_metrics
                     .with_label_values(&[&format!("{}::{}", domain, method_name)])
                     .observe(start_time.elapsed().as_secs_f64());
@@ -111,24 +110,25 @@ pub enum MetricsDomain {
     TlsHandshake,
     IDkgProtocol,
     ThresholdEcdsa,
+    IcCanisterSignature,
 }
 
 struct Metrics {
     /// Histogram of crypto lock acquisition times. The 'access' label is either
     /// 'read' or 'write'.
-    pub ic_crypto_lock_acquisition_duration_seconds: HistogramVec,
+    pub crypto_lock_acquisition_duration_seconds: HistogramVec,
 
     /// Histograms of CSP method call times of various functionalities, measuring
     /// the duration of the actual local crypto computation.
     ///
     /// The 'method_name' label indicates the functionality, such as `BasicSignature::sign`.
-    pub ic_crypto_csp_local_duration_seconds: BTreeMap<MetricsDomain, HistogramVec>,
+    pub crypto_csp_local_duration_seconds: BTreeMap<MetricsDomain, HistogramVec>,
 
     /// Histograms of crypto method call times of various functionalities, measuring the full
     /// duration of the call, i.e. both the local crypto computation, and the
     /// potential RPC overhead.
     /// The 'method_name' label indicates the functionality, such as `BasicSignature::sign`.
-    pub ic_crypto_full_duration_seconds: BTreeMap<MetricsDomain, HistogramVec>,
+    pub crypto_full_duration_seconds: BTreeMap<MetricsDomain, HistogramVec>,
 }
 
 impl Display for MetricsDomain {
@@ -147,11 +147,12 @@ impl MetricsDomain {
             MetricsDomain::TlsHandshake => "tls_handshake",
             MetricsDomain::IDkgProtocol => "idkg",
             MetricsDomain::ThresholdEcdsa => "threshold_ecdsa",
+            MetricsDomain::IcCanisterSignature => "ic_canister_signature",
         }
     }
 
     fn local_metric_name(&self) -> String {
-        format!("ic_crypto_{}_local_duration_seconds", self)
+        format!("crypto_{}_local_duration_seconds", self)
     }
 
     fn local_metric_help(&self) -> String {
@@ -162,7 +163,7 @@ impl MetricsDomain {
     }
 
     fn full_metric_name(&self) -> String {
-        format!("ic_crypto_{}_full_duration_seconds", self)
+        format!("crypto_{}_full_duration_seconds", self)
     }
 
     fn full_metric_help(&self) -> String {
@@ -199,14 +200,14 @@ impl Metrics {
             );
         }
         Self {
-            ic_crypto_lock_acquisition_duration_seconds: r.histogram_vec(
-                "ic_crypto_lock_acquisition_duration_seconds",
+            crypto_lock_acquisition_duration_seconds: r.histogram_vec(
+                "crypto_lock_acquisition_duration_seconds",
                 "Histogram of crypto lock acquisition times",
                 vec![0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0],
                 &["name", "access"],
             ),
-            ic_crypto_csp_local_duration_seconds: local_duration,
-            ic_crypto_full_duration_seconds: full_duration,
+            crypto_csp_local_duration_seconds: local_duration,
+            crypto_full_duration_seconds: full_duration,
         }
     }
 }

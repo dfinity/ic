@@ -101,6 +101,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
             crypto.registry_version => registry_version.get(),
         );
         debug!(logger; crypto.description => "start",);
+        let start_time = self.metrics.now();
         let result = BasicSigVerifierInternal::verify_basic_sig(
             &self.csp,
             Arc::clone(&self.registry_client),
@@ -108,6 +109,11 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
             message,
             signer,
             registry_version,
+        );
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::BasicSignature,
+            "verify_basic_sig",
+            start_time,
         );
         debug!(logger;
             crypto.description => "end",
@@ -134,11 +140,18 @@ impl<C: CryptoServiceProvider, S: Signable> BasicSigVerifierByPublicKey<S>
             crypto.public_key => format!("{}", public_key),
         );
         debug!(logger; crypto.description => "start",);
+        let start_time = self.metrics.now();
+        let metrics_label = format!("verify_basic_sig_by_public_key_{}", public_key.algorithm_id);
         let result = BasicSignVerifierByPublicKeyInternal::verify_basic_sig_by_public_key(
             &self.csp,
             signature,
             signed_bytes,
             public_key,
+        );
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::BasicSignature,
+            &metrics_label,
+            start_time,
         );
         debug!(logger;
             crypto.description => "end",
@@ -198,6 +211,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
             crypto.registry_version => registry_version.get(),
         );
         debug!(logger; crypto.description => "start",);
+        let start_time = self.metrics.now();
         let result = MultiSigVerifierInternal::verify_multi_sig_individual(
             &self.csp,
             Arc::clone(&self.registry_client),
@@ -205,6 +219,11 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
             message,
             signer,
             registry_version,
+        );
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::MultiSignature,
+            "verify_multi_sig_individual",
+            start_time,
         );
         debug!(logger;
             crypto.description => "end",
@@ -230,11 +249,17 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
         debug!(logger;
             crypto.description => format!("start; signature count: {}", signature_count),
         );
+        let start_time = self.metrics.now();
         let result = MultiSigVerifierInternal::combine_multi_sig_individuals(
             &self.csp,
             Arc::clone(&self.registry_client),
             signatures,
             registry_version,
+        );
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::MultiSignature,
+            "combine_multi_sig_individuals",
+            start_time,
         );
         debug!(logger;
             crypto.description => format!("end; signature count: {}", signature_count),
@@ -261,6 +286,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
         debug!(logger;
             crypto.description => format!("start; signers: {:?}", signers),
         );
+        let start_time = self.metrics.now();
         let result = MultiSigVerifierInternal::verify_multi_sig_combined(
             &self.csp,
             Arc::clone(&self.registry_client),
@@ -268,6 +294,11 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
             message,
             signers.clone(),
             registry_version,
+        );
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::MultiSignature,
+            "verify_multi_sig_combined",
+            start_time,
         );
         debug!(logger;
             crypto.description => format!("end; signers: {:?}", signers),
@@ -325,6 +356,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
             crypto.dkg_id => format!("{}", dkg_id),
         );
         debug!(logger; crypto.description => "start",);
+        let start_time = self.metrics.now();
         let result = ThresholdSigVerifierInternal::verify_threshold_sig_share(
             &self.lockable_threshold_sig_data_store,
             &self.csp,
@@ -332,6 +364,11 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
             message,
             dkg_id,
             signer,
+        );
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::ThresholdSignature,
+            "verify_threshold_sig_share",
+            start_time,
         );
         debug!(logger;
             crypto.description => "end",
@@ -355,11 +392,17 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
         debug!(logger;
             crypto.description => format!("start; nodes with share: {:?}", nodes_with_share),
         );
+        let start_time = self.metrics.now();
         let result = ThresholdSigVerifierInternal::combine_threshold_sig_shares(
             &self.lockable_threshold_sig_data_store,
             &self.csp,
             shares,
             dkg_id,
+        );
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::ThresholdSignature,
+            "combine_threshold_sig_shares",
+            start_time,
         );
         debug!(logger;
             crypto.description => format!("end; nodes with share: {:?}", nodes_with_share),
@@ -383,12 +426,18 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
         debug!(logger;
             crypto.description => "start",
         );
+        let start_time = self.metrics.now();
         let result = ThresholdSigVerifierInternal::verify_threshold_sig_combined(
             &self.lockable_threshold_sig_data_store,
             &self.csp,
             signature,
             message,
             dkg_id,
+        );
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::ThresholdSignature,
+            "verify_threshold_sig_combined",
+            start_time,
         );
         debug!(logger;
             crypto.description => "end",
@@ -418,6 +467,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
         debug!(logger;
             crypto.description => "start",
         );
+        let start_time = self.metrics.now();
         let result = ThresholdSigVerifierInternal::verify_combined_threshold_sig_by_public_key(
             &self.csp,
             Arc::clone(&self.registry_client),
@@ -425,6 +475,11 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
             message,
             subnet_id,
             registry_version,
+        );
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::ThresholdSignature,
+            "verify_combined_threshold_sig_by_public_key",
+            start_time,
         );
         debug!(logger;
             crypto.description => "end",
@@ -453,12 +508,18 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
         debug!(logger;
             crypto.description => "start",
         );
+        let start_time = self.metrics.now();
         let result = canister_sig::verify_canister_sig(
             Arc::clone(&self.registry_client),
             signature,
             signed_bytes,
             public_key,
             registry_version,
+        );
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::IcCanisterSignature,
+            "verify_canister_sig",
+            start_time,
         );
         debug!(logger;
             crypto.description => "end",
@@ -511,8 +572,14 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
         debug!(logger;
             crypto.description => "start",
         );
+        let start_time = self.metrics.now();
         let result =
             canister_threshold_sig::ecdsa::verify_sig_share(&self.csp, signer, inputs, share);
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::ThresholdEcdsa,
+            "verify_sig_share",
+            start_time,
+        );
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
@@ -533,7 +600,13 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
         debug!(logger;
             crypto.description => "start",
         );
+        let start_time = self.metrics.now();
         let result = canister_threshold_sig::ecdsa::combine_sig_shares(&self.csp, inputs, shares);
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::ThresholdEcdsa,
+            "combine_sig_shares",
+            start_time,
+        );
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
@@ -554,8 +627,14 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatC
         debug!(logger;
             crypto.description => "start",
         );
+        let start_time = self.metrics.now();
         let result =
             canister_threshold_sig::ecdsa::verify_combined_signature(&self.csp, inputs, signature);
+        self.metrics.observe_full_duration_seconds(
+            MetricsDomain::ThresholdEcdsa,
+            "verify_combined_sig",
+            start_time,
+        );
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),

@@ -16,7 +16,7 @@ use phantom_newtype::Id;
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, fmt, str::FromStr};
-use strum_macros::EnumIter;
+use strum_macros::{Display, EnumIter};
 
 /// An id of a key. These ids are used to refer to entries in the crypto secret
 /// key store.
@@ -122,10 +122,22 @@ impl FromStr for KeyPurpose {
 /// An algorithm ID. This is used to specify the signature algorithm associated
 /// with a public key.
 #[derive(
-    Clone, Copy, Debug, Deserialize, EnumIter, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Display,
+    EnumIter,
+    Eq,
+    Hash,
+    PartialEq,
+    PartialOrd,
+    Ord,
+    Serialize,
 )]
 #[cfg_attr(all(test, not(target_arch = "wasm32")), derive(Arbitrary))]
 #[allow(non_camel_case_types)]
+#[strum(serialize_all = "snake_case")]
 pub enum AlgorithmId {
     Placeholder = 0,
     MultiBls12_381 = 1,
