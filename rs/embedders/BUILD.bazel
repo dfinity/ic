@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "@crate_index//:parity-wasm",
     "@crate_index//:prometheus",
     "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
     "@crate_index//:slog",
     "@crate_index//:wasmtime",
     "@crate_index//:wasmtime-environ",

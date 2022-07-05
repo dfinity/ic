@@ -107,8 +107,10 @@ use parity_wasm::elements::{
     BlockType, BulkInstruction, ExportEntry, FuncBody, FunctionType, GlobalEntry, GlobalType,
     InitExpr, Instruction, Instructions, Internal, Local, Module, Section, Type, ValueType,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::convert::TryFrom;
+use std::iter::FromIterator;
 
 const UPDATE_AVAILABLE_MEMORY_FN: u32 = 1; // because it's the second import
 
@@ -255,20 +257,35 @@ fn inject_helper_functions(module: Module) -> Module {
     module
 }
 
-/// Vector of heap data chunks with their offsets.
-pub struct Segments(Vec<(usize, Vec<u8>)>);
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Segment {
+    offset: usize,
+    #[serde(with = "serde_bytes")]
+    bytes: Vec<u8>,
+}
 
-impl From<Vec<(usize, Vec<u8>)>> for Segments {
-    fn from(vec: Vec<(usize, Vec<u8>)>) -> Self {
-        Self(vec)
+/// Vector of heap data chunks with their offsets.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Segments(Vec<Segment>);
+
+impl FromIterator<(usize, Vec<u8>)> for Segments {
+    fn from_iter<T: IntoIterator<Item = (usize, Vec<u8>)>>(iter: T) -> Self {
+        Segments(
+            iter.into_iter()
+                .map(|(offset, bytes)| Segment { offset, bytes })
+                .collect(),
+        )
     }
 }
 
 impl Segments {
     // Returns the slice of the internal data. For testing purposes only.
-    #[allow(dead_code)]
-    pub fn as_slice(&self) -> &[(usize, Vec<u8>)] {
-        &self.0
+    #[doc(hidden)]
+    pub fn into_slice(self) -> Vec<(usize, Vec<u8>)> {
+        self.0
+            .into_iter()
+            .map(|seg| (seg.offset, seg.bytes))
+            .collect()
     }
 
     pub fn validate(
@@ -277,7 +294,7 @@ impl Segments {
     ) -> Result<(), WasmInstrumentationError> {
         let initial_memory_size =
             (initial_wasm_pages.get() as usize) * WASM_PAGE_SIZE_IN_BYTES as usize;
-        for (offset, bytes) in self.0.iter() {
+        for Segment { offset, bytes } in self.0.iter() {
             let out_of_bounds = match offset.checked_add(bytes.len()) {
                 None => true,
                 Some(end) => end > initial_memory_size,
@@ -295,12 +312,12 @@ impl Segments {
     // Takes chunks extracted from data, and creates pages out of them, by mapping
     // them to the corresponding page, leaving uninitialized parts filled with
     // zeros.
-    pub fn as_pages(self) -> Vec<(PageIndex, PageBytes)> {
+    pub fn as_pages(&self) -> Vec<(PageIndex, PageBytes)> {
         self.0
             .iter()
             // We go over all chunks and split them into multiple chunks if they cross page
             // boundaries.
-            .flat_map(|(offset, bytes)| {
+            .flat_map(|Segment { offset, bytes }| {
                 // First, we determine the size of the first chunk, which is equal to the chunk
                 // itself, if it does not cross the page boundary.
                 let first_chunk_size = std::cmp::min(bytes.len(), PAGE_SIZE - (offset % PAGE_SIZE));
@@ -460,7 +477,7 @@ pub(super) fn instrument(
     };
 
     // pull out the data from the data section
-    let data = Segments::from(get_data(module.sections_mut()));
+    let data = get_data(module.sections_mut());
     data.validate(NumWasmPages::from(initial_limit as usize))?;
 
     let wasm_instruction_count = (module
@@ -778,8 +795,8 @@ fn injections(
 
 // Looks for the data section and if it is present, converts it to a vector of
 // tuples (heap offset, bytes) and then deletes the section.
-fn get_data(sections: &mut Vec<Section>) -> Vec<(usize, Vec<u8>)> {
-    let mut res = Vec::new();
+fn get_data(sections: &mut Vec<Section>) -> Segments {
+    let mut res = Segments::default();
     let mut data_section_idx = sections.len();
     for (i, section) in sections.iter_mut().enumerate() {
         if let Section::Data(section) = section {

@@ -1,11 +1,10 @@
 //! This defines the RPC service methods offered by the sandbox process
 //! (used by the controller) as well as the expected replies.
 
-use std::collections::BTreeSet;
-
 use crate::fdenum::EnumerateInnerFileDescriptors;
 use crate::protocol::structs;
-use ic_interfaces::execution_environment::{CompilationResult, HypervisorResult};
+use ic_embedders::CompilationResult;
+use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
     page_map::{
         CheckpointSerialization, MappingSerialization, PageAllocatorSerialization,
@@ -13,14 +12,13 @@ use ic_replicated_state::{
     },
     Global, NumWasmPages,
 };
-use ic_types::{methods::WasmMethod, CanisterId};
+use ic_types::CanisterId;
 use serde::{Deserialize, Serialize};
 
 use super::{
     id::{ExecId, MemoryId, WasmId},
     structs::{MemoryModifications, SandboxExecInput},
 };
-use ic_replicated_state::canister_state::execution_state::WasmMetadata;
 
 /// Instruct sandbox process to terminate: Sandbox process should take
 /// all necessary steps for graceful termination (sync all files etc.)
@@ -235,8 +233,6 @@ impl EnumerateInnerFileDescriptors for CreateExecutionStateRequest {
 pub struct CreateExecutionStateSuccessReply {
     pub wasm_memory_modifications: MemoryModifications,
     pub exported_globals: Vec<Global>,
-    pub exported_functions: BTreeSet<WasmMethod>,
-    pub wasm_metadata: WasmMetadata,
     pub compilation_result: CompilationResult,
 }
 

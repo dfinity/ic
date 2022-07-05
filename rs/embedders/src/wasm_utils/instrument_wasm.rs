@@ -4,7 +4,7 @@ use slog::Drain;
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
-    wasm_utils::{compile, decoding::decode_wasm},
+    wasm_utils::{decoding::decode_wasm, validate_and_instrument_for_testing},
     WasmtimeEmbedder,
 };
 
@@ -44,10 +44,8 @@ fn instrument_wasm(filename: &str) -> std::io::Result<()> {
     let config = EmbeddersConfig::default();
     let decoded = decode_wasm(Arc::new(contents)).expect("failed to decode canister module");
     let embedder = WasmtimeEmbedder::new(config, get_logger().into());
-    match compile(&embedder, &decoded) {
-        Ok(output) => {
-            std::io::stdout().write_all(output.1.instrumentation_output.binary.as_slice())
-        }
+    match validate_and_instrument_for_testing(&embedder, &decoded) {
+        Ok((_, output)) => std::io::stdout().write_all(output.binary.as_slice()),
         Err(err) => {
             eprintln!("Failed to instrument wasm file {}: {}", filename, err);
             std::process::exit(1);

@@ -3,10 +3,11 @@ use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
+use ic_embedders::CompilationResult;
 use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
-    CompilationResult, ExecutionParameters, HypervisorError, HypervisorResult, WasmExecutionOutput,
+    ExecutionParameters, HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
@@ -101,6 +102,7 @@ impl HypervisorMetrics {
             largest_function_instruction_count,
             compilation_time,
             compilation_cost: _,
+            serialized_module: _,
         } = compilation_result;
         self.largest_function_instruction_count
             .observe(largest_function_instruction_count.get() as f64);

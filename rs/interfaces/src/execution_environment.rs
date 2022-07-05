@@ -18,12 +18,9 @@ use ic_types::{
     ComputeAllocation, Cycles, ExecutionRound, Height, NumInstructions, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, RwLock};
 use std::{collections::BTreeMap, ops};
 use std::{convert::Infallible, fmt};
-use std::{
-    sync::{Arc, RwLock},
-    time::Duration,
-};
 use tower::{limit::ConcurrencyLimit, util::BoxCloneService};
 
 /// Instance execution statistics. The stats are cumulative and
@@ -958,18 +955,6 @@ impl fmt::Display for WasmExecutionOutput {
                self.instance_stats.dirty_pages
         )
     }
-}
-
-/// The results of compiling a Canister which need to be passed back to the main
-/// replica process.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct CompilationResult {
-    /// The number of instructions in the canister's largest function.
-    pub largest_function_instruction_count: NumInstructions,
-    /// Compiling the canister is equivalent to executing this many instructions.
-    pub compilation_cost: NumInstructions,
-    /// Time to compile canister (including instrumentation and validation).
-    pub compilation_time: Duration,
 }
 
 #[cfg(test)]

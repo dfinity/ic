@@ -1,10 +1,11 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use ic_interfaces::execution_environment::{CompilationResult, HypervisorResult};
+use ic_config::embedders::Config as EmbeddersConfig;
+use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::EmbedderCache;
 use ic_wasm_types::BinaryEncodedWasm;
 
-use crate::WasmtimeEmbedder;
+use crate::{serialized_module::SerializedModule, CompilationResult, WasmtimeEmbedder};
 
 pub mod decoding;
 pub mod errors;
@@ -12,46 +13,59 @@ pub mod instrumentation;
 pub mod validation;
 mod wasm_module_builder;
 
-use instrumentation::{instrument, InstructionCostTable, InstrumentationOutput};
-use validation::{validate_wasm_binary, WasmValidationDetails};
+use instrumentation::{instrument, InstructionCostTable};
+use validation::validate_wasm_binary;
 
-/// All data required to create an execution state after compiling a canister.
-pub struct FullCompilationOutput {
-    pub validation_details: WasmValidationDetails,
-    pub instrumentation_output: InstrumentationOutput,
-    pub compilation_time: Duration,
+use self::{instrumentation::InstrumentationOutput, validation::WasmValidationDetails};
+
+fn validate_and_instrument(
+    wasm: &BinaryEncodedWasm,
+    instruction_cost_table: &InstructionCostTable,
+    config: &EmbeddersConfig,
+) -> HypervisorResult<(WasmValidationDetails, InstrumentationOutput)> {
+    let wasm_validation_details = validate_wasm_binary(wasm, config)?;
+    let instrumentation_output = instrument(
+        wasm,
+        instruction_cost_table,
+        config.cost_to_compile_wasm_instruction,
+    )?;
+    Ok((wasm_validation_details, instrumentation_output))
 }
 
-impl From<&FullCompilationOutput> for CompilationResult {
-    fn from(item: &FullCompilationOutput) -> Self {
-        CompilationResult {
-            largest_function_instruction_count: item
-                .validation_details
-                .largest_function_instruction_count,
-            compilation_cost: item.instrumentation_output.compilation_cost,
-            compilation_time: item.compilation_time,
-        }
-    }
+/// Only exposed for tests that need to inspect the instrumented wasm or
+/// validation details.
+#[doc(hidden)]
+pub fn validate_and_instrument_for_testing(
+    embedder: &WasmtimeEmbedder,
+    wasm: &BinaryEncodedWasm,
+) -> HypervisorResult<(WasmValidationDetails, InstrumentationOutput)> {
+    validate_and_instrument(wasm, &InstructionCostTable::default(), embedder.config())
 }
 
 pub fn compile(
     embedder: &WasmtimeEmbedder,
     wasm: &BinaryEncodedWasm,
-) -> HypervisorResult<(EmbedderCache, FullCompilationOutput)> {
+) -> HypervisorResult<(EmbedderCache, CompilationResult)> {
     let timer = Instant::now();
-    let wasm_validation_details = validate_wasm_binary(wasm, embedder.config())?;
-    let instrumentation_output = instrument(
-        wasm,
-        &InstructionCostTable::default(),
-        embedder.config().cost_to_compile_wasm_instruction,
+    let (wasm_validation_details, instrumentation_output) =
+        validate_and_instrument(wasm, &InstructionCostTable::default(), embedder.config())?;
+    let module = embedder.compile(&instrumentation_output.binary)?;
+    let largest_function_instruction_count =
+        wasm_validation_details.largest_function_instruction_count;
+    let compilation_cost = instrumentation_output.compilation_cost;
+    let serialized_module = SerializedModule::new(
+        embedder.config().feature_flags.module_sharing,
+        &module,
+        instrumentation_output,
+        wasm_validation_details,
     )?;
-    let compilate = embedder.compile(&instrumentation_output.binary)?;
     Ok((
-        compilate,
-        FullCompilationOutput {
-            validation_details: wasm_validation_details,
-            instrumentation_output,
+        EmbedderCache::new(module),
+        CompilationResult {
+            largest_function_instruction_count,
+            compilation_cost,
             compilation_time: timer.elapsed(),
+            serialized_module,
         },
     ))
 }

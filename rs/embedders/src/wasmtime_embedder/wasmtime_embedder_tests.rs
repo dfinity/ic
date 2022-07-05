@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::{system_api, StoreData, NUM_INSTRUCTION_GLOBAL_NAME};
-use crate::{wasm_utils::compile, WasmtimeEmbedder};
+use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
@@ -80,12 +80,12 @@ fn test_wasmtime_system_api() {
         BinaryEncodedWasm::new(wabt::wat2wasm(&wat).expect("failed to compile Wasm source"));
     // Exports the global `counter_instructions`.
     let config = EmbeddersConfig::default();
-    let output_instrumentation =
-        compile(&WasmtimeEmbedder::new(config, no_op_logger()), &wasm_binary)
-            .unwrap()
-            .1
-            .instrumentation_output;
-    let module = Module::new(&engine, output_instrumentation.binary.as_slice())
+    let (_, instrumentation_output) = validate_and_instrument_for_testing(
+        &WasmtimeEmbedder::new(config, no_op_logger()),
+        &wasm_binary,
+    )
+    .unwrap();
+    let module = Module::new(&engine, instrumentation_output.binary.as_slice())
         .expect("failed to instantiate module");
 
     let linker = system_api::syscalls(no_op_logger(), canister_id, &store, FlagStatus::Enabled);

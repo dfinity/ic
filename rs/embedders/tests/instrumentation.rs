@@ -1,8 +1,8 @@
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::{
-        compile,
         instrumentation::{export_additional_symbols, ExportModuleData, Segments},
+        validate_and_instrument_for_testing,
         validation::RESERVED_SYMBOLS,
     },
     WasmtimeEmbedder,
@@ -37,13 +37,12 @@ fn inject_and_cmp(testname: &str) {
     let buff = wabt::wat2wasm_with_features(content, features.clone())
         .expect("couldn't convert the input wat to Wasm");
     let config = EmbeddersConfig::default();
-    let output = compile(
+    let output = validate_and_instrument_for_testing(
         &WasmtimeEmbedder::new(config, no_op_logger()),
         &BinaryEncodedWasm::new(buff),
     )
     .expect("couldn't instrument Wasm code")
-    .1
-    .instrumentation_output;
+    .1;
     let module: Module = parity_wasm::elements::deserialize_buffer(output.binary.as_slice())
         .expect("couldn't deserialize module");
     let out = wabt::wasm2wat_with_features(
@@ -143,7 +142,7 @@ fn metering_memory_fill() {
 fn test_get_data() {
     let config = EmbeddersConfig::default();
     let embedder = WasmtimeEmbedder::new(config, no_op_logger());
-    let output = compile(
+    let output = validate_and_instrument_for_testing(
         &embedder,
         &BinaryEncodedWasm::new(
             wabt::wat2wasm(
@@ -158,9 +157,8 @@ fn test_get_data() {
         ),
     )
     .unwrap()
-    .1
-    .instrumentation_output;
-    let data = output.data.as_slice();
+    .1;
+    let data = output.data.into_slice();
     assert_eq!((2, b"a tree".to_vec()), data[0]);
     assert_eq!((11, b"is known".to_vec()), data[1]);
     assert_eq!((23, b"by its fruit".to_vec()), data[2]);
@@ -174,11 +172,13 @@ fn test_get_data() {
 
 #[test]
 fn test_chunks_to_pages() {
-    let segs = Segments::from(vec![
+    let segs: Segments = vec![
         (0, vec![1; PAGE_SIZE + 10]), // The segment is larger than a page.
         (PAGE_SIZE + 5, vec![2; 10]), // Overlaps with the segment above.
         (PAGE_SIZE + PAGE_SIZE - 100, vec![3; 200]), // Crosses the page boundary.
-    ]);
+    ]
+    .into_iter()
+    .collect();
     let mut pages = segs.as_pages();
     // sort for determinism
     pages.sort_by_key(|p| p.0);

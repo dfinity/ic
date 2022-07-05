@@ -9,10 +9,9 @@ use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::wasm_executor::{
     get_wasm_reserved_pages, PausedWasmExecution, WasmExecutionResult, WasmExecutor,
 };
-use ic_embedders::WasmExecutionInput;
+use ic_embedders::{CompilationResult, WasmExecutionInput};
 use ic_interfaces::execution_environment::{
-    CompilationResult, HypervisorError, HypervisorResult, InstanceStats, SubnetAvailableMemory,
-    WasmExecutionOutput,
+    HypervisorError, HypervisorResult, InstanceStats, SubnetAvailableMemory, WasmExecutionOutput,
 };
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
@@ -611,11 +610,21 @@ impl WasmExecutor for SandboxedExecutionController {
         let execution_state = ExecutionState::new(
             canister_root,
             wasm_binary,
-            ExportedFunctions::new(reply.exported_functions),
+            ExportedFunctions::new(
+                reply
+                    .compilation_result
+                    .serialized_module
+                    .exported_functions()
+                    .clone(),
+            ),
             wasm_memory,
             stable_memory,
             reply.exported_globals,
-            reply.wasm_metadata,
+            reply
+                .compilation_result
+                .serialized_module
+                .wasm_metadata()
+                .clone(),
         );
         Ok((reply.compilation_result, execution_state))
     }
