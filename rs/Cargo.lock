@@ -5582,7 +5582,6 @@ dependencies = [
  "ic-canister-sandbox-replica-controller",
  "ic-config",
  "ic-crypto",
- "ic-crypto-sha",
  "ic-crypto-tree-hash",
  "ic-cycles-account-manager",
  "ic-embedders",

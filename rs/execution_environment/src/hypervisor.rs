@@ -1,10 +1,11 @@
 use ic_canister_sandbox_replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
+use ic_config::embedders::FeatureFlags;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
-use ic_embedders::CompilationResult;
 use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
+use ic_embedders::{CompilationCache, CompilationResult};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionParameters, HypervisorError, HypervisorResult, WasmExecutionOutput,
@@ -118,6 +119,7 @@ pub struct Hypervisor {
     own_subnet_type: SubnetType,
     log: ReplicaLogger,
     cycles_account_manager: Arc<CyclesAccountManager>,
+    compilation_cache: Arc<CompilationCache>,
 }
 
 impl Hypervisor {
@@ -326,10 +328,13 @@ impl Hypervisor {
                 .create_execution_state(wasm_binary, canister_root, canister_id)?;
         self.metrics
             .observe_compilation_metrics(&compilation_result);
+        self.compilation_cache.insert(
+            &execution_state.wasm_binary.binary,
+            compilation_result.serialized_module,
+        );
         Ok((compilation_result.compilation_cost, execution_state))
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         config: Config,
         metrics_registry: &MetricsRegistry,
@@ -342,6 +347,8 @@ impl Hypervisor {
         embedder_config.query_execution_threads = config.query_execution_threads;
         embedder_config.feature_flags.rate_limiting_of_debug_prints =
             config.rate_limiting_of_debug_prints;
+
+        let module_sharing_flag = embedder_config.feature_flags.module_sharing;
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
             FlagStatus::Enabled => {
@@ -370,6 +377,7 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
+            compilation_cache: Arc::new(CompilationCache::new(module_sharing_flag)),
         }
     }
 
@@ -389,6 +397,9 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
+            compilation_cache: Arc::new(CompilationCache::new(
+                FeatureFlags::default().module_sharing,
+            )),
         }
     }
 
@@ -427,6 +438,10 @@ impl Hypervisor {
         if let Some(compilation_result) = compilation_result {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);
+            self.compilation_cache.insert(
+                &execution_state.wasm_binary.binary,
+                compilation_result.serialized_module,
+            );
         }
         self.metrics.observe(api_type_str, &execution_result);
         let (output, system_state_changes) = match execution_result {
@@ -475,6 +490,10 @@ impl Hypervisor {
         if let Some(compilation_result) = compilation_result {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);
+            self.compilation_cache.insert(
+                &execution_state.wasm_binary.binary,
+                compilation_result.serialized_module,
+            );
         }
         self.metrics.observe(api_type_str, &execution_result);
         (execution_state, execution_result)

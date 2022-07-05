@@ -1,3 +1,4 @@
+mod compilation_cache;
 mod serialized_module;
 mod signal_handler;
 pub mod wasm_executor;
@@ -6,13 +7,14 @@ pub mod wasmtime_embedder;
 
 use std::time::Duration;
 
+pub use compilation_cache::CompilationCache;
 use ic_interfaces::execution_environment::ExecutionParameters;
 use ic_replicated_state::{ExecutionState, Global, NumWasmPages, PageIndex};
 use ic_sys::PageBytes;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{methods::FuncRef, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
-use serialized_module::SerializedModule;
+pub use serialized_module::SerializedModule;
 pub use wasmtime_embedder::{WasmtimeEmbedder, WasmtimeMemoryCreator};
 
 pub struct WasmExecutionInput {
