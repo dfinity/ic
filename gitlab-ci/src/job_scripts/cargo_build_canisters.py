@@ -39,6 +39,7 @@ BIN_CANISTERS = [
     "root-canister",
     "sns-governance-canister",
     "sns-root-canister",
+    "sns-swap-canister",
     "sns-test-dapp-canister",
     "sns-governance-mem-test-canister",
     "sns-wasm-canister",
@@ -66,6 +67,7 @@ CANISTERS_MAX_SIZE_IN_BYTES = {
     "sns-governance-canister.wasm": 1_500_000,
     "sns-governance-canister_test.wasm": 1_500_000,
     "sns-root-canister.wasm": 1_500_000,
+    "sns-swap-canister.wasm": 1_500_000,
     "sns-wasm-canister.wasm": 1_500_000,
 }
 

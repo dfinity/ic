@@ -42,6 +42,7 @@ wasm_canister_build_list=(
     root-canister
     sns-governance-canister
     sns-root-canister
+    sns-swap-canister
     sns-test-dapp-canister
     sns-governance-mem-test-canister
     sns-wasm-canister
