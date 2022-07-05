@@ -19,7 +19,7 @@ groups
 
 cd "$ROOT_DIR" || exit 1
 # When you change the list below, please update ic-os/boundary-guestos/Capsule.toml accordingly!
-for f in boundary-node-control-plane boundary-node-prober; do
+for f in boundary-node-control-plane boundary-node-prober ic-balance-exporter; do
     gunzip -c -d artifacts/release/$f.gz >artifacts/release/$f
 done
 

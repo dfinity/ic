@@ -91,7 +91,12 @@ fi
 
 # Compute arguments for actual build stage.
 
-declare -a IC_EXECUTABLES=(boundary-node-control-plane boundary-node-prober)
+declare -a IC_EXECUTABLES=(
+    "boundary-node-control-plane"
+    "boundary-node-prober"
+    "ic-balance-exporter"
+)
+
 declare -a INSTALL_EXEC_ARGS=()
 for IC_EXECUTABLE in "${IC_EXECUTABLES[@]}"; do
     INSTALL_EXEC_ARGS+=("${EXEC_SRCDIR}/${IC_EXECUTABLE}:/opt/ic/bin/${IC_EXECUTABLE}:0755")

@@ -1,0 +1,18 @@
+[Unit]
+Description=Boundary Node Prober Wallets Exporter
+After=setup-prober.service
+ConditionPathExists=!/etc/prober/prober.disabled
+
+[Service]
+User=prober
+Group=prober
+Restart=always
+ExecStart=/opt/ic/bin/ic-balance-exporter \
+    --wallets-path "${WALLETS_PATH}" \
+    --identity-path "${IDENTITY_PATH}" \
+    --root-key-path "${ROOT_KEY_PATH}" \
+    --scrape-interval "${SCRAPE_INTERVAL}" \
+    --metrics-addr "${METRICS_ADDR}"
+
+[Install]
+WantedBy=multi-user.target
