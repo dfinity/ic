@@ -1,0 +1,7 @@
+policy_module(infogetty, 1.0.0)
+
+require {
+    type getty_t;
+}
+
+unconfined_domain(getty_t)
