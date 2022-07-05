@@ -8,7 +8,7 @@ use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, Wasmtime
 use ic_embedders::{CompilationCache, CompilationResult};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorError, HypervisorResult, WasmExecutionOutput,
+    ExecutionParameters, HypervisorResult, WasmExecutionOutput,
 };
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
@@ -131,69 +131,6 @@ impl Hypervisor {
         self.own_subnet_type
     }
 
-    /// Executes the system method `canister_start`.
-    ///
-    /// Returns:
-    ///
-    /// - The updated `CanisterState` if the execution succeeded, otherwise
-    /// the old `CanisterState`.
-    ///
-    /// - Number of instructions left. This should be <= `instructions_limit`.
-    ///
-    /// - A HypervisorResult containing the size of the heap delta change if
-    /// execution was successful or the relevant error if execution failed.
-    #[allow(clippy::type_complexity)]
-    pub fn execute_canister_start(
-        &self,
-        canister: CanisterState,
-        execution_parameters: ExecutionParameters,
-        network_topology: &NetworkTopology,
-    ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
-        let method = WasmMethod::System(SystemMethod::CanisterStart);
-        let memory_usage = canister.memory_usage(self.own_subnet_type);
-        let canister_id = canister.canister_id();
-        let (execution_state, system_state, scheduler_state) = canister.into_parts();
-
-        // Validate that the Wasm module is present.
-        let execution_state = match execution_state {
-            None => {
-                return (
-                    CanisterState::from_parts(None, system_state, scheduler_state),
-                    execution_parameters.total_instruction_limit,
-                    Err(HypervisorError::WasmModuleNotFound),
-                );
-            }
-            Some(es) => es,
-        };
-
-        // If the Wasm module does not export the method, then this execution
-        // succeeds as a no-op.
-        if !execution_state.exports_method(&method) {
-            return (
-                CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
-                execution_parameters.total_instruction_limit,
-                Ok(NumBytes::from(0)),
-            );
-        }
-
-        let (output, output_execution_state, _system_state_accessor) = self.execute(
-            ApiType::start(),
-            SystemState::new_for_start(canister_id),
-            memory_usage,
-            execution_parameters,
-            FuncRef::Method(method),
-            execution_state,
-            network_topology,
-        );
-
-        self.system_execution_result_with_old_system_state(
-            output,
-            output_execution_state,
-            system_state,
-            scheduler_state,
-        )
-    }
-
     /// Executes the system method `canister_inspect_message`.
     ///
     /// This method is called pre-consensus to let the canister decide if it
@@ -289,31 +226,6 @@ impl Hypervisor {
         };
         let canister =
             CanisterState::from_parts(Some(execution_state), system_state, scheduler_state);
-        (canister, output.num_instructions_left, heap_delta)
-    }
-
-    // Similar to `system_execution_result` but unconditionally uses
-    // the given `old_system_state` for the resulting canister state.
-    fn system_execution_result_with_old_system_state(
-        &self,
-        output: WasmExecutionOutput,
-        execution_state: ExecutionState,
-        old_system_state: SystemState,
-        scheduler_state: SchedulerState,
-    ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
-        let heap_delta = match output.wasm_result {
-            Ok(opt_result) => {
-                if opt_result.is_some() {
-                    fatal!(self.log, "[EXC-BUG] System methods cannot use msg_reply.");
-                }
-                Ok(NumBytes::from(
-                    (output.instance_stats.dirty_pages * PAGE_SIZE) as u64,
-                ))
-            }
-            Err(err) => Err(err),
-        };
-        let canister =
-            CanisterState::from_parts(Some(execution_state), old_system_state, scheduler_state);
         (canister, output.num_instructions_left, heap_delta)
     }
 
