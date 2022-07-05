@@ -140,6 +140,7 @@ pub struct TranscriptCastError {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct MaskedTranscript(TranscriptRef);
+
 impl AsRef<TranscriptRef> for MaskedTranscript {
     fn as_ref(&self) -> &TranscriptRef {
         &self.0
@@ -189,6 +190,7 @@ impl TryFrom<&pb::MaskedTranscript> for MaskedTranscript {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct UnmaskedTranscript(TranscriptRef);
+
 impl AsRef<TranscriptRef> for UnmaskedTranscript {
     fn as_ref(&self) -> &TranscriptRef {
         &self.0
@@ -233,6 +235,78 @@ impl TryFrom<&pb::UnmaskedTranscript> for UnmaskedTranscript {
             .ok_or("pb::UnmaskedTranscript:: Missing transcript ref")?;
         let transcript_ref = transcript_ref_proto.try_into()?;
         Ok(Self(transcript_ref))
+    }
+}
+
+/// Trait for transcript attributes.
+pub trait TranscriptAttributes {
+    fn receivers(&self) -> &BTreeSet<NodeId>;
+    fn algorithm_id(&self) -> AlgorithmId;
+    fn registry_version(&self) -> RegistryVersion;
+    fn to_attributes(&self) -> IDkgTranscriptAttributes {
+        IDkgTranscriptAttributes {
+            receivers: self.receivers().clone(),
+            algorithm_id: self.algorithm_id(),
+            registry_version: self.registry_version(),
+        }
+    }
+}
+
+impl TranscriptAttributes for IDkgTranscript {
+    fn receivers(&self) -> &BTreeSet<NodeId> {
+        self.receivers.get()
+    }
+    fn algorithm_id(&self) -> AlgorithmId {
+        self.algorithm_id
+    }
+    fn registry_version(&self) -> RegistryVersion {
+        self.registry_version
+    }
+}
+
+impl TranscriptAttributes for IDkgTranscriptParamsRef {
+    fn receivers(&self) -> &BTreeSet<NodeId> {
+        &self.receivers
+    }
+    fn algorithm_id(&self) -> AlgorithmId {
+        self.algorithm_id
+    }
+    fn registry_version(&self) -> RegistryVersion {
+        self.registry_version
+    }
+}
+
+/// Attributes of `IDkgTranscript`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct IDkgTranscriptAttributes {
+    receivers: BTreeSet<NodeId>,
+    algorithm_id: AlgorithmId,
+    registry_version: RegistryVersion,
+}
+
+impl IDkgTranscriptAttributes {
+    pub fn new(
+        receivers: BTreeSet<NodeId>,
+        algorithm_id: AlgorithmId,
+        registry_version: RegistryVersion,
+    ) -> Self {
+        Self {
+            receivers,
+            algorithm_id,
+            registry_version,
+        }
+    }
+}
+
+impl TranscriptAttributes for IDkgTranscriptAttributes {
+    fn receivers(&self) -> &BTreeSet<NodeId> {
+        &self.receivers
+    }
+    fn algorithm_id(&self) -> AlgorithmId {
+        self.algorithm_id
+    }
+    fn registry_version(&self) -> RegistryVersion {
+        self.registry_version
     }
 }
 
@@ -293,18 +367,17 @@ pub struct ReshareOfMaskedParams(IDkgTranscriptParamsRef);
 impl ReshareOfMaskedParams {
     pub fn new(
         transcript_id: IDkgTranscriptId,
-        dealers: BTreeSet<NodeId>,
         receivers: BTreeSet<NodeId>,
         registry_version: RegistryVersion,
-        algorithm_id: AlgorithmId,
+        masked_attrs: &dyn TranscriptAttributes,
         transcript: MaskedTranscript,
     ) -> Self {
         Self(IDkgTranscriptParamsRef::new(
             transcript_id,
-            dealers,
+            masked_attrs.receivers().clone(),
             receivers,
             registry_version,
-            algorithm_id,
+            masked_attrs.algorithm_id(),
             IDkgTranscriptOperationRef::ReshareOfMasked(transcript),
         ))
     }
@@ -344,18 +417,17 @@ pub struct ReshareOfUnmaskedParams(IDkgTranscriptParamsRef);
 impl ReshareOfUnmaskedParams {
     pub fn new(
         transcript_id: IDkgTranscriptId,
-        dealers: BTreeSet<NodeId>,
         receivers: BTreeSet<NodeId>,
         registry_version: RegistryVersion,
-        algorithm_id: AlgorithmId,
+        unmasked_attrs: &dyn TranscriptAttributes,
         transcript: UnmaskedTranscript,
     ) -> Self {
         Self(IDkgTranscriptParamsRef::new(
             transcript_id,
-            dealers,
+            unmasked_attrs.receivers().clone(),
             receivers,
             registry_version,
-            algorithm_id,
+            unmasked_attrs.algorithm_id(),
             IDkgTranscriptOperationRef::ReshareOfUnmasked(transcript),
         ))
     }
@@ -426,20 +498,25 @@ pub struct UnmaskedTimesMaskedParams(IDkgTranscriptParamsRef);
 impl UnmaskedTimesMaskedParams {
     pub fn new(
         transcript_id: IDkgTranscriptId,
-        dealers: BTreeSet<NodeId>,
         receivers: BTreeSet<NodeId>,
         registry_version: RegistryVersion,
-        algorithm_id: AlgorithmId,
-        transcript_1: UnmaskedTranscript,
-        transcript_2: MaskedTranscript,
+        transcript_1: (&dyn TranscriptAttributes, UnmaskedTranscript),
+        transcript_2: (&dyn TranscriptAttributes, MaskedTranscript),
     ) -> Self {
+        let receivers_1 = transcript_1.0.receivers();
+        let receivers_2 = transcript_2.0.receivers();
+        assert_eq!(
+            receivers_1, receivers_2,
+            "UnmaskedTimesMaskedParams: input transcripts have different set of receivers"
+        );
+        let dealers = receivers_1.clone();
         Self(IDkgTranscriptParamsRef::new(
             transcript_id,
             dealers,
             receivers,
             registry_version,
-            algorithm_id,
-            IDkgTranscriptOperationRef::UnmaskedTimesMasked(transcript_1, transcript_2),
+            transcript_1.0.algorithm_id(),
+            IDkgTranscriptOperationRef::UnmaskedTimesMasked(transcript_1.1, transcript_2.1),
         ))
     }
 }

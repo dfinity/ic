@@ -512,7 +512,9 @@ mod test {
         mock_time,
         types::{ids::subnet_test_id, messages::RequestBuilder},
     };
-    use ic_types::{crypto::AlgorithmId, messages::CallbackId, Height};
+    use ic_types::{
+        consensus::ecdsa::TranscriptAttributes, crypto::AlgorithmId, messages::CallbackId, Height,
+    };
     use std::convert::TryFrom;
     use std::{collections::BTreeSet, str::FromStr};
 
@@ -592,7 +594,6 @@ mod test {
         let crypto = &CryptoReturningOk::default();
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes);
         let mut payload = empty_ecdsa_payload(subnet_id);
-        let subnet_nodes = env.receivers().into_iter().collect::<Vec<_>>();
         let algorithm = AlgorithmId::ThresholdEcdsaSecp256k1;
         let mut block_reader = TestEcdsaBlockReader::new();
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
@@ -606,11 +607,14 @@ mod test {
         let key_transcript = generate_key_transcript(&env, algorithm);
         let key_transcript_ref =
             ecdsa::UnmaskedTranscript::try_from((Height::new(100), &key_transcript)).unwrap();
+        let current_key_transcript = ecdsa::UnmaskedTranscriptWithAttributes::new(
+            key_transcript.to_attributes(),
+            key_transcript_ref,
+        );
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
         initiate_reshare_requests(
             &mut payload,
-            Some(&key_transcript_ref),
-            &subnet_nodes,
+            Some(&current_key_transcript),
             reshare_requests.clone(),
         );
         let prev_payload = payload.clone();
@@ -621,7 +625,7 @@ mod test {
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         update_completed_reshare_requests(
             &mut payload,
-            Some(&key_transcript_ref),
+            Some(&current_key_transcript),
             &block_reader,
             &transcript_builder,
             &no_op_logger(),
@@ -655,7 +659,7 @@ mod test {
         let mut prev_payload = payload.clone();
         update_completed_reshare_requests(
             &mut payload,
-            Some(&key_transcript_ref),
+            Some(&current_key_transcript),
             &block_reader,
             &transcript_builder,
             &no_op_logger(),
@@ -713,6 +717,10 @@ mod test {
         let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
         let key_transcript_ref =
             ecdsa::UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
+        let current_key_transcript = ecdsa::UnmaskedTranscriptWithAttributes::new(
+            key_transcript.to_attributes(),
+            key_transcript_ref,
+        );
         let quadruple_id_1 = ecdsa_payload.uid_generator.next_quadruple_id();
         let quadruple_id_2 = ecdsa_payload.uid_generator.next_quadruple_id();
         // Fill in the ongoing signatures
@@ -756,7 +764,7 @@ mod test {
 
         update_ongoing_signatures(
             all_requests,
-            Some(&key_transcript_ref),
+            Some(&current_key_transcript),
             &mut ecdsa_payload,
             no_op_logger(),
         )
