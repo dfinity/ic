@@ -8,12 +8,12 @@ use std::time::Duration;
 use strum_macros::EnumIter;
 
 pub use crate::consensus::ecdsa_refs::{
-    unpack_reshare_of_unmasked_params, EcdsaBlockReader, IDkgTranscriptOperationRef,
-    IDkgTranscriptParamsRef, MaskedTranscript, PreSignatureQuadrupleRef, QuadrupleId,
-    QuadrupleInCreation, RandomTranscriptParams, RequestId, ReshareOfMaskedParams,
-    ReshareOfUnmaskedParams, ThresholdEcdsaSigInputsError, ThresholdEcdsaSigInputsRef,
-    TranscriptCastError, TranscriptLookupError, TranscriptParamsError, TranscriptRef,
-    UnmaskedTimesMaskedParams, UnmaskedTranscript,
+    unpack_reshare_of_unmasked_params, EcdsaBlockReader, IDkgTranscriptAttributes,
+    IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, MaskedTranscript,
+    PreSignatureQuadrupleRef, QuadrupleId, QuadrupleInCreation, RandomTranscriptParams, RequestId,
+    ReshareOfMaskedParams, ReshareOfUnmaskedParams, ThresholdEcdsaSigInputsError,
+    ThresholdEcdsaSigInputsRef, TranscriptAttributes, TranscriptCastError, TranscriptLookupError,
+    TranscriptParamsError, TranscriptRef, UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
 use crate::consensus::BasicSignature;
 use crate::crypto::canister_threshold_sig::error::IDkgTranscriptIdError;
@@ -23,7 +23,7 @@ use crate::crypto::{
         IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
     },
     canister_threshold_sig::{ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigShare},
-    CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
+    AlgorithmId, CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator,
 };
 use crate::{node_id_into_protobuf, node_id_try_from_protobuf};
 use crate::{Height, NodeId, RegistryVersion, SubnetId};
@@ -201,33 +201,43 @@ impl EcdsaPayload {
     /// Note that we do not consider available quadruples here because it would
     /// prevent nodes from leaving when the quadruples are not consumed.
     pub(crate) fn get_oldest_registry_version_in_use(&self) -> Option<RegistryVersion> {
-        // TODO: need to consider next_in_creation?
+        // Both current key transcript and next_in_creation are considered.
+        use KeyTranscriptCreation::*;
         let idkg_transcripts = &self.idkg_transcripts;
-        let registry_version = match self.key_transcript.current {
-            Some(unmasked) => {
-                let key_transcript_id = unmasked.as_ref().transcript_id;
-                idkg_transcripts
-                    .get(&key_transcript_id)
-                    .map(|transcript| transcript.registry_version)
+        let min_version = |version_1: Option<RegistryVersion>, version_2| {
+            if version_1.is_none() {
+                version_2
+            } else {
+                version_1.min(version_2)
             }
-            _ => None,
         };
-        self.ongoing_signatures.iter().fold(
-            registry_version,
-            |mut registry_version, (_, sig_input_ref)| {
-                for r in sig_input_ref.get_refs() {
-                    let transcript_version = idkg_transcripts
+        let key_version = self
+            .key_transcript
+            .current
+            .as_ref()
+            .map(|transcript| transcript.registry_version());
+        let in_creation_version = match &self.key_transcript.next_in_creation {
+            Begin => None,
+            RandomTranscriptParams(params) => Some(params.as_ref().registry_version()),
+            ReshareOfMaskedParams(params) => Some(params.as_ref().registry_version()),
+            ReshareOfUnmaskedParams(params) => Some(params.as_ref().registry_version()),
+            XnetReshareOfUnmaskedParams(_) => None,
+            Created(transcript) => idkg_transcripts
+                .get(&transcript.as_ref().transcript_id)
+                .map(|transcript| transcript.registry_version),
+        };
+        let mut registry_version = min_version(key_version, in_creation_version);
+        for (_, sig_input_ref) in self.ongoing_signatures.iter() {
+            for r in sig_input_ref.get_refs().iter() {
+                registry_version = min_version(
+                    registry_version,
+                    idkg_transcripts
                         .get(&r.transcript_id)
-                        .map(|transcript| transcript.registry_version);
-                    if registry_version.is_none() {
-                        registry_version = transcript_version;
-                    } else {
-                        registry_version = registry_version.min(transcript_version)
-                    }
-                }
-                registry_version
-            },
-        )
+                        .map(|transcript| transcript.registry_version),
+                );
+            }
+        }
+        registry_version
     }
 
     /// Returns the initial DKG dealings being used to bootstrap the target subnet,
@@ -242,10 +252,51 @@ impl EcdsaPayload {
     }
 }
 
+/// The unmasked transcript is paired with its attributes, which will be used
+/// in creating reshare params.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct UnmaskedTranscriptWithAttributes(IDkgTranscriptAttributes, UnmaskedTranscript);
+
+impl UnmaskedTranscriptWithAttributes {
+    pub fn new(attr: IDkgTranscriptAttributes, transcript: UnmaskedTranscript) -> Self {
+        Self(attr, transcript)
+    }
+    pub fn unmasked_transcript(&self) -> UnmaskedTranscript {
+        self.1
+    }
+    pub fn transcript_id(&self) -> IDkgTranscriptId {
+        self.1.as_ref().transcript_id
+    }
+}
+
+impl TranscriptAttributes for UnmaskedTranscriptWithAttributes {
+    fn receivers(&self) -> &BTreeSet<NodeId> {
+        self.0.receivers()
+    }
+    fn algorithm_id(&self) -> AlgorithmId {
+        self.0.algorithm_id()
+    }
+    fn registry_version(&self) -> RegistryVersion {
+        self.0.registry_version()
+    }
+}
+
+impl AsRef<TranscriptRef> for UnmaskedTranscriptWithAttributes {
+    fn as_ref(&self) -> &TranscriptRef {
+        self.1.as_ref()
+    }
+}
+
+impl AsMut<TranscriptRef> for UnmaskedTranscriptWithAttributes {
+    fn as_mut(&mut self) -> &mut TranscriptRef {
+        self.1.as_mut()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EcdsaKeyTranscript {
     /// The ECDSA key transcript used for the current interval.
-    pub current: Option<UnmaskedTranscript>,
+    pub current: Option<UnmaskedTranscriptWithAttributes>,
     /// Progress of creating the next ECDSA key transcript.
     pub next_in_creation: KeyTranscriptCreation,
     /// Key id.
@@ -302,8 +353,8 @@ impl EcdsaKeyTranscript {
 
 impl Display for EcdsaKeyTranscript {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let current = if let Some(transcript) = self.current {
-            format!("Current = {:?}", transcript)
+        let current = if let Some(transcript) = &self.current {
+            format!("Current = {:?}", transcript.as_ref())
         } else {
             "Current = None".to_string()
         };
@@ -924,7 +975,7 @@ impl From<&EcdsaPayload> for pb::EcdsaSummaryPayload {
             .key_transcript
             .current
             .as_ref()
-            .map(|transcript| transcript.into());
+            .map(|transcript| (&transcript.1).into());
         let next_key_in_creation = Some((&summary.key_transcript.next_in_creation).into());
         let key_id = Some((&summary.key_transcript.key_id).into());
 
@@ -1085,9 +1136,20 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaPayload {
         }
 
         // Key transcript state
-        let current_key_transcript: Option<UnmaskedTranscript> =
+        let current_key_transcript: Option<UnmaskedTranscriptWithAttributes> =
             if let Some(proto) = &summary.current_key_transcript {
-                Some(proto.try_into()?)
+                let unmasked = UnmaskedTranscript::try_from(proto)?;
+                let transcript_id = unmasked.as_ref().transcript_id;
+                let transcript = idkg_transcripts.get(&transcript_id).ok_or_else(|| {
+                    format!(
+                        "Key transcript {:?} does not exist in summary",
+                        transcript_id
+                    )
+                })?;
+                Some(UnmaskedTranscriptWithAttributes(
+                    transcript.to_attributes(),
+                    unmasked,
+                ))
             } else {
                 None
             };

@@ -109,23 +109,29 @@ pub fn deliver_batches(
 
                 let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
                 let ecdsa_subnet_public_key = pool.dkg_summary_block(&block).and_then(|summary| {
-                    block.payload.as_ref().as_ecdsa().and_then(|ecdsa| {
-                        ecdsa.key_transcript.current.and_then(|unmasked| {
-                            let chain = build_consensus_block_chain(pool.pool(), &summary, &block);
-                            let block_reader = EcdsaBlockReaderImpl::new(chain);
-                            let transcript_ref = unmasked.as_ref();
-                            match block_reader.transcript(transcript_ref) {
-                                Ok(transcript) =>  get_tecdsa_master_public_key(&transcript).ok().map(|public_key| (ecdsa.key_transcript.key_id.clone(), public_key)),
-                                Err(err) => {
-                                    warn!(
-                                        log,
-                                        "deliver_batches(): failed to translate transcript ref {:?}: {:?}",
-                                        transcript_ref, err
-                                    );
-                                    None
-                                }
+                    let ecdsa_summary = summary.payload.as_ref().as_summary().ecdsa.as_ref();
+                    ecdsa_summary.and_then(|ecdsa| {
+                        let chain = build_consensus_block_chain(pool.pool(), &summary, &block);
+                        let block_reader = EcdsaBlockReaderImpl::new(chain);
+                        let transcript_ref = match &ecdsa.key_transcript.current {
+                            Some(unmasked) => *unmasked.as_ref(),
+                            None => return None,
+                        };
+                        match block_reader.transcript(&transcript_ref) {
+                            Ok(transcript) =>  {
+                                get_tecdsa_master_public_key(&transcript)
+                                    .ok()
+                                    .map(|public_key| (ecdsa.key_transcript.key_id.clone(), public_key))
                             }
-                        })
+                            Err(err) => {
+                                warn!(
+                                    log,
+                                    "deliver_batches(): failed to translate transcript ref {:?}: {:?}",
+                                    transcript_ref, err
+                                );
+                                None
+                            }
+                        }
                     })
                 });
                 let block_stats = BlockStats::from(&block);

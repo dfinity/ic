@@ -103,19 +103,10 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
         let is_summary_block = block.payload.is_summary();
         let block_payload = BlockPayload::from(block.payload);
 
-        let idkg_transcripts = if is_summary_block {
-            block_payload
-                .into_summary()
-                .ecdsa
-                .ok_or(TranscriptLookupError::NoEcdsaSummary(*transcript_ref))?
-                .idkg_transcripts
-        } else {
-            block_payload
-                .into_data()
-                .ecdsa
-                .ok_or(TranscriptLookupError::NoEcdsaPayload(*transcript_ref))?
-                .idkg_transcripts
-        };
+        let idkg_transcripts = &block_payload
+            .as_ecdsa()
+            .ok_or(TranscriptLookupError::NoEcdsaSummary(*transcript_ref))?
+            .idkg_transcripts;
 
         idkg_transcripts
             .get(&transcript_ref.transcript_id)
@@ -240,9 +231,10 @@ pub(crate) mod test_utils {
     use ic_types::consensus::ecdsa::{
         EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript, EcdsaMessage,
         EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaReshareRequest, EcdsaSigShare,
-        EcdsaUIDGenerator, IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript,
-        PreSignatureQuadrupleRef, RequestId, ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef,
-        TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
+        EcdsaUIDGenerator, IDkgTranscriptAttributes, IDkgTranscriptParamsRef,
+        KeyTranscriptCreation, MaskedTranscript, PreSignatureQuadrupleRef, RequestId,
+        ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef, TranscriptLookupError, TranscriptRef,
+        UnmaskedTranscript,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{
         IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin, IDkgOpening,
@@ -675,13 +667,18 @@ pub(crate) mod test_utils {
         let mut idkg_transcripts = BTreeMap::new();
         idkg_transcripts.insert(*random_masked.as_ref(), random_transcript);
 
+        let attrs = IDkgTranscriptAttributes::new(
+            dealers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            RegistryVersion::from(0),
+        );
+
         // The transcript that points to the random transcript
         let transcript_params_ref = ReshareOfMaskedParams::new(
             transcript_id,
-            dealers,
             receivers,
             RegistryVersion::from(0),
-            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &attrs,
             random_masked,
         );
 
