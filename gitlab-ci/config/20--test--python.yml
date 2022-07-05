@@ -26,5 +26,6 @@ python-tests:
       echo "Running scalability/common/tests"
       set -euo pipefail
       cd "${CI_PROJECT_DIR}/scalability"
-      $SHELL_WRAPPER pip3 install --user -r requirements.txt
-      for test_file in common/tests/*.py; do { $SHELL_WRAPPER python3 -m unittest "$test_file"; } done
+      $SHELL_WRAPPER pipenv --python 3
+      $SHELL_WRAPPER pipenv install -r requirements.txt
+      for test_file in common/tests/*.py; do { $SHELL_WRAPPER pipenv run python3 -m unittest "$test_file"; } done

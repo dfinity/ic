@@ -439,6 +439,7 @@ class BaseExperiment:
         if this_canister_name != "counter":
             canister_in_artifacts = os.path.join(self.artifacts_path, f"../canisters/{this_canister_name}.wasm")
             canister_in_repo = os.path.join(f"canisters/{this_canister_name}.wasm")
+            print(f"Looking for canister at locations: {canister_in_artifacts} and {canister_in_repo}")
             if os.path.exists(canister_in_artifacts):
                 cmd += ["--canister", canister_in_artifacts]
             elif os.path.exists(canister_in_repo):
