@@ -1,6 +1,7 @@
 use crate::args::OrchestratorArgs;
 use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::firewall::Firewall;
+use crate::image_upgrader::ImageUpgrader;
 use crate::metrics::OrchestratorMetrics;
 use crate::registration::NodeRegistration;
 use crate::registry_helper::RegistryHelper;
@@ -230,13 +231,14 @@ impl Orchestrator {
             // This timeout is a last resort trying to revive the upgrade monitoring
             // in case it gets stuck in an unexpected situation for longer than 15 minutes.
             let timeout = Duration::from_secs(60 * 15);
-            while !*exit_signal.read().await {
-                match tokio::time::timeout(timeout, upgrade.check()).await {
-                    Ok(Ok(val)) => *maybe_subnet_id.write().await = val,
-                    e => warn!(log, "Check for upgrade failed: {:?}", e),
-                };
-                tokio::time::sleep(CHECK_INTERVAL_SECS).await;
-            }
+            upgrade
+                .upgrade_loop(exit_signal, CHECK_INTERVAL_SECS, timeout, |r| async {
+                    match r {
+                        Ok(Ok(val)) => *maybe_subnet_id.write().await = val,
+                        e => warn!(log, "Check for upgrade failed: {:?}", e),
+                    };
+                })
+                .await;
             info!(log, "Shut down the upgrade loop");
             if let Err(e) = upgrade.stop_replica() {
                 warn!(log, "{}", e);
