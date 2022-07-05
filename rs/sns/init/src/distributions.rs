@@ -14,7 +14,6 @@ use num::rational::Ratio;
 use num::BigInt;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
-use std::time::SystemTime;
 
 /// The static MEMO used when calculating subaccounts of neurons available at genesis.
 pub const DEFAULT_NEURON_STAKING_NONCE: u64 = 0;
@@ -96,26 +95,16 @@ impl InitialTokenDistribution {
                     .clone(),
             };
 
-            // TODO Set to the genesis timestamp of the SNS
-            let now = SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-
             let neuron = Neuron {
                 id: Some(subaccount.into()),
                 permissions: vec![permission],
                 cached_neuron_stake_e8s: *stake_e8s,
-                neuron_fees_e8s: 0,
-                created_timestamp_seconds: now,
-                aging_since_timestamp_seconds: now,
-                followees: Default::default(),
-                maturity_e8s_equivalent: 0,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                     parameters
                         .neuron_minimum_dissolve_delay_to_vote_seconds
                         .expect("Expected neuron_minimum_dissolve_delay_to_vote_seconds to exist"),
                 )),
+                ..Default::default()
             };
 
             initial_neurons.insert(neuron.id.as_ref().unwrap().to_string(), neuron);
