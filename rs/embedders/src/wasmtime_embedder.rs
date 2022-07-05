@@ -10,7 +10,7 @@ use std::{
 };
 
 use ic_system_api::ModificationTracking;
-use wasmtime::{unix::StoreExt, Memory, Mutability, OptLevel, Store, Val, ValType};
+use wasmtime::{unix::StoreExt, Memory, Module, Mutability, OptLevel, Store, Val, ValType};
 
 use host_memory::MmapMemoryCreator;
 pub use host_memory::WasmtimeMemoryCreator;
@@ -123,7 +123,7 @@ impl WasmtimeEmbedder {
         }
     }
 
-    pub fn compile(&self, wasm_binary: &BinaryEncodedWasm) -> HypervisorResult<EmbedderCache> {
+    pub fn compile(&self, wasm_binary: &BinaryEncodedWasm) -> HypervisorResult<Module> {
         let mut config = wasmtime::Config::default();
         config.cranelift_opt_level(OptLevel::None);
         ensure_determinism(&mut config);
@@ -154,7 +154,7 @@ impl WasmtimeEmbedder {
         // a bit of reference counting, i.e. it is a "shallow copy"). This is
         // important because EmbedderCache is cloned frequently, and that must
         // not be an expensive operation.
-        Ok(EmbedderCache::new(module))
+        Ok(module)
     }
 
     #[allow(clippy::too_many_arguments)]

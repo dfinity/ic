@@ -1284,12 +1284,12 @@ pub fn wat_compilation_cost(wat: &str) -> NumInstructions {
     let wasm = BinaryEncodedWasm::new(wabt::wat2wasm(wat).unwrap());
     let config = EmbeddersConfig::default();
     let (_, output) = compile(&WasmtimeEmbedder::new(config, no_op_logger()), &wasm).unwrap();
-    output.instrumentation_output.compilation_cost
+    output.compilation_cost
 }
 
 pub fn wasm_compilation_cost(wasm: &[u8]) -> NumInstructions {
     let wasm = BinaryEncodedWasm::new(wasm.to_vec());
     let config = EmbeddersConfig::default();
     let (_, output) = compile(&WasmtimeEmbedder::new(config, no_op_logger()), &wasm).unwrap();
-    output.instrumentation_output.compilation_cost
+    output.compilation_cost
 }

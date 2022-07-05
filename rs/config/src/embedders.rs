@@ -29,6 +29,7 @@ const DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION: NumInstructions = NumInstruction
 pub struct FeatureFlags {
     pub api_cycles_u128_flag: FlagStatus,
     pub rate_limiting_of_debug_prints: FlagStatus,
+    pub module_sharing: FlagStatus,
 }
 
 impl Default for FeatureFlags {
@@ -36,6 +37,7 @@ impl Default for FeatureFlags {
         Self {
             api_cycles_u128_flag: FlagStatus::Enabled,
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
+            module_sharing: FlagStatus::Disabled,
         }
     }
 }

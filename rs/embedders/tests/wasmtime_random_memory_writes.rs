@@ -195,7 +195,7 @@ mod tests {
 
             let config = Config::default();
             let embedder = WasmtimeEmbedder::new(config, log);
-            let (embedder_cache, _) = compile(&embedder, &wasm).unwrap();
+            let embedder_cache = compile(&embedder, &wasm).unwrap().0;
 
             // We will perform identical writes to wasm module's heap and this buffer.
             let mut test_heap = vec![0; TEST_HEAP_SIZE_BYTES];
@@ -350,14 +350,13 @@ mod tests {
 
             let config = Config::default();
             let embedder = WasmtimeEmbedder::new(config, log.clone());
-            let output_instrumentation =
-                compile(&embedder, &wasm).unwrap().1.instrumentation_output;
+            let cache = compile(&embedder, &wasm).unwrap().0;
 
             let api = test_api_for_update(log, None, payload, SubnetType::Application);
             let mut inst = embedder
                 .new_instance(
                     canister_test_id(1),
-                    &embedder.compile(&output_instrumentation.binary).unwrap(),
+                    &cache,
                     &[],
                     NumWasmPages::from(0),
                     PageMap::default(),
@@ -567,12 +566,12 @@ mod tests {
 
         let config = Config::default();
         let embedder = WasmtimeEmbedder::new(config, log.clone());
-        let output_instrumentation = compile(&embedder, &wasm).unwrap().1.instrumentation_output;
+        let cache = compile(&embedder, &wasm).unwrap().0;
         let api = test_api_for_update(log, None, payload, subnet_type);
         let mut inst = embedder
             .new_instance(
                 canister_test_id(1),
-                &embedder.compile(&output_instrumentation.binary).unwrap(),
+                &cache,
                 &[],
                 NumWasmPages::from(0),
                 PageMap::default(),

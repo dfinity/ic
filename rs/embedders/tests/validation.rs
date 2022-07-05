@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::{
-        compile,
+        validate_and_instrument_for_testing,
         validation::{
             extract_custom_section_name, validate_custom_section, WasmImportsDetails,
             WasmValidationDetails, RESERVED_SYMBOLS,
@@ -31,8 +31,8 @@ fn validate_wasm_binary(
     config: &EmbeddersConfig,
 ) -> Result<WasmValidationDetails, WasmValidationError> {
     let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
-    match compile(&embedder, wasm) {
-        Ok(output) => Ok(output.1.validation_details),
+    match validate_and_instrument_for_testing(&embedder, wasm) {
+        Ok((validation_details, _)) => Ok(validation_details),
         Err(HypervisorError::InvalidWasm(err)) => Err(err),
         Err(other_error) => panic!("unexpected error {}", other_error),
     }

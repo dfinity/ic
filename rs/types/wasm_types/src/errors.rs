@@ -164,6 +164,7 @@ pub enum WasmEngineError {
     FailedToInstantiateModule,
     FailedToSetAsyncStack,
     FailedToSetWasmStack,
+    FailedToSerializeModule(String),
 }
 
 impl std::fmt::Display for WasmEngineError {
@@ -180,6 +181,9 @@ impl std::fmt::Display for WasmEngineError {
             }
             Self::FailedToSetAsyncStack => {
                 write!(f, "Failed to set async stack")
+            }
+            Self::FailedToSerializeModule(s) => {
+                write!(f, "Failed to serialize module: {}", s)
             }
         }
     }

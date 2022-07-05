@@ -4,7 +4,6 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
     thread::{self, ThreadId},
-    time::Duration,
 };
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
@@ -16,12 +15,12 @@ use ic_config::{
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     wasm_executor::{WasmExecutionResult, WasmExecutor},
-    WasmExecutionInput,
+    CompilationResult, WasmExecutionInput,
 };
 use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, Method, Payload};
 use ic_interfaces::execution_environment::{
-    CompilationResult, ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter,
-    InstanceStats, Scheduler, WasmExecutionOutput,
+    ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter, InstanceStats,
+    Scheduler, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -847,11 +846,7 @@ impl TestWasmExecutorCore {
             vec![],
             WasmMetadata::default(),
         );
-        let compilation_result = CompilationResult {
-            largest_function_instruction_count: NumInstructions::from(0),
-            compilation_cost: NumInstructions::from(0),
-            compilation_time: Duration::default(),
-        };
+        let compilation_result = CompilationResult::empty_for_testing();
         Ok((compilation_result, execution_state))
     }
 

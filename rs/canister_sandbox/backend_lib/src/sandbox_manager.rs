@@ -24,13 +24,13 @@ use ic_canister_sandbox_common::protocol::structs::{
 };
 use ic_canister_sandbox_common::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_embedders::wasm_utils::{compile, FullCompilationOutput};
+use ic_config::flag_status::FlagStatus;
+use ic_embedders::wasm_utils::compile;
+use ic_embedders::CompilationResult;
 use ic_embedders::{
     wasm_executor::WasmStateChanges, wasm_utils::decoding::decode_wasm, WasmtimeEmbedder,
 };
-use ic_interfaces::execution_environment::{
-    CompilationResult, ExecutionMode, HypervisorResult, WasmExecutionOutput,
-};
+use ic_interfaces::execution_environment::{ExecutionMode, HypervisorResult, WasmExecutionOutput};
 use ic_logger::ReplicaLogger;
 use ic_replicated_state::page_map::PageMapSerialization;
 use ic_replicated_state::{EmbedderCache, Memory, PageMap};
@@ -54,7 +54,7 @@ struct Execution {
     exec_id: ExecId,
 
     /// The canister wasm used in this execution.
-    canister_wasm: Arc<CanisterWasm>,
+    embedder_cache: Arc<EmbedderCache>,
 
     /// The sandbox manager that is responsible for
     /// 1) Providing the controller to talk to the replica process.
@@ -73,7 +73,7 @@ impl Execution {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn start_on_worker_thread(
         exec_id: ExecId,
-        canister_wasm: Arc<CanisterWasm>,
+        embedder_cache: Arc<EmbedderCache>,
         wasm_memory: Arc<Memory>,
         stable_memory: Arc<Memory>,
         sandbox_manager: Arc<SandboxManager>,
@@ -86,7 +86,7 @@ impl Execution {
 
         let execution = Arc::new(Self {
             exec_id,
-            canister_wasm,
+            embedder_cache,
             sandbox_manager,
         });
 
@@ -143,7 +143,7 @@ impl Execution {
             exec_input.canister_current_memory_usage,
             exec_input.execution_parameters,
             exec_input.sandox_safe_system_state,
-            &self.canister_wasm.compilate,
+            &self.embedder_cache,
             &self.sandbox_manager.embedder,
             &mut wasm_memory,
             &mut stable_memory,
@@ -231,25 +231,6 @@ impl Execution {
     }
 }
 
-/// Represents a wasm object of a canister. This is the executable code
-/// of the canister.
-struct CanisterWasm {
-    compilate: Arc<EmbedderCache>,
-}
-
-impl CanisterWasm {
-    /// Validates and compiles the given Wasm binary.
-    pub fn compile(
-        embedder: &Arc<WasmtimeEmbedder>,
-        wasm_src: Vec<u8>,
-    ) -> HypervisorResult<(Self, FullCompilationOutput)> {
-        let wasm = decode_wasm(Arc::new(wasm_src))?;
-        let (compilate, output) = compile(embedder, &wasm)?;
-        let compilate = Arc::new(compilate);
-        Ok((Self { compilate }, output))
-    }
-}
-
 /// Manages the entirety of the sandbox process. It provides the methods
 /// through which the controller process (the replica) manages the
 /// sandboxed execution.
@@ -260,7 +241,7 @@ pub struct SandboxManager {
     log: ReplicaLogger,
 }
 struct SandboxManagerInt {
-    canister_wasms: HashMap<WasmId, Arc<CanisterWasm>>,
+    caches: HashMap<WasmId, Arc<EmbedderCache>>,
     memories: HashMap<MemoryId, Arc<Memory>>,
     paused_executions: HashMap<ExecId, PausedExecution>,
     workers_for_replicated_execution: threadpool::ThreadPool,
@@ -280,7 +261,7 @@ impl SandboxManager {
         let embedder = Arc::new(WasmtimeEmbedder::new(config.clone(), log.clone()));
         SandboxManager {
             repr: Mutex::new(SandboxManagerInt {
-                canister_wasms: HashMap::new(),
+                caches: HashMap::new(),
                 memories: HashMap::new(),
                 paused_executions: HashMap::new(),
                 workers_for_replicated_execution: threadpool::ThreadPool::new(1),
@@ -295,20 +276,21 @@ impl SandboxManager {
         }
     }
 
-    // For internal use in creating execution states we use the outputs of
-    // compilation, but these aren't returned by the public RPC.
-    fn open_wasm_internal(
+    /// Compiles the given Wasm binary and registers it under the given id.
+    /// The function may fail if the Wasm binary is invalid.
+    pub fn open_wasm(
         &self,
         wasm_id: WasmId,
         wasm_src: Vec<u8>,
-    ) -> HypervisorResult<(Arc<CanisterWasm>, FullCompilationOutput)> {
+    ) -> HypervisorResult<(Arc<EmbedderCache>, CompilationResult)> {
         let mut guard = self.repr.lock().unwrap();
         assert!(
-            !guard.canister_wasms.contains_key(&wasm_id),
+            !guard.caches.contains_key(&wasm_id),
             "Failed to open wasm session {}: id is already in use",
             wasm_id,
         );
-        let (wasm, compilation_output) = CanisterWasm::compile(&self.embedder, wasm_src)?;
+        let wasm = decode_wasm(Arc::new(wasm_src))?;
+        let (cache, compilation_result) = compile(&self.embedder, &wasm)?;
         // Return as much memory as possible because compiling seems to use up
         // some extra memory that can be returned.
         //
@@ -317,28 +299,15 @@ impl SandboxManager {
         unsafe {
             libc::malloc_trim(0);
         }
-        let canister_wasm = Arc::new(wasm);
-        guard
-            .canister_wasms
-            .insert(wasm_id, Arc::clone(&canister_wasm));
-        Ok((canister_wasm, compilation_output))
-    }
-
-    /// Compiles the given Wasm binary and registers it under the given id.
-    /// The function may fail if the Wasm binary is invalid.
-    pub fn open_wasm(
-        &self,
-        wasm_id: WasmId,
-        wasm_src: Vec<u8>,
-    ) -> HypervisorResult<CompilationResult> {
-        let (_wasm, compilation_output) = self.open_wasm_internal(wasm_id, wasm_src)?;
-        Ok((&compilation_output).into())
+        let embedder_cache = Arc::new(cache);
+        guard.caches.insert(wasm_id, Arc::clone(&embedder_cache));
+        Ok((embedder_cache, compilation_result))
     }
 
     /// Closes previously opened wasm instance, by id.
     pub fn close_wasm(&self, wasm_id: WasmId) {
         let mut guard = self.repr.lock().unwrap();
-        let removed = guard.canister_wasms.remove(&wasm_id);
+        let removed = guard.caches.remove(&wasm_id);
         assert!(
             removed.is_some(),
             "Failed to close wasm session {}: id not found",
@@ -388,7 +357,7 @@ impl SandboxManager {
     ) {
         let total_timer = std::time::Instant::now();
         let mut guard = sandbox_manager.repr.lock().unwrap();
-        let wasm_runner = guard.canister_wasms.get(&wasm_id).unwrap_or_else(|| {
+        let wasm_runner = guard.caches.get(&wasm_id).unwrap_or_else(|| {
             unreachable!(
                 "Failed to open exec session {}: wasm {} not found",
                 exec_id, wasm_id
@@ -463,16 +432,24 @@ impl SandboxManager {
         canister_id: CanisterId,
     ) -> HypervisorResult<CreateExecutionStateSuccessReply> {
         // Validate, instrument, and compile the binary.
-        let (canister_wasm, compilation_output) = self.open_wasm_internal(wasm_id, wasm_source)?;
-        let compilation_result = (&compilation_output).into();
-        let embedder_cache = Arc::clone(&canister_wasm.compilate);
+        let (embedder_cache, mut compilation_result) = self.open_wasm(wasm_id, wasm_source)?;
         let embedder = Arc::clone(&self.embedder);
 
         let mut wasm_page_map = PageMap::deserialize(wasm_page_map).unwrap();
+        let segments;
 
-        let (exported_functions, exported_globals, wasm_memory_delta, wasm_memory_size) =
+        let (exported_globals, wasm_memory_delta, wasm_memory_size) =
             ic_embedders::wasm_executor::get_initial_globals_and_memory(
-                compilation_output.instrumentation_output,
+                match self.embedder.config().feature_flags.module_sharing {
+                    FlagStatus::Disabled => {
+                        // With sharing disabled we can clear the data segments
+                        // from the `SerializedModule` so that we don't waste
+                        // time passing them back to the main replica process.
+                        segments = compilation_result.serialized_module.take_data_segments();
+                        &segments
+                    }
+                    FlagStatus::Enabled => compilation_result.serialized_module.data_segments(),
+                },
                 &embedder_cache,
                 &embedder,
                 &mut wasm_page_map,
@@ -493,8 +470,6 @@ impl SandboxManager {
         Ok(CreateExecutionStateSuccessReply {
             wasm_memory_modifications,
             exported_globals,
-            exported_functions,
-            wasm_metadata: compilation_output.validation_details.wasm_metadata,
             compilation_result,
         })
     }

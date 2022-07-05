@@ -4352,6 +4352,7 @@ version = "0.8.0"
 dependencies = [
  "bincode",
  "bytes",
+ "ic-embedders",
  "ic-interfaces",
  "ic-registry-subnet-type",
  "ic-replicated-state",
@@ -5545,6 +5546,7 @@ dependencies = [
  "prometheus 0.12.0",
  "proptest 0.9.6",
  "serde",
+ "serde_bytes",
  "slog",
  "slog-term",
  "wabt",

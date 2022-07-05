@@ -2,7 +2,7 @@ mod wasmtime_simple;
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
-    wasm_utils::{compile, decoding::decode_wasm},
+    wasm_utils::{decoding::decode_wasm, validate_and_instrument_for_testing},
     WasmtimeEmbedder,
 };
 use ic_logger::replica_logger::no_op_logger;
@@ -33,7 +33,7 @@ fn assert_memory_and_table_exports(module: &Module) {
 fn test_instrument_module_rename_memory_table() {
     let config = EmbeddersConfig::default();
     let embedder = WasmtimeEmbedder::new(config, no_op_logger());
-    let output = compile(
+    let output = validate_and_instrument_for_testing(
         &embedder,
         &BinaryEncodedWasm::new(
             wabt::wat2wasm(
@@ -51,8 +51,7 @@ fn test_instrument_module_rename_memory_table() {
         ),
     )
     .unwrap()
-    .1
-    .instrumentation_output;
+    .1;
 
     let module =
         parity_wasm::elements::deserialize_buffer::<Module>(output.binary.as_slice()).unwrap();
@@ -67,7 +66,7 @@ fn test_instrument_module_rename_memory_table() {
 fn test_instrument_module_export_memory_table() {
     let config = EmbeddersConfig::default();
     let embedder = WasmtimeEmbedder::new(config, no_op_logger());
-    let output = compile(
+    let output = validate_and_instrument_for_testing(
         &embedder,
         &BinaryEncodedWasm::new(
             wabt::wat2wasm(
@@ -85,8 +84,7 @@ fn test_instrument_module_export_memory_table() {
         ),
     )
     .unwrap()
-    .1
-    .instrumentation_output;
+    .1;
 
     let module =
         parity_wasm::elements::deserialize_buffer::<Module>(output.binary.as_slice()).unwrap();
@@ -99,7 +97,7 @@ fn test_instrument_module_export_memory_table() {
 fn test_instrument_module_with_exported_global() {
     let config = EmbeddersConfig::default();
     let embedder = WasmtimeEmbedder::new(config, no_op_logger());
-    let output = compile(
+    let output = validate_and_instrument_for_testing(
         &embedder,
         &BinaryEncodedWasm::new(
             wabt::wat2wasm(
@@ -118,8 +116,7 @@ fn test_instrument_module_with_exported_global() {
         ),
     )
     .unwrap()
-    .1
-    .instrumentation_output;
+    .1;
 
     wasmtime_simple::wasmtime_instantiate_and_call_run(&output.binary);
 }
