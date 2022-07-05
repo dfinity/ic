@@ -1,11 +1,13 @@
 use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::error::{OrchestratorError, OrchestratorResult};
+use crate::image_upgrader::ImageUpgrader;
 use crate::metrics::OrchestratorMetrics;
 use crate::registry_helper::RegistryHelper;
 use crate::replica_process::ReplicaProcess;
+use async_trait::async_trait;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_interfaces::registry::RegistryClient;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{info, warn, ReplicaLogger};
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
@@ -14,34 +16,27 @@ use ic_registry_replicator::RegistryReplicator;
 use ic_types::consensus::{CatchUpPackage, HasHeight};
 use ic_types::{Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
-use std::io::Write;
 use std::path::PathBuf;
-use std::process::exit;
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
-use tokio::process::Command;
-
-const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 
 /// Provides function to continuously check the Registry to determine if this
 /// node should upgrade to a new release package, and if so, downloads and
 /// extracts this release package and exec's the orchestrator binary contained
 /// within.
 pub(crate) struct Upgrade {
-    registry: Arc<RegistryHelper>,
+    pub registry: Arc<RegistryHelper>,
     replica_process: Arc<Mutex<ReplicaProcess>>,
     cup_provider: Arc<CatchUpPackageProvider>,
     replica_version: ReplicaVersion,
     replica_config_file: PathBuf,
-    ic_binary_dir: PathBuf,
+    pub ic_binary_dir: PathBuf,
+    pub image_path: PathBuf,
     registry_replicator: Arc<RegistryReplicator>,
-    release_content_dir: PathBuf,
-    logger: ReplicaLogger,
+    pub logger: ReplicaLogger,
     node_id: NodeId,
     /// The replica version that is prepared by 'prepare_upgrade' to upgrade to.
-    prepared_upgrade_version: Option<ReplicaVersion>,
-    orchestrator_data_directory: Option<PathBuf>,
+    pub prepared_upgrade_version: Option<ReplicaVersion>,
+    pub orchestrator_data_directory: Option<PathBuf>,
 }
 
 impl Upgrade {
@@ -60,10 +55,6 @@ impl Upgrade {
         logger: ReplicaLogger,
         orchestrator_data_directory: Option<PathBuf>,
     ) -> Self {
-        if let Err(e) = report_reboot_time(&orchestrator_data_directory, metrics.clone()) {
-            warn!(logger, "Cannot report the reboot time: {}", e);
-        }
-
         let value = Self {
             registry,
             replica_process,
@@ -71,15 +62,24 @@ impl Upgrade {
             node_id,
             replica_version,
             replica_config_file,
-            release_content_dir,
             ic_binary_dir,
+            image_path: release_content_dir.join("guest-os.tar.gz"),
             registry_replicator,
-            logger,
+            logger: logger.clone(),
             prepared_upgrade_version: None,
             orchestrator_data_directory,
         };
+        if let Err(e) = value.report_reboot_time(metrics) {
+            warn!(logger, "Cannot report the reboot time: {}", e);
+        }
         value.confirm_boot().await;
         value
+    }
+
+    fn report_reboot_time(&self, metrics: Arc<OrchestratorMetrics>) -> OrchestratorResult<()> {
+        let elapsed_time = self.get_time_since_last_reboot_trigger()?;
+        metrics.reboot_duration.set(elapsed_time.as_secs() as i64);
+        Ok(())
     }
 
     /// Checks for a new release package, and if found, upgrades to this release
@@ -252,7 +252,7 @@ impl Upgrade {
                 self.logger,
                 "Version upgrade detected: {} -> {}", self.replica_version, new_replica_version
             );
-            self.prepare_upgrade(new_replica_version).await?
+            self.prepare_upgrade(&new_replica_version).await?
         }
         Ok(())
     }
@@ -282,56 +282,6 @@ impl Upgrade {
             _ => Err(OrchestratorError::UpgradeError(
                 "No replica version for unassigned nodes found".to_string(),
             )),
-        }
-    }
-
-    // Executes the node upgrade by unpacking the downloaded image (if it didn't happen yet)
-    // and rebooting the node.
-    async fn execute_upgrade<T>(
-        &mut self,
-        replica_version: &ReplicaVersion,
-    ) -> OrchestratorResult<T> {
-        match &self.prepared_upgrade_version {
-            Some(version) if version == replica_version => {
-                info!(
-                    self.logger,
-                    "Replica version {} has already been prepared for upgrade.", replica_version
-                )
-            }
-            _ => self.prepare_upgrade(replica_version.clone()).await?,
-        };
-
-        // If we ever retry this function, it means we encountered an issue somewhere.
-        // To be safe, we should re-do all the steps.
-        self.prepared_upgrade_version = None;
-
-        // Save the time of triggering the reboot if a path is provided.
-        if let Err(e) = persist_time_of_triggering_reboot(&self.orchestrator_data_directory) {
-            warn!(self.logger, "Cannot persist the time of reboot: {}", e);
-        }
-
-        // We could successfuly unpack the file above, so we do not need the image anymore.
-        std::fs::remove_file(self.image_path())
-            .map_err(|e| OrchestratorError::IoError("Couldn't delete the image".to_string(), e))?;
-
-        info!(self.logger, "Attempting to reboot");
-        let mut script = self.ic_binary_dir.clone();
-        script.push("manageboot.sh");
-        let mut c = Command::new(script.into_os_string());
-        let out = c
-            .arg("upgrade-commit")
-            .output()
-            .await
-            .map_err(|e| OrchestratorError::file_command_error(e, &c))?;
-
-        if !out.status.success() {
-            warn!(self.logger, "upgrade-commit has failed");
-            Err(OrchestratorError::UpgradeError(
-                "upgrade-commit failed".to_string(),
-            ))
-        } else {
-            info!(self.logger, "Rebooting {:?}", out);
-            exit(42);
         }
     }
 
@@ -404,94 +354,49 @@ impl Upgrade {
                 OrchestratorError::IoError("Error when attempting to start new replica".into(), e)
             })
     }
+}
 
-    // Calls a corresponding script to "confirm" that the base OS could boot
-    // successfully. With a confirmation the image will be reverted on the next
-    // restart.
-    async fn confirm_boot(&self) {
-        if let Err(err) = Command::new(self.ic_binary_dir.join("manageboot.sh").into_os_string())
-            .arg("confirm")
-            .output()
-            .await
-        {
-            error!(self.logger, "Could not confirm the boot: {:?}", err);
-        }
+#[async_trait]
+impl ImageUpgrader<ReplicaVersion, Option<SubnetId>> for Upgrade {
+    fn get_prepared_version(&self) -> Option<&ReplicaVersion> {
+        self.prepared_upgrade_version.as_ref()
     }
 
-    // Downloads release package associated with the given version to
-    // `[self.release_content_dir]/guest-os.tar.gz`.
-    //
-    // Garbage collects old release packages while keeping
-    // `self.MAX_RELEASE_PACKAGES_TO_STORE` youngest entries and files younger
-    // than `self.MIN_RELEASE_PACKAGE_AGE`.
-    //
-    // Releases are downloaded using [`FileDownloader::download_file()`] which
-    // returns immediately if the file with matching hash already exists.
-    async fn download_release_package(
+    fn set_prepared_version(&mut self, version: Option<ReplicaVersion>) {
+        self.prepared_upgrade_version = version
+    }
+
+    fn binary_dir(&self) -> &PathBuf {
+        &self.ic_binary_dir
+    }
+
+    fn image_path(&self) -> &PathBuf {
+        &self.image_path
+    }
+
+    fn data_dir(&self) -> &Option<PathBuf> {
+        &self.orchestrator_data_directory
+    }
+
+    fn get_release_package_url_and_hash(
         &self,
-        replica_version: ReplicaVersion,
-    ) -> OrchestratorResult<()> {
-        let replica_version_record = self.registry.get_replica_version_record(
-            replica_version.clone(),
-            self.registry.get_latest_version(),
-        )?;
-        let start_time = std::time::Instant::now();
-        let file_downloader = FileDownloader::new(Some(self.logger.clone()));
-        file_downloader
-            .download_file(
-                &replica_version_record.release_package_url,
-                &self.image_path(),
-                Some(replica_version_record.release_package_sha256_hex),
-            )
-            .await
-            .map_err(OrchestratorError::from)?;
-        info!(
-            self.logger,
-            "Image downloading request for version {} processed in {:?}",
-            replica_version.as_ref(),
-            start_time.elapsed(),
-        );
-        Ok(())
+        version: &ReplicaVersion,
+    ) -> OrchestratorResult<(String, Option<String>)> {
+        let record = self
+            .registry
+            .get_replica_version_record(version.clone(), self.registry.get_latest_version())?;
+        Ok((
+            record.release_package_url,
+            Some(record.release_package_sha256_hex),
+        ))
     }
 
-    // Downloads release package associated with the given version,
-    // calls the node script that extracts it and copies it to the boot partition.
-    async fn prepare_upgrade(&mut self, replica_version: ReplicaVersion) -> OrchestratorResult<()> {
-        // Return immediately if 'replica version' is already prepared for an upgrade.
-        if self.prepared_upgrade_version == Some(replica_version.clone()) {
-            return Ok(());
-        }
-
-        self.download_release_package(replica_version.clone())
-            .await?;
-
-        // The call to `manageboot.sh upgrade-install` could corrupt any previous upgrade preperation.
-        // In case this function fails and we do want to leave `prepared_upgrade_version` set. Therefore,
-        // clear it here.
-        self.prepared_upgrade_version = None;
-
-        let mut script = self.ic_binary_dir.clone();
-        script.push("manageboot.sh");
-        let mut c = Command::new(script.clone().into_os_string());
-        let out = c
-            .arg("upgrade-install")
-            .arg(self.image_path())
-            .output()
-            .await
-            .map_err(|e| OrchestratorError::file_command_error(e, &c))?;
-        if out.status.success() {
-            self.prepared_upgrade_version = Some(replica_version);
-            Ok(())
-        } else {
-            warn!(self.logger, "upgrade-install has failed");
-            Err(OrchestratorError::UpgradeError(
-                "upgrade-install failed".to_string(),
-            ))
-        }
+    fn log(&self) -> &ReplicaLogger {
+        &self.logger
     }
 
-    fn image_path(&self) -> PathBuf {
-        self.release_content_dir.join("guest-os.tar.gz")
+    async fn check_for_upgrade(&mut self) -> OrchestratorResult<Option<SubnetId>> {
+        self.check().await
     }
 }
 
@@ -613,43 +518,4 @@ fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
     );
     let error = exec::Command::new(&args[0]).args(&args[1..]).exec();
     OrchestratorError::ExecError(PathBuf::new(), error)
-}
-
-fn get_reboot_time_file_path(
-    orchestrator_data_directory: &Option<PathBuf>,
-) -> Result<PathBuf, String> {
-    match orchestrator_data_directory {
-        Some(dir) => Ok(dir.join(REBOOT_TIME_FILENAME)),
-        None => Err("`orchestrator_data_directory` is not provided".to_string()),
-    }
-}
-
-fn persist_time_of_triggering_reboot(
-    orchestrator_data_directory: &Option<PathBuf>,
-) -> Result<(), String> {
-    let path = get_reboot_time_file_path(orchestrator_data_directory)?;
-    let now = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?;
-    let mut file = std::fs::File::create(path).map_err(|e| e.to_string())?;
-    file.write_all(now.as_secs().to_string().as_bytes())
-        .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-fn report_reboot_time(
-    orchestrator_data_directory: &Option<PathBuf>,
-    metrics: Arc<OrchestratorMetrics>,
-) -> Result<(), String> {
-    let path = get_reboot_time_file_path(orchestrator_data_directory)?;
-
-    let content = std::fs::read(path).map_err(|e| e.to_string())?;
-    let text = std::str::from_utf8(&content).map_err(|e| e.to_string())?;
-    let then = Duration::new(u64::from_str(text).map_err(|e| e.to_string())?, 0);
-    let now = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?;
-    let elapsed_time = now - then;
-    metrics.reboot_duration.set(elapsed_time.as_secs() as i64);
-    Ok(())
 }

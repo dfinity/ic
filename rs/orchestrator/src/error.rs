@@ -48,6 +48,9 @@ pub enum OrchestratorError {
 
     /// Generic upgrade error
     UpgradeError(String),
+
+    /// Generic error while handling reboot time
+    RebootTimeError(String),
 }
 
 impl OrchestratorError {
@@ -57,6 +60,10 @@ impl OrchestratorError {
 
     pub(crate) fn invalid_configuration_error(msg: impl ToString) -> Self {
         OrchestratorError::InvalidConfigurationError(msg.to_string())
+    }
+
+    pub(crate) fn reboot_time_error(msg: impl ToString) -> Self {
+        OrchestratorError::RebootTimeError(msg.to_string())
     }
 
     pub(crate) fn file_command_error(e: io::Error, cmd: &Command) -> Self {
@@ -91,6 +98,9 @@ impl fmt::Display for OrchestratorError {
             ),
             OrchestratorError::InvalidConfigurationError(msg) => {
                 write!(f, "Invalid configuration: {}", msg)
+            }
+            OrchestratorError::RebootTimeError(msg) => {
+                write!(f, "Failed to read or write reboot time: {}", msg)
             }
             OrchestratorError::SubnetMissingError(subnet_id, registry_version) => write!(
                 f,
