@@ -1,0 +1,13 @@
+package(default_visibility = ["//visibility:public"])
+
+cc_binary(
+    name = "infogetty",
+    srcs = [
+        "network_info.cc",
+        "network_info.h",
+        ":infogetty.cc",
+    ],
+    linkopts = [
+        "-lsystemd",
+    ],
+)

@@ -89,6 +89,9 @@ fi
 
 BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base.${BUILD_TYPE}")
 
+# HACK: build the infogetty binary
+make -C ${BASE_DIR}/src infogetty
+
 # Compute arguments for actual build stage.
 
 declare -a IC_EXECUTABLES=(orchestrator replica canister_sandbox sandbox_launcher vsock_agent state-tool ic-consensus-pool-util ic-crypto-csp ic-regedit ic-recovery ic-btc-adapter ic-canister-http-adapter)
@@ -96,6 +99,11 @@ declare -a INSTALL_EXEC_ARGS=()
 for IC_EXECUTABLE in "${IC_EXECUTABLES[@]}"; do
     INSTALL_EXEC_ARGS+=("${EXEC_SRCDIR}/${IC_EXECUTABLE}:/opt/ic/bin/${IC_EXECUTABLE}:0755")
 done
+INSTALL_EXEC_ARGS+=("${BASE_DIR}/src/infogetty:/opt/ic/bin/infogetty:0755")
+
+if [ "${BUILD_TYPE}" == "dev" ]; then
+    INSTALL_EXEC_ARGS+=("${BASE_DIR}/allow_console_root:/etc/allow_console_root:0644")
+fi
 
 echo "${VERSION}" >"${TMPDIR}/version.txt"
 
