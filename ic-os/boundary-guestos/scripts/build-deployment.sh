@@ -184,21 +184,33 @@ function prepare_build_directories() {
     fi
 }
 
+BN_BINARIES=(
+    "boundary-node-control-plane"
+    "boundary-node-prober"
+    "ic-balance-exporter"
+)
+
 function download_binaries() {
-    for filename in "boundary-node-control-plane.gz" "boundary-node-prober.gz"; do
+    for filename in "${BN_BINARIES[@]}"; do
         "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
-            --git-rev "$GIT_REVISION" --remote-path=release --include ${filename} --out="${IC_PREP_DIR}/bin/"
+            --git-rev "${GIT_REVISION}" \
+            --remote-path=release \
+            --include "${filename}.gz" \
+            --out="${IC_PREP_DIR}/bin/"
     done
 
     find "${IC_PREP_DIR}/bin/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {} && basename {} .gz | xargs -I[] chmod +x ${IC_PREP_DIR}/bin/[]"
 
-    mkdir -p "$OUTPUT/bin"
-    rsync -a --delete "${IC_PREP_DIR}/bin/" "$OUTPUT/bin/"
+    mkdir -p "${OUTPUT}/bin"
+    rsync -a --delete "${IC_PREP_DIR}/bin/" "${OUTPUT}/bin/"
 }
 
-function place_control_plane() {
-    cp -a "${IC_PREP_DIR}/bin/boundary-node-control-plane" "$REPO_ROOT/ic-os/boundary-guestos/rootfs/opt/ic/bin/boundary-node-control-plane"
-    cp -a "${IC_PREP_DIR}/bin/boundary-node-prober" "$REPO_ROOT/ic-os/boundary-guestos/rootfs/opt/ic/bin/boundary-node-prober"
+function place_binaries() {
+    for filename in "${BN_BINARIES[@]}"; do
+        cp -a \
+            "${IC_PREP_DIR}/bin/${filename}" \
+            "${REPO_ROOT}/ic-os/boundary-guestos/rootfs/opt/ic/bin/${filename}"
+    done
 }
 
 function create_tarball_structure() {
@@ -439,7 +451,7 @@ function main() {
     # Establish run order
     prepare_build_directories
     download_binaries
-    place_control_plane
+    place_binaries
     create_tarball_structure
     generate_boundary_node_config
     generate_journalbeat_config

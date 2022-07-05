@@ -21,6 +21,7 @@ cargo build --target $CARGO_BUILD_TARGET --release \
     --bin boundary-node-control-plane \
     --bin boundary-node-prober \
     --bin ic-admin \
+    --bin ic-balance-exporter \
     --bin ic-btc-adapter \
     --bin ic-canister-http-adapter \
     --bin ic-consensus-pool-util \

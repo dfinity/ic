@@ -20,6 +20,7 @@ generic-guest-os-diskimg:
 
       gunzip -c -d artifacts/release/boundary-node-control-plane.gz > artifacts/release/boundary-node-control-plane
       gunzip -c -d artifacts/release/boundary-node-prober.gz > artifacts/release/boundary-node-prober
+      gunzip -c -d artifacts/release/ic-balance-exporter.gz > artifacts/release/ic-balance-exporter
 
       cd ic-os/generic-guestos
 
