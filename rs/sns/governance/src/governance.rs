@@ -484,8 +484,17 @@ impl Governance {
         let mut proto = proto.into_inner();
 
         if proto.genesis_timestamp_seconds == 0 {
-            proto.genesis_timestamp_seconds = env.now();
+            let now = env.now();
+            proto.genesis_timestamp_seconds = now;
+
+            // Neurons available at genesis should have their timestamp
+            // fields set to the genesis timestamp.
+            for neuron in proto.neurons.values_mut() {
+                neuron.created_timestamp_seconds = now;
+                neuron.aging_since_timestamp_seconds = now;
+            }
         }
+
         if proto.latest_reward_event.is_none() {
             // Introduce a dummy reward event to mark the origin of the SNS instance era.
             // This is required to be able to compute accurately the rewards for the
