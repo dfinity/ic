@@ -5,21 +5,13 @@ use ic_nns_init::set_up_env_vars_for_all_canisters;
 use ic_types::ReplicaVersion;
 use rand_chacha::{rand_core, ChaCha8Rng};
 use slog::{o, warn, Drain, Logger};
-use slog_async::OverflowStrategy;
 use std::ffi::OsStr;
 use std::time::SystemTime;
-use std::{
-    fs,
-    fs::File,
-    path::{Path, PathBuf},
-    time::Duration,
-};
+use std::{fs, path::PathBuf, time::Duration};
 use url::Url;
 
 use super::cli::ValidatedCliRunTestsArgs;
 use super::farm::Farm;
-use super::pot_dsl::{self};
-use super::test_env::HasBaseLogDir;
 use serde::{Deserialize, Serialize};
 
 const ASYNC_CHAN_SIZE: usize = 8192;
@@ -65,9 +57,6 @@ pub fn initialize_env(env: &TestEnv, cli_args: ValidatedCliRunTestsArgs) -> Resu
         log_debug_overrides: cli_args.log_debug_overrides,
     }
     .write_attribute(env);
-    if let Some(base_dir) = &cli_args.log_base_dir {
-        env.write_base_log_dir(base_dir)?;
-    }
     Ok(())
 }
 
@@ -133,7 +122,6 @@ pub fn create_driver_context_from_cli(
         created_at,
         job_id,
         farm,
-        logs_base_dir: cli_args.log_base_dir,
         artifacts_path: cli_args.artifacts_path,
         pot_timeout: cli_args.pot_timeout,
         env,
@@ -150,38 +138,6 @@ pub fn mk_logger() -> Logger {
     slog::Logger::root(drain.fuse(), o!())
 }
 
-pub fn tee_logger(test_env: &TestEnv, logger: Logger) -> Logger {
-    use crate::driver::test_env::HasTestPath;
-    if let Some(base_dir) = test_env.base_log_dir() {
-        let stdout_drain = slog::LevelFilter::new(logger.clone(), slog::Level::Warning);
-        let test_path = test_env.test_path();
-        let file_drain = slog_term::FullFormat::new(slog_term::PlainSyncDecorator::new(
-            File::create(set_up_filepath(&base_dir, &test_path))
-                .expect("could not create a log file"),
-        ))
-        .build()
-        .fuse();
-        let file_drain = slog_async::Async::new(file_drain)
-            .chan_size(ASYNC_CHAN_SIZE)
-            .overflow_strategy(OverflowStrategy::Block)
-            .build()
-            .fuse();
-        slog::Logger::root(slog::Duplicate(stdout_drain, file_drain).fuse(), o!())
-    } else {
-        logger
-    }
-}
-
-fn set_up_filepath(base_dir: &Path, test_path: &pot_dsl::TestPath) -> PathBuf {
-    let mut tp = test_path.clone();
-    let filename = tp.pop();
-    let mut path = tp.to_filepath(base_dir);
-    fs::create_dir_all(&path).unwrap();
-    path.push(filename);
-    path.set_extension("log");
-    path
-}
-
 #[derive(Clone)]
 pub struct DriverContext {
     /// logger
@@ -193,7 +149,6 @@ pub struct DriverContext {
     pub job_id: String,
     /// Abstraction for the Farm service
     pub farm: Farm,
-    pub logs_base_dir: Option<PathBuf>,
     pub artifacts_path: Option<PathBuf>,
     pub pot_timeout: Duration,
     pub env: TestEnv,

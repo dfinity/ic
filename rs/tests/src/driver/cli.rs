@@ -34,12 +34,6 @@ pub struct ProcessTestsArgs {
 #[derive(clap::Args, Debug)]
 pub struct RunTestsArgs {
     #[clap(
-        long = "log-base-dir",
-        help = "If set, specifies where to write demultiplexed test-specific logs."
-    )]
-    log_base_dir: Option<PathBuf>,
-
-    #[clap(
         long = "log-level",
         help = "One of TRACE, DEBUG, INFO, WARN, or ERROR. (Default: Info)"
     )]
@@ -224,7 +218,6 @@ impl RunTestsArgs {
         let log_debug_overrides = parse_log_debug_overrides(self.log_debug_overrides)?;
 
         Ok(ValidatedCliRunTestsArgs {
-            log_base_dir: self.log_base_dir,
             log_level,
             rand_seed: self.rand_seed.unwrap_or(RND_SEED_DEFAULT),
             job_id: self.job_id,
@@ -263,7 +256,6 @@ pub struct ValidatedCliProcessTestsArgs {
 
 #[derive(Clone, Debug)]
 pub struct ValidatedCliRunTestsArgs {
-    pub log_base_dir: Option<PathBuf>,
     pub log_level: slog::Level,
     pub rand_seed: u64,
     pub job_id: Option<String>,

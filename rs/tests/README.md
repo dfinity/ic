@@ -221,7 +221,7 @@ The System Tests are defined in `rs/tests/bin/prod-test-driver.rs`. The API of t
 For example, to run all the `pre-master` System Tests use:
 
 ```bash
-./run-system-tests.py --suite pre_master --log-base-dir $(date +"%Y%m%d") 2>&1 | tee farm.log
+./run-system-tests.py --suite pre_master 2>&1 | tee system-test-logs.log
 ```
 
 Note: This requires the commit to be built by CI/CD, i.e. it must be pushed to the remote and an MR has to be created. If the script can't find artifacts for the current commit, it will fail.

@@ -93,7 +93,7 @@ impl Options {
 }
 
 #[derive(Debug, Clone, Parser)]
-#[clap(name = "system-tests", about = "Runs the our system-tests", version)]
+#[clap(name = "system-tests", about = "Runs the system-tests", version)]
 pub struct Options {
     #[clap(
         long = "seed",
