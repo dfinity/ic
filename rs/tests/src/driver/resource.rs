@@ -11,7 +11,7 @@ use super::farm::FarmResult;
 use super::farm::ImageLocation;
 use super::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
 use super::farm::{CreateVmRequest, HostFeature};
-use super::ic::{VmAllocationStrategy, VmResources};
+use super::ic::{ImageSizeGiB, VmAllocationStrategy, VmResources};
 use super::test_env::{TestEnv, TestEnvAttribute};
 use super::test_setup::PotSetup;
 use crate::driver::driver_setup::IcSetup;
@@ -90,6 +90,7 @@ pub struct VmSpec {
     pub vcpus: NrOfVCPUs,
     pub memory_kibibytes: AmountOfMemoryKiB,
     pub boot_image: BootImage,
+    pub boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
     pub has_ipv4: bool,
     pub vm_allocation: Option<VmAllocationStrategy>,
     pub required_host_features: Vec<HostFeature>,
@@ -190,6 +191,13 @@ pub fn get_resource_request_for_universal_vm(
                 .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM)
         }),
         boot_image: BootImage::GroupDefault,
+        boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
+            || {
+                pot_setup
+                    .default_vm_resources
+                    .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes)
+            },
+        ),
         has_ipv4: universal_vm.has_ipv4,
         vm_allocation: universal_vm.vm_allocation.clone(),
         required_host_features: universal_vm.required_host_features.clone(),
@@ -210,6 +218,7 @@ pub fn allocate_resources(farm: &Farm, req: &ResourceRequest) -> FarmResult<Reso
                 BootImage::GroupDefault => From::from(req.primary_image.clone()),
                 BootImage::Image(disk_image) => From::from(disk_image.clone()),
             },
+            vm_config.boot_image_minimal_size_gibibytes,
             vm_config.has_ipv4,
             vm_config.vm_allocation.clone(),
             vm_config.required_host_features.clone(),
@@ -240,6 +249,12 @@ fn vm_spec_from_node(n: &Node, default_vm_resources: Option<VmResources>) -> VmS
                 .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM)
         }),
         boot_image: BootImage::GroupDefault,
+        boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
+            || {
+                default_vm_resources
+                    .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes)
+            },
+        ),
         has_ipv4: false,
         vm_allocation: n.vm_allocation.clone(),
         required_host_features: n.required_host_features.clone(),

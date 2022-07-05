@@ -426,15 +426,18 @@ impl Default for Subnet {
 
 pub type NrOfVCPUs = AmountOf<VCPUs, u64>;
 pub type AmountOfMemoryKiB = AmountOf<MemoryKiB, u64>;
+pub type ImageSizeGiB = AmountOf<SizeGiB, u64>;
 
 pub enum VCPUs {}
 pub enum MemoryKiB {}
+pub enum SizeGiB {}
 
 /// Resources that the VM will use like number of virtual CPUs and memory.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct VmResources {
     pub vcpus: Option<NrOfVCPUs>,
     pub memory_kibibytes: Option<AmountOfMemoryKiB>,
+    pub boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
 }
 
 /// A builder for the initial configuration of a node.

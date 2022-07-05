@@ -15,6 +15,8 @@ use std::io::Write;
 use thiserror::Error;
 use url::Url;
 
+use super::ic::ImageSizeGiB;
+
 pub type FarmResult<T> = Result<T, FarmError>;
 
 const DEFAULT_REQ_TIMEOUT: Duration = Duration::from_secs(300);
@@ -290,6 +292,8 @@ pub struct CreateVmRequest {
     pub memory_kibibytes: AmountOfMemoryKiB,
     #[serde(rename = "primaryImage")]
     pub primary_image: ImageLocation,
+    #[serde(rename = "primaryImageMinimalSizeGiB")]
+    pub primary_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
     #[serde(rename = "hasIPv4")]
     pub has_ipv4: bool,
     #[serde(rename = "vmAllocation")]
@@ -304,6 +308,7 @@ impl CreateVmRequest {
         vcpus: NrOfVCPUs,
         memory_kibibytes: AmountOfMemoryKiB,
         primary_image: ImageLocation,
+        primary_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
         has_ipv4: bool,
         vm_allocation: Option<VmAllocationStrategy>,
         required_host_features: Vec<HostFeature>,
@@ -313,6 +318,7 @@ impl CreateVmRequest {
             vcpus,
             memory_kibibytes,
             primary_image,
+            primary_image_minimal_size_gibibytes,
             has_ipv4,
             vm_allocation,
             required_host_features,
