@@ -527,6 +527,13 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )])
             ),
              */
+            pot_with_setup(
+                "canister_http",
+                canister_http::lib::config,
+                par(vec![
+                    sys_t("http_basic", canister_http::http_basic_remote::test),
+                ]),
+            ),
         ],
     ).with_alert(TEST_FAILURE_CHANNEL));
 
@@ -715,6 +722,24 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         orchestrator::unstuck_subnet_test::test,
                     )]),
                 ),
+                pot_with_setup(
+                    "canister_http",
+                    canister_http::lib::config,
+                    seq(vec![
+                        sys_t("http_basic", canister_http::http_basic_remote::test),
+                        sys_t("http_time_out", canister_http::http_time_out::test),
+                    ]),
+                ),
+                pot_with_setup(
+                    "canister_http_fault_tolerance",
+                    canister_http::http_fault_tolerance::config,
+                    par(vec![
+                        sys_t(
+                            "http_fault_tolerance",
+                            canister_http::http_fault_tolerance::test,
+                        ),
+                    ]),
+                ),
             ],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
@@ -855,26 +880,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
             ),
         ],
     ));
-
-    m.add_suite(suite(
-        "manual",
-        vec![
-            // Below tests are disabled as Canister HTTP feature is not fully working
-            // on "master" yet. These tests will be enabled when the feature is code complete.
-            pot_with_setup(
-                "http_pot",
-                canister_http::lib::config,
-                par(vec![
-                    sys_t("http_basic", canister_http::http_basic_remote::test),
-                    sys_t(
-                        "http_fault_tolerance",
-                        canister_http::http_fault_tolerance::test,
-                    ),
-                    sys_t("http_time_out", canister_http::http_time_out::test),
-                ]),
-            ),
-        ],
-    ));
+    m.add_suite(suite("manual", vec![]));
     m
 }
 
