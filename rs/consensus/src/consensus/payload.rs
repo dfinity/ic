@@ -5,8 +5,9 @@ use ic_interfaces::{
     ingress_manager::IngressSelector, messaging::XNetPayloadBuilder,
     self_validating_payload::SelfValidatingPayloadBuilder,
 };
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_types::{
-    batch::{BatchPayload, ValidationContext},
+    batch::{BatchPayload, CanisterHttpPayload, IngressPayload, ValidationContext},
     consensus::Payload,
     CountBytes, Height, NumBytes, Time,
 };
@@ -45,10 +46,10 @@ impl BatchPayloadSectionBuilder {
     /// - `max_size`: The maximum size in [`NumBytes`], that the payload section has available in the current block.
     /// - `priority`: The order in which the individual [`BatchPayloadSectionBuilder`] have been called.
     /// - `past_payloads`: All [`BatchPayload`]s from the certified height to the tip.
+    /// - `logger`: Access to a [`ReplicaLogger`]
     ///
     /// # Returns:
-    /// The [`BatchPayloadSectionType`]. If there is no suitable payload, return [`Default`].
-    /// The size of the payload in [`NumBytes`].
+    /// - The size of the payload in [`NumBytes`]
     pub(crate) fn build_payload(
         &self,
         payload: &mut BatchPayload,
@@ -57,6 +58,7 @@ impl BatchPayloadSectionBuilder {
         max_size: NumBytes,
         priority: usize,
         past_payloads: &[(Height, Time, Payload)],
+        logger: &ReplicaLogger,
     ) -> NumBytes {
         match self {
             Self::Ingress(builder) => {
@@ -65,8 +67,23 @@ impl BatchPayloadSectionBuilder {
                     builder.get_ingress_payload(&past_payloads, validation_context, max_size);
                 let size = NumBytes::new(ingress.count_bytes() as u64);
 
-                payload.ingress = ingress;
-                size
+                // Validate the ingress payload as a safety measure
+                match builder.validate_ingress_payload(&ingress, &past_payloads, validation_context)
+                {
+                    Ok(()) => {
+                        payload.ingress = ingress;
+                        size
+                    }
+                    Err(err) => {
+                        error!(
+                            logger,
+                            "Ingress payload did not pass validation, this is a bug, {:?}", err
+                        );
+
+                        payload.ingress = IngressPayload::default();
+                        NumBytes::new(0)
+                    }
+                }
             }
             Self::XNet(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
@@ -99,8 +116,35 @@ impl BatchPayloadSectionBuilder {
                 );
                 let size = NumBytes::new(canister_http.count_bytes() as u64);
 
-                payload.canister_http = canister_http;
-                size
+                // Check validation as safety measure
+                match builder.validate_canister_http_payload(
+                    height,
+                    &canister_http,
+                    validation_context,
+                    &past_payloads,
+                ) {
+                    Ok(validation_size) => {
+                        if validation_size < size {
+                            warn!(
+                                logger,
+                                "CanisterHttp validator reported size different from builder"
+                            );
+                        }
+
+                        payload.canister_http = canister_http;
+                        size
+                    }
+                    Err(err) => {
+                        error!(
+                            logger,
+                            "CanisterHttp payload did not pass validation, this is a bug, {:?}",
+                            err
+                        );
+
+                        payload.canister_http = CanisterHttpPayload::default();
+                        NumBytes::new(0)
+                    }
+                }
             }
         }
     }

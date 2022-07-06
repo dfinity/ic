@@ -376,20 +376,6 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                 .collect(),
         );
 
-        // Check validation as safety measure
-        match self.validate_canister_http_payload(
-            height,
-            &payload,
-            validation_context,
-            past_payloads,
-        ) {
-            Ok(_) => (),
-            Err(err) => {
-                warn!(self.log, "CanisterHttpPayloadBuilder failed to build a payload that passes validation: {:?}", err);
-                return CanisterHttpPayload::default();
-            }
-        }
-
         payload
     }
 
