@@ -15,17 +15,20 @@ use crate::types::{
 use crate::utils::{get_flow_ips, get_flow_label, SendQueueImpl};
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer};
-use ic_interfaces_transport::{AsyncTransportEventHandler, FlowId, FlowTag, TransportErrorCode};
+use ic_interfaces_transport::{FlowId, FlowTag, TransportErrorCode, TransportEventHandler};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
-use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr};
-use std::str::FromStr;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::net::{TcpListener, TcpSocket, TcpStream};
-use tokio::task::JoinHandle;
-use tokio::time::sleep;
+use std::{
+    collections::HashMap,
+    net::{IpAddr, SocketAddr},
+    str::FromStr,
+    time::Duration,
+};
+use tokio::{
+    net::{TcpListener, TcpSocket, TcpStream},
+    task::JoinHandle,
+    time::sleep,
+};
 
 /// Time to wait before retrying an unsuccessful connection attempt
 const CONNECT_RETRY_SECONDS: u64 = 3;
@@ -737,7 +740,7 @@ impl TransportImpl {
     }
 
     /// Initilizes a client
-    pub(crate) fn init_client(&self, event_handler: Arc<dyn AsyncTransportEventHandler>) {
+    pub(crate) fn init_client(&self, event_handler: TransportEventHandler) {
         // Creating the listeners requres that we are within a tokio runtime context.
         let _rt_enter_guard = self.tokio_runtime.enter();
         // Bind to the server ports.
@@ -775,9 +778,7 @@ mod tests {
     use ic_base_types::{NodeId, RegistryVersion};
     use ic_config::transport::{TransportConfig, TransportFlowConfig};
     use ic_crypto::utils::TempCryptoComponent;
-    use ic_interfaces_transport::{
-        AsyncTransportEventHandler, SendError, TransportEvent, TransportStateChange,
-    };
+    use ic_interfaces_transport::{SendError, TransportEvent, TransportStateChange};
     use ic_logger::warn;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::node::v1::{
@@ -788,7 +789,14 @@ mod tests {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities::types::ids::{NODE_1, NODE_2};
     use ic_test_utilities::with_test_replica_logger;
+    use std::convert::Infallible;
+    use std::future::Future;
+    use std::pin::Pin;
     use std::sync::Arc;
+    use std::task::Context;
+    use std::task::Poll;
+    use tower::util::BoxCloneService;
+    use tower::Service;
 
     const NODE_ID_1: NodeId = NODE_1;
     const NODE_ID_2: NodeId = NODE_2;
@@ -798,27 +806,42 @@ mod tests {
 
     const PORT_1: u16 = 65001;
     const PORT_2: u16 = 65002;
-
+    #[derive(Clone)]
     struct FakeEventHandler {
         connected: Sender<bool>,
     }
 
     impl FakeEventHandler {
-        fn on_state_change(&self, state_change: TransportStateChange) {
+        fn on_state_change(connected: Sender<bool>, state_change: TransportStateChange) {
             if let TransportStateChange::PeerFlowUp(_) = state_change {
-                self.connected.send(true).unwrap();
+                connected.send(true).unwrap();
             }
         }
     }
 
     #[async_trait]
-    impl AsyncTransportEventHandler for FakeEventHandler {
-        async fn call(&self, event: TransportEvent) -> Result<(), SendError> {
-            match event {
-                TransportEvent::Message(_) => (),
-                TransportEvent::StateChange(state_change) => self.on_state_change(state_change),
-            };
-            Ok(())
+    impl Service<TransportEvent> for FakeEventHandler {
+        type Response = Result<(), SendError>;
+        type Error = Infallible;
+        #[allow(clippy::type_complexity)]
+        type Future =
+            Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
+
+        fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn call(&mut self, event: TransportEvent) -> Self::Future {
+            let connected = self.connected.clone();
+            Box::pin(async move {
+                match event {
+                    TransportEvent::Message(_) => (),
+                    TransportEvent::StateChange(state_change) => {
+                        Self::on_state_change(connected, state_change)
+                    }
+                };
+                Ok(Ok(()))
+            })
         }
     }
 
@@ -876,7 +899,7 @@ mod tests {
                 logger.clone(),
             );
 
-            let fake_event_handler_1 = Arc::new(FakeEventHandler {
+            let fake_event_handler_1 = BoxCloneService::new(FakeEventHandler {
                 connected: connected_1,
             });
             control_plane_1.set_event_handler(fake_event_handler_1);
@@ -893,7 +916,7 @@ mod tests {
                 .start_connections(&NODE_ID_2, &node_record_1, REG_V1)
                 .expect("start_connections");
 
-            let fake_event_handler_2 = Arc::new(FakeEventHandler {
+            let fake_event_handler_2 = BoxCloneService::new(FakeEventHandler {
                 connected: connected_2,
             });
             control_plane_2.set_event_handler(fake_event_handler_2);

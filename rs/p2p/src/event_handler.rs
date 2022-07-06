@@ -75,10 +75,7 @@ use crate::{
     },
     metrics::FlowWorkerMetrics,
 };
-use async_trait::async_trait;
-use ic_interfaces_transport::{
-    AsyncTransportEventHandler, SendError, TransportEvent, TransportMessage,
-};
+use ic_interfaces_transport::{SendError, TransportEvent, TransportMessage};
 use ic_logger::{debug, info, replica_logger::ReplicaLogger, trace};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::subnet::v1::GossipConfig};
@@ -87,12 +84,15 @@ use parking_lot::RwLock;
 use std::{
     cmp::max,
     collections::BTreeMap,
-    convert::TryInto,
+    convert::{Infallible, TryInto},
     fmt::Debug,
+    future::Future,
+    pin::Pin,
     sync::{
         atomic::{AtomicBool, Ordering::SeqCst},
         Arc, Condvar, Mutex,
     },
+    task::{Context, Poll},
     thread::JoinHandle,
     time::Duration,
 };
@@ -100,6 +100,7 @@ use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, IntoStaticStr};
 use threadpool::ThreadPool;
 use tokio::sync::{Semaphore, TryAcquireError};
+use tower::Service;
 
 // Each message for each flow is being executed on the same code path. Unless those codepaths are
 // lock free (which is not the case because Gossip has locks) there is no point in having more
@@ -138,6 +139,7 @@ enum FlowType {
 }
 
 /// We have a single worker for all flows with the same flow type.
+#[derive(Clone)]
 struct FlowWorker {
     flow_type_name: &'static str,
     /// The flow type worker metrics.
@@ -225,6 +227,7 @@ impl FlowWorker {
 
 /// The struct implements the async event handler traits for consumption by
 /// transport, ingress, artifact manager, and node addition/removal.
+#[derive(Clone)]
 pub(crate) struct AsyncTransportEventHandlerImpl {
     /// The replica node ID.
     node_id: NodeId,
@@ -330,62 +333,91 @@ impl AsyncTransportEventHandlerImpl {
     }
 }
 
-#[async_trait]
-impl AsyncTransportEventHandler for AsyncTransportEventHandlerImpl {
+impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
+    type Response = Result<(), SendError>;
+    type Error = Infallible;
+    #[allow(clippy::type_complexity)]
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
     /// The method sends the given message on the flow associated with the given
     /// flow ID.
-    async fn call(&self, event: TransportEvent) -> Result<(), SendError> {
+    fn call(&mut self, event: TransportEvent) -> Self::Future {
+        let c_gossip = self.gossip.read().as_ref().unwrap().clone();
         match event {
             TransportEvent::Message(raw) => {
                 let TransportMessage { payload, flow_id } = raw;
                 let gossip_message =
-                    <pb::GossipMessage as ProtoProxy<GossipMessage>>::proxy_decode(&payload.0)
-                        .map_err(|e| {
-                            trace!(self.log, "Deserialization failed {}", e);
-                            SendError::DeserializationFailed
-                        })?;
-
-                let c_gossip = self.gossip.read().as_ref().unwrap().clone();
+                    match <pb::GossipMessage as ProtoProxy<GossipMessage>>::proxy_decode(&payload.0)
+                    {
+                        Ok(msg) => msg,
+                        Err(err) => {
+                            trace!(self.log, "Deserialization failed {}", err);
+                            return Box::pin(
+                                async move { Ok(Err(SendError::DeserializationFailed)) },
+                            );
+                        }
+                    };
                 match gossip_message {
                     GossipMessage::Advert(msg) => {
                         let consume_fn = move |item, peer_id| {
                             c_gossip.on_advert(item, peer_id);
                         };
-                        self.advert.execute(flow_id.peer_id, msg, consume_fn).await;
+                        let advert = self.advert.clone();
+                        Box::pin(async move {
+                            advert.execute(flow_id.peer_id, msg, consume_fn).await;
+                            Ok(Ok(()))
+                        })
                     }
                     GossipMessage::ChunkRequest(msg) => {
                         let consume_fn = move |item, peer_id| {
                             c_gossip.on_chunk_request(item, peer_id);
                         };
-                        self.request.execute(flow_id.peer_id, msg, consume_fn).await;
+                        let request = self.request.clone();
+                        Box::pin(async move {
+                            request.execute(flow_id.peer_id, msg, consume_fn).await;
+                            Ok(Ok(()))
+                        })
                     }
                     GossipMessage::Chunk(msg) => {
                         let consume_fn = move |item, peer_id| {
                             c_gossip.on_chunk(item, peer_id);
                         };
-                        self.chunk.execute(flow_id.peer_id, msg, consume_fn).await;
+                        let chunk = self.chunk.clone();
+                        Box::pin(async move {
+                            chunk.execute(flow_id.peer_id, msg, consume_fn).await;
+                            Ok(Ok(()))
+                        })
                     }
                     GossipMessage::RetransmissionRequest(msg) => {
                         let consume_fn = move |item, peer_id| {
                             c_gossip.on_retransmission_request(item, peer_id);
                         };
-                        self.retransmission
-                            .execute(flow_id.peer_id, msg, consume_fn)
-                            .await;
+                        let retransmission = self.retransmission.clone();
+                        Box::pin(async move {
+                            retransmission
+                                .execute(flow_id.peer_id, msg, consume_fn)
+                                .await;
+                            Ok(Ok(()))
+                        })
                     }
-                };
+                }
             }
             TransportEvent::StateChange(state_change) => {
-                let c_gossip = self.gossip.read().as_ref().unwrap().clone();
                 let consume_fn = move |item, _peer_id| {
                     c_gossip.on_transport_state_change(item);
                 };
-                self.transport
-                    .execute(self.node_id, state_change, consume_fn)
-                    .await;
+                let node_id = self.node_id;
+                let transport = self.transport.clone();
+                Box::pin(async move {
+                    transport.execute(node_id, state_change, consume_fn).await;
+                    Ok(Ok(()))
+                })
             }
         }
-        Ok(())
     }
 }
 
@@ -665,7 +697,11 @@ pub mod tests {
 
     /// The function sends the given number of messages to the peer with the
     /// given node ID.
-    async fn send_advert(count: usize, handler: &AsyncTransportEventHandlerImpl, peer_id: NodeId) {
+    async fn send_advert(
+        count: usize,
+        handler: &mut AsyncTransportEventHandlerImpl,
+        peer_id: NodeId,
+    ) {
         for i in 0..count {
             let message = GossipMessage::Advert(make_gossip_advert(i as u64));
             let message = TransportPayload(pb::GossipMessage::proxy_encode(message).unwrap());
@@ -709,46 +745,44 @@ pub mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn event_handler_advert_dispatch() {
         let node_test_id = node_test_id(0);
-        let handler = new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id).0;
+        let mut handler = new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id).0;
         handler.start(Arc::new(TestGossip::new(
             Duration::from_secs(0),
             node_test_id,
         )));
-        send_advert(100, &handler, node_test_id).await;
+        send_advert(100, &mut handler, node_test_id).await;
     }
 
     /// Test slow/delayed consumption of events.
     #[tokio::test(flavor = "multi_thread")]
     async fn event_handler_slow_consumer() {
         let node_id = node_test_id(0);
-        let handler = new_test_event_handler(1, node_id).0;
+        let mut handler = new_test_event_handler(1, node_id).0;
         handler.start(Arc::new(TestGossip::new(Duration::from_millis(3), node_id)));
         // send adverts
-        send_advert(10, &handler, node_id).await;
+        send_advert(10, &mut handler, node_id).await;
     }
 
     /// Test the addition of nodes to the event handler.
     #[tokio::test(flavor = "multi_thread")]
     async fn event_handler_add_remove_nodes() {
         let node_id = node_test_id(0);
-        let handler = Arc::new(new_test_event_handler(1, node_id).0);
-
+        let mut handler = new_test_event_handler(1, node_id).0;
         handler.start(Arc::new(TestGossip::new(Duration::from_secs(0), node_id)));
-        send_advert(100, &handler, node_id).await;
+        send_advert(100, &mut handler, node_id).await;
     }
 
     /// Test queuing up the maximum number of adverts.
     #[tokio::test(flavor = "multi_thread")]
     async fn event_handler_max_channel_capacity() {
         let node_id = node_test_id(0);
-        let (handler, subscriber) = new_test_event_handler(MAX_ADVERT_BUFFER, node_id);
-        let handler = Arc::new(handler);
+        let (mut handler, subscriber) = new_test_event_handler(MAX_ADVERT_BUFFER, node_id);
         let node_test_id = node_test_id(0);
         let gossip_arc = Arc::new(TestGossip::new(Duration::from_secs(0), node_id));
         handler.start(gossip_arc.clone());
         subscriber.start(gossip_arc.clone());
 
-        send_advert(MAX_ADVERT_BUFFER, &handler, node_test_id).await;
+        send_advert(MAX_ADVERT_BUFFER, &mut handler, node_test_id).await;
         loop {
             let num_adverts = TestGossip::get_node_flow_count(&gossip_arc.num_adverts, node_id);
             assert!(num_adverts <= MAX_ADVERT_BUFFER);

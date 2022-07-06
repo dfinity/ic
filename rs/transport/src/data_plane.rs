@@ -28,15 +28,16 @@ use crate::{
 use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::{TlsReadHalf, TlsStream, TlsWriteHalf};
 use ic_interfaces_transport::{
-    AsyncTransportEventHandler, FlowId, FlowTag, TransportErrorCode, TransportEvent,
-    TransportMessage, TransportPayload, TransportStateChange,
+    FlowId, FlowTag, TransportErrorCode, TransportEvent, TransportEventHandler, TransportMessage,
+    TransportPayload, TransportStateChange,
 };
 use ic_logger::warn;
 use std::convert::TryInto;
 use std::net::SocketAddr;
-use std::sync::{Arc, Weak};
+use std::sync::Weak;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::time::{Duration, Instant};
+use tower::Service;
 
 // DEQUEUE_BYTES is the number of bytes which we will attempt to dequeue and
 // aggregate before sending to the network via write_all(). Tokio currently
@@ -131,7 +132,7 @@ impl TransportImpl {
         mut send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
         mut writer: Box<TlsWriteHalf>,
         metrics: DataPlaneMetrics,
-        event_handler: Arc<dyn AsyncTransportEventHandler>,
+        event_handler: TransportEventHandler,
         state: Weak<TransportImpl>,
     ) {
         let _updater = MetricsUpdater::new(metrics.clone(), true);
@@ -221,7 +222,7 @@ impl TransportImpl {
     async fn flow_read_task(
         flow_id: FlowId,
         flow_label: String,
-        event_handler: Arc<dyn AsyncTransportEventHandler>,
+        mut event_handler: TransportEventHandler,
         mut reader: Box<TlsReadHalf>,
         metrics: DataPlaneMetrics,
         state: Weak<TransportImpl>,
@@ -354,11 +355,7 @@ impl TransportImpl {
     }
 
     /// Handle peer disconnect.
-    async fn on_disconnect(
-        &self,
-        flow_id: FlowId,
-        event_handler: Arc<dyn AsyncTransportEventHandler>,
-    ) {
+    async fn on_disconnect(&self, flow_id: FlowId, mut event_handler: TransportEventHandler) {
         if let Err(e) = self.retry_connection(&flow_id) {
             warn!(
                 self.log,
@@ -383,7 +380,7 @@ impl TransportImpl {
         role: ConnectionRole,
         peer_addr: SocketAddr,
         tls_stream: TlsStream,
-        event_handler: Arc<dyn AsyncTransportEventHandler>,
+        event_handler: TransportEventHandler,
     ) -> Result<(), TransportErrorCode> {
         let (tls_reader, tls_writer) = tls_stream.split();
         let mut peer_map = self.peer_map.write().unwrap();
@@ -423,7 +420,7 @@ impl TransportImpl {
 
         let flow_id_cl = flow_id;
         let flow_label_cl = flow_state.flow_label.clone();
-        let event_handler_cl = event_handler.clone();
+        let event_handler_cl = event_handler;
         let metrics_cl = self.data_plane_metrics.clone();
         let weak_self = self.weak_self.read().unwrap().clone();
         let read_task = self.tokio_runtime.spawn(async move {
@@ -458,7 +455,7 @@ impl TransportImpl {
         peer_addr: SocketAddr,
         tls_stream: TlsStream,
     ) -> Result<(), TransportErrorCode> {
-        let event_handler = self
+        let mut event_handler = self
             .event_handler
             .lock()
             .unwrap()

@@ -72,7 +72,7 @@ use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_transport::{
-    AsyncTransportEventHandler, FlowTag, Transport, TransportErrorCode, TransportPayload,
+    FlowTag, Transport, TransportErrorCode, TransportEventHandler, TransportPayload,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -144,7 +144,7 @@ pub fn create_transport(
 /// Trait implementation for
 /// [`Transport`](../../ic_interfaces/transport/trait.Transport.html).
 impl Transport for TransportImpl {
-    fn set_event_handler(&self, event_handler: Arc<dyn AsyncTransportEventHandler>) {
+    fn set_event_handler(&self, event_handler: TransportEventHandler) {
         self.init_client(event_handler)
     }
 

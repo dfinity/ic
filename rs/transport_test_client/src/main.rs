@@ -1,6 +1,4 @@
 //! Transport client implementation for testing.
-
-use async_trait::async_trait;
 ///
 /// The test client instantiates the transport object and goes through the
 /// sequence, expected to be followed by transport clients like P2P:
@@ -26,8 +24,12 @@ use clap::{Arg, ArgMatches, Command};
 use crossbeam_channel::{self, Receiver, RecvTimeoutError, Sender};
 use rand::Rng;
 use std::collections::HashSet;
+use std::convert::Infallible;
 use std::convert::TryFrom;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 use std::time;
 
 mod utils;
@@ -37,8 +39,8 @@ use ic_config::{
     transport::{TransportConfig, TransportFlowConfig},
 };
 use ic_interfaces_transport::{
-    AsyncTransportEventHandler, FlowId, FlowTag, SendError, Transport, TransportErrorCode,
-    TransportEvent, TransportPayload, TransportStateChange,
+    FlowId, FlowTag, SendError, Transport, TransportErrorCode, TransportEvent, TransportPayload,
+    TransportStateChange,
 };
 use ic_logger::{info, warn, LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -50,6 +52,8 @@ use ic_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::time::Duration;
+use tower::util::BoxCloneService;
+use tower::Service;
 use utils::{create_crypto, to_node_id};
 
 // From the on_message() handler
@@ -90,7 +94,6 @@ enum TestClientErrorCode {
 
 struct TestClient {
     transport: Arc<dyn Transport>,
-    _event_handler: Arc<TestClientEventHandler>,
     prev: NodeId,
     next: NodeId,
     prev_node_record: NodeRecord,
@@ -114,12 +117,11 @@ impl TestClient {
     ) -> Self {
         let (sender, receiver) = crossbeam_channel::unbounded();
         let active_flows = Arc::new(Mutex::new(HashSet::new()));
-        let event_handler = Arc::new(TestClientEventHandler {
+        let event_handler = BoxCloneService::new(TestClientEventHandler {
             sender,
             active_flows: active_flows.clone(),
-            log: log.clone(),
         });
-        transport.set_event_handler(event_handler.clone());
+        transport.set_event_handler(event_handler);
 
         let prev_node_record = match registry_node_list.iter().position(|n| n.0 == *prev) {
             Some(pos) => registry_node_list[pos].1.clone(),
@@ -132,7 +134,6 @@ impl TestClient {
 
         TestClient {
             transport,
-            _event_handler: event_handler,
             prev: *prev,
             next: *next,
             prev_node_record,
@@ -360,49 +361,65 @@ impl TestClient {
     }
 }
 
+#[derive(Clone)]
 struct TestClientEventHandler {
     sender: MpscSender,
     active_flows: Arc<Mutex<HashSet<FlowId>>>,
-    log: ReplicaLogger,
 }
 
 impl TestClientEventHandler {
-    fn on_message(&self, flow_id: FlowId, message: TransportPayload) -> Option<TransportPayload> {
+    fn on_message(
+        sender: MpscSender,
+        flow_id: FlowId,
+        message: TransportPayload,
+    ) -> Option<TransportPayload> {
         tokio::task::block_in_place(move || {
-            self.sender
+            sender
                 .send(TestMessage {
                     flow_id,
                     payload: message,
                 })
                 .expect("on_message(): failed to send")
         });
-
         None
     }
 
-    fn on_state_change(&self, change: TransportStateChange) {
-        info!(self.log, "on_state_change(): {:?}", change);
+    fn on_state_change(active_flows: Arc<Mutex<HashSet<FlowId>>>, change: TransportStateChange) {
         match change {
             TransportStateChange::PeerFlowUp(flow) => {
-                self.active_flows.lock().unwrap().insert(flow);
+                active_flows.lock().unwrap().insert(flow);
             }
             TransportStateChange::PeerFlowDown(flow) => {
-                self.active_flows.lock().unwrap().remove(&flow);
+                active_flows.lock().unwrap().remove(&flow);
             }
         }
     }
 }
 
-#[async_trait]
-impl AsyncTransportEventHandler for TestClientEventHandler {
-    async fn call(&self, event: TransportEvent) -> Result<(), SendError> {
-        match event {
-            TransportEvent::Message(msg) => {
-                self.on_message(msg.flow_id, msg.payload);
+impl Service<TransportEvent> for TestClientEventHandler {
+    type Response = Result<(), SendError>;
+    type Error = Infallible;
+    #[allow(clippy::type_complexity)]
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + Sync>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, event: TransportEvent) -> Self::Future {
+        let active_flows = self.active_flows.clone();
+        let sender = self.sender.clone();
+        Box::pin(async move {
+            match event {
+                TransportEvent::Message(msg) => {
+                    Self::on_message(sender, msg.flow_id, msg.payload);
+                }
+                TransportEvent::StateChange(state_change) => {
+                    Self::on_state_change(active_flows, state_change)
+                }
             }
-            TransportEvent::StateChange(state_change) => self.on_state_change(state_change),
-        }
-        Ok(())
+            Ok(Ok(()))
+        })
     }
 }
 

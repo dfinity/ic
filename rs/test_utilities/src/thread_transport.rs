@@ -1,5 +1,5 @@
 use ic_interfaces_transport::{
-    AsyncTransportEventHandler, FlowId, FlowTag, Transport, TransportErrorCode, TransportEvent,
+    FlowId, FlowTag, Transport, TransportErrorCode, TransportEvent, TransportEventHandler,
     TransportMessage, TransportPayload,
 };
 use ic_logger::{info, ReplicaLogger};
@@ -8,6 +8,7 @@ use ic_types::{NodeId, RegistryVersion};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex, RwLock, Weak};
+use tower::Service;
 
 #[derive(Default)]
 struct Deferred {
@@ -21,7 +22,7 @@ pub struct ThreadPort {
     id: NodeId,
     // Access to full hub to route messages across threads
     hub_access: HubAccess,
-    event_handler: Mutex<Option<Arc<dyn AsyncTransportEventHandler>>>,
+    event_handler: Mutex<Option<TransportEventHandler>>,
     log: ReplicaLogger,
     deferred: Mutex<HashMap<NodeId, Deferred>>,
     weak_self: RwLock<Weak<ThreadPort>>,
@@ -126,7 +127,7 @@ impl ThreadPort {
         let event_handler = destination_node.event_handler.lock().unwrap().clone();
 
         // 3.
-        let event_handler = {
+        let mut event_handler = {
             let mut deferred = destination_node.deferred.lock().unwrap();
             let deferred = deferred.entry(src_node_id).or_default();
 
@@ -149,6 +150,7 @@ impl ThreadPort {
                 payload: message,
             }))
             .await
+            .expect("send message failed")
             .expect("send message failed");
         Ok(())
     }
@@ -170,7 +172,7 @@ impl Hub {
 }
 
 impl Transport for ThreadPort {
-    fn set_event_handler(&self, event_handler: Arc<dyn AsyncTransportEventHandler>) {
+    fn set_event_handler(&self, event_handler: TransportEventHandler) {
         info!(self.log, "Node{} -> Client Registered", self.id);
         *self.event_handler.lock().unwrap() = Some(event_handler);
     }

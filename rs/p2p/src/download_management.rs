@@ -1345,6 +1345,7 @@ pub mod tests {
     use std::convert::TryFrom;
     use std::ops::Range;
     use std::sync::{Arc, Mutex};
+    use tower::util::BoxCloneService;
 
     /// This priority function always returns Priority::FetchNow.
     fn priority_fn_fetch_now_all(_: &ArtifactId, _: &ArtifactAttribute) -> Priority {
@@ -2204,7 +2205,7 @@ pub mod tests {
             let transport = get_transport(0, hub_access, &logger, rt.handle().clone());
 
             // Context:
-            transport.set_event_handler(Arc::new(new_test_event_handler( MAX_ADVERT_BUFFER, node_test_id(0)).0));
+            transport.set_event_handler(BoxCloneService::new(new_test_event_handler( MAX_ADVERT_BUFFER, node_test_id(0)).0));
             let peer_manager = PeerManagerImpl::new(
                 node_test_id(0),
                 p2p_test_setup_logger().root.clone().into(),
@@ -2253,7 +2254,7 @@ pub mod tests {
             let transport = get_transport(0, hub_access, &logger, rt.handle().clone());
 
             // Context
-            transport.set_event_handler(Arc::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)).0));
+            transport.set_event_handler(BoxCloneService::new(new_test_event_handler(MAX_ADVERT_BUFFER, node_test_id(0)).0));
             let peer_manager = PeerManagerImpl::new(
                 node_test_id(0),
                 p2p_test_setup_logger().root.clone().into(),

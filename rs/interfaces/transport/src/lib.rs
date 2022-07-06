@@ -1,11 +1,10 @@
 //! Transport layer public interface.
-
-use async_trait::async_trait;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, sync::Arc};
+use std::{convert::Infallible, fmt::Debug};
+use tower::util::BoxCloneService;
 
 /// Transport component API
 /// The Transport component provides peer-to-peer connectivity with other peers.
@@ -34,7 +33,7 @@ pub trait Transport: Send + Sync {
     ///             b) complicated concurrent processing, because messages are fanned in into
     ///                a single channel that the client uses to receive them
     ///                (channel receivers require exclusive access to receive a message)
-    fn set_event_handler(&self, event_handler: Arc<dyn AsyncTransportEventHandler>);
+    fn set_event_handler(&self, event_handler: TransportEventHandler);
 
     /// Mark the peer as valid neighbor, and set up the transport layer to
     /// exchange messages with the peer. This call would create the
@@ -78,13 +77,7 @@ pub enum SendError {
     EndpointNotFound,
 }
 
-/// An event handler for Transport clients. The event handler defines a set
-/// of callback functions to be used by Transport for notifications to the
-/// client.
-#[async_trait]
-pub trait AsyncTransportEventHandler: Send + Sync {
-    async fn call(&self, event: TransportEvent) -> Result<(), SendError>;
-}
+pub type TransportEventHandler = BoxCloneService<TransportEvent, Result<(), SendError>, Infallible>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FlowTagType;
