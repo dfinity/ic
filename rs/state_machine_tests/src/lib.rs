@@ -1049,4 +1049,36 @@ impl StateMachine {
             CertificationScope::Full,
         );
     }
+
+    /// Returns the cycle balance of the specified canister.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the specified canister does not exist.
+    pub fn cycle_balance(&self, canister_id: CanisterId) -> u128 {
+        let state = self.state_manager.get_latest_state().take();
+        state
+            .canister_state(&canister_id)
+            .unwrap_or_else(|| panic!("Canister {} not found", canister_id))
+            .system_state
+            .balance()
+            .get()
+    }
+
+    /// Tops up the specified canister with cycle amount and returns the resulting cycle balance.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the specified canister does not exist.
+    pub fn add_cycles(&self, canister_id: CanisterId, amount: u128) -> u128 {
+        let (height, mut state) = self.state_manager.take_tip();
+        let canister_state = state
+            .canister_state_mut(&canister_id)
+            .unwrap_or_else(|| panic!("Canister {} not found", canister_id));
+        *canister_state.system_state.balance_mut() += Cycles::from(amount);
+        let balance = canister_state.system_state.balance().get();
+        self.state_manager
+            .commit_and_certify(state, height.increment(), CertificationScope::Full);
+        balance
+    }
 }
