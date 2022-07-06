@@ -17,17 +17,12 @@ use tonic::{Request, Response, Status};
 /// implements RPC
 pub struct CanisterHttp<C: Clone + Connect + Send + Sync + 'static> {
     client: Client<C>,
-    response_size_limit: Byte,
     logger: ReplicaLogger,
 }
 
 impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttp<C> {
-    pub fn new(client: Client<C>, response_size_limit: Byte, logger: ReplicaLogger) -> Self {
-        Self {
-            client,
-            response_size_limit,
-            logger,
-        }
+    pub fn new(client: Client<C>, logger: ReplicaLogger) -> Self {
+        Self { client, logger }
     }
 }
 
@@ -109,16 +104,18 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
             })?;
 
         // We don't need a timeout here because there is a global timeout on the entire request.
-        let body_bytes =
-            receive_body_without_timeout(http_resp.into_body(), self.response_size_limit)
-                .await
-                .map_err(|err| {
-                    debug!(self.logger, "Failed to fetch body: {}", err);
-                    Status::new(
-                        tonic::Code::Unavailable,
-                        format!("Failed to fetch body: {}", err),
-                    )
-                })?;
+        let body_bytes = receive_body_without_timeout(
+            http_resp.into_body(),
+            Byte::from(req.max_response_size_bytes),
+        )
+        .await
+        .map_err(|err| {
+            debug!(self.logger, "Failed to fetch body: {}", err);
+            Status::new(
+                tonic::Code::Unavailable,
+                format!("Failed to fetch body: {}", err),
+            )
+        })?;
 
         Ok(Response::new(CanisterHttpSendResponse {
             status,

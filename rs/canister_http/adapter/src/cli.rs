@@ -295,7 +295,6 @@ pub mod test {
         {
             "http_connect_timeout_secs": 20,
             "http_request_timeout_secs": 50,
-            "http_request_size_limit_bytes": 1073741824,
             "incoming_source": {
                     "Path": "/tmp/path.socket"
             },
@@ -325,7 +324,6 @@ pub mod test {
         let expected_config = Config {
             http_connect_timeout_secs: 20,
             http_request_timeout_secs: 50,
-            http_request_size_limit_bytes: 1073741824,
             incoming_source: IncomingSource::Path(PathBuf::from("/tmp/path.socket")),
             logger: ic_config::logger::Config {
                 node_id: 0,
