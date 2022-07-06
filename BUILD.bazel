@@ -91,6 +91,7 @@ CANISTERS = [
     "root-canister",
     "sns-governance-canister",
     "sns-root-canister",
+    "sns-swap-canister",
     "xnet-test-canister",
 ]
 
