@@ -1,19 +1,15 @@
 use ic_agent::{export::Principal, Agent};
-use leaky_bucket::RateLimiter;
 use slog::info;
 use std::collections::HashMap;
 use std::{
     cmp::{max, min},
     time::{Duration, Instant},
 };
-use tokio::time::timeout;
+use tokio::time::{sleep_until, timeout};
 use tokio::{
     sync::mpsc::{channel, Receiver, Sender},
     task::{self, JoinHandle},
 };
-
-// Interval for a token-bucket rate limiter.
-const RATE_LIMITER_INTERVAL: Duration = Duration::from_secs(1);
 
 /// Trait defining execution/scheduling plan of the requests against canisters.
 pub trait Plan {
@@ -291,9 +287,7 @@ impl<T: Plan> Workload<T> {
         self
     }
 
-    /// This extra timeout should normally not be provided.
-    /// As the workload's rate limiter should ensure that requests are dispatched strictly within the specified ([`self.duration`]) time bound.
-    /// However, there might be scenarios, where this dispatch time bound should be relaxed.
+    /// This extra timeout (normally very small) could provided if requests can't be dispatched strictly within the specified ([`self.duration`]) time bound.
     pub fn increase_requests_dispatch_timeout(mut self, extra_timeout: Duration) -> Self {
         self.requests_dispatch_timeout += extra_timeout;
         self
@@ -309,22 +303,17 @@ impl<T: Plan> Workload<T> {
         sender: Sender<RequestResult>,
         requests_count: usize,
     ) -> Result<(), WorkloadError> {
-        let rate_limiter = RateLimiter::builder()
-            .initial(self.rps)
-            .interval(RATE_LIMITER_INTERVAL)
-            .refill(self.rps)
-            .build();
-
         let mut request_handles: Vec<JoinHandle<()>> = Vec::with_capacity(requests_count);
-
+        let start = Instant::now();
         for idx in 0..requests_count {
-            rate_limiter.acquire_one().await;
             let request = self.plan.get_request(idx);
             let agent = {
                 // Round-robin distribution of requests via agents.
                 let agent_idx = idx % self.agents.len();
                 self.agents[agent_idx].clone()
             };
+            let target_instant = start + Duration::from_secs_f64(idx as f64 / self.rps as f64);
+            sleep_until(tokio::time::Instant::from_std(target_instant)).await;
             let task = task::spawn(execute_request(request, agent, sender.clone()));
             request_handles.push(task);
         }

@@ -13216,7 +13216,6 @@ dependencies = [
  "itertools 0.10.3",
  "json5",
  "lazy_static",
- "leaky-bucket",
  "ledger-canister",
  "lifeline",
  "log_analyzer",

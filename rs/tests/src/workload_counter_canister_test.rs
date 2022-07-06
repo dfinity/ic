@@ -43,6 +43,7 @@ const NON_EXISTING_METHOD_B: &str = "non_existing_method_b";
 const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
 const SUCCESS_THRESHOLD: f32 = 0.95; // If more than 95% of the expected calls are successful the test passes
+const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
 const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(5); // Responses are collected during the workload execution + this extra time, after all requests had been dispatched.
 
 /// Default configuration for this test
@@ -74,7 +75,7 @@ pub fn two_third_latency_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // Install NNS canisters
     ctx.install_nns_canisters(&handle, true);
     let canister_count: usize = 2;
-    let rps: usize = 100;
+    let rps: usize = 200;
     let duration: Duration = Duration::from_secs(500);
     test(handle, ctx, canister_count, rps, duration);
 }
@@ -135,7 +136,8 @@ fn test(
             Request::Update(CallSpec::new(canisters[1], "write", payload.clone())),
         ]);
         let workload = Workload::new(agents, rps, duration, plan, ctx.logger.clone())
-            .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT);
+            .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT)
+            .increase_requests_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
         let metrics = workload
             .execute()
             .await
