@@ -14,6 +14,7 @@ use crate::hypervisor::Hypervisor;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
 use ic_error_types::{ErrorCode, UserError};
+use ic_interfaces::messages::CanisterInputMessage;
 use ic_interfaces::{
     execution_environment::{
         AvailableMemory, ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
@@ -220,6 +221,7 @@ fn execute_update_method(
         call_origin,
         time,
         total_instruction_limit: execution_parameters.total_instruction_limit,
+        message: req,
     };
     let round = RoundContext {
         subnet_available_memory: execution_parameters.subnet_available_memory,
@@ -299,6 +301,7 @@ struct OriginalContext {
     call_origin: CallOrigin,
     time: Time,
     total_instruction_limit: NumInstructions,
+    message: RequestOrIngress,
 }
 
 #[derive(Debug)]
@@ -321,8 +324,12 @@ impl PausedExecution for PausedCallExecution {
         process_update_result(canister, result, self.original, round)
     }
 
-    fn abort(self: Box<Self>) {
-        todo!()
+    fn abort(self: Box<Self>) -> CanisterInputMessage {
+        self.paused_wasm_execution.abort();
+        match self.original.message {
+            RequestOrIngress::Request(r) => CanisterInputMessage::Request(r),
+            RequestOrIngress::Ingress(i) => CanisterInputMessage::Ingress(i),
+        }
     }
 }
 
