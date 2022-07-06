@@ -64,7 +64,7 @@ const MAX_CANISTER_READ_RETRIES: u32 = 4;
 const CANISTER_READ_RETRY_WAIT: Duration = Duration::from_secs(10);
 // Parameters related to workload creation.
 const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(30); // Responses are collected during the workload execution + this extra time, after all requests had been dispatched.
-const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::ZERO; // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
+const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
 
 // Test can be run with different setup/configuration parameters.
 // This config holds these parameters.
@@ -102,7 +102,7 @@ pub fn config_sys_4_nodes_app_4_nodes() -> Config {
     Config {
         nodes_app_subnet: 4,
         nodes_system_subnet: 4,
-        rps: 50,
+        rps: 100,
         runtime: Duration::from_secs(180),
         max_failures_ratio: 0.05,
     }
