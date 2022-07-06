@@ -657,6 +657,7 @@ dependencies = [
  "clap 3.1.18",
  "eyre",
  "lazy_static",
+ "maplit",
  "pathdiff",
  "semver 1.0.10",
  "serde",

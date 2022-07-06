@@ -1,17 +1,20 @@
 use std::{
     borrow::Cow,
-    collections::{btree_map, BTreeMap, BTreeSet, HashMap},
+    collections::{btree_map, BTreeMap, BTreeSet},
     fmt::Display,
     io::Write,
     path::{Path, PathBuf},
     process::Command,
 };
 
+use self::deps::*;
+use self::overrides::NameOverride;
 use askama::Template;
 use clap::Parser;
-use lazy_static::lazy_static;
-use semver::{Version, VersionReq};
 use serde::Deserialize;
+
+mod deps;
+mod overrides;
 
 #[derive(Parser, Debug)]
 struct Options {
@@ -50,44 +53,6 @@ impl Default for BuildType {
     }
 }
 
-type VersionOverride = (Version, &'static str);
-
-lazy_static! {
-    static ref VERSION_OVERRIDES: HashMap<&'static str, Vec<VersionOverride>> = {
-        let mut h = HashMap::new();
-        h.insert(
-            "rand",
-            vec![
-                (Version::new(0, 4, 6), "rand_0_4_6"),
-                (Version::new(0, 7, 3), "rand_0_7_3"),
-                (Version::new(0, 8, 4), "rand_0_8_4"),
-            ],
-        );
-        h.insert(
-            "rand_chacha",
-            vec![(Version::new(0, 3, 1), "rand_chacha_0_3_1")],
-        );
-        h
-    };
-}
-
-fn dep_name_override(name: &str, dep: &Dep) -> Option<&'static str> {
-    let req = match dep {
-        Dep::Version(v) => v,
-        Dep::VersionExtra(NormalDep { version, .. }) => version,
-        _ => return None,
-    };
-    let overrides_list = VERSION_OVERRIDES.get(&name)?;
-
-    for (vers, override_) in overrides_list {
-        if req.matches(vers) {
-            return Some(*override_);
-        }
-    }
-
-    None
-}
-
 #[derive(Deserialize, Debug)]
 struct Crate {
     package: Package,
@@ -121,33 +86,6 @@ struct BinSection {
 struct Package {
     name: String,
     edition: String,
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(untagged)]
-enum Dep {
-    Version(VersionReq),
-    VersionExtra(NormalDep),
-    Local(LocalDep),
-    Git(GitDep),
-}
-
-#[derive(Deserialize, Debug)]
-struct NormalDep {
-    version: VersionReq,
-    #[serde(default)]
-    package: Option<String>,
-}
-
-#[derive(Deserialize, Debug)]
-struct LocalDep {
-    path: String,
-}
-
-#[derive(Deserialize, Debug)]
-struct GitDep {
-    #[serde(rename = "git")]
-    _git: String,
 }
 
 #[derive(Template, Default)]
@@ -221,18 +159,24 @@ impl Bazelifier {
         aliases: &mut BTreeMap<String, String>,
     ) -> eyre::Result<()> {
         for (dep_name_, dep) in deps_iter {
-            let dep_name = dep_name_override(dep_name_, dep).unwrap_or(dep_name_);
+            let over = overrides::dep_name_override(dep_name_, dep).unwrap_or(NameOverride {
+                name: dep_name_,
+                repo: None,
+            });
+            let dep_name = over.name;
+            let repo = over.repo.unwrap_or("crate_index");
 
             let dep_text = match dep {
                 Dep::VersionExtra(NormalDep {
                     package: Some(alias),
                     ..
                 }) => {
-                    aliases.insert(format!("@crate_index//:{}", alias), dep_name.to_string());
-                    format!("@crate_index//:{}", alias)
+                    aliases.insert(format!("@{repo}//:{alias}"), dep_name.to_string());
+                    format!("@{repo}//:{alias}")
                 }
                 Dep::Version { .. } | Dep::VersionExtra { .. } | Dep::Git { .. } => {
-                    format!("@crate_index//:{}", dep_name)
+                    let colon = if dep_name.contains(':') { "" } else { ":" };
+                    format!("@{repo}//{colon}{dep_name}")
                 }
                 Dep::Local(LocalDep { path }) => format!(
                     "//rs/{}",
