@@ -27,6 +27,22 @@ use std::{
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
+struct PanicStruct<F: FnOnce()>(Option<F>);
+
+impl<F: FnOnce()> PanicStruct<F> {
+    fn forget(mut self) {
+        self.0 = None;
+    }
+}
+
+impl<F: FnOnce()> Drop for PanicStruct<F> {
+    fn drop(&mut self) {
+        if let Some(v) = self.0.take() {
+            v()
+        }
+    }
+}
+
 async fn create_canister(
     agent: &Agent,
     canister_bytes: &[u8],
@@ -114,6 +130,26 @@ pub fn test(env: TestEnv) {
         uname.trim(),
         channel.exit_status().unwrap()
     );
+
+    let panic_struct = {
+        let logger = env.logger();
+        let deployed_boundary_node = env.get_deployed_boundary_node(BOUNDARY_NODE_NAME).unwrap();
+        PanicStruct(Some(move || {
+            std::thread::sleep(Duration::from_secs(60));
+
+            let sess = deployed_boundary_node.block_on_ssh_session(ADMIN).unwrap();
+            let mut channel = sess.channel_session().unwrap();
+            channel.exec("systemctl status journalbeat").unwrap();
+            let mut journalbeat = String::new();
+            channel.read_to_string(&mut journalbeat).unwrap();
+            channel.wait_close().unwrap();
+            info!(
+                logger,
+                "journalbeat status {BOUNDARY_NODE_NAME} = '{journalbeat}'. Exit status = {}",
+                channel.exit_status().unwrap()
+            );
+        }))
+    };
 
     info!(&logger, "Checking readiness of all nodes...");
     let mut install_url = None;
@@ -230,6 +266,8 @@ pub fn test(env: TestEnv) {
             .unwrap();
         assert_eq!(res.status(), reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS);
     });
+
+    panic_struct.forget();
 }
 
 /* tag::catalog[]
