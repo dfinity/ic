@@ -6,6 +6,7 @@ use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces_canister_http_adapter_client::CanisterHttpAdapterClient;
 use ic_logger::{error, info, ReplicaLogger};
+use std::convert::TryFrom;
 use std::path::PathBuf;
 use tokio::net::UnixStream;
 use tonic::transport::{Endpoint, Uri};
