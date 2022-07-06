@@ -80,12 +80,12 @@ fn balance_of(env: &StateMachine, ledger: CanisterId, acc: Account) -> u64 {
     .expect("failed to decode balanceOf response")
 }
 
-fn total_supply(env: &StateMachine, ledger: CanisterId) -> Tokens {
+fn total_supply(env: &StateMachine, ledger: CanisterId) -> u64 {
     Decode!(
         &env.query(ledger, "icrc1_totalSupply", Encode!().unwrap())
             .expect("failed to query total supply")
             .bytes(),
-        Tokens
+        u64
     )
     .expect("failed to decode totalSupply response")
 }
@@ -245,22 +245,19 @@ fn test_mint_burn() {
     let p2 = PrincipalId::new_user_test_id(2);
     let canister_id = install_ledger(&env, vec![]);
 
-    assert_eq!(Tokens::ZERO, total_supply(&env, canister_id));
+    assert_eq!(0, total_supply(&env, canister_id));
     assert_eq!(0, balance_of(&env, canister_id, p1.into()));
     assert_eq!(0, balance_of(&env, canister_id, MINTER.clone()));
 
     transfer(&env, canister_id, MINTER.clone(), p1.into(), 10_000_000).expect("mint failed");
 
-    assert_eq!(
-        Tokens::from_e8s(10_000_000),
-        total_supply(&env, canister_id)
-    );
+    assert_eq!(10_000_000, total_supply(&env, canister_id));
     assert_eq!(10_000_000, balance_of(&env, canister_id, p1.into()));
     assert_eq!(0, balance_of(&env, canister_id, MINTER.clone()));
 
     transfer(&env, canister_id, p1.into(), MINTER.clone(), 1_000_000).expect("burn failed");
 
-    assert_eq!(Tokens::from_e8s(9_000_000), total_supply(&env, canister_id));
+    assert_eq!(9_000_000, total_supply(&env, canister_id));
     assert_eq!(9_000_000, balance_of(&env, canister_id, p1.into()));
     assert_eq!(0, balance_of(&env, canister_id, MINTER.clone()));
 
@@ -309,19 +306,13 @@ fn test_single_transfer() {
         ],
     );
 
-    assert_eq!(
-        Tokens::from_e8s(15_000_000),
-        total_supply(&env, canister_id)
-    );
+    assert_eq!(15_000_000, total_supply(&env, canister_id));
     assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1.into()));
     assert_eq!(5_000_000u64, balance_of(&env, canister_id, p2.into()));
 
     transfer(&env, canister_id, p1.into(), p2.into(), 1_000_000).expect("transfer failed");
 
-    assert_eq!(
-        Tokens::from_e8s(15_000_000 - FEE),
-        total_supply(&env, canister_id)
-    );
+    assert_eq!(15_000_000 - FEE, total_supply(&env, canister_id));
     assert_eq!(9_000_000u64 - FEE, balance_of(&env, canister_id, p1.into()));
     assert_eq!(6_000_000u64, balance_of(&env, canister_id, p2.into()));
 }
