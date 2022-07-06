@@ -64,8 +64,6 @@ use ic_types::{
     CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId, Time,
 };
 use lazy_static::lazy_static;
-#[cfg(test)]
-use mockall::automock;
 use rand::RngCore;
 use std::collections::BTreeMap;
 use std::str::FromStr;
@@ -145,84 +143,7 @@ pub trait PausedExecution: std::fmt::Debug {
 
 /// ExecutionEnvironment is the component responsible for executing messages
 /// on the IC.
-#[cfg_attr(test, automock)]
-pub trait ExecutionEnvironment: Sync + Send {
-    /// Executes a replicated message sent to a subnet.
-    //
-    // A deterministic cryptographically secure pseudo-random number generator
-    // is created per round and per thread and passed to this method to be used
-    // while responding to randomness requests (i.e. raw_rand). Using the type
-    // "&mut RngCore" imposes a problem with our usage of "mockall" library in
-    // the test_utilities. Mockall's doc states: "The only restrictions on
-    // mocking generic methods are that all generic parameters must be 'static,
-    // and generic lifetime parameters are not allowed." Hence, the type of the
-    // parameter is "&mut (dyn RngCore + 'static)".
-    //
-    // Returns the new replicated state and the number of left instructions.
-    #[allow(clippy::too_many_arguments)]
-    fn execute_subnet_message(
-        &self,
-        msg: CanisterInputMessage,
-        state: ReplicatedState,
-        instructions_limit: NumInstructions,
-        rng: &mut (dyn RngCore + 'static),
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
-        subnet_available_memory: SubnetAvailableMemory,
-        registry_settings: &RegistryExecutionSettings,
-    ) -> (ReplicatedState, NumInstructions);
-
-    /// Executes a replicated message sent to a canister.
-    #[allow(clippy::too_many_arguments)]
-    fn execute_canister_message(
-        &self,
-        canister_state: CanisterState,
-        instructions_limit: NumInstructions,
-        msg: CanisterInputMessage,
-        time: Time,
-        network_topology: Arc<NetworkTopology>,
-        subnet_available_memory: SubnetAvailableMemory,
-    ) -> ExecuteMessageResult;
-
-    /// Executes a heartbeat of a given canister.
-    #[allow(clippy::too_many_arguments)]
-    fn execute_canister_heartbeat(
-        &self,
-        canister_state: CanisterState,
-        instructions_limit: NumInstructions,
-        network_topology: Arc<NetworkTopology>,
-        time: Time,
-        subnet_available_memory: SubnetAvailableMemory,
-    ) -> (
-        CanisterState,
-        NumInstructions,
-        Result<NumBytes, CanisterHeartbeatError>,
-    );
-
-    /// Look up the current amount of memory available on the subnet.
-    /// EXC-185 will make this method obsolete.
-    fn subnet_available_memory(&self, state: &ReplicatedState) -> AvailableMemory;
-
-    /// Returns the maximum amount of memory that can be utilized by a single
-    /// canister.
-    fn max_canister_memory_size(&self) -> NumBytes;
-
-    /// Returns the subnet memory capacity.
-    fn subnet_memory_capacity(&self) -> NumBytes;
-
-    /// Builds execution parameters for the given canister with the given
-    /// instruction limit and available subnet memory counter.
-    fn execution_parameters(
-        &self,
-        canister: &CanisterState,
-        instruction_limit: NumInstructions,
-        subnet_available_memory: SubnetAvailableMemory,
-        execution_mode: ExecutionMode,
-    ) -> ExecutionParameters;
-}
-
-/// Struct that is responsible for executing update type message messages on
-/// canisters and subnet messages.
-pub struct ExecutionEnvironmentImpl {
+pub struct ExecutionEnvironment {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
     canister_manager: CanisterManager,
@@ -277,8 +198,52 @@ impl CanisterHeartbeatError {
     }
 }
 
-impl ExecutionEnvironment for ExecutionEnvironmentImpl {
-    fn subnet_available_memory(&self, state: &ReplicatedState) -> AvailableMemory {
+impl ExecutionEnvironment {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        log: ReplicaLogger,
+        hypervisor: Arc<Hypervisor>,
+        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+        metrics_registry: &MetricsRegistry,
+        own_subnet_id: SubnetId,
+        own_subnet_type: SubnetType,
+        num_cores: usize,
+        config: ExecutionConfig,
+        cycles_account_manager: Arc<CyclesAccountManager>,
+    ) -> Self {
+        let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
+            config.subnet_memory_capacity,
+            config.default_provisional_cycles_balance,
+            config.default_freeze_threshold,
+            own_subnet_id,
+            own_subnet_type,
+            config.max_controllers,
+            num_cores,
+            config.rate_limiting_of_instructions,
+            config.allocatable_compute_capacity_in_percent,
+        );
+        let canister_manager = CanisterManager::new(
+            Arc::clone(&hypervisor),
+            log.clone(),
+            canister_manager_config,
+            Arc::clone(&cycles_account_manager),
+            Arc::clone(&ingress_history_writer),
+        );
+        Self {
+            log,
+            hypervisor,
+            canister_manager,
+            ingress_history_writer,
+            metrics: ExecutionEnvironmentMetrics::new(metrics_registry),
+            config,
+            cycles_account_manager,
+            own_subnet_id,
+            own_subnet_type,
+        }
+    }
+
+    /// Look up the current amount of memory available on the subnet.
+    pub fn subnet_available_memory(&self, state: &ReplicatedState) -> AvailableMemory {
         AvailableMemory::new(
             self.config.subnet_memory_capacity.get() as i64
                 - state.total_memory_taken().get() as i64,
@@ -287,13 +252,16 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         )
     }
 
+    /// Executes a replicated message sent to a subnet.
+    /// Returns the new replicated state and the number of left instructions.
     #[allow(clippy::cognitive_complexity)]
-    fn execute_subnet_message(
+    #[allow(clippy::too_many_arguments)]
+    pub fn execute_subnet_message(
         &self,
         msg: CanisterInputMessage,
         mut state: ReplicatedState,
         instructions_limit: NumInstructions,
-        rng: &mut (dyn RngCore + 'static),
+        rng: &mut dyn RngCore,
         ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
         subnet_available_memory: SubnetAvailableMemory,
         registry_settings: &RegistryExecutionSettings,
@@ -877,7 +845,8 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         }
     }
 
-    fn execute_canister_message(
+    /// Executes a replicated message sent to a canister.
+    pub fn execute_canister_message(
         &self,
         canister: CanisterState,
         instructions_limit: NumInstructions,
@@ -916,7 +885,8 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         )
     }
 
-    fn execute_canister_heartbeat(
+    /// Executes a heartbeat of a given canister.
+    pub fn execute_canister_heartbeat(
         &self,
         canister: CanisterState,
         instructions_limit: NumInstructions,
@@ -967,14 +937,19 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
         (canister, num_instructions_left, result)
     }
 
-    fn max_canister_memory_size(&self) -> NumBytes {
+    /// Returns the maximum amount of memory that can be utilized by a single
+    /// canister.
+    pub fn max_canister_memory_size(&self) -> NumBytes {
         self.config.max_canister_memory_size
     }
 
-    fn subnet_memory_capacity(&self) -> NumBytes {
+    /// Returns the subnet memory capacity.
+    pub fn subnet_memory_capacity(&self) -> NumBytes {
         self.config.subnet_memory_capacity
     }
 
+    /// Builds execution parameters for the given canister with the given
+    /// instruction limit and available subnet memory counter.
     fn execution_parameters(
         &self,
         canister: &CanisterState,
@@ -990,51 +965,6 @@ impl ExecutionEnvironment for ExecutionEnvironmentImpl {
             compute_allocation: canister.scheduler_state.compute_allocation,
             subnet_type: self.own_subnet_type,
             execution_mode,
-        }
-    }
-}
-
-impl ExecutionEnvironmentImpl {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        log: ReplicaLogger,
-        hypervisor: Arc<Hypervisor>,
-        ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
-        metrics_registry: &MetricsRegistry,
-        own_subnet_id: SubnetId,
-        own_subnet_type: SubnetType,
-        num_cores: usize,
-        config: ExecutionConfig,
-        cycles_account_manager: Arc<CyclesAccountManager>,
-    ) -> Self {
-        let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
-            config.subnet_memory_capacity,
-            config.default_provisional_cycles_balance,
-            config.default_freeze_threshold,
-            own_subnet_id,
-            own_subnet_type,
-            config.max_controllers,
-            num_cores,
-            config.rate_limiting_of_instructions,
-            config.allocatable_compute_capacity_in_percent,
-        );
-        let canister_manager = CanisterManager::new(
-            Arc::clone(&hypervisor),
-            log.clone(),
-            canister_manager_config,
-            Arc::clone(&cycles_account_manager),
-            Arc::clone(&ingress_history_writer),
-        );
-        Self {
-            log,
-            hypervisor,
-            canister_manager,
-            ingress_history_writer,
-            metrics: ExecutionEnvironmentMetrics::new(metrics_registry),
-            config,
-            cycles_account_manager,
-            own_subnet_id,
-            own_subnet_type,
         }
     }
 
@@ -1483,7 +1413,7 @@ impl ExecutionEnvironmentImpl {
         settings: &SetupInitialDKGArgs,
         request: &Request,
         state: &mut ReplicatedState,
-        rng: &mut (dyn RngCore + 'static),
+        rng: &mut dyn RngCore,
     ) -> Result<(), UserError> {
         let sender_subnet_id = state.find_subnet_id(sender)?;
 
@@ -1558,7 +1488,7 @@ impl ExecutionEnvironmentImpl {
         key_id: EcdsaKeyId,
         max_queue_size: u32,
         state: &mut ReplicatedState,
-        rng: &mut (dyn RngCore + 'static),
+        rng: &mut dyn RngCore,
     ) -> Result<(), UserError> {
         if message_hash.len() != 32 {
             return Err(UserError::new(
@@ -1800,7 +1730,7 @@ pub struct ExecuteCanisterResult {
 /// Executes either a single task from the task queue of the canister or a
 /// single input message if there is no task.
 pub fn execute_canister(
-    exec_env: &dyn ExecutionEnvironment,
+    exec_env: &ExecutionEnvironment,
     mut canister: CanisterState,
     instructions_limit: NumInstructions,
     network_topology: Arc<NetworkTopology>,

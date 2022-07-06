@@ -55,7 +55,7 @@ use ic_types::{
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 
-use crate::{ExecutionEnvironmentImpl, Hypervisor, IngressHistoryWriterImpl};
+use crate::{ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl};
 
 use super::SchedulerImpl;
 
@@ -535,7 +535,7 @@ impl SchedulerTestBuilder {
             IngressHistoryWriterImpl::new(config.clone(), self.log.clone(), &metrics_registry);
         let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
             Arc::new(ingress_history_writer);
-        let exec_env = ExecutionEnvironmentImpl::new(
+        let exec_env = ExecutionEnvironment::new(
             self.log.clone(),
             hypervisor,
             Arc::clone(&ingress_history_writer),

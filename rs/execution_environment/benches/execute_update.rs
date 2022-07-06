@@ -7,7 +7,7 @@ mod common_wat;
 use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_error_types::ErrorCode;
-use ic_execution_environment::{ExecutionEnvironment, ExecutionResponse};
+use ic_execution_environment::ExecutionResponse;
 use ic_test_utilities::execution_environment::ExecutionTest;
 use ic_test_utilities::types::ids::canister_test_id;
 use ic_types::ingress::{IngressState, IngressStatus};

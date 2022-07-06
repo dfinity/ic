@@ -1,4 +1,4 @@
-use crate::ExecutionEnvironmentImpl;
+use crate::ExecutionEnvironment;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces_state_manager::StateReader;
@@ -19,7 +19,7 @@ use tower::{limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, 
 #[derive(Clone)]
 // Struct that is responsible for handling queries sent by internal IC components.
 pub(crate) struct AnonymousQueryHandler {
-    exec_env: Arc<ExecutionEnvironmentImpl>,
+    exec_env: Arc<ExecutionEnvironment>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     threadpool: Arc<Mutex<threadpool::ThreadPool>>,
     max_instructions_per_message: NumInstructions,
@@ -30,7 +30,7 @@ impl AnonymousQueryHandler {
         concurrency_buffer: GlobalConcurrencyLimitLayer,
         threadpool: Arc<Mutex<threadpool::ThreadPool>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-        exec_env: Arc<ExecutionEnvironmentImpl>,
+        exec_env: Arc<ExecutionEnvironment>,
         max_instructions_per_message: NumInstructions,
     ) -> AnonymousQueryService {
         let base_service = BoxCloneService::new(Self {

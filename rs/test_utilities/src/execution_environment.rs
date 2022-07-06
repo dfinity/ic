@@ -13,8 +13,8 @@ use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::{
     util::{process_result, process_stopping_canisters},
-    CanisterHeartbeatError, ExecutionEnvironment, ExecutionEnvironmentImpl, ExecutionResponse,
-    Hypervisor, IngressHistoryWriterImpl,
+    CanisterHeartbeatError, ExecutionEnvironment, ExecutionResponse, Hypervisor,
+    IngressHistoryWriterImpl,
 };
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterStatusType, EcdsaKeyId, EmptyBlob,
@@ -100,7 +100,7 @@ pub struct ExecutionTest {
     ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
 
     // The actual implementation.
-    exec_env: ExecutionEnvironmentImpl,
+    exec_env: ExecutionEnvironment,
     cycles_account_manager: Arc<CyclesAccountManager>,
     metrics_registry: MetricsRegistry,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
@@ -111,7 +111,7 @@ impl ExecutionTest {
         self.exec_env.hypervisor_for_testing()
     }
 
-    pub fn execution_environment(&self) -> &ExecutionEnvironmentImpl {
+    pub fn execution_environment(&self) -> &ExecutionEnvironment {
         &self.exec_env
     }
 
@@ -1158,7 +1158,7 @@ impl ExecutionTestBuilder {
             IngressHistoryWriterImpl::new(config.clone(), self.log.clone(), &metrics_registry);
         let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
             Arc::new(ingress_history_writer);
-        let exec_env = ExecutionEnvironmentImpl::new(
+        let exec_env = ExecutionEnvironment::new(
             self.log,
             hypervisor,
             Arc::clone(&ingress_history_writer),
