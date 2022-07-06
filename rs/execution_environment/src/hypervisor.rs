@@ -6,7 +6,6 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
 use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
 use ic_embedders::{CompilationCache, CompilationResult};
-use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionParameters, HypervisorResult, WasmExecutionOutput,
 };
@@ -21,9 +20,7 @@ use ic_replicated_state::{
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{
-    ingress::WasmResult,
-    methods::{FuncRef, SystemMethod, WasmMethod},
-    CanisterId, NumBytes, NumInstructions, PrincipalId, SubnetId, Time,
+    ingress::WasmResult, methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId,
 };
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::{path::PathBuf, sync::Arc};
@@ -127,74 +124,8 @@ impl Hypervisor {
         self.own_subnet_id
     }
 
-    pub(crate) fn subnet_type(&self) -> SubnetType {
+    pub fn subnet_type(&self) -> SubnetType {
         self.own_subnet_type
-    }
-
-    /// Executes the system method `canister_inspect_message`.
-    ///
-    /// This method is called pre-consensus to let the canister decide if it
-    /// wants to accept the message or not.
-    #[allow(clippy::too_many_arguments)]
-    pub fn execute_inspect_message(
-        &self,
-        canister: CanisterState,
-        sender: PrincipalId,
-        method_name: String,
-        method_payload: Vec<u8>,
-        time: Time,
-        execution_parameters: ExecutionParameters,
-        network_topology: &NetworkTopology,
-    ) -> (NumInstructions, Result<(), UserError>) {
-        let method = WasmMethod::System(SystemMethod::CanisterInspectMessage);
-        let memory_usage = canister.memory_usage(self.own_subnet_type);
-        let canister_id = canister.canister_id();
-        let (execution_state, system_state, _) = canister.into_parts();
-
-        // Validate that the Wasm module is present.
-        let execution_state = match execution_state {
-            None => {
-                return (
-                    execution_parameters.total_instruction_limit,
-                    Err(UserError::new(
-                        ErrorCode::CanisterWasmModuleNotFound,
-                        "Requested canister has no wasm module",
-                    )),
-                );
-            }
-            Some(execution_state) => execution_state,
-        };
-
-        // If the Wasm module does not export the method, then this execution
-        // succeeds as a no-op.
-        if !execution_state.exports_method(&method) {
-            return (execution_parameters.total_instruction_limit, Ok(()));
-        }
-
-        let system_api = ApiType::inspect_message(sender, method_name, method_payload, time);
-        let log = self.log.clone();
-        let (output, _output_execution_state, _system_state_accessor) = self.execute(
-            system_api,
-            system_state,
-            memory_usage,
-            execution_parameters,
-            FuncRef::Method(method),
-            execution_state,
-            network_topology,
-        );
-        match output.wasm_result {
-            Ok(maybe_wasm_result) => match maybe_wasm_result {
-                None => (output.num_instructions_left, Ok(())),
-                Some(_result) => fatal!(
-                    log,
-                    "SystemApi should guarantee that the canister does not reply"
-                ),
-            },
-            Err(err) => (
-                output.num_instructions_left,
-                Err(err.into_user_error(&canister_id)),
-            ),
-        }
     }
 
     // A helper that converts a Wasm execution output to an execution
