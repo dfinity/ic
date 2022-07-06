@@ -97,6 +97,12 @@ fn icrc1_balance_of(account: Account) -> u64 {
     Access::with_ledger(|ledger| ledger.balances().account_balance(&account).get_e8s())
 }
 
+#[query(name = "icrc1_totalSupply")]
+#[candid_method(query, rename = "icrc1_totalSupply")]
+fn icrc1_total_supply() -> Tokens {
+    Access::with_ledger(|ledger| Tokens::MAX - ledger.balances().token_pool).unwrap_or(Tokens::ZERO)
+}
+
 #[update]
 #[candid_method(update)]
 async fn icrc1_transfer(arg: TransferArg) -> Result<BlockHeight, TransferError> {
