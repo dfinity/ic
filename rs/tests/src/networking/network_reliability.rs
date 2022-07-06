@@ -102,7 +102,7 @@ pub fn config_sys_4_nodes_app_4_nodes() -> Config {
     Config {
         nodes_app_subnet: 4,
         nodes_system_subnet: 4,
-        rps: 100,
+        rps: 50,
         runtime: Duration::from_secs(180),
         max_failures_ratio: 0.05,
     }
