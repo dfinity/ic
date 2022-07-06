@@ -457,3 +457,54 @@ fn test_set_stable_memory() {
     let to_memory = env.stable_memory(to_id);
     assert_eq!(memory, to_memory);
 }
+
+#[test]
+fn can_query_cycle_balance_and_top_up_canisters() {
+    let env = StateMachine::new();
+
+    let canister_id = env.install_canister_wat(
+        r#"
+            (module
+              (import "ic0" "msg_reply" (func $msg_reply))
+              (import "ic0" "msg_reply_data_append"
+                (func $msg_reply_data_append (param i32 i32)))
+              (import "ic0" "canister_cycle_balance"
+                (func $cycle_balance (result i64)))
+
+
+              (func $balance
+                (i64.store
+                  (i32.const 0)
+                  (call $cycle_balance))
+                (call $msg_reply_data_append (i32.const 0) (i32.const 8))
+                (call $msg_reply))
+
+
+              (memory $memory 1)
+              (export "memory" (memory $memory))
+              (export "canister_query cycle_balance" (func $balance)))
+    "#,
+        vec![],
+        None,
+    );
+
+    assert_eq!(0u128, env.cycle_balance(canister_id));
+    assert_eq!(
+        &0u64.to_le_bytes()[..],
+        &env.query(canister_id, "cycle_balance", vec![])
+            .unwrap()
+            .bytes()[..]
+    );
+
+    const AMOUNT: u128 = 1_000_000u128;
+
+    assert_eq!(AMOUNT, env.add_cycles(canister_id, AMOUNT));
+
+    assert_eq!(AMOUNT, env.cycle_balance(canister_id));
+    assert_eq!(
+        &(AMOUNT as u64).to_le_bytes()[..],
+        &env.query(canister_id, "cycle_balance", vec![])
+            .unwrap()
+            .bytes()[..]
+    );
+}
