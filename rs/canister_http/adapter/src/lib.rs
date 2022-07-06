@@ -12,7 +12,6 @@ pub use cli::Cli;
 pub use config::{Config, IncomingSource};
 pub use rpc_server::CanisterHttp;
 
-use byte_unit::Byte;
 use futures::Future;
 use futures_core::stream::Stream;
 use hyper::{
@@ -70,11 +69,7 @@ impl AdapterServer {
         config: Config,
         logger: ReplicaLogger,
     ) -> Self {
-        let canister_http = CanisterHttp::new(
-            client,
-            Byte::from(config.http_request_size_limit_bytes),
-            logger,
-        );
+        let canister_http = CanisterHttp::new(client, logger);
         Self(
             Server::builder()
                 .timeout(Duration::from_secs(config.http_request_timeout_secs))

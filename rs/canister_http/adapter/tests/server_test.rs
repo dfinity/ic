@@ -42,6 +42,7 @@ async fn test_canister_http_server() {
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
         body: "hello".to_string().as_bytes().to_vec(),
+        max_response_size_bytes: 512,
     });
     let response = client.canister_http_send(request).await;
     assert!(response.is_ok());
@@ -72,6 +73,7 @@ async fn test_canister_http_server_post() {
         headers: Vec::new(),
         method: HttpMethod::Post as i32,
         body: "hello".to_string().as_bytes().to_vec(),
+        max_response_size_bytes: 512,
     });
 
     let response = client.canister_http_send(request).await;
@@ -103,6 +105,7 @@ async fn test_canister_http_server_head() {
         headers: Vec::new(),
         method: HttpMethod::Head as i32,
         body: "hello".to_string().as_bytes().to_vec(),
+        max_response_size_bytes: 512,
     });
 
     let response = client.canister_http_send(request).await;
@@ -114,14 +117,16 @@ async fn test_canister_http_server_head() {
 }
 
 #[tokio::test]
-async fn test_response_limit() {
+async fn test_response_limit_exceeded() {
     // Check if response with higher than allowed response limit is rejected.
     let server_config = Config {
         ..Default::default()
     };
     let mock_server = MockServer::start().await;
-    // 2Mb and 1 byte. Will get limitet because 'Content-length' is too large.
-    let payload: Vec<u8> = vec![0u8; server_config.http_request_size_limit_bytes + 1];
+
+    let response_limit: u64 = 512;
+    // Check that larger than specified payloads get rejected.
+    let payload: Vec<u8> = vec![0u8; (response_limit + 1) as usize];
     Mock::given(method("GET"))
         .and(path("/hello"))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(payload))
@@ -134,6 +139,7 @@ async fn test_response_limit() {
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
         body: "hello".to_string().as_bytes().to_vec(),
+        max_response_size_bytes: response_limit,
     });
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
@@ -145,6 +151,37 @@ async fn test_response_limit() {
         .unwrap_err()
         .message()
         .contains(&"header exceeds http body size".to_string()));
+}
+
+#[tokio::test]
+async fn test_within_response_limit() {
+    // Check that everything works fine if response limit is specified.
+    let server_config = Config {
+        ..Default::default()
+    };
+    let mock_server = MockServer::start().await;
+    let response_limit: u64 = 512;
+    let payload: Vec<u8> = vec![0u8; (response_limit - 1) as usize];
+    Mock::given(method("GET"))
+        .and(path("/hello"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(payload))
+        .mount(&mock_server)
+        .await;
+
+    let mut client = spawn_grpc_server(server_config.clone());
+    let request = tonic::Request::new(CanisterHttpSendRequest {
+        url: format!("{}/hello", &mock_server.uri()),
+        headers: Vec::new(),
+        method: HttpMethod::Get as i32,
+        body: "hello".to_string().as_bytes().to_vec(),
+        max_response_size_bytes: response_limit,
+    });
+    let response = client.canister_http_send(request).await;
+    assert!(response.is_ok());
+    assert_eq!(
+        response.unwrap().into_inner().status,
+        StatusCode::OK.as_u16() as u32
+    );
 }
 
 #[tokio::test]
@@ -171,6 +208,7 @@ async fn test_request_timeout() {
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
         body: "hello".to_string().as_bytes().to_vec(),
+        max_response_size_bytes: 512,
     });
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
@@ -201,6 +239,7 @@ async fn test_connect_timeout() {
         headers: Vec::new(),
         method: HttpMethod::Head as i32,
         body: "hello".to_string().as_bytes().to_vec(),
+        max_response_size_bytes: 64,
     });
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
@@ -239,6 +278,7 @@ async fn test_nonascii_header() {
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
         body: "hello".to_string().as_bytes().to_vec(),
+        max_response_size_bytes: 512,
     });
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
@@ -257,6 +297,7 @@ async fn test_missing_protocol() {
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
         body: "hello".to_string().as_bytes().to_vec(),
+        max_response_size_bytes: 512,
     });
     let response = client.canister_http_send(request).await;
     assert!(response.is_err());
@@ -278,6 +319,7 @@ async fn test_bad_socks() {
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
         body: "hello".to_string().as_bytes().to_vec(),
+        max_response_size_bytes: 512,
     });
 
     let response = client.canister_http_send(request).await;
@@ -310,6 +352,7 @@ async fn test_socks() {
         headers: Vec::new(),
         method: HttpMethod::Get as i32,
         body: "hello".to_string().as_bytes().to_vec(),
+        max_response_size_bytes: 512,
     });
     let response = client.canister_http_send(request).await;
     assert!(response.is_ok());

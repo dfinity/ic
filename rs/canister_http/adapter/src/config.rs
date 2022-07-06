@@ -4,7 +4,6 @@ use std::path::PathBuf;
 
 const DEFAULT_HTTP_CONNECT_TIMEOUT_SECS: u64 = 2;
 const DEFAULT_HTTP_REQUEST_TIMEOUT_SECS: u64 = 3;
-const DEFAULT_HTTP_REQUEST_SIZE_LIMIT_BYTES: usize = 2 * 1024 * 1024; // 2Mb
 
 #[derive(Clone, Debug, Deserialize, Eq, Serialize, PartialEq)]
 /// The source of the unix domain socket to be used for inter-process
@@ -28,7 +27,6 @@ impl Default for IncomingSource {
 pub struct Config {
     pub http_connect_timeout_secs: u64,
     pub http_request_timeout_secs: u64,
-    pub http_request_size_limit_bytes: usize,
     pub incoming_source: IncomingSource,
     pub logger: LoggerConfig,
     /// Socks proxy docs: https://gitlab.com/dfinity-lab/public/ic/-/blob/master/ic-os/boundary-guestos/doc/Components.adoc#user-content-socks-proxy
@@ -42,7 +40,6 @@ impl Default for Config {
         Config {
             http_connect_timeout_secs: DEFAULT_HTTP_CONNECT_TIMEOUT_SECS,
             http_request_timeout_secs: DEFAULT_HTTP_REQUEST_TIMEOUT_SECS,
-            http_request_size_limit_bytes: DEFAULT_HTTP_REQUEST_SIZE_LIMIT_BYTES,
             incoming_source: IncomingSource::default(),
             logger: LoggerConfig::default(),
             socks_proxy: None,

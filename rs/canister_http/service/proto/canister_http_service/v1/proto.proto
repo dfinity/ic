@@ -18,7 +18,8 @@ message CanisterHttpSendRequest {
   string url = 1;
   bytes body = 2;
   repeated HttpHeader headers = 3;
-  HttpMethod method = 4;  
+  HttpMethod method = 4;
+  uint64 max_response_size_bytes = 5;
 }
 
 message CanisterHttpSendResponse {

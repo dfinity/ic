@@ -13,7 +13,7 @@ use ic_types::{
         CanisterHttpResponse, CanisterHttpResponseContent,
     },
     messages::{AnonymousQuery, AnonymousQueryResponse, Request},
-    CanisterId,
+    CanisterId, NumBytes,
 };
 use tokio::{
     runtime::Handle,
@@ -25,6 +25,9 @@ use tokio::{
 };
 use tonic::{transport::Channel, Code};
 use tower::util::Oneshot;
+
+// Hard limit that the canister http adapter enforces on the response.
+const CANISTER_HTTP_ADAPTER_MAX_RESPONSE_SIZE: NumBytes = NumBytes::new(2 * 1024 * 1024);
 
 /// This client is returend if we fail to make connection to canister http adapter.
 pub struct BrokenCanisterHttpClient {}
@@ -118,6 +121,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         headers: request_headers,
                         body: request_body,
                         http_method: request_http_method,
+                        max_response_bytes: request_max_response_bytes,
                         transform_method_name: request_transform_method,
                         ..
                     },
@@ -132,6 +136,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         CanisterHttpMethod::POST => HttpMethod::Post.into(),
                         CanisterHttpMethod::HEAD => HttpMethod::Head.into(),
                     },
+                    max_response_size_bytes: request_max_response_bytes.unwrap_or(CANISTER_HTTP_ADAPTER_MAX_RESPONSE_SIZE).get(),
                     headers: request_headers
                         .into_iter()
                         .map(|h| HttpHeader {
