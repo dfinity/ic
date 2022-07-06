@@ -140,12 +140,12 @@ function route(r) {
     }
   }
   var subnet_id = subnet_table.canister_subnets[subnet_index];
-  var nodes = subnet_table.subnet_nodes[subnet_index];
+  var nodes = subnet_table.subnet_nodes[subnet_id];
   if (nodes.length < 1) {
     return '';
   }
   var node_index = Math.floor(Math.random() * Math.floor(nodes.length));
-  var node_ids = subnet_table.subnet_node_ids[subnet_index];
+  var node_ids = subnet_table.subnet_node_ids[subnet_id];
   var node_id = node_ids[node_index]
   r.headersOut['x-ic-subnet-id'] = subnet_id;
   r.headersOut['x-ic-node-id'] = node_id;
