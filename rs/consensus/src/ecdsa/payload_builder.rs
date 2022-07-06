@@ -281,7 +281,7 @@ pub(crate) fn create_summary_payload(
         let key_id = ecdsa_config.key_ids[0].clone();
         info!(
             log,
-            "Creating ECDSA key {} on subnet {} at height {}", key_id, subnet_id, height
+            "Start to create ECDSA key {} on subnet {} at height {}", key_id, subnet_id, height
         );
 
         return make_bootstrap_summary(subnet_id, key_id, height, None, Some(&log));
@@ -581,6 +581,19 @@ pub(crate) fn create_data_payload_helper(
     } else {
         return Ok(None);
     };
+
+    // Check if we are creating a new key, if so, start using it immediately.
+    if let ecdsa::KeyTranscriptCreation::Created(unmasked) =
+        &ecdsa_payload.key_transcript.next_in_creation
+    {
+        let transcript = block_reader.transcript(unmasked.as_ref())?;
+        if ecdsa_payload.key_transcript.current.is_none() {
+            ecdsa_payload.key_transcript.current = Some(
+                ecdsa::UnmaskedTranscriptWithAttributes::new(transcript.to_attributes(), *unmasked),
+            );
+        }
+    }
+
     ecdsa_payload.uid_generator.update_height(height)?;
     let current_key_transcript = ecdsa_payload.key_transcript.current.as_ref().cloned();
     let state = state_manager.get_state_at(context.certified_height)?;
@@ -983,11 +996,12 @@ fn update_next_key_transcript_helper(
             if let Some(transcript) =
                 transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
             {
-                debug!(
+                info!(
                     log,
-                    "Key transcript created from ReshareOfUnmasked {:?} registry_version {:?}",
+                    "ECDSA key transcript created from ReshareOfUnmasked {:?} registry_version {:?} height = {}",
                     config.as_ref().transcript_id,
                     transcript.registry_version,
+                    height,
                 );
                 let transcript_ref = ecdsa::UnmaskedTranscript::try_from((height, &transcript))?;
                 *next_key_transcript_creation =
@@ -1035,11 +1049,12 @@ fn update_next_key_transcript_helper(
             if let Some(transcript) =
                 transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
             {
-                debug!(
+                info!(
                     log,
-                    "Key transcript created from ReshareOfMasked {:?} registry_version {:?}",
+                    "ECDSA key transcript created from ReshareOfMasked {:?} registry_version {:?} height = {}",
                     config.as_ref().transcript_id,
                     transcript.registry_version,
+                    height,
                 );
                 let transcript_ref = ecdsa::UnmaskedTranscript::try_from((height, &transcript))?;
                 *next_key_transcript_creation =
@@ -1056,7 +1071,7 @@ fn update_next_key_transcript_helper(
                 // by the reshared param will be used.
                 info!(
                     log,
-                    "Key transcript created from XnetReshareOfMasked {:?}, registry_version {:?}, height = {:?}",
+                    "ECDSA Key transcript created from XnetReshareOfMasked {:?}, registry_version {:?}, height = {}",
                     config.as_ref().transcript_id,
                     transcript.registry_version,
                     height,
