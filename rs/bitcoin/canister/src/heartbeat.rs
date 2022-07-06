@@ -9,7 +9,7 @@ use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, Block, GetSuccessorsRequest,
     Transaction,
 };
-use ic_logger::{debug, error, ReplicaLogger};
+use ic_logger::{debug, error, trace, ReplicaLogger};
 use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus};
 use ic_replicated_state::bitcoin_state::{
     BitcoinState as ReplicatedBitcoinState, BitcoinStateError,
@@ -37,7 +37,11 @@ impl BitcoinCanister {
         let mut state: State = State::from(bitcoin_state);
 
         // Process all incoming responses from the adapter.
+        let previous_height = store::main_chain_height(&state);
         let height = process_adapter_responses(&mut state, &self.log);
+        if height != previous_height {
+            debug!(self.log, "New Bitcoin tip height: {}", height);
+        }
 
         match bitcoin_feature.status {
             BitcoinFeatureStatus::Enabled | BitcoinFeatureStatus::Syncing => {
@@ -104,9 +108,11 @@ fn process_adapter_responses(state: &mut State, log: &ReplicaLogger) -> u32 {
                     .iter()
                     .map(|x| to_btc_block(x).block_hash())
                     .collect();
-                debug!(
+                trace!(
                     log,
-                    "Received new blocks: {:?}, next headers {:?}", block_hashes, r.next
+                    "Received new blocks: {:?}, next headers {:?}",
+                    block_hashes,
+                    r.next
                 );
                 for block in r.blocks.into_iter() {
                     let btc_block = to_btc_block(&block);
