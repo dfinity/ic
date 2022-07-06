@@ -125,7 +125,15 @@ echo "${VERSION}" >"${TMPDIR}/version.txt"
 
 # Build all pieces and assemble the disk image.
 
-"${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/rootfs-tree.tar" -- --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" --build-arg BASE_IMAGE="${BASE_IMAGE}" "${BASE_DIR}/rootfs"
+# If specified, and ONLY on dev, add an additional layer to the built image,
+# containing an extra certificate.
+if [ "${BUILD_TYPE}" == "dev" -a "${DEV_ROOT_CA}" != "" ]; then
+    EXTRA_DOCKERFILE=("--extra-dockerfile" "${BASE_DIR}/rootfs/Dockerfile.dev" "--extra-vars" "DEV_ROOT_CA=$(cat ${DEV_ROOT_CA})")
+fi
+"${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/rootfs-tree.tar" "${EXTRA_DOCKERFILE[@]}" -- \
+    --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" \
+    --build-arg BASE_IMAGE="${BASE_IMAGE}" \
+    "${BASE_DIR}/rootfs"
 tar xOf "${TMPDIR}"/rootfs-tree.tar --occurrence=1 etc/selinux/default/contexts/files/file_contexts >"${TMPDIR}/file_contexts"
 "${TOOL_DIR}"/build_ext4_image.py -o "${TMPDIR}/partition-boot.tar" -s 1G -i "${TMPDIR}/rootfs-tree.tar" -S "${TMPDIR}/file_contexts" -p boot/ \
     "${TMPDIR}/version.txt:/boot/version.txt:0644" \

@@ -22,7 +22,7 @@ import tarfile
 image_hash_re = re.compile("((Successfully built )|(.*writing image sha256:))([0-9a-f]+).*\n")
 
 
-def docker_build(args):
+def docker_build(args, dockerfile):
     """
     Runs 'docker build' and return image hash.
 
@@ -32,6 +32,10 @@ def docker_build(args):
     function.
     """
     docker_args = ["docker", "build"] + args
+    if dockerfile:
+        docker_args.append("--file")
+        docker_args.append(dockerfile)
+
     image_hash = None
 
     with subprocess.Popen(docker_args, stdout=subprocess.PIPE) as proc:
@@ -291,6 +295,24 @@ def make_argparser():
     )
     parser.add_argument("-o", "--output", help="Target (tar) file to write to", type=str)
     parser.add_argument(
+        "-d",
+        "--dockerfile",
+        type=str,
+        default="",
+        help="Name of the Dockerfile to target.",
+    )
+    parser.add_argument(
+        "--extra-dockerfile",
+        type=str,
+        help="An additional dockerfile to be layered on top of the first image.",
+    )
+    parser.add_argument(
+        "--extra-vars",
+        type=str,
+        nargs="*",
+        help="Extra vars to pass to docker",
+    )
+    parser.add_argument(
         "build_args",
         metavar="build_args",
         type=str,
@@ -304,7 +326,11 @@ def main():
     args = make_argparser().parse_args(sys.argv[1:])
 
     out_file = args.output
+    dockerfile = args.dockerfile
+    extra_dockerfile = args.extra_dockerfile
+    extra_vars = args.extra_vars
     build_args = list(args.build_args)
+    extra_args = list(args.build_args)
 
     # Build the docker image.
     if not args.skip_pull:
@@ -316,7 +342,16 @@ def main():
         ]
     ):
         build_args.append("--no-cache")
-    image_hash = docker_build(build_args)
+        extra_args.append("--no-cache")
+    image_hash = docker_build(build_args, dockerfile)
+
+    # If an additional Dockerfile is specified, build an additional layer on top of the one already built
+    if extra_dockerfile:
+        extra_vars.append("PREVIOUS_IMAGE=%s" % image_hash)
+        for var in extra_vars:
+            extra_args.append("--build-arg")
+            extra_args.append(var)
+        image_hash = docker_build(extra_args, extra_dockerfile)
 
     # Extract and flatten all layers, build an in-memory pseudo filesystem
     # representing the docker image.
