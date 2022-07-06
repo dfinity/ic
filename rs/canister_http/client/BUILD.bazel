@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "client",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_canister_http_adapter_client",
+    edition = "2018",
+    deps = [
+        "//rs/async_utils",
+        "//rs/canister_http/service",
+        "//rs/interfaces",
+        "//rs/interfaces/canister_http_adapter_client",
+        "//rs/monitoring/logger",
+        "//rs/protobuf",
+        "//rs/types/error_types",
+        "//rs/types/ic00_types",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:tonic",
+        "@crate_index//:tower",
+    ],
+)
+
+# TODO(IC-1207): migrate rust_test when unblocked dependencies.

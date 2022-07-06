@@ -12,8 +12,9 @@ filegroup(
 )
 
 rust_library(
-    name = "ic_canister_http_service",
+    name = "service",
     srcs = glob(["src/**"]),
+    crate_name = "ic_canister_http_service",
     edition = "2018",
     deps = [
         ":build_script",
