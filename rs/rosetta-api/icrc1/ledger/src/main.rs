@@ -99,8 +99,8 @@ fn icrc1_balance_of(account: Account) -> u64 {
 
 #[query(name = "icrc1_totalSupply")]
 #[candid_method(query, rename = "icrc1_totalSupply")]
-fn icrc1_total_supply() -> Tokens {
-    Access::with_ledger(|ledger| Tokens::MAX - ledger.balances().token_pool).unwrap_or(Tokens::ZERO)
+fn icrc1_total_supply() -> u64 {
+    Access::with_ledger(|ledger| ledger.balances().total_supply().get_e8s())
 }
 
 #[update]
