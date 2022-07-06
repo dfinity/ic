@@ -1,10 +1,9 @@
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_interfaces_transport::{
-    AsyncTransportEventHandler, FlowTag, Transport, TransportErrorCode, TransportPayload,
+    FlowTag, Transport, TransportErrorCode, TransportEventHandler, TransportPayload,
 };
 use ic_protobuf::registry::node::v1::NodeRecord;
 use mockall::*;
-use std::sync::Arc;
 
 mock! {
     pub Transport {}
@@ -12,7 +11,7 @@ mock! {
     trait Transport {
         fn set_event_handler(
             &self,
-            event_handler: Arc<dyn AsyncTransportEventHandler>,
+            event_handler: TransportEventHandler,
         );
 
         fn start_connections(

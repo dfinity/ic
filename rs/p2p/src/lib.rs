@@ -111,6 +111,7 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
     sync::Arc,
 };
+use tower::util::BoxCloneService;
 
 mod artifact_download_list;
 mod download_management;
@@ -167,13 +168,13 @@ pub fn start_p2p(
     malicious_flags: MaliciousFlags,
     advert_broadcaster: &AdvertBroadcaster,
 ) -> P2PThreadJoiner {
-    let event_handler = Arc::new(event_handler::AsyncTransportEventHandlerImpl::new(
+    let event_handler = event_handler::AsyncTransportEventHandlerImpl::new(
         node_id,
         log.clone(),
         &metrics_registry,
         event_handler::ChannelConfig::from(gossip_config),
-    ));
-    transport.set_event_handler(event_handler.clone());
+    );
+    transport.set_event_handler(BoxCloneService::new(event_handler.clone()));
 
     let p2p_flow_tags = transport_config
         .p2p_flows

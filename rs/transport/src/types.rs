@@ -4,7 +4,7 @@ use crate::metrics::{ControlPlaneMetrics, DataPlaneMetrics, SendQueueMetrics};
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_interfaces_transport::{AsyncTransportEventHandler, FlowId, FlowTag, TransportPayload};
+use ic_interfaces_transport::{FlowId, FlowTag, TransportEventHandler, TransportPayload};
 use ic_logger::ReplicaLogger;
 use phantom_newtype::{AmountOf, Id};
 
@@ -90,7 +90,7 @@ pub(crate) struct TransportImpl {
     /// Mapping of peers to their corresponding state
     pub peer_map: RwLock<HashMap<NodeId, PeerState>>,
     /// Event handler to report back to the transport client
-    pub event_handler: Mutex<Option<Arc<dyn AsyncTransportEventHandler>>>,
+    pub event_handler: Mutex<Option<TransportEventHandler>>,
 
     // Crypto and data required for TLS handshakes
     /// Clients that are allowed to connect to this node
