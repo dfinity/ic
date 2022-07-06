@@ -6,7 +6,7 @@ use checkpoint::Checkpoint;
 pub use checkpoint::{CheckpointSerialization, MappingSerialization};
 use ic_sys::PageBytes;
 pub use ic_sys::{PageIndex, PAGE_SIZE};
-use ic_utils::deterministic_operations::deterministic_copy_from_slice;
+use ic_utils::{deterministic_operations::deterministic_copy_from_slice, fs::write_all_vectored};
 pub use page_allocator::{
     allocated_pages_count, PageAllocatorSerialization, PageDeltaSerialization, PageSerialization,
 };
@@ -20,11 +20,53 @@ use int_map::IntMap;
 use libc::off_t;
 use page_allocator::{Page, PageAllocator};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::ops::Range;
 use std::os::unix::io::RawFd;
 use std::path::Path;
+
+// When persisting PageDeltas, the maximum gap between dirty pages
+// that can be combined into a single vectorized write
+const MAXIMUM_GAP: u64 = 200;
+// When persisting PageDeltas, the maximum write amplification
+// (written pages/dirty pages)
+const MAXIMUM_WRITE_AMPLIFICATION: f64 = 5.0;
+
+struct WriteBuffer<'a> {
+    content: Vec<&'a [u8]>,
+    start_index: PageIndex,
+}
+
+impl<'a> WriteBuffer<'a> {
+    fn apply_to_file(&mut self, file: &mut File, path: &Path) -> Result<(), PersistenceError> {
+        use std::io::{Seek, SeekFrom};
+
+        let offset = self.start_index.get() * PAGE_SIZE as u64;
+        file.seek(SeekFrom::Start(offset as u64)).map_err(|err| {
+            PersistenceError::FileSystemError {
+                path: path.display().to_string(),
+                context: format!("Failed to seek to {}", offset),
+                internal_error: err.to_string(),
+            }
+        })?;
+
+        write_all_vectored(file, &self.content).map_err(|err| {
+            PersistenceError::FileSystemError {
+                path: path.display().to_string(),
+                context: format!(
+                    "Failed to copy page range #{}..{}",
+                    self.start_index,
+                    self.start_index.get() + self.content.len() as u64
+                ),
+                internal_error: err.to_string(),
+            }
+        })?;
+
+        Ok(())
+    }
+}
 
 /// `PageDelta` represents a changeset of the module heap.
 #[derive(Clone, Default, Debug)]
@@ -61,66 +103,52 @@ impl PageDelta {
         self.0.iter().map(|(idx, page)| (PageIndex::new(idx), page))
     }
 
-    /// Applies this delta to the specified file.
-    /// Precondition: `file` is seekable and writeable.
-    fn apply_to_file(&self, file: &mut File, path: &Path) -> Result<(), PersistenceError> {
-        use std::io::{Seek, SeekFrom};
-
-        for (index, page) in self.iter() {
-            let offset = index.get() * PAGE_SIZE as u64;
-            file.seek(SeekFrom::Start(offset as u64)).map_err(|err| {
-                PersistenceError::FileSystemError {
-                    path: path.display().to_string(),
-                    context: format!("Failed to seek to {}", offset),
-                    internal_error: err.to_string(),
-                }
-            })?;
-            let mut contents = page.contents() as &[u8];
-            std::io::copy(&mut contents, file).map_err(|err| {
-                PersistenceError::FileSystemError {
-                    path: path.display().to_string(),
-                    context: format!("Failed to copy page #{}", index),
-                    internal_error: err.to_string(),
-                }
-            })?;
+    /// When persisting PageDelta to disk, it is beneficial to reduce
+    /// the number of write syscalls due to file fragmentation. We
+    /// achieve this by grouping neighboring dirty pages, as well as
+    /// re-writing small gaps between pages. This function determines
+    /// the maximum gap size to re-write, in order to keep write
+    /// amplification (ratio of writes to dirty pages) below the
+    /// target.
+    fn write_amplification_to_gap(
+        &self,
+        maximum_gap: u64,
+        maximum_write_amplification: f64,
+    ) -> u64 {
+        if self.is_empty() || maximum_write_amplification <= 1.0 {
+            return 0;
         }
-        Ok(())
-    }
 
-    /// Persists this delta to the specified destination.
-    fn persist(&self, dst: &Path) -> Result<(), PersistenceError> {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open(dst)
-            .map_err(|err| PersistenceError::FileSystemError {
-                path: dst.display().to_string(),
-                context: "Failed to open file".to_string(),
-                internal_error: err.to_string(),
-            })?;
-        self.apply_to_file(&mut file, dst)?;
-        Ok(())
-    }
+        // Histogram of gaps and number of dirty pages
+        let (gaps, dirty_pages) = {
+            let mut gaps: BTreeMap<u64, u64> = BTreeMap::default();
+            assert!(!self.is_empty());
+            let mut last_index = self.iter().next().unwrap().0;
+            let mut count: u64 = 0;
+            for (index, _) in self.iter().skip(1) {
+                assert!(index.get() > last_index.get());
+                let gap = index.get() - last_index.get() - 1;
+                if gap > 0 && gap <= maximum_gap {
+                    *gaps.entry(gap).or_default() += 1;
+                }
+                last_index = index;
+                count += 1;
+            }
+            (gaps, count)
+        };
 
-    /// Persists this delta to the specified destination and flushes it.
-    fn persist_and_sync(&self, dst: &Path) -> Result<(), PersistenceError> {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open(dst)
-            .map_err(|err| PersistenceError::FileSystemError {
-                path: dst.display().to_string(),
-                context: "Failed to open file".to_string(),
-                internal_error: err.to_string(),
-            })?;
-        self.apply_to_file(&mut file, dst)?;
-        file.sync_all()
-            .map_err(|err| PersistenceError::FileSystemError {
-                path: dst.display().to_string(),
-                context: "Failed to sync file".to_string(),
-                internal_error: err.to_string(),
-            })?;
-        Ok(())
+        let mut amplified: u64 = 0;
+        for (gap, count) in gaps {
+            if (amplified + gap * count) as f64
+                > dirty_pages as f64 * (maximum_write_amplification - 1.0)
+            {
+                assert!(gap > 0);
+                return gap - 1;
+            }
+            amplified += gap * count;
+        }
+
+        maximum_gap
     }
 
     /// Returns true if the page delta contains no pages.
@@ -375,19 +403,19 @@ impl PageMap {
     /// Persists the heap delta contained in this page map to the specified
     /// destination.
     pub fn persist_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.page_delta.persist(dst)
+        self.persist_to_file(&self.page_delta, dst)
     }
 
     /// Persists the heap delta contained in this page map to the specified
     /// destination and fsync the file to disk.
     pub fn persist_and_sync_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.page_delta.persist_and_sync(dst)
+        self.persist_to_file_and_sync(&self.page_delta, dst)
     }
 
     /// Persists the round delta contained in this page map to the specified
     /// destination.
     pub fn persist_round_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.round_delta.persist(dst)
+        self.persist_to_file(&self.round_delta, dst)
     }
 
     /// Returns the iterator over host pages managed by this `PageMap`.
@@ -515,6 +543,91 @@ impl PageMap {
         // Delta is a persistent data structure and is cheap to clone.
         self.page_delta.update(delta.clone());
         self.round_delta.update(delta)
+    }
+
+    /// Persists the given delta to the specified destination.
+    fn persist_to_file(&self, page_delta: &PageDelta, dst: &Path) -> Result<(), PersistenceError> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(dst)
+            .map_err(|err| PersistenceError::FileSystemError {
+                path: dst.display().to_string(),
+                context: "Failed to open file".to_string(),
+                internal_error: err.to_string(),
+            })?;
+        self.apply_delta_to_file(&mut file, page_delta, dst)?;
+        Ok(())
+    }
+
+    /// Persists the given delta to the specified destination and flushes it.
+    fn persist_to_file_and_sync(
+        &self,
+        page_delta: &PageDelta,
+        dst: &Path,
+    ) -> Result<(), PersistenceError> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(dst)
+            .map_err(|err| PersistenceError::FileSystemError {
+                path: dst.display().to_string(),
+                context: "Failed to open file".to_string(),
+                internal_error: err.to_string(),
+            })?;
+        self.apply_delta_to_file(&mut file, page_delta, dst)?;
+        file.sync_all()
+            .map_err(|err| PersistenceError::FileSystemError {
+                path: dst.display().to_string(),
+                context: "Failed to sync file".to_string(),
+                internal_error: err.to_string(),
+            })?;
+        Ok(())
+    }
+
+    /// Applies the given delta to the specified file.
+    /// Precondition: `file` is seekable and writeable.
+    fn apply_delta_to_file(
+        &self,
+        file: &mut File,
+        page_delta: &PageDelta,
+        path: &Path,
+    ) -> Result<(), PersistenceError> {
+        let mut opt_buffer: Option<WriteBuffer> = None;
+        let maximum_gap =
+            page_delta.write_amplification_to_gap(MAXIMUM_GAP, MAXIMUM_WRITE_AMPLIFICATION);
+
+        for (index, page) in page_delta.iter() {
+            if let Some(buffer) = &mut opt_buffer {
+                let next_index = buffer.start_index.get() + buffer.content.len() as u64;
+                if index.get() <= next_index + maximum_gap {
+                    // TODO(MR-233) Consider using get_memory_region
+                    for copy_index in next_index..index.get() {
+                        let content = self.get_page(copy_index.into());
+                        buffer.content.push(content);
+                    }
+
+                    buffer.content.push(page.contents());
+                    continue;
+                }
+            }
+
+            if let Some(buffer) = &mut opt_buffer {
+                buffer.apply_to_file(file, path)?;
+            }
+
+            let content = page.contents();
+
+            opt_buffer = Some(WriteBuffer {
+                content: vec![content],
+                start_index: index,
+            });
+        }
+        if let Some(buffer) = &mut opt_buffer {
+            buffer.apply_to_file(file, path)?;
+        }
+
+        Ok(())
     }
 }
 

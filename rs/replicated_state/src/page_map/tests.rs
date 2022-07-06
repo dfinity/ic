@@ -1,7 +1,7 @@
 use super::{
     checkpoint::{Checkpoint, MappingSerialization},
     page_allocator::PageAllocatorSerialization,
-    Buffer, FileDescriptor, PageIndex, PageMap, PageMapSerialization,
+    Buffer, FileDescriptor, PageAllocator, PageDelta, PageIndex, PageMap, PageMapSerialization,
 };
 use ic_sys::PAGE_SIZE;
 use nix::unistd::dup;
@@ -106,12 +106,39 @@ fn persisted_map_is_equivalent_to_the_original() {
         .unwrap();
     let heap_file = tmp.path().join("heap");
 
+    let base_page = [42u8; PAGE_SIZE];
+    let base_data = vec![&base_page; 50];
+
+    let base_pages: Vec<(PageIndex, &[u8; PAGE_SIZE])> = base_data
+        .iter()
+        .enumerate()
+        .map(|(i, page)| (PageIndex::new(i as u64), *page))
+        .collect();
+
+    let mut base_map = PageMap::default();
+    base_map.update(base_pages.as_slice());
+    base_map.persist_delta(&heap_file).unwrap();
+
+    let mut original_map = PageMap::open(&heap_file, None).unwrap();
+
+    assert_eq!(base_map, original_map);
+
     let page_1 = [1u8; PAGE_SIZE];
     let page_3 = [3u8; PAGE_SIZE];
+    let page_4 = [4u8; PAGE_SIZE];
+    let page_60 = [60u8; PAGE_SIZE];
+    let page_62 = [62u8; PAGE_SIZE];
+    let page_100 = [100u8; PAGE_SIZE];
 
-    let pages = &[(PageIndex::new(1), &page_1), (PageIndex::new(3), &page_3)];
+    let pages = &[
+        (PageIndex::new(1), &page_1),
+        (PageIndex::new(3), &page_3),
+        (PageIndex::new(4), &page_4),
+        (PageIndex::new(60), &page_60),
+        (PageIndex::new(62), &page_62),
+        (PageIndex::new(100), &page_100),
+    ];
 
-    let mut original_map = PageMap::default();
     original_map.update(pages);
 
     original_map.persist_delta(&heap_file).unwrap();
@@ -226,4 +253,41 @@ fn serialize_page_map() {
     replica.deserialize_delta(page_delta);
     // The page deltas must be in sync.
     assert_equal_page_maps(&replica, &sandbox);
+}
+
+#[test]
+fn write_amplification_is_calculated_correctly() {
+    let allocator: PageAllocator = Default::default();
+
+    let page = [1u8; PAGE_SIZE];
+
+    let pages = &[
+        (PageIndex::new(1), &page),
+        // gap 1
+        (PageIndex::new(3), &page),
+        (PageIndex::new(4), &page),
+        // gap 100
+        (PageIndex::new(105), &page),
+    ];
+
+    let pages = allocator.allocate(pages);
+
+    let delta = PageDelta::from(pages);
+
+    // Amplification of 1 doesn't allow gaps
+    assert_eq!(delta.write_amplification_to_gap(1000, 1.0), 0);
+
+    // Amplification smaller than 1 is safe
+    assert_eq!(delta.write_amplification_to_gap(1000, 0.5), 0);
+    assert_eq!(delta.write_amplification_to_gap(1000, -10.0), 0);
+
+    // Small amplification should allow the small gap, but not the large
+    assert!(delta.write_amplification_to_gap(1000, 2.0) < 100);
+    assert!(delta.write_amplification_to_gap(1000, 2.0) >= 1);
+
+    // Large amplification should allow both gaps
+    assert!(delta.write_amplification_to_gap(1000, 100.0) >= 100);
+
+    // Maximum gap is respected
+    assert_eq!(delta.write_amplification_to_gap(50, 100.0), 50);
 }
