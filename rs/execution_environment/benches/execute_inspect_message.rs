@@ -6,9 +6,12 @@ mod common_wat;
 
 use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
-use ic_types::PrincipalId;
+use ic_execution_environment::execution::inspect_message;
 
+use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities::execution_environment::ExecutionTest;
+use ic_test_utilities::types::ids::user_test_id;
+use ic_test_utilities::types::messages::SignedIngressBuilder;
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -38,8 +41,6 @@ lazy_static! {
 }
 
 pub fn bench_execute_inspect_message(c: &mut Criterion) {
-    let sender = PrincipalId::new_node_test_id(common::REMOTE_CANISTER_ID);
-    let method_name = "very_long_method_name".to_string();
     common::run_benchmarks(
         c,
         "inspect",
@@ -53,15 +54,23 @@ pub fn bench_execute_inspect_message(c: &mut Criterion) {
              network_topology,
              ..
          }| {
+            let ingress = SignedIngressBuilder::new()
+                .canister_id(canister_state.canister_id())
+                .sender(user_test_id(common::REMOTE_CANISTER_ID))
+                .method_name("very_long_method_name".to_string())
+                .build()
+                .into();
+
             let hypervisor = ee_test.hypervisor_deprecated();
-            let (instructions_left, result) = hypervisor.execute_inspect_message(
-                canister_state,
-                sender,
-                method_name.clone(),
-                Vec::new(),
+            let (instructions_left, result) = inspect_message::execute_inspect_message(
                 time,
+                canister_state,
+                &ingress,
+                hypervisor.subnet_type(),
                 execution_parameters,
+                hypervisor,
                 &network_topology,
+                &no_op_logger(),
             );
             assert_eq!(result, Ok(()), "Error executing inspect message method");
             assert_eq!(

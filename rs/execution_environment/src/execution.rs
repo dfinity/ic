@@ -12,3 +12,4 @@ pub mod upgrade;
 
 // Common helpers.
 pub(crate) mod common;
+pub mod inspect_message;

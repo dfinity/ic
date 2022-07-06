@@ -9,7 +9,7 @@ use crate::{
         CanisterManager, CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
     },
     canister_settings::CanisterSettings,
-    execution::call::execute_call,
+    execution::{call::execute_call, inspect_message},
     execution_environment_metrics::ExecutionEnvironmentMetrics,
     hypervisor::Hypervisor,
     util::candid_error_to_user_error,
@@ -1227,6 +1227,16 @@ impl ExecutionEnvironmentImpl {
         ingress: &SignedIngressContent,
         execution_mode: ExecutionMode,
     ) -> Result<(), UserError> {
+        let canister = |canister_id: CanisterId| -> Result<&CanisterState, UserError> {
+            match state.canister_state(&canister_id) {
+                Some(canister) => Ok(canister),
+                None => Err(UserError::new(
+                    ErrorCode::CanisterNotFound,
+                    format!("Canister {} not found", canister_id),
+                )),
+            }
+        };
+
         // A first-pass check on the canister's balance to prevent needless gossiping
         // if the canister's balance is too low. A more rigorous check happens later
         // in the ingress selector.
@@ -1260,72 +1270,52 @@ impl ExecutionEnvironmentImpl {
                 })?;
 
             if let IngressInductionCost::Fee { payer, cost } = induction_cost {
-                match state.canister_state(&payer) {
-                    Some(canister) => {
-                        if let Err(err) = self.cycles_account_manager.can_withdraw_cycles(
-                            &canister.system_state,
-                            cost,
-                            canister.memory_usage(self.own_subnet_type),
-                            canister.scheduler_state.compute_allocation,
-                        ) {
-                            return Err(UserError::new(
-                                ErrorCode::CanisterOutOfCycles,
-                                err.to_string(),
-                            ));
-                        }
-                    }
-                    None => {
-                        return Err(UserError::new(
-                            ErrorCode::CanisterNotFound,
-                            format!("Canister {} not found", payer),
-                        ));
-                    }
+                let paying_canister = canister(payer)?;
+                if let Err(err) = self.cycles_account_manager.can_withdraw_cycles(
+                    &paying_canister.system_state,
+                    cost,
+                    paying_canister.memory_usage(self.own_subnet_type),
+                    paying_canister.scheduler_state.compute_allocation,
+                ) {
+                    return Err(UserError::new(
+                        ErrorCode::CanisterOutOfCycles,
+                        err.to_string(),
+                    ));
                 }
             }
         }
 
-        let canister_id = ingress.canister_id();
-        let sender = ingress.sender();
-        let method_name = ingress.method_name().to_string();
-        let payload = ingress.arg();
-
         if is_subnet_message(ingress, self.own_subnet_id) {
-            self.canister_manager.should_accept_ingress_message(
+            return self.canister_manager.should_accept_ingress_message(
                 state,
                 provisional_whitelist,
-                sender,
-                &method_name,
-                payload,
-            )
+                ingress.sender(),
+                ingress.method_name(),
+                ingress.arg(),
+            );
         } else {
-            match state.canister_state(&canister_id) {
-                Some(canister) => {
-                    // Letting the canister grow arbitrarily when executing the
-                    // query is fine as we do not persist state modifications.
-                    let subnet_available_memory = subnet_memory_capacity(&self.config);
-                    let execution_parameters = self.execution_parameters(
-                        canister,
-                        self.config.max_instructions_for_message_acceptance_calls,
-                        subnet_available_memory,
-                        execution_mode,
-                    );
-                    self.hypervisor
-                        .execute_inspect_message(
-                            canister.clone(),
-                            sender.get(),
-                            method_name,
-                            payload.to_vec(),
-                            state.time(),
-                            execution_parameters,
-                            &state.metadata.network_topology,
-                        )
-                        .1
-                }
-                None => Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found", canister_id),
-                )),
-            }
+            let canister = canister(ingress.canister_id())?;
+
+            // Letting the canister grow arbitrarily when executing the
+            // query is fine as we do not persist state modifications.
+            let subnet_available_memory = subnet_memory_capacity(&self.config);
+            let execution_parameters = self.execution_parameters(
+                canister,
+                self.config.max_instructions_for_message_acceptance_calls,
+                subnet_available_memory,
+                execution_mode,
+            );
+            inspect_message::execute_inspect_message(
+                state.time(),
+                canister.clone(),
+                ingress,
+                self.own_subnet_type,
+                execution_parameters,
+                &self.hypervisor,
+                &state.metadata.network_topology,
+                &self.log,
+            )
+            .1
         }
     }
 
