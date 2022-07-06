@@ -131,6 +131,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
                     NumBytes::new(max_block_payload_size.saturating_sub(accumulated_size)),
                     section_id,
                     past_payloads,
+                    &self.logger,
                 )
                 .get();
         }

@@ -15,7 +15,7 @@ use ic_interfaces::{
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_state_manager::StateManagerError;
-use ic_logger::{error, warn};
+use ic_logger::warn;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -143,16 +143,7 @@ impl<'a> IngressSelector for IngressManager {
         let payload_size = payload.count_bytes();
         debug_assert!(payload_size <= byte_limit.get() as usize);
 
-        // A last step is to validate the payload we just created. It will be
-        // an error if this fails, in which case we log the error, and return
-        // an empty payload instead.
-        match self.validate_ingress_payload(&payload, past_ingress, context) {
-            Ok(()) => payload,
-            Err(err) => {
-                error!(self.log, "Created an invalid IngressPayload: {:?}", err);
-                IngressPayload::default()
-            }
-        }
+        payload
     }
 
     fn validate_ingress_payload(
