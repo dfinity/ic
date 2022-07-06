@@ -83,7 +83,7 @@ pub(crate) struct SchedulerImpl {
     config: SchedulerConfig,
     own_subnet_id: SubnetId,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
-    exec_env: Arc<dyn ExecutionEnvironment>,
+    exec_env: Arc<ExecutionEnvironment>,
     cycles_account_manager: Arc<CyclesAccountManager>,
     bitcoin_canister: Arc<BitcoinCanister>,
     metrics: Arc<SchedulerMetrics>,
@@ -283,7 +283,7 @@ impl SchedulerImpl {
         config: SchedulerConfig,
         own_subnet_id: SubnetId,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
-        exec_env: Arc<dyn ExecutionEnvironment>,
+        exec_env: Arc<ExecutionEnvironment>,
         cycles_account_manager: Arc<CyclesAccountManager>,
         bitcoin_canister: Arc<BitcoinCanister>,
         metrics_registry: &MetricsRegistry,
@@ -1217,7 +1217,7 @@ struct ExecutionThreadResult {
 #[allow(clippy::too_many_arguments)]
 fn execute_canisters_on_thread(
     canisters_to_execute: Vec<CanisterState>,
-    exec_env: &dyn ExecutionEnvironment,
+    exec_env: &ExecutionEnvironment,
     canister_execution_limits: CanisterExecutionLimits,
     metrics: Arc<SchedulerMetrics>,
     round_id: ExecutionRound,

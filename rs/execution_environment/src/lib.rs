@@ -15,9 +15,7 @@ mod types;
 pub mod util;
 
 use crate::anonymous_query_handler::AnonymousQueryHandler;
-pub use execution_environment::{
-    CanisterHeartbeatError, ExecutionEnvironment, ExecutionEnvironmentImpl, ExecutionResponse,
-};
+pub use execution_environment::{CanisterHeartbeatError, ExecutionEnvironment, ExecutionResponse};
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_base_types::PrincipalId;
@@ -116,7 +114,7 @@ impl ExecutionServices {
         let ingress_history_reader =
             Box::new(IngressHistoryReaderImpl::new(Arc::clone(&state_reader)));
 
-        let exec_env = Arc::new(ExecutionEnvironmentImpl::new(
+        let exec_env = Arc::new(ExecutionEnvironment::new(
             logger.clone(),
             Arc::clone(&hypervisor),
             Arc::clone(&ingress_history_writer) as Arc<_>,

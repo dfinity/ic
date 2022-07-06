@@ -1,4 +1,4 @@
-use crate::ExecutionEnvironmentImpl;
+use crate::ExecutionEnvironment;
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{ExecutionMode, IngressFilterService};
 use ic_interfaces_state_manager::StateReader;
@@ -15,7 +15,7 @@ use tower::{limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, 
 
 #[derive(Clone)]
 pub(crate) struct IngressFilter {
-    exec_env: Arc<ExecutionEnvironmentImpl>,
+    exec_env: Arc<ExecutionEnvironment>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     threadpool: Arc<Mutex<threadpool::ThreadPool>>,
 }
@@ -25,7 +25,7 @@ impl IngressFilter {
         concurrency_buffer: GlobalConcurrencyLimitLayer,
         threadpool: Arc<Mutex<threadpool::ThreadPool>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-        exec_env: Arc<ExecutionEnvironmentImpl>,
+        exec_env: Arc<ExecutionEnvironment>,
     ) -> IngressFilterService {
         let base_service = BoxCloneService::new(Self {
             exec_env,
