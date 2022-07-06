@@ -74,7 +74,7 @@ pub fn two_third_latency_test(handle: IcHandle, ctx: &ic_fondue::pot::Context) {
     // Install NNS canisters
     ctx.install_nns_canisters(&handle, true);
     let canister_count: usize = 2;
-    let rps: usize = 200;
+    let rps: usize = 100;
     let duration: Duration = Duration::from_secs(500);
     test(handle, ctx, canister_count, rps, duration);
 }
