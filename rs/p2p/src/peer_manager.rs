@@ -202,9 +202,7 @@ impl PeerManager for PeerManagerImpl {
     /// The method removes the given peer from the list of current peers.
     fn remove_peer(&self, node_id: NodeId) {
         let mut current_peers = self.current_peers.lock().unwrap();
-        if let Err(e) = self.transport.stop_connections(&node_id) {
-            warn!(self.log, "stop connection failed {:?}: {:?}", node_id, e);
-        }
+        self.transport.stop_connections(&node_id);
         // Remove the peer irrespective of the result of the stop_connections() call.
         current_peers.remove(&node_id);
         info!(self.log, "Nodes {:0} removed", node_id);

@@ -168,22 +168,9 @@ impl TestClient {
         Ok(())
     }
 
-    fn stop_connections(&self) -> Result<(), TransportErrorCode> {
-        self.transport.stop_connections(&self.prev).map_err(|e| {
-            warn!(
-                self.log,
-                "Failed to stop_connections(): peer = {:?} err = {:?}", self.prev, e
-            );
-            e
-        })?;
-        self.transport.stop_connections(&self.next).map_err(|e| {
-            warn!(
-                self.log,
-                "Failed to stop_connections(): peer = {:?} err = {:?}", self.next, e
-            );
-            e
-        })?;
-        Ok(())
+    fn stop_connections(&self) {
+        self.transport.stop_connections(&self.prev);
+        self.transport.stop_connections(&self.next);
     }
 
     // Waits for the flows/connections to be up
@@ -629,19 +616,17 @@ async fn task_main(
             active_flag.store(false, Ordering::Relaxed);
             if let Err(e) = res {
                 info!(log, "Source thread failed, attempting to stop connections");
-                let _x = test_client.stop_connections();
+                test_client.stop_connections();
                 Err(e)
             } else {
-                test_client
-                    .stop_connections()
-                    .map_err(TestClientErrorCode::TransportError)?;
+                test_client.stop_connections();
                 info!(log, "Test successful");
                 Ok(())
             }
         }
         Role::Relay => {
             let res = test_client.relay_loop();
-            let _x = test_client.stop_connections();
+            test_client.stop_connections();
             res.map_err(TestClientErrorCode::TransportError)
         }
     }

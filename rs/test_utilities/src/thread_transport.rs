@@ -194,12 +194,11 @@ impl Transport for ThreadPort {
     /// Remove the peer from the set of valid neighbors, and tear down the
     /// queues and connections for the peer. Any messages in the Tx and Rx
     /// queues for the peer will be discarded.
-    fn stop_connections(&self, peer_id: &NodeId) -> Result<(), TransportErrorCode> {
+    fn stop_connections(&self, peer_id: &NodeId) {
         info!(
             self.log,
             "Node{} -> Connections to peer {} stopped", self.id, *peer_id
         );
-        Ok(())
     }
 
     /// Send the message to the specified peer. The message will be en-queued
