@@ -7666,6 +7666,7 @@ dependencies = [
 name = "ic-sns-root"
 version = "0.8.0"
 dependencies = [
+ "async-trait",
  "build-info",
  "build-info-build",
  "candid",
@@ -7681,6 +7682,7 @@ dependencies = [
  "prost 0.10.4",
  "serde",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -7795,6 +7797,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-sns-init",
+ "ic-sns-root",
  "ic-sns-wasm-proto-generator",
  "ic-state-machine-tests",
  "ic-test-utilities",

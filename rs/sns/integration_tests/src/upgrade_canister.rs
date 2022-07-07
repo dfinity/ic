@@ -1,8 +1,7 @@
 use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid_one;
-use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
-use ic_ic00_types::{CanisterInstallMode, CanisterStatusResultV2};
+use ic_ic00_types::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
 use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, CanisterStatusType};
 use ic_sns_governance::pb::v1::{
@@ -10,6 +9,7 @@ use ic_sns_governance::pb::v1::{
     NeuronPermissionType, Proposal, ProposalData, UpgradeSnsControlledCanister,
 };
 use ic_sns_governance::types::ONE_YEAR_SECONDS;
+use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_test_utils::itest_helpers::{
     install_governance_canister, install_ledger_canister, install_root_canister,
     local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
@@ -17,8 +17,6 @@ use ic_sns_test_utils::itest_helpers::{
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use ledger_canister::Tokens;
-use maplit::btreeset;
-use std::collections::BTreeSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, Duration};
 
@@ -589,28 +587,27 @@ fn test_upgrade_root_success() {
                 original_root_wasm_hash
             );
 
-            let summary: Vec<(String, PrincipalId, CanisterStatusResultV2)> = sns_canisters
+            let summary: GetSnsCanistersSummaryResponse = sns_canisters
                 .root
                 .update_(
                     "get_sns_canisters_summary",
                     candid_one,
-                    Vec::<PrincipalId>::new(), // dapp_canisters
+                    GetSnsCanistersSummaryRequest {},
                 )
                 .await
                 .expect("Could not get SNS summary");
 
-            let summary = summary
-                .iter()
-                .map(|(name, principal_id, _)| (name.clone(), *principal_id))
-                .collect::<BTreeSet<_>>();
-
             assert_eq!(
-                summary,
-                btreeset! {
-                    ("governance".to_string(), sns_canisters.governance.canister_id().get()),
-                    ("ledger".to_string(), sns_canisters.ledger.canister_id().get()),
-                    ("root".to_string(), sns_canisters.root.canister_id().get())
-                }
+                summary.governance_canister_summary().canister_id(),
+                sns_canisters.governance.canister_id().get(),
+            );
+            assert_eq!(
+                summary.ledger_canister_summary().canister_id(),
+                sns_canisters.ledger.canister_id().get(),
+            );
+            assert_eq!(
+                summary.root_canister_summary().canister_id(),
+                sns_canisters.root.canister_id().get(),
             );
 
             Ok(())

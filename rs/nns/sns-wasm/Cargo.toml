@@ -23,6 +23,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-ic00-types = {path = "../../types/ic00_types"}
 ic-sns-init = { path = "../../sns/init" }
+ic-sns-root = { path = "../../sns/root" }
 ic-types = { path = "../../types/types"}
 maplit = "1.0.2"
 serde = { version = "1.0", features = ["derive"] }

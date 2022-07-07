@@ -450,6 +450,7 @@ async fn get_root_canister_status_(_: ()) -> CanisterStatusResultV2 {
             .expect("Root canister ID not set"),
     )
     .await
+    .expect("Unable to get the status of the SNS root canister.")
 }
 
 /// Sets the mode. Only the swap canister is allowed to call this.

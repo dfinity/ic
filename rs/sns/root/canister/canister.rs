@@ -1,26 +1,51 @@
 use std::cell::RefCell;
 
+use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::{over, over_async, over_init};
 use ic_base_types::PrincipalId;
 
-#[cfg(test)]
-use ic_nervous_system_common::MethodAuthzChange;
-
-use ic_nervous_system_common::stable_mem_utils::{
-    BufferedStableMemReader, BufferedStableMemWriter,
+use ic_nervous_system_common::{
+    get_canister_status,
+    stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
 use ic_nervous_system_root::{ChangeCanisterProposal, LOG_PREFIX};
-use ic_sns_root::pb::v1::SnsRootCanister;
+use ic_sns_root::{
+    pb::v1::{RegisterDappCanisterRequest, RegisterDappCanisterResponse, SnsRootCanister},
+    CanisterCallError, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+    ManagementCanisterClient,
+};
 
 use prost::Message;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_ic00_types::CanisterStatusResultV2;
+use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2};
 
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
+
+/// An implementation of the ManagementCanisterClient trait that is suitable for
+/// production use.
+struct RealManagementCanisterClient {}
+
+impl RealManagementCanisterClient {
+    fn new() -> Self {
+        Self {}
+    }
+}
+
+#[async_trait]
+impl ManagementCanisterClient for RealManagementCanisterClient {
+    async fn canister_status(
+        &mut self,
+        canister_id_record: &CanisterIdRecord,
+    ) -> Result<CanisterStatusResultV2, CanisterCallError> {
+        get_canister_status(canister_id_record.get_canister_id().into())
+            .await
+            .map_err(CanisterCallError::from)
+    }
+}
 
 thread_local! {
     static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
@@ -89,6 +114,9 @@ fn canister_status() {
     over_async(candid, ic_nervous_system_root::canister_status)
 }
 
+/// Return the canister status of all SNS canisters that this root canister
+/// is part of, as well as of all registered dapp canisters (See
+/// SnsRootCanister::register_dapp_canister).
 #[export_name = "canister_update get_sns_canisters_summary"]
 fn get_sns_canisters_summary() {
     println!("{}get_sns_canisters_summary", LOG_PREFIX);
@@ -97,10 +125,14 @@ fn get_sns_canisters_summary() {
 
 #[candid_method(update, rename = "get_sns_canisters_summary")]
 async fn get_sns_canisters_summary_(
-    dapp_canisters: Vec<PrincipalId>,
-) -> Vec<(String, PrincipalId, CanisterStatusResultV2)> {
-    let root = STATE.with(|service| service.borrow().clone());
-    root.get_sns_canisters_summary(dapp_canisters).await
+    _request: GetSnsCanistersSummaryRequest,
+) -> GetSnsCanistersSummaryResponse {
+    SnsRootCanister::get_sns_canisters_summary(
+        &STATE,
+        &mut RealManagementCanisterClient::new(),
+        dfn_core::api::id(),
+    )
+    .await
 }
 
 #[export_name = "canister_update change_canister"]
@@ -122,10 +154,39 @@ fn change_canister() {
     //
     // To implement "acknowledge without actually completing the work", we use
     // spawn to do the real work in the background.
-    over(candid, |(proposal,): (ChangeCanisterProposal,)| {
+    over(candid_one, |proposal: ChangeCanisterProposal| {
         assert_change_canister_proposal_is_valid(&proposal);
         dfn_core::api::futures::spawn(ic_nervous_system_root::change_canister(proposal));
     });
+}
+
+/// Tells this canister (SNS root) about a dapp canister that it controls.
+///
+/// The canister must not be one of the distinguished SNS canisters
+/// (i.e. root, governance, ledger). Furthermore, the canister must be
+/// exclusively be controlled by this canister (i.e. SNS root). Otherwise,
+/// the request will be rejected.
+///
+/// Registered dapp canisters are used by at least two methods:
+///   1. get_sns_canisters_summary
+///   2. set_dapp_controllers (currently in review).
+#[export_name = "canister_update register_dapp_canister"]
+fn register_dapp_canister() {
+    println!("{}register_dapp_canister", LOG_PREFIX);
+    over_async(candid_one, register_dapp_canister_);
+}
+
+#[candid_method(update, rename = "register_dapp_canister")]
+async fn register_dapp_canister_(
+    request: RegisterDappCanisterRequest,
+) -> RegisterDappCanisterResponse {
+    SnsRootCanister::register_dapp_canister(
+        &STATE,
+        &mut RealManagementCanisterClient::new(),
+        dfn_core::api::id(),
+        request,
+    )
+    .await
 }
 
 fn assert_state_is_valid(state: &SnsRootCanister) {
@@ -152,24 +213,30 @@ fn assert_eq_governance_canister_id(id: PrincipalId) {
     });
 }
 
-#[test]
-#[should_panic]
-fn no_authz() {
-    let canister_id = dfn_core::api::CanisterId::from(1);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_nervous_system_common::MethodAuthzChange;
 
-    let mut proposal = ChangeCanisterProposal::new(
-        false, // stop before_installing
-        ic_ic00_types::CanisterInstallMode::Upgrade,
-        canister_id,
-    );
+    #[test]
+    #[should_panic]
+    fn no_authz() {
+        let canister_id = dfn_core::api::CanisterId::from(1);
 
-    proposal.authz_changes.push(MethodAuthzChange {
-        canister: canister_id,
-        method_name: "foo".to_string(),
-        principal: None,
-        operation: ic_nervous_system_common::AuthzChangeOp::Deauthorize,
-    });
+        let mut proposal = ChangeCanisterProposal::new(
+            false, // stop before_installing
+            ic_ic00_types::CanisterInstallMode::Upgrade,
+            canister_id,
+        );
 
-    // This should panic.
-    assert_change_canister_proposal_is_valid(&proposal);
+        proposal.authz_changes.push(MethodAuthzChange {
+            canister: canister_id,
+            method_name: "foo".to_string(),
+            principal: None,
+            operation: ic_nervous_system_common::AuthzChangeOp::Deauthorize,
+        });
+
+        // This should panic.
+        assert_change_canister_proposal_is_valid(&proposal);
+    }
 }
