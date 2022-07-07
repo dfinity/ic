@@ -58,6 +58,14 @@ const TEST_DATA = {
     body: 'hello world!',
     certificate_time: 1651142233000,
   },
+  queryDataDscvr: {
+    root_key:
+      '308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c0503020103610092b9abda44e940299a30e0f4ebdcefbbdc7bc618fe7dec5d882e9c77395cf233763fb6ca4eb592fa93e222da1fa44850164f76397a16fc9145b8b7aa6cec7de344497b73ccc7bfacee0e914279322053d81e2787c369260e5f118859025ffc37',
+    certificate:
+      'certificate=:2dn3omR0cmVlgwGDAkhjYW5pc3RlcoMCSgAAAAAAMAAZAQGDAk5jZXJ0aWZpZWRfZGF0YYIDWCCTYiq9Z2R97ckZGkWaapIku/HPaP1nllHaYnSbPIr8JoMCRHRpbWWCA0mnm/H8zaOC9RZpc2lnbmF0dXJlWDC2U1VIQ21bIeuTxfpA1OS7+26db71jE71wsAxRQ9MlO1OgQ/I0Gy5lxcHI2UH3IZo=:, tree=:2dn3gwJLaHR0cF9hc3NldHODAksvaW5kZXguaHRtbIIDWCB1CeW9oMdi0rrH+Q11i1siY/oBzLxUKrXj3xY74I5sqQ==:',
+    body: 'hello world!',
+    certificate_time: 1651142233000,
+  },
 };
 const HeaderFieldType = IDL.Tuple(IDL.Text, IDL.Text);
 const HttpRequestType = IDL.Record({
@@ -158,6 +166,46 @@ it('should accept valid certification without callbacks', async () => {
   expect(queryCall.method_name).toEqual('http_request');
   expect(req.url).toEqual('/');
   expect(req.method).toEqual('GET');
+});
+
+it('should use hostnameCanisterIdMap to resolve canister id', async () => {
+  jest.setSystemTime(TEST_DATA.queryData.certificate_time);
+  const queryHttpPayload = createHttpQueryResponsePayload(
+    TEST_DATA.queryData.body,
+    getResponseTypes(IDL.Text)[0],
+    TEST_DATA.queryData.certificate
+  );
+  mockFetchResponses(TEST_DATA.queryData.root_key, { query: queryHttpPayload });
+
+  const response = await handleRequest(
+    new Request(`https://identity.ic0.app/`)
+  );
+
+  expect(response.status).toEqual(200);
+  expect(fetch.mock.calls).toHaveLength(2);
+  expect(fetch.mock.calls[1][0]).toEqual(
+    `https://ic0.app/api/v2/canister/${CANISTER_ID}/query`
+  );
+});
+
+it('should send canister calls to https://ic0.app for any mapped domain in hostnameCanisterIdMap', async () => {
+  jest.setSystemTime(TEST_DATA.queryDataDscvr.certificate_time);
+  const queryHttpPayload = createHttpQueryResponsePayload(
+    TEST_DATA.queryDataDscvr.body,
+    getResponseTypes(IDL.Text)[0],
+    TEST_DATA.queryDataDscvr.certificate
+  );
+  mockFetchResponses(TEST_DATA.queryDataDscvr.root_key, {
+    query: queryHttpPayload,
+  });
+
+  const response = await handleRequest(new Request(`https://dscvr.one`));
+
+  expect(response.status).toEqual(200);
+  expect(fetch.mock.calls).toHaveLength(2);
+  expect(fetch.mock.calls[1][0]).toEqual(
+    'https://ic0.app/api/v2/canister/h5aet-waaaa-aaaab-qaamq-cai/query'
+  );
 });
 
 it('should accept valid certification for index.html fallback', async () => {
