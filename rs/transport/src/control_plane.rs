@@ -39,12 +39,15 @@ const TLS_HANDSHAKE_TIMEOUT_SECONDS: u64 = 30;
 /// Implementation for the transport control plane
 impl TransportImpl {
     /// Stops connection to a peer
-    pub(crate) fn stop_peer_connections(&self, peer_id: &NodeId) -> Result<(), TransportErrorCode> {
+    pub(crate) fn stop_peer_connections(&self, peer_id: &NodeId) {
         self.allowed_clients.write().unwrap().remove(peer_id);
         let mut peer_map = self.peer_map.write().unwrap();
-        let peer_state = peer_map
-            .get(peer_id)
-            .ok_or(TransportErrorCode::PeerNotFound)?;
+        let peer_state = match peer_map.get(peer_id) {
+            Some(peer_state) => peer_state,
+            None => {
+                return;
+            }
+        };
         // Remove flow from metrics.
         for flow_state in peer_state.flow_map.values() {
             if self
@@ -65,7 +68,6 @@ impl TransportImpl {
             self.log,
             "ControlPlane::stop_peer_connections(): peer_id = {:?}", peer_id
         );
-        Ok(())
     }
 
     /// Starts connection(s) to a peer and initializes the corresponding data
