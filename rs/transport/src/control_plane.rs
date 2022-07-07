@@ -16,7 +16,7 @@ use crate::utils::{get_flow_ips, get_flow_label, SendQueueImpl};
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
 use ic_interfaces_transport::{FlowId, FlowTag, TransportErrorCode, TransportEventHandler};
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{error, info, warn};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use std::{
     collections::HashMap,
@@ -230,16 +230,25 @@ impl TransportImpl {
                             .with_label_values(&[&flow_tag.to_string()])
                             .inc();
                         tokio_runtime.spawn(async move {
-                            // Errors are reported in set_sockopts
-                            let stream = match Self::set_send_sockopts(stream, &arc_self.log) {
-                                Ok(stream) => stream,
-                                Err(_) => return,
-                            };
+                            if let Err(err) = stream.set_nodelay(true) {
+                                warn!(
+                                    arc_self.log,
+                                    "ControlPlane::spawn_accept_task(): set_nodelay() failed: \
+                                     local_addr = {:?}, peer_addr = {:?}, error = {:?}",
+                                    stream
+                                        .local_addr()
+                                        .map_err(|e| format!("Unknown IP: {:?}", e)),
+                                    stream
+                                        .peer_addr()
+                                        .map_err(|e| format!("Unknown IP: {:?}", e)),
+                                    err,
+                                );
+                                return;
+                            }
                             let (local_addr, peer_addr, peer_id, tls_stream) = match arc_self.tls_server_handshake(flow_tag, stream).await {
                                 Ok((local_addr, peer_addr, peer_id, tls_stream)) => (local_addr, peer_addr, peer_id, tls_stream),
                                 Err(_) => return,
                             };
-                            // Errors are reported in tls_server_handshake
                             if let Ok(()) = arc_self.on_connect(
                                 peer_id,
                                 ConnectionRole::Server,
@@ -258,9 +267,9 @@ impl TransportImpl {
                         },
                     Err(err) => {
                         metrics
-                        .tcp_accept_conn_err
-                        .with_label_values(&[&flow_tag.to_string()])
-                        .inc();
+                            .tcp_accept_conn_err
+                            .with_label_values(&[&flow_tag.to_string()])
+                            .inc();
                         warn!(
                             arc_self.log,
                             "ControlPlane::accept(): local_addr = {:?}, flow_tag = {:?}, error = {:?}",
@@ -308,7 +317,7 @@ impl TransportImpl {
                     .tcp_connects
                     .with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()])
                     .inc();
-                match Self::connect_to_server(&local_addr, &peer_addr, &arc_self.log).await {
+                match Self::connect_to_server(&local_addr, &peer_addr).await {
                     Ok(stream) => {
                         match arc_self
                             .tls_client_handshake(peer_id, flow_tag, stream)
@@ -466,55 +475,16 @@ impl TransportImpl {
     async fn connect_to_server(
         local_addr: &SocketAddr,
         peer_addr: &SocketAddr,
-        log: &ReplicaLogger,
-    ) -> Result<TcpStream, TransportErrorCode> {
-        let client_socket = Self::init_client_socket(local_addr).map_err(|err| {
-            warn!(
-                every_n_seconds => 30,
-                log,
-                "ControlPlane::connect(): Failed to init client socket: local_addr = {:?}, error = {:?}",
-                local_addr,
-                err
-            );
-            TransportErrorCode::InitClientSocketFailed
-        })?;
-        match client_socket.connect(*peer_addr).await {
-            Ok(stream) => Self::set_send_sockopts(stream, log),
-            Err(err) => {
-                warn!(
-                    log,
-                    "ControlPlane::connect_to_server(): local_addr = {:?}, peer_addr = {:?}, error = {:?}",
-                    local_addr,
-                    peer_addr,
-                    err,
-                );
-                Err(TransportErrorCode::ConnectToServerError)
-            }
-        }
-    }
-
-    /// Set socket options on a socket
-    fn set_send_sockopts(
-        stream: TcpStream,
-        log: &ReplicaLogger,
-    ) -> Result<TcpStream, TransportErrorCode> {
-        if let Err(e) = stream.set_nodelay(true) {
-            warn!(
-                log,
-                "ControlPlane::set_send_sockopts(): set_nodelay() failed: \
-                 local_addr = {:?}, peer_addr = {:?}, error = {:?}",
-                stream
-                    .local_addr()
-                    .map_err(|e| format!("Unknown IP: {:?}", e)),
-                stream
-                    .peer_addr()
-                    .map_err(|e| format!("Unknown IP: {:?}", e)),
-                e,
-            );
-            Err(TransportErrorCode::SocketNoDelayFailed)
+    ) -> std::io::Result<TcpStream> {
+        let socket = if local_addr.is_ipv6() {
+            TcpSocket::new_v6()?
         } else {
-            Ok(stream)
-        }
+            TcpSocket::new_v4()?
+        };
+        socket.bind(*local_addr)?;
+        let stream = socket.connect(*peer_addr).await?;
+        stream.set_nodelay(true)?;
+        Ok(stream)
     }
 
     /// Performs the server side TLS hand shake processing
@@ -695,17 +665,6 @@ impl TransportImpl {
         socket.set_reuseport(true)?;
         socket.bind(*local_addr)?;
         socket.listen(128)
-    }
-
-    /// Sets up the client side socket with the node IP address
-    fn init_client_socket(local_addr: &SocketAddr) -> std::io::Result<TcpSocket> {
-        let socket = if local_addr.is_ipv6() {
-            TcpSocket::new_v6()?
-        } else {
-            TcpSocket::new_v4()?
-        };
-        socket.bind(*local_addr)?;
-        Ok(socket)
     }
 
     /// Returns our role wrt the peer connection
