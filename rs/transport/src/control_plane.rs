@@ -14,7 +14,7 @@ use crate::types::{
 };
 use crate::utils::{get_flow_ips, get_flow_label, SendQueueImpl};
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer};
+use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
 use ic_interfaces_transport::{FlowId, FlowTag, TransportErrorCode, TransportEventHandler};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
@@ -38,30 +38,6 @@ const TLS_HANDSHAKE_TIMEOUT_SECONDS: u64 = 30;
 
 /// Implementation for the transport control plane
 impl TransportImpl {
-    /// Starts connection to a peer
-    pub(crate) fn start_peer_connections(
-        &self,
-        peer_id: &NodeId,
-        peer_record: &NodeRecord,
-        registry_version: RegistryVersion,
-    ) -> Result<(), TransportErrorCode> {
-        let mut peer_map = self.peer_map.write().unwrap();
-        let role = Self::connection_role(&self.node_id, peer_id);
-        // If we are the server, we should add the peer to the allowed_clients.
-        if role == ConnectionRole::Server {
-            self.allowed_clients.write().unwrap().insert(*peer_id);
-        }
-        *self.registry_version.write().unwrap() = registry_version;
-        info!(
-            self.log,
-            "ControlPlane::start_peer_connections(): node_id = {:?}, peer_id = {:?}, registry_version = {}",
-            self.node_id,
-            peer_id,
-            registry_version
-        );
-        self.start_peer(peer_id, peer_record, &mut peer_map, role)
-    }
-
     /// Stops connection to a peer
     pub(crate) fn stop_peer_connections(&self, peer_id: &NodeId) -> Result<(), TransportErrorCode> {
         self.allowed_clients.write().unwrap().remove(peer_id);
@@ -69,7 +45,6 @@ impl TransportImpl {
         let peer_state = peer_map
             .get(peer_id)
             .ok_or(TransportErrorCode::PeerNotFound)?;
-
         // Remove flow from metrics.
         for flow_state in peer_state.flow_map.values() {
             if self
@@ -86,7 +61,6 @@ impl TransportImpl {
             }
         }
         peer_map.remove(peer_id);
-
         info!(
             self.log,
             "ControlPlane::stop_peer_connections(): peer_id = {:?}", peer_id
@@ -94,19 +68,31 @@ impl TransportImpl {
         Ok(())
     }
 
-    /// Starts all connections to a peer and initializes the corresponding data
+    /// Starts connection(s) to a peer and initializes the corresponding data
     /// structures and tasks
-    fn start_peer(
+    pub(crate) fn start_peer_connections(
         &self,
         peer_id: &NodeId,
         peer_record: &NodeRecord,
-        peer_map: &mut HashMap<NodeId, PeerState>,
-        role: ConnectionRole,
+        registry_version: RegistryVersion,
     ) -> Result<(), TransportErrorCode> {
+        info!(
+            self.log,
+            "ControlPlane::start_peer_connections(): node_id = {:?}, peer_id = {:?}, registry_version = {}",
+            self.node_id,
+            peer_id,
+            registry_version
+        );
+        let role = Self::connection_role(&self.node_id, peer_id);
+        // If we are the server, we should add the peer to the allowed_clients.
+        if role == ConnectionRole::Server {
+            self.allowed_clients.write().unwrap().insert(*peer_id);
+        }
+        *self.registry_version.write().unwrap() = registry_version;
+        let mut peer_map = self.peer_map.write().unwrap();
         if peer_map.get(peer_id).is_some() {
             return Err(TransportErrorCode::PeerAlreadyRegistered);
         }
-
         let mut peer_state = PeerState {
             flow_map: HashMap::new(),
         };
@@ -249,26 +235,38 @@ impl TransportImpl {
                                 Ok(stream) => stream,
                                 Err(_) => return,
                             };
+                            let (local_addr, peer_addr, peer_id, tls_stream) = match arc_self.tls_server_handshake(flow_tag, stream).await {
+                                Ok((local_addr, peer_addr, peer_id, tls_stream)) => (local_addr, peer_addr, peer_id, tls_stream),
+                                Err(_) => return,
+                            };
                             // Errors are reported in tls_server_handshake
-                            if let Ok(()) = arc_self.tls_server_handshake(flow_tag, stream).await {
-                                metrics
+                            if let Ok(()) = arc_self.on_connect(
+                                peer_id,
+                                ConnectionRole::Server,
+                                flow_tag,
+                                local_addr,
+                                peer_addr,
+                                tls_stream,
+                            )
+                            .await {
+                                 metrics
                                     .tcp_accept_conn_success
                                     .with_label_values(&[&flow_tag.to_string()])
-                                    .inc();
-                            }
-                        });
-                    }
-                    Err(e) => {
+                                        .inc()
+                                }
+                            });
+                        },
+                    Err(err) => {
                         metrics
-                            .tcp_accept_conn_err
-                            .with_label_values(&[&flow_tag.to_string()])
-                            .inc();
+                        .tcp_accept_conn_err
+                        .with_label_values(&[&flow_tag.to_string()])
+                        .inc();
                         warn!(
                             arc_self.log,
                             "ControlPlane::accept(): local_addr = {:?}, flow_tag = {:?}, error = {:?}",
                             local_addr,
                             flow_tag,
-                            e,
+                            err,
                         );
                     }
                 }
@@ -524,41 +522,12 @@ impl TransportImpl {
         &self,
         flow_tag: FlowTag,
         stream: TcpStream,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Result<(SocketAddr, SocketAddr, NodeId, TlsStream), TransportErrorCode> {
+        let registry_version = *self.registry_version.read().unwrap();
         let local_addr = Self::sock_addr(stream.local_addr())?;
         let peer_addr = Self::sock_addr(stream.peer_addr())?;
-        let allowed_clients = {
-            let allowed_clients = self.allowed_clients.read().unwrap().clone();
-            match AllowedClients::new_with_nodes(allowed_clients) {
-                Err(e) => {
-                    self.control_plane_metrics
-                        .tcp_server_handshake_failed
-                        .with_label_values(&[&flow_tag.to_string()])
-                        .inc();
-                    warn!(
-                        every_n_seconds => 30,
-                        self.log,
-                        "ControlPlane::tls_server_handshake() no allowed clients: failed node = {:?}/{:?}, \
-                         flow_tag = {:?}, peer_addr = {:?}, error = {:?}",
-                        self.node_id,
-                        local_addr,
-                        flow_tag,
-                        peer_addr,
-                        e
-                    );
-                    return Err(TransportErrorCode::PeerTlsInfoNotFound);
-                }
-                Ok(allowed_clients) => allowed_clients,
-            }
-        };
-        let registry_version = *self.registry_version.read().unwrap();
-        let ret = tokio::time::timeout(
-            Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
-            self.crypto
-                .perform_tls_server_handshake(stream, allowed_clients, registry_version),
-        )
-        .await;
-        if ret.is_err() {
+        let current_allowed_clients = self.allowed_clients.read().unwrap().clone();
+        let allowed_clients = AllowedClients::new_with_nodes(current_allowed_clients).map_err(|e| {
             self.control_plane_metrics
                 .tcp_server_handshake_failed
                 .with_label_values(&[&flow_tag.to_string()])
@@ -566,25 +535,7 @@ impl TransportImpl {
             warn!(
                 every_n_seconds => 30,
                 self.log,
-                "ControlPlane::tls_server_handshake() timed out: \
-                 node = {:?}/{:?}, flow_tag = {:?}, peer_addr = {:?}",
-                self.node_id,
-                local_addr,
-                flow_tag,
-                peer_addr
-            );
-            return Err(TransportErrorCode::TimeoutExpired);
-        }
-
-        let (tls_stream, authenticated_peer) = ret.unwrap().map_err(|e| {
-            self.control_plane_metrics
-                .tcp_server_handshake_failed
-                .with_label_values(&[&flow_tag.to_string()])
-                .inc();
-            warn!(
-                every_n_seconds => 30,
-                self.log,
-                "ControlPlane::tls_server_handshake() failed: node = {:?}/{:?}, \
+                "ControlPlane::tls_server_handshake() no allowed clients: failed node = {:?}/{:?}, \
                  flow_tag = {:?}, peer_addr = {:?}, error = {:?}",
                 self.node_id,
                 local_addr,
@@ -594,6 +545,50 @@ impl TransportImpl {
             );
             TransportErrorCode::PeerTlsInfoNotFound
         })?;
+        let (tls_stream, authenticated_peer) = match tokio::time::timeout(
+            Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
+            self.crypto
+                .perform_tls_server_handshake(stream, allowed_clients, registry_version),
+        )
+        .await
+        {
+            Err(_) => {
+                self.control_plane_metrics
+                    .tcp_server_handshake_failed
+                    .with_label_values(&[&flow_tag.to_string()])
+                    .inc();
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "ControlPlane::tls_server_handshake() timed out: \
+                     node = {:?}/{:?}, flow_tag = {:?}, peer_addr = {:?}",
+                    self.node_id,
+                    local_addr,
+                    flow_tag,
+                    peer_addr
+                );
+                return Err(TransportErrorCode::TimeoutExpired);
+            }
+            Ok(Ok((tls_stream, authenticated_peer))) => (tls_stream, authenticated_peer),
+            Ok(Err(err)) => {
+                self.control_plane_metrics
+                    .tcp_server_handshake_failed
+                    .with_label_values(&[&flow_tag.to_string()])
+                    .inc();
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "ControlPlane::tls_server_handshake() failed: node = {:?}/{:?}, \
+                     flow_tag = {:?}, peer_addr = {:?}, error = {:?}",
+                    self.node_id,
+                    local_addr,
+                    flow_tag,
+                    peer_addr,
+                    err
+                );
+                return Err(TransportErrorCode::PeerTlsInfoNotFound);
+            }
+        };
         let peer_id = match authenticated_peer {
             AuthenticatedPeer::Node(node_id) => node_id,
             AuthenticatedPeer::Cert(_) => {
@@ -610,23 +605,11 @@ impl TransportImpl {
                 return Err(TransportErrorCode::PeerTlsInfoNotFound);
             }
         };
-
-        // Pass the established connection to the data plane to start IOs.
-        self.on_connect(
-            peer_id,
-            ConnectionRole::Server,
-            flow_tag,
-            local_addr,
-            peer_addr,
-            tls_stream,
-        )
-        .await
-        .map(|_| {
-            self.control_plane_metrics
-                .tcp_server_handshake_success
-                .with_label_values(&[&flow_tag.to_string()])
-                .inc()
-        })
+        self.control_plane_metrics
+            .tcp_server_handshake_success
+            .with_label_values(&[&flow_tag.to_string()])
+            .inc();
+        Ok((local_addr, peer_addr, peer_id, tls_stream))
     }
 
     /// Performs the client side TLS hand shake processing
@@ -640,47 +623,48 @@ impl TransportImpl {
         let local_addr = Self::sock_addr(stream.local_addr())?;
         let peer_addr = Self::sock_addr(stream.peer_addr())?;
 
-        let ret = tokio::time::timeout(
+        let tls_stream = match tokio::time::timeout(
             Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
             self.crypto
                 .perform_tls_client_handshake(stream, peer_id, registry_version),
         )
-        .await;
-        if ret.is_err() {
-            warn!(
-                every_n_seconds => 30,
-                self.log,
-                "ControlPlane::tls_client_handshake(): timed out \
-                 node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}",
-                self.node_id,
-                local_addr,
-                flow_tag,
-                peer_id,
-                peer_addr
-            );
-            return Err(TransportErrorCode::TimeoutExpired);
-        }
-
-        let tls_stream = ret.unwrap().map_err(|e| {
-            self.control_plane_metrics
-                .tcp_client_handshake_failed
-                .with_label_values(&[&flow_tag.to_string()])
-                .inc();
-            warn!(
-                every_n_seconds => 30,
-                self.log,
-                "ControlPlane::tls_client_handshake(): failed \
-                 node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, error = {:?}",
-                self.node_id,
-                local_addr,
-                flow_tag,
-                peer_id,
-                peer_addr,
-                e
-            );
-            TransportErrorCode::PeerTlsInfoNotFound
-        })?;
-
+        .await
+        {
+            Err(_) => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "ControlPlane::tls_client_handshake(): timed out \
+                     node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}",
+                    self.node_id,
+                    local_addr,
+                    flow_tag,
+                    peer_id,
+                    peer_addr
+                );
+                return Err(TransportErrorCode::TimeoutExpired);
+            }
+            Ok(Ok(tls_stream)) => tls_stream,
+            Ok(Err(err)) => {
+                self.control_plane_metrics
+                    .tcp_client_handshake_failed
+                    .with_label_values(&[&flow_tag.to_string()])
+                    .inc();
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "ControlPlane::tls_client_handshake(): failed \
+                     node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, error = {:?}",
+                    self.node_id,
+                    local_addr,
+                    flow_tag,
+                    peer_id,
+                    peer_addr,
+                    err
+                );
+                return Err(TransportErrorCode::PeerTlsInfoNotFound);
+            }
+        };
         // Pass the established connection to the data plane to start IOs.
         self.on_connect(
             peer_id,
