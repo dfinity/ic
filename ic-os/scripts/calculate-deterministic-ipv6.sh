@@ -86,7 +86,7 @@ function calculate_deterministic_ipv6() {
     local output=$(printf "%02x%s" "$((0x${output:0:2} ^ 2))" "${output:2}")
     local output=$(echo "${output}" | sed 's/.\{4\}/&:/g;s/:$//')
     IPV6_RAW=$(echo "${ipv6_prefix}:${output}")
-    IPV6_COMPRESSED=$(echo ${IPV6_RAW} | python -c 'import ipaddress, sys;  print(ipaddress.ip_address(sys.stdin.read().strip()))')
+    IPV6_COMPRESSED=$(echo ${IPV6_RAW} | python3 -c 'import ipaddress, sys;  print(ipaddress.ip_address(sys.stdin.read().strip()))')
     DETERMINISTIC_IPV6=$(echo ${IPV6_COMPRESSED}${ipv6_subnet})
 }
 

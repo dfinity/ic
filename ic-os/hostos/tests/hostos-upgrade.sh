@@ -34,10 +34,10 @@ ls -lah /dev/kvm /dev/net/tun
 mkdir -p gitlab-runner-tmp
 cd gitlab-runner-tmp
 
-ls "${ci_project_dir}/ic-os/hostos/build-out/disk-img/host-disk-img.tar.gz"
-ls "${ci_project_dir}/ic-os/hostos/build-out/update-img/host-update-img.tar.gz"
-stat "${ci_project_dir}/ic-os/hostos/build-out/disk-img/host-disk-img.tar.gz"
-tar --sparse -xvf "${ci_project_dir}/ic-os/hostos/build-out/disk-img/host-disk-img.tar.gz"
+ls "${ci_project_dir}/ic-os/hostos/build-out/disk-img/disk-img.tar.gz"
+ls "${ci_project_dir}/ic-os/hostos/build-out/update-img/update-img.tar.gz"
+stat "${ci_project_dir}/ic-os/hostos/build-out/disk-img/disk-img.tar.gz"
+tar --sparse -xvf "${ci_project_dir}/ic-os/hostos/build-out/disk-img/disk-img.tar.gz"
 
 ls -lah
 
@@ -63,7 +63,7 @@ sudo ip link set dev ipv6_ic up
 sudo ip addr add fd00:2:1:1:1::1/64 dev ipv6_ic
 
 HOSTOS_IMG="$(pwd)/disk.img"
-UPGRADE_IMG="${ci_project_dir}/ic-os/hostos/build-out/update-img/host-update-img.tar.gz"
+UPGRADE_IMG="${ci_project_dir}/ic-os/hostos/build-out/update-img/update-img.tar.gz"
 echo "Initial HostOS image: ${HOSTOS_IMG}"
 echo "Upgrade HostOS image: ${UPGRADE_IMG}"
 

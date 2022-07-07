@@ -23,7 +23,7 @@ if [ -z "$CI_JOB_ID" ]; then
     ./build.sh -v "$VERSION" "$BUILD_EXTRA_ARGS"
     tar xzf disk-img.tar.gz -C "$BUILD_TMP"
     tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
-        -cvzf "${BUILD_OUT}/host-disk-img.tar.gz" -C "$BUILD_TMP" disk.img version.txt
+        -cvzf "${BUILD_OUT}/disk-img.tar.gz" -C "$BUILD_TMP" disk.img version.txt
     ls -lah "$BUILD_TMP"
 else
     buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-img -- \
@@ -32,7 +32,7 @@ else
         tar xzf disk-img.tar.gz -C "$BUILD_TMP"
     buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" tar-build-out -- \
         tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
-        -cvzf "${BUILD_OUT}/host-disk-img.tar.gz" -C "$BUILD_TMP" disk.img version.txt
+        -cvzf "${BUILD_OUT}/disk-img.tar.gz" -C "$BUILD_TMP" disk.img version.txt
     ls -lah "$BUILD_TMP"
 
     "$ROOT_DIR"/gitlab-ci/src/artifacts/openssl-sign.sh "$BUILD_OUT"

@@ -61,7 +61,6 @@ function read_variables() {
             "ipv6_subnet") ipv6_subnet="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
             "ipv6_address") ipv6_address="${value}" ;;
-            "hostname") hostname="${value}" ;;
         esac
     done <"${CONFIG}"
 }

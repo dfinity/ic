@@ -8,7 +8,7 @@ PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
 function start_setupos() {
     # Wait until login prompt appears
-    sleep 10
+    sleep 5
     clear
     echo "* Starting SetupOS..."
     echo " "

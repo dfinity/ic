@@ -21,7 +21,7 @@ mkdir -p "$BUILD_OUT" "$BUILD_TMP"
 echo "$VERSION" >"${BUILD_TMP}/version.txt"
 
 if [ -z "$CI_JOB_ID" ]; then
-    ./scripts/build-disk-image.sh "-o=${BUILD_TMP}/disk.img" "-v=$VERSION" "--host-os=./hostos/disk-img/host-disk-img.tar.gz" "--guest-os=./guestos/disk-img/disk-img.tar.gz"
+    ./scripts/build-disk-image.sh -o "${BUILD_TMP}/disk.img" -v "$VERSION" -f "./hostos/disk-img/disk-img.tar.gz" -g "./guestos/disk-img/disk-img.tar.gz"
     tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
         -cvzf "${BUILD_OUT}/disk-img.tar.gz" -C "$BUILD_TMP" disk.img version.txt
     tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
@@ -30,7 +30,7 @@ if [ -z "$CI_JOB_ID" ]; then
     ls -lah "$BUILD_TMP"
 else
     buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-img -- \
-        ./scripts/build-disk-image.sh "-o=${BUILD_TMP}/disk.img" "-v=$VERSION" "--host-os=./hostos/disk-img/host-disk-img.tar.gz" "--guest-os=./guestos/disk-img/disk-img.tar.gz"
+        ./scripts/build-disk-image.sh -o "${BUILD_TMP}/disk.img" -v "$VERSION" -f "./hostos/disk-img/disk-img.tar.gz" -g "./guestos/disk-img/disk-img.tar.gz"
     buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" tar-build-out -- \
         tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
         -cvzf "${BUILD_OUT}/disk-img.tar.gz" -C "$BUILD_TMP" disk.img version.txt

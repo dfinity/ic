@@ -4,7 +4,6 @@ Before=systemd-networkd.target
 DefaultDependencies=no
 Before=systemd-networkd.service
 After=systemd-tmpfiles-setup.service
-After=store-hsm.service
 
 [Service]
 Type=oneshot
