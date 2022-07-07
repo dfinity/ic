@@ -738,7 +738,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     )]),
                 ),
                 pot_with_setup(
-                    "canister_http",
+                    "canister_http_time_out",
                     canister_http::lib::config,
                     seq(vec![
                         sys_t("http_time_out", canister_http::http_time_out::test),
