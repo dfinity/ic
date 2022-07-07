@@ -1,8 +1,8 @@
 use ic_base_types::NumSeconds;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
-    AvailableMemory, CanisterOutOfCyclesError, ExecutionParameters, HypervisorError,
-    HypervisorResult, PerformanceCounterType, SubnetAvailableMemory, SystemApi, TrapCode,
+    AvailableMemory, CanisterOutOfCyclesError, HypervisorError, HypervisorResult,
+    PerformanceCounterType, SubnetAvailableMemory, SystemApi, TrapCode,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
@@ -1488,10 +1488,8 @@ fn stable_grow_updates_subnet_available_memory() {
         ApiTypeBuilder::build_update_api(),
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
-        ExecutionParameters {
-            subnet_available_memory: subnet_available_memory.clone(),
-            ..execution_parameters()
-        },
+        execution_parameters(),
+        subnet_available_memory.clone(),
         Memory::default(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
@@ -1519,10 +1517,8 @@ fn stable_grow_returns_allocated_memory_on_error() {
         ApiTypeBuilder::build_update_api(),
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
-        ExecutionParameters {
-            subnet_available_memory: subnet_available_memory.clone(),
-            ..execution_parameters()
-        },
+        execution_parameters(),
+        subnet_available_memory.clone(),
         Memory::new(PageMap::default(), NumWasmPages::new(1 << 32)),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
@@ -1561,10 +1557,8 @@ fn update_available_memory_updates_subnet_available_memory() {
         ApiTypeBuilder::build_update_api(),
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
-        ExecutionParameters {
-            subnet_available_memory: subnet_available_memory.clone(),
-            ..execution_parameters()
-        },
+        execution_parameters(),
+        subnet_available_memory.clone(),
         Memory::default(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
@@ -1605,10 +1599,8 @@ fn take_execution_result_properly_frees_memory() {
         ApiTypeBuilder::build_update_api(),
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
-        ExecutionParameters {
-            subnet_available_memory,
-            ..execution_parameters()
-        },
+        execution_parameters(),
+        subnet_available_memory,
         Memory::default(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
@@ -1662,10 +1654,8 @@ fn push_output_request_respects_memory_limits() {
             ApiTypeBuilder::build_update_api(),
             sandbox_safe_system_state,
             CANISTER_CURRENT_MEMORY_USAGE,
-            ExecutionParameters {
-                subnet_available_memory: subnet_available_memory.clone(),
-                ..execution_parameters()
-            },
+            execution_parameters(),
+            subnet_available_memory.clone(),
             Memory::default(),
             Arc::new(DefaultOutOfInstructionsHandler {}),
             no_op_logger(),
@@ -1761,10 +1751,8 @@ fn push_output_request_oversized_request_memory_limits() {
         ApiTypeBuilder::build_update_api(),
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
-        ExecutionParameters {
-            subnet_available_memory: subnet_available_memory.clone(),
-            ..execution_parameters()
-        },
+        execution_parameters(),
+        subnet_available_memory.clone(),
         Memory::default(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),

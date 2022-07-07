@@ -898,16 +898,13 @@ impl ExecutionEnvironment {
         NumInstructions,
         Result<NumBytes, CanisterHeartbeatError>,
     ) {
-        let execution_parameters = self.execution_parameters(
-            &canister,
-            instructions_limit,
-            subnet_available_memory,
-            ExecutionMode::Replicated,
-        );
+        let execution_parameters =
+            self.execution_parameters(&canister, instructions_limit, ExecutionMode::Replicated);
         let (canister, num_instructions_left, result) = execute_heartbeat(
             canister,
             network_topology,
             execution_parameters,
+            subnet_available_memory,
             self.own_subnet_type,
             time,
             &self.hypervisor,
@@ -954,14 +951,12 @@ impl ExecutionEnvironment {
         &self,
         canister: &CanisterState,
         instruction_limit: NumInstructions,
-        subnet_available_memory: SubnetAvailableMemory,
         execution_mode: ExecutionMode,
     ) -> ExecutionParameters {
         ExecutionParameters {
             total_instruction_limit: instruction_limit,
             slice_instruction_limit: instruction_limit,
             canister_memory_limit: canister.memory_limit(self.config.max_canister_memory_size),
-            subnet_available_memory,
             compute_allocation: canister.scheduler_state.compute_allocation,
             subnet_type: self.own_subnet_type,
             execution_mode,
@@ -1127,12 +1122,8 @@ impl ExecutionEnvironment {
         network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
     ) -> ExecuteMessageResult {
-        let execution_parameters = self.execution_parameters(
-            &canister,
-            instruction_limit,
-            subnet_available_memory,
-            ExecutionMode::Replicated,
-        );
+        let execution_parameters =
+            self.execution_parameters(&canister, instruction_limit, ExecutionMode::Replicated);
         execute_response(
             canister,
             response,
@@ -1140,6 +1131,7 @@ impl ExecutionEnvironment {
             self.own_subnet_type,
             network_topology,
             execution_parameters,
+            subnet_available_memory,
             &self.log,
             self.metrics.response_cycles_refund_error_counter(),
             &self.hypervisor,
@@ -1231,7 +1223,6 @@ impl ExecutionEnvironment {
             let execution_parameters = self.execution_parameters(
                 canister,
                 self.config.max_instructions_for_message_acceptance_calls,
-                subnet_available_memory,
                 execution_mode,
             );
             inspect_message::execute_inspect_message(
@@ -1240,6 +1231,7 @@ impl ExecutionEnvironment {
                 ingress,
                 self.own_subnet_type,
                 execution_parameters,
+                subnet_available_memory,
                 &self.hypervisor,
                 &state.metadata.network_topology,
                 &self.log,
@@ -1263,7 +1255,6 @@ impl ExecutionEnvironment {
         let execution_parameters = self.execution_parameters(
             &canister,
             max_instructions_per_message,
-            subnet_available_memory,
             ExecutionMode::NonReplicated,
         );
         let result = execute_non_replicated_query(
@@ -1276,6 +1267,7 @@ impl ExecutionEnvironment {
             None,
             state.time(),
             execution_parameters,
+            subnet_available_memory,
             &state.metadata.network_topology,
             &self.hypervisor,
         )
@@ -1609,7 +1601,6 @@ impl ExecutionEnvironment {
             total_instruction_limit: instructions_limit,
             slice_instruction_limit: instructions_limit,
             canister_memory_limit: self.config.max_canister_memory_size,
-            subnet_available_memory,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: state.metadata.own_subnet_type,
             execution_mode: ExecutionMode::Replicated,
@@ -1639,6 +1630,7 @@ impl ExecutionEnvironment {
                         memory_taken,
                         &network_topology,
                         execution_parameters,
+                        subnet_available_memory,
                     );
                     let (instructions_left, result, canister) = match dts_res.response {
                         InstallCodeResponse::Result((instructions_left, result)) => {

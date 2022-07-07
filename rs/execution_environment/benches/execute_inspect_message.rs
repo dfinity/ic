@@ -51,6 +51,7 @@ pub fn bench_execute_inspect_message(c: &mut Criterion) {
              canister_state,
              time,
              execution_parameters,
+             subnet_available_memory,
              network_topology,
              ..
          }| {
@@ -68,6 +69,7 @@ pub fn bench_execute_inspect_message(c: &mut Criterion) {
                 &ingress,
                 hypervisor.subnet_type(),
                 execution_parameters,
+                subnet_available_memory,
                 hypervisor,
                 &network_topology,
                 &no_op_logger(),

@@ -631,11 +631,13 @@ pub struct SystemApiImpl {
 }
 
 impl SystemApiImpl {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         api_type: ApiType,
         sandbox_safe_system_state: SandboxSafeSystemState,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
+        subnet_available_memory: SubnetAvailableMemory,
         stable_memory: Memory,
         out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
         log: ReplicaLogger,
@@ -645,7 +647,7 @@ impl SystemApiImpl {
             sandbox_safe_system_state.canister_id,
             execution_parameters.canister_memory_limit,
             canister_current_memory_usage,
-            execution_parameters.subnet_available_memory.clone(),
+            subnet_available_memory,
         );
         let stable_memory = StableMemory::new(stable_memory);
 

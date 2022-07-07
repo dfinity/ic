@@ -369,6 +369,7 @@ pub fn bench_execute_update(c: &mut Criterion) {
              time,
              network_topology,
              execution_parameters,
+             subnet_available_memory,
              ..
          }| {
             let res = ee_test.execution_environment().execute_canister_message(
@@ -377,7 +378,7 @@ pub fn bench_execute_update(c: &mut Criterion) {
                 ingress,
                 time,
                 network_topology,
-                execution_parameters.subnet_available_memory,
+                subnet_available_memory,
             );
             let instructions = res.num_instructions_left;
             match res.response {

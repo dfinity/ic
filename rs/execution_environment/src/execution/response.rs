@@ -14,7 +14,9 @@ use ic_types::{ComputeAllocation, NumBytes, NumInstructions, Time};
 
 use crate::execution::common;
 use crate::execution::common::action_to_response;
-use ic_interfaces::execution_environment::{ExecutionMode, ExecutionParameters, HypervisorError};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
+};
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
@@ -119,6 +121,7 @@ pub fn execute_response(
     own_subnet_type: SubnetType,
     network_topology: Arc<NetworkTopology>,
     execution_parameters: ExecutionParameters,
+    subnet_available_memory: SubnetAvailableMemory,
     log: &ReplicaLogger,
     error_counter: &IntCounter,
     hypervisor: &Hypervisor,
@@ -256,6 +259,7 @@ pub fn execute_response(
         canister.system_state.clone(),
         canister.memory_usage(own_subnet_type),
         execution_parameters.clone(),
+        subnet_available_memory.clone(),
         func_ref,
         canister.execution_state.take().unwrap(),
     );
@@ -274,7 +278,7 @@ pub fn execute_response(
     };
 
     let current = RoundContext {
-        subnet_available_memory: execution_parameters.subnet_available_memory,
+        subnet_available_memory,
         network_topology: &*network_topology,
         hypervisor,
         cycles_account_manager,
@@ -314,11 +318,11 @@ fn execute_response_cleanup(
             total_instruction_limit: instructions_left,
             slice_instruction_limit: instructions_left,
             canister_memory_limit: original.canister_memory_limit,
-            subnet_available_memory: current.subnet_available_memory.clone(),
             compute_allocation: original.compute_allocation,
             subnet_type: current.hypervisor.subnet_type(),
             execution_mode: ExecutionMode::Replicated,
         },
+        current.subnet_available_memory.clone(),
         func_ref,
         canister.execution_state.take().unwrap(),
     );
