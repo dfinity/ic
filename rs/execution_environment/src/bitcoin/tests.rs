@@ -29,98 +29,33 @@ lazy_static! {
         AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into();
 }
 
+fn calculate_send_transaction_payment(bytes: usize) -> Cycles {
+    SEND_TRANSACTION_FEE_BASE + SEND_TRANSACTION_FEE_PER_BYTE * bytes as u64
+}
+
+fn execute_method<S: ToString>(
+    features: &str,
+    state: BitcoinState, //  TODO:BitcoinState::from(state)
+    method_name: S,
+    method_payload: Vec<u8>,
+    cycles_given: Cycles,
+) -> Arc<Response> {
+    let mut test = ExecutionTestBuilder::new()
+        .with_caller(subnet_test_id(1), canister_test_id(10))
+        .with_subnet_features(features)
+        .build();
+    test.state_mut().put_bitcoin_state(state);
+    test.inject_call_to_ic00(method_name, method_payload, cycles_given);
+    test.execute_all();
+
+    test.get_xnet_response(0).to_owned()
+}
+
 fn get_reject_message(response: &Arc<Response>) -> String {
     match &response.response_payload {
         Payload::Data(_) => panic!("Expected Reject"),
         Payload::Reject(reject) => reject.message.clone(),
     }
-}
-
-#[test]
-fn get_balance_feature_not_enabled() {
-    // Bitcoin testnet feature is disabled by default.
-    let cycles_given = Cycles::new(100_000_000);
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .build();
-    test.inject_call_to_ic00(
-        Method::BitcoinGetBalance,
-        BitcoinGetBalanceArgs {
-            address: String::from("not an address"),
-            network: BitcoinNetwork::Testnet,
-            min_confirmations: None,
-        }
-        .encode(),
-        cycles_given,
-    );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        get_reject_message(response),
-        "The bitcoin API is not enabled on this subnet.".to_string()
-    );
-    // Refund all given cycles, since the feature was not enabled.
-    assert_eq!(response.refund, cycles_given);
-}
-
-#[test]
-fn get_balance_not_enough_cycles() {
-    // Not enough cycles given.
-    let cycles_given = Cycles::new(100_000_000 - 1);
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features("bitcoin_testnet")
-        .build();
-    test.inject_call_to_ic00(
-        Method::BitcoinGetBalance,
-        BitcoinGetBalanceArgs {
-            address: String::from("not an address"),
-            network: BitcoinNetwork::Testnet,
-            min_confirmations: None,
-        }
-        .encode(),
-        cycles_given,
-    );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        get_reject_message(response),
-        "Received 99999999 cycles. 100000000 cycles are required.".to_string()
-    );
-    // Refund all given cycles, since it was not enough to execute the request.
-    assert_eq!(response.refund, cycles_given);
-}
-
-#[test]
-fn get_balance_rejects_malformed_address() {
-    let malformed_address = String::from("not an address");
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features("bitcoin_testnet")
-        .build();
-    test.inject_call_to_ic00(
-        Method::BitcoinGetBalance,
-        BitcoinGetBalanceArgs {
-            address: malformed_address,
-            network: BitcoinNetwork::Testnet,
-            min_confirmations: None,
-        }
-        .encode(),
-        Cycles::new(100_000_000),
-    );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        get_reject_message(response),
-        "bitcoin_get_balance failed: Malformed address.".to_string()
-    );
-    // No refund, assumed request to be executed, but it's a gray area, difficult to be sure.
-    assert_eq!(response.refund, Cycles::zero());
 }
 
 /// Creates a Bitcoin canister state with the following transactions:
@@ -134,7 +69,7 @@ fn state_with_balance(
     amount: Satoshi,
     address_1: &Address,
     address_2: &Address,
-) -> ic_btc_canister::state::State {
+) -> BitcoinState {
     let coinbase_tx = TransactionBuilder::coinbase()
         .with_output(address_1, amount)
         .build();
@@ -152,7 +87,152 @@ fn state_with_balance(
     let stability_threshold = 2;
     let mut state = ic_btc_canister::state::State::new(stability_threshold, network, block_0);
     ic_btc_canister::store::insert_block(&mut state, block_1).unwrap();
-    state
+
+    BitcoinState::from(state)
+}
+
+fn fake_state() -> BitcoinState {
+    state_with_balance(
+        Network::Testnet,
+        123,
+        &random_p2pkh_address(Network::Testnet),
+        &random_p2pkh_address(Network::Testnet),
+    )
+}
+
+fn reject_feature_not_enabled<S: ToString>(method_name: S, method_payload: Vec<u8>) {
+    let cycles_given = Cycles::new(100_000_000);
+
+    let response = execute_method(
+        "", // Bitcoin feature is disabled by default.
+        fake_state(),
+        method_name,
+        method_payload,
+        cycles_given,
+    );
+
+    assert_eq!(
+        get_reject_message(&response),
+        "The bitcoin API is not enabled on this subnet.".to_string()
+    );
+    // Refund all given cycles, since the feature was not enabled.
+    assert_eq!(response.refund, cycles_given);
+}
+
+fn reject_and_check_refund<S: ToString>(
+    state: BitcoinState,
+    method_name: S,
+    method_payload: Vec<u8>,
+    cycles_given: Cycles,
+    expected_refund: Cycles,
+    expected_reject_message: &str,
+) {
+    let response = execute_method(
+        "bitcoin_testnet",
+        state,
+        method_name,
+        method_payload,
+        cycles_given,
+    );
+
+    assert_eq!(
+        get_reject_message(&response),
+        expected_reject_message.to_string()
+    );
+    assert_eq!(response.refund, expected_refund);
+}
+
+fn execute_and_check_refund<S: ToString>(
+    method_name: S,
+    method_payload: Vec<u8>,
+    cycles_given: Cycles,
+    expected_refund: Cycles,
+) {
+    let response = execute_method(
+        "bitcoin_testnet",
+        fake_state(),
+        method_name,
+        method_payload,
+        cycles_given,
+    );
+
+    assert_eq!(response.refund, expected_refund); // Refund the rest of cycles left.
+}
+
+fn execute_check_payload_and_refund<S: ToString>(
+    state: BitcoinState,
+    method_name: S,
+    method_payload: Vec<u8>,
+    cycles_given: Cycles,
+    expected_refund: Cycles,
+    expected_response_payload: Payload,
+) {
+    let response = execute_method(
+        "bitcoin_testnet",
+        state,
+        method_name,
+        method_payload,
+        cycles_given,
+    );
+
+    assert_eq!(response.response_payload, expected_response_payload);
+    assert_eq!(response.refund, expected_refund);
+}
+
+fn fake_get_balance_args() -> BitcoinGetBalanceArgs {
+    BitcoinGetBalanceArgs {
+        address: random_p2pkh_address(Network::Testnet).to_string(),
+        network: BitcoinNetwork::Testnet,
+        min_confirmations: None,
+    }
+}
+
+#[test]
+fn get_balance_feature_not_enabled() {
+    reject_feature_not_enabled(Method::BitcoinGetBalance, fake_get_balance_args().encode());
+}
+
+#[test]
+fn get_balance_not_enough_cycles() {
+    reject_and_check_refund(
+        fake_state(),
+        Method::BitcoinGetBalance,
+        fake_get_balance_args().encode(),
+        Cycles::new(100_000_000 - 1), // Not enough cycles given.
+        Cycles::new(100_000_000 - 1), // Refund all.
+        "Received 99999999 cycles. 100000000 cycles are required.",
+    );
+}
+
+#[test]
+fn get_balance_charge_cycles() {
+    let payment = Cycles::new(100_000_000);
+    let expected_refund = Cycles::new(123); // Charge payment.
+    execute_and_check_refund(
+        Method::BitcoinGetBalance,
+        fake_get_balance_args().encode(),
+        payment + expected_refund,
+        expected_refund,
+    );
+}
+
+#[test]
+fn get_balance_rejects_malformed_address() {
+    let address = String::from("malformed address");
+    let payment = Cycles::new(100_000_000);
+    let expected_refund = Cycles::new(123); // Charge payment.
+    reject_and_check_refund(
+        fake_state(),
+        Method::BitcoinGetBalance,
+        BitcoinGetBalanceArgs {
+            address,
+            ..fake_get_balance_args()
+        }
+        .encode(),
+        payment + expected_refund,
+        expected_refund,
+        "bitcoin_get_balance failed: Malformed address.",
+    );
 }
 
 #[test]
@@ -162,125 +242,68 @@ fn get_balance_succeeds() {
     let address_1 = random_p2pkh_address(Network::Testnet);
     let address_2 = random_p2pkh_address(Network::Testnet);
     // Expect the balance of `address_2` to be `amount`.
-    let check_address = address_2.to_string();
     let expected_balance: Satoshi = 123;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features("bitcoin_testnet")
-        .build();
-    test.state_mut()
-        .put_bitcoin_state(BitcoinState::from(state_with_balance(
-            Network::Testnet,
-            amount,
-            &address_1,
-            &address_2,
-        )));
-    test.inject_call_to_ic00(
+    execute_check_payload_and_refund(
+        state_with_balance(Network::Testnet, amount, &address_1, &address_2),
         Method::BitcoinGetBalance,
         BitcoinGetBalanceArgs {
-            address: check_address,
-            network: BitcoinNetwork::Testnet,
-            min_confirmations: None,
+            address: address_2.to_string(),
+            ..fake_get_balance_args()
         }
         .encode(),
         Cycles::new(100_000_000),
+        Cycles::zero(),
+        Payload::Data(Encode!(&expected_balance).unwrap()),
     );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        response.response_payload,
-        Payload::Data(Encode!(&expected_balance).unwrap())
-    );
-    // No refund, since it was used to execute the request.
-    assert_eq!(response.refund, Cycles::zero());
 }
 
 #[test]
-fn get_balance_succeeds_with_min_confirmations_1() {
+fn get_balance_succeeds_min_confirmations_1() {
     // Transfer `amount` of funds from `address_1` to `address_2`.
     let amount: Satoshi = 123;
     let address_1 = random_p2pkh_address(Network::Testnet);
     let address_2 = random_p2pkh_address(Network::Testnet);
-    let min_confirmations = Some(1);
     // Expect the balance of `address_2` to be `amount`.
-    let check_address = address_2.to_string();
     let expected_balance: Satoshi = 123;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features("bitcoin_testnet")
-        .build();
-    test.state_mut()
-        .put_bitcoin_state(BitcoinState::from(state_with_balance(
-            Network::Testnet,
-            amount,
-            &address_1,
-            &address_2,
-        )));
-    test.inject_call_to_ic00(
+    execute_check_payload_and_refund(
+        state_with_balance(Network::Testnet, amount, &address_1, &address_2),
         Method::BitcoinGetBalance,
         BitcoinGetBalanceArgs {
-            address: check_address,
-            network: BitcoinNetwork::Testnet,
-            min_confirmations,
+            address: address_2.to_string(),
+            min_confirmations: Some(1),
+            ..fake_get_balance_args()
         }
         .encode(),
         Cycles::new(100_000_000),
+        Cycles::zero(),
+        Payload::Data(Encode!(&expected_balance).unwrap()),
     );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        response.response_payload,
-        Payload::Data(Encode!(&expected_balance).unwrap())
-    );
-    // No refund, since it was used to execute the request.
-    assert_eq!(response.refund, Cycles::zero());
 }
 
 #[test]
-fn get_balance_succeeds_with_min_confirmations_2() {
+fn get_balance_succeeds_min_confirmations_2() {
     // Transfer `amount` of funds from `address_1` to `address_2`.
     let amount: Satoshi = 123;
     let address_1 = random_p2pkh_address(Network::Testnet);
     let address_2 = random_p2pkh_address(Network::Testnet);
-    let min_confirmations = Some(2);
     // Expect the balance of `address_2` to be zero, since receiving funds was confirmed only by 1 block.
-    let check_address = address_2.to_string();
     let expected_balance: Satoshi = 0;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features("bitcoin_testnet")
-        .build();
-    test.state_mut()
-        .put_bitcoin_state(BitcoinState::from(state_with_balance(
-            Network::Testnet,
-            amount,
-            &address_1,
-            &address_2,
-        )));
-    test.inject_call_to_ic00(
+    execute_check_payload_and_refund(
+        state_with_balance(Network::Testnet, amount, &address_1, &address_2),
         Method::BitcoinGetBalance,
         BitcoinGetBalanceArgs {
-            address: check_address,
-            network: BitcoinNetwork::Testnet,
-            min_confirmations,
+            address: address_2.to_string(),
+            min_confirmations: Some(2),
+            ..fake_get_balance_args()
         }
         .encode(),
         Cycles::new(100_000_000),
+        Cycles::zero(),
+        Payload::Data(Encode!(&expected_balance).unwrap()),
     );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        response.response_payload,
-        Payload::Data(Encode!(&expected_balance).unwrap())
-    );
-    // No refund, assumed request to be executed, but it's a gray area, difficult to be sure.
-    assert_eq!(response.refund, Cycles::zero());
 }
 
 #[test]
@@ -289,127 +312,101 @@ fn get_balance_rejects_large_min_confirmations() {
     let amount: Satoshi = 123;
     let address_1 = random_p2pkh_address(Network::Testnet);
     let address_2 = random_p2pkh_address(Network::Testnet);
-    let min_confirmations = Some(1000);
-    let check_address = address_2.to_string();
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features("bitcoin_testnet")
-        .build();
-    test.state_mut()
-        .put_bitcoin_state(BitcoinState::from(state_with_balance(
-            Network::Testnet,
-            amount,
-            &address_1,
-            &address_2,
-        )));
-    test.inject_call_to_ic00(
+    reject_and_check_refund(
+        state_with_balance(Network::Testnet, amount, &address_1, &address_2),
         Method::BitcoinGetBalance,
         BitcoinGetBalanceArgs {
-            address: check_address,
-            network: BitcoinNetwork::Testnet,
-            min_confirmations,
+            address: address_2.to_string(),
+            min_confirmations: Some(1_000),  // Too large confirmation.
+            ..fake_get_balance_args()
         }
         .encode(),
         Cycles::new(100_000_000),
+        Cycles::zero(),
+        "bitcoin_get_balance failed: The requested min_confirmations is too large. Given: 1000, max supported: 2"
     );
-    test.execute_all();
+}
 
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        get_reject_message(response),
-        "bitcoin_get_balance failed: The requested min_confirmations is too large. Given: 1000, max supported: 2".to_string()
-    );
-    // No refund, assumed request to be executed, but it's a gray area, difficult to be sure.
-    assert_eq!(response.refund, Cycles::zero());
+fn fake_get_utxos_args() -> BitcoinGetUtxosArgs {
+    BitcoinGetUtxosArgs {
+        address: random_p2pkh_address(Network::Testnet).to_string(),
+        network: BitcoinNetwork::Testnet,
+        filter: None,
+    }
 }
 
 #[test]
-fn get_utxos_rejects_if_feature_not_enabled() {
-    // Bitcoin testnet feature is disabled by default.
-    let cycles_given = Cycles::new(100_000_000);
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .build();
-    test.inject_call_to_ic00(
-        Method::BitcoinGetUtxos,
-        BitcoinGetUtxosArgs {
-            address: String::from("not an address"),
-            network: BitcoinNetwork::Testnet,
-            filter: None,
-        }
-        .encode(),
-        cycles_given,
-    );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        get_reject_message(response),
-        "The bitcoin API is not enabled on this subnet.".to_string()
-    );
-    // Refund all given cycles, since the feature was not enabled.
-    assert_eq!(response.refund, cycles_given);
+fn get_utxos_rejects_feature_not_enabled() {
+    reject_feature_not_enabled(Method::BitcoinGetUtxos, fake_get_utxos_args().encode());
 }
 
 #[test]
-fn get_utxos_rejects_if_address_is_malformed() {
-    let address = String::from("not an address");
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features("bitcoin_testnet")
-        .build();
-    test.inject_call_to_ic00(
+fn get_utxos_not_enough_cycles() {
+    reject_and_check_refund(
+        fake_state(),
+        Method::BitcoinGetUtxos,
+        fake_get_utxos_args().encode(),
+        Cycles::new(100_000_000 - 1), // Not enough cycles given.
+        Cycles::new(100_000_000 - 1), // Refund all.
+        "Received 99999999 cycles. 100000000 cycles are required.",
+    );
+}
+
+#[test]
+fn get_utxos_charge_cycles() {
+    let payment = Cycles::new(100_000_000);
+    let expected_refund = Cycles::new(123);
+    execute_and_check_refund(
+        Method::BitcoinGetUtxos,
+        fake_get_utxos_args().encode(),
+        payment + expected_refund,
+        expected_refund,
+    );
+}
+
+#[test]
+fn get_utxos_rejects_malformed_address() {
+    let payment = Cycles::new(100_000_000);
+    let expected_refund = Cycles::new(123);
+    reject_and_check_refund(
+        fake_state(),
         Method::BitcoinGetUtxos,
         BitcoinGetUtxosArgs {
-            address,
-            network: BitcoinNetwork::Testnet,
-            filter: None,
+            address: String::from("malformed address"),
+            ..fake_get_utxos_args()
         }
         .encode(),
-        Cycles::new(100_000_000),
+        payment + expected_refund,
+        expected_refund,
+        "bitcoin_get_utxos failed: Malformed address.",
     );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        get_reject_message(response),
-        "bitcoin_get_utxos failed: Malformed address.".to_string()
-    );
-    // No refund, assumed request to be executed, but it's a gray area, difficult to be sure.
-    assert_eq!(response.refund, Cycles::zero());
 }
 
 #[test]
 fn get_utxos_rejects_large_min_confirmations() {
-    let min_confirmations = 1_000;
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features("bitcoin_testnet")
-        .build();
-    test.inject_call_to_ic00(
+    // Transfer `amount` of funds from `address_1` to `address_2`.
+    let amount: Satoshi = 123;
+    let address_1 = random_p2pkh_address(Network::Testnet);
+    let address_2 = random_p2pkh_address(Network::Testnet);
+
+    reject_and_check_refund(
+        state_with_balance(Network::Testnet, amount, &address_1, &address_2),
         Method::BitcoinGetUtxos,
         BitcoinGetUtxosArgs {
-            address: random_p2pkh_address(Network::Testnet).to_string(),
-            network: BitcoinNetwork::Testnet,
-            filter: Some(UtxosFilter::MinConfirmations(min_confirmations)),
+            address: address_2.to_string(),
+            filter: Some(UtxosFilter::MinConfirmations(1_000)), // Too large confirmations.
+            ..fake_get_utxos_args()
         }
         .encode(),
         Cycles::new(100_000_000),
+        Cycles::zero(),
+        "bitcoin_get_utxos failed: The requested min_confirmations is too large. Given: 1000, max supported: 2"
     );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        get_reject_message(response),
-        "bitcoin_get_utxos failed: The requested min_confirmations is too large. Given: 1000, max supported: 1".to_string()
-    );
-    // No refund, assumed request to be executed, but it's a gray area, difficult to be sure.
-    assert_eq!(response.refund, Cycles::zero());
 }
 
 #[test]
-fn get_utxos_of_valid_request_succeeds() {
+fn get_utxos_succeeds() {
     let address = random_p2pkh_address(Network::Testnet);
     let coinbase_tx = TransactionBuilder::coinbase()
         .with_output(&address, 1000)
@@ -417,32 +414,22 @@ fn get_utxos_of_valid_request_succeeds() {
     let block_0 = BlockBuilder::genesis()
         .with_transaction(coinbase_tx.clone())
         .build();
-    let bitcoin_state = BitcoinState::from(ic_btc_canister::state::State::new(
-        2,
-        Network::Testnet,
-        block_0.clone(),
-    ));
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features("bitcoin_testnet")
-        .build();
-    test.state_mut().put_bitcoin_state(bitcoin_state);
-    test.inject_call_to_ic00(
+    execute_check_payload_and_refund(
+        BitcoinState::from(ic_btc_canister::state::State::new(
+            2,
+            Network::Testnet,
+            block_0.clone(),
+        )),
         Method::BitcoinGetUtxos,
         BitcoinGetUtxosArgs {
             address: address.to_string(),
-            network: BitcoinNetwork::Testnet,
             filter: Some(UtxosFilter::MinConfirmations(1)),
+            ..fake_get_utxos_args()
         }
         .encode(),
-        Cycles::new(200_000_000),
-    );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        response.response_payload,
+        Cycles::new(100_000_000),
+        Cycles::zero(),
         Payload::Data(
             Encode!(&GetUtxosResponse {
                 utxos: vec![Utxo {
@@ -457,65 +444,47 @@ fn get_utxos_of_valid_request_succeeds() {
                 tip_height: 0,
                 next_page: None,
             })
-            .unwrap()
-        )
+            .unwrap(),
+        ),
     );
-    // Sent 200M cycles, should receive 100M as a refund.
-    assert_eq!(response.refund, Cycles::new(100_000_000));
 }
 
-#[test]
-fn get_utxos_not_enough_cycles() {
-    let cycles_given = Cycles::new(10_000);
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features("bitcoin_testnet")
-        .build();
-    test.inject_call_to_ic00(
-        Method::BitcoinGetUtxos,
-        BitcoinGetUtxosArgs {
-            address: random_p2pkh_address(Network::Testnet).to_string(),
-            network: BitcoinNetwork::Testnet,
-            filter: Some(UtxosFilter::MinConfirmations(1)),
-        }
-        .encode(),
-        cycles_given,
-    );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        get_reject_message(response),
-        "Received 10000 cycles. 100000000 cycles are required.".to_string()
-    );
-    // Refund all given cycles, since it was not enough to execute the request.
-    assert_eq!(response.refund, cycles_given);
+fn fake_get_current_fee_percentiles_args() -> BitcoinGetCurrentFeePercentilesArgs {
+    BitcoinGetCurrentFeePercentilesArgs {
+        network: BitcoinNetwork::Testnet,
+    }
 }
 
 #[test]
 fn get_current_fee_percentiles_rejects_feature_not_enabled() {
-    // Bitcoin testnet feature is disabled by default.
-    let cycles_given = Cycles::new(100_000_000);
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .build();
-    test.inject_call_to_ic00(
+    reject_feature_not_enabled(
         Method::BitcoinGetCurrentFeePercentiles,
-        BitcoinGetCurrentFeePercentilesArgs {
-            network: BitcoinNetwork::Testnet,
-        }
-        .encode(),
-        cycles_given,
+        fake_get_current_fee_percentiles_args().encode(),
     );
-    test.execute_all();
+}
 
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        get_reject_message(response),
-        "The bitcoin API is not enabled on this subnet.".to_string()
+#[test]
+fn get_current_fee_percentiles_not_enough_cycles() {
+    reject_and_check_refund(
+        fake_state(),
+        Method::BitcoinGetCurrentFeePercentiles,
+        fake_get_current_fee_percentiles_args().encode(),
+        Cycles::new(100_000_000 - 1), // Not enough cycles given.
+        Cycles::new(100_000_000 - 1), // Refund all.
+        "Received 99999999 cycles. 100000000 cycles are required.",
     );
-    // Refund all given cycles, since the feature was not enabled.
-    assert_eq!(response.refund, cycles_given);
+}
+
+#[test]
+fn get_current_fee_percentiles_charge_cycles() {
+    let payment = Cycles::new(100_000_000);
+    let expected_refund = Cycles::new(123);
+    execute_and_check_refund(
+        Method::BitcoinGetCurrentFeePercentiles,
+        fake_get_current_fee_percentiles_args().encode(),
+        payment + expected_refund,
+        expected_refund,
+    );
 }
 
 #[test]
@@ -523,8 +492,6 @@ fn get_current_fee_percentiles_succeeds() {
     let initial_balance: Satoshi = 1_000;
     let pay: Satoshi = 1;
     let fee: Satoshi = 2;
-    let cycles_given = Cycles::new(150_000_000);
-    let expected_refund = Cycles::new(50_000_000); // 150M - 100M in fees = refund of 50M
 
     // Create 2 blocks with 2 transactions:
     // - genesis block receives initial balance on address_1
@@ -549,57 +516,18 @@ fn get_current_fee_percentiles_succeeds() {
     let mut state = ic_btc_canister::state::State::new(0, network, block_0);
     ic_btc_canister::store::insert_block(&mut state, block_1).unwrap();
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features("bitcoin_testnet")
-        .build();
-    test.state_mut()
-        .put_bitcoin_state(BitcoinState::from(state));
-    test.inject_call_to_ic00(
+    let expected_fee = (1_000 * fee) / (tx.size() as u64); // Millisatoshi per byte.
+    execute_check_payload_and_refund(
+        BitcoinState::from(state),
         Method::BitcoinGetCurrentFeePercentiles,
         BitcoinGetCurrentFeePercentilesArgs {
             network: BitcoinNetwork::Testnet,
         }
         .encode(),
-        cycles_given,
+        Cycles::new(100_000_000),
+        Cycles::zero(),
+        Payload::Data(Encode!(&vec![expected_fee; 100]).unwrap()),
     );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    let millisatoshi_per_byte = (1_000 * fee) / (tx.size() as u64);
-    assert_eq!(
-        response.response_payload,
-        Payload::Data(Encode!(&vec![millisatoshi_per_byte; 100]).unwrap())
-    );
-    assert_eq!(response.refund, expected_refund);
-}
-
-#[test]
-fn get_current_fee_percentiles_not_enough_cycles() {
-    // Not enough cycles given.
-    let cycles_given = Cycles::new(90_000_000);
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features("bitcoin_testnet")
-        .build();
-    test.inject_call_to_ic00(
-        Method::BitcoinGetCurrentFeePercentiles,
-        BitcoinGetCurrentFeePercentilesArgs {
-            network: BitcoinNetwork::Testnet,
-        }
-        .encode(),
-        cycles_given,
-    );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        get_reject_message(response),
-        "Received 90000000 cycles. 100000000 cycles are required.".to_string()
-    );
-    // Refund all given cycles, since it was not enough to execute the request.
-    assert_eq!(response.refund, cycles_given);
 }
 
 #[test]
@@ -608,32 +536,26 @@ fn get_current_fee_percentiles_rejects_mainnet_when_testnet_is_enabled() {
     // bitcoin mainnet while the underlying state is for the bitcoin testnet.
     // Should be rejected.
     let network = BitcoinNetwork::Mainnet;
-    let feature = "bitcoin_testnet";
-    let bitcoin_state = BitcoinState::from(ic_btc_canister::state::State::new(
-        0,
-        Network::Testnet,
-        genesis_block(Network::Testnet),
-    ));
+    let features = "bitcoin_testnet";
+    let state_network = Network::Testnet;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features(feature)
-        .build();
-    test.state_mut().put_bitcoin_state(bitcoin_state);
-    test.inject_call_to_ic00(
+    let response = execute_method(
+        features,
+        BitcoinState::from(ic_btc_canister::state::State::new(
+            0,
+            state_network,
+            genesis_block(Network::Testnet),
+        )),
         Method::BitcoinGetCurrentFeePercentiles,
         BitcoinGetCurrentFeePercentilesArgs { network }.encode(),
         Cycles::new(100_000_000),
     );
-    test.execute_all();
 
-    let response = test.get_xnet_response(0);
     assert_eq!(
-        get_reject_message(response),
+        get_reject_message(&response),
         "Received request for mainnet but the subnet supports testnet".to_string()
     );
-    // No refund, assumed request to be executed, but it's a gray area, difficult to be sure.
-    assert_eq!(response.refund, Cycles::zero());
+    assert_eq!(response.refund, Cycles::zero()); // Charge payment.
 }
 
 #[test]
@@ -642,32 +564,26 @@ fn get_current_fee_percentiles_rejects_testnet_when_mainnet_is_enabled() {
     // bitcoin testnet while the underlying state is for the bitcoin mainnet.
     // Should be rejected.
     let network = BitcoinNetwork::Testnet;
-    let feature = "bitcoin_mainnet";
-    let bitcoin_state = BitcoinState::from(ic_btc_canister::state::State::new(
-        0,
-        Network::Bitcoin,
-        genesis_block(Network::Bitcoin),
-    ));
+    let features = "bitcoin_mainnet";
+    let state_network = Network::Bitcoin;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features(feature)
-        .build();
-    test.state_mut().put_bitcoin_state(bitcoin_state);
-    test.inject_call_to_ic00(
+    let response = execute_method(
+        features,
+        BitcoinState::from(ic_btc_canister::state::State::new(
+            0,
+            state_network,
+            genesis_block(Network::Testnet),
+        )),
         Method::BitcoinGetCurrentFeePercentiles,
         BitcoinGetCurrentFeePercentilesArgs { network }.encode(),
         Cycles::new(100_000_000),
     );
-    test.execute_all();
 
-    let response = test.get_xnet_response(0);
     assert_eq!(
-        get_reject_message(response),
+        get_reject_message(&response),
         "Received request for testnet but the subnet supports mainnet".to_string()
     );
-    // No refund, assumed request to be executed, but it's a gray area, difficult to be sure.
-    assert_eq!(response.refund, Cycles::zero());
+    assert_eq!(response.refund, Cycles::zero()); // Charge payment.
 }
 
 #[test]
@@ -815,125 +731,120 @@ fn get_current_fee_percentiles_cache() {
 
 #[test]
 fn send_transaction_rejects_if_feature_not_enabled() {
-    // Bitcoin testnet feature is disabled by default.
-    let cycles_given = Cycles::new(100_000_000);
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .build();
-    test.inject_call_to_ic00(
+    reject_feature_not_enabled(
         Method::BitcoinSendTransaction,
         BitcoinSendTransactionArgs {
             transaction: vec![],
             network: BitcoinNetwork::Testnet,
         }
         .encode(),
-        cycles_given,
     );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        get_reject_message(response),
-        "The bitcoin API is not enabled on this subnet.".to_string()
-    );
-    // Refund all given cycles, since the feature was not enabled.
-    assert_eq!(response.refund, cycles_given);
 }
 
 #[test]
-fn send_transaction_malformed_transaction() {
-    let transaction = vec![1, 2, 3];
-    let tx_len = transaction.len() as u64;
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features("bitcoin_testnet")
-        .build();
-    test.inject_call_to_ic00(
+fn send_transaction_zero_len_not_enough_cycles() {
+    let transaction = vec![];
+    // Not enough cycles given.
+    let cycles_given = calculate_send_transaction_payment(transaction.len()) - Cycles::new(1);
+    reject_and_check_refund(
+        fake_state(),
         Method::BitcoinSendTransaction,
         BitcoinSendTransactionArgs {
             transaction,
             network: BitcoinNetwork::Testnet,
         }
         .encode(),
-        SEND_TRANSACTION_FEE_BASE + SEND_TRANSACTION_FEE_PER_BYTE * tx_len as u64,
+        cycles_given,
+        cycles_given, // Refund all.
+        "Received 4999999999 cycles. 5000000000 cycles are required.",
     );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        get_reject_message(response),
-        "bitcoin_send_transaction failed: Can't deserialize transaction because it's malformed."
-            .to_string()
-    );
-    // No refund, assumed request to be executed, but it's a gray area, difficult to be sure.
-    assert_eq!(response.refund, Cycles::zero());
 }
 
 #[test]
-fn send_transaction_succeeds() {
-    // Create a fake transaction that passes verification check.
-    let tx = TransactionBuilder::coinbase()
-        .with_output(&random_p2pkh_address(Network::Testnet), 1_000)
-        .build()
-        .serialize();
-    let mut test = ExecutionTestBuilder::new()
-        .with_caller(subnet_test_id(1), canister_test_id(10))
-        .with_subnet_features("bitcoin_testnet")
-        .build();
-    test.inject_call_to_ic00(
+fn send_transaction_non_zero_len_not_enough_cycles() {
+    let transaction = vec![1, 2, 3];
+    // Not enough cycles given.
+    let cycles_given = calculate_send_transaction_payment(transaction.len()) - Cycles::new(1);
+    reject_and_check_refund(
+        fake_state(),
         Method::BitcoinSendTransaction,
         BitcoinSendTransactionArgs {
-            transaction: tx.clone(),
+            transaction,
             network: BitcoinNetwork::Testnet,
         }
         .encode(),
-        SEND_TRANSACTION_FEE_BASE + SEND_TRANSACTION_FEE_PER_BYTE * tx.serialize().len() as u64,
+        cycles_given,
+        cycles_given, // Refund all.
+        "Received 5059999999 cycles. 5060000000 cycles are required.",
     );
-    test.execute_all();
-
-    let response = test.get_xnet_response(0);
-    assert_eq!(
-        response.response_payload,
-        Payload::Data(EmptyBlob::encode()),
-    );
-    assert_eq!(response.refund, Cycles::zero());
 }
 
 #[test]
 fn send_transaction_cycles_charging() {
     for network in [BitcoinNetwork::Mainnet, BitcoinNetwork::Testnet] {
         for transaction in [vec![], vec![0; 1], vec![0; 10], vec![0; 100], vec![0; 1000]] {
-            let tx_len = transaction.len() as u64;
-            let initial_balance = Cycles::new(100_000_000_000);
-            let mut test = ExecutionTestBuilder::new()
-                .with_caller(subnet_test_id(1), canister_test_id(10))
-                .with_subnet_features(&format!("bitcoin_{}", network)) // bitcoin feature is enabled for this network.
-                .build();
-            test.state_mut()
-                .put_bitcoin_state(BitcoinState::new(network));
-            test.inject_call_to_ic00(
+            let payment = calculate_send_transaction_payment(transaction.len());
+            let expected_refund = Cycles::new(123);
+
+            let response = execute_method(
+                &format!("bitcoin_{}", network),
+                BitcoinState::new(network),
                 Method::BitcoinSendTransaction,
                 BitcoinSendTransactionArgs {
                     transaction,
                     network,
                 }
                 .encode(),
-                initial_balance,
+                payment + expected_refund,
             );
-            test.execute_all();
 
-            let response = test.get_xnet_response(0);
+            assert_eq!(response.refund, expected_refund); // Refund the rest of cycles left.
             assert_eq!(
-                response.refund,
-                // the expected fee is deducted from the balance.
-                initial_balance
-                    - (SEND_TRANSACTION_FEE_BASE + SEND_TRANSACTION_FEE_PER_BYTE * tx_len as u64)
-            );
-            assert_eq!(
-                get_reject_message(response),
-                "bitcoin_send_transaction failed: Can't deserialize transaction because it's malformed."
-                    .to_string()
+                get_reject_message(&response),
+                "bitcoin_send_transaction failed: Can't deserialize transaction because it's malformed.".to_string()
             );
         }
     }
+}
+
+#[test]
+fn send_transaction_malformed_transaction() {
+    let transaction = vec![1, 2, 3];
+    let payment = calculate_send_transaction_payment(transaction.len());
+    let expected_refund = Cycles::new(123);
+    reject_and_check_refund(
+        fake_state(),
+        Method::BitcoinSendTransaction,
+        BitcoinSendTransactionArgs {
+            transaction,
+            network: BitcoinNetwork::Testnet,
+        }
+        .encode(),
+        payment + expected_refund,
+        expected_refund,
+        "bitcoin_send_transaction failed: Can't deserialize transaction because it's malformed.",
+    );
+}
+
+#[test]
+fn send_transaction_succeeds() {
+    // Create a fake transaction that passes verification check.
+    let transaction = TransactionBuilder::coinbase()
+        .with_output(&random_p2pkh_address(Network::Testnet), 1_000)
+        .build()
+        .serialize();
+    let payment = calculate_send_transaction_payment(transaction.len());
+
+    execute_check_payload_and_refund(
+        fake_state(),
+        Method::BitcoinSendTransaction,
+        BitcoinSendTransactionArgs {
+            transaction,
+            network: BitcoinNetwork::Testnet,
+        }
+        .encode(),
+        payment,
+        Cycles::zero(),
+        Payload::Data(EmptyBlob::encode()),
+    );
 }

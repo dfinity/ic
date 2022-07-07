@@ -957,7 +957,7 @@ impl ExecutionTestBuilder {
         }
     }
 
-    /// Ensures that the routing table is set up properl to allow inject a fake
+    /// Ensures that the routing table is set up properly to allow inject a fake
     /// call from the given subnet/canister. See `inject_call_to_ic00()`.
     pub fn with_caller(self, subnet_id: SubnetId, canister_id: CanisterId) -> Self {
         Self {
