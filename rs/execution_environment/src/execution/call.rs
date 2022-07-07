@@ -131,7 +131,6 @@ pub fn execute_call(
         total_instruction_limit: instruction_limit,
         slice_instruction_limit: instruction_limit,
         canister_memory_limit: canister.memory_limit(config.max_canister_memory_size),
-        subnet_available_memory,
         compute_allocation: canister.scheduler_state.compute_allocation,
         subnet_type,
         execution_mode: ExecutionMode::Replicated,
@@ -148,7 +147,7 @@ pub fn execute_call(
     } else if canister.exports_query_method(req.method_name().to_string()) {
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        execution_parameters.subnet_available_memory = subnet_memory_capacity(config);
+        let subnet_available_memory = subnet_memory_capacity(config);
         // DTS is not supported in query calls.
         execution_parameters.total_instruction_limit = execution_parameters.slice_instruction_limit;
         execute_query_method(
@@ -157,6 +156,7 @@ pub fn execute_call(
             time,
             &network_topology,
             execution_parameters,
+            subnet_available_memory,
             hypervisor,
             cycles_account_manager,
             log,
@@ -168,6 +168,7 @@ pub fn execute_call(
             time,
             network_topology,
             execution_parameters,
+            subnet_available_memory,
             hypervisor,
             cycles_account_manager,
             log,
@@ -184,6 +185,7 @@ fn execute_update_method(
     time: Time,
     network_topology: Arc<NetworkTopology>,
     execution_parameters: ExecutionParameters,
+    subnet_available_memory: SubnetAvailableMemory,
     hypervisor: &Hypervisor,
     cycles_account_manager: &CyclesAccountManager,
     log: &ReplicaLogger,
@@ -212,6 +214,7 @@ fn execute_update_method(
         canister.system_state.clone(),
         memory_usage,
         execution_parameters.clone(),
+        subnet_available_memory.clone(),
         FuncRef::Method(method),
         canister.execution_state.take().unwrap(),
     );
@@ -224,7 +227,7 @@ fn execute_update_method(
         message: req,
     };
     let round = RoundContext {
-        subnet_available_memory: execution_parameters.subnet_available_memory,
+        subnet_available_memory,
         network_topology: &*network_topology,
         hypervisor,
         cycles_account_manager,
@@ -342,6 +345,7 @@ fn execute_query_method(
     time: Time,
     network_topology: &NetworkTopology,
     execution_parameters: ExecutionParameters,
+    subnet_available_memory: SubnetAvailableMemory,
     hypervisor: &Hypervisor,
     cycles_account_manager: &CyclesAccountManager,
     log: &ReplicaLogger,
@@ -364,6 +368,7 @@ fn execute_query_method(
         canister.system_state.clone(),
         memory_usage,
         execution_parameters.clone(),
+        subnet_available_memory,
         FuncRef::Method(method),
         canister.execution_state.clone().unwrap(),
         network_topology,

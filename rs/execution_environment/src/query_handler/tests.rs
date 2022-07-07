@@ -127,15 +127,11 @@ fn universal_canister(
             total_instruction_limit: INSTRUCTION_LIMIT,
             slice_instruction_limit: INSTRUCTION_LIMIT,
             canister_memory_limit: MEMORY_CAPACITY,
-            subnet_available_memory: AvailableMemory::new(
-                MEMORY_CAPACITY.get() as i64,
-                MEMORY_CAPACITY.get() as i64,
-            )
-            .into(),
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
         },
+        AvailableMemory::new(MEMORY_CAPACITY.get() as i64, MEMORY_CAPACITY.get() as i64).into(),
     );
     assert!(res.1.is_ok());
     state.put_canister_state(res.2.unwrap());

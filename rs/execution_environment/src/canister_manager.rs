@@ -603,6 +603,7 @@ impl CanisterManager {
         context: InstallCodeContext,
         state: &mut ReplicatedState,
         execution_parameters: ExecutionParameters,
+        subnet_available_memory: SubnetAvailableMemory,
     ) -> (
         NumInstructions,
         Result<InstallCodeResult, CanisterManagerError>,
@@ -633,6 +634,7 @@ impl CanisterManager {
             memory_taken,
             &network_topology,
             execution_parameters,
+            subnet_available_memory,
         );
         let (instructions_left, result, canister) = match dts_res.response {
             InstallCodeResponse::Result((instructions_left, result)) => {
@@ -681,6 +683,7 @@ impl CanisterManager {
         memory_taken: NumBytes,
         network_topology: &NetworkTopology,
         mut execution_parameters: ExecutionParameters,
+        subnet_available_memory: SubnetAvailableMemory,
     ) -> DtsInstallCodeResult {
         // TODO(RUN-221): Validate the compute and memory allocation after the
         // entire execution completes, Because it could be the case that while
@@ -785,6 +788,7 @@ impl CanisterManager {
                 time,
                 canister_layout_path.clone(),
                 execution_parameters,
+                subnet_available_memory,
                 network_topology,
                 &self.hypervisor,
                 &self.log,
@@ -795,6 +799,7 @@ impl CanisterManager {
                 time,
                 canister_layout_path.clone(),
                 execution_parameters,
+                subnet_available_memory,
                 network_topology,
                 &self.hypervisor,
                 &self.log,

@@ -108,11 +108,6 @@ impl Execution {
     ) {
         let run_timer = std::time::Instant::now();
 
-        let subnet_available_memory = exec_input
-            .execution_parameters
-            .subnet_available_memory
-            .clone();
-
         let total_instruction_limit = exec_input.execution_parameters.total_instruction_limit;
         let slice_instruction_limit = exec_input.execution_parameters.slice_instruction_limit;
         let sandbox_manager = Arc::clone(&self.sandbox_manager);
@@ -143,6 +138,7 @@ impl Execution {
             exec_input.api_type,
             exec_input.canister_current_memory_usage,
             exec_input.execution_parameters,
+            exec_input.subnet_available_memory,
             exec_input.sandox_safe_system_state,
             &self.embedder_cache,
             &self.sandbox_manager.embedder,
@@ -181,7 +177,6 @@ impl Execution {
                             &stable_memory,
                             &dirty_page_indices.wasm_memory_delta,
                             &dirty_page_indices.stable_memory_delta,
-                            subnet_available_memory.get(),
                             system_state_changes,
                         )
                     },

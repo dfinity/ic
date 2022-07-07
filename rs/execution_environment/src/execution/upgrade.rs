@@ -77,6 +77,7 @@ pub(crate) fn execute_upgrade(
     time: Time,
     canister_layout_path: PathBuf,
     execution_parameters: ExecutionParameters,
+    subnet_available_memory: SubnetAvailableMemory,
     network_topology: &NetworkTopology,
     hypervisor: &Hypervisor,
     log: &ReplicaLogger,
@@ -115,6 +116,7 @@ pub(crate) fn execute_upgrade(
             old_canister,
             canister_layout_path,
             execution_parameters,
+            subnet_available_memory,
             instructions_left,
             total_heap_delta,
             time,
@@ -128,6 +130,7 @@ pub(crate) fn execute_upgrade(
             new_canister.system_state.clone(),
             memory_usage,
             execution_parameters.clone(),
+            subnet_available_memory.clone(),
             FuncRef::Method(method),
             execution_state,
         );
@@ -143,6 +146,7 @@ pub(crate) fn execute_upgrade(
                     old_canister,
                     canister_layout_path,
                     execution_parameters,
+                    subnet_available_memory,
                     total_heap_delta,
                     time,
                     network_topology,
@@ -178,6 +182,7 @@ fn upgrade_stage_1_process_pre_upgrade_result(
     old_canister: CanisterState,
     canister_layout_path: PathBuf,
     execution_parameters: ExecutionParameters,
+    subnet_available_memory: SubnetAvailableMemory,
     mut total_heap_delta: NumBytes,
     time: Time,
     network_topology: &NetworkTopology,
@@ -205,6 +210,7 @@ fn upgrade_stage_1_process_pre_upgrade_result(
                 old_canister,
                 canister_layout_path,
                 execution_parameters,
+                subnet_available_memory,
                 instructions_left,
                 total_heap_delta,
                 time,
@@ -230,6 +236,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     old_canister: CanisterState,
     canister_layout_path: PathBuf,
     mut execution_parameters: ExecutionParameters,
+    subnet_available_memory: SubnetAvailableMemory,
     instructions_left: NumInstructions,
     total_heap_delta: NumBytes,
     time: Time,
@@ -333,6 +340,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             new_canister,
             old_canister,
             execution_parameters,
+            subnet_available_memory,
             instructions_left,
             total_heap_delta,
             time,
@@ -346,6 +354,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             SystemState::new_for_start(canister_id),
             memory_usage,
             execution_parameters.clone(),
+            subnet_available_memory.clone(),
             FuncRef::Method(method),
             execution_state,
         );
@@ -360,6 +369,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                     new_canister,
                     old_canister,
                     execution_parameters,
+                    subnet_available_memory,
                     total_heap_delta,
                     time,
                     network_topology,
@@ -394,6 +404,7 @@ fn upgrade_stage_3b_process_start_result(
     new_canister: CanisterState,
     old_canister: CanisterState,
     execution_parameters: ExecutionParameters,
+    subnet_available_memory: SubnetAvailableMemory,
     mut total_heap_delta: NumBytes,
     time: Time,
     network_topology: &NetworkTopology,
@@ -416,6 +427,7 @@ fn upgrade_stage_3b_process_start_result(
                 new_canister,
                 old_canister,
                 execution_parameters,
+                subnet_available_memory,
                 instructions_left,
                 total_heap_delta,
                 time,
@@ -441,6 +453,7 @@ fn upgrade_stage_4a_call_post_upgrade(
     mut new_canister: CanisterState,
     old_canister: CanisterState,
     mut execution_parameters: ExecutionParameters,
+    subnet_available_memory: SubnetAvailableMemory,
     instructions_left: NumInstructions,
     total_heap_delta: NumBytes,
     time: Time,
@@ -488,6 +501,7 @@ fn upgrade_stage_4a_call_post_upgrade(
             new_canister.system_state.clone(),
             memory_usage,
             execution_parameters.clone(),
+            subnet_available_memory,
             FuncRef::Method(method),
             execution_state,
         );
@@ -654,7 +668,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
         let execution_state = new_canister.execution_state.take().unwrap();
         let (execution_state, wasm_execution_result) = self
             .paused_wasm_execution
-            .resume(execution_state, subnet_available_memory);
+            .resume(execution_state, subnet_available_memory.clone());
         new_canister.execution_state = Some(execution_state);
         match wasm_execution_result {
             WasmExecutionResult::Finished(output, system_state_changes) => {
@@ -666,6 +680,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
                     old_canister,
                     self.canister_layout_path,
                     self.execution_parameters,
+                    subnet_available_memory,
                     self.total_heap_delta,
                     self.time,
                     network_topology,
@@ -720,7 +735,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
         let execution_state = new_canister.execution_state.take().unwrap();
         let (execution_state, wasm_execution_result) = self
             .paused_wasm_execution
-            .resume(execution_state, subnet_available_memory);
+            .resume(execution_state, subnet_available_memory.clone());
         new_canister.execution_state = Some(execution_state);
         match wasm_execution_result {
             WasmExecutionResult::Finished(output, _system_state_changes) => {
@@ -731,6 +746,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
                     new_canister,
                     old_canister,
                     self.execution_parameters,
+                    subnet_available_memory,
                     self.total_heap_delta,
                     self.time,
                     network_topology,

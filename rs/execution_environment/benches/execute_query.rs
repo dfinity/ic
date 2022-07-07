@@ -48,6 +48,7 @@ pub fn bench_execute_query(c: &mut Criterion) {
              canister_state,
              time,
              mut execution_parameters,
+             subnet_available_memory,
              network_topology,
              ..
          }| {
@@ -60,6 +61,7 @@ pub fn bench_execute_query(c: &mut Criterion) {
                 Some(vec![0; 256]),
                 time,
                 execution_parameters,
+                subnet_available_memory,
                 &network_topology,
                 ee_test.hypervisor_deprecated(),
             );

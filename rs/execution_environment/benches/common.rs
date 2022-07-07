@@ -46,6 +46,7 @@ pub struct BenchmarkArgs {
     pub time: Time,
     pub network_topology: Arc<NetworkTopology>,
     pub execution_parameters: ExecutionParameters,
+    pub subnet_available_memory: SubnetAvailableMemory,
     pub call_origin: CallOrigin,
     pub callback: Callback,
 }
@@ -112,7 +113,6 @@ where
         total_instruction_limit: MAX_NUM_INSTRUCTIONS,
         slice_instruction_limit: MAX_NUM_INSTRUCTIONS,
         canister_memory_limit: canister_state.memory_limit(NumBytes::new(std::u64::MAX)),
-        subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
         compute_allocation: canister_state.scheduler_state.compute_allocation,
         subnet_type: SubnetType::Application,
         execution_mode: ExecutionMode::Replicated,
@@ -125,6 +125,7 @@ where
         time: mock_time(),
         network_topology,
         execution_parameters,
+        subnet_available_memory: MAX_SUBNET_AVAILABLE_MEMORY.clone(),
         call_origin,
         callback,
     }

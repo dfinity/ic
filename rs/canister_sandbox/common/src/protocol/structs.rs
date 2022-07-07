@@ -1,5 +1,5 @@
 use ic_interfaces::execution_environment::{
-    AvailableMemory, ExecutionParameters, WasmExecutionOutput,
+    ExecutionParameters, SubnetAvailableMemory, WasmExecutionOutput,
 };
 use ic_replicated_state::{
     canister_state::WASM_PAGE_SIZE_IN_BYTES, page_map::PageDeltaSerialization, ExecutionState,
@@ -24,6 +24,7 @@ pub struct SandboxExecInput {
     pub globals: Vec<Global>,
     pub canister_current_memory_usage: NumBytes,
     pub execution_parameters: ExecutionParameters,
+    pub subnet_available_memory: SubnetAvailableMemory,
     pub next_wasm_memory_id: MemoryId,
     pub next_stable_memory_id: MemoryId,
     // View of the system_state that is safe for the sandboxed process to
@@ -58,10 +59,6 @@ pub struct StateModifications {
     /// Modifications in the stable memory.
     pub stable_memory: MemoryModifications,
 
-    /// The available memory left on the subnet after executing
-    /// the message.
-    pub subnet_available_memory: AvailableMemory,
-
     pub system_state_changes: SystemStateChanges,
 }
 
@@ -72,7 +69,6 @@ impl StateModifications {
         stable_memory: &Memory,
         wasm_memory_delta: &[PageIndex],
         stable_memory_delta: &[PageIndex],
-        subnet_available_memory: AvailableMemory,
         system_state_changes: SystemStateChanges,
     ) -> Self {
         let wasm_memory = MemoryModifications {
@@ -89,7 +85,6 @@ impl StateModifications {
             globals,
             wasm_memory,
             stable_memory,
-            subnet_available_memory,
             system_state_changes,
         }
     }

@@ -7,7 +7,7 @@ use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
 use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
 use ic_embedders::{CompilationCache, CompilationResult};
 use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorResult, WasmExecutionOutput,
+    ExecutionParameters, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
@@ -260,6 +260,7 @@ impl Hypervisor {
         mut system_state: SystemState,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
+        subnet_available_memory: SubnetAvailableMemory,
         func_ref: FuncRef,
         execution_state: ExecutionState,
         network_topology: &NetworkTopology,
@@ -274,6 +275,7 @@ impl Hypervisor {
                 sandbox_safe_system_state: static_system_state,
                 canister_current_memory_usage,
                 execution_parameters,
+                subnet_available_memory,
                 func_ref,
                 execution_state,
                 compilation_cache: Arc::clone(&self.compilation_cache),
@@ -310,6 +312,7 @@ impl Hypervisor {
         system_state: SystemState,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
+        subnet_available_memory: SubnetAvailableMemory,
         func_ref: FuncRef,
         execution_state: ExecutionState,
     ) -> (ExecutionState, WasmExecutionResult) {
@@ -323,6 +326,7 @@ impl Hypervisor {
                 sandbox_safe_system_state: static_system_state,
                 canister_current_memory_usage,
                 execution_parameters,
+                subnet_available_memory,
                 func_ref,
                 execution_state,
                 compilation_cache: Arc::clone(&self.compilation_cache),

@@ -410,6 +410,7 @@ impl WasmExecutor for SandboxedExecutionController {
             sandbox_safe_system_state,
             canister_current_memory_usage,
             execution_parameters,
+            subnet_available_memory,
             func_ref,
             execution_state,
             compilation_cache,
@@ -499,8 +500,6 @@ impl WasmExecutor for SandboxedExecutionController {
         let stable_memory_id = MemoryId::from(stable_memory_handle.get_id());
         let next_stable_memory_id = MemoryId::new();
 
-        let subnet_available_memory = execution_parameters.subnet_available_memory.clone();
-
         sandbox_process.history.record(
             format!("StartExecution(exec_id={} wasm_id={} wasm_memory_id={} stable_member_id={} api_type={}, next_wasm_memory_id={} next_stable_memory_id={}",
                 exec_id, wasm_id, wasm_memory_id, stable_memory_id, api_type.as_str(), next_wasm_memory_id, next_stable_memory_id));
@@ -517,6 +516,7 @@ impl WasmExecutor for SandboxedExecutionController {
                     globals: execution_state.exported_globals.clone(),
                     canister_current_memory_usage,
                     execution_parameters,
+                    subnet_available_memory: subnet_available_memory.clone(),
                     next_wasm_memory_id,
                     next_stable_memory_id,
                     sandox_safe_system_state: sandbox_safe_system_state,

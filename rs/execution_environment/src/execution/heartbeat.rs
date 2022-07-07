@@ -3,7 +3,9 @@
 use crate::{CanisterHeartbeatError, Hypervisor};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ic00_types::CanisterStatusType;
-use ic_interfaces::execution_environment::{ExecutionParameters, HypervisorError};
+use ic_interfaces::execution_environment::{
+    ExecutionParameters, HypervisorError, SubnetAvailableMemory,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallOrigin, CanisterState, ExecutionState, NetworkTopology, SchedulerState, SystemState,
@@ -127,6 +129,7 @@ pub fn execute_heartbeat(
     canister: CanisterState,
     network_topology: Arc<NetworkTopology>,
     execution_parameters: ExecutionParameters,
+    subnet_available_memory: SubnetAvailableMemory,
     own_subnet_type: SubnetType,
     time: Time,
     hypervisor: &Hypervisor,
@@ -171,6 +174,7 @@ pub fn execute_heartbeat(
         system_state.clone(),
         memory_usage,
         execution_parameters,
+        subnet_available_memory,
         FuncRef::Method(method),
         execution_state,
         &network_topology,

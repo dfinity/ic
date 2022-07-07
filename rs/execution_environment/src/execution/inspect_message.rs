@@ -1,6 +1,6 @@
 use crate::Hypervisor;
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::ExecutionParameters;
+use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
 use ic_logger::{fatal, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, NetworkTopology};
@@ -19,6 +19,7 @@ pub fn execute_inspect_message(
     ingress: &SignedIngressContent,
     own_subnet_type: SubnetType,
     execution_parameters: ExecutionParameters,
+    subnet_available_memory: SubnetAvailableMemory,
     hypervisor: &Hypervisor,
     network_topology: &NetworkTopology,
     logger: &ReplicaLogger,
@@ -59,6 +60,7 @@ pub fn execute_inspect_message(
         system_state,
         memory_usage,
         execution_parameters,
+        subnet_available_memory,
         FuncRef::Method(method),
         execution_state,
         network_topology,

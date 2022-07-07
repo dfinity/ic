@@ -251,7 +251,6 @@ pub struct ExecutionParameters {
     pub slice_instruction_limit: NumInstructions,
 
     pub canister_memory_limit: NumBytes,
-    pub subnet_available_memory: SubnetAvailableMemory,
     pub compute_allocation: ComputeAllocation,
     pub subnet_type: SubnetType,
     pub execution_mode: ExecutionMode,
