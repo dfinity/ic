@@ -188,6 +188,8 @@ pub fn test(env: TestEnv) {
             .await
             .expect("Could not create http_counter canister");
 
+        info!(&logger, "Created counter={counter_canister_id} and http_counter={http_counter_canister_id}.");
+
         info!(&logger, "Creating BN agent...");
         let agent = create_agent_mapping("https://ic0.app/", boundary_node_vm.ipv6.into())
             .await
@@ -209,7 +211,7 @@ pub fn test(env: TestEnv) {
             // FIXME: use `ClientBuilder::add_root_certificate` instead
             .danger_accept_invalid_certs(true)
             .resolve(
-                "raw.ic0.app",
+                "invalid-canister-id.raw.ic0.app",
                 SocketAddrV6::new(boundary_node_vm.ipv6, 443, 0, 0).into(),
             )
             .resolve(
@@ -235,7 +237,7 @@ pub fn test(env: TestEnv) {
 
         // Check that `canisterId` parameters go unused
         let res = client
-            .get(format!("https://raw.ic0.app/?canisterId={}", http_counter_canister_id))
+            .get(format!("https://invalid-canister-id.raw.ic0.app/?canisterId={}", http_counter_canister_id))
             .send()
             .await
             .unwrap();

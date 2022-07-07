@@ -21,10 +21,15 @@ map $cbor_key $cbor_rate_limit_10rpm {
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name {{DOMAIN}}.{{TLD}};
-    server_name  ~^([^.]+\.{{DOMAIN_ESCAPED}}\.{{TLD}})$;
-    set $icx_proxy 127.0.0.1:9500;
 
+    server_name .boundary.dfinity.network;
+    server_name mainnet.dfinity.network;
+
+    server_name {{DOMAIN}}.{{TLD}};
+    server_name raw.{{DOMAIN}}.{{TLD}};
+    server_name  ~^([^.]+\.{{DOMAIN_ESCAPED}}\.{{TLD}})$;
+
+    set $icx_proxy 127.0.0.1:9500;
     client_max_body_size 60M;
 
     if ($denylisted) {
@@ -192,143 +197,17 @@ server {
 }
 
 server {
-
-    # Location of the icx-proxy from github.com/dfinity/agent.rs.
-    # Requests forwarded to this server will be sent back as /api/v2 requests.
-    set $icx_proxy 127.0.0.1:9500;
-
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name .raw.{{DOMAIN}}.{{TLD}};
 
+    server_name  ~^([^.]+\.raw\.{{DOMAIN_ESCAPED}}\.{{TLD}})$;
+    server_name  ~^([^.]+\.mainnet\.dfinity\.network)$;
+
+    set $icx_proxy 127.0.0.1:9500;
     client_max_body_size 60M;
-
-    root /var/www/html;
-    index index.html;
 
     if ($denylisted) {
       return 451;
-    }
-
-    location /_/ {
-        return 404;
-    }
-
-    location ~ /api/v2/canister/[0-9a-zA-Z\-]+/call {
-        if ($node_id = '') {
-            return 404;
-        }
-        set_cbor_input $cbor_key;
-        limit_req zone=cbor_key_rate_limit_10rpm burst=3 delay=2;
-        limit_req zone=nns_zone burst=3 delay=2;
-        limit_req zone=subnet_zone burst=100 delay=100;
-        # Handles the preflight check.
-        #
-        if ($request_method = 'OPTIONS') {
-            add_header 'Access-Control-Allow-Methods' 'GET, POST, HEAD, OPTIONS' always;
-            add_header 'Access-Control-Allow-Origin' '*' always;
-            add_header 'Access-Control-Allow-Credentials' 'true' always;
-            # Custom headers and headers various browsers *should* be OK with but aren't.
-            #
-            add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization' always;
-            # Tell client that this pre-flight info is valid for 10 minutes. Browsers don't have to
-            # respect this, but they mostly do.
-            #
-            add_header 'Access-Control-Max-Age' 600 always;
-            add_header 'Content-Type' 'text/plain; charset=utf-8' always;
-            add_header 'Content-Length' 0 always;
-            return 204;
-        }
-        proxy_pass https://$node_id;
-        # proxy_ssl_certificate        /etc/nginx/client.pem;
-        # proxy_ssl_certificate_key    /etc/nginx/client.key;
-        add_header 'X-Content-Type-Options' 'nosniff' always;
-        add_header 'content-type' 'application/cbor' always;
-        proxy_ssl_protocols TLSv1.3;
-        proxy_ssl_trusted_certificate /etc/nginx/ic/trusted_certs.pem;
-        proxy_ssl_name $node_id;
-        proxy_ssl_verify on;
-        proxy_ssl_verify_depth 2;
-    }
-
-    location ~ /api/v2/canister/[0-9a-zA-Z\-]+/query {
-        if ($node_id = '') {
-            return 404;
-        }
-        # The following settings are disabled since they would limit the
-        # effectiveness of caching. Instead we protect the upstream using
-        # max_conns in upstream block.
-        #
-        # limit_req zone=nns_read_zone burst=30 delay=20;
-        # limit_req zone=subnet_read_zone burst=100 delay=100;
-
-        proxy_pass "https://$node_id-query";
-        # proxy_ssl_certificate        /etc/nginx/client.pem;
-        # proxy_ssl_certificate_key    /etc/nginx/client.key;
-        add_header 'X-Content-Type-Options' 'nosniff' always;
-        add_header 'content-type' 'application/cbor' always;
-        proxy_ssl_protocols TLSv1.3;
-        proxy_ssl_trusted_certificate /etc/nginx/ic/trusted_certs.pem;
-        proxy_ssl_name $node_id;
-        proxy_ssl_verify on;
-        proxy_ssl_verify_depth 2;
-
-        # Cache all queries
-        set_cbor_input $cache_key;
-        set $skip_cache 0;
-        if ($cache_key = "") {
-            set $skip_cache 1;
-        }
-        proxy_cache cache_ic;
-        proxy_cache_methods POST;
-        proxy_cache_key "$cache_key";
-        proxy_cache_valid 1s;
-        proxy_cache_use_stale updating;
-        # proxy_buffers 8 32k;
-        # proxy_buffer_size 64k;
-        proxy_cache_bypass $skip_cache;
-        proxy_no_cache $skip_cache;
-    }
-
-    location /api/v2/ {
-        if ($node_id = '') {
-            return 404;
-        }
-        set_cbor_input $cbor_key;
-        limit_req zone=cbor_key_rate_limit_10rpm burst=3 delay=2;
-        limit_req zone=nns_read_zone burst=30 delay=20;
-        limit_req zone=subnet_read_zone burst=100 delay=100;
-        # Handles the preflight check.
-        #
-        if ($request_method = 'OPTIONS') {
-            add_header 'Access-Control-Allow-Methods' 'GET, POST, HEAD, OPTIONS' always;
-            add_header 'Access-Control-Allow-Origin' '*' always;
-            add_header 'Access-Control-Allow-Credentials' 'true' always;
-            # Custom headers and headers various browsers *should* be OK with but aren't.
-            #
-            add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization' always;
-            # Tell client that this pre-flight info is valid for 10 minutes. Browsers don't have to
-            # respect this, but they mostly do.
-            #
-            add_header 'Access-Control-Max-Age' 600 always;
-            add_header 'Content-Type' 'text/plain; charset=utf-8' always;
-            add_header 'Content-Length' 0 always;
-            return 204;
-        }
-        proxy_pass https://$node_id;
-        # proxy_ssl_certificate        /etc/nginx/client.pem;
-        # proxy_ssl_certificate_key    /etc/nginx/client.key;
-        add_header 'X-Content-Type-Options' 'nosniff' always;
-        add_header 'content-type' 'application/cbor' always;
-        proxy_ssl_protocols TLSv1.3;
-        proxy_ssl_trusted_certificate /etc/nginx/ic/trusted_certs.pem;
-        proxy_ssl_name $node_id;
-        proxy_ssl_verify on;
-        proxy_ssl_verify_depth 2;
-    }
-
-    location /api/ {
-        return 404;
     }
 
     location / {
@@ -374,12 +253,4 @@ server {
         add_header Access-Control-Expose-Headers 'Content-Length,Content-Range' always;
         add_header X-Cache-Status $upstream_cache_status;
     }
-}
-
-server {
-    listen      80;
-    listen [::]:80;
-    server_name .{{DOMAIN}}.{{TLD}};
-
-    return 301 https://$host$request_uri;
 }
