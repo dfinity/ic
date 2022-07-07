@@ -187,7 +187,7 @@ impl SchedulerTest {
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         canister_state.execution_state = Some(
             wasm_executor
-                .create_execution_state(wasm_source, canister_id)
+                .create_execution_state(CanisterModule::new(wasm_source), canister_id)
                 .unwrap()
                 .1,
         );
@@ -714,12 +714,12 @@ impl WasmExecutor for TestWasmExecutor {
 
     fn create_execution_state(
         &self,
-        wasm_source: Vec<u8>,
+        canister_module: CanisterModule,
         _canister_root: PathBuf,
         canister_id: CanisterId,
     ) -> HypervisorResult<(CompilationResult, ExecutionState)> {
         let mut guard = self.core.lock().unwrap();
-        guard.create_execution_state(wasm_source, canister_id)
+        guard.create_execution_state(canister_module, canister_id)
     }
 }
 
@@ -822,7 +822,7 @@ impl TestWasmExecutorCore {
 
     fn create_execution_state(
         &mut self,
-        wasm_source: Vec<u8>,
+        canister_module: CanisterModule,
         _canister_id: CanisterId,
     ) -> HypervisorResult<(CompilationResult, ExecutionState)> {
         let mut exported_functions = vec![
@@ -832,14 +832,14 @@ impl TestWasmExecutorCore {
             WasmMethod::System(SystemMethod::CanisterPostUpgrade),
             WasmMethod::System(SystemMethod::CanisterInit),
         ];
-        if !wasm_source.is_empty() {
-            let text = std::str::from_utf8(&wasm_source).unwrap();
+        if !canister_module.as_slice().is_empty() {
+            let text = std::str::from_utf8(canister_module.as_slice()).unwrap();
             let system_method = SystemMethod::try_from(text).unwrap();
             exported_functions.push(WasmMethod::System(system_method));
         }
         let execution_state = ExecutionState::new(
             Default::default(),
-            execution_state::WasmBinary::new(CanisterModule::new(wasm_source)),
+            execution_state::WasmBinary::new(canister_module),
             ExportedFunctions::new(exported_functions.into_iter().collect()),
             Default::default(),
             Default::default(),

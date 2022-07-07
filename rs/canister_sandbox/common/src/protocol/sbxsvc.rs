@@ -1,9 +1,11 @@
 //! This defines the RPC service methods offered by the sandbox process
 //! (used by the controller) as well as the expected replies.
 
+use std::sync::Arc;
+
 use crate::fdenum::EnumerateInnerFileDescriptors;
 use crate::protocol::structs;
-use ic_embedders::CompilationResult;
+use ic_embedders::{CompilationResult, SerializedModule, SerializedModuleBytes};
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
     page_map::{
@@ -13,6 +15,7 @@ use ic_replicated_state::{
     Global, NumWasmPages,
 };
 use ic_types::CanisterId;
+use ic_utils;
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -54,7 +57,26 @@ pub struct OpenWasmRequest {
 
 /// Reply to an `OpenWasmRequest`.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct OpenWasmReply(pub HypervisorResult<CompilationResult>);
+pub struct OpenWasmReply(pub HypervisorResult<(CompilationResult, SerializedModule)>);
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OpenWasmSerializedRequest {
+    /// Id used to later refer to this canister runner. Must be unique
+    /// per sandbox instance.
+    pub wasm_id: WasmId,
+
+    /// The serialization of a previously compiled `wasmtime::Module`.
+    /// This types in just an `Arc` reference to a vector of bytes and the only
+    /// reason it is `Arc` is so that we can cheaply create the
+    /// `OpenWasmSerializedRequest` before sending it to the sandbox.
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+    pub serialized_module: Arc<SerializedModuleBytes>,
+}
+
+/// Reply to an `OpenWasmRequest`.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OpenWasmSerializedReply(pub HypervisorResult<()>);
 
 /// Request to close the indicated wasm object.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -234,6 +256,7 @@ pub struct CreateExecutionStateSuccessReply {
     pub wasm_memory_modifications: MemoryModifications,
     pub exported_globals: Vec<Global>,
     pub compilation_result: CompilationResult,
+    pub serialized_module: SerializedModule,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -245,6 +268,7 @@ pub struct CreateExecutionStateReply(pub HypervisorResult<CreateExecutionStateSu
 pub enum Request {
     Terminate(TerminateRequest),
     OpenWasm(OpenWasmRequest),
+    OpenWasmSerialized(OpenWasmSerializedRequest),
     CloseWasm(CloseWasmRequest),
     OpenMemory(OpenMemoryRequest),
     CloseMemory(CloseMemoryRequest),
@@ -261,6 +285,7 @@ impl EnumerateInnerFileDescriptors for Request {
             Request::CreateExecutionState(request) => request.enumerate_fds(fds),
             Request::Terminate(_)
             | Request::OpenWasm(_)
+            | Request::OpenWasmSerialized(_)
             | Request::CloseWasm(_)
             | Request::CloseMemory(_)
             | Request::StartExecution(_)
@@ -276,6 +301,7 @@ impl EnumerateInnerFileDescriptors for Request {
 pub enum Reply {
     Terminate(TerminateReply),
     OpenWasm(OpenWasmReply),
+    OpenWasmSerialized(OpenWasmSerializedReply),
     CloseWasm(CloseWasmReply),
     OpenMemory(OpenMemoryReply),
     CloseMemory(CloseMemoryReply),

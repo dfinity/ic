@@ -36,8 +36,18 @@ impl SandboxService for SandboxServer {
         let result = self
             .manager
             .open_wasm(req.wasm_id, req.wasm_src)
-            .map(|(_cache, result)| result);
+            .map(|(_cache, result, serialized_module)| (result, serialized_module));
         rpc::Call::new_resolved(Ok(OpenWasmReply(result)))
+    }
+
+    fn open_wasm_serialized(
+        &self,
+        req: OpenWasmSerializedRequest,
+    ) -> rpc::Call<OpenWasmSerializedReply> {
+        let result = self
+            .manager
+            .open_wasm_serialized(req.wasm_id, &req.serialized_module);
+        rpc::Call::new_resolved(Ok(OpenWasmSerializedReply(result)))
     }
 
     fn close_wasm(&self, req: CloseWasmRequest) -> rpc::Call<CloseWasmReply> {

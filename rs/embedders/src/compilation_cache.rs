@@ -32,17 +32,20 @@ impl CompilationCache {
         }
     }
 
-    pub fn insert(&self, canister_module: &CanisterModule, serialized_module: SerializedModule) {
+    pub fn insert(
+        &self,
+        canister_module: &CanisterModule,
+        serialized_module: Arc<SerializedModule>,
+    ) {
         if self.enabled == FlagStatus::Enabled {
             self.cache
                 .write()
                 .unwrap()
-                .insert(WasmHash::from(canister_module), Arc::new(serialized_module));
+                .insert(WasmHash::from(canister_module), serialized_module);
         }
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn get(&self, canister_module: &CanisterModule) -> Option<Arc<SerializedModule>> {
+    pub fn get(&self, canister_module: &CanisterModule) -> Option<Arc<SerializedModule>> {
         if self.enabled == FlagStatus::Enabled {
             self.cache
                 .read()
@@ -52,5 +55,10 @@ impl CompilationCache {
         } else {
             None
         }
+    }
+
+    #[doc(hidden)]
+    pub fn clear_for_testing(&self) {
+        self.cache.write().unwrap().clear()
     }
 }

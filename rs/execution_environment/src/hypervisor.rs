@@ -22,6 +22,7 @@ use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{
     ingress::WasmResult, methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId,
 };
+use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::{path::PathBuf, sync::Arc};
 
@@ -100,7 +101,6 @@ impl HypervisorMetrics {
             largest_function_instruction_count,
             compilation_time,
             compilation_cost: _,
-            serialized_module: _,
         } = compilation_result;
         self.largest_function_instruction_count
             .observe(largest_function_instruction_count.get() as f64);
@@ -166,15 +166,14 @@ impl Hypervisor {
         canister_root: PathBuf,
         canister_id: CanisterId,
     ) -> HypervisorResult<(NumInstructions, ExecutionState)> {
-        let (compilation_result, execution_state) =
-            self.wasm_executor
-                .create_execution_state(wasm_binary, canister_root, canister_id)?;
+        let canister_module = CanisterModule::new(wasm_binary);
+        let (compilation_result, execution_state) = self.wasm_executor.create_execution_state(
+            canister_module,
+            canister_root,
+            canister_id,
+        )?;
         self.metrics
             .observe_compilation_metrics(&compilation_result);
-        self.compilation_cache.insert(
-            &execution_state.wasm_binary.binary,
-            compilation_result.serialized_module,
-        );
         Ok((compilation_result.compilation_cost, execution_state))
     }
 
@@ -277,14 +276,11 @@ impl Hypervisor {
                 execution_parameters,
                 func_ref,
                 execution_state,
+                compilation_cache: Arc::clone(&self.compilation_cache),
             });
         if let Some(compilation_result) = compilation_result {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);
-            self.compilation_cache.insert(
-                &execution_state.wasm_binary.binary,
-                compilation_result.serialized_module,
-            );
         }
         self.metrics.observe(api_type_str, &execution_result);
         let (output, system_state_changes) = match execution_result {
@@ -329,16 +325,18 @@ impl Hypervisor {
                 execution_parameters,
                 func_ref,
                 execution_state,
+                compilation_cache: Arc::clone(&self.compilation_cache),
             });
         if let Some(compilation_result) = compilation_result {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);
-            self.compilation_cache.insert(
-                &execution_state.wasm_binary.binary,
-                compilation_result.serialized_module,
-            );
         }
         self.metrics.observe(api_type_str, &execution_result);
         (execution_state, execution_result)
+    }
+
+    #[doc(hidden)]
+    pub fn clear_compilation_cache_for_testing(&self) {
+        self.compilation_cache.clear_for_testing()
     }
 }

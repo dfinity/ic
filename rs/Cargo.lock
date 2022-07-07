@@ -4360,6 +4360,7 @@ dependencies = [
  "ic-sys",
  "ic-system-api",
  "ic-types 0.8.0",
+ "ic-utils 0.8.0",
  "libc",
  "nix 0.23.0",
  "serde",

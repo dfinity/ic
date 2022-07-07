@@ -10,11 +10,11 @@ use prometheus::IntCounter;
 
 use crate::wasm_utils::compile;
 use crate::wasm_utils::instrumentation::Segments;
-use crate::CompilationResult;
 use crate::{
     wasm_utils::decoding::decode_wasm, wasm_utils::validation::WasmImportsDetails,
     wasmtime_embedder::WasmtimeInstance, WasmExecutionInput, WasmtimeEmbedder,
 };
+use crate::{CompilationCache, CompilationResult, SerializedModule};
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
     ExecutionParameters, HypervisorError, HypervisorResult, InstanceStats,
@@ -48,9 +48,10 @@ pub trait WasmExecutor: Send + Sync {
         ExecutionState,
         WasmExecutionResult,
     );
+
     fn create_execution_state(
         &self,
-        wasm_source: Vec<u8>,
+        canister_module: CanisterModule,
         canister_root: PathBuf,
         canister_id: CanisterId,
     ) -> HypervisorResult<(CompilationResult, ExecutionState)>;
@@ -156,6 +157,7 @@ impl WasmExecutor for WasmExecutorImpl {
             execution_parameters,
             func_ref,
             mut execution_state,
+            compilation_cache,
         }: WasmExecutionInput,
     ) -> (
         Option<CompilationResult>,
@@ -171,27 +173,30 @@ impl WasmExecutor for WasmExecutorImpl {
         );
 
         // Ensure that Wasm is compiled.
-        let (embedder_cache, compilation_result) =
-            match self.get_embedder_cache(None, &execution_state.wasm_binary) {
-                Ok(cache_result) => cache_result,
-                Err(err) => {
-                    return (
-                        None,
-                        execution_state,
-                        WasmExecutionResult::Finished(
-                            WasmExecutionOutput {
-                                wasm_result: Err(err),
-                                num_instructions_left: NumInstructions::from(0),
-                                instance_stats: InstanceStats {
-                                    accessed_pages: 0,
-                                    dirty_pages: 0,
-                                },
+        let CacheLookup {
+            cache: embedder_cache,
+            serialized_module: _,
+            compilation_result,
+        } = match self.get_embedder_cache(&execution_state.wasm_binary, compilation_cache) {
+            Ok(cache_result) => cache_result,
+            Err(err) => {
+                return (
+                    None,
+                    execution_state,
+                    WasmExecutionResult::Finished(
+                        WasmExecutionOutput {
+                            wasm_result: Err(err),
+                            num_instructions_left: NumInstructions::from(0),
+                            instance_stats: InstanceStats {
+                                accessed_pages: 0,
+                                dirty_pages: 0,
                             },
-                            sandbox_safe_system_state.changes(),
-                        ),
-                    )
-                }
-            };
+                        },
+                        sandbox_safe_system_state.changes(),
+                    ),
+                )
+            }
+        };
 
         let wasm_reserved_pages = get_wasm_reserved_pages(&execution_state);
 
@@ -235,36 +240,30 @@ impl WasmExecutor for WasmExecutorImpl {
 
     fn create_execution_state(
         &self,
-        wasm_source: Vec<u8>,
+        canister_module: CanisterModule,
         canister_root: PathBuf,
         canister_id: CanisterId,
     ) -> HypervisorResult<(CompilationResult, ExecutionState)> {
         // Compile Wasm binary and cache it.
-        let wasm_binary = WasmBinary::new(CanisterModule::new(wasm_source));
-        let binary_encoded_wasm = decode_wasm(wasm_binary.binary.to_shared_vec())?;
-        let (embedder_cache, mut compilation_result) =
-            match self.get_embedder_cache(Some(&binary_encoded_wasm), &wasm_binary)? {
-                (cache, Some(compilation_result)) => (cache, compilation_result),
-                (_cache, None) => panic!("Newly created WasmBinary must be compiled"),
-            };
-        let exported_functions = compilation_result
-            .serialized_module
-            .exported_functions()
-            .clone();
-        let wasm_metadata = compilation_result.serialized_module.wasm_metadata().clone();
+        let wasm_binary = WasmBinary::new(canister_module);
+        let (embedder_cache, serialized_module, compilation_result) = match self
+            .get_embedder_cache(
+                &wasm_binary,
+                Arc::new(CompilationCache::new(FlagStatus::Disabled)),
+            )? {
+            CacheLookup {
+                cache,
+                serialized_module: Some(serialized_module),
+                compilation_result: Some(compilation_result),
+            } => (cache, serialized_module, compilation_result),
+            _ => panic!("Newly created WasmBinary must be compiled"),
+        };
+        let exported_functions = serialized_module.exported_functions.clone();
+        let wasm_metadata = serialized_module.wasm_metadata.clone();
         let mut wasm_page_map = PageMap::default();
-        let segments;
 
         let (globals, _wasm_page_delta, wasm_memory_size) = get_initial_globals_and_memory(
-            match self.wasm_embedder.config().feature_flags.module_sharing {
-                FlagStatus::Disabled => {
-                    // With sharing disabled we can clear the data segments
-                    // from the `SerializedModule` because it won't be used anyway.
-                    segments = compilation_result.serialized_module.take_data_segments();
-                    &segments
-                }
-                FlagStatus::Enabled => compilation_result.serialized_module.data_segments(),
-            },
+            &serialized_module.data_segments,
             &embedder_cache,
             &self.wasm_embedder,
             &mut wasm_page_map,
@@ -284,6 +283,15 @@ impl WasmExecutor for WasmExecutorImpl {
         );
         Ok((compilation_result, execution_state))
     }
+}
+
+/// Result of checking for a compiled module in the `EmbedderCache` and `CompilationCache`.
+struct CacheLookup {
+    pub cache: EmbedderCache,
+    /// This field will be `None` if the `EmbedderCache` was present (so no module deserialization was required).
+    pub serialized_module: Option<Arc<SerializedModule>>,
+    /// This field will be `None` if the `SerializedModule` was present in the `CompilationCache` (so no compilation was required).
+    pub compilation_result: Option<CompilationResult>,
 }
 
 impl WasmExecutorImpl {
@@ -325,28 +333,45 @@ impl WasmExecutorImpl {
 
     fn get_embedder_cache(
         &self,
-        decoded_wasm: Option<&BinaryEncodedWasm>,
         wasm_binary: &WasmBinary,
-    ) -> HypervisorResult<(EmbedderCache, Option<CompilationResult>)> {
+        compilation_cache: Arc<CompilationCache>,
+    ) -> HypervisorResult<CacheLookup> {
         let mut guard = wasm_binary.embedder_cache.lock().unwrap();
         if let Some(embedder_cache) = &*guard {
-            Ok((embedder_cache.clone(), None))
+            Ok(CacheLookup {
+                cache: embedder_cache.clone(),
+                serialized_module: None,
+                compilation_result: None,
+            })
         } else {
-            use std::borrow::Cow;
-            // The wasm_binary stored in the `ExecutionState` is not
-            // instrumented so instrument it before compiling. Further, due to
-            // IC upgrades, it is possible that the `validate_wasm_binary()`
-            // function has changed, so also validate the binary.
-            let decoded_wasm: Cow<'_, BinaryEncodedWasm> = match decoded_wasm {
-                Some(wasm) => Cow::Borrowed(wasm),
-                None => Cow::Owned(decode_wasm(wasm_binary.binary.to_shared_vec())?),
-            };
-            match compile(&self.wasm_embedder, decoded_wasm.as_ref()) {
-                Ok((cache, result)) => {
+            match compilation_cache.get(&wasm_binary.binary) {
+                Some(serialized_module) => {
+                    let cache = self
+                        .wasm_embedder
+                        .deserialize_module(&serialized_module.bytes)
+                        .map(|module| EmbedderCache::new(module))?;
                     *guard = Some(cache.clone());
-                    Ok((cache, Some(result)))
+                    Ok(CacheLookup {
+                        cache,
+                        serialized_module: Some(serialized_module),
+                        compilation_result: None,
+                    })
                 }
-                Err(err) => Err(err),
+                None => {
+                    use std::borrow::Cow;
+                    let decoded_wasm: Cow<'_, BinaryEncodedWasm> =
+                        Cow::Owned(decode_wasm(wasm_binary.binary.to_shared_vec())?);
+                    let (cache, compilation_result, serialized_module) =
+                        compile(&self.wasm_embedder, decoded_wasm.as_ref())?;
+                    let serialized_module = Arc::new(serialized_module);
+                    compilation_cache.insert(&wasm_binary.binary, Arc::clone(&serialized_module));
+                    *guard = Some(cache.clone());
+                    Ok(CacheLookup {
+                        cache,
+                        serialized_module: Some(serialized_module),
+                        compilation_result: Some(compilation_result),
+                    })
+                }
             }
         }
     }
