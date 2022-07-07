@@ -1,6 +1,6 @@
 use crate::cmd::{
-    AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SetRecoveryCupCmd, WithLedgerAccountCmd,
-    WithNeuronCmd, WithTrustedNeuronsFollowingNeuronCmd,
+    AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, WithLedgerAccountCmd, WithNeuronCmd,
+    WithTrustedNeuronsFollowingNeuronCmd,
 };
 use candid::Encode;
 use ic_canister_client::{Agent, Sender};
@@ -16,12 +16,11 @@ use ic_nns_governance::pb::v1::{
 };
 use ic_protobuf::registry::{
     replica_version::v1::ReplicaVersionRecord,
-    subnet::v1::{CatchUpPackageContents, RegistryStoreUri, SubnetRecord, SubnetType},
+    subnet::v1::{SubnetRecord, SubnetType},
 };
 use ic_registry_client_helpers::subnet::get_node_ids_from_subnet_record;
 use ic_registry_keys::{
-    make_blessed_replica_version_key, make_catch_up_package_contents_key, make_replica_version_key,
-    make_subnet_record_key,
+    make_blessed_replica_version_key, make_replica_version_key, make_subnet_record_key,
 };
 use ic_registry_transport::{
     pb::v1::{registry_mutation, Precondition, RegistryMutation},
@@ -207,53 +206,6 @@ pub fn cmd_add_ledger_account(
     )])
 }
 
-/// Creates a recovery CUP by using the latest CUP and overriding the height and
-/// the state hash.
-pub fn cmd_set_recovery_cup(
-    agent: &Agent,
-    player: &crate::player::Player,
-    cmd: &SetRecoveryCupCmd,
-    context_time: Time,
-) -> Result<SignedIngress, String> {
-    use ic_crypto::utils::ni_dkg::initial_ni_dkg_transcript_record_from_transcript;
-    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
-
-    let time = context_time + Duration::from_secs(60);
-    let state_hash = hex::decode(&cmd.state_hash).map_err(|err| format!("{}", err))?;
-    let cup = player.get_highest_catch_up_package();
-    let payload = cup.content.block.as_ref().payload.as_ref();
-    let summary = payload.as_summary();
-    let low_threshold_transcript = summary
-        .dkg
-        .current_transcript(&NiDkgTag::LowThreshold)
-        .clone();
-    let high_threshold_transcript = summary
-        .dkg
-        .current_transcript(&NiDkgTag::HighThreshold)
-        .clone();
-    let initial_ni_dkg_transcript_low_threshold = Some(
-        initial_ni_dkg_transcript_record_from_transcript(low_threshold_transcript),
-    );
-    let initial_ni_dkg_transcript_high_threshold = Some(
-        initial_ni_dkg_transcript_record_from_transcript(high_threshold_transcript),
-    );
-    let cup_contents = CatchUpPackageContents {
-        initial_ni_dkg_transcript_low_threshold,
-        initial_ni_dkg_transcript_high_threshold,
-        height: cmd.height,
-        time: time.as_nanos_since_unix_epoch(),
-        state_hash,
-        registry_store_uri: Some(RegistryStoreUri {
-            uri: cmd.registry_store_uri.clone().unwrap_or_default(),
-            hash: cmd.registry_store_sha256.clone().unwrap_or_default(),
-            registry_version: player.get_latest_registry_version(context_time)?.get(),
-        }),
-        ecdsa_initializations: vec![],
-    };
-
-    update_catch_up_package_contents(agent, player.subnet_id, cup_contents, context_time)
-}
-
 /// Creates signed ingress messages to add a new blessed replica version and
 /// potentially updates the subnet record with this replica version.
 pub fn cmd_add_and_bless_replica_version(
@@ -404,31 +356,6 @@ pub fn atomic_mutate(
         .map_err(|err| format!("Error preparing update message: {:?}", err))?;
     SignedIngress::try_from(http_body)
         .map_err(|err| format!("Error converting to SignedIngress: {:?}", err))
-}
-
-/// Add a new catch up content by mutating the registry canister.
-pub fn update_catch_up_package_contents(
-    agent: &Agent,
-    subnet_id: SubnetId,
-    cup_contents: CatchUpPackageContents,
-    context_time: Time,
-) -> Result<SignedIngress, String> {
-    let mut mutation = RegistryMutation::default();
-    mutation.set_mutation_type(registry_mutation::Type::Update);
-    mutation.key = make_catch_up_package_contents_key(subnet_id).into_bytes();
-
-    let mut buf = Vec::new();
-    match cup_contents.encode(&mut buf) {
-        Ok(_) => mutation.value = buf,
-        Err(error) => panic!("Error encoding the value to protobuf: {:?}", error),
-    }
-    atomic_mutate(
-        agent,
-        REGISTRY_CANISTER_ID,
-        vec![mutation],
-        vec![],
-        context_time + Duration::from_secs(60),
-    )
 }
 
 /// Bless a new replica version by mutating the registry canister.

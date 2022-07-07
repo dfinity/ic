@@ -206,22 +206,6 @@ impl AdminHelper {
         ic_admin
     }
 
-    pub fn get_extract_cup_command(
-        &self,
-        subnet_id: SubnetId,
-        registry_store: PathBuf,
-        output_file: PathBuf,
-    ) -> IcAdmin {
-        let mut ic_admin = self.get_ic_admin_cmd_base(&None);
-        ic_admin.push("get-recovery-cup".to_string());
-        ic_admin.push(subnet_id.to_string());
-        ic_admin.push("--registry-local-store".to_string());
-        ic_admin.push(format!("{:?}", registry_store));
-        ic_admin.push("--output-file".to_string());
-        ic_admin.push(format!("{:?}", output_file));
-        ic_admin
-    }
-
     pub fn to_system_command(ic_admin: &IcAdmin) -> Command {
         let mut cmd = Command::new(&ic_admin[0]);
         cmd.args(ic_admin[1..].iter().map(|s| s.replace('\"', "")));

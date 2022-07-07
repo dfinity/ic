@@ -108,10 +108,10 @@ pub struct Player {
     http_query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     certification_pool: Option<CertificationPoolImpl>,
-    registry: Arc<RegistryClientImpl>,
+    pub registry: Arc<RegistryClientImpl>,
     local_store_path: Option<PathBuf>,
     replica_version: ReplicaVersion,
-    log: ReplicaLogger,
+    pub log: ReplicaLogger,
     _async_log_guard: AsyncGuard,
     /// The id of the subnet where the artifacts are taken from.
     pub subnet_id: SubnetId,

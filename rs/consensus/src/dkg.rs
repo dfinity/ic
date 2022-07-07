@@ -1250,43 +1250,11 @@ pub fn make_genesis_summary(
                 let summary_registry_version =
                     registry_version_to_put_in_summary.unwrap_or(registry_version);
                 let cup_contents = versioned_record.value.expect("Missing CUP contents");
-                let cup_height = Height::new(cup_contents.height);
-
-                let transcripts = get_dkg_transcripts_from_cup_contents(cup_contents);
-                let transcripts = vec![
-                    (NiDkgTag::LowThreshold, transcripts.low_threshold),
-                    (NiDkgTag::HighThreshold, transcripts.high_threshold),
-                ]
-                .into_iter()
-                .collect();
-
-                let committee = get_node_list(subnet_id, registry, registry_version)
-                    .expect("Could not retrieve committee list");
-
-                let configs = get_configs_for_local_transcripts(
+                return get_dkg_summary_from_cup_contents(
+                    cup_contents,
                     subnet_id,
-                    committee,
-                    cup_height,
-                    &transcripts,
-                    registry_version,
-                )
-                .expect("Couldn't generate configs for the genesis summary");
-                // For the first 2 intervals we use the length value contained in the
-                // genesis subnet record.
-                let interval_length =
-                    get_dkg_interval_length(registry, registry_version, subnet_id)
-                        .expect("Could not retieve the interval length for the genesis summary.");
-                let next_interval_length = interval_length;
-                return Summary::new(
-                    configs,
-                    transcripts,
-                    BTreeMap::new(), // next transcripts
-                    BTreeMap::new(), // transcripts for other subnets
+                    registry,
                     summary_registry_version,
-                    interval_length,
-                    next_interval_length,
-                    cup_height,
-                    BTreeMap::new(), // initial_dkg_attempts
                 );
             }
             _ => {
@@ -1300,8 +1268,13 @@ pub fn make_genesis_summary(
     }
 }
 
-fn get_dkg_transcripts_from_cup_contents(cup_contents: CatchUpPackageContents) -> DkgTranscripts {
-    DkgTranscripts {
+fn get_dkg_summary_from_cup_contents(
+    cup_contents: CatchUpPackageContents,
+    subnet_id: SubnetId,
+    registry: &dyn RegistryClient,
+    registry_version: RegistryVersion,
+) -> Summary {
+    let transcripts = DkgTranscripts {
         low_threshold: cup_contents
             .initial_ni_dkg_transcript_low_threshold
             .map(initial_ni_dkg_transcript_from_registry_record)
@@ -1310,10 +1283,45 @@ fn get_dkg_transcripts_from_cup_contents(cup_contents: CatchUpPackageContents) -
             .initial_ni_dkg_transcript_high_threshold
             .map(initial_ni_dkg_transcript_from_registry_record)
             .expect("Missing initial high-threshold DKG transcript"),
-    }
+    };
+    let transcripts = vec![
+        (NiDkgTag::LowThreshold, transcripts.low_threshold),
+        (NiDkgTag::HighThreshold, transcripts.high_threshold),
+    ]
+    .into_iter()
+    .collect();
+
+    let committee = get_node_list(subnet_id, registry, registry_version)
+        .expect("Could not retrieve committee list");
+
+    let height = Height::from(cup_contents.height);
+    let configs = get_configs_for_local_transcripts(
+        subnet_id,
+        committee,
+        height,
+        &transcripts,
+        registry_version,
+    )
+    .expect("Couldn't generate configs for the genesis summary");
+    // For the first 2 intervals we use the length value contained in the
+    // genesis subnet record.
+    let interval_length = get_dkg_interval_length(registry, registry_version, subnet_id)
+        .expect("Could not retieve the interval length for the genesis summary.");
+    let next_interval_length = interval_length;
+    Summary::new(
+        configs,
+        transcripts,
+        BTreeMap::new(), // next transcripts
+        BTreeMap::new(), // transcripts for other subnets
+        registry_version,
+        interval_length,
+        next_interval_length,
+        height,
+        BTreeMap::new(), // initial_dkg_attempts
+    )
 }
 
-/// Construcs a genesis/recovery CUP from the CUP contents associated with the
+/// Constructs a genesis/recovery CUP from the CUP contents associated with the
 /// given subnet
 pub fn make_registry_cup(
     registry: &dyn RegistryClient,
@@ -1335,18 +1343,25 @@ pub fn make_registry_cup(
     };
 
     let cup_contents = versioned_record.value.expect("Missing CUP contents");
-    let registry_version = if let Some(registry_info) = cup_contents.registry_store_uri {
-        RegistryVersion::from(registry_info.registry_version)
-    } else {
-        versioned_record.version
-    };
-    // We do not use `registry_version` here because doing so would cause issues
-    // for full NNS (4b) subnet recovery. When we are calling
-    // make_registry_cup, our notion of the the NNS registry is still that of
-    // the temporary NNS that is used to spawn the recovered NNS. However the
-    // registry version store in `registry_store_uri` is a registry version from
-    // the original/restored NNS, and so we can not use that version here.
-    let replica_version = match registry.get_replica_version(subnet_id, versioned_record.version) {
+    make_registry_cup_from_cup_contents(
+        registry,
+        subnet_id,
+        cup_contents,
+        versioned_record.version,
+        logger,
+    )
+}
+
+/// Constructs a genesis/recovery CUP from the CUP contents associated with the
+/// given subnet from the provided CUP contents
+pub fn make_registry_cup_from_cup_contents(
+    registry: &dyn RegistryClient,
+    subnet_id: SubnetId,
+    cup_contents: CatchUpPackageContents,
+    registry_version: RegistryVersion,
+    logger: Option<&ReplicaLogger>,
+) -> Option<CatchUpPackage> {
+    let replica_version = match registry.get_replica_version(subnet_id, registry_version) {
         Ok(Some(replica_version)) => replica_version,
         err => {
             if let Some(logger) = logger {
@@ -1360,7 +1375,12 @@ pub fn make_registry_cup(
             return None;
         }
     };
-    let dkg_summary = make_genesis_summary(registry, subnet_id, Some(registry_version));
+    let dkg_summary = get_dkg_summary_from_cup_contents(
+        cup_contents.clone(),
+        subnet_id,
+        registry,
+        registry_version,
+    );
     let cup_height = Height::new(cup_contents.height);
     let ecdsa_summary = match inspect_ecdsa_initializations(&cup_contents.ecdsa_initializations) {
         Ok(Some((key_id, dealings))) => {

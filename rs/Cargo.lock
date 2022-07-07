@@ -3717,7 +3717,6 @@ dependencies = [
  "ic-base-types",
  "ic-canister-client",
  "ic-config",
- "ic-consensus",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "ic-crypto-utils-basic-sig",

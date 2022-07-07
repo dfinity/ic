@@ -10,7 +10,7 @@ use crate::{
     IC_STATE_EXCLUDES,
 };
 use ic_base_types::CanisterId;
-use ic_replay::cmd::{SetRecoveryCupCmd, SubCommand};
+use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
 use ic_types::{Height, SubnetId};
 use slog::{info, Logger};
 use std::net::IpAddr;
@@ -547,17 +547,18 @@ impl Step for UpdateLocalStoreStep {
     }
 }
 
-pub struct SetRecoveryCUPStep {
+pub struct GetRecoveryCUPStep {
     pub subnet_id: SubnetId,
     pub config: PathBuf,
     pub state_hash: String,
     pub recovery_height: Height,
     pub result: PathBuf,
+    pub work_dir: PathBuf,
 }
 
-impl Step for SetRecoveryCUPStep {
+impl Step for GetRecoveryCUPStep {
     fn descr(&self) -> String {
-        format!("Set recovery CUP by executing:\nic-replay {:?} --subnet-id {:?} set-recovery-cup {:?} {:?}", self.config, self.subnet_id, self.state_hash, self.recovery_height)
+        format!("Set recovery CUP by executing:\nic-replay {:?} --subnet-id {:?} get-recovery-cup {:?} {:?} cup.proto", self.config, self.subnet_id, self.state_hash, self.recovery_height)
     }
 
     fn exec(&self) -> RecoveryResult<()> {
@@ -565,11 +566,12 @@ impl Step for SetRecoveryCUPStep {
             self.subnet_id,
             self.config.clone(),
             None,
-            Some(SubCommand::SetRecoveryCup(SetRecoveryCupCmd {
+            Some(SubCommand::GetRecoveryCup(GetRecoveryCupCmd {
                 state_hash: self.state_hash.clone(),
                 height: self.recovery_height.get(),
                 registry_store_uri: None,
                 registry_store_sha256: None,
+                output_file: self.work_dir.join("cup.proto"),
             })),
             self.result.clone(),
         ))?;
@@ -646,12 +648,10 @@ sudo chown -R "$OWNER_UID:$GROUP_UID" cup.proto;
 sudo systemctl stop ic-replica;
 sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/;
 sudo cp cup.proto /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb;
-sudo cp cup.proto /var/lib/ic/data/cups/cup_${}.types.v1.CatchUpPackage.pb;
 sudo systemctl start ic-replica;
 sudo systemctl status ic-replica;
 "#,
             UploadCUPAndTar::get_upload_dir_name(),
-            self.subnet_id,
         )
     }
 

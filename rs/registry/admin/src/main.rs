@@ -19,7 +19,6 @@ use ic_registry_client_helpers::deserialize_registry_value;
 use ic_types::p2p;
 #[macro_use]
 extern crate ic_admin_derive;
-use ic_consensus::dkg::make_registry_cup;
 use ic_ic00_types::{CanisterIdRecord, CanisterInstallMode, EcdsaKeyId};
 use ic_interfaces::registry::RegistryClient;
 use ic_nervous_system_common_test_keys::{
@@ -88,7 +87,6 @@ use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
 use ic_types::{
-    consensus::{catchup::CUPWithOriginalProtobuf, HasHeight},
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
     CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
 };
@@ -118,7 +116,6 @@ use registry_canister::mutations::{
 use serde::Serialize;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Debug;
-use std::io::Write;
 use std::sync::Arc;
 use std::{
     convert::TryFrom,
@@ -281,8 +278,6 @@ enum SubCommand {
     GetProvisionalWhitelist,
     /// Get the public of the subnet.
     GetSubnetPublicKey(SubnetPublicKeyCmd),
-    /// Get the recovery CUP fields of a subnet
-    GetRecoveryCup(GetRecoveryCupCmd),
     /// Propose to add a new node operator to the registry.
     ProposeToAddNodeOperator(ProposeToAddNodeOperatorCmd),
     /// Get a node operator's record
@@ -1917,20 +1912,6 @@ struct SubnetPublicKeyCmd {
     target_path: PathBuf,
 }
 
-/// Sub-command to get the recovery cup of a subnet from the registry.
-#[derive(Parser)]
-struct GetRecoveryCupCmd {
-    /// The subnet
-    subnet: SubnetDescriptor,
-
-    #[clap(long)]
-    output_file: Option<PathBuf>,
-
-    /// Read recovery CUP from a local store instead.
-    #[clap(long)]
-    registry_local_store: Option<PathBuf>,
-}
-
 /// Sub-command to submit a proposal to add or remove a node provider.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
@@ -3170,7 +3151,6 @@ async fn main() {
         SubCommand::GetSubnetPublicKey(cmd) => {
             store_subnet_pk(&registry_canister, cmd.subnet, cmd.target_path.as_path()).await;
         }
-        SubCommand::GetRecoveryCup(cmd) => get_recovery_cup(registry_canister, cmd).await,
         SubCommand::ProposeToRemoveNodes(cmd) => {
             propose_external_proposal_from_command(
                 cmd,
@@ -3950,62 +3930,6 @@ async fn get_subnet_pk(registry: &RegistryCanister, subnet_id: SubnetId) -> Publ
             PublicKey::decode(&bytes[..]).expect("Error decoding PublicKey from registry")
         }
         Err(error) => panic!("Error getting value from registry: {:?}", error),
-    }
-}
-
-/// Fetch a subnet's recovery CUP.
-async fn get_recovery_cup(registry_canister: RegistryCanister, cmd: GetRecoveryCupCmd) {
-    let subnet_id = cmd.subnet.get_id(&registry_canister).await;
-    let registry_client = if let Some(local_store_path) = cmd.registry_local_store {
-        let local_store = Arc::new(LocalStoreImpl::new(local_store_path));
-        RegistryClientImpl::new(local_store, None)
-    } else {
-        RegistryClientImpl::new(
-            Arc::new(NnsDataProvider::new(
-                tokio::runtime::Handle::current(),
-                registry_canister,
-            )),
-            None,
-        )
-    };
-    // maximum number of retries, let the user ctrl+c if necessary
-    registry_client
-        .try_polling_latest_version(usize::MAX)
-        .expect("Failed to poll client");
-
-    let cup =
-        make_registry_cup(&registry_client, subnet_id, None).expect("Failed to make registry CUP");
-
-    // This prints JSON with byte array fields in hex format.
-    fn to_json_string<T: Serialize>(msg: &T) -> String {
-        let mut out = vec![];
-        let mut ser = serde_json::Serializer::new(&mut out);
-        let ser = serde_bytes_repr::ByteFmtSerializer::hex(&mut ser);
-        msg.serialize(ser).expect("Failed to serialize to JSON");
-        String::from_utf8(out).expect("UTF8 conversion error")
-    }
-
-    // CUP content is printed to stdout as JSON string.
-    println!("{}", to_json_string(&cup));
-    // Additional information is printed to stderr in human readable form.
-    eprintln!(
-        "height: {}, time: {}, state_hash: {:?}",
-        cup.height(),
-        cup.content.block.as_ref().context.time,
-        cup.content.state_hash
-    );
-
-    if let Some(output_file) = cmd.output_file {
-        let cup_proto = CUPWithOriginalProtobuf::from_cup(cup);
-        let mut file =
-            std::fs::File::create(output_file).expect("Failed to open output file for write");
-        let mut bytes = Vec::<u8>::new();
-        cup_proto
-            .protobuf
-            .encode(&mut bytes)
-            .expect("Failed to encode protobuf");
-        file.write_all(&bytes)
-            .expect("Failed to write to output file");
     }
 }
 
