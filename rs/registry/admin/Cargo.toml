@@ -20,7 +20,6 @@ ic-nns-init = { path="../../nns/init" }
 ic-base-types = { path="../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }
 ic-config = { path = "../../config" }
-ic-consensus = { path = "../../consensus" }
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }

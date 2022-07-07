@@ -235,9 +235,9 @@ impl Recovery {
                     None,
                 );
                 let registry_client = RegistryClientImpl::new(nns_data_provider, None);
-                registry_client
-                    .poll_once()
-                    .expect("couldn't poll the registry");
+                if let Err(err) = registry_client.poll_once() {
+                    return Err(format!("couldn't poll the registry: {:?}", err));
+                };
                 let version = registry_client.get_latest_version();
                 match registry_client.get_node_ids_on_subnet(subnet_id, version) {
                     Ok(Some(node_ids)) => Ok(node_ids
@@ -703,29 +703,18 @@ impl Recovery {
         }
     }
 
-    /// Return an [SetRecoveryCUPStep] to set the recovery CUP using ic-replay
-    pub fn get_set_recovery_cup_step(&self, subnet_id: SubnetId) -> RecoveryResult<impl Step> {
+    /// Return an [GetRecoveryCUPStep] to get the recovery CUP using ic-replay
+    pub fn get_recovery_cup_step(&self, subnet_id: SubnetId) -> RecoveryResult<impl Step> {
         let state_params = self.get_replay_output()?;
         let recovery_height = Recovery::get_recovery_height(state_params.height);
-        Ok(SetRecoveryCUPStep {
+        Ok(GetRecoveryCUPStep {
             subnet_id,
             config: self.work_dir.join("ic.json5"),
             result: self.work_dir.join("set_recovery_cup.txt"),
             state_hash: state_params.hash,
+            work_dir: self.work_dir.clone(),
             recovery_height,
         })
-    }
-
-    /// Return an [AdminStep] extracting the current cup into cup.proto using ic-admin
-    pub fn get_extract_cup_file_step(&self, subnet_id: SubnetId) -> impl Step {
-        AdminStep {
-            logger: self.logger.clone(),
-            ic_admin_cmd: self.admin_helper.get_extract_cup_command(
-                subnet_id,
-                self.work_dir.join("data").join(IC_REGISTRY_LOCAL_STORE),
-                self.work_dir.join("cup.proto"),
-            ),
-        }
     }
 
     /// Return a [CreateTarsStep] to create tar files of the current registry local store and ic state

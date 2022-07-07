@@ -104,40 +104,6 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             *res_clone.borrow_mut() = player.restore(cmd.start_height + 1);
             return;
         }
-        let extra = move |player: &Player, time| {
-            // Use a dummy URL here because we don't send any outgoing ingress.
-            // The agent is only used to construct ingress messages.
-            let agent = &Agent::new(
-                url::Url::parse("http://localhost").unwrap(),
-                Sender::PrincipalId(canister_caller_id.into()),
-            );
-            match subcmd {
-                Some(SubCommand::SetRecoveryCup(cmd)) => {
-                    vec![cmd_set_recovery_cup(agent, player, cmd, time).unwrap()]
-                }
-                Some(SubCommand::AddAndBlessReplicaVersion(cmd)) => {
-                    cmd_add_and_bless_replica_version(agent, player, cmd, time).unwrap()
-                }
-                Some(SubCommand::AddRegistryContent(cmd)) => {
-                    cmd_add_registry_content(agent, cmd, player.subnet_id, time).unwrap()
-                }
-                Some(SubCommand::RemoveSubnetNodes) => {
-                    if let Some(msg) = cmd_remove_subnet(agent, player, time).unwrap() {
-                        vec![msg]
-                    } else {
-                        Vec::new()
-                    }
-                }
-                Some(SubCommand::WithNeuronForTests(cmd)) => cmd_add_neuron(time, cmd).unwrap(),
-                Some(SubCommand::WithLedgerAccountForTests(cmd)) => {
-                    cmd_add_ledger_account(time, cmd).unwrap()
-                }
-                Some(SubCommand::WithTrustedNeuronsFollowingNeuronForTests(cmd)) => {
-                    cmd_make_trusted_neurons_follow_neuron(time, cmd).unwrap()
-                }
-                _ => Vec::new(),
-            }
-        };
         {
             let _enter_guard = rt.enter();
             let player = match (subcmd.as_ref(), target_height) {
@@ -150,6 +116,44 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                     Player::new(cfg, subnet_id).with_replay_target_height(target_height)
                 }
             };
+
+            if let Some(SubCommand::GetRecoveryCup(cmd)) = subcmd {
+                cmd_get_recovery_cup(&player, cmd).unwrap();
+                return;
+            }
+
+            let extra = move |player: &Player, time| {
+                // Use a dummy URL here because we don't send any outgoing ingress.
+                // The agent is only used to construct ingress messages.
+                let agent = &Agent::new(
+                    url::Url::parse("http://localhost").unwrap(),
+                    Sender::PrincipalId(canister_caller_id.into()),
+                );
+                match subcmd {
+                    Some(SubCommand::AddAndBlessReplicaVersion(cmd)) => {
+                        cmd_add_and_bless_replica_version(agent, player, cmd, time).unwrap()
+                    }
+                    Some(SubCommand::AddRegistryContent(cmd)) => {
+                        cmd_add_registry_content(agent, cmd, player.subnet_id, time).unwrap()
+                    }
+                    Some(SubCommand::RemoveSubnetNodes) => {
+                        if let Some(msg) = cmd_remove_subnet(agent, player, time).unwrap() {
+                            vec![msg]
+                        } else {
+                            Vec::new()
+                        }
+                    }
+                    Some(SubCommand::WithNeuronForTests(cmd)) => cmd_add_neuron(time, cmd).unwrap(),
+                    Some(SubCommand::WithLedgerAccountForTests(cmd)) => {
+                        cmd_add_ledger_account(time, cmd).unwrap()
+                    }
+                    Some(SubCommand::WithTrustedNeuronsFollowingNeuronForTests(cmd)) => {
+                        cmd_make_trusted_neurons_follow_neuron(time, cmd).unwrap()
+                    }
+                    _ => Vec::new(),
+                }
+            };
+
             *res_clone.borrow_mut() = match player.replay(extra) {
                 Ok(state_params) => {
                     if let Some(SubCommand::UpdateRegistryLocalStore) = subcmd {
@@ -176,4 +180,81 @@ pub fn consent_given(question: &str) -> bool {
     let mut s = String::new();
     stdin().read_line(&mut s).expect("Couldn't read user input");
     matches!(s.as_str(), "\n" | "y\n" | "Y\n")
+}
+
+// Creates a recovery CUP by using the latest CUP and overriding the height and
+// the state hash.
+fn cmd_get_recovery_cup(
+    player: &crate::player::Player,
+    cmd: &crate::cmd::GetRecoveryCupCmd,
+) -> Result<(), String> {
+    use ic_crypto::utils::ni_dkg::initial_ni_dkg_transcript_record_from_transcript;
+    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, RegistryStoreUri};
+    use ic_types::consensus::{catchup::CUPWithOriginalProtobuf, HasHeight};
+    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
+    use prost::Message;
+
+    let context_time = ic_types::time::current_time();
+    let time = context_time + std::time::Duration::from_secs(60);
+    let state_hash = hex::decode(&cmd.state_hash).map_err(|err| format!("{}", err))?;
+    let cup = player.get_highest_catch_up_package();
+    let payload = cup.content.block.as_ref().payload.as_ref();
+    let summary = payload.as_summary();
+    let low_threshold_transcript = summary
+        .dkg
+        .current_transcript(&NiDkgTag::LowThreshold)
+        .clone();
+    let high_threshold_transcript = summary
+        .dkg
+        .current_transcript(&NiDkgTag::HighThreshold)
+        .clone();
+    let initial_ni_dkg_transcript_low_threshold = Some(
+        initial_ni_dkg_transcript_record_from_transcript(low_threshold_transcript),
+    );
+    let initial_ni_dkg_transcript_high_threshold = Some(
+        initial_ni_dkg_transcript_record_from_transcript(high_threshold_transcript),
+    );
+    let registry_version = player.get_latest_registry_version(context_time)?;
+    let cup_contents = CatchUpPackageContents {
+        initial_ni_dkg_transcript_low_threshold,
+        initial_ni_dkg_transcript_high_threshold,
+        height: cmd.height,
+        time: time.as_nanos_since_unix_epoch(),
+        state_hash,
+        registry_store_uri: Some(RegistryStoreUri {
+            uri: cmd.registry_store_uri.clone().unwrap_or_default(),
+            hash: cmd.registry_store_sha256.clone().unwrap_or_default(),
+            registry_version: registry_version.get(),
+        }),
+        ecdsa_initializations: vec![],
+    };
+
+    let cup = ic_consensus::dkg::make_registry_cup_from_cup_contents(
+        &*player.registry,
+        player.subnet_id,
+        cup_contents,
+        registry_version,
+        Some(&player.log),
+    )
+    .ok_or_else(|| "couldn't create a registry CUP".to_string())?;
+
+    println!(
+        "height: {}, time: {}, state_hash: {:?}",
+        cup.height(),
+        cup.content.block.as_ref().context.time,
+        cup.content.state_hash
+    );
+
+    let cup_proto = CUPWithOriginalProtobuf::from_cup(cup);
+    let mut file =
+        std::fs::File::create(&cmd.output_file).expect("Failed to open output file for write");
+    let mut bytes = Vec::<u8>::new();
+    cup_proto
+        .protobuf
+        .encode(&mut bytes)
+        .expect("Failed to encode protobuf");
+    use std::io::Write;
+    file.write_all(&bytes)
+        .expect("Failed to write to output file");
+    Ok(())
 }

@@ -49,8 +49,8 @@ pub enum SubCommand {
     /// Remove all nodes from the subnet record that this node belongs to.
     /// Note that this does not remove individual node records.
     RemoveSubnetNodes,
-    /// Create a recovery CUP.
-    SetRecoveryCup(SetRecoveryCupCmd),
+    /// Create a recovery CUP and write it to a file.
+    GetRecoveryCup(GetRecoveryCupCmd),
 
     /// Restore from the backup.
     RestoreFromBackup(RestoreFromBackupCmd),
@@ -71,11 +71,13 @@ pub enum SubCommand {
 }
 
 #[derive(Clone, Parser)]
-pub struct SetRecoveryCupCmd {
+pub struct GetRecoveryCupCmd {
     /// State hash (in hex).
     pub state_hash: String,
     /// Height of the recovery CUP to create.
     pub height: u64,
+    /// Output file
+    pub output_file: PathBuf,
     /// Registry store URI
     pub registry_store_uri: Option<String>,
     /// Registry store SHA256 hash

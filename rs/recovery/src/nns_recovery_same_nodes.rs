@@ -23,9 +23,7 @@ pub enum StepType {
     UpdateRegistryLocalStore,
     CreateTars,
     CopyIcState,
-    SetRecoveryCUP,
-    UpdateLocalStoreWithCUP,
-    ExtractCUPFile,
+    GetRecoveryCUP,
     UploadCUPandRegistry,
     WaitForCUP,
     UploadState,
@@ -145,10 +143,16 @@ impl RecoveryIterator<StepType> for NNSRecoverySameNodes {
                 },
             ))),
 
-            StepType::UpdateRegistryLocalStore => Ok(Box::new(
-                self.recovery
-                    .get_update_local_store_step(self.params.subnet_id),
-            )),
+            StepType::UpdateRegistryLocalStore => {
+                if self.params.upgrade_version.is_none() {
+                    Err(RecoveryError::StepSkipped)
+                } else {
+                    Ok(Box::new(
+                        self.recovery
+                            .get_update_local_store_step(self.params.subnet_id),
+                    ))
+                }
+            }
 
             StepType::CreateTars => Ok(Box::new(self.recovery.get_create_tars_step())),
 
@@ -156,19 +160,8 @@ impl RecoveryIterator<StepType> for NNSRecoverySameNodes {
                 self.recovery.get_copy_ic_state(self.new_state_dir.clone()),
             )),
 
-            StepType::SetRecoveryCUP => Ok(Box::new(
-                self.recovery
-                    .get_set_recovery_cup_step(self.params.subnet_id)?,
-            )),
-
-            StepType::UpdateLocalStoreWithCUP => Ok(Box::new(
-                self.recovery
-                    .get_update_local_store_step(self.params.subnet_id),
-            )),
-
-            StepType::ExtractCUPFile => Ok(Box::new(
-                self.recovery
-                    .get_extract_cup_file_step(self.params.subnet_id),
+            StepType::GetRecoveryCUP => Ok(Box::new(
+                self.recovery.get_recovery_cup_step(self.params.subnet_id)?,
             )),
 
             StepType::UploadCUPandRegistry => Ok(Box::new(
