@@ -188,6 +188,7 @@ impl SnsInitPayload {
         SnsRootCanister {
             governance_canister_id: Some(sns_canister_ids.governance),
             ledger_canister_id: Some(sns_canister_ids.ledger),
+            dapp_canister_ids: vec![],
         }
     }
 

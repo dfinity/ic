@@ -3,13 +3,13 @@ use canister_test::{Canister, Project, Runtime};
 use dfn_core::bytes;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto_sha::Sha256;
-use ic_ic00_types::CanisterStatusResultV2;
 use ic_ic00_types::CanisterStatusType::Running;
 use ic_interfaces::registry::RegistryClient;
 use ic_nns_test_utils::itest_helpers::{local_test_on_nns_subnet, set_up_sns_wasm_canister};
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_sns_init::pb::v1::SnsInitPayload;
+use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
@@ -151,12 +151,11 @@ fn test_canisters_are_created_and_installed() {
             Canister::new(&runtime, CanisterId::new(root_canister_principal).unwrap());
         root_canister.set_wasm(root_wasm.bytes());
 
-        let principals: Vec<PrincipalId> = Vec::new();
         let result = root_canister
             .update_(
                 "get_sns_canisters_summary",
                 bytes,
-                Encode!(&principals).unwrap(),
+                Encode!(&GetSnsCanistersSummaryRequest {}).unwrap(),
             )
             .await
             .unwrap();
@@ -165,32 +164,51 @@ fn test_canisters_are_created_and_installed() {
         // through CanisterApiImpl::install_wasm, since governance has to know root canister_id
         // in order to respond to root's request for its own status from governance
         // more detailed coverage of the initialization parameters is done through unit tests
-        let mut response =
-            Decode!(&result, Vec<(String, PrincipalId, CanisterStatusResultV2)>).unwrap();
-
-        let root_tuple = response.remove(0);
-        let governance_tuple = response.remove(0);
-        let ledger_tuple = response.remove(0);
+        let response = Decode!(&result, GetSnsCanistersSummaryResponse).unwrap();
 
         // Assert that the canisters are installed in the same configuration that our response
         // told us above and controllers and installed wasms are correct
-        assert_eq!(root_tuple.0, "root");
-        assert_eq!(root_tuple.1, root_canister_id.get());
-        assert_eq!(root_tuple.2.status(), Running);
-        assert_eq!(root_tuple.2.controller(), governance_canister_id.get());
-        assert_eq!(root_tuple.2.module_hash().unwrap(), root_hash);
+        let root_canister_summary = response.root_canister_summary();
+        assert_eq!(root_canister_summary.canister_id(), root_canister_id.get());
+        assert_eq!(root_canister_summary.status().status(), Running);
+        assert_eq!(
+            root_canister_summary.status().controller(),
+            governance_canister_id.get()
+        );
+        assert_eq!(
+            root_canister_summary.status().module_hash().unwrap(),
+            root_hash
+        );
 
-        assert_eq!(governance_tuple.0, "governance");
-        assert_eq!(governance_tuple.1, governance_canister_id.get());
-        assert_eq!(governance_tuple.2.status(), Running);
-        assert_eq!(governance_tuple.2.controller(), root_canister_id.get());
-        assert_eq!(governance_tuple.2.module_hash().unwrap(), governance_hash);
+        let governance_canister_summary = response.governance_canister_summary();
+        assert_eq!(
+            governance_canister_summary.canister_id(),
+            governance_canister_id.get()
+        );
+        assert_eq!(governance_canister_summary.status().status(), Running);
+        assert_eq!(
+            governance_canister_summary.status().controller(),
+            root_canister_id.get()
+        );
+        assert_eq!(
+            governance_canister_summary.status().module_hash().unwrap(),
+            governance_hash
+        );
 
-        assert_eq!(ledger_tuple.0, "ledger");
-        assert_eq!(ledger_tuple.1, ledger_canister_id.get());
-        assert_eq!(ledger_tuple.2.status(), Running);
-        assert_eq!(ledger_tuple.2.controller(), root_canister_id.get());
-        assert_eq!(ledger_tuple.2.module_hash().unwrap(), ledger_hash);
+        let ledger_canister_summary = response.ledger_canister_summary();
+        assert_eq!(
+            ledger_canister_summary.canister_id(),
+            ledger_canister_id.get()
+        );
+        assert_eq!(ledger_canister_summary.status().status(), Running);
+        assert_eq!(
+            ledger_canister_summary.status().controller(),
+            root_canister_id.get()
+        );
+        assert_eq!(
+            ledger_canister_summary.status().module_hash().unwrap(),
+            ledger_hash
+        );
 
         Ok(())
     });

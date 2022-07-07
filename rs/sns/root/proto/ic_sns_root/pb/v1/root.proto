@@ -19,4 +19,14 @@ message SnsRootCanister {
 
   // The SNS Ledger canister ID
   ic_base_types.pb.v1.PrincipalId ledger_canister_id = 2;
+
+  // Dapp canister IDs.
+  repeated ic_base_types.pb.v1.PrincipalId dapp_canister_ids = 3;
+}
+
+message RegisterDappCanisterRequest {
+  ic_base_types.pb.v1.PrincipalId canister_id = 1;
+}
+
+message RegisterDappCanisterResponse {
 }

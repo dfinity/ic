@@ -16,4 +16,17 @@ pub struct SnsRootCanister {
     /// The SNS Ledger canister ID
     #[prost(message, optional, tag="2")]
     pub ledger_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Dapp canister IDs.
+    #[prost(message, repeated, tag="3")]
+    pub dapp_canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RegisterDappCanisterRequest {
+    #[prost(message, optional, tag="1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RegisterDappCanisterResponse {
 }

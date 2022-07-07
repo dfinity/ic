@@ -70,7 +70,9 @@ pub enum AuthzChangeOp {
 }
 
 /// Return the status of the given canister. The caller must control the given canister.
-pub async fn get_canister_status(canister_id: PrincipalId) -> CanisterStatusResultV2 {
+pub async fn get_canister_status(
+    canister_id: PrincipalId,
+) -> Result<CanisterStatusResultV2, (Option<i32>, String)> {
     let canister_id_record: CanisterIdRecord = CanisterId::new(canister_id).unwrap().into();
 
     call(
@@ -80,7 +82,6 @@ pub async fn get_canister_status(canister_id: PrincipalId) -> CanisterStatusResu
         (canister_id_record,),
     )
     .await
-    .unwrap()
 }
 
 /// (Concisely) converts an integer to a rational.
