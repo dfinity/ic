@@ -1,0 +1,14 @@
+[Unit]
+Description=SetupOS config process
+Before=generate-network-config.service
+Before=setupos.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/config.sh
+StandardOutput=file:/dev/tty1
+StandardError=file:/dev/tty1
+
+[Install]
+WantedBy=multi-user.target

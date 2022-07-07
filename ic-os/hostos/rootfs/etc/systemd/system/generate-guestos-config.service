@@ -1,7 +1,6 @@
 [Unit]
 Description=Generate GuestOS configuration
 Before=systemd-networkd.service
-After=store-hsm.service
 
 [Service]
 Type=oneshot

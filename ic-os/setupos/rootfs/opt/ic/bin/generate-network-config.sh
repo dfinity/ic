@@ -22,7 +22,7 @@ for argument in "${@}"; do
 Generate Network Configuration
 
 Arguments:
-  -c=, --config=        specify the config.ini configuration file (Default: /config/config.ini)
+  -c=, --config=        specify the config.ini configuration file (Default: /config/tmp/config.ini)
   -d=, --deployment=    specify the deployment.json configuration file (Default: /data/deployment.json)
   -h, --help            show this help message and exit
   -o=, --output=        specify the systemd-networkd output directory (Default: /run/systemd/network)
@@ -41,7 +41,7 @@ Arguments:
 done
 
 # Set arguments if undefined
-CONFIG="${CONFIG:=/config/config.ini}"
+CONFIG="${CONFIG:=/config/tmp/config.ini}"
 DEPLOYMENT="${DEPLOYMENT:=/data/deployment.json}"
 OUTPUT="${OUTPUT:=/run/systemd/network}"
 
@@ -60,7 +60,6 @@ function read_variables() {
             "ipv6_subnet") ipv6_subnet="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
             "ipv6_address") ipv6_address="${value}" ;;
-            "hostname") hostname="${value}" ;;
         esac
     done <"${CONFIG}"
 }

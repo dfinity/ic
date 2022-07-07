@@ -6,9 +6,6 @@ set -e
 
 SCRIPT="$(basename $0)[$$]"
 
-# Set argument default
-UNIQUE=0
-
 # Get keyword arguments
 for argument in "${@}"; do
     case ${argument} in
@@ -24,16 +21,12 @@ Arguments:
   -c=, --config=        mandatory: specify the configuration file to read from
   -h, --help            show this help message and exit
   -k=, --key=           mandatory: specify the property key
-  -u, --unique          optional: read per data center unique property (Default: 0)
 '
             exit 1
             ;;
         -k=* | --key=*)
             KEY="${argument#*=}"
             shift
-            ;;
-        -u | --unique)
-            UNIQUE=1
             ;;
         *)
             echo "Error: Argument is not supported."
@@ -58,22 +51,8 @@ write_log() {
     logger -t ${SCRIPT} "${message}"
 }
 
-function fetch_hsm_principal() {
-    HSM_PRINCIPAL=$(/opt/ic/bin/hsm-utils.sh --fetch)
-
-    if [ -z "${HSM_PRINCIPAL}" -o "${HSM_PRINCIPAL}" == "null" ]; then
-        write_log "ERROR: HSM public key principal is invalid."
-        exit 1
-    fi
-}
-
 function fetch_property() {
-    if [ ${UNIQUE} -eq 1 ]; then
-        fetch_hsm_principal
-        PROPERTY=$(jq -r ".network.dcs.\"${HSM_PRINCIPAL}\"$(echo ${KEY})" ${CONFIG})
-    else
-        PROPERTY=$(jq -r "$(echo ${KEY})" ${CONFIG})
-    fi
+    PROPERTY=$(jq -r "$(echo ${KEY})" ${CONFIG})
 
     if [ -z "${PROPERTY}" -o "${PROPERTY}" == "null" ]; then
         write_log "ERROR: Unable to fetch property: ${KEY}"

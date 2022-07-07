@@ -34,13 +34,23 @@ RUN find /etc -type d -exec chmod 0755 {} \+ && \
 # but we want to prohibit it from writing to user home dirs
 RUN sed -e '/.*pam_motd.so.*/d' -i /etc/pam.d/login
 
+# Deactivate lvm backup/archive: It writes backup information to /etc/lvm, but a) this is
+# per system (so backups are not persisted across upgrades) and thus not very
+# useful, and b) we want to turn /etc read-only eventually. So simply suppress
+# generating backups.
+RUN sed -e 's/\(backup *= *\)1/\10/' -e 's/\(archive *= *\)1/\10/' -i /etc/lvm/lvm.conf
+
 # Deactivate systemd userdb. We don't use it.
 RUN sed -e 's/ *systemd//' -i /etc/nsswitch.conf
 
 # Regenerate initramfs (config changed after copying in /etc)
 RUN RESUME=none update-initramfs -c -k all
 
-RUN echo "root:$(openssl passwd -6 -salt jE8zzDEHeRg/DuGq password)" | chpasswd -e
+ARG ROOT_PASSWORD=
+RUN \
+    if [ "${ROOT_PASSWORD}" != "" ]; then \
+        echo "root:$(openssl passwd -6 -salt jE8zzDEHeRg/DuGq ${ROOT_PASSWORD})" | chpasswd -e ; \
+    fi
 
 COPY prep /prep
 RUN cd /prep && ./prep.sh && cd / && rm -rf /prep

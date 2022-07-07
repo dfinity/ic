@@ -29,9 +29,9 @@ function verify_cpu() {
     log_and_reboot_on_error "${?}" "Unable to extract CPU sockets."
 
     if [ ${sockets} -eq ${CPU_SOCKETS} ]; then
-        echo "Number of sockets (${sockets}/${CPU_SOCKETS}) meets system requirements."
+        echo "  Number of sockets (${sockets}/${CPU_SOCKETS}) meets system requirements."
     else
-        log_and_reboot_on_error "1" "Number of sockets (${sockets}/${CPU_SOCKETS}) does NOT meet system requirements."
+        log_and_reboot_on_error "1" "  Number of sockets (${sockets}/${CPU_SOCKETS}) does NOT meet system requirements."
     fi
 
     for i in $(echo "${cpu}" | jq -r '.[].id'); do
@@ -40,7 +40,7 @@ function verify_cpu() {
 
         local model=$(echo "${cpu}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .product')
         if [[ ${model} =~ .*${CPU_MODEL}.* ]]; then
-            echo "Model meets system requirements."
+            echo "  Model meets system requirements."
         else
             log_and_reboot_on_error "1" "Model does NOT meet system requirements.."
         fi
@@ -51,7 +51,7 @@ function verify_cpu() {
             log_and_reboot_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
 
             if [[ ${capability} =~ .*true.* ]]; then
-                echo "Capability '${c}' meets system requirements."
+                echo "  Capability '${c}' meets system requirements."
             else
                 log_and_reboot_on_error "$?" "Capability '${c}' does NOT meet system requirements.."
             fi
@@ -59,14 +59,14 @@ function verify_cpu() {
 
         local cores=$(echo "${cpu}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .configuration.cores')
         if [ ${cores} -eq ${CPU_CORES} ]; then
-            echo "Number of cores (${cores}/${CPU_CORES}) meets system requirements."
+            echo "  Number of cores (${cores}/${CPU_CORES}) meets system requirements."
         else
             log_and_reboot_on_error "1" "Number of cores (${cores}/${CPU_CORES}) does NOT meet system requirements."
         fi
 
         local threads=$(echo "${cpu}" | jq -r --arg socket "${i}" '.[] | select(.id==$socket) | .configuration.threads')
         if [ ${threads} -eq ${CPU_THREADS} ]; then
-            echo "Number of threads (${threads}/${CPU_THREADS}) meets system requirements."
+            echo "  Number of threads (${threads}/${CPU_THREADS}) meets system requirements."
         else
             log_and_reboot_on_error "1" "Number of threads (${threads}/${CPU_THREADS}) does NOT meet system requirements."
         fi
@@ -83,7 +83,7 @@ function verify_memory() {
     log_and_reboot_on_error "${?}" "Unable to extract memory size."
 
     if [ "${size}" -gt "${MEMORY_SIZE}" ]; then
-        echo "Memory size (${size} bytes) meets system requirements."
+        echo "  Memory size (${size} bytes) meets system requirements."
     else
         log_and_reboot_on_error "1" "Memory size (${size} bytes) does NOT meet system requirements."
     fi
@@ -99,7 +99,7 @@ function verify_disk() {
     log_and_reboot_on_error "${?}" "Unable to extract disk size."
 
     if [ "${size}" -gt "${DISK_SIZE}" ]; then
-        echo "Disk size (${size} bytes) meets system requirements."
+        echo "  Disk size (${size} bytes) meets system requirements."
     else
         log_and_reboot_on_error "1" "Disk size (${size} bytes) does NOT meet system requirements."
     fi

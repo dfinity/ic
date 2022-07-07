@@ -21,70 +21,84 @@ BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base")
 TOUCH_TIMESTAMP="200901031815.05"
 export SOURCE_DATE_EPOCH="1231006505"
 
-# Get keyword arguments
-for argument in "${@}"; do
-    case ${argument} in
-        -d=* | --deployment=*)
-            DEPLOYMENT="${argument#*=}"
-            shift
-            ;;
-        -h | --help)
-            echo 'Usage:
-SetupOS Builder
+function usage() {
+    cat <<EOF
 
-Arguments:
-  -d=, --deployment=    specify the deployment name (Default: mainnet)
-  --host-os=            specify the HostOS disk-image file (Default: ./host-os.img.tar.gz)
-  --guest-os=           specify the GuestOS disk-image file (Default: ./guest-os.img.tar.gz)
-  -h, --help            show this help message and exit
-  -k=, --key=           specify the NNS public key (Example: ./nns_public_key.pem)
-  -l=, --logging=       specify the logging hosts/destination (Default: telemetry01.mainnet.dfinity.network telemetry02.mainnet.dfinity.network telemetry03.mainnet.dfinity.network)
-  -n=, --nns-url=       specify the NNS URL for the GuestOS (Default: <http://[mainnet]:8080>)
-  -o=, --output=        ISO output directory (Default: ./)
-  -s=, --name-servers=  specify the DNS name servers (Default: 2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844)
-  --memory=             specify the amount of memory in GiB (Gibibytes) for the GuestOS (Default: 490)
-  -v=, --version        specify the SetupOS version
-'
-            exit 1
+Usage:
+  build-disk-image -o outfile -v version -t dev] [-p password]
+
+  Build whole disk of IC SetupOS image.
+
+  -d deployment: Define the deployment name
+                 Default: mainnet
+  -f host-os-img: Specify the HostOS disk-image file; mandatory
+                  Default: ./host-os.img.tar.gz
+  -g guest-os-img: Specify the GuestOS disk-image file; mandatory
+                   Default: ./guest-os.img.tar.gz
+  -k nns-public-key: Specify the NNS public key
+                     Example: ./nns_public_key.pem
+  -l logging-hosts: Define the logging hosts/destination
+                    Default: telemetry01.mainnet.dfinity.network
+                             telemetry02.mainnet.dfinity.network
+                             telemetry03.mainnet.dfinity.network
+  -m memory: Set the amount of memory in GiB (Gibibytes) for the GuestOS.
+             Default: 490
+  -n nns-url: Define the NNS URL for the GuestOS.
+              Default: http://[mainnet]:8080
+  -o outfile: Name of output file; mandatory
+  -p password: Set root password for console access. This is only allowed
+               for "dev" images
+  -s nameserver: Define the DNS name servers.
+                 Default: 2606:4700:4700::1111 2606:4700:4700::1001
+                          2001:4860:4860::8888 2001:4860:4860::8844
+  -t image-type: The type of image to build. Must be either "dev" or "prod".
+                 If nothing is specified, defaults to building "prod" image.
+  -v version: The version written into the image; mandatory
+
+EOF
+}
+
+BUILD_TYPE=prod
+while getopts "d:f:g:k:l:m:n:o:p:s:t:v:" OPT; do
+    case "${OPT}" in
+        d)
+            DEPLOYMENT="${OPTARG}"
             ;;
-        --host-os=*)
-            HOST_OS="${argument#*=}"
-            shift
+        f)
+            HOST_OS="${OPTARG}"
             ;;
-        --guest-os=*)
-            GUEST_OS="${argument#*=}"
-            shift
+        g)
+            GUEST_OS="${OPTARG}"
             ;;
-        -k=* | --key=*)
-            KEY="${argument#*=}"
-            shift
+        k)
+            KEY="${OPTARG}"
             ;;
-        -l=* | --logging=*)
-            LOGGING="${argument#*=}"
-            shift
+        l)
+            LOGGING="${OPTARG}"
             ;;
-        -n=* | --nns-url=*)
-            NNS_URL="${argument#*=}"
-            shift
+        m)
+            MEMORY="${OPTARG}"
             ;;
-        -o=* | --output=*)
-            OUTPUT="${argument#*=}"
-            shift
+        n)
+            NNS_URL="${OPTARG}"
             ;;
-        -s=* | --name-servers=*)
-            NAME_SERVERS="${argument#*=}"
-            shift
+        o)
+            OUT_FILE="${OPTARG}"
             ;;
-        --memory=*)
-            MEMORY="${argument#*=}"
-            shift
+        p)
+            ROOT_PASSWORD="${OPTARG}"
             ;;
-        -v=* | --version=*)
-            VERSION="${argument#*=}"
-            shift
+        s)
+            NAME_SERVERS="${OPTARG}"
+            ;;
+        t)
+            BUILD_TYPE="${OPTARG}"
+            ;;
+        v)
+            VERSION="${OPTARG}"
             ;;
         *)
-            echo "Error: Argument is not supported: ${argument#*=}" >&2
+            usage >&2
             exit 1
             ;;
     esac
@@ -99,16 +113,26 @@ MEMORY="${MEMORY:=490}"
 NNS_URL="${NNS_URL:=http://[2600:c02:b002:15:5000:ceff:fecc:d5cd]:8080,http://[2604:3fc0:3002:0:5000:6bff:feb9:6baf]:8080,http://[2a00:fb01:400:100:5000:5bff:fe6b:75c6]:8080,http://[2604:3fc0:2001:0:5000:b0ff:fe7b:ff55]:8080,http://[2600:3000:6100:200:5000:cbff:fe4b:b207]:8080,http://[2604:3fc0:3002:0:5000:4eff:fec2:4806]:8080,http://[2001:920:401a:1708:5000:5fff:fec1:9ddb]:8080,http://[2001:920:401a:1706:5000:87ff:fe11:a9a0]:8080,http://[2401:3f00:1000:24:5000:deff:fed6:1d7]:8080,http://[2a00:fb01:400:100:5000:61ff:fe2c:14ac]:8080,http://[2a04:9dc0:0:108:5000:ccff:feb7:c03b]:8080,http://[2600:c02:b002:15:5000:53ff:fef7:d3c0]:8080,http://[2401:3f00:1000:22:5000:c3ff:fe44:36f4]:8080,http://[2607:f1d0:10:1:5000:a7ff:fe91:44e]:8080,http://[2a04:9dc0:0:108:5000:96ff:fe4a:be10]:8080,http://[2604:7e00:50:0:5000:20ff:fea7:efee]:8080,http://[2600:3004:1200:1200:5000:59ff:fe54:4c4b]:8080,http://[2a0f:cd00:2:1:5000:3fff:fe36:cab8]:8080,http://[2401:3f00:1000:23:5000:80ff:fe84:91ad]:8080,http://[2607:f758:c300:0:5000:72ff:fe35:3797]:8080,http://[2607:f758:1220:0:5000:12ff:fe0c:8a57]:8080,http://[2a01:138:900a:0:5000:2aff:fef4:c47e]:8080,http://[2a0f:cd00:2:1:5000:87ff:fe58:ceba]:8080,http://[2401:3f00:1000:24:5000:86ff:fea6:9bb5]:8080,http://[2600:2c01:21:0:5000:27ff:fe23:4839]:8080,http://[2a04:9dc0:0:108:5000:7cff:fece:97d]:8080,http://[2001:920:401a:1708:5000:4fff:fe92:48f1]:8080,http://[2604:3fc0:3002:0:5000:acff:fe31:12e8]:8080,http://[2a04:9dc0:0:108:5000:6bff:fe08:5f57]:8080,http://[2607:f758:c300:0:5000:3eff:fe6d:af08]:8080,http://[2607:f758:1220:0:5000:bfff:feb9:6794]:8080,http://[2607:f758:c300:0:5000:8eff:fe8b:d68]:8080,http://[2607:f758:1220:0:5000:3aff:fe16:7aec]:8080,http://[2a00:fb01:400:100:5000:ceff:fea2:bb0]:8080,http://[2a00:fa0:3:0:5000:5aff:fe89:b5fc]:8080,http://[2a00:fa0:3:0:5000:68ff:fece:922e]:8080,http://[2600:3000:6100:200:5000:c4ff:fe43:3d8a]:8080,http://[2001:920:401a:1710:5000:d7ff:fe6f:fde7]:8080,http://[2a01:138:900a:0:5000:5aff:fece:cf05]:8080,http://[2600:3006:1400:1500:5000:20ff:fe3f:3c98]:8080}"
 NAME_SERVERS="${NAME_SERVERS:=2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844}"
 
-function validate_input() {
-    local variable="${1}"
-    local message="${2}"
+if [ "${OUT_FILE}" == "" ]; then
+    usage >&2
+    exit 1
+fi
 
-    if [ -z ${variable} ]; then
-        echo "Missing Argument:" >&2
-        echo "  ${message}" >&2
-        exit 1
-    fi
-}
+if [ "${BUILD_TYPE}" != "dev" -a "${BUILD_TYPE}" != "prod" ]; then
+    echo "Unknown build type: ${BUILD_TYPE}" >&2
+    exit 1
+fi
+
+if [ "${ROOT_PASSWORD}" != "" -a "${BUILD_TYPE}" != "dev" ]; then
+    echo "Root password is valid only for build type 'dev'" >&2
+    exit 1
+fi
+
+if [ "${VERSION}" == "" ]; then
+    echo "Version needs to be specified for build to succeed" >&2
+    usage >&2
+    exit 1
+fi
 
 function log_and_exit_on_error() {
     local exit_code="${1}"
@@ -257,7 +281,7 @@ function assemble_and_populate_image() {
     touch -t ${TOUCH_TIMESTAMP} ${TMP_DIR}/version.txt
 
     "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/boot-tree.tar" "${BASE_DIR}/bootloader"
-    "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/rootfs-tree.tar" -- --build-arg BASE_IMAGE="${BASE_IMAGE}" "${BASE_DIR}/rootfs"
+    "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/rootfs-tree.tar" -- --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" --build-arg BASE_IMAGE="${BASE_IMAGE}" "${BASE_DIR}/rootfs"
 
     "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-esp.tar" -s 100M -p boot/efi -i "${TMP_DIR}/boot-tree.tar"
     "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-grub.tar" -s 100M -p boot/grub -i "${TMP_DIR}/boot-tree.tar" \
@@ -288,11 +312,11 @@ function assemble_and_populate_image() {
 function provide_raw_image() {
     # For compatibility with previous use of this script, provide the raw
     # image as output from this program.
-    OUT_DIRNAME="$(dirname "${OUTPUT}")"
-    OUT_BASENAME="$(basename "${OUTPUT}")"
+    OUT_DIRNAME="$(dirname "${OUT_FILE}")"
+    OUT_BASENAME="$(basename "${OUT_FILE}")"
     tar xf "${TMP_DIR}/disk.img.tar" --transform="s/disk.img/${OUT_BASENAME}/" -C "${OUT_DIRNAME}"
     # increase size a bit, for immediate qemu use (legacy)
-    truncate --size 5G "${OUTPUT}"
+    truncate --size 5G "${OUT_FILE}"
 }
 
 function log_end() {
@@ -307,8 +331,6 @@ function log_end() {
 # Establish run order
 function main() {
     log_start
-    validate_input "${OUTPUT}" "Output file needs to be specified for build to succeed."
-    validate_input "${VERSION}" "Version needs to be specified for build to succeed."
     validate_guest_os
     validate_host_os
     prepare_config_partition

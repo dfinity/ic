@@ -5,7 +5,7 @@ set -e
 VAR_PARTITION="$1"
 KEYFILE=/boot/grub/store.keyfile
 
-echo "Seting up ${VAR_PARTITION} for use as encrypted /var."
+echo "Setting up ${VAR_PARTITION} for use as encrypted /var."
 
 # Check whether there is already a luks header in the partition.
 TYPE=$(blkid -o value --match-tag TYPE "${VAR_PARTITION}")

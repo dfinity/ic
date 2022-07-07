@@ -1,6 +1,5 @@
 [Unit]
 Description=Generate network config
-After=store-hsm.service
 Before=systemd-networkd.service
 Before=systemd-networkd-wait-online.service
 
