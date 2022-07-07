@@ -15,6 +15,7 @@ use crate::{
     },
     util::{assert_create_agent, create_agent_mapping, delay},
 };
+use anyhow::bail;
 use ic_agent::{export::Principal, Agent};
 use ic_registry_subnet_type::SubnetType;
 use ic_utils::interfaces::ManagementCanister;
@@ -190,6 +191,10 @@ pub fn test(env: TestEnv) {
 
         info!(&logger, "Created counter={counter_canister_id} and http_counter={http_counter_canister_id}.");
 
+        // Wait for the canisters to finish installing
+        // TODO: maybe this should be status calls?
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
         info!(&logger, "Creating BN agent...");
         let agent = create_agent_mapping("https://ic0.app/", boundary_node_vm.ipv6.into())
             .await
@@ -221,27 +226,45 @@ pub fn test(env: TestEnv) {
             .build()
             .unwrap();
 
-        let res = client
-            .get(format!("https://{}/", host))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.text().await.unwrap(), "Counter is 0\n");
+        retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{}/", host))
+                .send()
+                .await?
+                .text()
+                .await?;
+            if res != "Counter is 0\n" {
+                bail!(res)
+            }
+            Ok(())
+        }).await.unwrap();
 
-        let res = client
-            .get(format!("https://{}/stream", host))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.text().await.unwrap(), "Counter is 0 streaming\n");
+        retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{}/stream", host))
+                .send()
+                .await?
+                .text()
+                .await?;
+            if res != "Counter is 0 streaming\n" {
+                bail!(res)
+            }
+            Ok(())
+        }).await.unwrap();
 
         // Check that `canisterId` parameters go unused
-        let res = client
-            .get(format!("https://invalid-canister-id.raw.ic0.app/?canisterId={}", http_counter_canister_id))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.text().await.unwrap(), "Could not find a canister id to forward to.");
+        retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://invalid-canister-id.raw.ic0.app/?canisterId={}", http_counter_canister_id))
+                .send()
+                .await?
+                .text()
+                .await?;
+            if res != "Could not find a canister id to forward to." {
+                bail!(res)
+            }
+            Ok(())
+        }).await.unwrap();
 
         // Update the denylist and reload nginx
         let denylist_command = format!(r#"printf "ryjl3-tyaaa-aaaaa-aaaba-cai 1;\n{} 1;\n" | sudo tee /etc/nginx/denylist.map && sudo service nginx reload"#, http_counter_canister_id);
@@ -257,16 +280,22 @@ pub fn test(env: TestEnv) {
             output.trim(),
             channel.exit_status().unwrap()
         );
+
         // Wait a bit for the reload to complete
         tokio::time::sleep(Duration::from_secs(2)).await;
 
         // Probe the (now-blocked) canister again, we should get a 451
-        let res = client
-            .get(format!("https://{}/", host))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.status(), reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS);
+        retry_async(&logger, RETRY_TIMEOUT, RETRY_BACKOFF, || async {
+            let res = client
+                .get(format!("https://{}/", host))
+                .send()
+                .await?
+                .status();
+            if res != reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS {
+                bail!(res)
+            }
+            Ok(())
+        }).await.unwrap();
     });
 
     panic_struct.forget();
