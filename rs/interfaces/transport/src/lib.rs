@@ -204,14 +204,8 @@ pub enum TransportErrorCode {
     /// Failed to convert server listener.
     ServerSocketConversionFailed,
 
-    /// Client socket init failed.
-    InitClientSocketFailed,
-
     /// Failed to set the NO_DELAY option
     SocketNoDelayFailed,
-
-    /// Connecting to a server failed.
-    ConnectToServerError,
 
     /// Duplicate node Ids in node registry.
     RegistryDuplicateNodeId,
