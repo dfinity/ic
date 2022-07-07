@@ -37,7 +37,7 @@ use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
 use std::time::{Duration, Instant};
 
-const EXPIRATION: Duration = Duration::from_secs(60);
+const EXPIRATION: Duration = Duration::from_secs(180);
 const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 
 pub fn config(env: TestEnv) {
@@ -174,36 +174,41 @@ pub fn test(env: TestEnv) {
         restarted_endpoint,
         CanisterId::new(PrincipalId::from(cid)).unwrap(),
     );
-    println!("Sleeping 60s for the restarted node to catch up.");
-    std::thread::sleep(EXPIRATION);
     let start = Instant::now();
     rt.block_on(async {
-        while restarted_canister_endpoint
-            .query_(
-                "check_response",
-                candid_one::<Result<RemoteHttpResponse, String>, _>,
-                "https://www.example.com".to_string(),
-            )
-            .await
-            .expect("query call failed")
-            .is_err()
-        {
+        loop {
             if Instant::now() - start > EXPIRATION {
                 panic!("Restarted node not able to catch up cached query content before timeout.");
             }
-            std::thread::sleep(BACKOFF_DELAY);
+            let waited_query = restarted_canister_endpoint
+                .query_(
+                    "check_response",
+                    candid_one::<Result<RemoteHttpResponse, String>, _>,
+                    "https://www.example.com".to_string(),
+                )
+                .await;
+
+            if let Err(error) = waited_query {
+                std::thread::sleep(BACKOFF_DELAY);
+                println!("Restarted node hasn't caught up. Got error: {error}. Retrying..");
+                continue;
+            }
+
+            match waited_query.unwrap() {
+                Err(error) => {
+                    std::thread::sleep(BACKOFF_DELAY);
+                    println!(
+                        "Restarted node hasn't caught up. Got inner error: {error}. Retrying.."
+                    );
+                }
+                Ok(queried) => {
+                    println!("Restarted node is caught up!");
+                    assert!(queried.status == 200);
+                    assert!(!queried.body.is_empty());
+                    break;
+                }
+            }
         }
-        let queried = restarted_canister_endpoint
-            .query_(
-                "check_response",
-                candid_one::<Result<RemoteHttpResponse, String>, _>,
-                "https://www.example.com".to_string(),
-            )
-            .await
-            .expect("query call failed")
-            .unwrap();
-        assert!(queried.status == 200);
-        assert!(!queried.body.is_empty());
     });
     println!("Restarted node caught up with cached query content. Success!");
 
