@@ -27,7 +27,7 @@ use ic_test_utilities::{
     },
     universal_canister::{call_args, wasm},
 };
-use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_count, metric_vec};
+use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES;
 use ic_types::{
     canister_http::CanisterHttpMethod,
@@ -2125,77 +2125,4 @@ fn ecdsa_signature_queue_fills_up() {
                 .to_string()
         )
     );
-}
-
-#[test]
-fn compilation_metrics_are_recorded_during_installation() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let wat1 = r#"
-        (module
-            (func (result i64)
-                (i64.const 1)
-                (i64.add (i64.const 1))
-                (i64.add (i64.const 1))
-                (i64.add (i64.const 1))
-            )
-            (func)
-        )"#;
-    let wat2 = "(module)";
-    test.canister_from_wat(wat1).unwrap();
-    test.canister_from_wat(wat2).unwrap();
-    let largest_function_metric = fetch_histogram_stats(
-        test.metrics_registry(),
-        "hypervisor_largest_function_instruction_count",
-    )
-    .unwrap();
-    assert_eq!(largest_function_metric.count, 2);
-    assert_eq!(largest_function_metric.sum, 8.0);
-    let compilation_time_metric = fetch_histogram_stats(
-        test.metrics_registry(),
-        "hypervisor_wasm_compile_time_seconds",
-    )
-    .unwrap();
-    assert_eq!(compilation_time_metric.count, 2);
-}
-
-#[test]
-fn compilation_metrics_are_recorded_during_update() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let wat = r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (func $go 
-                (i64.const 1)
-                (i64.add (i64.const 1))
-                (i64.add (i64.const 1))
-                (i64.add (i64.const 1))
-                (drop)
-                (call $msg_reply)
-            )
-            (export "canister_update go" (func $go))
-        )"#;
-    let canister_id = test.canister_from_wat(wat).unwrap();
-    let canister_state = test.canister_state_mut(canister_id);
-    // Clear cache so that we are forced to recompile.
-    canister_state
-        .execution_state
-        .as_mut()
-        .unwrap()
-        .wasm_binary
-        .clear_compilation_cache();
-    test.ingress(canister_id, "go", vec![]).unwrap();
-    let largest_function_metric = fetch_histogram_stats(
-        test.metrics_registry(),
-        "hypervisor_largest_function_instruction_count",
-    )
-    .unwrap();
-    // Compiled once for install and once for execution.
-    assert_eq!(largest_function_metric.count, 2);
-    assert_eq!(largest_function_metric.sum, 20.0);
-    let compilation_time_metric = fetch_histogram_stats(
-        test.metrics_registry(),
-        "hypervisor_wasm_compile_time_seconds",
-    )
-    .unwrap();
-    assert_eq!(compilation_time_metric.count, 2);
 }

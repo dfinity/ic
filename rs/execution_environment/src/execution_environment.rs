@@ -1693,6 +1693,11 @@ impl ExecutionEnvironment {
     pub fn hypervisor_for_testing(&self) -> &Hypervisor {
         &*self.hypervisor
     }
+
+    #[doc(hidden)]
+    pub fn clear_compilation_cache_for_testing(&self) {
+        (&*self.hypervisor).clear_compilation_cache_for_testing()
+    }
 }
 
 /// Returns the subnet's configured memory capacity (ignoring current usage).

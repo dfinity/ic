@@ -32,6 +32,19 @@ impl SandboxService for SandboxClientStub {
         Call::new(cell)
     }
 
+    fn open_wasm_serialized(
+        &self,
+        req: OpenWasmSerializedRequest,
+    ) -> Call<OpenWasmSerializedReply> {
+        let cell = self
+            .channel
+            .call(Request::OpenWasmSerialized(req), |rep| match rep {
+                Reply::OpenWasmSerialized(rep) => Ok(rep),
+                _ => Err(Error::ServerError),
+            });
+        Call::new(cell)
+    }
+
     fn close_wasm(&self, req: CloseWasmRequest) -> Call<CloseWasmReply> {
         let cell = self.channel.call(Request::CloseWasm(req), |rep| match rep {
             Reply::CloseWasm(rep) => Ok(rep),

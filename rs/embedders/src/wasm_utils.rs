@@ -45,7 +45,7 @@ pub fn validate_and_instrument_for_testing(
 pub fn compile(
     embedder: &WasmtimeEmbedder,
     wasm: &BinaryEncodedWasm,
-) -> HypervisorResult<(EmbedderCache, CompilationResult)> {
+) -> HypervisorResult<(EmbedderCache, CompilationResult, SerializedModule)> {
     let timer = Instant::now();
     let (wasm_validation_details, instrumentation_output) =
         validate_and_instrument(wasm, &InstructionCostTable::default(), embedder.config())?;
@@ -65,7 +65,7 @@ pub fn compile(
             largest_function_instruction_count,
             compilation_cost,
             compilation_time: timer.elapsed(),
-            serialized_module,
         },
+        serialized_module,
     ))
 }

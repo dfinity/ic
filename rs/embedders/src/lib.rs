@@ -5,7 +5,7 @@ pub mod wasm_executor;
 pub mod wasm_utils;
 pub mod wasmtime_embedder;
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 pub use compilation_cache::CompilationCache;
 use ic_interfaces::execution_environment::ExecutionParameters;
@@ -14,7 +14,7 @@ use ic_sys::PageBytes;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{methods::FuncRef, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
-pub use serialized_module::SerializedModule;
+pub use serialized_module::{SerializedModule, SerializedModuleBytes};
 pub use wasmtime_embedder::{WasmtimeEmbedder, WasmtimeMemoryCreator};
 
 pub struct WasmExecutionInput {
@@ -24,6 +24,7 @@ pub struct WasmExecutionInput {
     pub execution_parameters: ExecutionParameters,
     pub func_ref: FuncRef,
     pub execution_state: ExecutionState,
+    pub compilation_cache: Arc<CompilationCache>,
 }
 
 #[derive(Debug)]
@@ -61,9 +62,6 @@ pub struct CompilationResult {
     pub compilation_cost: NumInstructions,
     /// Time to compile canister (including instrumentation and validation).
     pub compilation_time: Duration,
-    /// Serialization of the canister's wasm module. This can be used to create
-    /// a new `wasmtime::Instance` without recompiling.  
-    pub serialized_module: SerializedModule,
 }
 
 impl CompilationResult {
@@ -72,7 +70,6 @@ impl CompilationResult {
             largest_function_instruction_count: NumInstructions::new(0),
             compilation_cost: NumInstructions::new(0),
             compilation_time: Duration::from_millis(1),
-            serialized_module: SerializedModule::empty_for_testing(),
         }
     }
 }

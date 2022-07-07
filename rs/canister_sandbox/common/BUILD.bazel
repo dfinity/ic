@@ -23,6 +23,7 @@ rust_library(
         "//rs/sys",
         "//rs/system_api",
         "//rs/types/types",
+        "//rs/utils",
         "@crate_index//:bincode",
         "@crate_index//:bytes",
         "@crate_index//:libc",
@@ -51,6 +52,7 @@ rust_binary(
         ":common",
         "//rs/embedders",
         "//rs/interfaces",
+        "//rs/replicated_state",
         "//rs/types/types",
     ],
 )

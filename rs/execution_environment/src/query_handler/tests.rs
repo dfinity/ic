@@ -378,13 +378,17 @@ fn query_compiled_once() {
             let canister = state.canister_state_mut(&canister_id).unwrap();
             // The canister was compiled during installation.
             assert_eq!(1, query_handler.hypervisor.compile_count());
-            // Drop the embedder cache to force compilation during query handling.
+            // Drop the embedder cache and compilation cache to force
+            // compilation during query handling.
             canister
                 .execution_state
                 .as_mut()
                 .unwrap()
                 .wasm_binary
                 .clear_compilation_cache();
+            query_handler
+                .hypervisor
+                .clear_compilation_cache_for_testing();
 
             let result = query_handler.query(
                 UserQuery {
