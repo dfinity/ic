@@ -1,18 +1,16 @@
 //! Control plane - Transport connection management.
 //!
 //! The control plane handles tokio/TLS related details of connection
-//! management.  This component establishes/accepts connections
-//! to/from subnet peers. The component also manages re-establishment
-//! of severed connections.
-//!
-//! The control plane module implements control plane functionality for
-//! [`TransportImpl`](../types/struct.TransportImpl.html).
+//! management. This component establishes/accepts connections to/from subnet
+//! peers. The component also manages re-establishment of severed connections.
 
-use crate::types::{
-    Connecting, ConnectionRole, ConnectionState, FlowState, PeerState, QueueSize, ServerPort,
-    ServerPortState, TransportImpl,
+use crate::{
+    types::{
+        Connecting, ConnectionRole, ConnectionState, FlowState, PeerState, QueueSize, ServerPort,
+        ServerPortState, TransportImpl,
+    },
+    utils::{get_flow_ips, get_flow_label, SendQueueImpl},
 };
-use crate::utils::{get_flow_ips, get_flow_label, SendQueueImpl};
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
 use ic_interfaces_transport::{FlowId, FlowTag, TransportErrorCode, TransportEventHandler};
@@ -29,6 +27,14 @@ use tokio::{
     task::JoinHandle,
     time::sleep,
 };
+
+#[derive(Debug)]
+enum TransportTlsHandshakeError {
+    DeadlineExceeded,
+    Internal(String),
+    NotFound,
+    InvalidArgument,
+}
 
 /// Time to wait before retrying an unsuccessful connection attempt
 const CONNECT_RETRY_SECONDS: u64 = 3;
@@ -207,23 +213,12 @@ impl TransportImpl {
         let tokio_runtime = self.tokio_runtime.clone();
         let metrics = self.control_plane_metrics.clone();
         self.tokio_runtime.spawn(async move {
-            let local_addr = match tcp_listener.local_addr() {
-                Ok(addr) => addr,
-                _ => return,
-            };
             loop {
                 // If the TransportImpl has been deleted, abort.
                 let arc_self = match weak_self.upgrade() {
                     Some(arc_self) => arc_self,
                     _ => return,
                 };
-                info!(
-                    every_n_seconds => 5,
-                    arc_self.log,
-                    "ControlPlane::spawn_accept_task(): local_addr = {:?}, flow_tag = {:?}",
-                    local_addr,
-                    flow_tag
-                );
                 match tcp_listener.accept().await {
                     Ok((stream, _)) => {
                         let metrics = metrics.clone();
@@ -231,25 +226,44 @@ impl TransportImpl {
                             .tcp_accepts
                             .with_label_values(&[&flow_tag.to_string()])
                             .inc();
-                        tokio_runtime.spawn(async move {
-                            if let Err(err) = stream.set_nodelay(true) {
-                                warn!(
+
+                        let (local_addr, peer_addr) = match (stream.local_addr(), stream.peer_addr()) {
+                            (Ok(local_addr), Ok(peer_addr)) => (local_addr, peer_addr),
+                            _ => {
+                                error!(
                                     arc_self.log,
-                                    "ControlPlane::spawn_accept_task(): set_nodelay() failed: \
-                                     local_addr = {:?}, peer_addr = {:?}, error = {:?}",
-                                    stream
-                                        .local_addr()
-                                        .map_err(|e| format!("Unknown IP: {:?}", e)),
-                                    stream
-                                        .peer_addr()
-                                        .map_err(|e| format!("Unknown IP: {:?}", e)),
-                                    err,
+                                    "ControlPlane::spawn_accept_task(): local_addr() and/or peer_addr() failed."
                                 );
                                 return;
                             }
-                            let (local_addr, peer_addr, peer_id, tls_stream) = match arc_self.tls_server_handshake(flow_tag, stream).await {
-                                Ok((local_addr, peer_addr, peer_id, tls_stream)) => (local_addr, peer_addr, peer_id, tls_stream),
-                                Err(_) => return,
+                        };
+
+                        if let Err(err) = stream.set_nodelay(true) {
+                            error!(
+                                arc_self.log,
+                                "ControlPlane::spawn_accept_task(): set_nodelay(true) failed: \
+                                error = {:?}, local_addr = {:?}, peer_addr = {:?}",
+                                err,
+                                local_addr,
+                                peer_addr,
+                            );
+                            return;
+                        }
+
+                        tokio_runtime.spawn(async move {
+                            let (peer_id, tls_stream) = match arc_self.tls_server_handshake(flow_tag, stream).await {
+                                Ok((peer_id, tls_stream)) => (peer_id, tls_stream),
+                                Err(err) => {
+                                    warn!(
+                                        arc_self.log,
+                                        "ControlPlane::tls_server_handshake() failed: error = {:?},
+                                        local_addr = {:?}, peer_addr = {:?}",
+                                        err,
+                                        local_addr,
+                                        peer_addr,
+                                    );
+                                    return;
+                                }
                             };
                             if let Ok(()) = arc_self.on_connect(
                                 peer_id,
@@ -272,13 +286,7 @@ impl TransportImpl {
                             .tcp_accept_conn_err
                             .with_label_values(&[&flow_tag.to_string()])
                             .inc();
-                        warn!(
-                            arc_self.log,
-                            "ControlPlane::accept(): local_addr = {:?}, flow_tag = {:?}, error = {:?}",
-                            local_addr,
-                            flow_tag,
-                            err,
-                        );
+                        warn!(arc_self.log, "ControlPlane::accept(): failed: error = {:?}",err);
                     }
                 }
             }
@@ -287,7 +295,6 @@ impl TransportImpl {
 
     /// Spawn a task that tries to connect to a peer (forever, or until
     /// connection is established or peer is removed)
-    #[allow(clippy::too_many_arguments)]
     fn spawn_connect_task(
         &self,
         flow_tag: FlowTag,
@@ -321,9 +328,29 @@ impl TransportImpl {
                     .inc();
                 match Self::connect_to_server(&local_addr, &peer_addr).await {
                     Ok(stream) => {
-                        match arc_self
-                            .tls_client_handshake(peer_id, flow_tag, stream)
-                            .await
+                        let tls_stream = match arc_self.tls_client_handshake(peer_id, flow_tag, stream).await {
+                            Ok(tls_stream) => tls_stream,
+                            Err(err) => {
+                                warn!(
+                                    arc_self.log,
+                                    "ControlPlane::tls_client_handshake() failed: error = {:?},
+                                    local_addr = {:?}, peer_addr = {:?}",
+                                    err,
+                                    local_addr,
+                                    peer_addr,
+                                );
+                                return;
+                            }
+                        };
+                        match arc_self.on_connect(
+                            peer_id,
+                            ConnectionRole::Client,
+                            flow_tag,
+                            local_addr,
+                            peer_addr,
+                            tls_stream,
+                        )
+                        .await
                         {
                             Ok(()) => {
                                 metrics
@@ -494,29 +521,17 @@ impl TransportImpl {
         &self,
         flow_tag: FlowTag,
         stream: TcpStream,
-    ) -> Result<(SocketAddr, SocketAddr, NodeId, TlsStream), TransportErrorCode> {
+    ) -> Result<(NodeId, TlsStream), TransportTlsHandshakeError> {
         let registry_version = *self.registry_version.read().unwrap();
-        let local_addr = Self::sock_addr(stream.local_addr())?;
-        let peer_addr = Self::sock_addr(stream.peer_addr())?;
         let current_allowed_clients = self.allowed_clients.read().unwrap().clone();
-        let allowed_clients = AllowedClients::new_with_nodes(current_allowed_clients).map_err(|e| {
-            self.control_plane_metrics
-                .tcp_server_handshake_failed
-                .with_label_values(&[&flow_tag.to_string()])
-                .inc();
-            warn!(
-                every_n_seconds => 30,
-                self.log,
-                "ControlPlane::tls_server_handshake() no allowed clients: failed node = {:?}/{:?}, \
-                 flow_tag = {:?}, peer_addr = {:?}, error = {:?}",
-                self.node_id,
-                local_addr,
-                flow_tag,
-                peer_addr,
-                e
-            );
-            TransportErrorCode::PeerTlsInfoNotFound
-        })?;
+        let allowed_clients =
+            AllowedClients::new_with_nodes(current_allowed_clients).map_err(|_| {
+                self.control_plane_metrics
+                    .tcp_server_handshake_failed
+                    .with_label_values(&[&flow_tag.to_string()])
+                    .inc();
+                TransportTlsHandshakeError::InvalidArgument
+            })?;
         let (tls_stream, authenticated_peer) = match tokio::time::timeout(
             Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
             self.crypto
@@ -529,17 +544,7 @@ impl TransportImpl {
                     .tcp_server_handshake_failed
                     .with_label_values(&[&flow_tag.to_string()])
                     .inc();
-                warn!(
-                    every_n_seconds => 30,
-                    self.log,
-                    "ControlPlane::tls_server_handshake() timed out: \
-                     node = {:?}/{:?}, flow_tag = {:?}, peer_addr = {:?}",
-                    self.node_id,
-                    local_addr,
-                    flow_tag,
-                    peer_addr
-                );
-                return Err(TransportErrorCode::TimeoutExpired);
+                return Err(TransportTlsHandshakeError::DeadlineExceeded);
             }
             Ok(Ok((tls_stream, authenticated_peer))) => (tls_stream, authenticated_peer),
             Ok(Err(err)) => {
@@ -547,41 +552,20 @@ impl TransportImpl {
                     .tcp_server_handshake_failed
                     .with_label_values(&[&flow_tag.to_string()])
                     .inc();
-                warn!(
-                    every_n_seconds => 30,
-                    self.log,
-                    "ControlPlane::tls_server_handshake() failed: node = {:?}/{:?}, \
-                     flow_tag = {:?}, peer_addr = {:?}, error = {:?}",
-                    self.node_id,
-                    local_addr,
-                    flow_tag,
-                    peer_addr,
-                    err
-                );
-                return Err(TransportErrorCode::PeerTlsInfoNotFound);
+                return Err(TransportTlsHandshakeError::Internal(format!("{:?}", err)));
             }
         };
         let peer_id = match authenticated_peer {
             AuthenticatedPeer::Node(node_id) => node_id,
             AuthenticatedPeer::Cert(_) => {
-                warn!(
-                    every_n_seconds => 10,
-                    self.log,
-                    "ControlPlane::tls_server_handshake() failed: node = {:?}/{:?}, \
-                     flow_tag = {:?}, peer_addr = {:?}, error = cert instead of node id",
-                    self.node_id,
-                    local_addr,
-                    flow_tag,
-                    peer_addr
-                );
-                return Err(TransportErrorCode::PeerTlsInfoNotFound);
+                return Err(TransportTlsHandshakeError::NotFound);
             }
         };
         self.control_plane_metrics
             .tcp_server_handshake_success
             .with_label_values(&[&flow_tag.to_string()])
             .inc();
-        Ok((local_addr, peer_addr, peer_id, tls_stream))
+        Ok((peer_id, tls_stream))
     }
 
     /// Performs the client side TLS hand shake processing
@@ -590,74 +574,36 @@ impl TransportImpl {
         peer_id: NodeId,
         flow_tag: FlowTag,
         stream: TcpStream,
-    ) -> Result<(), TransportErrorCode> {
+    ) -> Result<TlsStream, TransportTlsHandshakeError> {
         let registry_version = *self.registry_version.read().unwrap();
-        let local_addr = Self::sock_addr(stream.local_addr())?;
-        let peer_addr = Self::sock_addr(stream.peer_addr())?;
-
-        let tls_stream = match tokio::time::timeout(
+        match tokio::time::timeout(
             Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
             self.crypto
                 .perform_tls_client_handshake(stream, peer_id, registry_version),
         )
         .await
         {
-            Err(_) => {
-                warn!(
-                    every_n_seconds => 30,
-                    self.log,
-                    "ControlPlane::tls_client_handshake(): timed out \
-                     node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}",
-                    self.node_id,
-                    local_addr,
-                    flow_tag,
-                    peer_id,
-                    peer_addr
-                );
-                return Err(TransportErrorCode::TimeoutExpired);
+            Err(_) => Err(TransportTlsHandshakeError::DeadlineExceeded),
+            Ok(Ok(tls_stream)) => {
+                self.control_plane_metrics
+                    .tcp_client_handshake_success
+                    .with_label_values(&[&flow_tag.to_string()])
+                    .inc();
+                Ok(tls_stream)
             }
-            Ok(Ok(tls_stream)) => tls_stream,
             Ok(Err(err)) => {
                 self.control_plane_metrics
                     .tcp_client_handshake_failed
                     .with_label_values(&[&flow_tag.to_string()])
                     .inc();
-                warn!(
-                    every_n_seconds => 30,
-                    self.log,
-                    "ControlPlane::tls_client_handshake(): failed \
-                     node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, error = {:?}",
-                    self.node_id,
-                    local_addr,
-                    flow_tag,
-                    peer_id,
-                    peer_addr,
-                    err
-                );
-                return Err(TransportErrorCode::PeerTlsInfoNotFound);
+                Err(TransportTlsHandshakeError::Internal(format!("{:?}", err)))
             }
-        };
-        // Pass the established connection to the data plane to start IOs.
-        self.on_connect(
-            peer_id,
-            ConnectionRole::Client,
-            flow_tag,
-            local_addr,
-            peer_addr,
-            tls_stream,
-        )
-        .await
-        .map(|_| {
-            self.control_plane_metrics
-                .tcp_client_handshake_success
-                .with_label_values(&[&flow_tag.to_string()])
-                .inc()
-        })
+        }
     }
 
     // Sets up the server side socket with the node IP:port
     // Panics in case of unrecoverable error.
-    fn init_listener(local_addr: &SocketAddr) -> std::io::Result<TcpListener> {
+    fn start_listener(local_addr: &SocketAddr) -> std::io::Result<TcpListener> {
         let socket = if local_addr.is_ipv6() {
             TcpSocket::new_v6()?
         } else {
@@ -679,11 +625,6 @@ impl TransportImpl {
         }
     }
 
-    /// Extract the socket address from the result
-    fn sock_addr(result: std::io::Result<SocketAddr>) -> Result<SocketAddr, TransportErrorCode> {
-        result.map_err(|_| TransportErrorCode::InvalidSockAddr)
-    }
-
     /// Initilizes a client
     pub(crate) fn init_client(&self, event_handler: TransportEventHandler) {
         // Creating the listeners requres that we are within a tokio runtime context.
@@ -695,7 +636,7 @@ impl TransportImpl {
             listeners.push((
                 flow_config.flow_tag,
                 flow_config.server_port,
-                Self::init_listener(&server_addr).unwrap_or_else(|err| {
+                Self::start_listener(&server_addr).unwrap_or_else(|err| {
                     panic!(
                         "Failed to init listener: local_addr = {:?}, error = {:?}",
                         server_addr, err
