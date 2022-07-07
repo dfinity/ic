@@ -13,7 +13,6 @@
     E2E_TEST_TIMEOUT: 480
 
 host-os-upgrade-test:
-  allow_failure: true
   extends:
     - .host-e2e-test-base
   needs:
