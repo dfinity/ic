@@ -68,20 +68,28 @@ impl FractionalDeveloperVotingPower {
                 permission_type: parameters
                     .neuron_claimer_permissions
                     .as_ref()
-                    .unwrap()
+                    .expect("NervousSystemParameters.neuron_claimer_permissions must be present")
                     .permissions
                     .clone(),
             };
+
+            let default_followees = parameters
+                .default_followees
+                .as_ref()
+                .expect("NervousSystemParameters.default_followees must be present")
+                .followees
+                .clone();
+
+            let dissolve_delay_seconds = parameters
+                .neuron_minimum_dissolve_delay_to_vote_seconds
+                .expect("NervousSystemParameters.neuron_minimum_dissolve_delay_to_vote_seconds must be present");
 
             let neuron = Neuron {
                 id: Some(subaccount.into()),
                 permissions: vec![permission],
                 cached_neuron_stake_e8s: stake_e8s,
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                    parameters
-                        .neuron_minimum_dissolve_delay_to_vote_seconds
-                        .expect("Expected neuron_minimum_dissolve_delay_to_vote_seconds to exist"),
-                )),
+                followees: default_followees,
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
                 ..Default::default()
             };
 
