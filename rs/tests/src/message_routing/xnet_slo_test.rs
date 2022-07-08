@@ -20,9 +20,8 @@ Success::
 
 end::catalog[] */
 
-use std::time::Duration;
-
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::nns::NnsExt;
 use crate::util::{assert_endpoints_reachability, block_on, runtime_from_url, EndpointsStatus};
 use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid;
@@ -30,6 +29,7 @@ use ic_fondue::{ic_manager::IcHandle, pot::FondueTestFn};
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
 use std::fmt::Display;
+use std::time::Duration;
 use tokio::time::sleep;
 use xnet_test::{CanisterId, Metrics};
 
@@ -111,8 +111,8 @@ pub fn config_prod_slo_3_subnets() -> Config {
     Config::new(3, 4, Duration::from_secs(1200), 10)
 }
 
-pub fn config_prod_slo_120_subnets() -> Config {
-    Config::new(120, 1, Duration::from_secs(3800), 10) // 3800s = 1h + 200s
+pub fn config_120_subnets() -> Config {
+    Config::new(120, 1, Duration::from_secs(1200), 10) // 1200s = 20min
 }
 
 pub fn config_hotfix_slo_3_subnets() -> Config {
@@ -134,6 +134,16 @@ pub fn test(handle: IcHandle, ctx: &ic_fondue::pot::Context, config: Config) {
         ctx.logger,
         "IC setup succeeded, all status endpoints are reachable over http."
     );
+    // Install NNS for long tests (note that for large numbers of subnets or
+    // nodes the registry might be too big for installation as a canister)
+    if config.runtime > Duration::from_secs(1500) {
+        info!(
+            &ctx.logger,
+            "Installing NNS canisters on the root subnet ..."
+        );
+        ctx.install_nns_canisters(&handle, true);
+        info!(&ctx.logger, "NNS canisters installed successfully.");
+    }
     // Installing canisters on a subnet requires an Agent (or a Runtime wrapper around Agent).
     // We need only one endpoint per subnet for canister installation.
     endpoints.sort_by_key(|key| key.subnet_id().unwrap());
