@@ -328,7 +328,7 @@ class VsockAgent:
         async def alert():
             with open("/dev/tty1", "w") as tty:
                 for _ in range(info.count):
-                    tty.write("%s\n" % info.message)
+                    tty.write("\n%s\n" % info.message)
                     await asyncio.sleep(2)
 
         logging.info("Notifying a successful join from: %s", sender_cid)
