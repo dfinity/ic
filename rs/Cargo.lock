@@ -4269,6 +4269,7 @@ dependencies = [
  "ic-canister-http-service",
  "ic-config",
  "ic-logger",
+ "itertools 0.10.3",
  "prost 0.10.4",
  "rand 0.8.5",
  "serde",

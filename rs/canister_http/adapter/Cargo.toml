@@ -20,6 +20,7 @@ ic-async-utils = { path = "../../async_utils" }
 ic-canister-http-service = { path = "../service"}
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
+itertools = "0.10.3"
 prost = "0.10.4"
 rand = "0.8.3"
 serde = { version = "1.0", features = ["derive"] }

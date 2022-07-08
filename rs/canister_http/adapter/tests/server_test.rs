@@ -24,7 +24,8 @@ use wiremock::{
 #[tokio::test]
 async fn test_canister_http_server() {
     // Setup local mock server.
-    let mock_server = MockServer::start().await;
+    let listener = std::net::TcpListener::bind("127.0.0.1:20001").unwrap();
+    let mock_server = MockServer::builder().listener(listener).start().await;
     Mock::given(method("GET"))
         .and(path("/hello"))
         .respond_with(ResponseTemplate::new(200))
@@ -55,7 +56,8 @@ async fn test_canister_http_server() {
 #[tokio::test]
 async fn test_canister_http_server_post() {
     // Setup local mock server.
-    let mock_server = MockServer::start().await;
+    let listener = std::net::TcpListener::bind("127.0.0.1:20002").unwrap();
+    let mock_server = MockServer::builder().listener(listener).start().await;
     Mock::given(method("POST"))
         .and(path("/hello"))
         .respond_with(ResponseTemplate::new(200))
@@ -87,7 +89,8 @@ async fn test_canister_http_server_post() {
 #[tokio::test]
 async fn test_canister_http_server_head() {
     // Setup local mock server.
-    let mock_server = MockServer::start().await;
+    let listener = std::net::TcpListener::bind("127.0.0.1:20003").unwrap();
+    let mock_server = MockServer::builder().listener(listener).start().await;
     Mock::given(method("HEAD"))
         .and(path("/hello"))
         .respond_with(ResponseTemplate::new(200))
@@ -122,8 +125,8 @@ async fn test_response_limit_exceeded() {
     let server_config = Config {
         ..Default::default()
     };
-    let mock_server = MockServer::start().await;
-
+    let listener = std::net::TcpListener::bind("127.0.0.1:20004").unwrap();
+    let mock_server = MockServer::builder().listener(listener).start().await;
     let response_limit: u64 = 512;
     // Check that larger than specified payloads get rejected.
     let payload: Vec<u8> = vec![0u8; (response_limit + 1) as usize];
@@ -187,8 +190,8 @@ async fn test_within_response_limit() {
 #[tokio::test]
 async fn test_request_timeout() {
     // Test that adapter times out for unresponsive but reachable webpages.
-    let mock_server = MockServer::start().await;
-    // 2Mb and 2 bytes. Will get limitet because 'Content-length' is too large.
+    let listener = std::net::TcpListener::bind("127.0.0.1:20005").unwrap();
+    let mock_server = MockServer::builder().listener(listener).start().await; // 2Mb and 2 bytes. Will get limitet because 'Content-length' is too large.
     Mock::given(method("GET"))
         .and(path("/hello"))
         // Delay here is higher than request timeout below.
@@ -255,8 +258,8 @@ async fn test_connect_timeout() {
 
 #[tokio::test]
 async fn test_nonascii_header() {
-    let mock_server = MockServer::start().await;
-    // Create invalid header. Needs unsafe to bypass parsing.
+    let listener = std::net::TcpListener::bind("127.0.0.1:20006").unwrap();
+    let mock_server = MockServer::builder().listener(listener).start().await; // Create invalid header. Needs unsafe to bypass parsing.
     unsafe {
         Mock::given(method("GET"))
             .and(path("/hello"))
@@ -336,7 +339,8 @@ async fn test_socks() {
     // Spawn grpc server and return client.
     let mut client = spawn_grpc_server(server_config);
 
-    let mock_server = MockServer::start().await;
+    let listener = std::net::TcpListener::bind("127.0.0.1:20007").unwrap();
+    let mock_server = MockServer::builder().listener(listener).start().await;
     Mock::given(method("GET"))
         .and(path("/hello"))
         .respond_with(ResponseTemplate::new(200))
@@ -362,7 +366,8 @@ async fn test_socks() {
 // This test only verifies the fallback behaviour of the hyper HttpConnector that is used in the adapter client.
 #[tokio::test]
 async fn test_socks_fallback() {
-    let mock_server = MockServer::start().await;
+    let listener = std::net::TcpListener::bind("127.0.0.1:20008").unwrap();
+    let mock_server = MockServer::builder().listener(listener).start().await;
     Mock::given(method("GET"))
         .and(path("/hello"))
         .respond_with(ResponseTemplate::new(200))
