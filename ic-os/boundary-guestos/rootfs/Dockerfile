@@ -9,8 +9,8 @@
 ARG BASE_IMAGE=
 
 # Service worker verion and sha256
-ARG sw_version=1.1.2
-ARG sw_sha256=46e655f491ae312349ae72099233de3b685b5d261366944293af724461bdacf0
+ARG sw_version=1.2.0
+ARG sw_sha256=2f84ab0b02e3ac45b2c4de31789ccf7f6389887931970326842bfefb07073b55
 
 # First build stage: download software, build and verify it (such that it
 # does not change under our noses).
