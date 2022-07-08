@@ -566,14 +566,50 @@ fn get_test_suites() -> HashMap<String, Suite> {
     m.add_suite(
         suite(
             "staging", //runs hourly, allowed to fail
-            vec![pot_with_setup(
-                "canister_http_fault_tolerance",
-                canister_http::http_fault_tolerance::config,
-                par(vec![sys_t(
-                    "http_fault_tolerance",
-                    canister_http::http_fault_tolerance::test,
-                )]),
-            )],
+            vec![
+                pot_with_setup(
+                    "canister_http_fault_tolerance",
+                    canister_http::http_fault_tolerance::config,
+                    par(vec![sys_t(
+                        "http_fault_tolerance",
+                        canister_http::http_fault_tolerance::test,
+                    )]),
+                ),
+                pot_with_setup(
+                    "default_subnet_workload_pot",
+                    networking::subnet_update_workload::default_config,
+                    par(vec![
+                        sys_t(
+                            "default_subnet_query_workload_long_duration_test",
+                            networking::subnet_query_workload::long_duration_test,
+                        ),
+                        sys_t(
+                            "default_subnet_update_workload_long_duration_test",
+                            networking::subnet_update_workload::long_duration_test,
+                        ),
+                        sys_t(
+                            "default_subnet_update_workload_large_payload",
+                            networking::subnet_update_workload::large_payload_test,
+                        ),
+                    ]),
+                ),
+                //.with_vm_allocation(VmAllocationStrategy::DistributeAcrossDcs),
+                pot_with_setup(
+                    "large_subnet_workload_pot",
+                    networking::subnet_update_workload::large_config,
+                    par(vec![
+                        sys_t(
+                            "large_subnet_update_workload_test",
+                            networking::subnet_update_workload::large_subnet_test,
+                        ),
+                        sys_t(
+                            "large_subnet_query_workload_test",
+                            networking::subnet_query_workload::large_subnet_test,
+                        ),
+                    ]),
+                ),
+                //.with_vm_allocation(VmAllocationStrategy::DistributeAcrossDcs),
+            ],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
     );
