@@ -105,8 +105,8 @@ fi
 
 BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base.${BUILD_TYPE}")
 
-# HACK: build the infogetty binary
-make -C ${BASE_DIR}/src infogetty
+# HACK: build required system binaries
+make -C ${BASE_DIR}/src infogetty prestorecon
 
 # Compute arguments for actual build stage.
 
@@ -116,6 +116,7 @@ for IC_EXECUTABLE in "${IC_EXECUTABLES[@]}"; do
     INSTALL_EXEC_ARGS+=("${EXEC_SRCDIR}/${IC_EXECUTABLE}:/opt/ic/bin/${IC_EXECUTABLE}:0755")
 done
 INSTALL_EXEC_ARGS+=("${BASE_DIR}/src/infogetty:/opt/ic/bin/infogetty:0755")
+INSTALL_EXEC_ARGS+=("${BASE_DIR}/src/prestorecon:/opt/ic/bin/prestorecon:0755")
 
 if [ "${BUILD_TYPE}" == "dev" ]; then
     INSTALL_EXEC_ARGS+=("${BASE_DIR}/allow_console_root:/etc/allow_console_root:0644")
