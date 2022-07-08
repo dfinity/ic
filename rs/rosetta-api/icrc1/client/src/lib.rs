@@ -114,6 +114,13 @@ impl<R: Runtime> ICRC1Client<R> {
             .map(untuple)
     }
 
+    pub async fn total_supply(&self) -> Result<u64, (i32, String)> {
+        self.runtime
+            .call(self.ledger_canister_id, "icrc1_totalSupply", ())
+            .await
+            .map(untuple)
+    }
+
     pub async fn transfer(
         &self,
         args: TransferArg,
