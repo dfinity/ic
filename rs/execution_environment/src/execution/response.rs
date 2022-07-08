@@ -4,21 +4,16 @@
 use crate::execution_environment::{
     ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext,
 };
-use crate::Hypervisor;
-use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::messages::CanisterInputMessage;
-use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
+use ic_replicated_state::{CallOrigin, CanisterState};
 use ic_types::messages::{CallContextId, Payload, Response};
 use ic_types::{ComputeAllocation, NumBytes, NumInstructions, Time};
 
 use crate::execution::common;
 use crate::execution::common::action_to_response;
-use ic_interfaces::execution_environment::{
-    ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
-};
-use ic_logger::{error, ReplicaLogger};
-use ic_registry_subnet_type::SubnetType;
+use ic_interfaces::execution_environment::{ExecutionMode, ExecutionParameters, HypervisorError};
+use ic_logger::error;
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ApiType;
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
@@ -118,18 +113,13 @@ pub fn execute_response(
     mut canister: CanisterState,
     response: Arc<Response>,
     time: Time,
-    own_subnet_type: SubnetType,
-    network_topology: Arc<NetworkTopology>,
     execution_parameters: ExecutionParameters,
-    subnet_available_memory: SubnetAvailableMemory,
-    log: &ReplicaLogger,
     error_counter: &IntCounter,
-    hypervisor: &Hypervisor,
-    cycles_account_manager: &CyclesAccountManager,
+    round: RoundContext,
 ) -> ExecuteMessageResult {
     let failure = |mut canister: CanisterState, response, instruction_limit| {
         // Refund the canister with any cycles left after message execution.
-        cycles_account_manager.refund_execution_cycles(
+        round.cycles_account_manager.refund_execution_cycles(
             &mut canister.system_state,
             instruction_limit,
             instruction_limit,
@@ -147,7 +137,7 @@ pub fn execute_response(
     let total_instruction_limit = execution_parameters.total_instruction_limit;
 
     let (callback, call_context) =
-        match common::get_call_context_and_callback(&mut canister, &response, log) {
+        match common::get_call_context_and_callback(&mut canister, &response, round.log) {
             Some((callback, call_context)) => (callback, call_context),
             None => {
                 return ExecuteMessageResult {
@@ -172,7 +162,7 @@ pub fn execute_response(
     // then that indicates (potential malicious) faults.
     let refunded_cycles = if response.refund > callback.cycles_sent {
         error!(
-            log,
+            round.log,
             "[EXC-BUG] Canister got a response with too many cycles.  originator {} respondent {} max cycles expected {} got {}.",
             response.originator,
             response.respondent,
@@ -184,7 +174,9 @@ pub fn execute_response(
         response.refund
     };
 
-    cycles_account_manager.add_cycles(canister.system_state.balance_mut(), refunded_cycles);
+    round
+        .cycles_account_manager
+        .add_cycles(canister.system_state.balance_mut(), refunded_cycles);
 
     // The canister that sends a request must also pay the fee for
     // the transmission of the response. As we do not know how big
@@ -192,8 +184,8 @@ pub fn execute_response(
     // possible response when the request is being sent. Now that we
     // have received the response, we can refund the cycles based on
     // the actual size of the response.
-    cycles_account_manager.response_cycles_refund(
-        log,
+    round.cycles_account_manager.response_cycles_refund(
+        round.log,
         error_counter,
         &mut canister.system_state,
         &response,
@@ -207,7 +199,7 @@ pub fn execute_response(
     // Validate that the canister has an `ExecutionState`.
     if canister.execution_state.is_none() {
         error!(
-                log,
+                round.log,
                 "[EXC-BUG] Canister {} is attempting to execute a response, but the execution state does not exist.",
                 canister.system_state.canister_id,
             );
@@ -220,7 +212,7 @@ pub fn execute_response(
                 callback.call_context_id,
                 Err(HypervisorError::WasmModuleNotFound),
             );
-        let response = action_to_response(&canister, action, call_origin, time, log);
+        let response = action_to_response(&canister, action, call_origin, time, round.log);
 
         return failure(canister, response, total_instruction_limit);
     }
@@ -254,12 +246,12 @@ pub fn execute_response(
         ),
     };
 
-    let (output_execution_state, result) = hypervisor.execute_dts(
+    let (output_execution_state, result) = round.hypervisor.execute_dts(
         api_type,
         canister.system_state.clone(),
-        canister.memory_usage(own_subnet_type),
+        canister.memory_usage(round.hypervisor.subnet_type()),
         execution_parameters.clone(),
-        subnet_available_memory.clone(),
+        round.subnet_available_memory.clone(),
         func_ref,
         canister.execution_state.take().unwrap(),
     );
@@ -277,15 +269,7 @@ pub fn execute_response(
         message: response,
     };
 
-    let current = RoundContext {
-        subnet_available_memory,
-        network_topology: &*network_topology,
-        hypervisor,
-        cycles_account_manager,
-        log,
-    };
-
-    process_response_result(result, canister, original, current)
+    process_response_result(result, canister, original, round)
 }
 
 // Helper function to execute response cleanup.
