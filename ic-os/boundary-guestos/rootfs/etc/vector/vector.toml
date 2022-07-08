@@ -9,9 +9,14 @@ default_namespace = "vector"
 
 # nginx
 
-[sources.nginx_access]
-type = "file"
-include = ["/var/log/nginx/access_json.log.gz"]
+[sources.nginx]
+type = "journald"
+include_units = ["nginx"]
+
+[transforms.nginx_access]
+type = "filter"
+inputs = ["nginx"]
+condition = ".SYSLOG_IDENTIFIER == \"access\""
 
 [transforms.nginx_access_json]
 type = "remap"
