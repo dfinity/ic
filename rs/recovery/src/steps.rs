@@ -449,6 +449,10 @@ impl Step for UploadAndRestartStep {
             r"sudo find {} -type f -exec chmod go+r {{}} \;;",
             ic_state_path
         ));
+        // Note that on older versions of IC-OS this service does not exist.
+        // So try this operation, but ignore possible failure if service
+        // does not exist on the affected version.
+        replace_state.push_str("(sudo systemctl restart setup-permissions || true);");
         replace_state.push_str("sudo systemctl start ic-replica;");
         replace_state.push_str("sudo systemctl status ic-replica;");
 
@@ -647,6 +651,7 @@ sudo systemctl stop ic-replica;
 sudo rsync -a --delete ic_registry_local_store/ /var/lib/ic/data/ic_registry_local_store/;
 sudo cp cup.proto /var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb;
 sudo cp cup.proto /var/lib/ic/data/cups/cup_${}.types.v1.CatchUpPackage.pb;
+sudo systemctl restart setup-permissions || true ;
 sudo systemctl start ic-replica;
 sudo systemctl status ic-replica;
 "#,

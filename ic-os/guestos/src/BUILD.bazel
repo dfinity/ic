@@ -11,3 +11,14 @@ cc_binary(
         "-lsystemd",
     ],
 )
+
+cc_binary(
+    name = "prestorecon",
+    srcs = [
+        "prestorecon.cc",
+    ],
+    linkopts = [
+        "-lselinux",
+        "-pthread",
+    ],
+)

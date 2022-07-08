@@ -97,6 +97,7 @@ IC_OS_IMAGE_DEPS = {
         "//:state-tool": "/opt/ic/bin/state-tool:0755",
         "//:vsock_agent": "/opt/ic/bin/vsock_agent:0755",
         "//ic-os/guestos/src:infogetty": "/opt/ic/bin/infogetty:0755",
+        "//ic-os/guestos/src:prestorecon": "/opt/ic/bin/prestorecon:0755",
         # NB: this should be there for dev images only
         ":allow_console_root": "/etc/allow_console_root:0644",
     },

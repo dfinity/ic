@@ -1,0 +1,25 @@
+[Unit]
+Description=Set up persistent storage permissions
+# We must wait for IC bootstrap to complete (it may
+# write the state files to begin with).
+After=bootstrap-ic-node.service
+Wants=bootstrap-ic-node.service
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-permissions.sh
+# Give it enough time to "guarantee" that it finishes. A
+# a rate of 400k-500k inodes per second was measured for
+# the production systems, so this leaves room for
+# 800M-900M inodes on the filesystems for now. Obviously, it
+# is very bad if it really takes that long, but rather be
+# patient than not booting at all.
+# If we ever approach this limit, then we need to apply
+# somewhat more complicated strategy where this may need
+# to happen partially in parallel with some services
+# running already. This is very tricky to synchronize, though.
+TimeoutStartSec=1800
+
