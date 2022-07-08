@@ -1475,7 +1475,7 @@ pub struct SetModeResponse {
 }
 /// The different types of neuron permissions, i.e., privileges to modify a neuron,
 /// that principals can have.
-#[derive(candid::CandidType, candid::Deserialize, strum_macros::EnumIter)]
+#[derive(candid::CandidType, candid::Deserialize, strum_macros::EnumIter, clap::ArgEnum)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum NeuronPermissionType {

@@ -36,7 +36,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.NeuronPermissionType",
-        "#[derive(candid::CandidType, candid::Deserialize, strum_macros::EnumIter)]",
+        "#[derive(candid::CandidType, candid::Deserialize, strum_macros::EnumIter, clap::ArgEnum)]",
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.NeuronPermission",
