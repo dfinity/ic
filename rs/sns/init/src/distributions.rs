@@ -1,19 +1,18 @@
-use crate::pb::v1::TokenDistribution;
-use crate::{InitialTokenDistribution, SnsCanisterIds, Tokens};
+use crate::pb::v1::{
+    DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution, SwapDistribution,
+    TreasuryDistribution,
+};
+use crate::{AirdropDistribution, SnsCanisterIds, Tokens};
 use anyhow::anyhow;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ledger::{
     compute_distribution_subaccount, compute_neuron_staking_subaccount,
 };
-use ic_nervous_system_common::{i2r, try_r2u64};
 use ic_sns_governance::pb::v1::neuron::DissolveState;
 use ic_sns_governance::pb::v1::{NervousSystemParameters, Neuron, NeuronPermission};
 use ledger_canister::AccountIdentifier;
 use maplit::btreemap;
-use num::rational::Ratio;
-use num::BigInt;
 use std::collections::{BTreeMap, HashMap};
-use std::str::FromStr;
 
 /// The static MEMO used when calculating subaccounts of neurons available at genesis.
 pub const DEFAULT_NEURON_STAKING_NONCE: u64 = 0;
@@ -21,49 +20,22 @@ pub const DEFAULT_NEURON_STAKING_NONCE: u64 = 0;
 /// The static MEMO used when calculating the SNS Treasury subaccount.
 pub const TREASURY_SUBACCOUNT_NONCE: u64 = 0;
 
-/// The static MEMO used when calculating the subaccount of future developer distributions.
-pub const DEVELOPER_SUBACCOUNT_NONCE: u64 = 1;
-
 /// The static MEMO used when calculating the subaccount of future token swaps.
-pub const SWAP_SUBACCOUNT_NONCE: u64 = 2;
+pub const SWAP_SUBACCOUNT_NONCE: u64 = 1;
 
-impl InitialTokenDistribution {
+impl FractionalDeveloperVotingPower {
     /// Given the configuration of the different buckets, when provided the SnsCanisterIds calculate
     /// all the `AccountId`s of SNS Ledger accounts that will have tokens distributed at genesis.
-    /// As there are ratios involved in determining how many tokens are distributed to which
-    /// account, there is some tricky math with large numbers. This method makes use of
-    /// `Ratio<BigInt>` to handle the rounding with precision, and to make sure every e8 is
-    /// distributed.
     pub fn get_account_ids_and_tokens(
         &self,
         sns_canister_ids: &SnsCanisterIds,
     ) -> anyhow::Result<HashMap<AccountIdentifier, Tokens>> {
-        let developers = self.get_developer_distribution()?;
-        let treasury = self.get_treasury_distribution()?;
-
-        let developer_neuron_distribution =
-            Self::get_total_distributions(&developers.distributions)?;
-        let treasury_neuron_distribution = Self::get_total_distributions(&treasury.distributions)?;
-
-        // The initial_swap_ratio determines how much of the swap distribution is put in
-        // the Swap Canister, and how much is held in locked reserves. It is proportional to
-        // the amount that the devs have allocated in neurons and their total distribution.
-        //
-        // As this is a ratio, use Ration<BigInt> to not lose precision when dividing.
-        let initial_swap_ratio = i2r(developer_neuron_distribution) / i2r(developers.total_e8s);
-
         let mut accounts = HashMap::new();
-        self.insert_developer_accounts(
-            developer_neuron_distribution,
-            sns_canister_ids,
-            &mut accounts,
-        )?;
-        self.insert_treasury_accounts(
-            treasury_neuron_distribution,
-            sns_canister_ids,
-            &mut accounts,
-        )?;
-        self.insert_swap_accounts(initial_swap_ratio, sns_canister_ids, &mut accounts)?;
+
+        self.insert_developer_accounts(sns_canister_ids, &mut accounts)?;
+        self.insert_treasury_accounts(sns_canister_ids, &mut accounts)?;
+        self.insert_swap_accounts(sns_canister_ids, &mut accounts)?;
+        self.insert_airdrop_accounts(sns_canister_ids, &mut accounts)?;
 
         Ok(accounts)
     }
@@ -75,12 +47,18 @@ impl InitialTokenDistribution {
         &self,
         parameters: &NervousSystemParameters,
     ) -> anyhow::Result<BTreeMap<String, Neuron>> {
-        let treasury = &self.get_treasury_distribution()?.distributions;
-        let developers = &self.get_developer_distribution()?.distributions;
+        let developer_neurons = &self.developer_distribution()?.developer_neurons;
+        let airdrop_neurons = &self.airdrop_distribution()?.airdrop_neurons;
+
+        let swap = self.swap_distribution()?;
+        // TODO NNS1-1465: Add the voting_power_multiplier as a field to neuron
+        let _voting_power_multiplier = swap.initial_swap_amount_e8s as f64 / swap.total_e8s as f64;
+
         let mut initial_neurons = btreemap! {};
 
-        for (principal_id, stake_e8s) in developers.iter().chain(treasury.iter()) {
-            let principal_id = PrincipalId::from_str(principal_id)?;
+        for neuron_distribution in developer_neurons.iter().chain(airdrop_neurons.iter()) {
+            let principal_id = neuron_distribution.controller()?;
+            let stake_e8s = neuron_distribution.stake_e8s;
 
             let subaccount =
                 compute_neuron_staking_subaccount(principal_id, DEFAULT_NEURON_STAKING_NONCE);
@@ -98,7 +76,7 @@ impl InitialTokenDistribution {
             let neuron = Neuron {
                 id: Some(subaccount.into()),
                 permissions: vec![permission],
-                cached_neuron_stake_e8s: *stake_e8s,
+                cached_neuron_stake_e8s: stake_e8s,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                     parameters
                         .neuron_minimum_dissolve_delay_to_vote_seconds
@@ -109,115 +87,226 @@ impl InitialTokenDistribution {
 
             initial_neurons.insert(neuron.id.as_ref().unwrap().to_string(), neuron);
         }
+
         Ok(initial_neurons)
     }
 
-    /// TODO NNS1-1464 : Enforce proper decentralization of distributions
-    pub fn validate(&self) -> Result<(), String> {
+    /// Validate an instance of FractionalDeveloperVotingPower
+    pub fn validate(&self) -> anyhow::Result<()> {
+        let developer_distribution = self
+            .developer_distribution
+            .as_ref()
+            .ok_or_else(|| anyhow!("Error: developer_distribution must be specified"))?;
+
+        self.treasury_distribution
+            .as_ref()
+            .ok_or_else(|| anyhow!("Error: treasury_distribution must be specified"))?;
+
+        let swap_distribution = self
+            .swap_distribution
+            .as_ref()
+            .ok_or_else(|| anyhow!("Error: swap_distribution must be specified"))?;
+
+        let airdrop_distribution = self
+            .airdrop_distribution
+            .as_ref()
+            .ok_or_else(|| anyhow!("Error: airdrop_distribution must be specified"))?;
+
+        self.validate_neurons(developer_distribution, airdrop_distribution)?;
+
+        match Self::get_total_distributions(&airdrop_distribution.airdrop_neurons) {
+            Ok(_) => (),
+            Err(_) => return Err(anyhow!("Error: The sum of all airdrop allocated tokens overflowed and is an invalid distribution")),
+        };
+
+        if swap_distribution.initial_swap_amount_e8s == 0 {
+            return Err(anyhow!(
+                "Error: swap_distribution.initial_swap_amount_e8s must be greater than 0"
+            ));
+        }
+
+        if swap_distribution.total_e8s < swap_distribution.initial_swap_amount_e8s {
+            return Err(anyhow!("Error: swap_distribution.total_e8 must be greater than or equal to swap_distribution.initial_swap_amount_e8s"));
+        }
+
+        let total_developer_e8s = match Self::get_total_distributions(&developer_distribution.developer_neurons) {
+            Ok(total) => total,
+            Err(_) => return Err(anyhow!("Error: The sum of all developer allocated tokens overflowed and is an invalid distribution")),
+        };
+
+        if total_developer_e8s > swap_distribution.total_e8s {
+            return Err(anyhow!("Error: The sum of all developer allocated tokens must be less than or equal to swap_distribution.total_e8s"));
+        }
+
+        Ok(())
+    }
+
+    /// Validate the NeuronDistributions in the Developer and Airdrop bucket
+    fn validate_neurons(
+        &self,
+        developer_distribution: &DeveloperDistribution,
+        airdrop_distribution: &AirdropDistribution,
+    ) -> anyhow::Result<()> {
+        let missing_developer_principals_count = developer_distribution
+            .developer_neurons
+            .iter()
+            .filter(|neuron_distribution| neuron_distribution.controller.is_none())
+            .count();
+
+        if missing_developer_principals_count != 0 {
+            return Err(anyhow!(
+                "Error: {} developer_neurons are missing controllers",
+                missing_developer_principals_count
+            ));
+        }
+
+        let deduped_dev_neurons = developer_distribution
+            .developer_neurons
+            .iter()
+            .map(|neuron_distribution| {
+                (
+                    neuron_distribution.controller,
+                    neuron_distribution.stake_e8s,
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        if deduped_dev_neurons.len() != developer_distribution.developer_neurons.len() {
+            return Err(anyhow!(
+                "Error: Duplicate controllers detected in developer_neurons"
+            ));
+        }
+
+        let missing_airdrop_principals_count = airdrop_distribution
+            .airdrop_neurons
+            .iter()
+            .filter(|neuron_distribution| neuron_distribution.controller.is_none())
+            .count();
+
+        if missing_airdrop_principals_count != 0 {
+            return Err(anyhow!(
+                "Error: {} airdrop_neurons are missing controllers",
+                missing_airdrop_principals_count
+            ));
+        }
+
+        let deduped_airdrop_neurons = airdrop_distribution
+            .airdrop_neurons
+            .iter()
+            .map(|neuron_distribution| {
+                (
+                    neuron_distribution.controller,
+                    neuron_distribution.stake_e8s,
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        if deduped_airdrop_neurons.len() != airdrop_distribution.airdrop_neurons.len() {
+            return Err(anyhow!(
+                "Error: Duplicate controllers detected in developer_neurons"
+            ));
+        }
+
+        let mut duplicated_neuron_principals = vec![];
+        for developer_principal in deduped_dev_neurons.keys() {
+            if deduped_airdrop_neurons.contains_key(developer_principal) {
+                // Safe to unwrap due to the checks done above
+                duplicated_neuron_principals.push(developer_principal.unwrap())
+            }
+        }
+
+        if !duplicated_neuron_principals.is_empty() {
+            return Err(anyhow!(
+                "Error: The following controllers are present in AirdropDistribution \
+                and DeveloperDistribution: {:?}",
+                duplicated_neuron_principals
+            ));
+        }
+
         Ok(())
     }
 
     /// Calculate and insert the developer bucket accounts into the provided map.
     fn insert_developer_accounts(
         &self,
-        developer_neuron_distribution: u64,
         sns_canister_ids: &SnsCanisterIds,
         accounts: &mut HashMap<AccountIdentifier, Tokens>,
     ) -> anyhow::Result<()> {
-        let developers = self.get_developer_distribution()?;
-        // First deduct the distributions at genesis from the configured total_e8s. These funds
-        // will be locked in a static subaccount of Governance until future decentralization swaps.
-        let locked_developer_distribution = developers.total_e8s - developer_neuron_distribution;
-        let (locked_developer_distribution_account, locked_developer_distribution) =
-            Self::get_distribution_account_id_and_tokens(
-                &sns_canister_ids.governance,
-                DEVELOPER_SUBACCOUNT_NONCE,
-                locked_developer_distribution,
-            );
-        accounts.insert(
-            locked_developer_distribution_account,
-            locked_developer_distribution,
-        );
-
-        for (principal_id, amount) in developers.distributions.iter() {
-            let principal_id = PrincipalId::from_str(principal_id)?;
+        for neuron_distribution in &self.developer_distribution()?.developer_neurons {
+            let principal_id = neuron_distribution.controller()?;
 
             let (account, tokens) = Self::get_neuron_account_id_and_tokens(
                 &sns_canister_ids.governance,
                 &principal_id,
-                *amount,
+                neuron_distribution.stake_e8s,
             );
             accounts.insert(account, tokens);
         }
         Ok(())
     }
 
-    /// Calculate and insert the treasury bucket accounts into the provided map.
+    /// Calculate and insert the treasury bucket account into the provided map.
     fn insert_treasury_accounts(
         &self,
-        treasury_neuron_distributions: u64,
         sns_canister_ids: &SnsCanisterIds,
         accounts: &mut HashMap<AccountIdentifier, Tokens>,
     ) -> anyhow::Result<()> {
-        let treasury = self.get_treasury_distribution()?;
+        let treasury = self.treasury_distribution()?;
 
-        let locked_treasury_distribution = treasury.total_e8s - treasury_neuron_distributions;
         let (locked_treasury_distribution_account, locked_treasury_distribution) =
             Self::get_distribution_account_id_and_tokens(
                 &sns_canister_ids.governance,
                 TREASURY_SUBACCOUNT_NONCE,
-                locked_treasury_distribution,
+                treasury.total_e8s,
             );
         accounts.insert(
             locked_treasury_distribution_account,
             locked_treasury_distribution,
         );
 
-        for (principal_id, amount) in treasury.distributions.iter() {
-            let principal_id = PrincipalId::from_str(principal_id)?;
-
-            let (account, tokens) = Self::get_neuron_account_id_and_tokens(
-                &sns_canister_ids.governance,
-                &principal_id,
-                *amount,
-            );
-            accounts.insert(account, tokens);
-        }
         Ok(())
     }
 
     /// Calculate and insert the swap bucket accounts into the provided map.
     fn insert_swap_accounts(
         &self,
-        initial_swap_ratio: Ratio<BigInt>,
         sns_canister_ids: &SnsCanisterIds,
         accounts: &mut HashMap<AccountIdentifier, Tokens>,
     ) -> anyhow::Result<()> {
-        // Multiply the total amount of allocated Swap distribution with the initial_swap_ratio to
-        // determine how much of the distribution will be available to the token swap canister
-        // at genesis.
-        let initial_swap_amount_ratio: Ratio<BigInt> = i2r(self.swap) * initial_swap_ratio;
-        // If the ratio produces a fractional, round down and convert back to a u64
-        let initial_swap_amount = try_r2u64(&initial_swap_amount_ratio.floor()).map_err(|err| {
-            anyhow!(
-                "Unable to convert initial swap tokens to an unsigned integer: {}",
-                err
-            )
-        })?;
+        let swap = self.swap_distribution()?;
 
         let swap_canister_account = AccountIdentifier::new(sns_canister_ids.swap, None);
-        let tokens = Tokens::from_e8s(initial_swap_amount);
-        accounts.insert(swap_canister_account, tokens);
+        let initial_swap_amount_tokens = Tokens::from_e8s(swap.initial_swap_amount_e8s);
+        accounts.insert(swap_canister_account, initial_swap_amount_tokens);
 
-        let future_swap_amount = self.swap - initial_swap_amount;
-        let (future_swap_distribution_account, future_swap_amount) =
+        let future_swap_amount_e8s = swap.total_e8s - swap.initial_swap_amount_e8s;
+        let (future_swap_distribution_account, future_swap_amount_tokens) =
             Self::get_distribution_account_id_and_tokens(
                 &sns_canister_ids.governance,
                 SWAP_SUBACCOUNT_NONCE,
-                future_swap_amount,
+                future_swap_amount_e8s,
             );
-        accounts.insert(future_swap_distribution_account, future_swap_amount);
+        accounts.insert(future_swap_distribution_account, future_swap_amount_tokens);
 
+        Ok(())
+    }
+
+    /// Calculate and insert the airdrop bucket accounts into the provided map.
+    fn insert_airdrop_accounts(
+        &self,
+        sns_canister_ids: &SnsCanisterIds,
+        accounts: &mut HashMap<AccountIdentifier, Tokens>,
+    ) -> anyhow::Result<()> {
+        for neuron_distribution in &self.airdrop_distribution()?.airdrop_neurons {
+            let principal_id = neuron_distribution.controller()?;
+
+            let (account, tokens) = Self::get_neuron_account_id_and_tokens(
+                &sns_canister_ids.governance,
+                &principal_id,
+                neuron_distribution.stake_e8s,
+            );
+            accounts.insert(account, tokens);
+        }
         Ok(())
     }
 
@@ -226,36 +315,36 @@ impl InitialTokenDistribution {
     pub fn get_distribution_account_id_and_tokens(
         governance_canister: &PrincipalId,
         distribution_account_nonce: u64,
-        amount: u64,
+        amount_e8s: u64,
     ) -> (AccountIdentifier, Tokens) {
         let subaccount =
             compute_distribution_subaccount(*governance_canister, distribution_account_nonce);
         let account = AccountIdentifier::new(*governance_canister, Some(subaccount));
-        let tokens = Tokens::from_e8s(amount);
+        let tokens = Tokens::from_e8s(amount_e8s);
 
         (account, tokens)
     }
 
     /// Given a the PrincipalId of Governance, compute the AccountId and the number of tokens
-    /// of a neuron.
+    /// for a neuron.
     fn get_neuron_account_id_and_tokens(
         governance_canister: &PrincipalId,
         claimer: &PrincipalId,
-        amount: u64,
+        amount_e8s: u64,
     ) -> (AccountIdentifier, Tokens) {
         let subaccount = compute_neuron_staking_subaccount(*claimer, DEFAULT_NEURON_STAKING_NONCE);
         let account = AccountIdentifier::new(*governance_canister, Some(subaccount));
-        let tokens = Tokens::from_e8s(amount);
+        let tokens = Tokens::from_e8s(amount_e8s);
 
         (account, tokens)
     }
 
-    /// Safely get the sum of all the e8 denominated token distributions. The maximum amount
+    /// Safely get the sum of all the e8 denominated neuron distributions. The maximum amount
     /// of tokens e8s must be less than or equal to u64::MAX.
-    fn get_total_distributions(distributions: &HashMap<String, u64>) -> anyhow::Result<u64> {
+    fn get_total_distributions(distributions: &Vec<NeuronDistribution>) -> anyhow::Result<u64> {
         let mut distribution_total: u64 = 0;
-        for distribution in distributions.values() {
-            distribution_total = match distribution_total.checked_add(*distribution) {
+        for distribution in distributions {
+            distribution_total = match distribution_total.checked_add(distribution.stake_e8s) {
                 Some(total) => total,
                 None => {
                     return Err(anyhow!(
@@ -268,28 +357,49 @@ impl InitialTokenDistribution {
         Ok(distribution_total)
     }
 
-    fn get_developer_distribution(&self) -> anyhow::Result<&TokenDistribution> {
-        self.developers
+    fn developer_distribution(&self) -> anyhow::Result<&DeveloperDistribution> {
+        self.developer_distribution
             .as_ref()
-            .ok_or_else(|| anyhow!("Expected developer token distribution to exist"))
+            .ok_or_else(|| anyhow!("Expected developer distribution to exist"))
     }
 
-    fn get_treasury_distribution(&self) -> anyhow::Result<&TokenDistribution> {
-        self.treasury
+    fn treasury_distribution(&self) -> anyhow::Result<&TreasuryDistribution> {
+        self.treasury_distribution
             .as_ref()
-            .ok_or_else(|| anyhow!("Expected treasury token distribution to exist"))
+            .ok_or_else(|| anyhow!("Expected treasury distribution to exist"))
+    }
+
+    fn swap_distribution(&self) -> anyhow::Result<&SwapDistribution> {
+        self.swap_distribution
+            .as_ref()
+            .ok_or_else(|| anyhow!("Expected swap distribution to exist"))
+    }
+
+    fn airdrop_distribution(&self) -> anyhow::Result<&AirdropDistribution> {
+        self.airdrop_distribution
+            .as_ref()
+            .ok_or_else(|| anyhow!("Expected airdrop distribution to exist"))
+    }
+}
+
+impl NeuronDistribution {
+    /// Internal helper method that provides a consistent error message.
+    fn controller(&self) -> anyhow::Result<PrincipalId> {
+        self.controller
+            .ok_or_else(|| anyhow!("Expected controller to exist"))
     }
 }
 
 #[cfg(test)]
 mod test {
     use crate::distributions::{
-        DEFAULT_NEURON_STAKING_NONCE, DEVELOPER_SUBACCOUNT_NONCE, SWAP_SUBACCOUNT_NONCE,
-        TREASURY_SUBACCOUNT_NONCE,
+        DEFAULT_NEURON_STAKING_NONCE, SWAP_SUBACCOUNT_NONCE, TREASURY_SUBACCOUNT_NONCE,
     };
-    use crate::pb::v1::TokenDistribution;
-    use crate::{InitialTokenDistribution, SnsCanisterIds, Tokens};
-    use assert_approx_eq::assert_approx_eq;
+    use crate::pb::v1::{
+        DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
+        SwapDistribution, TreasuryDistribution,
+    };
+    use crate::{AirdropDistribution, SnsCanisterIds, Tokens};
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_nervous_system_common::ledger::{
         compute_distribution_subaccount, compute_neuron_staking_subaccount,
@@ -300,7 +410,6 @@ mod test {
     use ic_sns_governance::pb::v1::neuron::DissolveState;
     use ic_sns_governance::pb::v1::{NervousSystemParameters, NeuronId, NeuronPermission};
     use ledger_canister::AccountIdentifier;
-    use maplit::hashmap;
     use std::str::FromStr;
 
     fn create_canister_ids() -> SnsCanisterIds {
@@ -339,40 +448,44 @@ mod test {
     }
 
     #[test]
-    fn test_initial_distributions() {
-        let neuron_stake = 100_000_000;
-        let dev_total = 600_000_000;
+    fn test_fractional_developer_voting_power_initial_ledger_accounts() {
+        let neuron_stake = 200_000_000;
         let swap_total = 1_000_000_000;
+        let swap_initial_round = 400_000_000;
         let treasury_total = 1_000_000_000;
 
-        let initial_token_distribution = InitialTokenDistribution {
-            developers: Some(TokenDistribution {
-                total_e8s: dev_total,
-                distributions: hashmap! {
-                    (*TEST_NEURON_1_OWNER_PRINCIPAL).to_string() => neuron_stake,
-                    (*TEST_NEURON_2_OWNER_PRINCIPAL).to_string() => neuron_stake,
-                },
+        let initial_token_distribution = FractionalDeveloperVotingPower {
+            developer_distribution: Some(DeveloperDistribution {
+                developer_neurons: vec![
+                    NeuronDistribution {
+                        controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                        stake_e8s: neuron_stake,
+                    },
+                    NeuronDistribution {
+                        controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
+                        stake_e8s: neuron_stake,
+                    },
+                ],
             }),
-            treasury: Some(TokenDistribution {
+            treasury_distribution: Some(TreasuryDistribution {
                 total_e8s: treasury_total,
-                distributions: hashmap! {
-                    (*TEST_NEURON_3_OWNER_PRINCIPAL).to_string() => neuron_stake,
-                },
             }),
-            swap: swap_total,
+            swap_distribution: Some(SwapDistribution {
+                total_e8s: swap_total,
+                initial_swap_amount_e8s: swap_initial_round,
+            }),
+            airdrop_distribution: Some(AirdropDistribution {
+                airdrop_neurons: vec![NeuronDistribution {
+                    controller: Some(*TEST_NEURON_3_OWNER_PRINCIPAL),
+                    stake_e8s: neuron_stake,
+                }],
+            }),
         };
 
         let canister_ids = create_canister_ids();
-        let initial_accounts = initial_token_distribution
+        let initial_ledger_accounts = initial_token_distribution
             .get_account_ids_and_tokens(&canister_ids)
             .unwrap();
-
-        // Verify developer related bucket
-        let locked_dev_account = get_distribution_account_identifier(
-            canister_ids.governance,
-            Some(canister_ids.governance),
-            Some(DEVELOPER_SUBACCOUNT_NONCE),
-        );
 
         let neuron_1_account = get_neuron_account_identifier(
             canister_ids.governance,
@@ -384,19 +497,19 @@ mod test {
             Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
             None,
         );
+        let neuron_3_account = get_neuron_account_identifier(
+            canister_ids.governance,
+            Some(*TEST_NEURON_3_OWNER_PRINCIPAL),
+            None,
+        );
 
-        let locked_dev_account_balance = initial_accounts.get(&locked_dev_account).unwrap();
-        let neuron_1_account_balance = initial_accounts.get(&neuron_1_account).unwrap();
-        let neuron_2_account_balance = initial_accounts.get(&neuron_2_account).unwrap();
+        let neuron_1_account_balance = initial_ledger_accounts.get(&neuron_1_account).unwrap();
+        let neuron_2_account_balance = initial_ledger_accounts.get(&neuron_2_account).unwrap();
+        let neuron_3_account_balance = initial_ledger_accounts.get(&neuron_3_account).unwrap();
 
         assert_eq!(neuron_1_account_balance, &Tokens::from_e8s(neuron_stake));
         assert_eq!(neuron_2_account_balance, &Tokens::from_e8s(neuron_stake));
-        assert_eq!(
-            ((*locked_dev_account_balance + *neuron_1_account_balance).unwrap()
-                + *neuron_1_account_balance)
-                .unwrap(),
-            Tokens::from_e8s(dev_total)
-        );
+        assert_eq!(neuron_3_account_balance, &Tokens::from_e8s(neuron_stake));
 
         // Verify swap related bucket
         let locked_swap_account = get_distribution_account_identifier(
@@ -406,12 +519,19 @@ mod test {
         );
         let swap_canister_account = AccountIdentifier::new(canister_ids.swap, None);
 
-        let locked_swap_account_balance = initial_accounts.get(&locked_swap_account).unwrap();
-        let swap_canister_account_balance = initial_accounts.get(&swap_canister_account).unwrap();
+        let locked_swap_account_balance =
+            initial_ledger_accounts.get(&locked_swap_account).unwrap();
+        let swap_canister_account_balance =
+            initial_ledger_accounts.get(&swap_canister_account).unwrap();
 
         assert_eq!(
             (*locked_swap_account_balance + *swap_canister_account_balance).unwrap(),
-            Tokens::from_e8s(initial_token_distribution.swap)
+            Tokens::from_e8s(
+                initial_token_distribution
+                    .swap_distribution
+                    .unwrap()
+                    .total_e8s
+            )
         );
 
         // Verify treasury related bucket
@@ -420,119 +540,49 @@ mod test {
             Some(canister_ids.governance),
             Some(TREASURY_SUBACCOUNT_NONCE),
         );
-        let neuron_3_account = get_neuron_account_identifier(
-            canister_ids.governance,
-            Some(*TEST_NEURON_3_OWNER_PRINCIPAL),
-            None,
-        );
-        let locked_treasury_account_balance =
-            initial_accounts.get(&locked_treasury_account).unwrap();
-        let neuron_3_account_balance = initial_accounts.get(&neuron_3_account).unwrap();
-
-        assert_eq!(neuron_3_account_balance, &Tokens::from_e8s(neuron_stake));
+        let locked_treasury_account_balance = initial_ledger_accounts
+            .get(&locked_treasury_account)
+            .unwrap();
         assert_eq!(
-            (*locked_treasury_account_balance + *neuron_3_account_balance).unwrap(),
+            *locked_treasury_account_balance,
             Tokens::from_e8s(treasury_total)
         );
-    }
-
-    #[test]
-    fn test_developer_and_swap_ratio() {
-        // Choose initial values for the distributions. Choosing non-evenly-divisible numbers
-        // like 1 / 6 developers will lead to fractional swaps for the swap canister which
-        // this test is for.
-        let neuron_stake = 100_000_000;
-        let dev_total = 600_000_000;
-        let swap_total = 1_000_000_000;
-        let treasury_total = 0;
-
-        let initial_token_distribution = InitialTokenDistribution {
-            developers: Some(TokenDistribution {
-                total_e8s: dev_total,
-                distributions: hashmap! {
-                    (*TEST_NEURON_1_OWNER_PRINCIPAL).to_string() => neuron_stake,
-                },
-            }),
-            treasury: Some(TokenDistribution {
-                total_e8s: treasury_total,
-                distributions: hashmap! {},
-            }),
-            swap: swap_total,
-        };
-
-        let canister_ids = create_canister_ids();
-        let initial_accounts = initial_token_distribution
-            .get_account_ids_and_tokens(&canister_ids)
-            .unwrap();
-
-        // Calculate the swap accounts
-        let locked_swap_account = get_distribution_account_identifier(
-            canister_ids.governance,
-            Some(canister_ids.governance),
-            Some(SWAP_SUBACCOUNT_NONCE),
-        );
-        let swap_canister_account = AccountIdentifier::new(canister_ids.swap, None);
-
-        // Get their initial balances
-        let locked_swap_account_balance = initial_accounts.get(&locked_swap_account).unwrap();
-        let swap_canister_account_balance = initial_accounts.get(&swap_canister_account).unwrap();
-
-        // Calculate the swap ratio. This should be the same as the developer ratio.
-        let swap_ratio = swap_canister_account_balance.get_e8s() as f64
-            / locked_swap_account_balance.get_e8s() as f64;
-
-        // Calculate the developer accounts
-        let locked_dev_account = get_distribution_account_identifier(
-            canister_ids.governance,
-            Some(canister_ids.governance),
-            Some(DEVELOPER_SUBACCOUNT_NONCE),
-        );
-        let neuron_1_account = get_neuron_account_identifier(
-            canister_ids.governance,
-            Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-            None,
-        );
-
-        // Get their initial balances
-        let locked_dev_account_balance = initial_accounts.get(&locked_dev_account).unwrap();
-        let neuron_1_account_balance = initial_accounts.get(&neuron_1_account).unwrap();
-
-        // Calculate the developer ratio. This should be the same as the swap ratio.
-        let dev_ratio =
-            neuron_1_account_balance.get_e8s() as f64 / locked_dev_account_balance.get_e8s() as f64;
-
-        // Although this looks like the approx_eq is because of floating point division, it is in fact
-        // because there could be a slight different in the ratio of these values. For instance,
-        // if the initial_swap_ratio produces a fractional amount of tokens for the swap canister,
-        // the formula will round down to the nearest integer (an 'e8' of a token) and subtract that
-        // from the total, accounting for the extra e8. This assert_approx_eq! takes into account
-        // these imperfect distribution ratios and allows this unit test to test this edge case.
-        assert_approx_eq!(swap_ratio, dev_ratio, 1e-5f64);
     }
 
     #[test]
     fn test_initial_neurons() {
         let developer_neuron_stake = 100_000_000;
         let airdrop_neuron_stake = 50_000;
-        let dev_total = 600_000_000;
         let swap_total = 1_000_000_000;
+        let swap_initial_round = 400_000_000;
         let treasury_total = 1_000_000_000;
 
-        let initial_token_distribution = InitialTokenDistribution {
-            developers: Some(TokenDistribution {
-                total_e8s: dev_total,
-                distributions: hashmap! {
-                    (*TEST_NEURON_1_OWNER_PRINCIPAL).to_string() => developer_neuron_stake,
-                    (*TEST_NEURON_2_OWNER_PRINCIPAL).to_string() => developer_neuron_stake,
-                },
+        let initial_token_distribution = FractionalDeveloperVotingPower {
+            developer_distribution: Some(DeveloperDistribution {
+                developer_neurons: vec![
+                    NeuronDistribution {
+                        controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                        stake_e8s: developer_neuron_stake,
+                    },
+                    NeuronDistribution {
+                        controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
+                        stake_e8s: developer_neuron_stake,
+                    },
+                ],
             }),
-            treasury: Some(TokenDistribution {
+            treasury_distribution: Some(TreasuryDistribution {
                 total_e8s: treasury_total,
-                distributions: hashmap! {
-                    (*TEST_NEURON_3_OWNER_PRINCIPAL).to_string() => airdrop_neuron_stake,
-                },
             }),
-            swap: swap_total,
+            swap_distribution: Some(SwapDistribution {
+                total_e8s: swap_total,
+                initial_swap_amount_e8s: swap_initial_round,
+            }),
+            airdrop_distribution: Some(AirdropDistribution {
+                airdrop_neurons: vec![NeuronDistribution {
+                    controller: Some(*TEST_NEURON_3_OWNER_PRINCIPAL),
+                    stake_e8s: airdrop_neuron_stake,
+                }],
+            }),
         };
 
         let parameters = NervousSystemParameters::with_default_values();
@@ -612,4 +662,306 @@ mod test {
         );
         assert_eq!(neuron_3.dissolve_state, Some(expected_dissolve_delay));
     }
+
+    #[test]
+    fn test_fractional_developer_voting_power_developer_validation() {
+        // A basic valid FractionalDeveloperVotingPower
+        let mut initial_token_distribution = FractionalDeveloperVotingPower {
+            developer_distribution: Some(DeveloperDistribution {
+                developer_neurons: Default::default(),
+            }),
+            treasury_distribution: Some(TreasuryDistribution { total_e8s: 0 }),
+            swap_distribution: Some(SwapDistribution {
+                total_e8s: 100,
+                initial_swap_amount_e8s: 1,
+            }),
+            airdrop_distribution: Some(AirdropDistribution {
+                airdrop_neurons: Default::default(),
+            }),
+        };
+        // Validate that the initial version is valid
+        assert!(initial_token_distribution.validate().is_ok());
+
+        // The developer_distribution being absent should fail validation
+        initial_token_distribution.developer_distribution = None;
+        assert!(initial_token_distribution.validate().is_err());
+
+        // Check that returning to a default is valid
+        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
+            developer_neurons: Default::default(),
+        });
+        assert!(initial_token_distribution.validate().is_ok());
+
+        // Duplicate principals should fail validation
+        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
+            developer_neurons: vec![
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                    stake_e8s: 1,
+                },
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                    stake_e8s: 1,
+                },
+            ],
+        });
+        assert!(initial_token_distribution.validate().is_err());
+
+        // Unique principals should pass validation
+        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
+            developer_neurons: vec![
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                    stake_e8s: 1,
+                },
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
+                    stake_e8s: 1,
+                },
+            ],
+        });
+        assert!(initial_token_distribution.validate().is_ok());
+
+        // The sum of the distributions MUST fit into a u64
+        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
+            developer_neurons: vec![
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                    stake_e8s: u64::MAX,
+                },
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
+                    stake_e8s: u64::MAX,
+                },
+            ],
+        });
+        assert!(initial_token_distribution.validate().is_err());
+
+        // The sum of the distributions can equal the swap_distribution.total_e8s
+        // which is set to 100 at the beginning of the test
+        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
+            developer_neurons: vec![
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                    stake_e8s: 50,
+                },
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
+                    stake_e8s: 50,
+                },
+            ],
+        });
+        assert!(initial_token_distribution.validate().is_ok());
+
+        // The sum of the distributions being greater than swap_distribution.total_e8s should fail
+        // validation
+        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
+            developer_neurons: vec![
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                    stake_e8s: 50,
+                },
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
+                    stake_e8s: 51,
+                },
+            ],
+        });
+        assert!(initial_token_distribution.validate().is_err());
+
+        // Reset to a valid developer_distribution
+        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
+            developer_neurons: vec![NeuronDistribution {
+                controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                stake_e8s: 50,
+            }],
+        });
+        assert!(initial_token_distribution.validate().is_ok());
+
+        // Using the same controller in the AirdropDistribution and DeveloperDistribution should fail
+        // validation
+        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
+            airdrop_neurons: vec![NeuronDistribution {
+                controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                stake_e8s: 50,
+            }],
+        });
+        assert!(initial_token_distribution.validate().is_err());
+    }
+
+    #[test]
+    fn test_fractional_developer_voting_power_treasury_validation() {
+        // A basic valid FractionalDeveloperVotingPower
+        let mut initial_token_distribution = FractionalDeveloperVotingPower {
+            developer_distribution: Some(DeveloperDistribution {
+                developer_neurons: Default::default(),
+            }),
+            treasury_distribution: Some(TreasuryDistribution { total_e8s: 0 }),
+            swap_distribution: Some(SwapDistribution {
+                total_e8s: 100,
+                initial_swap_amount_e8s: 1,
+            }),
+            airdrop_distribution: Some(AirdropDistribution {
+                airdrop_neurons: Default::default(),
+            }),
+        };
+        // Validate that the initial version is valid
+        assert!(initial_token_distribution.validate().is_ok());
+
+        // The treasury_distribution being absent should fail validation
+        initial_token_distribution.treasury_distribution = None;
+        assert!(initial_token_distribution.validate().is_err());
+
+        // Check that returning to a default is valid
+        initial_token_distribution.treasury_distribution =
+            Some(TreasuryDistribution { total_e8s: 0 });
+        assert!(initial_token_distribution.validate().is_ok());
+
+        // Check that the max value is valid
+        initial_token_distribution.treasury_distribution = Some(TreasuryDistribution {
+            total_e8s: u64::MAX,
+        });
+        assert!(initial_token_distribution.validate().is_ok());
+    }
+
+    #[test]
+    fn test_fractional_developer_voting_power_swap_validation() {
+        // A basic valid FractionalDeveloperVotingPower
+        let mut initial_token_distribution = FractionalDeveloperVotingPower {
+            developer_distribution: Some(DeveloperDistribution {
+                developer_neurons: Default::default(),
+            }),
+            treasury_distribution: Some(TreasuryDistribution { total_e8s: 0 }),
+            swap_distribution: Some(SwapDistribution {
+                total_e8s: 100,
+                initial_swap_amount_e8s: 1,
+            }),
+            airdrop_distribution: Some(AirdropDistribution {
+                airdrop_neurons: Default::default(),
+            }),
+        };
+        // Validate that the initial version is valid
+        assert!(initial_token_distribution.validate().is_ok());
+
+        // The swap_distribution being absent should fail validation
+        initial_token_distribution.swap_distribution = None;
+        assert!(initial_token_distribution.validate().is_err());
+
+        // Check that returning to a default is valid
+        initial_token_distribution.swap_distribution = Some(SwapDistribution {
+            initial_swap_amount_e8s: 1,
+            total_e8s: 1,
+        });
+        assert!(initial_token_distribution.validate().is_ok());
+
+        // initial_swap_amount_e8s must be greater than 0
+        initial_token_distribution.swap_distribution = Some(SwapDistribution {
+            initial_swap_amount_e8s: 0,
+            total_e8s: 0,
+        });
+        assert!(initial_token_distribution.validate().is_err());
+
+        // initial_swap_amount_e8s cannot be greater than total_e8s
+        initial_token_distribution.swap_distribution = Some(SwapDistribution {
+            initial_swap_amount_e8s: 10,
+            total_e8s: 5,
+        });
+        assert!(initial_token_distribution.validate().is_err());
+    }
+
+    #[test]
+    fn test_fractional_developer_voting_power_airdrop_validation() {
+        // A basic valid FractionalDeveloperVotingPower
+        let mut initial_token_distribution = FractionalDeveloperVotingPower {
+            developer_distribution: Some(DeveloperDistribution {
+                developer_neurons: Default::default(),
+            }),
+            treasury_distribution: Some(TreasuryDistribution { total_e8s: 0 }),
+            swap_distribution: Some(SwapDistribution {
+                total_e8s: 100,
+                initial_swap_amount_e8s: 1,
+            }),
+            airdrop_distribution: Some(AirdropDistribution {
+                airdrop_neurons: Default::default(),
+            }),
+        };
+        // Validate that the initial version is valid
+        assert!(initial_token_distribution.validate().is_ok());
+
+        // The airdrop_distribution being absent should fail validation
+        initial_token_distribution.airdrop_distribution = None;
+        assert!(initial_token_distribution.validate().is_err());
+
+        // Check that returning to a default is valid
+        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
+            airdrop_neurons: Default::default(),
+        });
+        assert!(initial_token_distribution.validate().is_ok());
+
+        // Duplicate principals should fail validation
+        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
+            airdrop_neurons: vec![
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                    stake_e8s: 1,
+                },
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                    stake_e8s: 1,
+                },
+            ],
+        });
+        assert!(initial_token_distribution.validate().is_err());
+
+        // Unique principals should pass validation
+        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
+            airdrop_neurons: vec![
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                    stake_e8s: 1,
+                },
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
+                    stake_e8s: 1,
+                },
+            ],
+        });
+        assert!(initial_token_distribution.validate().is_ok());
+
+        // The sum of the distributions MUST fit into a u64
+        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
+            airdrop_neurons: vec![
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                    stake_e8s: u64::MAX,
+                },
+                NeuronDistribution {
+                    controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
+                    stake_e8s: u64::MAX,
+                },
+            ],
+        });
+        assert!(initial_token_distribution.validate().is_err());
+
+        // Reset to a valid airdrop_distribution
+        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
+            airdrop_neurons: vec![NeuronDistribution {
+                controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                stake_e8s: 50,
+            }],
+        });
+        assert!(initial_token_distribution.validate().is_ok());
+
+        // Using the same controller in the AirdropDistribution and DeveloperDistribution should fail
+        // validation
+        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
+            developer_neurons: vec![NeuronDistribution {
+                controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                stake_e8s: 50,
+            }],
+        });
+        assert!(initial_token_distribution.validate().is_err());
+    }
+
+    // TODO NNS1-1465: Add tests for fractional developer voting power
 }

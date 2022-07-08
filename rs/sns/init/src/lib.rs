@@ -1,7 +1,11 @@
 pub mod distributions;
 pub mod pb;
 
-use crate::pb::v1::{InitialTokenDistribution, SnsInitPayload, TokenDistribution};
+use crate::pb::v1::{
+    sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower,
+    AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower as FractionalDVP,
+    SnsInitPayload, SwapDistribution, TreasuryDistribution,
+};
 use anyhow::anyhow;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_constants::{
@@ -79,17 +83,21 @@ impl SnsInitPayload {
         Self {
             token_symbol: Some("TEST".to_string()),
             token_name: Some("PlaceHolder".to_string()),
-            initial_token_distribution: Some(InitialTokenDistribution {
-                developers: Some(TokenDistribution {
-                    total_e8s: 100,
-                    distributions: Default::default(),
+            initial_token_distribution: Some(FractionalDeveloperVotingPower(FractionalDVP {
+                developer_distribution: Some(DeveloperDistribution {
+                    developer_neurons: Default::default(),
                 }),
-                treasury: Some(TokenDistribution {
-                    total_e8s: 100,
-                    distributions: Default::default(),
+                treasury_distribution: Some(TreasuryDistribution {
+                    total_e8s: 500_000_000,
                 }),
-                swap: 100,
-            }),
+                swap_distribution: Some(SwapDistribution {
+                    total_e8s: 1_000_000_000,
+                    initial_swap_amount_e8s: 1_000_000_000,
+                }),
+                airdrop_distribution: Some(AirdropDistribution {
+                    airdrop_neurons: Default::default(),
+                }),
+            })),
             max_icp_e8s: Some(1_000_000_000),
             min_participants: Some(1),
             min_icp_e8s: Some(100),
@@ -221,11 +229,12 @@ impl SnsInitPayload {
         &self,
         sns_canister_ids: &SnsCanisterIds,
     ) -> anyhow::Result<HashMap<AccountIdentifier, Tokens>> {
-        if let Some(initial_token_distribution) = &self.initial_token_distribution {
-            return initial_token_distribution.get_account_ids_and_tokens(sns_canister_ids);
+        match &self.initial_token_distribution {
+            None => Ok(hashmap! {}),
+            Some(FractionalDeveloperVotingPower(f)) => {
+                f.get_account_ids_and_tokens(sns_canister_ids)
+            }
         }
-
-        Ok(hashmap! {})
     }
 
     /// Return the initial neurons that the user specified. These neurons will exist in
@@ -235,11 +244,10 @@ impl SnsInitPayload {
         &self,
         parameters: &NervousSystemParameters,
     ) -> anyhow::Result<BTreeMap<String, Neuron>> {
-        if let Some(initial_token_distribution) = &self.initial_token_distribution {
-            return initial_token_distribution.get_initial_neurons(parameters);
+        match &self.initial_token_distribution {
+            None => Ok(btreemap! {}),
+            Some(FractionalDeveloperVotingPower(f)) => f.get_initial_neurons(parameters),
         }
-
-        Ok(btreemap! {})
     }
 
     /// Validates the SnsInitPayload. This is called before building each SNS canister's
@@ -332,7 +340,9 @@ impl SnsInitPayload {
             .as_ref()
             .ok_or_else(|| "Error: initial-token-distribution must be specified".to_string())?;
 
-        initial_token_distribution.validate()?;
+        match initial_token_distribution {
+            FractionalDeveloperVotingPower(f) => f.validate().map_err(|err| err.to_string())?,
+        }
 
         Ok(())
     }
@@ -445,25 +455,36 @@ impl SnsInitPayload {
 
 #[cfg(test)]
 mod test {
-    use crate::pb::v1::{InitialTokenDistribution, TokenDistribution};
-    use crate::{SnsCanisterIds, SnsInitPayload, MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH};
-    use ic_base_types::{ic_types::principal::Principal, CanisterId, PrincipalId};
+    use crate::pb::v1::{
+        sns_init_payload::InitialTokenDistribution, DeveloperDistribution,
+        FractionalDeveloperVotingPower as FractionalDVP, SwapDistribution, TreasuryDistribution,
+    };
+    use crate::{
+        AirdropDistribution, FractionalDeveloperVotingPower, SnsCanisterIds, SnsInitPayload,
+        MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH,
+    };
+    use ic_base_types::ic_types::Principal;
+    use ic_base_types::{CanisterId, PrincipalId};
     use ic_sns_governance::governance::ValidGovernanceProto;
     use ledger_canister::{AccountIdentifier, Tokens};
     use maplit::hashset;
 
     fn create_valid_initial_token_distribution() -> InitialTokenDistribution {
-        InitialTokenDistribution {
-            developers: Some(TokenDistribution {
-                total_e8s: 100_000_000,
-                distributions: Default::default(),
+        FractionalDeveloperVotingPower(FractionalDVP {
+            developer_distribution: Some(DeveloperDistribution {
+                developer_neurons: Default::default(),
             }),
-            treasury: Some(TokenDistribution {
+            treasury_distribution: Some(TreasuryDistribution {
                 total_e8s: 500_000_000,
-                distributions: Default::default(),
             }),
-            swap: 1_000_000_000,
-        }
+            swap_distribution: Some(SwapDistribution {
+                total_e8s: 1_000_000_000,
+                initial_swap_amount_e8s: 1_000_000_000,
+            }),
+            airdrop_distribution: Some(AirdropDistribution {
+                airdrop_neurons: Default::default(),
+            }),
+        })
     }
 
     fn get_test_sns_init_payload() -> SnsInitPayload {
@@ -497,7 +518,7 @@ mod test {
             SnsInitPayload {
                 token_name: Some("ServiceNervousSystem".to_string()),
                 token_symbol: Some("SNS".to_string()),
-                initial_token_distribution: Some(InitialTokenDistribution::default()),
+                initial_token_distribution: Some(create_valid_initial_token_distribution()),
                 ..get_test_sns_init_payload()
             }
             .validate()

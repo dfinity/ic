@@ -75,7 +75,7 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
             Regex::new(r"proposal_reject_cost_e8s.*").unwrap(),
             format!(
                 r##"#
-# Cost of making a proposal that doesnt pass.
+# Cost of making a proposal that is not adopted.
 # Default value = {}
 #"##,
                 nervous_system_parameters_default.reject_cost_e8s.unwrap()
@@ -89,7 +89,7 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
 # This field has no default, a value must be provided by the user.
 # Must be a string length between {} and {} characters
 #
-# Example: Bitcoin
+# Example: InternetComputerProtocol
 #"##,
                 MIN_TOKEN_NAME_LENGTH, MAX_TOKEN_NAME_LENGTH
             ),
@@ -97,33 +97,60 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
         (
             Regex::new(r"initial_token_distribution.*").unwrap(),
             r##"#
-# This field sets the initial token distribution between Treasury, Developers and Swap.
-# This field has no default, a value must be provided by the user.
+# This field sets the initial token distribution. Initially, there is only support for
+# the FractionalDeveloperVotingPower strategy. The FractionalDeveloperVotingPower token
+# distribution strategy configures how tokens and neurons are distributed via four
+# "buckets": developers, treasury, swap, and airdrops. This strategy will distribute
+# all developer tokens at genesis in restricted neurons with an additional voting power
+# multiplier applied. This voting power multiplier is calculated as
+# `swap_distribution.initial_swap_amount_e8s / swap_distribution.total_e8s`.
+# As more of the swap funds are swapped in future rounds, the voting power
+# multiplier will approach 1.0. The following preconditions must be met for
+# it to be a valid distribution:
+#    - developer_distribution.developer_neurons.stake_e8s.sum <= u64:MAX
+#    - developer_neurons.developer_neurons.stake_e8s.sum <= swap_distribution.total_e8s
+#    - airdrop_distribution.airdrop_neurons.stake_e8s.sum <= u64:MAX
+#    - swap_distribution.initial_swap_amount_e8s > 0
+#    - swap_distribution.initial_swap_amount_e8s <= swap_distribution.total_e8s
+#    - swap_distribution.total_e8s >= developer_distribution.developer_neurons.stake_e8s.sum
 #
-# -Treasury is of type "TokenDistribution", it has two fields:
-#    - total_e8: The total amount of tokens in the Treasury bucket.
-#    - token_distributions: A map between PrincipalId and amount, it specifies the amount and
-#    recipients of Airdrops.
+# - developer_distribution has one field:
+#    - developer_neurons: A list of NeuronDistributions that specifiy the neuron's stake and
+#      controlling principal. These neurons will be available at genesis in PreInitializationSwap
+#      mode. The voting power mutlipler will be applied to these neurons.
 #
-# -Developers is also of type "TokenDistribution", with two fields:
-#    - total_e8: The total amount of tokens in the Developers bucket.
-#    - token_distributions: A map between PrincipalId and amount, a neuron will be created for
-#    each PrincipalId with the given amount
+# - treasury_distribution has one field:
+#    - total_e8s: The total amount of tokens in the treasury bucket.
 #
-# -Swap is of type u64 and specifies the amount of token that will be offered during the swap.
+# - swap_distribution has two fields:
+#    - total_e8s: The total amount of tokens in the swap bucket. initial_swap_amount_e8s will be
+#      deducted from this total.
+#    - initial_swap_amount_e8s: The initial amount of tokens deposited in the swap canister for
+#      the initial token swap.
+#
+# - aidrop_distribution has one field:
+#    - airdrop_neurons: A list of NeuronDistributions that specifiy the neuron's stake and
+#      controlling principal. These neurons will be available at genesis in PreInitializationSwap
+#      mode. No voting power mutlipler will be applied to these neurons.
 #
 # Example:
 # initial_token_distribution:
-#   developers:
-#     total_e8s: 3000000000
-#     distributions:
-#       fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe: 1000000000
-#       x4vjn-rrapj-c2kqe-a6m2b-7pzdl-ntmc4-riutz-5bylw-2q2bh-ds5h2-lae: 1500000000
-#   treasury:
-#     total_e8s: 5000000000
-#     distributions:
-#       fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe: 500000000
-#   swap: 6000000000
+#   FractionalDeveloperVotingPower:
+#     developer_distribution:
+#       developer_neurons:
+#         - controller: x4vjn-rrapj-c2kqe-a6m2b-7pzdl-ntmc4-riutz-5bylw-2q2bh-ds5h2-lae
+#           stake_e8s: 1500000000
+#         - controller: fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe
+#           stake_e8s: 1500000000
+#     treasury_distribution:
+#       total_e8s: 5000000000
+#     swap_distribution:
+#       total_e8s: 6000000000
+#       initial_swap_amount_e8s: 3000000000
+#     airdrop_distribution:
+#       airdrop_neurons:
+#         - controller: fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe
+#           stake_e8s: 500000000
 #"##
             .to_string(),
         ),
@@ -135,8 +162,8 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
 # This field has no default, a value must be provided by the user.
 # Must be a string length between {} and {} characters
 #
-# Example: BTC
-
+# Example: ICP
+#
 #"##,
                 MIN_TOKEN_SYMBOL_LENGTH, MAX_TOKEN_SYMBOL_LENGTH
             ),
@@ -156,11 +183,12 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
         (
             Regex::new(r"min_icp_e8s*").unwrap(),
             r##"#
-# The total number of ICP that is required for this token sale to take
-# place. This number divided by the number of SNS tokens for sale gives the
-# seller's reserve price for the sale, i.e., the minimum number of ICP per SNS
+# This field has no default, a value must be provided by the user.
+# The minimum amount of ICP that is required for this token swap to take
+# place. This amount divided by the amount of SNS tokens for swap gives the
+# seller's reserve price for the swap, i.e., the minimum number of ICP per SNS
 # tokens that the seller of SNS tokens is willing to accept. If this amount is
-# not achieved, the sale will be aborted (instead of committed) when the due
+# not achieved, the swap will be aborted (instead of committed) when the due
 # date/time occurs. Must be smaller than or equal to `max_icp_e8s`.
 #"##
             .to_string(),
@@ -175,26 +203,27 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
             .to_string(),
         ),
         (
-            Regex::new(r"min_participants*").unwrap(),
-            r##"#
-# This field has no default, a value must be provided by the user.
-# Minimum number of participants for the swap to take place. Must be greater than zero.
-#"##
-            .to_string(),
-        ),
-        (
             Regex::new(r"min_participant_icp_e8s*").unwrap(),
             format!(
                 r##"#
-# The minimum amount of icp that each buyer must contribute to participate.
+# The minimum amount of ICP that each buyer must contribute to participate in the swap.
 # Default value = {}
 #"##,
                 MIN_PARTICIPANT_ICP_E8S_DEFAULT
             ),
         ),
         (
+            Regex::new(r"min_participants*").unwrap(),
+            r##"#
+# This field has no default, a value must be provided by the user.
+# The minimum number of participants for the swap to take place. Must be greater than zero.
+#"##
+            .to_string(),
+        ),
+        (
             Regex::new(r"max_participant_icp_e8s*").unwrap(),
             r##"#
+# This field has no default, a value must be provided by the user.
 # The maximum amount of ICP that each buyer can contribute. Must be greater than
 # or equal to `min_participant_icp_e8s` and less than or equal to
 # `max_icp_e8s`. Can effectively be disabled by setting it to `max_icp_e8s`.
@@ -214,7 +243,7 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
 
     for (i, line) in yaml_payload.lines().enumerate() {
         if i == 1 {
-            yaml_file_string.push_str("# 100_000_000 e8s = 1 token.")
+            yaml_file_string.push_str("# 100_000_000 e8s = 1 token.\n")
         }
         for (re, comment) in field_comment.iter() {
             if re.is_match(line) {
@@ -229,16 +258,19 @@ fn get_config_file_contents(sns_init_payload: SnsInitPayload) -> String {
 
 fn validate(init_config_file: PathBuf) {
     let file = File::open(&init_config_file).unwrap_or_else(|_| {
-        panic!(
+        eprintln!(
             "Couldn't open {} for validation",
             init_config_file.to_str().unwrap()
-        )
+        );
+        std::process::exit(1);
     });
-    let sns_init_payload: SnsInitPayload = serde_yaml::from_reader(file).unwrap_or_else(|_| {
-        panic!(
-            "Couldn't parse {} for validation",
-            init_config_file.to_str().unwrap()
-        )
+    let sns_init_payload: SnsInitPayload = serde_yaml::from_reader(file).unwrap_or_else(|e| {
+        eprintln!(
+            "Couldn't parse {} for validation: {}",
+            init_config_file.to_str().unwrap(),
+            e
+        );
+        std::process::exit(1);
     });
     match sns_init_payload.validate() {
         Ok(_) => println!("No errors found {}", init_config_file.to_str().unwrap()),

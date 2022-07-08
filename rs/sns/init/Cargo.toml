@@ -29,6 +29,6 @@ serde_yaml = "0.8.24"
 [dev-dependencies]
 assert_approx_eq = "1.1.0"
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
-ic-sns-init-proto-generator = { path = "./proto_generator" }
+ic-sns-init-protobuf-generator = { path = "protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 tempfile = "3.1.0"

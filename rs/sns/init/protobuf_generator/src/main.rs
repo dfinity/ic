@@ -1,4 +1,4 @@
-use ic_sns_init_proto_generator::{generate_prost_files, ProtoPaths};
+use ic_sns_init_protobuf_generator::{generate_prost_files, ProtoPaths};
 use std::path::PathBuf;
 
 fn main() {
@@ -8,6 +8,7 @@ fn main() {
     );
     let out = &manifest_dir.join("../gen");
     let sns_init_proto = manifest_dir.join("../proto");
+    let base_types_proto = manifest_dir.join("../../../types/base_types/proto");
 
     match std::fs::remove_dir_all(&out) {
         Ok(_) => (),
@@ -21,6 +22,7 @@ fn main() {
     generate_prost_files(
         ProtoPaths {
             sns_init: &sns_init_proto,
+            base_types: &base_types_proto,
         },
         out.as_ref(),
     );

@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package ic_sns_init.pb.v1;
 
+import "ic_base_types/pb/v1/types.proto";
+
 // This struct contains all the parameters necessary to initialize an SNS. All fields are optional
 // to avoid future candid compatibility problems. However, for the struct to be "valid", all fields
 // must be populated.
@@ -27,55 +29,29 @@ message SnsInitPayload {
   // The minimum amount a neuron needs to have staked.
   optional uint64 neuron_minimum_stake_e8s = 5;
 
-  // This field sets the initial token distribution between Treasury, Developers and Swap.
-  // This field has no default, a value must be provided by the user.
-  //
-  // -Treasury is of type "TokenDistribution", it has two fields:
-  //    - total_e8: The total amount of tokens in the Treasury bucket.
-  //    - token_distributions: A map between PrincipalId and amount, it specifies the amount and
-  //    recipients of Airdrops.
-  //
-  // -Developers is also of type "TokenDistribution", with two fields:
-  //    - total_e8: The total amount of tokens in the Developers bucket.
-  //    - token_distributions: A map between PrincipalId and amount, a neuron will be created for
-  //    each PrincipalId with the given amount
-  //
-  // -Swap is of type u64 and specifies the amount of token that will be up for sale.
-  //
-  // Example (Prost):
-  // InitialTokenDistribution {
-  //     developers: TokenDistribution {
-  //         total_e8s: 30_00000000,
-  //         distributions: hashmap! {
-  //             "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe" => 10_00000000,
-  //             "x4vjn-rrapj-c2kqe-a6m2b-7pzdl-ntmc4-riutz-5bylw-2q2bh-ds5h2-lae" => 15_00000000,
-  //         },
-  //     }
-  //     treasury: TokenDistribution {
-  //         total_e8s: 50_00000000,
-  //         distributions: hashmap! {
-  //             "fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe" => 5_00000000,
-  //         },
-  //     },
-  //     swap: 60_00000000,
-  // }
-  optional InitialTokenDistribution initial_token_distribution = 6;
+  // The initial tokens and neurons available at genesis will be distributed according
+  // to the strategy and configuration picked via the initial_token_distribution
+  // parameter.
+  oneof initial_token_distribution {
+    // See `FractionalDeveloperVotingPower`
+    FractionalDeveloperVotingPower fractional_developer_voting_power = 6;
+  };
 
   // Amount targeted by the swap, if the amount is reached the swap is triggered. Must be at least
   // min_participants * min_participant_icp_e8.
   optional uint64 max_icp_e8s = 7;
 
   // Minimum number of participants for the swap to take place. Must be greater than zero.
-  optional uint32 min_participants = 9;
+  optional uint32 min_participants = 8;
 
   // The minimum amount of icp that each buyer must contribute to participate.
-  optional uint64 min_participant_icp_e8s = 10;
+  optional uint64 min_participant_icp_e8s = 9;
 
   // The maximum amount of ICP that each buyer can contribute. Must be
   // greater than or equal to `min_participant_icp_e8s` and less than
   // or equal to `max_icp_e8s`. Can effectively be disabled by
   // setting it to `max_icp_e8s`.
-  optional uint64 max_participant_icp_e8s = 11;
+  optional uint64 max_participant_icp_e8s = 10;
 
   // The total number of ICP that is required for this token swap to
   // take place. This number divided by the number of SNS tokens being
@@ -84,61 +60,91 @@ message SnsInitPayload {
   // tokens is willing to accept. If this amount is not achieved, the
   // swap will be aborted (instead of committed) when the due date/time
   // occurs. Must be smaller than or equal to `max_icp_e8s`.
-  optional uint64 min_icp_e8s = 12;
+  optional uint64 min_icp_e8s = 11;
 
   // If the swap fails, control of the dapp canister(s) will be set to these
   // principal IDs. In most use-cases, this would be the same as the original
   // set of controller(s). Must not be empty.
-  repeated string fallback_controller_principal_ids = 13;
+  repeated string fallback_controller_principal_ids = 12;
 }
 
-// An `InitialTokenDistribution` structures the configuration of the SNS Ledger and SNS
-// Governance at genesis. Developers can allocate tokens to the different buckets needed
-// for a decentralization swap.
-message InitialTokenDistribution {
-  // The developer bucket distributes tokens to the original developers of the dapp.
-  // Each distribution will create a neuron in `PreInitializationSwap` mode controlled
-  // by the PrincipalId and with the provided stake. The tokens will be distributed
-  // to the neuron's subaccount in the SNS Ledger, and the amount will be funded by
-  // this bucket. The ratio between the bucket's `TokenDistribution::total_e8s` and
-  // the sum of each distribution's stake determines how many tokens are swapped in
-  // the first decentralization swap. This ratio will also determine how many
-  // neurons will be created for the developers in future swaps. Any undistributed
-  // tokens between swaps will remain in a subaccount of Governance until used to
-  // fund the developer neurons in the future.
-  TokenDistribution developers = 1;
+// The FractionalDeveloperVotingPower token distribution strategy configures
+// how tokens and neurons are distributed via four "buckets": developers,
+// treasury, swap, and airdrops. This strategy will distribute all developer tokens
+// at genesis in restricted neurons with an additional voting power
+// multiplier applied. This voting power multiplier is calculated as
+// `swap_distribution.initial_swap_amount_e8s / swap_distribution.total_e8s`.
+// As more of the swap funds are swapped in future rounds, the voting power
+// multiplier will approach 1.0. The following preconditions must be met for
+// it to be a valid distribution:
+//    - developer_distribution.developer_neurons.stake_e8s.sum <= u64:MAX
+//    - developer_neurons.developer_neurons.stake_e8s.sum <= swap_distribution.total_e8s
+//    - airdrop_distribution.airdrop_neurons.stake_e8s.sum <= u64:MAX
+//    - swap_distribution.initial_swap_amount_e8s > 0
+//    - swap_distribution.initial_swap_amount_e8s <= swap_distribution.total_e8s
+//    - swap_distribution.total_e8s >= developer_distribution.developer_neurons.stake_e8s.sum
+message FractionalDeveloperVotingPower {
+  // The developer bucket.
+  DeveloperDistribution developer_distribution = 1;
 
-  // The treasury bucket distributes tokens to the SNS's treasury account and creates neurons
-  // for the SNS community for use at genesis. Each distribution will create a one-time neuron
-  // in `PreInitializationSwap` mode controlled by the PrincipalId and with the provided stake.
-  // The tokens used to fund these one-time neurons comes from the treasury's total distribution.
-  // The remaining tokens will be distributed to a subaccount of Governance for use after the
-  // first decentralization swap.
-  TokenDistribution treasury = 2;
+  // The treasury bucket.
+  TreasuryDistribution treasury_distribution = 2;
 
-  // The total amount of tokens denominated in e8s (1 token = 100,000,000 e8s) used to fund
-  // the Swap Canister for the decentralization swap. These tokens will be distributed to the
-  // Swap Canister's main account on the SNS Ledger at genesis. The amount of these tokens
-  // used in each swap is determined by the ratio configured by the developers
-  // `TokenDistribution`. Any unused tokens will be distributed to a subaccount of Governance
-  // for use in future swaps. For example if the developers want 25% of their neurons issued for
-  // each during swap, only 25% of the swap bucket's total amount will be swapped
-  // via the Swap Canister. The rest will be in a protected subaccount of Governance for
-  // future swaps.
-  uint64 swap = 3;
+  // The swap bucket.
+  SwapDistribution swap_distribution = 3;
+
+  // The airdrop bucket.
+  AirdropDistribution airdrop_distribution = 4;
 }
 
-// A `TokenDistribution` couples a bucket's total distribution, and distributions
-// of neurons created at genesis from that bucket's total distribution.
-message TokenDistribution {
-  // The total number of tokens denominated in e8s (1 token = 100,000,000 e8s)
-  // for a bucket at genesis. The stake of neurons created from this bucket
-  // will be pulled from `total_e8s`.
+// The distributions awarded to developers at SNS genesis.
+message DeveloperDistribution {
+  // List of `NeuronDistribution` that specify a Neuron controller and Neuron stake in e8s (10E-8 of a token).
+  // For each entry in the developer_neurons list, a neuron will be created with a voting multiplier applied
+  // (see `FractionalDeveloperVotingPower`) and will start in PreInitializationSwap mode.
+  repeated NeuronDistribution developer_neurons = 1;
+}
+
+// The funds for the SNS' Treasury account on the SNS Ledger. These funds are
+// in the SNS Ledger at genesis, but unavailable until after the initial swap
+// has successfully completed.
+message TreasuryDistribution {
+  // The total token distribution denominated in e8s (10E-8 of a token) of the
+  // treasury bucket.
   uint64 total_e8s = 1;
+}
 
-  // A map of string `PrincipalId` to tokens denominated in e8s (1 token = 100,000,000 e8s)
-  // that represent Neurons and their stakes available at genesis. These neurons
-  // will have reduced functionality until the decentralization swap has completed.
-  // The ledger accounts containing the stake will be funded from `total_e8s`.
-  map<string, uint64> distributions = 2;
+// The funds for token swaps to decentralize an SNS. These funds are in the
+// SNS Ledger at genesis.
+message SwapDistribution {
+  // The total token distribution denominated in e8s (10E-8 of a token) of the
+  // swap bucket. All tokens used in initial_swap_amount_e8s will be
+  // deducted from total_e8s. The remaining tokens will be distributed to
+  // a subaccount of Governance for use in future token swaps.
+  uint64 total_e8s = 1;
+  // The initial number of tokens denominated in e8s (10E-8 of a token)
+  // deposited in the swap canister's account for the initial token swap.
+  uint64 initial_swap_amount_e8s = 2;
+}
+
+// The distributions airdropped at SNS genesis.
+message AirdropDistribution {
+  // List of `NeuronDistribution` that specify a Neuron controller and Neuron stake in e8s
+  // (10E-8 of a token). For each entry in the airdrop_neurons list, a neuron will be
+  // created with NO voting multiplier applied and will start in PreInitializationSwap mode.
+  repeated NeuronDistribution airdrop_neurons = 1;
+}
+
+// A tuple of values used to create a Neuron available at SNS genesis.
+message NeuronDistribution {
+  // The initial `PrincipalId` given permissions on a neuron available at genesis.
+  // The permissions granted to the controller will be set to the SNS' configured
+  // `NervousSystemParameters.neuron_claimer_permissions`. This controller
+  // will be the first available `PrincipalId` to manage a neuron.
+  ic_base_types.pb.v1.PrincipalId controller = 1;
+
+  // The stake denominated in e8s (10E-8 of a token) that the neuron will have
+  // at genesis. The `Neuron.cached_neuron_stake_e8s` in SNS Governance and the
+  // Neuron's account in the SNS Ledger will have this value.
+  uint64 stake_e8s = 2;
 }

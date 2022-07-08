@@ -1,5 +1,5 @@
 [package]
-name = "ic-sns-init-proto-generator"
+name = "ic-sns-init-protobuf-generator"
 version = "0.8.0"
 edition = "2018"
 

@@ -132,8 +132,6 @@ impl SnsWasmCanister {
         let initial_payloads = deploy_new_sns_payload
             .sns_init_payload
             .unwrap()
-            .validate()
-            .unwrap()
             .build_canister_payloads(&canisters.clone().try_into().unwrap())
             .unwrap();
 
