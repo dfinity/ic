@@ -120,6 +120,10 @@ pub struct RoundContext<'a> {
     pub log: &'a ReplicaLogger,
 }
 
+pub struct RoundLimits {
+    // TODO(RUN-263): Move round instruction limit and subnet available memory here.
+}
+
 /// Represent a paused execution that can be resumed or aborted.
 pub trait PausedExecution: std::fmt::Debug {
     /// Resumes a paused execution.
@@ -136,6 +140,7 @@ pub trait PausedExecution: std::fmt::Debug {
         self: Box<Self>,
         canister: CanisterState,
         round_context: RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult;
 
     /// Aborts the paused execution and returns the original message.
@@ -266,6 +271,7 @@ impl ExecutionEnvironment {
         ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
         subnet_available_memory: SubnetAvailableMemory,
         registry_settings: &RegistryExecutionSettings,
+        round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, NumInstructions) {
         let timer = Timer::start(); // Start logging execution time.
 
@@ -345,6 +351,7 @@ impl ExecutionEnvironment {
                     &mut state,
                     instructions_limit,
                     subnet_available_memory,
+                    round_limits,
                 );
                 (Some((res, msg.take_cycles())), instructions_left)
             }
@@ -847,6 +854,7 @@ impl ExecutionEnvironment {
     }
 
     /// Executes a replicated message sent to a canister.
+    #[allow(clippy::too_many_arguments)]
     pub fn execute_canister_message(
         &self,
         canister: CanisterState,
@@ -855,6 +863,7 @@ impl ExecutionEnvironment {
         time: Time,
         network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
+        round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
         let req = match msg {
             CanisterInputMessage::Response(response) => {
@@ -865,6 +874,7 @@ impl ExecutionEnvironment {
                     time,
                     network_topology,
                     subnet_available_memory,
+                    round_limits,
                 );
             }
             CanisterInputMessage::Request(request) => RequestOrIngress::Request(request),
@@ -879,7 +889,15 @@ impl ExecutionEnvironment {
             log: &self.log,
         };
 
-        execute_call(canister, req, instructions_limit, time, &self.config, round)
+        execute_call(
+            canister,
+            req,
+            instructions_limit,
+            time,
+            &self.config,
+            round,
+            round_limits,
+        )
     }
 
     /// Executes a heartbeat of a given canister.
@@ -890,6 +908,7 @@ impl ExecutionEnvironment {
         network_topology: Arc<NetworkTopology>,
         time: Time,
         subnet_available_memory: SubnetAvailableMemory,
+        round_limits: &mut RoundLimits,
     ) -> (
         CanisterState,
         NumInstructions,
@@ -906,6 +925,7 @@ impl ExecutionEnvironment {
             time,
             &self.hypervisor,
             &self.cycles_account_manager,
+            round_limits,
         )
         .into_parts();
         if let Err(err) = &result {
@@ -1118,6 +1138,7 @@ impl ExecutionEnvironment {
         time: Time,
         network_topology: Arc<NetworkTopology>,
         subnet_available_memory: SubnetAvailableMemory,
+        round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
         let execution_parameters =
             self.execution_parameters(&canister, instruction_limit, ExecutionMode::Replicated);
@@ -1135,6 +1156,7 @@ impl ExecutionEnvironment {
             execution_parameters,
             self.metrics.response_cycles_refund_error_counter(),
             round,
+            round_limits,
         )
     }
 
@@ -1256,6 +1278,8 @@ impl ExecutionEnvironment {
             max_instructions_per_message,
             ExecutionMode::NonReplicated,
         );
+        // TODO(RUN-263): Initialize round limits here.
+        let mut round_limits = RoundLimits {};
         let result = execute_non_replicated_query(
             NonReplicatedQueryKind::Pure {
                 caller: IC_00.get(),
@@ -1269,6 +1293,7 @@ impl ExecutionEnvironment {
             subnet_available_memory,
             &state.metadata.network_topology,
             &self.hypervisor,
+            &mut round_limits,
         )
         .2;
 
@@ -1575,6 +1600,7 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         instructions_limit: NumInstructions,
         subnet_available_memory: SubnetAvailableMemory,
+        round_limits: &mut RoundLimits,
     ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let payload = msg.method_payload();
         let install_context = match InstallCodeArgs::decode(payload) {
@@ -1630,6 +1656,7 @@ impl ExecutionEnvironment {
                         &network_topology,
                         execution_parameters,
                         subnet_available_memory,
+                        round_limits,
                     );
                     let (instructions_left, result, canister) = match dts_res.response {
                         InstallCodeResponse::Result((instructions_left, result)) => {
@@ -1732,6 +1759,7 @@ pub fn execute_canister(
     network_topology: Arc<NetworkTopology>,
     time: Time,
     subnet_available_memory: SubnetAvailableMemory,
+    round_limits: &mut RoundLimits,
 ) -> ExecuteCanisterResult {
     if !canister.is_active() {
         return ExecuteCanisterResult {
@@ -1752,6 +1780,7 @@ pub fn execute_canister(
                         network_topology,
                         time,
                         subnet_available_memory,
+                        round_limits,
                     );
                 let heap_delta = result.unwrap_or_else(|_| NumBytes::from(0));
                 ExecuteCanisterResult {
@@ -1774,6 +1803,7 @@ pub fn execute_canister(
                 time,
                 network_topology,
                 subnet_available_memory,
+                round_limits,
             );
             let (canister, num_instructions_left, heap_delta, ingress_status) =
                 process_result(result);

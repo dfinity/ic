@@ -1,6 +1,8 @@
 use crate::{
     canister_manager::{uninstall_canister, InstallCodeContext},
-    execution_environment::{execute_canister, ExecuteCanisterResult, ExecutionEnvironment},
+    execution_environment::{
+        execute_canister, ExecuteCanisterResult, ExecutionEnvironment, RoundLimits,
+    },
     metrics::MeasurementScope,
     util::{self, process_responses},
 };
@@ -560,6 +562,8 @@ impl SchedulerImpl {
                 let logger = new_logger!(self.log; messaging.round => round_id.get());
                 let canister_execution_limits = canister_execution_limits.clone();
                 let rate_limiting_of_heap_delta = self.rate_limiting_of_heap_delta;
+                // TODO(RUN-263): Initialize per-thread round limits from the global round limits.
+                let mut round_limits = RoundLimits {};
                 scope.execute(move || {
                     *result = execute_canisters_on_thread(
                         canisters,
@@ -572,6 +576,7 @@ impl SchedulerImpl {
                         network_topology,
                         logger,
                         rate_limiting_of_heap_delta,
+                        &mut round_limits,
                     );
                 });
             }
@@ -862,6 +867,9 @@ impl Scheduler for SchedulerImpl {
     ) -> ReplicatedState {
         let measurement_scope = MeasurementScope::root(&self.metrics.round);
 
+        // TODO(RUN-263): Initialize round limits.
+        let mut round_limits = RoundLimits {};
+
         let mut cycles_in_sum = Cycles::zero();
         let round_log;
         let subnet_available_memory: SubnetAvailableMemory;
@@ -959,6 +967,7 @@ impl Scheduler for SchedulerImpl {
                     &ecdsa_subnet_public_keys,
                     subnet_available_memory.clone(),
                     registry_settings,
+                    &mut round_limits,
                 );
 
                 state = new_state;
@@ -1002,6 +1011,7 @@ impl Scheduler for SchedulerImpl {
                     &ecdsa_subnet_public_keys,
                     subnet_available_memory.clone(),
                     registry_settings,
+                    &mut round_limits,
                 );
 
                 state = new_state;
@@ -1226,6 +1236,7 @@ fn execute_canisters_on_thread(
     network_topology: Arc<NetworkTopology>,
     logger: ReplicaLogger,
     rate_limiting_of_heap_delta: FlagStatus,
+    round_limits: &mut RoundLimits,
 ) -> ExecutionThreadResult {
     // Since this function runs on a helper thread, we cannot use a nested scope
     // here. Instead, we propagate metrics to the outer scope manually via
@@ -1283,6 +1294,7 @@ fn execute_canisters_on_thread(
                 Arc::clone(&network_topology),
                 time,
                 subnet_available_memory.clone(),
+                round_limits,
             );
             ingress_results.extend(ingress_status);
 

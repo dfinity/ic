@@ -39,6 +39,7 @@ use super::query_allocations::QueryAllocationsUsed;
 use crate::{
     execution::common,
     execution::nonreplicated_query::execute_non_replicated_query,
+    execution_environment::RoundLimits,
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
     NonReplicatedQueryKind,
@@ -115,6 +116,7 @@ pub(super) struct QueryContext<'a> {
     subnet_available_memory: SubnetAvailableMemory,
     max_canister_memory_size: NumBytes,
     max_instructions_per_message: NumInstructions,
+    round_limits: RoundLimits,
 }
 
 impl<'a> QueryContext<'a> {
@@ -131,6 +133,8 @@ impl<'a> QueryContext<'a> {
         max_instructions_per_message: NumInstructions,
     ) -> Self {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
+        // TODO(RUN-263): Initialize round limits here.
+        let round_limits = RoundLimits {};
         Self {
             log,
             hypervisor,
@@ -145,6 +149,7 @@ impl<'a> QueryContext<'a> {
             subnet_available_memory,
             max_canister_memory_size,
             max_instructions_per_message,
+            round_limits,
         }
     }
 
@@ -402,6 +407,7 @@ impl<'a> QueryContext<'a> {
             subnet_available_memory,
             &self.network_topology,
             self.hypervisor,
+            &mut self.round_limits,
         );
         let instructions_executed = instruction_limit - instructions_left;
         measurement_scope.add(instructions_executed, NumMessages::from(1));
@@ -498,6 +504,7 @@ impl<'a> QueryContext<'a> {
             func_ref,
             canister.execution_state.take().unwrap(),
             &self.network_topology,
+            &mut self.round_limits,
         );
 
         let canister_current_memory_usage = canister.memory_usage(self.own_subnet_type);
@@ -561,7 +568,7 @@ impl<'a> QueryContext<'a> {
     ///     - A result containing the wasm result or relevant `HypervisorError`.
     #[allow(clippy::too_many_arguments)]
     fn execute_cleanup(
-        &self,
+        &mut self,
         time: Time,
         canister: &mut CanisterState,
         cleanup_closure: WasmClosure,
@@ -589,6 +596,7 @@ impl<'a> QueryContext<'a> {
                 func_ref,
                 canister.execution_state.take().unwrap(),
                 &self.network_topology,
+                &mut self.round_limits,
             );
 
         canister.execution_state = Some(output_execution_state);

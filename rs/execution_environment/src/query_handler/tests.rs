@@ -3,7 +3,7 @@ use crate::{
     canister_manager::{CanisterManager, CanisterMgrConfig},
     canister_settings::CanisterSettings,
     hypervisor::Hypervisor,
-    IngressHistoryWriterImpl, InternalHttpQueryHandler,
+    IngressHistoryWriterImpl, InternalHttpQueryHandler, RoundLimits,
 };
 use ic_base_types::NumSeconds;
 use ic_config::{execution_environment::Config, flag_status::FlagStatus};
@@ -132,6 +132,7 @@ fn universal_canister(
             execution_mode: ExecutionMode::Replicated,
         },
         AvailableMemory::new(MEMORY_CAPACITY.get() as i64, MEMORY_CAPACITY.get() as i64).into(),
+        &mut RoundLimits {},
     );
     assert!(res.1.is_ok());
     state.put_canister_state(res.2.unwrap());

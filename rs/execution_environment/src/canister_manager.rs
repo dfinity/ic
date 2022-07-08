@@ -1,5 +1,5 @@
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
-use crate::execution_environment::RoundContext;
+use crate::execution_environment::{RoundContext, RoundLimits};
 use crate::{
     canister_settings::CanisterSettings,
     hypervisor::Hypervisor,
@@ -98,6 +98,7 @@ pub(crate) trait PausedInstallCodeExecution: std::fmt::Debug {
         self: Box<Self>,
         old_canister: CanisterState,
         round: RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult;
 
     // Aborts the paused execution.
@@ -601,6 +602,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         execution_parameters: ExecutionParameters,
         subnet_available_memory: SubnetAvailableMemory,
+        round_limits: &mut RoundLimits,
     ) -> (
         NumInstructions,
         Result<InstallCodeResult, CanisterManagerError>,
@@ -632,6 +634,7 @@ impl CanisterManager {
             &network_topology,
             execution_parameters,
             subnet_available_memory,
+            round_limits,
         );
         let (instructions_left, result, canister) = match dts_res.response {
             InstallCodeResponse::Result((instructions_left, result)) => {
@@ -681,6 +684,7 @@ impl CanisterManager {
         network_topology: &NetworkTopology,
         mut execution_parameters: ExecutionParameters,
         subnet_available_memory: SubnetAvailableMemory,
+        round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult {
         // TODO(RUN-221): Validate the compute and memory allocation after the
         // entire execution completes, Because it could be the case that while
@@ -794,6 +798,7 @@ impl CanisterManager {
                 canister_layout_path.clone(),
                 execution_parameters,
                 round.clone(),
+                round_limits,
             ),
             CanisterInstallMode::Upgrade => execute_upgrade(
                 context,
@@ -802,6 +807,7 @@ impl CanisterManager {
                 canister_layout_path.clone(),
                 execution_parameters,
                 round.clone(),
+                round_limits,
             ),
         };
 
@@ -1891,10 +1897,11 @@ impl PausedInstallCodeExecution for PausedInstallCode {
         self: Box<Self>,
         old_canister: CanisterState,
         round: RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult {
-        let res = self
-            .paused_install_code_execution
-            .resume(old_canister, round.clone());
+        let res =
+            self.paused_install_code_execution
+                .resume(old_canister, round.clone(), round_limits);
         match res.response {
             InstallCodeResponse::Result((instructions_left, result)) => finish_install_code(
                 res.old_canister,

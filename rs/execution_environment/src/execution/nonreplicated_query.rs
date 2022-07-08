@@ -6,6 +6,7 @@
 //
 
 use crate::execution::common::{validate_canister, validate_method};
+use crate::execution_environment::RoundLimits;
 use crate::{Hypervisor, NonReplicatedQueryKind};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
@@ -28,6 +29,7 @@ pub fn execute_non_replicated_query(
     subnet_available_memory: SubnetAvailableMemory,
     network_topology: &NetworkTopology,
     hypervisor: &Hypervisor,
+    round_limits: &mut RoundLimits,
 ) -> (
     CanisterState,
     NumInstructions,
@@ -102,6 +104,7 @@ pub fn execute_non_replicated_query(
         FuncRef::Method(method),
         canister.execution_state.clone().unwrap(),
         network_topology,
+        round_limits,
     );
     canister.system_state = output_system_state;
     if preserve_changes {

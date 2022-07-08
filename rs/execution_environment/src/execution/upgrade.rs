@@ -8,7 +8,7 @@ use crate::canister_manager::{
     InstallCodeResponse, InstallCodeResult,
 };
 use crate::execution::common::deduct_compilation_instructions;
-use crate::execution_environment::RoundContext;
+use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::{
@@ -77,6 +77,7 @@ pub(crate) fn execute_upgrade(
     canister_layout_path: PathBuf,
     execution_parameters: ExecutionParameters,
     round: RoundContext,
+    round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
     let canister_id = context.canister_id;
     let mut new_canister = old_canister.clone();
@@ -116,6 +117,7 @@ pub(crate) fn execute_upgrade(
             total_heap_delta,
             time,
             round,
+            round_limits,
         )
     } else {
         let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
@@ -126,6 +128,7 @@ pub(crate) fn execute_upgrade(
             round.subnet_available_memory.clone(),
             FuncRef::Method(method),
             execution_state,
+            round_limits,
         );
         new_canister.execution_state = Some(output_execution_state);
 
@@ -142,6 +145,7 @@ pub(crate) fn execute_upgrade(
                     total_heap_delta,
                     time,
                     round,
+                    round_limits,
                 )
             }
             WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -175,6 +179,7 @@ fn upgrade_stage_1_process_pre_upgrade_result(
     mut total_heap_delta: NumBytes,
     time: Time,
     round: RoundContext,
+    round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
     let instructions_left = output.num_instructions_left;
@@ -201,6 +206,7 @@ fn upgrade_stage_1_process_pre_upgrade_result(
                 total_heap_delta,
                 time,
                 round,
+                round_limits,
             )
         }
         Err(err) => DtsInstallCodeResult {
@@ -224,6 +230,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     total_heap_delta: NumBytes,
     time: Time,
     round: RoundContext,
+    round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
 
@@ -325,6 +332,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             total_heap_delta,
             time,
             round,
+            round_limits,
         )
     } else {
         let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
@@ -335,6 +343,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             round.subnet_available_memory.clone(),
             FuncRef::Method(method),
             execution_state,
+            round_limits,
         );
         new_canister.execution_state = Some(output_execution_state);
 
@@ -350,6 +359,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                     total_heap_delta,
                     time,
                     round,
+                    round_limits,
                 )
             }
             WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -382,6 +392,7 @@ fn upgrade_stage_3b_process_start_result(
     mut total_heap_delta: NumBytes,
     time: Time,
     round: RoundContext,
+    round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
     let instructions_left = output.num_instructions_left;
@@ -403,6 +414,7 @@ fn upgrade_stage_3b_process_start_result(
                 total_heap_delta,
                 time,
                 round,
+                round_limits,
             )
         }
         Err(err) => DtsInstallCodeResult {
@@ -426,6 +438,7 @@ fn upgrade_stage_4a_call_post_upgrade(
     total_heap_delta: NumBytes,
     time: Time,
     round: RoundContext,
+    round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
 
@@ -470,6 +483,7 @@ fn upgrade_stage_4a_call_post_upgrade(
             round.subnet_available_memory.clone(),
             FuncRef::Method(method),
             execution_state,
+            round_limits,
         );
         new_canister.execution_state = Some(output_execution_state);
         match wasm_execution_result {
@@ -482,6 +496,7 @@ fn upgrade_stage_4a_call_post_upgrade(
                     execution_parameters,
                     total_heap_delta,
                     round,
+                    round_limits,
                 )
             }
             WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -509,7 +524,9 @@ fn upgrade_stage_4b_process_post_upgrade_result(
     execution_parameters: ExecutionParameters,
     mut total_heap_delta: NumBytes,
     round: RoundContext,
+    _round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
+    // TODO(RUN-263): Update round limits here.
     let canister_id = new_canister.canister_id();
     let instructions_left = output.num_instructions_left;
     match output.wasm_result {
@@ -621,6 +638,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
         self: Box<Self>,
         old_canister: CanisterState,
         round: RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult {
         let mut new_canister = self.new_canister;
         let execution_state = new_canister.execution_state.take().unwrap();
@@ -641,6 +659,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
                     self.total_heap_delta,
                     self.time,
                     round,
+                    round_limits,
                 )
             }
             WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -681,6 +700,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
         self: Box<Self>,
         old_canister: CanisterState,
         round: RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult {
         let mut new_canister = self.new_canister;
         let execution_state = new_canister.execution_state.take().unwrap();
@@ -700,6 +720,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
                     self.total_heap_delta,
                     self.time,
                     round,
+                    round_limits,
                 )
             }
             WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -737,6 +758,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
         self: Box<Self>,
         old_canister: CanisterState,
         round: RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult {
         let mut new_canister = self.new_canister;
         let execution_state = new_canister.execution_state.take().unwrap();
@@ -754,6 +776,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
                     self.execution_parameters,
                     self.total_heap_delta,
                     round,
+                    round_limits,
                 )
             }
             WasmExecutionResult::Paused(paused_wasm_execution) => {

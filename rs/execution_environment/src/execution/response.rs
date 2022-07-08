@@ -2,7 +2,7 @@
 // See https://smartcontracts.org/docs/interface-spec/index.html#_callback_invocation.
 
 use crate::execution_environment::{
-    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext,
+    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
 };
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::messages::CanisterInputMessage;
@@ -46,14 +46,15 @@ impl PausedExecution for PausedResponseExecution {
     fn resume(
         self: Box<Self>,
         mut canister: CanisterState,
-        current: RoundContext,
+        round: RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
         let execution_state = canister.execution_state.take().unwrap();
         let (execution_state, result) = self
             .paused_wasm_execution
-            .resume(execution_state, current.subnet_available_memory.clone());
+            .resume(execution_state, round.subnet_available_memory.clone());
         canister.execution_state = Some(execution_state);
-        process_response_result(result, canister, self.original, current)
+        process_response_result(result, canister, self.original, round, round_limits)
     }
 
     fn abort(self: Box<Self>) -> CanisterInputMessage {
@@ -75,14 +76,22 @@ impl PausedExecution for PausedCleanupExecution {
     fn resume(
         self: Box<Self>,
         mut canister: CanisterState,
-        current: RoundContext,
+        round: RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
         let execution_state = canister.execution_state.take().unwrap();
         let (execution_state, result) = self
             .paused_wasm_execution
-            .resume(execution_state, current.subnet_available_memory.clone());
+            .resume(execution_state, round.subnet_available_memory.clone());
         canister.execution_state = Some(execution_state);
-        process_cleanup_result(result, canister, self.callback_err, self.original, current)
+        process_cleanup_result(
+            result,
+            canister,
+            self.callback_err,
+            self.original,
+            round,
+            round_limits,
+        )
     }
 
     fn abort(self: Box<Self>) -> CanisterInputMessage {
@@ -116,6 +125,7 @@ pub fn execute_response(
     execution_parameters: ExecutionParameters,
     error_counter: &IntCounter,
     round: RoundContext,
+    round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
     let failure = |mut canister: CanisterState, response, instruction_limit| {
         // Refund the canister with any cycles left after message execution.
@@ -254,6 +264,7 @@ pub fn execute_response(
         round.subnet_available_memory.clone(),
         func_ref,
         canister.execution_state.take().unwrap(),
+        round_limits,
     );
 
     canister.execution_state = Some(output_execution_state);
@@ -269,7 +280,7 @@ pub fn execute_response(
         message: response,
     };
 
-    process_response_result(result, canister, original, round)
+    process_response_result(result, canister, original, round, round_limits)
 }
 
 // Helper function to execute response cleanup.
@@ -281,7 +292,8 @@ fn execute_response_cleanup(
     callback_err: HypervisorError,
     instructions_left: NumInstructions,
     original: OriginalContext,
-    current: RoundContext,
+    round: RoundContext,
+    round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
     let func_ref = match original.call_origin {
         CallOrigin::Ingress(_, _) | CallOrigin::CanisterUpdate(_, _) | CallOrigin::Heartbeat => {
@@ -291,8 +303,8 @@ fn execute_response_cleanup(
             FuncRef::QueryClosure(cleanup_closure)
         }
     };
-    let own_subnet_type = current.hypervisor.subnet_type();
-    let (output_execution_state, result) = current.hypervisor.execute_dts(
+    let own_subnet_type = round.hypervisor.subnet_type();
+    let (output_execution_state, result) = round.hypervisor.execute_dts(
         ApiType::Cleanup {
             time: original.time,
         },
@@ -303,15 +315,23 @@ fn execute_response_cleanup(
             slice_instruction_limit: instructions_left,
             canister_memory_limit: original.canister_memory_limit,
             compute_allocation: original.compute_allocation,
-            subnet_type: current.hypervisor.subnet_type(),
+            subnet_type: round.hypervisor.subnet_type(),
             execution_mode: ExecutionMode::Replicated,
         },
-        current.subnet_available_memory.clone(),
+        round.subnet_available_memory.clone(),
         func_ref,
         canister.execution_state.take().unwrap(),
+        round_limits,
     );
     canister.execution_state = Some(output_execution_state);
-    process_cleanup_result(result, canister, callback_err, original, current)
+    process_cleanup_result(
+        result,
+        canister,
+        callback_err,
+        original,
+        round,
+        round_limits,
+    )
 }
 
 // Helper function to process the execution result of a response.
@@ -321,7 +341,8 @@ fn process_response_result(
     result: WasmExecutionResult,
     mut canister: CanisterState,
     original: OriginalContext,
-    current: RoundContext,
+    round: RoundContext,
+    round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -342,9 +363,9 @@ fn process_response_result(
                     // Executing the reply/reject closure succeeded.
                     system_state_changes.apply_changes(
                         &mut canister.system_state,
-                        current.network_topology,
-                        current.hypervisor.subnet_id(),
-                        current.log,
+                        round.network_topology,
+                        round.hypervisor.subnet_id(),
+                        round.log,
                     );
                     let heap_delta = NumBytes::from(
                         (response_output.instance_stats.dirty_pages * PAGE_SIZE) as u64,
@@ -366,7 +387,8 @@ fn process_response_result(
                                 callback_err,
                                 response_output.num_instructions_left,
                                 original,
-                                current,
+                                round,
+                                round_limits,
                             );
                         }
                         None => {
@@ -390,11 +412,11 @@ fn process_response_result(
                 action,
                 original.call_origin,
                 original.time,
-                current.log,
+                round.log,
             );
 
             // Refund the canister with any cycles left after message execution.
-            current.cycles_account_manager.refund_execution_cycles(
+            round.cycles_account_manager.refund_execution_cycles(
                 &mut canister.system_state,
                 num_instructions_left,
                 original.total_instruction_limit,
@@ -415,7 +437,8 @@ fn process_cleanup_result(
     mut canister: CanisterState,
     callback_err: HypervisorError,
     original: OriginalContext,
-    current: RoundContext,
+    round: RoundContext,
+    _round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -437,9 +460,9 @@ fn process_cleanup_result(
                     // Executing the cleanup callback has succeeded.
                     system_state_changes.apply_changes(
                         &mut canister.system_state,
-                        current.network_topology,
-                        current.hypervisor.subnet_id(),
-                        current.log,
+                        round.network_topology,
+                        round.hypervisor.subnet_id(),
+                        round.log,
                     );
                     let heap_delta = NumBytes::from(
                         (cleanup_output.instance_stats.dirty_pages * PAGE_SIZE) as u64,
@@ -475,11 +498,11 @@ fn process_cleanup_result(
                 action,
                 original.call_origin,
                 original.time,
-                current.log,
+                round.log,
             );
 
             // Refund the canister with any cycles left after message execution.
-            current.cycles_account_manager.refund_execution_cycles(
+            round.cycles_account_manager.refund_execution_cycles(
                 &mut canister.system_state,
                 num_instructions_left,
                 original.total_instruction_limit,
