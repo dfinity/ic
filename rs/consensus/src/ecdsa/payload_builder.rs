@@ -148,7 +148,7 @@ pub fn make_bootstrap_summary(
     key_id: EcdsaKeyId,
     height: Height,
     initial_dealings: Option<InitialIDkgDealings>,
-    log: Option<&ReplicaLogger>,
+    log: &ReplicaLogger,
 ) -> Result<ecdsa::Summary, EcdsaPayloadError> {
     let mut summary_payload = ecdsa::EcdsaPayload {
         signature_agreements: BTreeMap::new(),
@@ -178,23 +178,19 @@ pub fn make_bootstrap_summary(
                         Box::new(dealings),
                         params,
                     ));
-                if let Some(log) = log {
-                    info!(
-                        log,
-                        "make_ecdsa_genesis_summary(): height = {:?}, key_transcript = [{}]",
-                        height,
-                        summary_payload.key_transcript
-                    );
-                }
+                info!(
+                    log,
+                    "make_ecdsa_genesis_summary(): height = {:?}, key_transcript = [{}]",
+                    height,
+                    summary_payload.key_transcript
+                );
             }
             None => {
                 // Leave the feature disabled if the initial dealings are incorrect.
-                if let Some(log) = log {
-                    warn!(
-                        log,
-                        "make_ecdsa_genesis_summary(): failed to unpack initial dealings"
-                    );
-                }
+                warn!(
+                    log,
+                    "make_ecdsa_genesis_summary(): failed to unpack initial dealings"
+                );
                 return Err(EcdsaPayloadError::InitialIDkgDealingsNotUnmaskedParams(
                     Box::new(dealings),
                 ));
@@ -284,7 +280,7 @@ pub(crate) fn create_summary_payload(
             "Start to create ECDSA key {} on subnet {} at height {}", key_id, subnet_id, height
         );
 
-        return make_bootstrap_summary(subnet_id, key_id, height, None, Some(&log));
+        return make_bootstrap_summary(subnet_id, key_id, height, None, &log);
     }
     let ecdsa_payload = ecdsa_payload.unwrap();
 

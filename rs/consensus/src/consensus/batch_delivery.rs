@@ -109,8 +109,8 @@ pub fn deliver_batches(
 
                 let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
                 let ecdsa_subnet_public_key = pool.dkg_summary_block(&block).and_then(|summary| {
-                    let ecdsa_summary = summary.payload.as_ref().as_summary().ecdsa.as_ref();
-                    ecdsa_summary.and_then(|ecdsa| {
+                    let ecdsa_payload = block.payload.as_ref().as_ecdsa();
+                    ecdsa_payload.and_then(|ecdsa| {
                         let chain = build_consensus_block_chain(pool.pool(), &summary, &block);
                         let block_reader = EcdsaBlockReaderImpl::new(chain);
                         let transcript_ref = match &ecdsa.key_transcript.current {

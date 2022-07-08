@@ -5,7 +5,10 @@
 use crate::consensus::{
     crypto::ConsensusCrypto, dkg_key_manager::DkgKeyManager, pool_reader::PoolReader,
 };
-use crate::ecdsa::{make_bootstrap_summary, utils::inspect_ecdsa_initializations};
+use crate::ecdsa::{
+    make_bootstrap_summary, payload_builder::get_ecdsa_config_if_enabled,
+    utils::inspect_ecdsa_initializations,
+};
 use ic_crypto::crypto_hash;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
@@ -1328,16 +1331,16 @@ pub fn make_registry_cup(
     subnet_id: SubnetId,
     logger: Option<&ReplicaLogger>,
 ) -> Option<CatchUpPackage> {
+    let no_op_logger = ic_logger::replica_logger::no_op_logger();
+    let logger = logger.unwrap_or(&no_op_logger);
     let versioned_record = match registry.get_cup_contents(subnet_id, registry.get_latest_version())
     {
         Ok(versioned_record) => versioned_record,
         Err(e) => {
-            if let Some(logger) = logger {
-                warn!(
-                    logger,
-                    "Failed to retrieve versioned record from the registry {:?}", e,
-                );
-            }
+            warn!(
+                logger,
+                "Failed to retrieve versioned record from the registry {:?}", e,
+            );
             return None;
         }
     };
@@ -1359,19 +1362,17 @@ pub fn make_registry_cup_from_cup_contents(
     subnet_id: SubnetId,
     cup_contents: CatchUpPackageContents,
     registry_version: RegistryVersion,
-    logger: Option<&ReplicaLogger>,
+    logger: &ReplicaLogger,
 ) -> Option<CatchUpPackage> {
     let replica_version = match registry.get_replica_version(subnet_id, registry_version) {
         Ok(Some(replica_version)) => replica_version,
         err => {
-            if let Some(logger) = logger {
-                warn!(
-                    logger,
-                    "Failed to retrieve subnet replica version at registry version {:?}: {:?}",
-                    registry_version,
-                    err
-                );
-            }
+            warn!(
+                logger,
+                "Failed to retrieve subnet replica version at registry version {:?}: {:?}",
+                registry_version,
+                err
+            );
             return None;
         }
     };
@@ -1382,32 +1383,36 @@ pub fn make_registry_cup_from_cup_contents(
         registry_version,
     );
     let cup_height = Height::new(cup_contents.height);
-    let ecdsa_summary = match inspect_ecdsa_initializations(&cup_contents.ecdsa_initializations) {
-        Ok(Some((key_id, dealings))) => {
-            match make_bootstrap_summary(subnet_id, key_id, cup_height, Some(dealings), logger) {
-                Ok(summary) => {
-                    println!(
-                        "Making CUP with ecdsa_summary with key_id {:?}",
-                        summary.as_ref().map(|x| &x.key_transcript.key_id)
-                    );
-                    summary
-                }
-                Err(err) => {
-                    if let Some(logger) = logger {
-                        warn!(logger, "{:?}", err);
-                    }
-                    None
-                }
+
+    let ecdsa_init = match inspect_ecdsa_initializations(&cup_contents.ecdsa_initializations) {
+        Ok(Some((key_id, dealings))) => Some((key_id, Some(dealings))),
+        Ok(None) => {
+            match get_ecdsa_config_if_enabled(subnet_id, registry_version, registry, logger) {
+                Ok(Some(ecdsa_config)) => Some((ecdsa_config.key_ids[0].clone(), None)),
+                _ => None,
             }
         }
-        Ok(None) => None,
         Err(err) => {
-            if let Some(logger) = logger {
-                warn!(logger, "{}", err);
-            }
+            warn!(logger, "{}", err);
             None
         }
     };
+    let ecdsa_summary = ecdsa_init.and_then(|(key_id, dealings)| {
+        match make_bootstrap_summary(subnet_id, key_id, cup_height, dealings, logger) {
+            Ok(summary) => {
+                info!(
+                    logger,
+                    "Making CUP with ecdsa_summary with key_id {:?}",
+                    summary.as_ref().map(|x| &x.key_transcript.key_id)
+                );
+                summary
+            }
+            Err(err) => {
+                warn!(logger, "{:?}", err);
+                None
+            }
+        }
+    });
 
     let low_dkg_id = dkg_summary
         .current_transcript(&NiDkgTag::LowThreshold)
