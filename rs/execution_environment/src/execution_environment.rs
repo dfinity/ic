@@ -111,6 +111,7 @@ pub struct ExecuteMessageResult {
 }
 
 /// Contains round-specific context necessary for resuming a paused execution.
+#[derive(Clone)]
 pub struct RoundContext<'a> {
     pub subnet_available_memory: SubnetAvailableMemory,
     pub network_topology: &'a NetworkTopology,

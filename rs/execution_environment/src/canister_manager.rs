@@ -1,4 +1,5 @@
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
+use crate::execution_environment::RoundContext;
 use crate::{
     canister_settings::CanisterSettings,
     hypervisor::Hypervisor,
@@ -96,11 +97,7 @@ pub(crate) trait PausedInstallCodeExecution: std::fmt::Debug {
     fn resume(
         self: Box<Self>,
         old_canister: CanisterState,
-        subnet_available_memory: SubnetAvailableMemory,
-        network_topology: &NetworkTopology,
-        hypervisor: &Hypervisor,
-        cycles_account_manager: &CyclesAccountManager,
-        log: &ReplicaLogger,
+        round: RoundContext,
     ) -> DtsInstallCodeResult;
 
     // Aborts the paused execution.
@@ -781,6 +778,14 @@ impl CanisterManager {
         let mode = context.mode;
         let instruction_limit = execution_parameters.total_instruction_limit;
 
+        let round = RoundContext {
+            subnet_available_memory,
+            network_topology,
+            hypervisor: &self.hypervisor,
+            cycles_account_manager: &self.cycles_account_manager,
+            log: &self.log,
+        };
+
         let res = match context.mode {
             CanisterInstallMode::Install | CanisterInstallMode::Reinstall => execute_install(
                 context,
@@ -788,10 +793,7 @@ impl CanisterManager {
                 time,
                 canister_layout_path.clone(),
                 execution_parameters,
-                subnet_available_memory,
-                network_topology,
-                &self.hypervisor,
-                &self.log,
+                round.clone(),
             ),
             CanisterInstallMode::Upgrade => execute_upgrade(
                 context,
@@ -799,10 +801,7 @@ impl CanisterManager {
                 time,
                 canister_layout_path.clone(),
                 execution_parameters,
-                subnet_available_memory,
-                network_topology,
-                &self.hypervisor,
-                &self.log,
+                round.clone(),
             ),
         };
 
@@ -812,11 +811,10 @@ impl CanisterManager {
                 instruction_limit,
                 instructions_left,
                 result,
-                &self.cycles_account_manager,
                 mode,
                 canister_layout_path,
                 &self.config,
-                &self.log,
+                round,
             ),
             InstallCodeResponse::Paused(paused_install_code_execution) => {
                 let paused_execution = Box::new(PausedInstallCode {
@@ -1805,11 +1803,10 @@ fn finish_install_code(
     instruction_limit: NumInstructions,
     instructions_left: NumInstructions,
     result: Result<(InstallCodeResult, CanisterState), CanisterManagerError>,
-    cycles_account_manager: &CyclesAccountManager,
     mode: CanisterInstallMode,
     canister_layout_path: PathBuf,
     config: &CanisterMgrConfig,
-    log: &ReplicaLogger,
+    round: RoundContext,
 ) -> DtsInstallCodeResult {
     let canister_id = old_canister.canister_id();
     let instructions_consumed = instruction_limit - instructions_left;
@@ -1819,7 +1816,7 @@ fn finish_install_code(
             // replace the old canister with the new one.
             let old_wasm_hash = get_wasm_hash(&old_canister);
             let new_wasm_hash = get_wasm_hash(&new_canister);
-            cycles_account_manager.refund_execution_cycles(
+            round.cycles_account_manager.refund_execution_cycles(
                 &mut new_canister.system_state,
                 instructions_left,
                 instruction_limit,
@@ -1832,9 +1829,13 @@ fn finish_install_code(
             // older one. So we get rid of the previous heap to make sure it
             // doesn't interfere with the new deltas and replace the old
             // canister with the new one.
-            truncate_canister_heap(log, canister_layout_path.as_path(), canister_id);
+            truncate_canister_heap(round.log, canister_layout_path.as_path(), canister_id);
             if mode != CanisterInstallMode::Upgrade {
-                truncate_canister_stable_memory(log, canister_layout_path.as_path(), canister_id);
+                truncate_canister_stable_memory(
+                    round.log,
+                    canister_layout_path.as_path(),
+                    canister_id,
+                );
             }
 
             Ok((
@@ -1852,7 +1853,7 @@ fn finish_install_code(
             if config.rate_limiting_of_instructions == FlagStatus::Enabled {
                 old_canister.scheduler_state.install_code_debit += instructions_consumed;
             }
-            cycles_account_manager.refund_execution_cycles(
+            round.cycles_account_manager.refund_execution_cycles(
                 &mut old_canister.system_state,
                 instructions_left,
                 instruction_limit,
@@ -1889,31 +1890,21 @@ impl PausedInstallCodeExecution for PausedInstallCode {
     fn resume(
         self: Box<Self>,
         old_canister: CanisterState,
-        subnet_available_memory: SubnetAvailableMemory,
-        network_topology: &NetworkTopology,
-        hypervisor: &Hypervisor,
-        cycles_account_manager: &CyclesAccountManager,
-        log: &ReplicaLogger,
+        round: RoundContext,
     ) -> DtsInstallCodeResult {
-        let res = self.paused_install_code_execution.resume(
-            old_canister,
-            subnet_available_memory,
-            network_topology,
-            hypervisor,
-            cycles_account_manager,
-            log,
-        );
+        let res = self
+            .paused_install_code_execution
+            .resume(old_canister, round.clone());
         match res.response {
             InstallCodeResponse::Result((instructions_left, result)) => finish_install_code(
                 res.old_canister,
                 self.instruction_limit,
                 instructions_left,
                 result,
-                cycles_account_manager,
                 self.mode,
                 self.canister_layout_path,
                 &self.config,
-                log,
+                round,
             ),
             InstallCodeResponse::Paused(paused_install_code_execution) => {
                 let paused_execution = Box::new(PausedInstallCode {

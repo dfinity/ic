@@ -8,15 +8,14 @@ use crate::canister_manager::{
     InstallCodeResponse, InstallCodeResult,
 };
 use crate::execution::common::deduct_compilation_instructions;
-use crate::Hypervisor;
+use crate::execution_environment::RoundContext;
 use ic_base_types::{NumBytes, PrincipalId};
-use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorError, SubnetAvailableMemory, WasmExecutionOutput,
+    ExecutionParameters, HypervisorError, WasmExecutionOutput,
 };
-use ic_logger::{error, fatal, info, ReplicaLogger};
-use ic_replicated_state::{CanisterState, Memory, NetworkTopology, SystemState};
+use ic_logger::{error, fatal, info};
+use ic_replicated_state::{CanisterState, Memory, SystemState};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_system_api::ApiType;
@@ -77,10 +76,7 @@ pub(crate) fn execute_upgrade(
     time: Time,
     canister_layout_path: PathBuf,
     execution_parameters: ExecutionParameters,
-    subnet_available_memory: SubnetAvailableMemory,
-    network_topology: &NetworkTopology,
-    hypervisor: &Hypervisor,
-    log: &ReplicaLogger,
+    round: RoundContext,
 ) -> DtsInstallCodeResult {
     let canister_id = context.canister_id;
     let mut new_canister = old_canister.clone();
@@ -90,7 +86,7 @@ pub(crate) fn execute_upgrade(
     // Stage 1: invoke `canister_pre_upgrade()` (if present) using the old code.
 
     let method = WasmMethod::System(SystemMethod::CanisterPreUpgrade);
-    let memory_usage = new_canister.memory_usage(hypervisor.subnet_type());
+    let memory_usage = new_canister.memory_usage(round.hypervisor.subnet_type());
 
     // Validate that the Wasm module is present.
     let execution_state = match new_canister.execution_state.take() {
@@ -116,21 +112,18 @@ pub(crate) fn execute_upgrade(
             old_canister,
             canister_layout_path,
             execution_parameters,
-            subnet_available_memory,
             instructions_left,
             total_heap_delta,
             time,
-            network_topology,
-            hypervisor,
-            log,
+            round,
         )
     } else {
-        let (output_execution_state, wasm_execution_result) = hypervisor.execute_dts(
+        let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
             ApiType::pre_upgrade(time, context.sender),
             new_canister.system_state.clone(),
             memory_usage,
             execution_parameters.clone(),
-            subnet_available_memory.clone(),
+            round.subnet_available_memory.clone(),
             FuncRef::Method(method),
             execution_state,
         );
@@ -146,12 +139,9 @@ pub(crate) fn execute_upgrade(
                     old_canister,
                     canister_layout_path,
                     execution_parameters,
-                    subnet_available_memory,
                     total_heap_delta,
                     time,
-                    network_topology,
-                    hypervisor,
-                    log,
+                    round,
                 )
             }
             WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -182,25 +172,22 @@ fn upgrade_stage_1_process_pre_upgrade_result(
     old_canister: CanisterState,
     canister_layout_path: PathBuf,
     execution_parameters: ExecutionParameters,
-    subnet_available_memory: SubnetAvailableMemory,
     mut total_heap_delta: NumBytes,
     time: Time,
-    network_topology: &NetworkTopology,
-    hypervisor: &Hypervisor,
-    log: &ReplicaLogger,
+    round: RoundContext,
 ) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
     let instructions_left = output.num_instructions_left;
     match output.wasm_result {
         Ok(opt_result) => {
             if opt_result.is_some() {
-                fatal!(log, "[EXC-BUG] System methods cannot use msg_reply.");
+                fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
             system_state_changes.apply_changes(
                 &mut new_canister.system_state,
-                network_topology,
-                hypervisor.subnet_id(),
-                log,
+                round.network_topology,
+                round.hypervisor.subnet_id(),
+                round.log,
             );
             let bytes = NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
             total_heap_delta += bytes;
@@ -210,13 +197,10 @@ fn upgrade_stage_1_process_pre_upgrade_result(
                 old_canister,
                 canister_layout_path,
                 execution_parameters,
-                subnet_available_memory,
                 instructions_left,
                 total_heap_delta,
                 time,
-                network_topology,
-                hypervisor,
-                log,
+                round,
             )
         }
         Err(err) => DtsInstallCodeResult {
@@ -236,18 +220,15 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     old_canister: CanisterState,
     canister_layout_path: PathBuf,
     mut execution_parameters: ExecutionParameters,
-    subnet_available_memory: SubnetAvailableMemory,
     instructions_left: NumInstructions,
     total_heap_delta: NumBytes,
     time: Time,
-    network_topology: &NetworkTopology,
-    hypervisor: &Hypervisor,
-    log: &ReplicaLogger,
+    round: RoundContext,
 ) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
 
     info!(
-        log,
+        round.log,
         "Executing (canister_pre_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
         canister_id,
         execution_parameters.total_instruction_limit - instructions_left,
@@ -258,11 +239,10 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     // Replace the execution state of the canister with a new execution state, but
     // persist the stable memory (if it exists).
     let layout = canister_layout(&canister_layout_path, &canister_id);
-    let (instructions_from_compilation, execution_state) = match hypervisor.create_execution_state(
-        context.wasm_module,
-        layout.raw_path(),
-        canister_id,
-    ) {
+    let (instructions_from_compilation, execution_state) = match round
+        .hypervisor
+        .create_execution_state(context.wasm_module, layout.raw_path(), canister_id)
+    {
         Err(err) => {
             return DtsInstallCodeResult {
                 old_canister,
@@ -303,8 +283,9 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         Some(allocation) => allocation,
         None => new_canister.system_state.memory_allocation,
     };
+    let subnet_type = round.hypervisor.subnet_type();
     if let MemoryAllocation::Reserved(bytes) = desired_memory_allocation {
-        if bytes < new_canister.memory_usage(hypervisor.subnet_type()) {
+        if bytes < new_canister.memory_usage(subnet_type) {
             return DtsInstallCodeResult {
                 old_canister,
                 response: InstallCodeResponse::Result((
@@ -312,7 +293,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                     Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                         canister_id,
                         memory_allocation_given: desired_memory_allocation,
-                        memory_usage_needed: new_canister.memory_usage(hypervisor.subnet_type()),
+                        memory_usage_needed: new_canister.memory_usage(subnet_type),
                     }),
                 )),
             };
@@ -324,7 +305,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     // Stage 3: invoke the `start()` method (if present).
 
     let method = WasmMethod::System(SystemMethod::CanisterStart);
-    let memory_usage = new_canister.memory_usage(hypervisor.subnet_type());
+    let memory_usage = new_canister.memory_usage(subnet_type);
     let canister_id = new_canister.canister_id();
 
     // The execution state is present because we just put it there.
@@ -340,21 +321,18 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             new_canister,
             old_canister,
             execution_parameters,
-            subnet_available_memory,
             instructions_left,
             total_heap_delta,
             time,
-            network_topology,
-            hypervisor,
-            log,
+            round,
         )
     } else {
-        let (output_execution_state, wasm_execution_result) = hypervisor.execute_dts(
+        let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
             ApiType::start(),
             SystemState::new_for_start(canister_id),
             memory_usage,
             execution_parameters.clone(),
-            subnet_available_memory.clone(),
+            round.subnet_available_memory.clone(),
             FuncRef::Method(method),
             execution_state,
         );
@@ -369,12 +347,9 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                     new_canister,
                     old_canister,
                     execution_parameters,
-                    subnet_available_memory,
                     total_heap_delta,
                     time,
-                    network_topology,
-                    hypervisor,
-                    log,
+                    round,
                 )
             }
             WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -404,12 +379,9 @@ fn upgrade_stage_3b_process_start_result(
     new_canister: CanisterState,
     old_canister: CanisterState,
     execution_parameters: ExecutionParameters,
-    subnet_available_memory: SubnetAvailableMemory,
     mut total_heap_delta: NumBytes,
     time: Time,
-    network_topology: &NetworkTopology,
-    hypervisor: &Hypervisor,
-    log: &ReplicaLogger,
+    round: RoundContext,
 ) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
     let instructions_left = output.num_instructions_left;
@@ -417,7 +389,7 @@ fn upgrade_stage_3b_process_start_result(
     match output.wasm_result {
         Ok(opt_result) => {
             if opt_result.is_some() {
-                fatal!(log, "[EXC-BUG] System methods cannot use msg_reply.");
+                fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
             total_heap_delta +=
                 NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
@@ -427,13 +399,10 @@ fn upgrade_stage_3b_process_start_result(
                 new_canister,
                 old_canister,
                 execution_parameters,
-                subnet_available_memory,
                 instructions_left,
                 total_heap_delta,
                 time,
-                network_topology,
-                hypervisor,
-                log,
+                round,
             )
         }
         Err(err) => DtsInstallCodeResult {
@@ -453,18 +422,15 @@ fn upgrade_stage_4a_call_post_upgrade(
     mut new_canister: CanisterState,
     old_canister: CanisterState,
     mut execution_parameters: ExecutionParameters,
-    subnet_available_memory: SubnetAvailableMemory,
     instructions_left: NumInstructions,
     total_heap_delta: NumBytes,
     time: Time,
-    network_topology: &NetworkTopology,
-    hypervisor: &Hypervisor,
-    log: &ReplicaLogger,
+    round: RoundContext,
 ) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
 
     info!(
-        log,
+        round.log,
         "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
         canister_id,
         execution_parameters.total_instruction_limit - instructions_left,
@@ -477,7 +443,7 @@ fn upgrade_stage_4a_call_post_upgrade(
     // Stage 4: invoke the `canister_post_upgrade()` method (if present).
 
     let method = WasmMethod::System(SystemMethod::CanisterPostUpgrade);
-    let memory_usage = new_canister.memory_usage(hypervisor.subnet_type());
+    let memory_usage = new_canister.memory_usage(round.hypervisor.subnet_type());
 
     // The execution state is guaranteed to be present because this function is
     // called after creating a new execution state.
@@ -493,15 +459,15 @@ fn upgrade_stage_4a_call_post_upgrade(
             execution_parameters,
             instructions_left,
             total_heap_delta,
-            log,
+            round,
         )
     } else {
-        let (output_execution_state, wasm_execution_result) = hypervisor.execute_dts(
+        let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
             ApiType::init(time, context_arg, context_sender),
             new_canister.system_state.clone(),
             memory_usage,
             execution_parameters.clone(),
-            subnet_available_memory,
+            round.subnet_available_memory.clone(),
             FuncRef::Method(method),
             execution_state,
         );
@@ -515,9 +481,7 @@ fn upgrade_stage_4a_call_post_upgrade(
                     old_canister,
                     execution_parameters,
                     total_heap_delta,
-                    network_topology,
-                    hypervisor,
-                    log,
+                    round,
                 )
             }
             WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -544,22 +508,20 @@ fn upgrade_stage_4b_process_post_upgrade_result(
     old_canister: CanisterState,
     execution_parameters: ExecutionParameters,
     mut total_heap_delta: NumBytes,
-    network_topology: &NetworkTopology,
-    hypervisor: &Hypervisor,
-    log: &ReplicaLogger,
+    round: RoundContext,
 ) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
     let instructions_left = output.num_instructions_left;
     match output.wasm_result {
         Ok(opt_result) => {
             if opt_result.is_some() {
-                fatal!(log, "[EXC-BUG] System methods cannot use msg_reply.");
+                fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
             system_state_changes.apply_changes(
                 &mut new_canister.system_state,
-                network_topology,
-                hypervisor.subnet_id(),
-                log,
+                round.network_topology,
+                round.hypervisor.subnet_id(),
+                round.log,
             );
             let bytes = NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
             total_heap_delta += bytes;
@@ -569,7 +531,7 @@ fn upgrade_stage_4b_process_post_upgrade_result(
                 execution_parameters,
                 instructions_left,
                 total_heap_delta,
-                log,
+                round,
             )
         }
         Err(err) => DtsInstallCodeResult {
@@ -588,12 +550,12 @@ fn upgrade_stage_4c_finish_upgrade(
     execution_parameters: ExecutionParameters,
     instructions_left: NumInstructions,
     total_heap_delta: NumBytes,
-    log: &ReplicaLogger,
+    round: RoundContext,
 ) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
 
     info!(
-        log,
+        round.log,
         "Executing (canister_post_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
         canister_id,
         execution_parameters.total_instruction_limit - instructions_left,
@@ -604,7 +566,7 @@ fn upgrade_stage_4c_finish_upgrade(
         != new_canister.system_state.queues().input_queues_stats()
     {
         error!(
-            log,
+            round.log,
             "Input queues changed after upgrade. Before: {:?}. After: {:?}",
             old_canister.system_state.queues().input_queues_stats(),
             new_canister.system_state.queues().input_queues_stats()
@@ -658,17 +620,13 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
     fn resume(
         self: Box<Self>,
         old_canister: CanisterState,
-        subnet_available_memory: SubnetAvailableMemory,
-        network_topology: &NetworkTopology,
-        hypervisor: &Hypervisor,
-        _cycles_account_manager: &CyclesAccountManager,
-        log: &ReplicaLogger,
+        round: RoundContext,
     ) -> DtsInstallCodeResult {
         let mut new_canister = self.new_canister;
         let execution_state = new_canister.execution_state.take().unwrap();
         let (execution_state, wasm_execution_result) = self
             .paused_wasm_execution
-            .resume(execution_state, subnet_available_memory.clone());
+            .resume(execution_state, round.subnet_available_memory.clone());
         new_canister.execution_state = Some(execution_state);
         match wasm_execution_result {
             WasmExecutionResult::Finished(output, system_state_changes) => {
@@ -680,12 +638,9 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
                     old_canister,
                     self.canister_layout_path,
                     self.execution_parameters,
-                    subnet_available_memory,
                     self.total_heap_delta,
                     self.time,
-                    network_topology,
-                    hypervisor,
-                    log,
+                    round,
                 )
             }
             WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -725,17 +680,13 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
     fn resume(
         self: Box<Self>,
         old_canister: CanisterState,
-        subnet_available_memory: SubnetAvailableMemory,
-        network_topology: &NetworkTopology,
-        hypervisor: &Hypervisor,
-        _cycles_account_manager: &CyclesAccountManager,
-        log: &ReplicaLogger,
+        round: RoundContext,
     ) -> DtsInstallCodeResult {
         let mut new_canister = self.new_canister;
         let execution_state = new_canister.execution_state.take().unwrap();
         let (execution_state, wasm_execution_result) = self
             .paused_wasm_execution
-            .resume(execution_state, subnet_available_memory.clone());
+            .resume(execution_state, round.subnet_available_memory.clone());
         new_canister.execution_state = Some(execution_state);
         match wasm_execution_result {
             WasmExecutionResult::Finished(output, _system_state_changes) => {
@@ -746,12 +697,9 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
                     new_canister,
                     old_canister,
                     self.execution_parameters,
-                    subnet_available_memory,
                     self.total_heap_delta,
                     self.time,
-                    network_topology,
-                    hypervisor,
-                    log,
+                    round,
                 )
             }
             WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -788,17 +736,13 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
     fn resume(
         self: Box<Self>,
         old_canister: CanisterState,
-        subnet_available_memory: SubnetAvailableMemory,
-        network_topology: &NetworkTopology,
-        hypervisor: &Hypervisor,
-        _cycles_account_manager: &CyclesAccountManager,
-        log: &ReplicaLogger,
+        round: RoundContext,
     ) -> DtsInstallCodeResult {
         let mut new_canister = self.new_canister;
         let execution_state = new_canister.execution_state.take().unwrap();
         let (execution_state, wasm_execution_result) = self
             .paused_wasm_execution
-            .resume(execution_state, subnet_available_memory);
+            .resume(execution_state, round.subnet_available_memory.clone());
         new_canister.execution_state = Some(execution_state);
         match wasm_execution_result {
             WasmExecutionResult::Finished(output, system_state_changes) => {
@@ -809,9 +753,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
                     old_canister,
                     self.execution_parameters,
                     self.total_heap_delta,
-                    network_topology,
-                    hypervisor,
-                    log,
+                    round,
                 )
             }
             WasmExecutionResult::Paused(paused_wasm_execution) => {
