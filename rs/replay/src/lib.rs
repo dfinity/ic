@@ -234,7 +234,7 @@ fn cmd_get_recovery_cup(
         player.subnet_id,
         cup_contents,
         registry_version,
-        Some(&player.log),
+        &player.log,
     )
     .ok_or_else(|| "couldn't create a registry CUP".to_string())?;
 
