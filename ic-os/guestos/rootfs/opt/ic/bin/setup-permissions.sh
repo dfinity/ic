@@ -39,7 +39,7 @@ make_group_owned_and_sticky /var/lib/ic/data/ic_registry_local_store ic-replica 
 
 # Fix up security labels for everything.
 echo "Restoring SELinux security contexts in /var/lib/ic"
-restorecon -p -r /var/lib/ic/data /var/lib/ic/crypto
+/opt/ic/bin/prestorecon -j 0 /var/lib/ic/data /var/lib/ic/crypto
 
 # Note: we are not setting up contexts individually for /var/lib/ic/backup.
 # This is handled instead by mount option for the filesystem in its entirety.
