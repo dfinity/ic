@@ -1,5 +1,6 @@
 [Unit]
 Description=Generate network config
+After=systemd-modules-load.service
 Before=systemd-networkd.service
 Before=systemd-networkd-wait-online.service
 

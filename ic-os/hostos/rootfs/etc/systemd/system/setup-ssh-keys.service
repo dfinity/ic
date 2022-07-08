@@ -1,5 +1,6 @@
 [Unit]
 Description=Generate ssh keys on first boot
+RequiresMountsFor=/var
 Before=ssh.service
 
 [Service]
