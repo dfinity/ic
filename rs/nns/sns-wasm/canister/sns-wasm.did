@@ -2,22 +2,34 @@ type AddWasmError = record { error : text };
 type AddWasmOk = record { hash : vec nat8 };
 type AddWasmRequest = record { hash : vec nat8; wasm : opt SnsWasm };
 type AddWasmResponse = record { result : opt Result };
+type AirdropDistribution = record { airdrop_neurons : vec NeuronDistribution };
 type DeployNewSnsRequest = record { sns_init_payload : opt SnsInitPayload };
 type DeployNewSnsResponse = record {
   subnet_id : opt principal;
   canisters : opt SnsCanisterIds;
 };
 type DeployedSns = record { root_canister_id : opt principal };
+type DeveloperDistribution = record {
+  developer_neurons : vec NeuronDistribution;
+};
+type FractionalDeveloperVotingPower = record {
+  treasury_distribution : opt TreasuryDistribution;
+  developer_distribution : opt DeveloperDistribution;
+  airdrop_distribution : opt AirdropDistribution;
+  swap_distribution : opt SwapDistribution;
+};
 type GetNextSnsVersionRequest = record { current_version : opt SnsVersion };
 type GetNextSnsVersionResponse = record { next_version : opt SnsVersion };
 type GetWasmRequest = record { hash : vec nat8 };
 type GetWasmResponse = record { wasm : opt SnsWasm };
-type InitialTokenDistribution = record {
-  swap : nat64;
-  developers : opt TokenDistribution;
-  treasury : opt TokenDistribution;
+type InitialTokenDistribution = variant {
+  FractionalDeveloperVotingPower : FractionalDeveloperVotingPower;
 };
 type ListDeployedSnsesResponse = record { instances : vec DeployedSns };
+type NeuronDistribution = record {
+  controller : opt principal;
+  stake_e8s : nat64;
+};
 type Result = variant { Ok : AddWasmOk; Error : AddWasmError };
 type SnsCanisterIds = record {
   root : opt principal;
@@ -46,10 +58,11 @@ type SnsVersion = record {
 };
 type SnsWasm = record { wasm : vec nat8; canister_type : int32 };
 type SnsWasmCanisterInitPayload = record { sns_subnet_ids : vec principal };
-type TokenDistribution = record {
-  distributions : vec record { text; nat64 };
+type SwapDistribution = record {
   total_e8s : nat64;
+  initial_swap_amount_e8s : nat64;
 };
+type TreasuryDistribution = record { total_e8s : nat64 };
 service : (SnsWasmCanisterInitPayload) -> {
   add_wasm : (AddWasmRequest) -> (AddWasmResponse);
   deploy_new_sns : (DeployNewSnsRequest) -> (DeployNewSnsResponse);
