@@ -8,6 +8,7 @@ use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces_canister_http_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
 use ic_types::{
+    batch::MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     canister_http::{
         CanisterHttpMethod, CanisterHttpReject, CanisterHttpRequest, CanisterHttpRequestContext,
         CanisterHttpResponse, CanisterHttpResponseContent,
@@ -26,6 +27,8 @@ use tokio::{
 use tonic::{transport::Channel, Code};
 use tower::util::Oneshot;
 
+// Substract 50Kb for consensus overhead (CallbackID, Time, CanisterId, CanisterHttpResponseProof)
+const CANISTER_HTTP_RESPONSE_LIMIT: usize = MAX_CANISTER_HTTP_PAYLOAD_SIZE - 50 * 1024;
 // Hard limit that the canister http adapter enforces on the response.
 const CANISTER_HTTP_ADAPTER_MAX_RESPONSE_SIZE: NumBytes = NumBytes::new(2 * 1024 * 1024);
 
@@ -155,7 +158,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 .and_then(|adapter_response| async move {
                     let adapter_response = adapter_response.into_inner();
                     // Only apply the transform if a function name is specified
-                    let transform_response = match request_transform_method {
+                    let transform_response = match &request_transform_method {
                         Some(transform_method) => {
                             transform_adapter_response(
                                 anonymous_query_handler,
@@ -186,6 +189,23 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             )
                         })?,
                     };
+
+                    if transform_response.len() > CANISTER_HTTP_RESPONSE_LIMIT {
+                        let err_msg = match request_transform_method{
+                            Some(_) => format!(
+                                "Transformed http response exceeds limit: {}", CANISTER_HTTP_RESPONSE_LIMIT
+                            ),
+                            None => format!(
+                                "Http response exceeds limit: {}. Apply a transform function to the http response.", CANISTER_HTTP_RESPONSE_LIMIT
+                            ),
+                        };
+                        return Err(
+                            (
+                                RejectCode::SysFatal,
+                                err_msg
+                            )
+                        );
+                    }
 
                     Ok(transform_response)
                 });
@@ -225,7 +245,7 @@ async fn transform_adapter_response(
     anonymous_query_handler: AnonymousQueryService,
     adapter_response: CanisterHttpSendResponse,
     transform_canister: CanisterId,
-    transform_method: String,
+    transform_method: &str,
 ) -> Result<Vec<u8>, (RejectCode, String)> {
     // TODO: Protobuf to conversion via from/into trait to avoid having ic00 as a dependency.
     // CanisterHttpResponsePayload type is part of the public API and need to encode the adapter response into the public API candid.
@@ -251,7 +271,7 @@ async fn transform_adapter_response(
     // Query to execution.
     let anonymous_query = AnonymousQuery {
         receiver: transform_canister,
-        method_name: transform_method.clone(),
+        method_name: transform_method.to_string(),
         method_payload,
     };
 
@@ -573,6 +593,66 @@ mod tests {
                             mock_time(),
                             RejectCode::SysTransient,
                             "adapter unavailable".to_string()
+                        )
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Test case where transformed response exceeds consensus limit.
+    #[tokio::test]
+    async fn test_client_transformed_limit() {
+        // Adapter mock setup
+        let mock_grpc_channel = setup_adapter_mock(Ok(CanisterHttpSendResponse {
+            status: 200,
+            headers: Vec::new(),
+            content: Vec::new(),
+        }))
+        .await;
+        // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
+        let mock_anon_svc =
+            SingleResponseAnonymousQueryService::new(AnonymousQueryResponse::Replied {
+                reply: ic_types::messages::AnonymousQueryResponseReply {
+                    arg: Blob(vec![0; CANISTER_HTTP_RESPONSE_LIMIT + 1]),
+                },
+            });
+        let base_service = BoxCloneService::new(ServiceBuilder::new().service(mock_anon_svc));
+        let svc = ServiceBuilder::new()
+            .concurrency_limit(1)
+            .service(base_service);
+
+        let mut client = CanisterHttpAdapterClientImpl::new(
+            tokio::runtime::Handle::current(),
+            mock_grpc_channel,
+            svc,
+            100,
+        );
+
+        assert_eq!(
+            client.send(build_mock_canister_http_request(
+                420,
+                mock_time(),
+                Some("transform".to_string())
+            )),
+            Ok(())
+        );
+        // Yield to execute the request on the client.
+        loop {
+            match client.try_receive() {
+                Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
+                Ok(r) => {
+                    assert_eq!(
+                        r,
+                        build_mock_canister_http_response_reject(
+                            420,
+                            mock_time(),
+                            RejectCode::SysFatal,
+                            format!(
+                                "Transformed http response exceeds limit: {}",
+                                CANISTER_HTTP_RESPONSE_LIMIT
+                            )
                         )
                     );
                     break;
