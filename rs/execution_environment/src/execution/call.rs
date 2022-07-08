@@ -8,7 +8,7 @@ use crate::execution::common::{
     action_to_response, validate_canister, validate_method, wasm_result_to_query_response,
 };
 use crate::execution_environment::{
-    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext,
+    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
 };
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
@@ -106,6 +106,7 @@ pub fn execute_call(
     time: Time,
     config: &ExecutionConfig,
     mut round: RoundContext,
+    round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
     let subnet_type = round.hypervisor.subnet_type();
     let memory_usage = canister.memory_usage(subnet_type);
@@ -143,9 +144,23 @@ pub fn execute_call(
         round.subnet_available_memory = subnet_memory_capacity(config);
         // DTS is not supported in query calls.
         execution_parameters.total_instruction_limit = execution_parameters.slice_instruction_limit;
-        execute_query_method(canister, req, time, execution_parameters, round)
+        execute_query_method(
+            canister,
+            req,
+            time,
+            execution_parameters,
+            round,
+            round_limits,
+        )
     } else {
-        execute_update_method(canister, req, time, execution_parameters, round)
+        execute_update_method(
+            canister,
+            req,
+            time,
+            execution_parameters,
+            round,
+            round_limits,
+        )
     }
 }
 
@@ -158,6 +173,7 @@ fn execute_update_method(
     time: Time,
     execution_parameters: ExecutionParameters,
     round: RoundContext,
+    round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
     let call_origin = CallOrigin::from(&req);
     let method = WasmMethod::Update(req.method_name().to_string());
@@ -186,6 +202,7 @@ fn execute_update_method(
         round.subnet_available_memory.clone(),
         FuncRef::Method(method),
         canister.execution_state.take().unwrap(),
+        round_limits,
     );
     canister.execution_state = Some(output_execution_state);
     let original = OriginalContext {
@@ -195,7 +212,7 @@ fn execute_update_method(
         total_instruction_limit: execution_parameters.total_instruction_limit,
         message: req,
     };
-    process_update_result(canister, result, original, round)
+    process_update_result(canister, result, original, round, round_limits)
 }
 
 fn process_update_result(
@@ -203,6 +220,7 @@ fn process_update_result(
     result: WasmExecutionResult,
     original: OriginalContext,
     round: RoundContext,
+    _round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -280,13 +298,14 @@ impl PausedExecution for PausedCallExecution {
         self: Box<Self>,
         mut canister: CanisterState,
         round: RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
         let execution_state = canister.execution_state.take().unwrap();
         let (execution_state, result) = self
             .paused_wasm_execution
             .resume(execution_state, round.subnet_available_memory.clone());
         canister.execution_state = Some(execution_state);
-        process_update_result(canister, result, self.original, round)
+        process_update_result(canister, result, self.original, round, round_limits)
     }
 
     fn abort(self: Box<Self>) -> CanisterInputMessage {
@@ -307,6 +326,7 @@ fn execute_query_method(
     time: Time,
     execution_parameters: ExecutionParameters,
     round: RoundContext,
+    round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
     let call_origin = CallOrigin::from(&req);
 
@@ -330,6 +350,7 @@ fn execute_query_method(
         FuncRef::Method(method),
         canister.execution_state.clone().unwrap(),
         round.network_topology,
+        round_limits,
     );
 
     let result = output.wasm_result;

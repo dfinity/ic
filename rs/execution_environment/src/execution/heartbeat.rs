@@ -1,3 +1,4 @@
+use crate::execution_environment::RoundLimits;
 // This module defines how `canister_heartbeat` messages are executed.
 // See https://smartcontracts.org/docs/interface-spec/index.html#_heartbeat.
 use crate::{CanisterHeartbeatError, Hypervisor};
@@ -124,7 +125,7 @@ fn validate_canister(
 ///
 /// - A result containing the size of the heap delta change if
 /// execution was successful or the relevant `CanisterHeartbeatError` error if execution fails.
-#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
 pub fn execute_heartbeat(
     canister: CanisterState,
     network_topology: Arc<NetworkTopology>,
@@ -134,6 +135,7 @@ pub fn execute_heartbeat(
     time: Time,
     hypervisor: &Hypervisor,
     cycles_account_manager: &CyclesAccountManager,
+    round_limits: &mut RoundLimits,
 ) -> HeartbeatResult {
     let method = WasmMethod::System(SystemMethod::CanisterHeartbeat);
     let memory_usage = canister.memory_usage(own_subnet_type);
@@ -178,6 +180,7 @@ pub fn execute_heartbeat(
         FuncRef::Method(method),
         execution_state,
         &network_topology,
+        round_limits,
     );
 
     // Post execution processing.

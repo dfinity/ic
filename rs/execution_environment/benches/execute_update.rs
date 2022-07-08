@@ -7,7 +7,7 @@ mod common_wat;
 use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_error_types::ErrorCode;
-use ic_execution_environment::ExecutionResponse;
+use ic_execution_environment::{ExecutionResponse, RoundLimits};
 use ic_test_utilities::execution_environment::ExecutionTest;
 use ic_test_utilities::types::ids::canister_test_id;
 use ic_types::ingress::{IngressState, IngressStatus};
@@ -372,6 +372,8 @@ pub fn bench_execute_update(c: &mut Criterion) {
              subnet_available_memory,
              ..
          }| {
+            // TODO(RUN-263): Initialize round limits here.
+            let mut round_limits = RoundLimits {};
             let res = ee_test.execution_environment().execute_canister_message(
                 canister_state,
                 execution_parameters.total_instruction_limit,
@@ -379,6 +381,7 @@ pub fn bench_execute_update(c: &mut Criterion) {
                 time,
                 network_topology,
                 subnet_available_memory,
+                &mut round_limits,
             );
             let instructions = res.num_instructions_left;
             match res.response {

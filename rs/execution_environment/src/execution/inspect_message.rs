@@ -1,3 +1,4 @@
+use crate::execution_environment::RoundLimits;
 use crate::Hypervisor;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
@@ -55,6 +56,8 @@ pub fn execute_inspect_message(
         ingress.arg().to_vec(),
         time,
     );
+    // TODO(RUN-263): Initialize round limits here.
+    let mut round_limits = RoundLimits {};
     let (output, _output_execution_state, _system_state_accessor) = hypervisor.execute(
         system_api,
         system_state,
@@ -64,6 +67,7 @@ pub fn execute_inspect_message(
         FuncRef::Method(method),
         execution_state,
         network_topology,
+        &mut round_limits,
     );
     match output.wasm_result {
         Ok(maybe_wasm_result) => match maybe_wasm_result {

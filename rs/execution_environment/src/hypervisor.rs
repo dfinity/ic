@@ -26,6 +26,8 @@ use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::{path::PathBuf, sync::Arc};
 
+use crate::execution_environment::RoundLimits;
+
 #[doc(hidden)] // pub for usage in tests
 pub struct HypervisorMetrics {
     accessed_pages: Histogram,
@@ -264,6 +266,7 @@ impl Hypervisor {
         func_ref: FuncRef,
         execution_state: ExecutionState,
         network_topology: &NetworkTopology,
+        _round_limits: &mut RoundLimits,
     ) -> (WasmExecutionOutput, ExecutionState, SystemState) {
         let api_type_str = api_type.as_str();
         let static_system_state =
@@ -315,6 +318,7 @@ impl Hypervisor {
         subnet_available_memory: SubnetAvailableMemory,
         func_ref: FuncRef,
         execution_state: ExecutionState,
+        _round_limits: &mut RoundLimits,
     ) -> (ExecutionState, WasmExecutionResult) {
         let api_type_str = api_type.as_str();
         let static_system_state =

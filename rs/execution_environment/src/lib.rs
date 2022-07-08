@@ -15,7 +15,9 @@ mod types;
 pub mod util;
 
 use crate::anonymous_query_handler::AnonymousQueryHandler;
-pub use execution_environment::{CanisterHeartbeatError, ExecutionEnvironment, ExecutionResponse};
+pub use execution_environment::{
+    CanisterHeartbeatError, ExecutionEnvironment, ExecutionResponse, RoundLimits,
+};
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_base_types::PrincipalId;

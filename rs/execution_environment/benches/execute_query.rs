@@ -8,6 +8,7 @@ use common_wat::*;
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_execution_environment::{
     execution::nonreplicated_query::execute_non_replicated_query, NonReplicatedQueryKind,
+    RoundLimits,
 };
 use ic_interfaces::execution_environment::ExecutionMode;
 use ic_test_utilities::execution_environment::ExecutionTest;
@@ -53,6 +54,8 @@ pub fn bench_execute_query(c: &mut Criterion) {
              ..
          }| {
             execution_parameters.execution_mode = ExecutionMode::NonReplicated;
+            // TODO(RUN-263): Initialize round limits here.
+            let mut round_limits = RoundLimits {};
             let (_, instructions_left, result) = execute_non_replicated_query(
                 NonReplicatedQueryKind::Pure { caller: sender },
                 "test",
@@ -64,6 +67,7 @@ pub fn bench_execute_query(c: &mut Criterion) {
                 subnet_available_memory,
                 &network_topology,
                 ee_test.hypervisor_deprecated(),
+                &mut round_limits,
             );
             assert_eq!(result, Ok(None), "Error executing a query method");
             assert_eq!(

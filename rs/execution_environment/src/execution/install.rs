@@ -7,7 +7,7 @@ use crate::canister_manager::{
     InstallCodeResponse, InstallCodeResult,
 };
 use crate::execution::common::deduct_compilation_instructions;
-use crate::execution_environment::RoundContext;
+use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::{ExecutionParameters, WasmExecutionOutput};
@@ -67,6 +67,7 @@ pub(crate) fn execute_install(
     canister_layout_path: PathBuf,
     mut execution_parameters: ExecutionParameters,
     round: RoundContext,
+    round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
     // Stage 1: create a new execution state based on the new Wasm binary.
 
@@ -166,6 +167,7 @@ pub(crate) fn execute_install(
             total_heap_delta,
             time,
             round,
+            round_limits,
         )
     } else {
         let (output_execution_state, wasm_execution_result) = round.hypervisor.execute_dts(
@@ -176,6 +178,7 @@ pub(crate) fn execute_install(
             round.subnet_available_memory.clone(),
             FuncRef::Method(method),
             execution_state,
+            round_limits,
         );
         new_canister.execution_state = Some(output_execution_state);
 
@@ -191,6 +194,7 @@ pub(crate) fn execute_install(
                     total_heap_delta,
                     time,
                     round,
+                    round_limits,
                 )
             }
             WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -223,6 +227,7 @@ fn install_stage_2a_process_start_result(
     mut total_heap_delta: NumBytes,
     time: Time,
     round: RoundContext,
+    round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
     let instructions_left = output.num_instructions_left;
@@ -255,6 +260,7 @@ fn install_stage_2a_process_start_result(
         total_heap_delta,
         time,
         round,
+        round_limits,
     )
 }
 
@@ -269,6 +275,7 @@ fn install_stage_2b_continue_install_after_start(
     total_heap_delta: NumBytes,
     time: Time,
     round: RoundContext,
+    round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
     let canister_id = new_canister.canister_id();
     info!(
@@ -325,6 +332,7 @@ fn install_stage_2b_continue_install_after_start(
         round.subnet_available_memory.clone(),
         FuncRef::Method(method),
         new_canister.execution_state.unwrap(),
+        round_limits,
     );
     new_canister.execution_state = Some(output_execution_state);
     match wasm_execution_result {
@@ -337,6 +345,7 @@ fn install_stage_2b_continue_install_after_start(
                 execution_parameters,
                 total_heap_delta,
                 round,
+                round_limits,
             )
         }
         WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -363,7 +372,9 @@ fn install_stage_3_process_init_result(
     execution_parameters: ExecutionParameters,
     mut total_heap_delta: NumBytes,
     round: RoundContext,
+    _round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
+    // TODO(RUN-263): Update round limits here.
     let canister_id = new_canister.canister_id();
     info!(
         round.log,
@@ -428,6 +439,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
         self: Box<Self>,
         old_canister: CanisterState,
         round: RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult {
         let mut new_canister = self.new_canister;
         let execution_state = new_canister.execution_state.take().unwrap();
@@ -445,6 +457,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
                     self.execution_parameters,
                     self.total_heap_delta,
                     round,
+                    round_limits,
                 )
             }
             WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -484,6 +497,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
         self: Box<Self>,
         old_canister: CanisterState,
         round: RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult {
         let mut new_canister = self.new_canister;
         let execution_state = new_canister.execution_state.take().unwrap();
@@ -503,6 +517,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
                     self.total_heap_delta,
                     self.time,
                     round,
+                    round_limits,
                 )
             }
             WasmExecutionResult::Paused(paused_wasm_execution) => {
