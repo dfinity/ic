@@ -244,8 +244,9 @@ def main(
         ARTIFACT_DIR = os.path.join(base_path, ARTIFACT_DIR)
     is_merge_request = CI_PARENT_PIPELINE_SOURCE == "merge_request_event"
     is_honeycomb_push = not is_local_run
-    is_slack_test_failure_notify = not is_local_run and CI_PIPELINE_SOURCE == "schedule"
-    is_slack_timeout_notify = not is_local_run and CI_PIPELINE_SOURCE == "schedule"
+    is_scheduled_run = CI_PIPELINE_SOURCE == "schedule"
+    is_slack_test_failure_notify = not is_local_run and is_scheduled_run
+    is_slack_timeout_notify = not is_local_run and is_scheduled_run
     # End set variables.
 
     # Firstly, build the prod-test-driver binary.
@@ -450,6 +451,7 @@ def main(
             f"--job_url={CI_JOB_URL}",
             f"--trace_id={ROOT_PIPELINE_ID}",
             f"--parent_id={JOB_ID}",
+            f"--job_name={CI_JOB_NAME}",
             "--type=system-tests",
         ]
         honeycomb_returncode = run_command(command=honeycomb_cmd)
