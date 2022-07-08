@@ -871,19 +871,15 @@ impl ExecutionEnvironment {
             CanisterInputMessage::Ingress(ingress) => RequestOrIngress::Ingress(ingress),
         };
 
-        execute_call(
-            canister,
-            req,
-            instructions_limit,
-            time,
-            network_topology,
+        let round = RoundContext {
             subnet_available_memory,
-            &self.config,
-            self.own_subnet_type,
-            &self.hypervisor,
-            &*self.cycles_account_manager,
-            &self.log,
-        )
+            network_topology: &*network_topology,
+            hypervisor: &self.hypervisor,
+            cycles_account_manager: &self.cycles_account_manager,
+            log: &self.log,
+        };
+
+        execute_call(canister, req, instructions_limit, time, &self.config, round)
     }
 
     /// Executes a heartbeat of a given canister.
@@ -1125,18 +1121,20 @@ impl ExecutionEnvironment {
     ) -> ExecuteMessageResult {
         let execution_parameters =
             self.execution_parameters(&canister, instruction_limit, ExecutionMode::Replicated);
+        let round = RoundContext {
+            subnet_available_memory,
+            network_topology: &*network_topology,
+            hypervisor: &self.hypervisor,
+            cycles_account_manager: &self.cycles_account_manager,
+            log: &self.log,
+        };
         execute_response(
             canister,
             response,
             time,
-            self.own_subnet_type,
-            network_topology,
             execution_parameters,
-            subnet_available_memory,
-            &self.log,
             self.metrics.response_cycles_refund_error_counter(),
-            &self.hypervisor,
-            &self.cycles_account_manager,
+            round,
         )
     }
 

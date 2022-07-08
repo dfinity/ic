@@ -10,7 +10,6 @@ use crate::execution::common::{
 use crate::execution_environment::{
     ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext,
 };
-use crate::hypervisor::Hypervisor;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
 use ic_error_types::{ErrorCode, UserError};
@@ -22,8 +21,7 @@ use ic_interfaces::{
     messages::RequestOrIngress,
 };
 use ic_logger::{error, info, ReplicaLogger};
-use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
+use ic_replicated_state::{CallOrigin, CanisterState};
 use ic_types::messages::CallContextId;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
@@ -31,10 +29,9 @@ use ic_types::{
     CanisterId, NumBytes, NumInstructions, Time,
 };
 
-use ic_cycles_account_manager::CyclesAccountManager;
 use ic_system_api::ApiType;
 use ic_types::methods::{FuncRef, WasmMethod};
-use std::{convert::Into, sync::Arc};
+use std::convert::Into;
 
 fn early_error_to_result(
     user_error: UserError,
@@ -107,17 +104,13 @@ pub fn execute_call(
     req: RequestOrIngress,
     instruction_limit: NumInstructions,
     time: Time,
-    network_topology: Arc<NetworkTopology>,
-    subnet_available_memory: SubnetAvailableMemory,
     config: &ExecutionConfig,
-    subnet_type: SubnetType,
-    hypervisor: &Hypervisor,
-    cycles_account_manager: &CyclesAccountManager,
-    log: &ReplicaLogger,
+    mut round: RoundContext,
 ) -> ExecuteMessageResult {
+    let subnet_type = round.hypervisor.subnet_type();
     let memory_usage = canister.memory_usage(subnet_type);
     let compute_allocation = canister.scheduler_state.compute_allocation;
-    if let Err(err) = cycles_account_manager.withdraw_execution_cycles(
+    if let Err(err) = round.cycles_account_manager.withdraw_execution_cycles(
         &mut canister.system_state,
         memory_usage,
         compute_allocation,
@@ -136,9 +129,9 @@ pub fn execute_call(
         execution_mode: ExecutionMode::Replicated,
     };
 
-    if let Err(user_error) = validate_message(&canister, &req, time, log) {
+    if let Err(user_error) = validate_message(&canister, &req, time, round.log) {
         let mut result = early_error_to_result(user_error, canister, req, instruction_limit, time);
-        cycles_account_manager.refund_execution_cycles(
+        round.cycles_account_manager.refund_execution_cycles(
             &mut result.canister.system_state,
             result.num_instructions_left,
             instruction_limit,
@@ -147,32 +140,12 @@ pub fn execute_call(
     } else if canister.exports_query_method(req.method_name().to_string()) {
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory = subnet_memory_capacity(config);
+        round.subnet_available_memory = subnet_memory_capacity(config);
         // DTS is not supported in query calls.
         execution_parameters.total_instruction_limit = execution_parameters.slice_instruction_limit;
-        execute_query_method(
-            canister,
-            req,
-            time,
-            &network_topology,
-            execution_parameters,
-            subnet_available_memory,
-            hypervisor,
-            cycles_account_manager,
-            log,
-        )
+        execute_query_method(canister, req, time, execution_parameters, round)
     } else {
-        execute_update_method(
-            canister,
-            req,
-            time,
-            network_topology,
-            execution_parameters,
-            subnet_available_memory,
-            hypervisor,
-            cycles_account_manager,
-            log,
-        )
+        execute_update_method(canister, req, time, execution_parameters, round)
     }
 }
 
@@ -183,16 +156,12 @@ fn execute_update_method(
     mut canister: CanisterState,
     mut req: RequestOrIngress,
     time: Time,
-    network_topology: Arc<NetworkTopology>,
     execution_parameters: ExecutionParameters,
-    subnet_available_memory: SubnetAvailableMemory,
-    hypervisor: &Hypervisor,
-    cycles_account_manager: &CyclesAccountManager,
-    log: &ReplicaLogger,
+    round: RoundContext,
 ) -> ExecuteMessageResult {
     let call_origin = CallOrigin::from(&req);
     let method = WasmMethod::Update(req.method_name().to_string());
-    let memory_usage = canister.memory_usage(hypervisor.subnet_type());
+    let memory_usage = canister.memory_usage(round.hypervisor.subnet_type());
     let incoming_cycles = req.take_cycles();
 
     let call_context_id = canister
@@ -209,12 +178,12 @@ fn execute_update_method(
         call_context_id,
     );
 
-    let (output_execution_state, result) = hypervisor.execute_dts(
+    let (output_execution_state, result) = round.hypervisor.execute_dts(
         api_type,
         canister.system_state.clone(),
         memory_usage,
         execution_parameters.clone(),
-        subnet_available_memory.clone(),
+        round.subnet_available_memory.clone(),
         FuncRef::Method(method),
         canister.execution_state.take().unwrap(),
     );
@@ -225,13 +194,6 @@ fn execute_update_method(
         time,
         total_instruction_limit: execution_parameters.total_instruction_limit,
         message: req,
-    };
-    let round = RoundContext {
-        subnet_available_memory,
-        network_topology: &*network_topology,
-        hypervisor,
-        cycles_account_manager,
-        log,
     };
     process_update_result(canister, result, original, round)
 }
@@ -343,17 +305,13 @@ fn execute_query_method(
     mut canister: CanisterState,
     req: RequestOrIngress,
     time: Time,
-    network_topology: &NetworkTopology,
     execution_parameters: ExecutionParameters,
-    subnet_available_memory: SubnetAvailableMemory,
-    hypervisor: &Hypervisor,
-    cycles_account_manager: &CyclesAccountManager,
-    log: &ReplicaLogger,
+    round: RoundContext,
 ) -> ExecuteMessageResult {
     let call_origin = CallOrigin::from(&req);
 
     let method = WasmMethod::Query(req.method_name().to_string());
-    let memory_usage = canister.memory_usage(hypervisor.subnet_type());
+    let memory_usage = canister.memory_usage(round.hypervisor.subnet_type());
 
     let api_type =
         ApiType::replicated_query(time, req.method_payload().to_vec(), *req.sender(), None);
@@ -363,23 +321,24 @@ fn execute_query_method(
     // unmodified version of the canister. Hence, execute on clones
     // of system and execution states so that we have the original
     // versions.
-    let (output, _output_execution_state, _output_system_state) = hypervisor.execute(
+    let (output, _output_execution_state, _output_system_state) = round.hypervisor.execute(
         api_type,
         canister.system_state.clone(),
         memory_usage,
         execution_parameters.clone(),
-        subnet_available_memory,
+        round.subnet_available_memory,
         FuncRef::Method(method),
         canister.execution_state.clone().unwrap(),
-        network_topology,
+        round.network_topology,
     );
 
     let result = output.wasm_result;
+    let log = round.log;
     let result =
         result.map_err(|err| log_and_transform_to_user_error(log, err, &canister.canister_id()));
     let response = wasm_result_to_query_response(result, &canister, time, call_origin, log);
 
-    cycles_account_manager.refund_execution_cycles(
+    round.cycles_account_manager.refund_execution_cycles(
         &mut canister.system_state,
         output.num_instructions_left,
         execution_parameters.slice_instruction_limit,
