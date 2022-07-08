@@ -7536,6 +7536,7 @@ dependencies = [
  "build-info-build",
  "bytes",
  "candid",
+ "clap 3.1.18",
  "comparable",
  "criterion",
  "csv",
