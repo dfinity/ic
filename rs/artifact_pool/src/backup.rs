@@ -144,6 +144,31 @@ struct PurgingThread {
     age_threshold_secs: Duration,
     metrics: Metrics,
     log: ReplicaLogger,
+    age: Box<dyn BackupAge>,
+}
+
+pub enum PurgingError {
+    Transient(String),
+    Permanent(io::Error),
+}
+
+/// Trait defining an interface to determine the age of backup artifacts stored on disk
+pub trait BackupAge: Send {
+    fn get_elapsed_time(&self, path: &Path) -> Result<Duration, PurgingError>;
+}
+
+pub struct FileSystemAge {}
+
+impl BackupAge for FileSystemAge {
+    fn get_elapsed_time(&self, path: &Path) -> Result<Duration, PurgingError> {
+        // return elapsed time since last modification as reported by file system
+        path.metadata()
+            .map_err(|err| PurgingError::Permanent(err))?
+            .modified()
+            .map_err(|err| PurgingError::Permanent(err))?
+            .elapsed()
+            .map_err(|err| PurgingError::Transient(err.to_string()))
+    }
 }
 
 impl PurgingThread {
@@ -152,12 +177,14 @@ impl PurgingThread {
         age_threshold_secs: Duration,
         metrics: Metrics,
         log: ReplicaLogger,
+        age: Box<dyn BackupAge>,
     ) -> Self {
         Self {
             backup_path,
             age_threshold_secs,
             metrics,
             log,
+            age,
         }
     }
 
@@ -175,9 +202,12 @@ impl PurgingThread {
             match rx.recv() {
                 Ok(PurgingRequest::Purge) => {
                     let start = std::time::Instant::now();
-                    if let Err(err) =
-                        purge(self.age_threshold_secs, &self.backup_path, self.log.clone())
-                    {
+                    if let Err(err) = purge(
+                        self.age_threshold_secs,
+                        &self.backup_path,
+                        self.log.clone(),
+                        self.age.as_ref(),
+                    ) {
                         error!(self.log, "Backup purging failed: {:?}", err);
                         self.metrics.io_errors.inc();
                     }
@@ -215,7 +245,7 @@ pub(super) struct Backup {
 }
 
 impl Backup {
-    pub fn new(
+    pub fn new_with_age_func(
         pool: &dyn ConsensusPool,
         backup_path: PathBuf,
         version_path: PathBuf,
@@ -223,6 +253,7 @@ impl Backup {
         purge_interval_secs: Duration,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
+        age: Box<dyn BackupAge>,
     ) -> Self {
         let metrics = Metrics::new(&metrics_registry);
         let (backup_queue, backup_thread) =
@@ -232,6 +263,7 @@ impl Backup {
             age_threshold_secs,
             metrics.clone(),
             log.clone(),
+            age,
         )
         .start();
         let backup = Self {
@@ -258,6 +290,27 @@ impl Backup {
             backup.metrics.io_errors.inc();
         }
         backup
+    }
+
+    pub fn new(
+        pool: &dyn ConsensusPool,
+        backup_path: PathBuf,
+        version_path: PathBuf,
+        age_threshold_secs: Duration,
+        purge_interval_secs: Duration,
+        metrics_registry: MetricsRegistry,
+        log: ReplicaLogger,
+    ) -> Self {
+        Self::new_with_age_func(
+            pool,
+            backup_path,
+            version_path,
+            age_threshold_secs,
+            purge_interval_secs,
+            metrics_registry,
+            log,
+            Box::new(FileSystemAge {}),
+        )
     }
 
     // Filters the new artifacts and asynchronously writes the relevant artifacts
@@ -349,20 +402,26 @@ fn store_artifacts(artifacts: Vec<ConsensusMessage>, path: &Path) -> Result<(), 
         .try_for_each(|artifact| artifact.write_to_disk(path))
 }
 
-// Traverses the whole backup directory and finds all leaf directories
-// (containing no other directories). Then it purges all leaves older than the
-// specified retention time.
-fn purge(threshold_secs: Duration, path: &Path, log: ReplicaLogger) -> Result<(), io::Error> {
+/// Traverses the whole backup directory and finds all leaf directories
+/// (containing no other directories). Then it purges all leaves older than the
+/// specified retention time. Age of a leave is determined by calling the given
+/// implementation of [`BackupAge`]
+fn purge(
+    threshold_secs: Duration,
+    path: &Path,
+    log: ReplicaLogger,
+    age: &dyn BackupAge,
+) -> Result<(), io::Error> {
     let mut leaves = Vec::new();
     get_leaves(path, &mut leaves)?;
     for path in leaves {
-        let age = match path.metadata()?.modified()?.elapsed() {
+        let age = match age.get_elapsed_time(&path) {
             Ok(time) => time,
             // According to the documentation of `elapsed` this function may fail as
             // "the underlying system clock is susceptible to drift and updates". Those
             // errors are transient and safe to ignore. As they are very rare it's ok to
             // log a warning.
-            Err(err) => {
+            Err(PurgingError::Transient(err)) => {
                 warn!(
                     log,
                     "Skipping {:?}, because the modified timestamp couldn't be computed: {:?}",
@@ -371,6 +430,8 @@ fn purge(threshold_secs: Duration, path: &Path, log: ReplicaLogger) -> Result<()
                 );
                 continue;
             }
+
+            Err(PurgingError::Permanent(err)) => return Err(err),
         };
         if age > threshold_secs {
             fs::remove_dir_all(path)?;
