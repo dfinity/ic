@@ -1,4 +1,5 @@
 pub mod btreemap;
+pub mod cell;
 #[cfg(target_arch = "wasm32")]
 mod ic0_memory; // Memory API for canisters.
 pub mod storable;
