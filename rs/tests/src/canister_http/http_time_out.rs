@@ -25,16 +25,14 @@ use slog::info;
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
-    await_nodes_healthy(&env);
-    install_nns_canisters(&env);
-
     let mut nodes = get_node_snapshots(&env);
     let node = nodes.next().expect("there is no application node");
     let runtime = get_runtime_from_node(&node);
     let proxy_canister = create_proxy_canister(&env, &runtime, &node);
+    let webserver_ipv6 = get_universal_vm_address(&env);
 
     block_on(async {
-        let url_to_succeed = "https://www.example.com".to_string();
+        let url_to_succeed = format!("https://[{webserver_ipv6}]:443");
         let request_to_succeed = RemoteHttpRequest {
             url: url_to_succeed.clone(),
             headers: vec![],
@@ -68,7 +66,7 @@ pub fn test(env: TestEnv) {
         assert_eq!(httpbin_success.unwrap().status, 200);
 
         // Test remote timeout case
-        let url_to_fail = "https://www.example.com:81".to_string();
+        let url_to_fail = "https://[40d:40d:40d:40d:40d:40d:40d:40d]:9082".to_string();
         let mut request_to_fail = request_to_succeed;
         request_to_fail.url = url_to_fail.clone();
         let failure_update = proxy_canister

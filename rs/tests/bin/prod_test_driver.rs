@@ -531,7 +531,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 "canister_http",
                 canister_http::lib::config,
                 par(vec![
-                    sys_t("http_basic", canister_http::http_basic_remote::test),
+                    sys_t("http_basic", canister_http::http_basic::test),
                 ]),
             ),
         ],
@@ -579,6 +579,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     par(vec![sys_t(
                         "http_fault_tolerance",
                         canister_http::http_fault_tolerance::test,
+                    )]),
+                ),
+                pot_with_setup(
+                    "canister_http_remote",
+                    canister_http::lib::config,
+                    par(vec![sys_t(
+                        "http_basic_remote",
+                        canister_http::http_basic_remote::test,
                     )]),
                 ),
                 pot_with_setup(
