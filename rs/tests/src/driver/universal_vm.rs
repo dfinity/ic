@@ -171,17 +171,23 @@ impl UniversalVms for TestEnv {
 
         setup_ssh(self, config_dir.clone())?;
 
-        let activate_path = config_dir.join("activate");
-
-        let mut activate_file = File::create(&activate_path)?;
-        activate_file.write_all(activate_script.as_bytes())?;
-        let metadata = activate_file.metadata()?;
-        let mut permissions = metadata.permissions();
-        permissions.set_mode(0o755);
-        std::fs::set_permissions(activate_path, permissions)?;
-        activate_file.sync_all()?;
+        // copy activate script to Universal VM
+        let _ = insert_file_to_config(config_dir.clone(), "activate", activate_script.as_bytes());
         Ok(config_dir)
     }
+}
+
+pub fn insert_file_to_config(config_dir: PathBuf, file_name: &str, content: &[u8]) -> Result<()> {
+    let activate_path = config_dir.join(file_name);
+
+    let mut activate_file = File::create(&activate_path)?;
+    activate_file.write_all(content)?;
+    let metadata = activate_file.metadata()?;
+    let mut permissions = metadata.permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(activate_path, permissions)?;
+    activate_file.sync_all()?;
+    Ok(())
 }
 
 fn setup_ssh(env: &TestEnv, config_dir: PathBuf) -> Result<()> {

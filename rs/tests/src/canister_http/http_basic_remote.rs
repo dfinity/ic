@@ -25,9 +25,6 @@ use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::{error, info};
 
 pub fn test(env: TestEnv) {
-    await_nodes_healthy(&env);
-    install_nns_canisters(&env);
-
     let mut nodes = get_node_snapshots(&env);
     let node = nodes.next().expect("there is no application node");
     let runtime = get_runtime_from_node(&node);

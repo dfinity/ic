@@ -14,11 +14,14 @@ Success::
 1. Result of last query returns what the update call put in the canister.
 
 end::catalog[] */
+use crate::canister_http::lib::*;
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     HasArtifacts, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
 };
+use crate::driver::universal_vm::UniversalVm;
+use crate::driver::universal_vm::UniversalVms;
 use crate::nns::NnsExt;
 use crate::util::{self};
 use crate::{
@@ -41,6 +44,15 @@ const EXPIRATION: Duration = Duration::from_secs(180);
 const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 
 pub fn config(env: TestEnv) {
+    let activate_script = &get_universal_vm_activation_script()[..];
+    let config_dir = env
+        .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
+        .unwrap();
+
+    UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
+        .with_config_dir(config_dir)
+        .start(&env)
+        .expect("failed to set up universal VM");
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(
@@ -105,6 +117,7 @@ pub fn test(env: TestEnv) {
     });
 
     info!(&logger, "proxy_canister {cid} installed");
+    let webserver_ipv6 = get_universal_vm_address(&env);
 
     let continuous_http_calls = rt.spawn(async move {
         println!("Starting workload of continued remote HTTP calls.");
@@ -112,7 +125,6 @@ pub fn test(env: TestEnv) {
             &app_runtime,
             CanisterId::new(PrincipalId::from(cid)).unwrap(),
         );
-        let url = "https://www.example.com";
 
         // keeping sending http calls as an application node is being killed.
         // all http requests should still succeed throughout.
@@ -122,7 +134,7 @@ pub fn test(env: TestEnv) {
                     "send_request",
                     candid_one::<Result<(), String>, RemoteHttpRequest>,
                     RemoteHttpRequest {
-                        url: url.to_string(),
+                        url: format!("https://[{webserver_ipv6}]:443"),
                         headers: vec![],
                         method: HttpMethod::GET,
                         body: "".to_string(),
@@ -184,7 +196,7 @@ pub fn test(env: TestEnv) {
                 .query_(
                     "check_response",
                     candid_one::<Result<RemoteHttpResponse, String>, _>,
-                    "https://www.example.com".to_string(),
+                    format!("https://[{webserver_ipv6}]:443"),
                 )
                 .await;
 
