@@ -73,7 +73,7 @@ def external_crates_repository(name, annotations):
                 features = ["runtime"],
             ),
             "bip32": crate.spec(
-                version = "^0.3",
+                version = "^0.4.0",
                 features = [
                     "secp256k1",
                 ],
@@ -307,7 +307,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.1",
             ),
             "ic-agent": crate.spec(
-                version = "^0.15.0",
+                version = "^0.17.0",
             ),
             "ic-cdk": crate.spec(
                 version = "^0.5",
@@ -321,13 +321,13 @@ def external_crates_repository(name, annotations):
                 rev = "2112e912e156b271389a51777680de542bb43980",
             ),
             "ic-identity-hsm": crate.spec(
-                version = "=0.3.3",
+                version = "=0.17.0",
             ),
             "ic-ledger-types": crate.spec(
                 version = "^0.1.1",
             ),
             "ic-utils": crate.spec(
-                version = "=0.15.0",
+                version = "^0.17.0",
             ),
             "indicatif": crate.spec(
                 version = "^0.15",
@@ -361,7 +361,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.4.1",
             ),
             "k256": crate.spec(
-                version = "^0.10.3",
+                version = "^0.11.2",
                 features = [
                     "arithmetic",
                     "ecdsa",

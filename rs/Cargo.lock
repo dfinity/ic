@@ -956,8 +956,8 @@ dependencies = [
  "glob 0.3.0",
  "humantime 2.1.0",
  "hyper",
- "ic-agent 0.15.0",
- "ic-utils 0.15.0",
+ "ic-agent",
+ "ic-utils 0.17.0",
  "indoc",
  "mockall 0.11.1",
  "opentelemetry 0.17.0",
@@ -3293,13 +3293,13 @@ dependencies = [
  "clap 3.1.18",
  "dfn_candid",
  "garcon",
- "ic-agent 0.6.0",
+ "ic-agent",
  "ic-base-types",
  "ic-identity-hsm",
  "ic-nns-constants",
  "ic-nns-init",
  "ic-types 0.8.0",
- "ic-utils 0.4.0",
+ "ic-utils 0.17.0",
  "on_wire",
  "tokio",
  "url",
@@ -3649,7 +3649,7 @@ dependencies = [
  "rustls-native-certs",
  "tokio",
  "tokio-rustls 0.23.2",
- "webpki-roots 0.22.2",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -3770,99 +3770,6 @@ version = "0.8.0"
 dependencies = [
  "quote 1.0.17",
  "syn 1.0.96",
-]
-
-[[package]]
-name = "ic-agent"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "870ff4dd5a1a5514dbd37660a11d9ca9d4ee62cfe00e48de8d6bf1050e97058e"
-dependencies = [
- "async-trait",
- "base32",
- "base64 0.12.3",
- "byteorder",
- "candid",
- "garcon",
- "hex",
- "http",
- "leb128",
- "mime",
- "openssl",
- "pem 0.8.2",
- "rand 0.7.3",
- "reqwest",
- "ring",
- "rustls 0.19.1",
- "serde",
- "serde_bytes",
- "serde_cbor",
- "simple_asn1 0.5.4",
- "thiserror",
- "url",
- "webpki-roots 0.20.0",
-]
-
-[[package]]
-name = "ic-agent"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50649dbe2e37f4f503bfe2bd1d7b1f992496fc65e840972f22f338449bcda01d"
-dependencies = [
- "async-trait",
- "base32",
- "base64 0.13.0",
- "byteorder",
- "garcon",
- "hex",
- "http",
- "hyper-rustls",
- "ic-types 0.3.0",
- "leb128",
- "mime",
- "openssl",
- "pem 1.0.1",
- "rand 0.8.5",
- "reqwest",
- "ring",
- "rustls 0.20.6",
- "serde",
- "serde_bytes",
- "serde_cbor",
- "simple_asn1 0.6.1",
- "thiserror",
- "url",
-]
-
-[[package]]
-name = "ic-agent"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7b198398233a8bd3b8247bc1922899c257ba7985bea1c197b0ee31bef9d3043"
-dependencies = [
- "async-trait",
- "base32",
- "base64 0.13.0",
- "byteorder",
- "garcon",
- "hex",
- "http",
- "hyper-rustls",
- "ic-types 0.3.0",
- "leb128",
- "mime",
- "openssl",
- "pem 1.0.1",
- "rand 0.8.5",
- "reqwest",
- "ring",
- "rustls 0.20.6",
- "serde",
- "serde_bytes",
- "serde_cbor",
- "simple_asn1 0.6.1",
- "thiserror",
- "url",
 ]
 
 [[package]]
@@ -3997,7 +3904,7 @@ dependencies = [
  "futures",
  "humantime 2.1.0",
  "hyper",
- "ic-agent 0.15.0",
+ "ic-agent",
  "indoc",
  "mockall 0.11.1",
  "opentelemetry 0.17.0",
@@ -5644,7 +5551,7 @@ dependencies = [
  "futures",
  "hex",
  "humantime 2.1.0",
- "ic-agent 0.11.1",
+ "ic-agent",
  "ic-base-types",
  "ic-config",
  "ic-crypto-sha",
@@ -5853,16 +5760,16 @@ dependencies = [
 
 [[package]]
 name = "ic-identity-hsm"
-version = "0.3.3"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a275323846ec68c7ba58bb4f386e477ed3109e2aee25a34d7eb41b017b07d23"
+checksum = "4f23185559fafa2c475db99df789191c7494627184425726080788bd8ff1e6b1"
 dependencies = [
  "hex",
- "ic-agent 0.6.0",
- "num-bigint 0.3.1",
- "openssl",
+ "ic-agent",
+ "num-bigint 0.4.3",
  "pkcs11",
- "simple_asn1 0.5.4",
+ "sha2 0.10.2",
+ "simple_asn1 0.6.1",
  "thiserror",
 ]
 
@@ -8300,23 +8207,6 @@ dependencies = [
 
 [[package]]
 name = "ic-utils"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca94cc12d3d4d3a28276d94ac57eea101e773ba96fe0fdd636851529f76ce82f"
-dependencies = [
- "async-trait",
- "candid",
- "garcon",
- "ic-agent 0.6.0",
- "serde",
- "serde_bytes",
- "strum 0.20.0",
- "strum_macros 0.20.1",
- "thiserror",
-]
-
-[[package]]
-name = "ic-utils"
 version = "0.8.0"
 dependencies = [
  "bitflags",
@@ -8336,26 +8226,6 @@ dependencies = [
 
 [[package]]
 name = "ic-utils"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36568bc5b48c8a1bb5506522a803cc581b3c7b7b9377eba32bf0ed6b8d5689d1"
-dependencies = [
- "async-trait",
- "candid",
- "garcon",
- "ic-agent 0.15.0",
- "leb128",
- "num-bigint 0.4.3",
- "paste 1.0.5",
- "serde",
- "serde_bytes",
- "strum 0.23.0",
- "strum_macros 0.23.1",
- "thiserror",
-]
-
-[[package]]
-name = "ic-utils"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f84ea6aad8345896eb336fe2757cbe14a8c476a0e586403b84a61a2106053cd"
@@ -8363,7 +8233,7 @@ dependencies = [
  "async-trait",
  "candid",
  "garcon",
- "ic-agent 0.17.0",
+ "ic-agent",
  "leb128",
  "num-bigint 0.4.3",
  "once_cell",
@@ -9837,17 +9707,6 @@ name = "num-bigint"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "090c7f9998ee0ff65aa5b723e4009f7b217707f1fb5ea551329cc4d6231fb304"
-dependencies = [
- "autocfg 1.1.0",
- "num-integer",
- "num-traits",
-]
-
-[[package]]
-name = "num-bigint"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e9a41747ae4633fce5adffb4d2e81ffc5e89593cb19917f8fb2cc5ff76507bf"
 dependencies = [
  "autocfg 1.1.0",
  "num-integer",
@@ -11685,7 +11544,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "webpki-roots 0.22.2",
+ "webpki-roots",
  "winreg",
 ]
 
@@ -12804,12 +12663,6 @@ checksum = "57bd81eb48f4c437cadc685403cad539345bf703d78e63707418431cecd4522b"
 
 [[package]]
 name = "strum"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7318c509b5ba57f18533982607f24070a55d353e90d4cae30c467cdb2ad5ac5c"
-
-[[package]]
-name = "strum"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cae14b91c7d11c9a851d3fbc80a963198998c2a64eec840477fa92d8ce9b70bb"
@@ -12828,18 +12681,6 @@ name = "strum_macros"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "87c85aa3f8ea653bfd3ddf25f7ee357ee4d204731f6aa9ad04002306f6e2774c"
-dependencies = [
- "heck 0.3.1",
- "proc-macro2 1.0.39",
- "quote 1.0.17",
- "syn 1.0.96",
-]
-
-[[package]]
-name = "strum_macros"
-version = "0.20.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee8bc6b87a5112aeeab1f4a9f7ab634fe6cbefc4850006df31267f4cfb9e3149"
 dependencies = [
  "heck 0.3.1",
  "proc-macro2 1.0.39",
@@ -13163,7 +13004,7 @@ dependencies = [
  "humantime 2.1.0",
  "hyper",
  "hyper-rustls",
- "ic-agent 0.17.0",
+ "ic-agent",
  "ic-artifact-pool",
  "ic-base-types",
  "ic-btc-types",
@@ -14322,15 +14163,6 @@ checksum = "f095d78192e208183081cc07bc5515ef55216397af48b873e5edcd72637fa1bd"
 dependencies = [
  "ring",
  "untrusted",
-]
-
-[[package]]
-name = "webpki-roots"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f20dea7535251981a9670857150d571846545088359b28e4951d350bdaf179f"
-dependencies = [
- "webpki 0.21.4",
 ]
 
 [[package]]
