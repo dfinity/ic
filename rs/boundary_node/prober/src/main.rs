@@ -4,6 +4,7 @@ use std::{
     fs::{self, File},
     net::SocketAddr,
     path::{Path, PathBuf},
+    str::FromStr,
     sync::Arc,
     time::Duration,
 };
@@ -15,7 +16,7 @@ use ic_agent::{
     identity::BasicIdentity, Agent,
 };
 use ic_utils::{
-    call::AsyncCall,
+    canister::Argument,
     interfaces,
     interfaces::{
         management_canister::{
@@ -23,9 +24,7 @@ use ic_utils::{
             MgmtMethod,
         },
         wallet::CreateResult,
-        ManagementCanister,
     },
-    Canister,
 };
 
 use anyhow::{anyhow, Context, Error};
@@ -51,7 +50,7 @@ use metrics::{MetricParams, WithMetrics};
 const MILLISECOND: Duration = Duration::from_millis(1);
 const MINUTE: Duration = Duration::from_secs(60);
 
-const BILLION: u64 = 1_000_000_000;
+const BILLION: u128 = 1_000_000_000;
 
 const CANISTER_WAT: &[u8] = include_bytes!("canister.wat");
 
@@ -74,7 +73,7 @@ struct Cli {
     root_key_path: Option<PathBuf>,
 
     #[clap(long, default_value_t = 200 * BILLION)]
-    canister_cycles_amount: u64,
+    canister_cycles_amount: u128,
 
     #[clap(long, default_value = "24h")]
     canister_ttl: humantime::Duration,
@@ -500,11 +499,11 @@ trait Create: 'static + Sync + Send {
 }
 
 struct Creator {
-    canister_cycles_amount: u64,
+    canister_cycles_amount: u128,
 }
 
 impl Creator {
-    fn new(canister_cycles_amount: u64) -> Self {
+    fn new(canister_cycles_amount: u128) -> Self {
         Self {
             canister_cycles_amount,
         }
@@ -514,11 +513,9 @@ impl Creator {
 #[async_trait]
 impl Create for Creator {
     async fn create(&self, agent: &Agent, wallet_id: &str) -> Result<Principal, Error> {
-        let wallet = Canister::builder()
-            .with_agent(agent)
-            .with_canister_id(wallet_id)
-            .with_interface(interfaces::Wallet)
-            .build()
+        let principal = Principal::from_str(wallet_id).unwrap();
+        let wallet = interfaces::WalletCanister::create(agent, principal)
+            .await
             .context("failed to build wallet")?;
 
         let waiter = Delay::builder()
@@ -571,28 +568,25 @@ impl Install for Installer {
         wallet_id: &str,
         canister_id: Principal,
     ) -> Result<(), Error> {
-        let mgmt_canister = ManagementCanister::create(agent);
+        let mut install_args = Argument::new();
+        install_args.push_idl_arg(CanisterInstall {
+            mode: InstallMode::Install,
+            canister_id,
+            wasm_module: self.wasm_module.clone(),
+            arg: vec![],
+        });
 
-        let install_call = mgmt_canister
-            .update_(MgmtMethod::InstallCode.as_ref())
-            .with_arg(CanisterInstall {
-                mode: InstallMode::Install,
-                canister_id,
-                wasm_module: self.wasm_module.clone(),
-                arg: vec![],
-            })
-            .build();
-
-        let wallet = Canister::builder()
-            .with_agent(agent)
-            .with_canister_id(wallet_id)
-            .with_interface(interfaces::Wallet)
-            .build()
+        let principal = Principal::from_str(wallet_id).unwrap();
+        let wallet = interfaces::WalletCanister::create(agent, principal)
+            .await
             .context("failed to build wallet")?;
 
-        let install_call = wallet
-            .call_forward(install_call, 0)
-            .context("failed to forward call")?;
+        let install_call = wallet.call(
+            Principal::management_canister(),
+            MgmtMethod::InstallCode.as_ref(),
+            install_args,
+            0,
+        );
 
         let waiter = Delay::builder()
             .throttle(500 * MILLISECOND)
@@ -683,28 +677,25 @@ impl Stop for Stopper {
         wallet_id: &str,
         canister_id: Principal,
     ) -> Result<(), Error> {
-        let mgmt_canister = ManagementCanister::create(agent);
-
         #[derive(CandidType)]
         struct In {
             canister_id: Principal,
         }
 
-        let stop_call = mgmt_canister
-            .update_(MgmtMethod::StopCanister.as_ref())
-            .with_arg(In { canister_id })
-            .build();
+        let mut stop_args = Argument::new();
+        stop_args.push_idl_arg(In { canister_id });
 
-        let wallet = Canister::builder()
-            .with_agent(agent)
-            .with_canister_id(wallet_id)
-            .with_interface(interfaces::Wallet)
-            .build()
+        let principal = Principal::from_str(wallet_id).unwrap();
+        let wallet = interfaces::WalletCanister::create(agent, principal)
+            .await
             .context("failed to build wallet")?;
 
-        let stop_call = wallet
-            .call_forward(stop_call, 0)
-            .context("failed to forward call")?;
+        let stop_call = wallet.call(
+            Principal::management_canister(),
+            MgmtMethod::StopCanister.as_ref(),
+            stop_args,
+            0,
+        );
 
         let waiter = Delay::builder()
             .throttle(500 * MILLISECOND)
@@ -741,28 +732,25 @@ impl Delete for Deleter {
         wallet_id: &str,
         canister_id: Principal,
     ) -> Result<(), Error> {
-        let mgmt_canister = ManagementCanister::create(agent);
-
         #[derive(CandidType)]
         struct In {
             canister_id: Principal,
         }
 
-        let delete_call = mgmt_canister
-            .update_(MgmtMethod::DeleteCanister.as_ref())
-            .with_arg(In { canister_id })
-            .build();
+        let mut delete_args = Argument::new();
+        delete_args.push_idl_arg(In { canister_id });
 
-        let wallet = Canister::builder()
-            .with_agent(agent)
-            .with_canister_id(wallet_id)
-            .with_interface(interfaces::Wallet)
-            .build()
+        let principal = Principal::from_str(wallet_id).unwrap();
+        let wallet = interfaces::WalletCanister::create(agent, principal)
+            .await
             .context("failed to build wallet")?;
 
-        let delete_call = wallet
-            .call_forward(delete_call, 0)
-            .context("failed to forward call")?;
+        let delete_call = wallet.call(
+            Principal::management_canister(),
+            MgmtMethod::DeleteCanister.as_ref(),
+            delete_args,
+            0,
+        );
 
         let waiter = Delay::builder()
             .throttle(500 * MILLISECOND)
