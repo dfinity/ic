@@ -66,7 +66,7 @@ pub fn test(env: TestEnv) {
         assert_eq!(httpbin_success.unwrap().status, 200);
 
         // Test remote timeout case
-        let url_to_fail = "https://[40d:40d:40d:40d:40d:40d:40d:40d]:9082".to_string();
+        let url_to_fail = "https://[40d:40d:40d:40d:40d:40d:40d:40d]:28992".to_string();
         let mut request_to_fail = request_to_succeed;
         request_to_fail.url = url_to_fail.clone();
         let failure_update = proxy_canister
@@ -82,11 +82,11 @@ pub fn test(env: TestEnv) {
             "Failure expected when URL is unreachable, but request succeeded!"
         );
         let unwrapped_error = failure_update.unwrap_err();
+        info!(&logger, "{unwrapped_error}");
         assert!(
             unwrapped_error.contains("RejectionCode: SysTransient"),
             "Expected SysTransient"
         );
-        info!(&logger, "{unwrapped_error}");
         assert!(unwrapped_error.contains("Failed to connect"));
 
         let httpbin_timeout = proxy_canister
