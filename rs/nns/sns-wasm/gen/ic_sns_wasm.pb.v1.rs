@@ -1,3 +1,49 @@
+/// The SNS-WASM canister state that is persisted to stable memory on pre-upgrade and read on
+/// post-upgrade.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StableCanisterState {
+    #[prost(message, repeated, tag="1")]
+    pub wasm_indexes: ::prost::alloc::vec::Vec<SnsWasmStableIndex>,
+    #[prost(message, repeated, tag="2")]
+    pub sns_subnet_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(message, repeated, tag="3")]
+    pub deployed_sns_list: ::prost::alloc::vec::Vec<DeployedSns>,
+    #[prost(message, optional, tag="4")]
+    pub upgrade_path: ::core::option::Option<UpgradePath>,
+}
+/// Details the offset and size of a WASM binary in stable memory and the hash of this binary
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SnsWasmStableIndex {
+    #[prost(bytes="vec", tag="1")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint32, tag="2")]
+    pub offset: u32,
+    #[prost(uint32, tag="3")]
+    pub size: u32,
+}
+/// Specifies the upgrade path for SNS instances
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpgradePath {
+    /// The latest SNS version. New SNS deployments will deploy the SNS canisters specified by
+    /// this version.
+    #[prost(message, optional, tag="1")]
+    pub latest_version: ::core::option::Option<SnsVersion>,
+    /// Maps SnsVersions to the SnsVersion that it should be upgraded to.
+    #[prost(message, repeated, tag="2")]
+    pub upgrade_path: ::prost::alloc::vec::Vec<SnsUpgrade>,
+}
+/// Maps an SnsVersion to the SnsVersion that it should be upgraded to.
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SnsUpgrade {
+    #[prost(message, optional, tag="1")]
+    pub current_version: ::core::option::Option<SnsVersion>,
+    #[prost(message, optional, tag="2")]
+    pub next_version: ::core::option::Option<SnsVersion>,
+}
 /// The representation of a WASM along with its target canister type
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]

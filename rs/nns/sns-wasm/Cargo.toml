@@ -20,6 +20,7 @@ dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 futures = "0.3.21"
 ic-base-types = { path = "../../types/base_types" }
+ic-cdk = "0.5.2"
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-ic00-types = {path = "../../types/ic00_types"}
 ic-sns-init = { path = "../../sns/init" }

@@ -27,7 +27,7 @@ fn list_deployed_snses_lists_created_sns_instances() {
     // cycles for the test
     let sns_wasm_canister_id = create_canister_with_cycles(
         &machine,
-        wasm,
+        wasm.clone(),
         Some(
             Encode!(&SnsWasmCanisterInitPayload {
                 sns_subnet_ids: vec![subnet_ids[0]]
@@ -76,6 +76,11 @@ fn list_deployed_snses_lists_created_sns_instances() {
     .root;
 
     assert_ne!(root_1, root_2);
+
+    // Also check that deployed SNSes are persisted across upgrades
+    machine
+        .upgrade_canister(sns_wasm_canister_id, wasm.bytes(), vec![])
+        .unwrap();
 
     let response = sns_wasm::list_deployed_snses(&machine, sns_wasm_canister_id);
 
