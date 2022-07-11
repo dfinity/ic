@@ -103,12 +103,12 @@ def external_crates_repository(name, annotations):
                 default_features = False,
             ),
             "build-info": crate.spec(
-                version = "^0.0.26",
-                default_features = False,
+                git = "https://github.com/dfinity-lab/build-info",
+                rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764",
             ),
             "build-info-build": crate.spec(
-                version = "^0.0.26",
-                default_features = False,
+                git = "https://github.com/dfinity-lab/build-info",
+                rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764",
             ),
             "byte-unit": crate.spec(
                 version = "^4.0.14",
