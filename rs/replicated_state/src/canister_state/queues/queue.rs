@@ -200,14 +200,14 @@ impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<Option<Reques
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(super) struct InputQueue {
     queue: QueueWithReservation<RequestOrResponse>,
-    ind: QueueIndex,
+    index: QueueIndex,
 }
 
 impl InputQueue {
     pub(super) fn new(capacity: usize) -> Self {
         Self {
             queue: QueueWithReservation::new(capacity),
-            ind: QueueIndex::from(0),
+            index: QueueIndex::from(0),
         }
     }
 
@@ -221,16 +221,16 @@ impl InputQueue {
 
     pub(super) fn push(
         &mut self,
-        msg_ind: QueueIndex,
+        msg_index: QueueIndex,
         msg: RequestOrResponse,
     ) -> Result<(), (StateError, RequestOrResponse)> {
-        if msg_ind == self.ind {
-            self.ind.inc_assign();
-        } else if msg_ind != super::QUEUE_INDEX_NONE {
+        if msg_index == self.index {
+            self.index.inc_assign();
+        } else if msg_index != super::QUEUE_INDEX_NONE {
             // We don't pass `QueueIndex` values through streams, this should never happen.
             panic!(
                 "Expected queue index {}, got {}. Message: {:?}",
-                self.ind, msg_ind, msg
+                self.index, msg_index, msg
             );
         }
         match msg {
@@ -285,7 +285,7 @@ impl From<&InputQueue> for pb_queues::InputOutputQueue {
     fn from(q: &InputQueue) -> Self {
         Self {
             queue: (&q.queue).into(),
-            ind: q.ind.get(),
+            index: q.index.get(),
             capacity: q.queue.capacity as u64,
             num_slots_reserved: q.queue.num_slots_reserved as u64,
         }
@@ -297,7 +297,7 @@ impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
 
     fn try_from(q: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
         Ok(Self {
-            ind: q.ind.into(),
+            index: q.index.into(),
             queue: q.try_into()?,
         })
     }
@@ -318,14 +318,14 @@ impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct OutputQueue {
     queue: QueueWithReservation<Option<RequestOrResponse>>,
-    ind: QueueIndex,
+    index: QueueIndex,
 }
 
 impl OutputQueue {
     pub(super) fn new(capacity: usize) -> Self {
         Self {
             queue: QueueWithReservation::new(capacity),
-            ind: QueueIndex::from(0),
+            index: QueueIndex::from(0),
         }
     }
 
@@ -366,12 +366,12 @@ impl OutputQueue {
         match self.queue.pop() {
             None => None,
             Some(msg) => {
-                let ret = Some((self.ind, msg.unwrap()));
-                self.ind.inc_assign();
+                let ret = Some((self.index, msg.unwrap()));
+                self.index.inc_assign();
 
                 while let Some(None) = self.queue.peek() {
                     self.queue.pop();
-                    self.ind.inc_assign();
+                    self.index.inc_assign();
                 }
 
                 ret
@@ -384,7 +384,7 @@ impl OutputQueue {
     pub(crate) fn peek(&self) -> Option<(QueueIndex, &RequestOrResponse)> {
         self.queue
             .peek()
-            .map(|msg| (self.ind, msg.as_ref().unwrap()))
+            .map(|msg| (self.index, msg.as_ref().unwrap()))
     }
 
     /// Number of slots used in output queues
@@ -428,7 +428,7 @@ impl From<&OutputQueue> for pb_queues::InputOutputQueue {
     fn from(q: &OutputQueue) -> Self {
         Self {
             queue: (&q.queue).into(),
-            ind: q.ind.get(),
+            index: q.index.get(),
             capacity: q.queue.capacity as u64,
             num_slots_reserved: q.queue.num_slots_reserved as u64,
         }
@@ -439,11 +439,11 @@ impl TryFrom<pb_queues::InputOutputQueue> for OutputQueue {
     type Error = ProxyDecodeError;
 
     fn try_from(q: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
-        let ind: QueueIndex = q.ind.into();
+        let index: QueueIndex = q.index.into();
         let queue: QueueWithReservation<Option<RequestOrResponse>> = q.try_into()?;
         match queue.peek() {
             Some(None) => Err(ProxyDecodeError::MissingField("Front may not be None.")),
-            _ => Ok(Self { ind, queue }),
+            _ => Ok(Self { index, queue }),
         }
     }
 }

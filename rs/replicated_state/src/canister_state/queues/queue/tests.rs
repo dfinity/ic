@@ -112,7 +112,7 @@ fn input_queue_push_suceeds_with_queue_index_none() {
         )
         .unwrap();
 
-    assert_eq!(QueueIndex::from(2), input_queue.ind);
+    assert_eq!(QueueIndex::from(2), input_queue.index);
     assert_eq!(3, input_queue.num_messages());
 }
 
@@ -288,7 +288,7 @@ prop_compose! {
         }
         OutputQueue {
             queue,
-            ind: QueueIndex::from(starting_index)
+            index: QueueIndex::from(starting_index)
         }
     }
 }
@@ -304,7 +304,7 @@ proptest! {
         mut q in arb_output_queue(5,10),
     ) {
         let initial_len = q.queue.queue.len();
-        let initial_index = q.ind;
+        let initial_index = q.index;
 
         let mut last_index = None;
         while q.num_messages()>0 {
@@ -324,7 +324,7 @@ proptest! {
             // pop() returns what peek() returned.
             assert_eq!((index, msg_ref.clone()), q.pop().unwrap());
         }
-        assert_eq!((q.ind - initial_index).get(), initial_len as u64);
+        assert_eq!((q.index - initial_index).get(), initial_len as u64);
     }
 
     #[test]
