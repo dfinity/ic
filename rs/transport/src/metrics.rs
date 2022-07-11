@@ -3,6 +3,8 @@
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use prometheus::{HistogramOpts, HistogramVec, IntCounterVec, IntGauge, IntGaugeVec};
 
+pub(crate) const STATUS_SUCCESS: &str = "success";
+
 #[derive(Clone)]
 pub(crate) struct ControlPlaneMetrics {
     pub(crate) flow_state: IntGaugeVec,
@@ -12,11 +14,8 @@ pub(crate) struct ControlPlaneMetrics {
     pub(crate) tcp_connects: IntCounterVec,
     pub(crate) tcp_conn_to_server_err: IntCounterVec,
     pub(crate) tcp_conn_to_server_success: IntCounterVec,
-    pub(crate) tcp_server_handshake_failed: IntCounterVec,
-    pub(crate) tcp_server_handshake_success: IntCounterVec,
-    pub(crate) tcp_client_handshake_failed: IntCounterVec,
-    pub(crate) tcp_client_handshake_success: IntCounterVec,
     pub(crate) retry_connection: IntCounterVec,
+    pub(crate) tls_handshakes: IntCounterVec,
 }
 
 impl ControlPlaneMetrics {
@@ -57,30 +56,15 @@ impl ControlPlaneMetrics {
                 "Successfully connected to peer TCP server as client",
                 &["flow_peer_id", "flow_tag"],
             ),
-            tcp_server_handshake_failed: metrics_registry.int_counter_vec(
-                "transport_tcp_server_handshake_failed",
-                "Error completing handshake as peer server",
-                &["flow_tag"],
-            ),
-            tcp_server_handshake_success: metrics_registry.int_counter_vec(
-                "transport_tcp_server_handshake_success",
-                "Successfully completed handshake as peer server",
-                &["flow_tag"],
-            ),
-            tcp_client_handshake_failed: metrics_registry.int_counter_vec(
-                "transport_tcp_client_handshake_failed",
-                "Error completing handshake to peer as client",
-                &["flow_tag"],
-            ),
-            tcp_client_handshake_success: metrics_registry.int_counter_vec(
-                "transport_tcp_client_handshake_success",
-                "Successfully completed handshake to peer as client",
-                &["flow_tag"],
-            ),
             retry_connection: metrics_registry.int_counter_vec(
                 "transport_retry_connection",
                 "Connection retries to reconnect to a peer from Transport",
                 &["peer_id", "flow_tag"],
+            ),
+            tls_handshakes: metrics_registry.int_counter_vec(
+                "transport_tls_handshakes_total",
+                "TLS handshakes in Transport",
+                &["role", "status"],
             ),
         }
     }

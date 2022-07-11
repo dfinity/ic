@@ -15,6 +15,7 @@ use std::fmt::{self, Debug, Formatter};
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, RwLock, Weak};
+use strum::AsRefStr;
 use tokio::runtime::Handle;
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
@@ -116,7 +117,8 @@ pub(crate) struct TransportImpl {
 }
 
 /// Our role in a connection
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, AsRefStr)]
+#[strum(serialize_all = "snake_case")]
 pub(crate) enum ConnectionRole {
     /// We connect to the peer as a client
     Client,
