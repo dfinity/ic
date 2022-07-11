@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use crate::keygen_utils::{add_public_key_to_registry, add_tls_cert_to_registry, TestKeygenCrypto};
+use crate::keygen_utils::TestKeygenCrypto;
 use ic_config::crypto::CryptoConfig;
 use ic_config::logger::{Config as LoggerConfig, LogTarget};
 use ic_crypto::utils::{
@@ -12,6 +12,7 @@ use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
 };
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
 use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
+use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
 use ic_interfaces::crypto::{KeyManager, PublicKeyRegistrationStatus};
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{LoggerImpl, ReplicaLogger};

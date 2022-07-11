@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::sign::{
     get_mega_pubkey, mega_public_key_from_proto, MEGaPublicKeyFromProtoError,
     MegaKeyFromRegistryError,
@@ -33,6 +36,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
         &self,
         registry_version: RegistryVersion,
     ) -> CryptoResult<PublicKeyRegistrationStatus> {
+        self.collect_and_store_key_count_metrics(registry_version);
         self.ensure_node_signing_key_material_is_set_up(registry_version)?;
         self.ensure_committee_signing_key_material_is_set_up(registry_version)?;
         self.ensure_dkg_dealing_encryption_key_material_is_set_up(registry_version)?;
@@ -65,6 +69,42 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
 
 // Helpers for implementing `KeyManager`-trait.
 impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
+    fn collect_and_store_key_count_metrics(&self, registry_version: RegistryVersion) {
+        let (pub_keys_in_reg, pub_keys_local, secret_keys_in_sks) =
+            self.collect_key_count_metrics(registry_version);
+        self.metrics
+            .observe_node_key_counts(pub_keys_in_reg, pub_keys_local, secret_keys_in_sks);
+    }
+
+    fn collect_key_count_metrics(&self, registry_version: RegistryVersion) -> (u8, u8, u8) {
+        let mut pub_keys_in_reg: u8 = 0;
+        let mut secret_keys_in_sks: u8 = 0;
+        let pub_keys_local = self.node_public_keys().get_pub_keys_and_cert_count();
+        let reg_and_secret_key_results = vec![
+            self.ensure_node_signing_key_material_is_set_up(registry_version),
+            self.ensure_committee_signing_key_material_is_set_up(registry_version),
+            self.ensure_dkg_dealing_encryption_key_material_is_set_up(registry_version),
+            self.ensure_idkg_dealing_encryption_key_material_is_set_up(registry_version),
+            self.ensure_tls_key_material_is_set_up(registry_version),
+        ];
+        for r in reg_and_secret_key_results.iter() {
+            match r {
+                Ok(_) => {
+                    pub_keys_in_reg += 1;
+                    secret_keys_in_sks += 1;
+                }
+                Err(CryptoError::SecretKeyNotFound { .. }) => {
+                    pub_keys_in_reg += 1;
+                }
+                Err(CryptoError::TlsSecretKeyNotFound { .. }) => {
+                    pub_keys_in_reg += 1;
+                }
+                _ => {}
+            }
+        }
+        (pub_keys_in_reg, pub_keys_local, secret_keys_in_sks)
+    }
+
     fn ensure_node_signing_key_material_is_set_up(
         &self,
         registry_version: RegistryVersion,
