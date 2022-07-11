@@ -1,0 +1,21 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(["**"]),
+)
+
+rust_library(
+    name = "keygen",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_test_utils_keygen",
+    edition = "2018",
+    deps = [
+        "//rs/protobuf",
+        "//rs/registry/keys",
+        "//rs/registry/proto_data_provider",
+        "//rs/types/types",
+    ],
+)

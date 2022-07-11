@@ -1,0 +1,10 @@
+[package]
+name = "ic-crypto-test-utils-keygen"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+ic-protobuf = { path = "../../../protobuf" }
+ic-registry-keys = { path = "../../../registry/keys" }
+ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provider" }
+ic-types = { path = "../../../types/types" }

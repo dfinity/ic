@@ -4589,6 +4589,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-keygen",
  "ic-crypto-test-utils-multi-sigs",
  "ic-crypto-test-utils-threshold-sigs",
  "ic-crypto-tls-cert-validation",
@@ -5177,6 +5178,16 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-types 0.8.0",
  "rand 0.8.5",
+]
+
+[[package]]
+name = "ic-crypto-test-utils-keygen"
+version = "0.1.0"
+dependencies = [
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-registry-proto-data-provider",
+ "ic-types 0.8.0",
 ]
 
 [[package]]

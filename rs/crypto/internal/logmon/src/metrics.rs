@@ -2,7 +2,7 @@
 
 use core::fmt;
 use ic_metrics::MetricsRegistry;
-use prometheus::HistogramVec;
+use prometheus::{HistogramVec, IntCounter};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::time;
@@ -99,6 +99,34 @@ impl CryptoMetrics {
             }
         }
     }
+
+    /// Observes the key counts of a node.
+    ///
+    /// Parameters:
+    ///  - `num_pub_reg`: The number of node public keys (and TLS x.509 certificates) stored
+    ///    in the registry
+    ///  - `num_pub_local`: The number of node public keys (and TLS x.509 certificates) stored
+    ///    locally
+    ///  - `num_secret_local`: The number of node secret keys stored in the local secret key store
+    pub fn observe_node_key_counts(
+        &self,
+        num_pub_reg: u8,
+        num_pub_local: u8,
+        num_secret_local: u8,
+    ) {
+        if let Some(metrics) = &self.metrics {
+            metrics.crypto_key_counts[&KeyType::PublicLocal].inc_by(num_pub_local as u64);
+            metrics.crypto_key_counts[&KeyType::PublicRegistry].inc_by(num_pub_reg as u64);
+            metrics.crypto_key_counts[&KeyType::SecretSKS].inc_by(num_secret_local as u64);
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, Eq, PartialOrd, Ord, PartialEq)]
+pub enum KeyType {
+    PublicRegistry,
+    PublicLocal,
+    SecretSKS,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, Eq, PartialOrd, Ord, PartialEq)]
@@ -129,6 +157,20 @@ struct Metrics {
     /// potential RPC overhead.
     /// The 'method_name' label indicates the functionality, such as `BasicSignature::sign`.
     pub crypto_full_duration_seconds: BTreeMap<MetricsDomain, HistogramVec>,
+
+    /// Counters for the different types of keys and certificates of a node. The keys and
+    /// certificates that are kept track of are:
+    ///  - Node signing keys
+    ///  - Committee signing keys
+    ///  - NI-DKG keys
+    ///  - iDKG keys
+    ///  - TLS certificates and secret keys
+    /// The above keys are not kept track of separately, merely a total number of stored keys.
+    /// The counters keep track of which locations these keys are stored in:
+    ///  - Registry
+    ///  - Local public key store
+    ///  - Local secret key store (SKS)
+    pub crypto_key_counts: BTreeMap<KeyType, IntCounter>,
 }
 
 impl Display for MetricsDomain {
@@ -171,6 +213,30 @@ impl MetricsDomain {
     }
 }
 
+impl Display for KeyType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str_snake_case())
+    }
+}
+
+impl KeyType {
+    fn as_str_snake_case(&self) -> &str {
+        match self {
+            KeyType::PublicLocal => "public_local",
+            KeyType::PublicRegistry => "public_registry",
+            KeyType::SecretSKS => "secret_sks",
+        }
+    }
+
+    fn key_count_metric_name(&self) -> String {
+        format!("crypto_{}_key_count", self)
+    }
+
+    fn key_count_metric_help(&self) -> String {
+        format!("Number of crypto_{}_key_count", self)
+    }
+}
+
 impl Metrics {
     pub fn new(r: &MetricsRegistry) -> Self {
         let default_buckets = vec![
@@ -199,6 +265,16 @@ impl Metrics {
                 ),
             );
         }
+        let mut key_counts = BTreeMap::new();
+        for key_type in KeyType::iter() {
+            key_counts.insert(
+                key_type,
+                r.int_counter(
+                    key_type.key_count_metric_name(),
+                    key_type.key_count_metric_help(),
+                ),
+            );
+        }
         Self {
             crypto_lock_acquisition_duration_seconds: r.histogram_vec(
                 "crypto_lock_acquisition_duration_seconds",
@@ -208,6 +284,7 @@ impl Metrics {
             ),
             crypto_csp_local_duration_seconds: local_duration,
             crypto_full_duration_seconds: full_duration,
+            crypto_key_counts: key_counts,
         }
     }
 }
