@@ -189,6 +189,7 @@ fn upgrade_stage_1_process_pre_upgrade_result(
                 fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
             system_state_changes.apply_changes(
+                time,
                 &mut new_canister.system_state,
                 round.network_topology,
                 round.hypervisor.subnet_id(),
@@ -535,6 +536,7 @@ fn upgrade_stage_4b_process_post_upgrade_result(
                 fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
             system_state_changes.apply_changes(
+                round.time,
                 &mut new_canister.system_state,
                 round.network_topology,
                 round.hypervisor.subnet_id(),

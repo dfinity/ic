@@ -17,7 +17,7 @@ use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response},
     methods::WasmMethod,
     AccumulatedPriority, CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes,
-    NumRounds, PrincipalId, QueueIndex,
+    NumRounds, PrincipalId, QueueIndex, Time,
 };
 use phantom_newtype::AmountOf;
 pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY, QUEUE_INDEX_NONE};
@@ -213,8 +213,9 @@ impl CanisterState {
     pub fn push_output_request(
         &mut self,
         msg: Arc<Request>,
+        time: Time,
     ) -> Result<(), (StateError, Arc<Request>)> {
-        self.system_state.push_output_request(msg)
+        self.system_state.push_output_request(msg, time)
     }
 
     /// See `SystemState::push_output_response` for documentation.

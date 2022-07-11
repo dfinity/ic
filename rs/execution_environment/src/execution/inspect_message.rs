@@ -60,6 +60,7 @@ pub fn execute_inspect_message(
     let mut round_limits = RoundLimits {};
     let (output, _output_execution_state, _system_state_accessor) = hypervisor.execute(
         system_api,
+        time,
         system_state,
         memory_usage,
         execution_parameters,

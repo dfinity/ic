@@ -2,6 +2,7 @@ use super::*;
 use crate::canister_state::execution_state::WasmMetadata;
 use crate::CallOrigin;
 use ic_base_types::NumSeconds;
+use ic_test_utilities::mock_time;
 use ic_test_utilities::types::{
     ids::user_test_id,
     messages::{RequestBuilder, ResponseBuilder},
@@ -112,6 +113,7 @@ fn canister_state_push_input_response_success() {
                     .receiver(OTHER_CANISTER_ID)
                     .build()
                     .into(),
+                mock_time(),
             )
             .unwrap();
         canister_state.output_into_iter().count();
@@ -444,6 +446,7 @@ fn canister_state_push_input_response_memory_limit_test_impl(
                     .receiver(OTHER_CANISTER_ID)
                     .build()
                     .into(),
+                mock_time(),
             )
             .unwrap();
         canister_state.output_into_iter().count();
@@ -507,6 +510,7 @@ fn canister_state_push_output_request_mismatched_sender() {
                     .sender(OTHER_CANISTER_ID)
                     .build()
                     .into(),
+                mock_time(),
             )
             .unwrap();
     })

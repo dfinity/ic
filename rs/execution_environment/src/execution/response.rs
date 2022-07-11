@@ -362,6 +362,7 @@ fn process_response_result(
                 Ok(_) => {
                     // Executing the reply/reject closure succeeded.
                     system_state_changes.apply_changes(
+                        round.time,
                         &mut canister.system_state,
                         round.network_topology,
                         round.hypervisor.subnet_id(),
@@ -459,6 +460,7 @@ fn process_cleanup_result(
                 Ok(_) => {
                     // Executing the cleanup callback has succeeded.
                     system_state_changes.apply_changes(
+                        round.time,
                         &mut canister.system_state,
                         round.network_topology,
                         round.hypervisor.subnet_id(),

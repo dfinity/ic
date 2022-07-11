@@ -14,7 +14,7 @@ use ic_types::{
     messages::{CallContextId, CallbackId, Request},
     methods::Callback,
     nominal_cycles::NominalCycles,
-    ComputeAllocation, Cycles, MemoryAllocation,
+    ComputeAllocation, Cycles, MemoryAllocation, Time,
 };
 use serde::{Deserialize, Serialize};
 
@@ -102,6 +102,7 @@ impl SystemStateChanges {
     /// canister has broken out of wasmtime.
     pub fn apply_changes(
         self,
+        time: Time,
         system_state: &mut SystemState,
         network_topology: &NetworkTopology,
         own_subnet_id: SubnetId,
@@ -161,7 +162,7 @@ impl SystemStateChanges {
                 callback_changes.insert(msg.sender_reply_callback, destination_subnet);
             }
             system_state
-                .push_output_request(msg.into())
+                .push_output_request(msg.into(), time)
                 .expect("Unable to send new request");
         }
 

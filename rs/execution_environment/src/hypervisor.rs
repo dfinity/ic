@@ -20,7 +20,7 @@ use ic_replicated_state::{
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{
-    ingress::WasmResult, methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId,
+    ingress::WasmResult, methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
@@ -259,6 +259,7 @@ impl Hypervisor {
     pub fn execute(
         &self,
         api_type: ApiType,
+        time: Time,
         mut system_state: SystemState,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
@@ -297,6 +298,7 @@ impl Hypervisor {
             }
         };
         system_state_changes.apply_changes(
+            time,
             &mut system_state,
             network_topology,
             self.own_subnet_id,
