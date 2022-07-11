@@ -690,7 +690,7 @@ impl XNetPayloadBuilderImpl {
 
         // Random rotation so all slices have equal chances if `byte_limit` is reached.
         let mut rotated_stream_positions: Vec<_> = stream_positions.clone().into_iter().collect();
-        let first_subnet = thread_rng().gen_range(0, rotated_stream_positions.len());
+        let first_subnet = thread_rng().gen_range(0..rotated_stream_positions.len());
         rotated_stream_positions.rotate_left(first_subnet);
 
         let mut bytes_left = byte_limit.get() as usize;

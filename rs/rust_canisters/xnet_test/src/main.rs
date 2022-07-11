@@ -208,7 +208,7 @@ fn fanout() {
         }
 
         for _ in 0..PER_SUBNET_RATE.with(|r| *r.borrow()) {
-            let idx = RNG.with(|rng| rng.borrow_mut().gen_range(0, canisters.len()));
+            let idx = RNG.with(|rng| rng.borrow_mut().gen_range(0..canisters.len()));
             let canister = canisters[idx].clone();
 
             let seq_no = STATE.with(|s| s.borrow_mut().next_out_seq_no(canister.clone()));

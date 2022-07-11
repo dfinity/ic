@@ -304,7 +304,7 @@ fn defrag_tip(
     // empty
     if let Ok((path, size)) = path_with_sizes.choose_weighted(&mut rng, |entry| entry.1) {
         let write_size = size.min(&max_size);
-        let offset = rng.gen_range(0, size - write_size + 1);
+        let offset = rng.gen_range(0..=size - write_size);
 
         defrag_file_partially(path, offset, write_size.to_owned() as usize).map_err(|err| {
             CheckpointError::IoError {

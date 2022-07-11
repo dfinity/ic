@@ -1,5 +1,4 @@
-pub use ed25519_dalek::Keypair as EdKeypair;
-use ed25519_dalek::Signer;
+use ed25519_consensus::SigningKey as EdKeypair;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_rosetta_api::{
@@ -57,8 +56,9 @@ pub fn generate_zondax_test(
     keypair: EdKeypair,
     send_args: SendArgs,
 ) -> serde_json::Value {
-    let public_key_der =
-        ic_canister_client_sender::ed25519_public_key_to_der(keypair.public.to_bytes().to_vec());
+    let public_key_der = ic_canister_client_sender::ed25519_public_key_to_der(
+        keypair.verification_key().to_bytes().to_vec(),
+    );
 
     let public_key =
         models::PublicKey::new(hex::encode(public_key_der.clone()), CurveType::Edwards25519);
@@ -235,7 +235,7 @@ fn test_zondax_generator() {
     };
 
     let mut rng = StdRng::seed_from_u64(1);
-    let keypair = EdKeypair::generate(&mut rng);
+    let keypair = EdKeypair::new(&mut rng);
 
     let s = generate_zondax_test(1, keypair, send_args);
     println!("{}", s);
@@ -359,7 +359,7 @@ fn main() {
                     created_at_time,
                 };
 
-                let keypair = EdKeypair::generate(&mut rng);
+                let keypair = EdKeypair::new(&mut rng);
 
                 let s = generate_zondax_test(index, keypair, send_args);
                 seq.serialize_element(&s).unwrap();

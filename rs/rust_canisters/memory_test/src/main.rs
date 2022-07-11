@@ -87,9 +87,9 @@ fn operation_from_args() -> Operation {
 
 fn rand<T>(low: T, high: T) -> T
 where
-    T: rand::distributions::uniform::SampleUniform,
+    T: rand::distributions::uniform::SampleUniform + std::cmp::PartialOrd,
 {
-    RNG.with(|rng| rng.borrow_mut().gen_range(low, high))
+    RNG.with(|rng| rng.borrow_mut().gen_range(low..high))
 }
 
 /// Reads and sums up all 8-byte values from the given memory region.

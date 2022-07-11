@@ -1194,7 +1194,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-types 0.8.0",
  "on_wire",
- "rand 0.7.3",
+ "rand 0.8.5",
  "reqwest",
  "tokio",
  "wabt",
@@ -2087,7 +2087,7 @@ dependencies = [
  "ledger-canister",
  "on_wire",
  "prost 0.10.4",
- "rand 0.7.3",
+ "rand 0.8.5",
  "serde",
  "serde_cbor",
  "sha2 0.9.9",
@@ -3357,7 +3357,7 @@ checksum = "d36fab90f82edc3c747f9d438e06cf0a491055896f2a279638bb5beed6c40177"
 name = "hardware_wallet_tests"
 version = "0.1.0"
 dependencies = [
- "ed25519-dalek",
+ "ed25519-consensus",
  "hex",
  "ic-canister-client-sender",
  "ic-ledger-core",
@@ -3368,8 +3368,8 @@ dependencies = [
  "ledger-canister",
  "log",
  "nix 0.23.0",
- "rand 0.7.3",
- "rand_distr 0.3.0",
+ "rand 0.8.5",
+ "rand_distr 0.4.3",
  "reqwest",
  "serde",
  "serde_cbor",
@@ -3857,7 +3857,7 @@ dependencies = [
  "nix 0.23.0",
  "prometheus 0.12.0",
  "prost 0.10.4",
- "rand 0.4.6",
+ "rand 0.8.5",
  "rocksdb",
  "serde",
  "serde-bytes-repr",
@@ -4904,8 +4904,8 @@ dependencies = [
  "ic-types-test-utils",
  "mockall 0.7.2",
  "proptest 0.9.6",
- "rand 0.7.3",
- "rand_chacha 0.2.2",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "serde",
  "serde_bytes",
  "tempfile",
@@ -4924,8 +4924,8 @@ dependencies = [
  "lazy_static",
  "miracl_core_bls12381",
  "proptest 0.9.6",
- "rand 0.7.3",
- "rand_chacha 0.2.2",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "zeroize",
 ]
 
@@ -5191,7 +5191,7 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-types 0.8.0",
- "rand 0.7.3",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -5206,7 +5206,7 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-types 0.8.0",
- "rand 0.7.3",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -5756,10 +5756,10 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "clap 3.1.18",
- "ed25519-dalek",
+ "ed25519-consensus",
  "ic-crypto-internal-types",
  "ic-crypto-utils-basic-sig",
- "rand 0.7.3",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -5784,7 +5784,6 @@ dependencies = [
  "assert_matches",
  "bincode",
  "criterion",
- "ed25519-dalek",
  "ic-artifact-pool",
  "ic-config",
  "ic-constants",
@@ -5807,7 +5806,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ic-validator",
  "prometheus 0.12.0",
- "rand 0.7.3",
+ "rand 0.8.5",
  "slog",
  "tokio",
 ]
@@ -5832,7 +5831,7 @@ dependencies = [
  "ic-utils 0.8.0",
  "ic-wasm-types",
  "prost 0.10.4",
- "rand 0.7.3",
+ "rand 0.8.5",
  "serde",
  "serde_bytes",
  "thiserror",
@@ -6024,8 +6023,8 @@ dependencies = [
  "maplit",
  "mockall 0.7.2",
  "prometheus 0.12.0",
- "rand 0.7.3",
- "rand_chacha 0.2.2",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "slog",
 ]
 
@@ -6520,7 +6519,7 @@ dependencies = [
  "phantom_newtype",
  "prometheus 0.12.0",
  "proptest 0.9.6",
- "rand 0.7.3",
+ "rand 0.8.5",
  "serde",
  "slog",
  "strum 0.23.0",
@@ -6639,7 +6638,7 @@ dependencies = [
  "openssl",
  "pretty_assertions 0.6.1",
  "prost 0.10.4",
- "rand 0.7.3",
+ "rand 0.8.5",
  "reqwest",
  "serde",
  "serde_json",
@@ -6831,7 +6830,7 @@ dependencies = [
  "ic-base-types",
  "ic-ic00-types",
  "ic-types 0.8.0",
- "rand 0.7.3",
+ "rand 0.8.5",
  "serde",
 ]
 
@@ -6864,7 +6863,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ic-utils 0.8.0",
  "prost 0.10.4",
- "rand 0.7.3",
+ "rand 0.8.5",
  "tempfile",
 ]
 
@@ -6892,7 +6891,7 @@ dependencies = [
  "lazy_static",
  "leb128",
  "prost 0.10.4",
- "rand 0.7.3",
+ "rand 0.8.5",
  "serde",
  "serde_cbor",
  "tempfile",
@@ -7044,7 +7043,7 @@ dependencies = [
  "ic-utils 0.8.0",
  "ledger-canister",
  "prost 0.10.4",
- "rand 0.7.3",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "slog",
@@ -7113,7 +7112,7 @@ dependencies = [
  "predicates 1.0.4",
  "prometheus 0.12.0",
  "prost 0.10.4",
- "rand 0.7.3",
+ "rand 0.8.5",
  "regex",
  "serde",
  "serde_bytes",
@@ -7266,7 +7265,6 @@ dependencies = [
  "dfn_candid",
  "dfn_macro",
  "dfn_protobuf",
- "ed25519-dalek",
  "futures",
  "hex",
  "ic-base-types",
@@ -7293,7 +7291,7 @@ dependencies = [
  "log4rs",
  "on_wire",
  "prometheus 0.12.0",
- "rand 0.7.3",
+ "rand 0.8.5",
  "rand_chacha 0.2.2",
  "rand_core 0.5.1",
  "reqwest",
@@ -7387,9 +7385,8 @@ dependencies = [
  "nix 0.23.0",
  "on_wire",
  "prost 0.10.4",
- "rand 0.7.3",
- "rand_chacha 0.2.2",
- "rand_core 0.5.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "registry-canister",
  "reqwest",
  "serde",
@@ -7427,8 +7424,7 @@ dependencies = [
  "maplit",
  "on_wire",
  "prost 0.10.4",
- "rand 0.7.3",
- "rand_core 0.5.1",
+ "rand 0.8.5",
  "regex",
  "serde",
  "serde_json",
@@ -7482,8 +7478,7 @@ dependencies = [
  "proptest 1.0.0",
  "prost 0.10.4",
  "prost-build 0.10.4",
- "rand 0.7.3",
- "rand_core 0.5.1",
+ "rand 0.8.5",
  "registry-canister",
  "serde",
  "strum 0.18.0",
@@ -7669,7 +7664,6 @@ dependencies = [
  "canister-test",
  "dfn_candid",
  "dfn_protobuf",
- "ed25519-dalek",
  "futures",
  "ic-canister-client-sender",
  "ic-config",
@@ -7687,8 +7681,6 @@ dependencies = [
  "maplit",
  "on_wire",
  "prost 0.10.4",
- "rand_chacha 0.2.2",
- "rand_core 0.5.1",
  "tokio",
 ]
 
@@ -7866,8 +7858,8 @@ dependencies = [
  "proptest 0.9.6",
  "proptest-derive",
  "prost 0.10.4",
- "rand 0.7.3",
- "rand_chacha 0.2.2",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "scoped_threadpool",
  "serde",
  "serde_bytes",
@@ -8127,7 +8119,7 @@ dependencies = [
  "ic-transport",
  "ic-types 0.8.0",
  "notify",
- "rand 0.7.3",
+ "rand 0.8.5",
  "slog",
  "tokio",
  "tokio-openssl",
@@ -8184,7 +8176,7 @@ dependencies = [
  "proptest 0.9.6",
  "proptest-derive",
  "prost 0.10.4",
- "rand 0.7.3",
+ "rand 0.8.5",
  "rusty-fork 0.3.0",
  "serde",
  "serde_bytes",
@@ -8408,8 +8400,8 @@ dependencies = [
  "nix 0.23.0",
  "prometheus 0.12.0",
  "proptest 0.9.6",
- "rand 0.7.3",
- "rand_chacha 0.2.2",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "reqwest",
  "slog",
  "tempfile",
@@ -9284,8 +9276,8 @@ dependencies = [
  "dfn_core",
  "ic-test-utilities",
  "ic-types 0.8.0",
- "rand 0.7.3",
- "rand_pcg 0.2.1",
+ "rand 0.8.5",
+ "rand_pcg 0.3.1",
  "serde",
  "serde_json",
 ]
@@ -9538,7 +9530,7 @@ dependencies = [
  "num-rational 0.4.0",
  "num-traits",
  "rand 0.8.5",
- "rand_distr 0.4.2",
+ "rand_distr 0.4.3",
  "simba",
  "typenum",
 ]
@@ -10087,7 +10079,7 @@ dependencies = [
  "nix 0.23.0",
  "prometheus 0.12.0",
  "prost 0.10.4",
- "rand 0.7.3",
+ "rand 0.8.5",
  "registry-canister",
  "serde",
  "serde_cbor",
@@ -11189,9 +11181,9 @@ dependencies = [
 
 [[package]]
 name = "rand_distr"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "964d548f8e7d12e102ef183a0de7e98180c9f8729f555897a857b96e48122d2f"
+checksum = "32cb0b9bc82b0a0876c2dd994a7e7a2683d3e7390ca40e6886785ef0c7e3ee31"
 dependencies = [
  "num-traits",
  "rand 0.8.5",
@@ -11266,6 +11258,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "16abd0c1b639e9eb4d7c50c0b8100b0d0f849be2349829c740fe8e6eb4816429"
 dependencies = [
  "rand_core 0.5.1",
+]
+
+[[package]]
+name = "rand_pcg"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59cad018caf63deb318e5a4586d99a24424a364f40f1e5778c29aca23f4fc73e"
+dependencies = [
+ "rand_core 0.6.2",
 ]
 
 [[package]]
@@ -14405,8 +14406,8 @@ version = "0.8.0"
 dependencies = [
  "candid",
  "dfn_core",
- "rand 0.7.3",
- "rand_pcg 0.2.1",
+ "rand 0.8.5",
+ "rand_pcg 0.3.1",
  "serde",
 ]
 

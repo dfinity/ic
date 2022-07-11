@@ -1,5 +1,5 @@
 {
-  "checksum": "1cf342459cc092a8a4cbe7b45d69ee1755d320dc7d90c909f928ba42bf7faecc",
+  "checksum": "1a5a7f27404d4255e5bb390bd80be49db461d4813bb76be2a811d563ccb630bd",
   "crates": {
     "actix-codec 0.5.0": {
       "name": "actix-codec",
@@ -10628,7 +10628,7 @@
               "target": "rand_distr"
             },
             {
-              "id": "rand_pcg 0.2.1",
+              "id": "rand_pcg 0.3.1",
               "target": "rand_pcg"
             },
             {
@@ -28149,13 +28149,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "prettyplease 0.1.15": {
+    "prettyplease 0.1.16": {
       "name": "prettyplease",
-      "version": "0.1.15",
+      "version": "0.1.16",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/prettyplease/0.1.15/download",
-          "sha256": "9e1516508b396cefe095485fdce673007422f5e48e82934b7b423dc26aa5e6a4"
+          "url": "https://crates.io/api/v1/crates/prettyplease/0.1.16/download",
+          "sha256": "da6ffbe862780245013cb1c0a48c4e44b7d665548088f91f6b90876d0625e4c2"
         }
       },
       "targets": [
@@ -28192,7 +28192,7 @@
         "deps": {
           "common": [
             {
-              "id": "prettyplease 0.1.15",
+              "id": "prettyplease 0.1.16",
               "target": "build_script_build"
             },
             {
@@ -28207,7 +28207,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.15"
+        "version": "0.1.16"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -30794,13 +30794,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "rand_pcg 0.2.1": {
+    "rand_pcg 0.3.1": {
       "name": "rand_pcg",
-      "version": "0.2.1",
+      "version": "0.3.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rand_pcg/0.2.1/download",
-          "sha256": "16abd0c1b639e9eb4d7c50c0b8100b0d0f849be2349829c740fe8e6eb4816429"
+          "url": "https://crates.io/api/v1/crates/rand_pcg/0.3.1/download",
+          "sha256": "59cad018caf63deb318e5a4586d99a24424a364f40f1e5778c29aca23f4fc73e"
         }
       },
       "targets": [
@@ -30825,14 +30825,14 @@
         "deps": {
           "common": [
             {
-              "id": "rand_core 0.5.1",
+              "id": "rand_core 0.6.3",
               "target": "rand_core"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.2.1"
+        "version": "0.3.1"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -40247,7 +40247,7 @@
         "deps": {
           "common": [
             {
-              "id": "prettyplease 0.1.15",
+              "id": "prettyplease 0.1.16",
               "target": "prettyplease"
             },
             {
@@ -42136,6 +42136,18 @@
         },
         {
           "Binary": {
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
             "srcs": {
@@ -42150,18 +42162,6 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

@@ -26,7 +26,7 @@ DEPENDENCIES = [
     "@crate_index//:hyper-tls",
     "@crate_index//:lazy_static",
     "@crate_index//:prost",
-    "@crate_index//:rand_0_7_3",
+    "@crate_index//:rand_0_8_4",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:tempfile",

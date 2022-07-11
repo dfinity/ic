@@ -38,7 +38,7 @@ log = "0.4.14"
 log4rs = "1.1.1"
 on_wire = {path = "../rust_canisters/on_wire"}
 prometheus = "0.12.0"
-rand = "0.7"
+rand = "0.8"
 reqwest = "0.11.1"
 serde = "1.0"
 serde_cbor = "0.11"
@@ -52,7 +52,6 @@ url = "2.2.1"
 
 [dev-dependencies]
 ic-cdk = { version = "0.5.1" }
-ed25519-dalek = "1.0.1"
 ic-nns-governance = { path = "../nns/governance" }
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "ledger_canister_blocks_synchronizer/test_utils" }
 ic-rosetta-test-utils = { path = "test_utils" }

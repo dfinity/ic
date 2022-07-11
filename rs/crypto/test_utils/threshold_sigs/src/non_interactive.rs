@@ -215,14 +215,14 @@ impl RandomNiDkgConfigBuilder {
         // margin that allows for increasing it again sufficiently during tests.
         let registry_version = self.registry_version.unwrap_or_else(|| {
             let rng = &mut thread_rng();
-            RegistryVersion::new(rng.gen_range(1, u32::MAX - 10_000) as u64)
+            RegistryVersion::new(rng.gen_range(1..u32::MAX - 10_000) as u64)
         });
 
         let dealer_count = self.dealer_count.unwrap_or_else(|| {
             let rng = &mut thread_rng();
             let threshold = dkg_tag.threshold_for_subnet_of_size(subnet_size);
             let required_dealer_count = threshold;
-            let dealer_surplus = rng.gen_range(0, 3);
+            let dealer_surplus = rng.gen_range(0..3);
             required_dealer_count + dealer_surplus
         });
 
@@ -284,7 +284,7 @@ impl RandomNiDkgConfig {
                 // The first DKG is always done by NNS for another (remote) subnet
                 target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(random())),
             },
-            max_corrupt_dealers: Self::number_of_nodes_from_usize(rng.gen_range(0, dealers.len())),
+            max_corrupt_dealers: Self::number_of_nodes_from_usize(rng.gen_range(0..dealers.len())),
             dealers,
             max_corrupt_receivers: {
                 Self::number_of_nodes_from_usize(get_faults_tolerated(subnet_size))
@@ -314,7 +314,7 @@ impl RandomNiDkgConfig {
         let threshold = dkg_tag.threshold_for_subnet_of_size(subnet_size);
         let dealers = {
             let required_dealer_count = threshold;
-            let dealer_surplus = rng.gen_range(0, 3);
+            let dealer_surplus = rng.gen_range(0..3);
             // Exclude receivers from being dealers because initial DKG is done by NNS for
             // another (remote) subnet, which means the dealers and receivers are disjoint.
             Self::random_node_ids_excluding(&receivers, required_dealer_count + dealer_surplus)
@@ -327,7 +327,7 @@ impl RandomNiDkgConfig {
                 dkg_tag,
                 target_subnet: self.0.dkg_id().target_subnet,
             },
-            max_corrupt_dealers: Self::number_of_nodes_from_usize(rng.gen_range(0, dealers.len())),
+            max_corrupt_dealers: Self::number_of_nodes_from_usize(rng.gen_range(0..dealers.len())),
             dealers,
             max_corrupt_receivers: {
                 Self::number_of_nodes_from_usize(get_faults_tolerated(subnet_size))
@@ -365,7 +365,7 @@ impl RandomNiDkgConfig {
                 transcript.threshold.get().get(), // Ensures #dealers >= resharing threshold
             );
             let lower_bound = usize::try_from(lower_bound_u32).expect("conversion error");
-            let dealer_count = rng.gen_range(lower_bound, transcript.committee.get().len() + 1);
+            let dealer_count = rng.gen_range(lower_bound..=transcript.committee.get().len());
             let dealers_vec = transcript
                 .committee
                 .get()
@@ -379,7 +379,7 @@ impl RandomNiDkgConfig {
                 isize::try_from(transcript.committee.get().len()).expect("conversion error");
 
             let change_in_subnet_size =
-                rng.gen_range(subnet_size_change.start(), subnet_size_change.end() + 1);
+                rng.gen_range(*subnet_size_change.start()..=*subnet_size_change.end());
 
             let new_subnet_size_isize =
                 cmp::max(1, transcript_committee_len_isize + change_in_subnet_size);
