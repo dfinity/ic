@@ -345,6 +345,14 @@ class BaseExperiment:
         """Get NNS url for mainnet."""
         return "2001:920:401a:1710:5000:d7ff:fe6f:fde7"
 
+    def _get_nns_ip(self):
+        ip = (
+            BaseExperiment.get_mainnet_nns_url()
+            if FLAGS.testnet == "mercury"
+            else ansible.get_ansible_hostnames_for_subnet(FLAGS.testnet, NNS_SUBNET_INDEX, sort=False)[0]
+        )
+        return ip
+
     def _get_nns_url(self):
         """
         Get the testnets NNS url.
@@ -354,11 +362,7 @@ class BaseExperiment:
         """
         if len(FLAGS.nns_url) > 0:
             return FLAGS.nns_url
-        ip = (
-            BaseExperiment.get_mainnet_nns_url()
-            if FLAGS.testnet == "mercury"
-            else ansible.get_ansible_hostnames_for_subnet(FLAGS.testnet, NNS_SUBNET_INDEX, sort=False)[0]
-        )
+        ip = self._get_nns_ip()
         return f"http://[{ip}]:8080"
 
     def add_node_to_subnet(self, subnet_index, node_ids):

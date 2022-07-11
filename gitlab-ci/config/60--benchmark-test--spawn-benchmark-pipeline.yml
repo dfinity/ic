@@ -652,3 +652,29 @@ xnet-nightly:
       cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+
+
+sns-deployment-test-nightly:
+   extends: .benchmark-spot-test
+   artifacts:
+    when: always
+    paths:
+      - scalability/
+   script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+
+      $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh medium09 --git-revision "$GIT_REVISION" --hosts-ini sns_hosts.ini
+      cd ./scalability
+
+      $SHELL_WRAPPER pipenv --python 3
+      $SHELL_WRAPPER pipenv install -r requirements.txt
+
+      $SHELL_WRAPPER pipenv run python3 experiments/run_sns_experiment.py --testnet medium09 --interactive=False
+
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      cd -
+
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
