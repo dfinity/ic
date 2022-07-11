@@ -7,9 +7,16 @@ pub const N_THREADS_PER_POT: usize = 8;
 pub const TEST_SUITE_CONTRACT_FILE: &str = "suite_execution_contract.json";
 // Each test after execution dumps this result file, which contains the test info Passed/Failed(Message)/Skipped.
 pub const TEST_RESULT_FILE: &str = "test_execution_result.json";
+// Each pot setup evaluation dumps this file, which contains setup info Passed/Failed(Message).
+pub const POT_SETUP_RESULT_FILE: &str = "pot_setup_result.json";
+// File containing the final summary of the suite execution.
 pub const TEST_SUITE_RESULT_FILE: &str = "test-results.json";
-// Name of the system environment directory.
+// Name of the system environment directory with a working directory.
 pub const SYSTEM_ENV_DIR: &str = "system_env";
+// Name of the tests directory within the pot directory.
+pub const TESTS_DIR: &str = "tests";
+// Name of the pot setup directory within the working directory.
+pub const POT_SETUP_DIR: &str = "setup";
 // Test owner channels
 pub const TEST_FAILURE_CHANNEL: &str = "test-failure-alerts";
 pub const ENG_TESTING_CHANNEL: &str = "eng-testing";

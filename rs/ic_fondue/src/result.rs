@@ -189,7 +189,7 @@ impl From<&TestSuiteContract> for TestResultNode {
         let result = if contract.is_skipped {
             TestResult::Skipped
         } else {
-            TestResult::Failed("Execution not finished.".to_string())
+            TestResult::Failed("".to_string())
         };
         Self {
             name: contract.name.clone(),

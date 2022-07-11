@@ -106,6 +106,15 @@ class TestRunSystemTests(unittest.TestCase):
             expected_exit_code=124,
         )
 
+    def test__suite_to_fail_in_pot_setup(self):
+        self._run_suite_to_completion(
+            suite_name="suite_to_fail_in_pot_setup",
+            additional_args=["--keep_artifacts", "--keep_tmp_dirs"],
+            expected_suite_contract=expected_results.suite_contract_to_fail_in_pot_setup,
+            expected_suite_result=expected_results.suite_result_to_fail_in_pot_setup,
+            expected_exit_code=1,
+        )
+
     def test__suite_with_include_pattern_case_1(self):
         include_pattern = "test_success_1"
         # test_success_2 is excluded from pot_success_1
