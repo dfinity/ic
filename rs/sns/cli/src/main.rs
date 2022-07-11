@@ -8,12 +8,17 @@ use crate::init_config_file::InitConfigFileArgs;
 use candid::{CandidType, Encode, IDLArgs};
 use clap::Parser;
 use ic_base_types::PrincipalId;
+use ic_crypto_sha::Sha256;
+use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_init::pb::v1::SnsInitPayload;
+use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use ledger_canister::{AccountIdentifier, BinaryAccountBalanceArgs};
 use std::fs::File;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::str::FromStr;
+use tempfile::NamedTempFile;
 
 #[derive(Debug, Parser)]
 #[clap(
@@ -33,6 +38,9 @@ enum SubCommand {
     /// Deploy an sns directly to a subnet, skipping the sns-wasms canister.
     /// For use in tests only.
     DeploySkippingSnsWasmsForTests(DeployArgs),
+    /// Add a wasms for one of the SNS canisters, skipping the NNS proposal,
+    /// for tests.
+    AddSnsWasmForTests(AddSnsWasmForTestsArgs),
     /// Display the balance of a given account.
     AccountBalance(AccountBalanceArgs),
     /// Manage the config file where the initial sns parameters are set.
@@ -80,6 +88,23 @@ struct AccountBalanceArgs {
     network: String,
 }
 
+#[derive(Debug, Parser)]
+struct AddSnsWasmForTestsArgs {
+    #[clap(long, parse(from_os_str))]
+    wasm_file: PathBuf,
+
+    canister_type: String,
+
+    /// The canister ID of SNS-WASMS to use instead of the default
+    ///
+    /// This is useful for testing CLI commands against local replicas without fully deployed NNS
+    #[clap(long)]
+    pub override_sns_wasm_canister_id_for_tests: Option<String>,
+
+    #[structopt(default_value = "local", long)]
+    network: String,
+}
+
 impl DeployArgs {
     /// panic! if any args are invalid
     pub fn validate(&self) {
@@ -104,6 +129,15 @@ impl DeployArgs {
     }
 }
 
+impl AddSnsWasmForTestsArgs {
+    pub fn get_wasm_file_bytes(&self) -> Vec<u8> {
+        let mut file = File::open(&self.wasm_file).expect("Couldn't open wasm file");
+        let mut buf = Vec::new();
+        file.read_to_end(&mut buf).expect("Couldn't read wasm file");
+        buf
+    }
+}
+
 fn main() {
     let args = match CliArgs::try_parse_from(std::env::args()) {
         Ok(args) => args,
@@ -118,6 +152,7 @@ fn main() {
         SubCommand::DeploySkippingSnsWasmsForTests(args) => {
             deploy_skipping_sns_wasms_for_tests(args)
         }
+        SubCommand::AddSnsWasmForTests(args) => add_sns_wasm_for_tests(args),
         SubCommand::AccountBalance(args) => print_account_balance(args),
         SubCommand::InitConfigFile(args) => init_config_file::exec(args),
     }
@@ -136,6 +171,54 @@ fn deploy_skipping_sns_wasms_for_tests(args: DeployArgs) {
     args.validate();
     let sns_init_payload = args.generate_sns_init_payload();
     DirectSnsDeployerForTests::new(args, sns_init_payload).deploy()
+}
+
+fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) {
+    let sns_wasm_bytes = args.get_wasm_file_bytes();
+    let sns_wasm_hash = {
+        let mut state = Sha256::new();
+        state.write(&sns_wasm_bytes);
+        state.finish()
+    };
+
+    let sns_canister_type = match args.canister_type.as_str() {
+        "root" => SnsCanisterType::Root,
+        "governance" => SnsCanisterType::Governance,
+        "ledger" => SnsCanisterType::Ledger,
+        _ => panic!("Uknown canister type."),
+    };
+
+    let add_sns_wasm_request = AddWasmRequest {
+        wasm: Some(SnsWasm {
+            wasm: sns_wasm_bytes,
+            canister_type: sns_canister_type as i32,
+        }),
+        hash: sns_wasm_hash.to_vec(),
+    };
+
+    let sns_wasms_canister_id = args
+        .override_sns_wasm_canister_id_for_tests
+        .as_ref()
+        .map(|principal| PrincipalId::from_str(principal).unwrap())
+        .unwrap_or_else(|| SNS_WASM_CANISTER_ID.get());
+
+    let idl = IDLArgs::from_bytes(&Encode!(&add_sns_wasm_request).unwrap()).unwrap();
+    let mut argument_file = NamedTempFile::new().expect("Could not open temp file");
+    argument_file
+        .write_all(format!("{}", idl).as_bytes())
+        .expect("Could not write wasm to temp file");
+    let argument_path = argument_file.path().as_os_str().to_str().unwrap();
+
+    call_dfx(&[
+        "canister",
+        "--network",
+        &args.network,
+        "call",
+        "--argument-file",
+        argument_path,
+        &sns_wasms_canister_id.to_string(),
+        "add_wasm",
+    ]);
 }
 
 /// Print the Ledger account balance of the principal in `AccountBalanceArgs` if given, else
