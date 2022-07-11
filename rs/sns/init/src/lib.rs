@@ -18,8 +18,10 @@ use ic_sns_governance::pb::v1::{
 };
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::pb::v1::Init;
+use lazy_static::lazy_static;
 use ledger_canister::{AccountIdentifier, ArchiveOptions, LedgerCanisterInitPayload, Tokens};
 use maplit::{btreemap, hashmap, hashset};
+use std::collections::HashSet;
 use std::collections::{BTreeMap, HashMap};
 
 /// The maximum number of characters allowed for token symbol.
@@ -36,6 +38,20 @@ pub const MIN_TOKEN_NAME_LENGTH: usize = 4;
 
 /// SNS parameters default values
 pub const MIN_PARTICIPANT_ICP_E8S_DEFAULT: u64 = 1;
+
+// Token Symbols that can not be used.
+lazy_static! {
+    static ref BANNED_TOKEN_SYMBOLS: HashSet<&'static str> = hashset! {
+        "ICP", "DFINITY"
+    };
+}
+
+// Token Names that can not be used.
+lazy_static! {
+    static ref BANNED_TOKEN_NAMES: HashSet<&'static str> = hashset! {
+        "internetcomputer", "internetcomputerprotocol"
+    };
+}
 
 /// The canister IDs of all SNS canisters
 #[derive(Debug, Clone)]
@@ -307,6 +323,14 @@ impl SnsInitPayload {
             ));
         }
 
+        if token_symbol != token_symbol.trim() {
+            return Err("Token symbol must not have leading or trailing whitespaces".to_string());
+        }
+
+        if BANNED_TOKEN_SYMBOLS.contains::<str>(&token_symbol.clone().to_uppercase()) {
+            return Err("Banned token symbol, please chose another one.".to_string());
+        }
+
         Ok(())
     }
 
@@ -330,6 +354,20 @@ impl SnsInitPayload {
                 MIN_TOKEN_NAME_LENGTH,
                 token_name.len()
             ));
+        }
+
+        if token_name != token_name.trim() {
+            return Err("Token name must not have leading or trailing whitespaces".to_string());
+        }
+
+        if BANNED_TOKEN_NAMES.contains::<str>(
+            &token_name
+                .to_lowercase()
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .collect::<String>(),
+        ) {
+            return Err("Banned token name, please chose another one.".to_string());
         }
 
         Ok(())
@@ -532,7 +570,19 @@ mod test {
         assert!(sns_init_payload.validate().is_err());
         sns_init_payload = get_sns_init_payload();
 
+        sns_init_payload.token_symbol = Some(" ICP".to_string());
+        assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
+
         sns_init_payload.token_name = Some("S".repeat(MAX_TOKEN_NAME_LENGTH + 1));
+        assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
+
+        sns_init_payload.token_name = Some("Internet Computer".to_string());
+        assert!(sns_init_payload.validate().is_err());
+        sns_init_payload = get_sns_init_payload();
+
+        sns_init_payload.token_name = Some("InternetComputerProtocol".to_string());
         assert!(sns_init_payload.validate().is_err());
         sns_init_payload = get_sns_init_payload();
 

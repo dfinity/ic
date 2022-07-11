@@ -294,4 +294,47 @@ mod test {
             .unwrap()
         )
     }
+
+    /// Test reading a valid and an invalid yaml file.
+    #[test]
+    fn test_read_yaml_file() {
+        let mut file_contents = r#"
+---
+transaction_fee_e8s: 10000
+token_name: Bitcoin
+token_symbol: BTC
+proposal_reject_cost_e8s: 100000000
+neuron_minimum_stake_e8s: 100000000
+initial_token_distribution:
+  FractionalDeveloperVotingPower:
+    developer_distribution:
+      developer_neurons:
+        - controller: x4vjn-rrapj-c2kqe-a6m2b-7pzdl-ntmc4-riutz-5bylw-2q2bh-ds5h2-lae
+          stake_e8s: 1500000000
+    treasury_distribution:
+      total_e8s: 5000000000
+    swap_distribution:
+      total_e8s: 6000000000
+      initial_swap_amount_e8s: 3000000000
+    airdrop_distribution:
+      airdrop_neurons:
+        - controller: fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe
+          stake_e8s: 500000000
+
+max_icp_e8s: 10000
+min_participants: 2
+min_participant_icp_e8s: 1
+max_participant_icp_e8s: 10000
+min_icp_e8s: 9000
+fallback_controller_principal_ids: [fod6j-klqsi-ljm4t-7v54x-2wd6s-6yduy-spdkk-d2vd4-iet7k-nakfi-qqe]
+
+        "#
+        .to_string();
+        let resulting_payload: SnsInitPayload = serde_yaml::from_str(&file_contents).unwrap();
+        assert!(resulting_payload.validate().is_ok());
+
+        // We add a string repeating the field "min_participants", this should fail
+        file_contents.push_str("\nmin_participants: 21");
+        assert!(serde_yaml::from_str::<SnsInitPayload>(&file_contents).is_err());
+    }
 }

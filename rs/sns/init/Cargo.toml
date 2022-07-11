@@ -19,9 +19,11 @@ ic-sns-governance = { path = "../governance" }
 ic-sns-root = { path = "../root" }
 ic-sns-swap = { path = "../swap" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+lazy_static = "1.4.0"
 maplit = "1.0.2"
 num = "0.4.0"
 prost = "0.10.4"
+regex = "1.5.6"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.79"
 serde_yaml = "0.8.24"
