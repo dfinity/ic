@@ -416,8 +416,8 @@ icos-continuous-upgrade-nightly:
           --is_upgrade_test
 
 .run-farm-based-test: &run-farm-based-test |
-  BASE_DIR="${CI_PROJECT_DIR}/working_dir/$(date +%Y%m%d_%H%M%S)"
-  mkdir -p "$BASE_DIR"
+  WORKING_DIR="${CI_PROJECT_DIR}/working_dir/"
+  mkdir -p "$WORKING_DIR"
   IC_VERSION_ID=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
   export IC_VERSION_ID
   if [[ -z "${LOG_DEBUG_OVERRIDES:-}" ]]; then
@@ -433,9 +433,9 @@ icos-continuous-upgrade-nightly:
   # Hence, the fourth column can be used to distinguish structured from unstructured logs.
   $SHELL_WRAPPER "${CI_PROJECT_DIR}/rs/tests/run-system-tests.py" \
     --suite="${SUITE_NAME}" \
-    --working-dir="${BASE_DIR}" \
+    --working-dir="${WORKING_DIR}" \
     "${LOG_DEBUG_OVERRIDES_OPTS[@]}" \
-  | tee "${BASE_DIR}/unstructured-logs.log" \
+  | tee "${WORKING_DIR}/unstructured-logs.log" \
   | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
 
 .system-tests:

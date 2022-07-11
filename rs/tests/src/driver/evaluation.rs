@@ -94,7 +94,7 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<()>
         .replace(':', "_")
         .replace('.', "_");
 
-    let pot_working_dir = ctx.working_dir.join(&pot.name).join("setup");
+    let pot_working_dir = ctx.working_dir.join(&pot.name).join(config::POT_SETUP_DIR);
     let pot_env = ctx.env.fork(ctx.logger.clone(), pot_working_dir)?;
 
     pot_env
@@ -109,16 +109,35 @@ fn evaluate_pot(ctx: &DriverContext, mut pot: Pot, path: TestPath) -> Result<()>
     }
     .write_attribute(&pot_env);
 
-    create_group_for_pot(&pot_env, &pot, &ctx.logger)?;
+    let pot_setup_result: TestResult =
+        if let Err(err) = create_group_for_pot(&pot_env, &pot, &ctx.logger) {
+            TestResult::failed_with_message(format!("{:?}", err).as_str())
+        } else if let Err(err) = pot.setup.evaluate(pot_env.clone()) {
+            if let Some(s) = err.downcast_ref::<String>() {
+                TestResult::failed_with_message(s.as_str())
+            } else if let Some(s) = err.downcast_ref::<&str>() {
+                TestResult::failed_with_message(s)
+            } else {
+                TestResult::failed_with_message(format!("{:?}", err).as_str())
+            }
+        } else {
+            TestResult::Passed
+        };
 
-    if let Err(e) = pot.setup.evaluate(pot_env.clone()) {
-        if let Some(s) = e.downcast_ref::<String>() {
-            bail!("Could not evaluate pot config: {}", s);
-        } else if let Some(s) = e.downcast_ref::<&str>() {
-            bail!("Could not evaluate pot config: {}", s);
-        }
-        bail!("Could not evaluate pot config: {:?}", e);
-    };
+    pot_env
+        .write_json_object(config::POT_SETUP_RESULT_FILE, &pot_setup_result)
+        .unwrap_or_else(|e| {
+            error!(
+                ctx.logger,
+                "Couldn't save pot setup result {} file: {}.",
+                config::POT_SETUP_RESULT_FILE,
+                e
+            );
+        });
+
+    if let TestResult::Failed(err) = pot_setup_result {
+        bail!("Could not evaluate pot setup: {}", err);
+    }
 
     evaluate_pot_with_group(ctx, pot, pot_path, &pot_env)?;
     if let Err(e) = ctx.farm.delete_group(&group_name) {
@@ -173,7 +192,7 @@ fn evaluate_pot_with_group(
                         .parent()
                         .expect("parent not set")
                         .to_owned()
-                        .join("tests")
+                        .join(config::TESTS_DIR)
                         .join(&t.name);
                     let test_env = t_pot_env
                         .fork(t_ctx.logger.clone(), t_env_dir)

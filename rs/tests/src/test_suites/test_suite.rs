@@ -17,7 +17,7 @@ pub fn get_e2e_suites() -> Vec<Suite> {
             vec![
                 pot_with_setup(
                     "pot_success_1",
-                    config,
+                    setup_success,
                     par(vec![
                         sys_t("test_success_1", test_success),
                         sys_t("test_success_2", test_success),
@@ -25,7 +25,7 @@ pub fn get_e2e_suites() -> Vec<Suite> {
                 ),
                 pot_with_setup(
                     "pot_success_2",
-                    config,
+                    setup_success,
                     par(vec![sys_t("test_success_1", test_success)]),
                 ),
             ],
@@ -35,26 +35,26 @@ pub fn get_e2e_suites() -> Vec<Suite> {
             vec![
                 pot_with_setup(
                     "pot_fail_1",
-                    config,
+                    setup_success,
                     par(vec![
                         sys_t(
                             "test_fail_1",
-                            test_fail_with_message("test from pot_fail_1.".to_string()),
+                            test_with_panic("test from pot_fail_1.".to_string()),
                         ),
                         sys_t("test_success_1", test_success),
                     ]),
                 ),
                 pot_with_setup(
                     "pot_fail_2",
-                    config,
+                    setup_success,
                     par(vec![sys_t(
                         "test_fail_1",
-                        test_fail_with_message("test from pot_fail_2.".to_string()),
+                        test_with_panic("test from pot_fail_2.".to_string()),
                     )]),
                 ),
                 pot_with_setup(
                     "pot_success_3",
-                    config,
+                    setup_success,
                     par(vec![sys_t("test_success_1", test_success)]),
                 ),
             ],
@@ -64,7 +64,7 @@ pub fn get_e2e_suites() -> Vec<Suite> {
             vec![
                 pot_with_setup(
                     "pot_timeout_1",
-                    config,
+                    setup_success,
                     par(vec![
                         sys_t("test_infinite_1", test_infinite),
                         sys_t("test_success_2", test_success),
@@ -72,7 +72,25 @@ pub fn get_e2e_suites() -> Vec<Suite> {
                 ),
                 pot_with_setup(
                     "pot_success_2",
-                    config,
+                    setup_success,
+                    par(vec![sys_t("test_success_1", test_success)]),
+                ),
+            ],
+        ),
+        suite(
+            "suite_to_fail_in_pot_setup",
+            vec![
+                pot_with_setup(
+                    "pot_panic_1",
+                    setup_with_panic("pot_panic_1 setup failed.".to_string()),
+                    par(vec![
+                        sys_t("test_success_1", test_success),
+                        sys_t("test_success_2", test_success),
+                    ]),
+                ),
+                pot_with_setup(
+                    "pot_panic_2",
+                    setup_with_panic("pot_panic_2 setup failed.".to_string()),
                     par(vec![sys_t("test_success_1", test_success)]),
                 ),
             ],
@@ -80,11 +98,17 @@ pub fn get_e2e_suites() -> Vec<Suite> {
     ]
 }
 
-fn config(_: TestEnv) {}
+fn setup_success(_: TestEnv) {}
+
+fn setup_with_panic(error_msg: String) -> impl FnOnce(TestEnv) {
+    move |_: TestEnv| {
+        panic!("{}", error_msg);
+    }
+}
 
 fn test_success(_: TestEnv) {}
 
-fn test_fail_with_message(error_msg: String) -> impl FnOnce(TestEnv) {
+fn test_with_panic(error_msg: String) -> impl FnOnce(TestEnv) {
     move |_: TestEnv| {
         panic!("{}", error_msg);
     }

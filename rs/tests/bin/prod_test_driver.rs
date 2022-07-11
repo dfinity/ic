@@ -21,7 +21,6 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
 
 fn run_tests(validated_args: ValidatedCliRunTestsArgs) -> anyhow::Result<()> {
     let mut suite = match get_test_suites().remove(&validated_args.suite) {
@@ -63,54 +62,49 @@ fn process_test_results(validated_args: ValidatedCliProcessTestsArgs) -> anyhow:
             .unwrap_or_else(|_| panic!("Could not read json. {:?}", &file));
         TestResultNode::from(&suite_contract)
     };
-    // Walk over all test result files and update suite object with corresponding results.
-    let test_depth_level: usize = 1;
-    let pot_depth_level: usize = 3;
-    for entry in WalkDir::new(&working_dir) {
-        let path: PathBuf = entry.unwrap().into_path();
-        let file_name: &str = path.file_name().unwrap().to_str().unwrap();
-        if !file_name.contains(config::TEST_RESULT_FILE) {
-            continue;
+
+    for pot in suite_result.children.iter_mut() {
+        let pot_path = working_dir.join(&pot.name);
+        for test in pot.children.iter_mut() {
+            let test_name = test.name.clone();
+            // Pot setup result file should be always present, otherwise we panic.
+            let pot_result: TestResult = {
+                let file_path = pot_path
+                    .join(config::POT_SETUP_DIR)
+                    .join(config::POT_SETUP_RESULT_FILE);
+                let file = fs::File::open(&file_path)
+                    .unwrap_or_else(|_| panic!("Could not open: {:?}", file_path));
+                serde_json::from_reader(&file)
+                    .unwrap_or_else(|_| panic!("Could not read json. {:?}", &file))
+            };
+            let test_result_path = pot_path
+                .join(config::TESTS_DIR)
+                .join(&test_name)
+                .join(config::TEST_RESULT_FILE);
+            // On the contrary, test result file might be absent, e.g., if test timed out, or pot setup failed.
+            // In case test result file is absent, pot_result is used to propagate error message of the pot setup to the test.
+            let test_result_file = fs::File::open(&test_result_path);
+            let test_result: TestResultNode = {
+                match test_result_file {
+                    Ok(file) => serde_json::from_reader(&file)
+                        .unwrap_or_else(|_| panic!("Could not read json. {:?}", &file)),
+                    Err(_) => {
+                        let err_msg = if let TestResult::Failed(err) = pot_result {
+                            format!("Pot setup failed: {}", err)
+                        } else {
+                            // In this case we have no additional info about the reason of test failure.
+                            String::from("Test execution has not finished.")
+                        };
+                        TestResultNode {
+                            name: test_name.clone(),
+                            result: TestResult::Failed(err_msg),
+                            ..Default::default()
+                        }
+                    }
+                }
+            };
+            test.result = test_result.result;
         }
-        let test_name = path
-            .ancestors()
-            .nth(test_depth_level)
-            .unwrap()
-            .file_name()
-            .unwrap();
-        let pot_name = path
-            .ancestors()
-            .nth(pot_depth_level)
-            .unwrap()
-            .file_name()
-            .unwrap();
-        let test_result: TestResultNode = {
-            let file =
-                fs::File::open(&path).unwrap_or_else(|_| panic!("Could not open: {:?}", path));
-            serde_json::from_reader(&file)
-                .unwrap_or_else(|_| panic!("Could not read json. {:?}", &file))
-        };
-        // Update suite result object with a test result.
-        let test: &mut TestResultNode = suite_result
-            .children
-            .iter_mut()
-            .find(|p| p.name.as_str() == pot_name)
-            .unwrap_or_else(|| {
-                panic!(
-                    "Couldn't match the pot={} in the suite contract.",
-                    pot_name.to_str().unwrap()
-                )
-            })
-            .children
-            .iter_mut()
-            .find(|t| t.name.as_str() == test_name)
-            .unwrap_or_else(|| {
-                panic!(
-                    "Couldn't match the test={} in the suite contract.",
-                    test_name.to_str().unwrap()
-                )
-            });
-        *test = test_result;
     }
     // Recursively infer suite and pot level results from individual tests results.
     propagate_children_results_to_parents(&mut suite_result);

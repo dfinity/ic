@@ -115,6 +115,29 @@ suite_contract_to_timeout = {
     ],
 }
 
+suite_contract_to_fail_in_pot_setup = {
+    "name": "suite_to_fail_in_pot_setup",
+    "is_skipped": False,
+    "alert_channels": [],
+    "children": [
+        {
+            "name": "pot_panic_1",
+            "is_skipped": False,
+            "alert_channels": [],
+            "children": [
+                {"name": "test_success_1", "is_skipped": False, "alert_channels": [], "children": []},
+                {"name": "test_success_2", "is_skipped": False, "alert_channels": [], "children": []},
+            ],
+        },
+        {
+            "name": "pot_panic_2",
+            "is_skipped": False,
+            "alert_channels": [],
+            "children": [{"name": "test_success_1", "is_skipped": False, "alert_channels": [], "children": []}],
+        },
+    ],
+}
+
 
 suite_result_to_succeed = {
     "name": "suite_to_succeed",
@@ -253,7 +276,7 @@ suite_result_to_timeout = {
                     "name": "test_infinite_1",
                     "started_at": mock.ANY,
                     "duration": mock.ANY,
-                    "result": {"Failed": "Execution not finished."},
+                    "result": {"Failed": "Test execution has not finished."},
                     "children": [],
                     "alert_channels": [],
                 },
@@ -367,6 +390,58 @@ suite_result_include_pattern_case_2 = {
                     "started_at": mock.ANY,
                     "duration": mock.ANY,
                     "result": "Passed",
+                    "children": [],
+                    "alert_channels": [],
+                }
+            ],
+            "alert_channels": [],
+        },
+    ],
+    "alert_channels": [],
+}
+
+suite_result_to_fail_in_pot_setup = {
+    "name": "suite_to_fail_in_pot_setup",
+    "started_at": mock.ANY,
+    "duration": mock.ANY,
+    "result": {"Failed": ""},
+    "children": [
+        {
+            "name": "pot_panic_1",
+            "started_at": mock.ANY,
+            "duration": mock.ANY,
+            "result": {"Failed": ""},
+            "children": [
+                {
+                    "name": "test_success_1",
+                    "started_at": mock.ANY,
+                    "duration": mock.ANY,
+                    "result": {"Failed": "Pot setup failed: pot_panic_1 setup failed."},
+                    "children": [],
+                    "alert_channels": [],
+                },
+                {
+                    "name": "test_success_2",
+                    "started_at": mock.ANY,
+                    "duration": mock.ANY,
+                    "result": {"Failed": "Pot setup failed: pot_panic_1 setup failed."},
+                    "children": [],
+                    "alert_channels": [],
+                },
+            ],
+            "alert_channels": [],
+        },
+        {
+            "name": "pot_panic_2",
+            "started_at": mock.ANY,
+            "duration": mock.ANY,
+            "result": {"Failed": ""},
+            "children": [
+                {
+                    "name": "test_success_1",
+                    "started_at": mock.ANY,
+                    "duration": mock.ANY,
+                    "result": {"Failed": "Pot setup failed: pot_panic_2 setup failed."},
                     "children": [],
                     "alert_channels": [],
                 }
