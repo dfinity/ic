@@ -5,7 +5,7 @@ mod tests;
 
 use crate::forward_secure::ZeroizedBIG;
 use crate::random_oracles::{
-    random_oracle_to_miracl_g1, random_oracle_to_scalar, HashedMap, UniqueHash,
+    random_oracle_to_miracl_ecp, random_oracle_to_scalar, HashedMap, UniqueHash,
 };
 use crate::utils::*;
 use miracl_core::bls12381::big::BIG;
@@ -77,7 +77,7 @@ pub fn prove_pop(
         return Err(EncryptionKeyPopError::InvalidInstance);
     }
     // First Move
-    let pop_base = random_oracle_to_miracl_g1(DOMAIN_POP_ENCRYPTION_KEY, instance);
+    let pop_base = random_oracle_to_miracl_ecp(DOMAIN_POP_ENCRYPTION_KEY, instance);
     let pop_key = pop_base.mul(witness);
 
     let mut random_scalar = ZeroizedBIG {
@@ -114,7 +114,7 @@ pub fn verify_pop(
     instance: &EncryptionKeyInstance,
     pop: &EncryptionKeyPop,
 ) -> Result<(), EncryptionKeyPopError> {
-    let pop_base = random_oracle_to_miracl_g1(DOMAIN_POP_ENCRYPTION_KEY, instance);
+    let pop_base = random_oracle_to_miracl_ecp(DOMAIN_POP_ENCRYPTION_KEY, instance);
 
     let minus_challenge = BIG::modneg(&pop.challenge, &curve_order());
     let blinder_public_key =

@@ -244,6 +244,36 @@ mod random_oracles {
     use super::*;
     use proptest::prelude::*;
 
+    #[test]
+    fn test_hash_to_g1_against_draft_vectors() {
+        let dst = b"QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_";
+
+        assert_eq!(
+            hex::encode(miracl_g1_to_bytes(&hash_to_miracl_ecp(&dst[..], b""))),
+            "852926add2207b76ca4fa57a8734416c8dc95e24501772c814278700eed6d1e4e8cf62d9c09db0fac349612b759e79a1"
+        );
+
+        assert_eq!(
+            hex::encode(miracl_g1_to_bytes(&hash_to_miracl_ecp(&dst[..], b"abc"))),
+            "83567bc5ef9c690c2ab2ecdf6a96ef1c139cc0b2f284dca0a9a7943388a49a3aee664ba5379a7655d3c68900be2f6903"
+        );
+
+        assert_eq!(
+            hex::encode(miracl_g1_to_bytes(&hash_to_miracl_ecp(&dst[..], b"abcdef0123456789"))),
+            "91e0b079dea29a68f0383ee94fed1b940995272407e3bb916bbf268c263ddd57a6a27200a784cbc248e84f357ce82d98",
+        );
+
+        assert_eq!(
+            hex::encode(miracl_g1_to_bytes(&hash_to_miracl_ecp(&dst[..], format!("q128_{}", "q".repeat(128)).as_bytes()))),
+            "b5f68eaa693b95ccb85215dc65fa81038d69629f70aeee0d0f677cf22285e7bf58d7cb86eefe8f2e9bc3f8cb84fac488",
+        );
+
+        assert_eq!(
+            hex::encode(miracl_g1_to_bytes(&hash_to_miracl_ecp(&dst[..], format!("a512_{}", "a".repeat(512)).as_bytes()))),
+            "882aabae8b7dedb0e78aeb619ad3bfd9277a2f77ba7fad20ef6aabdc6c31d19ba5a6d12283553294c1825c4b3ca2dcfe",
+        );
+    }
+
     proptest! {
         #[test]
         fn should_return_distinct_hashes_on_different_domains(domain_1: String, domain_2: String) {
@@ -295,8 +325,8 @@ mod random_oracles {
                 scalar: BIG::new_int(36),
                 bytes: vec![1, 2, 3, 4],
             };
-            let hash_1 = random_oracle_to_miracl_g1(&domain_1, &hashable_struct);
-            let hash_2 = random_oracle_to_miracl_g1(&domain_2, &hashable_struct);
+            let hash_1 = random_oracle_to_miracl_ecp(&domain_1, &hashable_struct);
+            let hash_2 = random_oracle_to_miracl_ecp(&domain_2, &hashable_struct);
             assert!(!hash_1.equals(&hash_2));
         }
     }

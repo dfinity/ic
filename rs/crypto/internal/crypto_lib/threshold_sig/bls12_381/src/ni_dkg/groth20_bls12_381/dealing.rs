@@ -10,7 +10,6 @@ use crate::{
     api::individual_public_key,
     crypto::{keygen, keygen_with_secret},
 };
-use ic_crypto_internal_bls12381_common::fr_to_bytes;
 use ic_crypto_internal_bls12381_serde_miracl::FrBytes;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
@@ -120,7 +119,7 @@ pub fn create_dealing(
             .map(|(index, share)| {
                 let share =
                     (*share).expect("The keys should be contiguous but we have a missing entry.");
-                let share = FrBytes(fr_to_bytes(&share));
+                let share = FrBytes(share.serialize());
                 let share = FsEncryptionPlaintext::from(&share);
                 (
                     *receiver_keys

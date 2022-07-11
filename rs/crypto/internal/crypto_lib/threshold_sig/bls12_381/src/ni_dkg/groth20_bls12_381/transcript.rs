@@ -8,7 +8,7 @@ use super::encryption::decrypt;
 use crate::api::ni_dkg_errors;
 use crate::crypto::x_for_index;
 use crate::types as threshold_types;
-use ic_crypto_internal_bls12381_common::fr_from_bytes;
+use ic_crypto_internal_bls12_381_type::Scalar;
 use ic_crypto_internal_fs_ni_dkg::forward_secure::SecretKey as ForwardSecureSecretKey;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20;
 use ic_types::{NodeIndex, NumberOfNodes};
@@ -286,7 +286,7 @@ pub fn compute_threshold_signing_key(
                     }
                 })?;
                 let secret_key = FrBytes::from(&fs_plaintext);
-                let secret_key = fr_from_bytes(&secret_key.0);
+                let secret_key = Scalar::deserialize(&secret_key.0);
 
                 if secret_key.is_err() {
                     let message = format!(

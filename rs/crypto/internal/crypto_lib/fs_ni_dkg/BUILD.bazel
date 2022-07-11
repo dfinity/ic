@@ -19,8 +19,8 @@ rust_library(
     crate_name = "ic_crypto_internal_fs_ni_dkg",
     edition = "2018",
     deps = [
-        "//rs/crypto/internal/crypto_lib/bls12_381/common",
         "//rs/crypto/internal/crypto_lib/bls12_381/serde/miracl",
+        "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/sha",
         "@crate_index//:hex",

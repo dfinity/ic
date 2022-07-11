@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::crypto;
-use ic_crypto_internal_bls12381_common::fr_from_bytes;
+use ic_crypto_internal_bls12_381_type::Scalar;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::NumberOfNodes;
 use proptest::prelude::*;
@@ -17,7 +17,7 @@ use proptest::prelude::*;
 #[cfg(test)]
 pub fn secret_key() -> impl Strategy<Value = SecretKey> {
     any::<[u8; 32]>()
-        .prop_map(|seed| fr_from_bytes(&seed))
+        .prop_map(|seed| Scalar::deserialize(&seed))
         .prop_filter("Key must be valid".to_owned(), |secret_key| {
             secret_key.is_ok()
         })
@@ -30,7 +30,7 @@ pub fn public_key() -> impl Strategy<Value = PublicKey> {
 #[cfg(test)]
 pub fn individual_signature() -> impl Strategy<Value = IndividualSignature> {
     any::<([u8; 32], [u8; 9])>()
-        .prop_map(|(seed, message)| (fr_from_bytes(&seed), message))
+        .prop_map(|(seed, message)| (Scalar::deserialize(&seed), message))
         .prop_filter("Key must be valid".to_owned(), |(key, _message)| {
             key.is_ok()
         })

@@ -1,7 +1,7 @@
 //! Standard Rust operations on PublicCoefficients
 
 use super::*;
-use bls12_381::{G2Projective, Scalar};
+use ic_crypto_internal_bls12_381_type::{G2Projective, Scalar};
 use std::borrow::Borrow;
 use std::iter::Sum;
 use std::ops;

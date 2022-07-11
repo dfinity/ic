@@ -1,6 +1,5 @@
 //! Type conversions for BLS12-381 multisignatures.
 use super::*;
-use ic_crypto_internal_bls12381_common as bls;
 use ic_types::crypto::{AlgorithmId, CryptoError};
 use std::convert::{TryFrom, TryInto};
 
@@ -11,12 +10,12 @@ mod tests;
 
 impl From<SecretKeyBytes> for SecretKey {
     fn from(val: SecretKeyBytes) -> Self {
-        bls::fr_from_bytes_unchecked(&val.0)
+        SecretKey::deserialize_unchecked(val.0)
     }
 }
 impl From<SecretKey> for SecretKeyBytes {
     fn from(secret_key: SecretKey) -> SecretKeyBytes {
-        SecretKeyBytes(bls::fr_to_bytes(&secret_key))
+        SecretKeyBytes(secret_key.serialize())
     }
 }
 
@@ -24,16 +23,18 @@ impl TryFrom<PublicKeyBytes> for PublicKey {
     type Error = CryptoError;
 
     fn try_from(public_key_bytes: PublicKeyBytes) -> Result<Self, Self::Error> {
-        bls::g2_from_bytes(&public_key_bytes.0).map_err(|_| CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::MultiBls12_381,
-            key_bytes: Some(public_key_bytes.0.to_vec()),
-            internal_error: "Point decoding failed".to_string(),
+        G2Projective::deserialize(&public_key_bytes.0).map_err(|_| {
+            CryptoError::MalformedPublicKey {
+                algorithm: AlgorithmId::MultiBls12_381,
+                key_bytes: Some(public_key_bytes.0.to_vec()),
+                internal_error: "Point decoding failed".to_string(),
+            }
         })
     }
 }
 impl From<PublicKey> for PublicKeyBytes {
     fn from(public_key: PublicKey) -> PublicKeyBytes {
-        PublicKeyBytes(bls::g2_to_bytes(&public_key))
+        PublicKeyBytes(public_key.serialize())
     }
 }
 
@@ -41,7 +42,7 @@ impl TryInto<IndividualSignature> for IndividualSignatureBytes {
     type Error = CryptoError;
 
     fn try_into(self) -> Result<IndividualSignature, CryptoError> {
-        bls::g1_from_bytes(&self.0).map_err(|_| CryptoError::MalformedSignature {
+        G1Projective::deserialize(&self.0).map_err(|_| CryptoError::MalformedSignature {
             algorithm: AlgorithmId::MultiBls12_381,
             sig_bytes: self.0.to_vec(),
             internal_error: "Point decoding failed".to_string(),
@@ -50,7 +51,7 @@ impl TryInto<IndividualSignature> for IndividualSignatureBytes {
 }
 impl From<IndividualSignature> for IndividualSignatureBytes {
     fn from(signature: IndividualSignature) -> IndividualSignatureBytes {
-        IndividualSignatureBytes(bls::g1_to_bytes(&signature))
+        IndividualSignatureBytes(signature.serialize())
     }
 }
 
@@ -58,7 +59,7 @@ impl TryFrom<PopBytes> for Pop {
     type Error = CryptoError;
 
     fn try_from(pop_bytes: PopBytes) -> Result<Self, Self::Error> {
-        bls::g1_from_bytes(&pop_bytes.0).map_err(|_| CryptoError::MalformedPop {
+        G1Projective::deserialize(&pop_bytes.0).map_err(|_| CryptoError::MalformedPop {
             algorithm: AlgorithmId::MultiBls12_381,
             pop_bytes: pop_bytes.0.to_vec(),
             internal_error: "Point decoding failed".to_string(),
@@ -67,7 +68,7 @@ impl TryFrom<PopBytes> for Pop {
 }
 impl From<Pop> for PopBytes {
     fn from(pop: Pop) -> PopBytes {
-        PopBytes(bls::g1_to_bytes(&pop))
+        PopBytes(pop.serialize())
     }
 }
 
@@ -75,7 +76,7 @@ impl TryInto<CombinedSignature> for CombinedSignatureBytes {
     type Error = CryptoError;
 
     fn try_into(self) -> Result<CombinedSignature, CryptoError> {
-        bls::g1_from_bytes(&self.0).map_err(|_| CryptoError::MalformedSignature {
+        G1Projective::deserialize(&self.0).map_err(|_| CryptoError::MalformedSignature {
             algorithm: AlgorithmId::MultiBls12_381,
             sig_bytes: self.0.to_vec(),
             internal_error: "Point decoding failed".to_string(),
@@ -84,7 +85,7 @@ impl TryInto<CombinedSignature> for CombinedSignatureBytes {
 }
 impl From<CombinedSignature> for CombinedSignatureBytes {
     fn from(signature: CombinedSignature) -> CombinedSignatureBytes {
-        CombinedSignatureBytes(bls::g1_to_bytes(&signature))
+        CombinedSignatureBytes(signature.serialize())
     }
 }
 

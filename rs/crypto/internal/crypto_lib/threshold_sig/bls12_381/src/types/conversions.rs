@@ -7,10 +7,6 @@
 
 use super::*;
 use crate::api::threshold_sign_error::ClibThresholdSignError;
-use ic_crypto_internal_bls12381_common::{
-    fr_from_bytes, fr_to_bytes, g1_from_bytes, g1_to_bytes, g2_from_bytes, g2_from_bytes_unchecked,
-    g2_to_bytes,
-};
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::{
     PublicKeyBytes, ThresholdSigPublicKeyBytesConversionError,
 };
@@ -22,7 +18,7 @@ mod tests;
 
 impl From<&PublicKey> for PublicKeyBytes {
     fn from(public_key: &PublicKey) -> PublicKeyBytes {
-        PublicKeyBytes(g2_to_bytes(&public_key.0))
+        PublicKeyBytes(public_key.0.serialize())
     }
 }
 
@@ -42,7 +38,7 @@ impl PublicKey {
     pub fn from_trusted_bytes(
         bytes: &PublicKeyBytes,
     ) -> Result<Self, ThresholdSigPublicKeyBytesConversionError> {
-        g2_from_bytes_unchecked(&bytes.0)
+        G2Projective::deserialize_unchecked(&bytes.0)
             .map_err(|_| ThresholdSigPublicKeyBytesConversionError::Malformed {
                 key_bytes: Some(bytes.0.to_vec()),
                 internal_error: "Invalid public key".to_string(),
@@ -54,7 +50,7 @@ impl PublicKey {
 impl TryFrom<&PublicKeyBytes> for PublicKey {
     type Error = ThresholdSigPublicKeyBytesConversionError;
     fn try_from(bytes: &PublicKeyBytes) -> Result<Self, Self::Error> {
-        g2_from_bytes(&bytes.0)
+        G2Projective::deserialize(&bytes.0)
             .map_err(|_| ThresholdSigPublicKeyBytesConversionError::Malformed {
                 key_bytes: Some(bytes.0.to_vec()),
                 internal_error: "Invalid public key".to_string(),
@@ -65,18 +61,18 @@ impl TryFrom<&PublicKeyBytes> for PublicKey {
 
 impl From<SecretKey> for SecretKeyBytes {
     fn from(key: SecretKey) -> Self {
-        Self(fr_to_bytes(&key))
+        Self(key.serialize())
     }
 }
 impl From<&SecretKey> for SecretKeyBytes {
     fn from(key: &SecretKey) -> Self {
-        Self(fr_to_bytes(key))
+        Self(key.serialize())
     }
 }
 impl TryFrom<&SecretKeyBytes> for SecretKey {
     type Error = ClibThresholdSignError;
     fn try_from(bytes: &SecretKeyBytes) -> Result<SecretKey, ClibThresholdSignError> {
-        fr_from_bytes(&bytes.0).map_err(|_| ClibThresholdSignError::MalformedSecretKey {
+        Scalar::deserialize(&bytes.0).map_err(|_| ClibThresholdSignError::MalformedSecretKey {
             algorithm: AlgorithmId::ThresBls12_381,
         })
     }
@@ -84,7 +80,7 @@ impl TryFrom<&SecretKeyBytes> for SecretKey {
 
 impl From<&IndividualSignature> for IndividualSignatureBytes {
     fn from(signature: &IndividualSignature) -> Self {
-        IndividualSignatureBytes(g1_to_bytes(signature))
+        IndividualSignatureBytes(signature.serialize())
     }
 }
 impl From<IndividualSignature> for IndividualSignatureBytes {
@@ -95,7 +91,7 @@ impl From<IndividualSignature> for IndividualSignatureBytes {
 impl TryFrom<&IndividualSignatureBytes> for IndividualSignature {
     type Error = CryptoError;
     fn try_from(bytes: &IndividualSignatureBytes) -> Result<IndividualSignature, CryptoError> {
-        g1_from_bytes(&bytes.0).map_err(|_| CryptoError::MalformedSignature {
+        G1Projective::deserialize(&bytes.0).map_err(|_| CryptoError::MalformedSignature {
             algorithm: AlgorithmId::ThresBls12_381,
             sig_bytes: bytes.0.to_vec(),
             internal_error: "Invalid individual signature".to_string(),
@@ -105,7 +101,7 @@ impl TryFrom<&IndividualSignatureBytes> for IndividualSignature {
 
 impl From<&CombinedSignature> for CombinedSignatureBytes {
     fn from(signature: &CombinedSignature) -> Self {
-        CombinedSignatureBytes(g1_to_bytes(signature))
+        CombinedSignatureBytes(signature.serialize())
     }
 }
 impl From<CombinedSignature> for CombinedSignatureBytes {
@@ -116,7 +112,7 @@ impl From<CombinedSignature> for CombinedSignatureBytes {
 impl TryFrom<&CombinedSignatureBytes> for CombinedSignature {
     type Error = CryptoError;
     fn try_from(bytes: &CombinedSignatureBytes) -> Result<CombinedSignature, CryptoError> {
-        g1_from_bytes(&bytes.0).map_err(|_| CryptoError::MalformedSignature {
+        G1Projective::deserialize(&bytes.0).map_err(|_| CryptoError::MalformedSignature {
             algorithm: AlgorithmId::ThresBls12_381,
             sig_bytes: bytes.0.to_vec(),
             internal_error: "Invalid combined signature".to_string(),

@@ -1,7 +1,6 @@
 //! BLS12-381 multisignature types.
 #![allow(clippy::unit_arg)] // Arbitrary is a unit arg in: derive(proptest_derive::Arbitrary)
-use bls12_381::{G1Projective, G2Projective, Scalar};
-use ic_crypto_internal_bls12381_common as bls;
+use ic_crypto_internal_bls12_381_type::{G1Projective, G2Projective, Scalar};
 use zeroize::Zeroize;
 
 #[cfg(test)]
@@ -35,7 +34,7 @@ pub type CombinedSignature = G1Projective;
 pub struct SecretKeyBytes(pub [u8; SecretKeyBytes::SIZE]);
 ic_crypto_internal_types::derive_serde!(SecretKeyBytes, SecretKeyBytes::SIZE);
 impl SecretKeyBytes {
-    pub const SIZE: usize = bls::FR_SIZE;
+    pub const SIZE: usize = Scalar::BYTES;
 }
 
 /// Wrapper for a serialized individual signature.
@@ -43,7 +42,7 @@ impl SecretKeyBytes {
 pub struct IndividualSignatureBytes(pub [u8; IndividualSignatureBytes::SIZE]);
 ic_crypto_internal_types::derive_serde!(IndividualSignatureBytes, IndividualSignatureBytes::SIZE);
 impl IndividualSignatureBytes {
-    pub const SIZE: usize = bls::G1_SIZE;
+    pub const SIZE: usize = G1Projective::BYTES;
 }
 
 /// Wrapper for a serialized proof of possession.
@@ -51,7 +50,7 @@ impl IndividualSignatureBytes {
 pub struct PopBytes(pub [u8; PopBytes::SIZE]);
 ic_crypto_internal_types::derive_serde!(PopBytes, PopBytes::SIZE);
 impl PopBytes {
-    pub const SIZE: usize = bls::G1_SIZE;
+    pub const SIZE: usize = G1Projective::BYTES;
 }
 
 /// Wrapper for a serialized combined signature.
@@ -59,7 +58,7 @@ impl PopBytes {
 pub struct CombinedSignatureBytes(pub [u8; CombinedSignatureBytes::SIZE]);
 ic_crypto_internal_types::derive_serde!(CombinedSignatureBytes, CombinedSignatureBytes::SIZE);
 impl CombinedSignatureBytes {
-    pub const SIZE: usize = bls::G1_SIZE;
+    pub const SIZE: usize = G1Projective::BYTES;
 }
 
 /// Wrapper for a serialized public key.
@@ -67,5 +66,5 @@ impl CombinedSignatureBytes {
 pub struct PublicKeyBytes(pub [u8; PublicKeyBytes::SIZE]);
 ic_crypto_internal_types::derive_serde!(PublicKeyBytes, PublicKeyBytes::SIZE);
 impl PublicKeyBytes {
-    pub const SIZE: usize = bls::G2_SIZE;
+    pub const SIZE: usize = G2Projective::BYTES;
 }

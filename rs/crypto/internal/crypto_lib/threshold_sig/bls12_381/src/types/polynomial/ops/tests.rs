@@ -2,7 +2,6 @@
 
 use super::*;
 use crate::types::public_coefficients::tests::uints_to_polynomial;
-use ic_crypto_internal_bls12381_common::test_utils::uint_to_fr;
 
 #[test]
 fn test_polynomial_sum() {
@@ -203,7 +202,7 @@ fn test_constant_addition() {
     for (int_value, int_addition, combined_int, test_vector_name) in
         constant_addition_test_vectors()
     {
-        let value = uints_to_polynomial(&int_value) + uint_to_fr(int_addition);
+        let value = uints_to_polynomial(&int_value) + Scalar::from_u32(int_addition);
         let expected = uints_to_polynomial(&combined_int);
         assert_eq!(expected, value, "Test vector failed: {}", test_vector_name);
     }
@@ -214,7 +213,7 @@ fn test_constant_subtraction() {
     for (int_value, int_addition, combined_int, test_vector_name) in
         constant_addition_test_vectors()
     {
-        let value = uints_to_polynomial(&combined_int) - uint_to_fr(int_addition);
+        let value = uints_to_polynomial(&combined_int) - Scalar::from_u32(int_addition);
         let expected = uints_to_polynomial(&int_value);
         assert_eq!(expected, value, "Test vector failed: {}", test_vector_name);
     }
@@ -239,7 +238,7 @@ fn test_constant_multiplication() {
     for (int_value, int_factor, combined_int, test_vector_name) in
         constant_multiplication_test_vectors()
     {
-        let value = &uints_to_polynomial(&int_value) * uint_to_fr(int_factor);
+        let value = &uints_to_polynomial(&int_value) * Scalar::from_u32(int_factor);
         let expected = uints_to_polynomial(&combined_int);
         assert_eq!(expected, value, "Test vector failed: {}", test_vector_name);
     }

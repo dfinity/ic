@@ -5,16 +5,16 @@ use super::types::{
     Polynomial, PublicCoefficients, SecretKey, Signature,
 };
 use crate::api::dkg_errors::InvalidArgumentError;
-use ic_crypto_internal_bls12381_common::hash_to_g1;
 
 use crate::types::PublicKey;
-use bls12_381::{Bls12, G1Projective, G2Affine, G2Projective, Scalar};
+use ic_crypto_internal_bls12_381_type::{
+    verify_bls_signature, G1Projective, G2Affine, G2Projective, Scalar,
+};
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::{
     crypto::{AlgorithmId, CryptoError, CryptoResult},
     NodeIndex, NumberOfNodes, Randomness,
 };
-use pairing::Engine;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::convert::TryFrom;
@@ -27,7 +27,7 @@ const DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG: &[u8; 43] =
 
 /// Hashes `msg` to a point in `G1`.
 pub fn hash_message_to_g1(msg: &[u8]) -> G1Projective {
-    hash_to_g1(&DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG[..], msg)
+    G1Projective::hash(&DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG[..], msg)
 }
 
 #[cfg(test)]
@@ -45,10 +45,7 @@ pub fn public_key_from_secret_key(secret_key: &SecretKey) -> PublicKey {
 /// threshold key. Shares are ordered and numbered `0...N`.
 pub fn x_for_index(index: NodeIndex) -> Scalar {
     // It is important that this is never zero and that values are unique.
-    let value: [u64; 4] = [index as u64, 0, 0, 0];
-    let mut ans = Scalar::from_raw(value);
-    ans += Scalar::one();
-    ans
+    Scalar::from_u64(u64::from(index)) + Scalar::one()
 }
 
 /// Generates keys for a (t,n)-threshold signature scheme.
@@ -313,9 +310,8 @@ pub fn verify_combined_sig(
 // exponentiation.
 fn verify(message: &[u8], signature: Signature, public_key: PublicKey) -> Result<(), ()> {
     let point = hash_message_to_g1(message);
-    if Bls12::pairing(&signature.into(), &G2Affine::generator())
-        == Bls12::pairing(&point.into(), &public_key.0.into())
-    {
+
+    if verify_bls_signature(&signature.into(), &public_key.0.into(), &point.into()) {
         Ok(())
     } else {
         Err(())
@@ -342,5 +338,5 @@ pub fn secret_key_is_consistent(
     let neg_pub = G2Projective::generator() * neg_secret;
     // Compare:
     y.add_assign(&neg_pub);
-    bool::from(y.is_identity())
+    y.is_identity()
 }

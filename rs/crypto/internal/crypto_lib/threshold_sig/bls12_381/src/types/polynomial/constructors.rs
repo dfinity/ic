@@ -1,6 +1,5 @@
 //! Constructors and conversion from/to other types
 use super::*;
-use crate::types::bls::random_bls12_381_scalar;
 
 impl Polynomial {
     ///////////////
@@ -25,9 +24,9 @@ impl Polynomial {
     }
 
     /// Creates a random polynomial.
-    pub fn random<R: RngCore>(number_of_coefficients: usize, rng: &mut R) -> Self {
+    pub fn random<R: RngCore + CryptoRng>(number_of_coefficients: usize, rng: &mut R) -> Self {
         let coefficients: Vec<Scalar> = iter::repeat(())
-            .map(|()| random_bls12_381_scalar(rng))
+            .map(|()| Scalar::legacy_random_generation(rng))
             .take(number_of_coefficients)
             .collect();
         Polynomial::from(coefficients)

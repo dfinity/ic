@@ -2,9 +2,8 @@
 //!
 //! Note: This file is largely based on https://github.com/poanetwork/threshold_crypto/blob/master/src/poly.rs
 
-use bls12_381::Scalar;
-use ff::Field;
-use rand::RngCore;
+use ic_crypto_internal_bls12_381_type::Scalar;
+use rand::{CryptoRng, RngCore};
 use std::iter;
 use zeroize::Zeroize;
 
