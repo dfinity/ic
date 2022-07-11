@@ -3,7 +3,6 @@
 
 use crate::dkg::secp256k1::types::{EncryptedShare, EphemeralPublicKeyBytes};
 use crate::types::SecretKey as ThresholdSecretKey;
-use ic_crypto_internal_bls12381_common::hash_to_fr;
 use ic_crypto_sha::Sha256;
 use ic_crypto_sha::{Context, DomainSeparationContext};
 use ic_types::IDkgId;
@@ -50,7 +49,7 @@ pub fn key_encryption_key<
     hash.write(&dealer_public_key.0);
     hash.write(&receiver_public_key.0);
     hash.write(&diffie_hellman.0);
-    hash_to_fr(hash)
+    ThresholdSecretKey::legacy_hash_to_fr(hash.finish())
 }
 
 /// Encrypts a threshold key share

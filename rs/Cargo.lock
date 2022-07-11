@@ -4887,20 +4887,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-crypto-internal-bls12381-common"
-version = "0.8.0"
+name = "ic-crypto-internal-bls12-381-type"
+version = "0.1.0"
 dependencies = [
  "bls12_381",
+ "criterion",
  "getrandom 0.2.2",
  "hex",
- "ic-crypto-internal-bls12381-serde-miracl",
  "ic-crypto-internal-types",
- "ic-crypto-sha",
- "miracl_core_bls12381",
- "proptest 0.9.6",
- "proptest-derive",
+ "pairing",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "sha2 0.9.9",
 ]
 
 [[package]]
@@ -4928,7 +4926,6 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-basic-sig-iccsa",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
- "ic-crypto-internal-bls12381-common",
  "ic-crypto-internal-bls12381-serde-miracl",
  "ic-crypto-internal-csp-protobuf-generator",
  "ic-crypto-internal-csp-test-utils",
@@ -5012,7 +5009,7 @@ name = "ic-crypto-internal-fs-ni-dkg"
 version = "0.8.0"
 dependencies = [
  "hex",
- "ic-crypto-internal-bls12381-common",
+ "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-bls12381-serde-miracl",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
@@ -5048,15 +5045,13 @@ name = "ic-crypto-internal-multi-sig-bls12381"
 version = "0.8.0"
 dependencies = [
  "base64 0.11.0",
- "bls12_381",
  "hex",
- "ic-crypto-internal-bls12381-common",
+ "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "ic-protobuf",
  "ic-types 0.8.0",
- "pairing",
  "proptest 0.9.6",
  "proptest-derive",
  "rand 0.8.5",
@@ -5102,10 +5097,8 @@ version = "0.8.0"
 dependencies = [
  "arrayvec 0.5.1",
  "base64 0.11.0",
- "bls12_381",
- "ff 0.10.1",
  "hex",
- "ic-crypto-internal-bls12381-common",
+ "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-bls12381-serde-miracl",
  "ic-crypto-internal-csp-test-utils",
  "ic-crypto-internal-fs-ni-dkg",
@@ -5119,7 +5112,6 @@ dependencies = [
  "lazy_static",
  "libsecp256k1",
  "miracl_core_bls12381",
- "pairing",
  "proptest 0.9.6",
  "proptest-derive",
  "rand 0.8.5",

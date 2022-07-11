@@ -2,7 +2,6 @@
 
 use super::common_traits::zeroize_fr;
 use super::*;
-use ff::Field;
 use std::borrow::Borrow;
 use std::iter::Sum;
 use std::ops;

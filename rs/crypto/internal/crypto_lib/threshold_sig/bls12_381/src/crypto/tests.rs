@@ -9,8 +9,7 @@ use super::super::types::{
 };
 use crate::crypto::hash_message_to_g1;
 use crate::types::PublicKey;
-use bls12_381::Scalar;
-use ic_crypto_internal_bls12381_common::{g1_to_bytes, hash_to_fr, random_bls12_381_scalar};
+use ic_crypto_internal_bls12_381_type::{G2Projective, Scalar};
 use ic_types::crypto::error::InvalidArgumentError;
 use ic_types::{NodeIndex, NumberOfNodes, Randomness};
 use proptest::prelude::*;
@@ -24,9 +23,8 @@ use std::ops::{AddAssign, SubAssign};
 pub mod util {
     use super::{
         crypto, select_n, IndividualSignature, InvalidArgumentError, NodeIndex, NumberOfNodes,
-        Polynomial, PublicCoefficients, Randomness, SecretKey,
+        Polynomial, PublicCoefficients, Randomness, Scalar, SecretKey,
     };
-    use bls12_381::Scalar;
 
     // A public key as computed by the holder of the private key is the same as the
     // public key as computed from the public public_coefficients.
@@ -250,7 +248,7 @@ fn test_distinct_messages_yield_distinct_hashes() {
     let points: HashSet<_> = (0..number_of_messages as u32)
         .map(|number| {
             let g1 = hash_message_to_g1(&number.to_be_bytes()[..]);
-            let bytes = g1_to_bytes(&g1);
+            let bytes = g1.serialize();
             // It suffices to prove that the first 32 bytes are distinct.  More requires a
             // custom hash implementation.
             let mut hashable = [0u8; 32];
@@ -357,7 +355,7 @@ proptest! {
             let mut rng = ChaChaRng::from_seed(seed);
             let receivers_size = (threshold+redundancy+idle_receivers) as usize;
 
-            let secret_key = random_bls12_381_scalar(&mut rng);
+            let secret_key = Scalar::random(&mut rng);
 
             let eligibility = {
                 let mut eligibility = vec![true;receivers_size];
@@ -383,7 +381,6 @@ proptest! {
 
 mod resharing_util {
     use super::*;
-    use bls12_381::G2Projective;
 
     pub type ToyDealing = (PublicCoefficients, Vec<Option<SecretKey>>);
 
@@ -553,7 +550,7 @@ fn resharing_with_encryption_should_preserve_the_threshold_key() {
         let mut hash = ic_crypto_sha::Sha256::new();
         hash.write(&(original_receiver_index as NodeIndex).to_be_bytes()[..]);
         hash.write(&(new_receiver_index as NodeIndex).to_be_bytes()[..]);
-        hash_to_fr(hash)
+        SecretKey::legacy_hash_to_fr(hash.finish())
     }
     let original_threshold = 3;
     let new_threshold = 4;

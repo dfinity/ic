@@ -43,10 +43,7 @@ impl Polynomial {
             let mut diff = *y;
             diff.sub_assign(&poly.evaluate_at(x));
 
-            let inv = base.evaluate_at(x).invert();
-
-            if bool::from(inv.is_some()) {
-                let base_inv = inv.unwrap();
+            if let Some(base_inv) = base.evaluate_at(x).inverse() {
                 diff.mul_assign(&base_inv);
                 base *= diff;
                 poly += &base;

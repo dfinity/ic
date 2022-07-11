@@ -2,7 +2,7 @@
 
 use super::super::ThresholdError;
 use super::*;
-use bls12_381::{G1Projective, G2Projective, Scalar};
+use ic_crypto_internal_bls12_381_type::{G1Projective, G2Projective, Scalar};
 use std::borrow::Borrow;
 use std::ops::{AddAssign, Mul, MulAssign, SubAssign};
 
@@ -66,7 +66,7 @@ impl PublicCoefficients {
         let mut set = std::collections::HashSet::new();
 
         for scalar in scalars {
-            if !set.insert(scalar.to_bytes().to_vec()) {
+            if !set.insert(scalar.serialize().to_vec()) {
                 return true;
             }
         }
@@ -126,14 +126,12 @@ impl PublicCoefficients {
                 diff.sub_assign(x_i);
                 denom.mul_assign(&diff);
             }
-            let inv = denom.invert();
 
-            if bool::from(inv.is_none()) {
+            if let Some(inv) = denom.inverse() {
+                lagrange_0.mul_assign(inv);
+            } else {
                 return Err(ThresholdError::DuplicateX);
             }
-
-            let inv = inv.unwrap();
-            lagrange_0.mul_assign(inv);
         }
         Ok(x_prod)
     }
@@ -143,7 +141,7 @@ impl PublicCoefficients {
             .coefficients
             .iter()
             .rev()
-            .take_while(|c| bool::from(c.0.is_identity()))
+            .take_while(|c| c.0.is_identity())
             .count();
         let len = self.coefficients.len() - zeros;
         self.coefficients.truncate(len)

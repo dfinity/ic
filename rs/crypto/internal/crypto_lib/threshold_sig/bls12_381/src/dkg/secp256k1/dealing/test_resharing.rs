@@ -2,7 +2,7 @@ use crate::dkg::secp256k1::test_fixtures::{
     StateWithEphemeralKeys, StateWithResharedDealings, StateWithThresholdKey,
 };
 use crate::types::PublicKey;
-use bls12_381::G2Projective;
+use ic_crypto_internal_bls12_381_type::G2Projective;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use proptest::prelude::*;
 use rand::SeedableRng;

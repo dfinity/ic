@@ -1,8 +1,7 @@
 //! Hashing to group elements (fields, curves)
 use crate::utils::{curve_order, RAND_ChaCha20};
-use ic_crypto_internal_bls12381_common::{hash_to_miracl_g1, MiraclG1};
 use ic_crypto_internal_bls12381_serde_miracl::{
-    miracl_fr_to_bytes, miracl_g1_to_bytes, miracl_g2_to_bytes,
+    miracl_fr_to_bytes, miracl_g1_from_bytes_unchecked, miracl_g1_to_bytes, miracl_g2_to_bytes,
 };
 use ic_crypto_sha::{Context, DomainSeparationContext, Sha256};
 use miracl_core::bls12381::big::BIG;
@@ -241,9 +240,25 @@ pub fn random_oracle_to_scalar(domain: &str, data: &dyn UniqueHash) -> BIG {
 /// a random oracle. Returns a group element of G1 in BLS12_381.
 ///
 /// A distinct `domain` should be used for each purpose of the random oracle.
-pub fn random_oracle_to_miracl_g1(domain: &str, data: &dyn UniqueHash) -> MiraclG1 {
-    hash_to_miracl_g1(
+pub fn random_oracle_to_miracl_ecp(domain: &str, data: &dyn UniqueHash) -> ECP {
+    hash_to_miracl_ecp(
         DomainSeparationContext::new(domain).as_bytes(),
         &data.unique_hash(),
     )
+}
+
+/// Hash onto BLS12-381 G1 (random oracle variant) returning MIRACL object
+///
+/// This follows the internet draft <https://datatracker.ietf.org/doc/draft-irtf-cfrg-hash-to-curve/>
+///
+/// # Arguments
+/// * `dst` is a domain separation tag (see draft-irtf-cfrg-hash-to-curve for
+///   guidance on formatting of this tag)
+/// * `msg` is the message to be hashed to an elliptic curve point on BLS12_381.
+/// # Returns
+/// The G1 point as a MIRACL object
+fn hash_to_miracl_ecp(dst: &[u8], msg: &[u8]) -> ECP {
+    let g1 = ic_crypto_internal_bls12_381_type::G1Projective::hash(dst, msg);
+    miracl_g1_from_bytes_unchecked(&g1.serialize())
+        .expect("MIRACL unable to parse G1 serialization")
 }

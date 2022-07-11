@@ -3,15 +3,17 @@
 
 use super::super::Polynomial;
 use super::PublicCoefficients;
-use crate::types::bls::random_bls12_381_scalar;
 use crate::types::{PublicKey, ThresholdError};
-use bls12_381::Scalar;
-use ic_crypto_internal_bls12381_common::test_utils::{int_to_fr, uint_to_fr, uint_to_g2};
+use ic_crypto_internal_bls12_381_type::{G2Projective, Scalar};
 use std::ops::MulAssign;
+
+fn uint_to_g2(num: u32) -> G2Projective {
+    G2Projective::generator() * Scalar::from_u32(num)
+}
 
 /// Polynomial evaluation for small polynomials; this will overflow and panic if
 /// used for large values.
-pub fn evaluate_integer_polynomial(x: u32, polynomial: &[u32]) -> u32 {
+fn evaluate_integer_polynomial(x: u32, polynomial: &[u32]) -> u32 {
     let mut ans = 0u32;
     let mut power = 1u32;
     for coefficient in polynomial {
@@ -46,7 +48,7 @@ pub fn uints_to_polynomial(integer_coefficients: &[u32]) -> Polynomial {
         coefficients: integer_coefficients
             .iter()
             .cloned()
-            .map(uint_to_fr)
+            .map(Scalar::from_u32)
             .collect(),
     }
 }
@@ -95,9 +97,9 @@ mod public_coefficients {
     /// Given a polynomial, verify that keys are generated correctly
     fn test_key_is_correct(x: u32, integer_coefficients: &[u32]) {
         let polynomial = uints_to_polynomial(integer_coefficients);
-        let secret_key = polynomial.evaluate_at(&uint_to_fr(x));
+        let secret_key = polynomial.evaluate_at(&Scalar::from_u32(x));
         let y = evaluate_integer_polynomial(x, integer_coefficients);
-        assert_eq!(secret_key, uint_to_fr(y));
+        assert_eq!(secret_key, Scalar::from_u32(y));
     }
     #[test]
     fn key_is_correct() {
@@ -112,7 +114,10 @@ mod public_coefficients {
         let public_coefficients = uints_to_public_coefficients(integer_coefficients);
         let y = evaluate_integer_polynomial(x, integer_coefficients);
         let public_key = uint_to_g2(y);
-        assert_eq!(public_coefficients.evaluate_at(&uint_to_fr(x)), public_key);
+        assert_eq!(
+            public_coefficients.evaluate_at(&Scalar::from_u32(x)),
+            public_key
+        );
     }
     #[test]
     fn public_key_from_public_coefficients_are_correct() {
@@ -131,7 +136,7 @@ mod public_coefficients {
     #[test]
     fn test_public_coefficients_multiplication_is_correct() {
         assert_eq!(
-            uints_to_public_coefficients(&[1, 0, 5, 7]) * uint_to_fr(3),
+            uints_to_public_coefficients(&[1, 0, 5, 7]) * Scalar::from_u32(3),
             uints_to_public_coefficients(&[3, 0, 15, 21])
         );
     }
@@ -148,7 +153,7 @@ mod public_coefficients {
     #[allow(clippy::identity_op)]
     fn test_lagrange_coefficients_are_correct() {
         let x_values = [1, 3, 4, 7];
-        let x_values_as_fr: Vec<Scalar> = x_values.iter().map(|x| int_to_fr(*x)).collect();
+        let x_values_as_fr: Vec<Scalar> = x_values.iter().map(|x| Scalar::from_u32(*x)).collect();
         let lagrange_coefficients: Vec<Scalar> = {
             // The lagrange coefficient numerators and denominators:
             let as_integers = [
@@ -159,13 +164,15 @@ mod public_coefficients {
             ];
             let as_fr: Vec<(Scalar, Scalar)> = as_integers
                 .iter()
-                .map(|(numerator, denominator)| (int_to_fr(*numerator), int_to_fr(*denominator)))
+                .map(|(numerator, denominator)| {
+                    (Scalar::from_i32(*numerator), Scalar::from_i32(*denominator))
+                })
                 .collect();
             let divided: Vec<Scalar> = as_fr
                 .iter()
                 .map(|(numerator, denominator)| {
                     let mut ans = *numerator;
-                    let inv = denominator.invert().unwrap();
+                    let inv = denominator.inverse().expect("No inverse");
                     ans.mul_assign(&inv);
                     ans
                 })
@@ -184,12 +191,12 @@ mod public_coefficients {
         for num_coefficients in 1..50 {
             let mut inputs = vec![];
 
-            let dup_r = random_bls12_381_scalar(&mut rng);
+            let dup_r = Scalar::random(&mut rng);
 
             inputs.push(dup_r);
 
             for _i in 0..=num_coefficients {
-                let r = random_bls12_381_scalar(&mut rng);
+                let r = Scalar::random(&mut rng);
                 inputs.push(r);
             }
             inputs.push(dup_r);
@@ -211,7 +218,7 @@ mod public_coefficients {
 
             let mut samples = vec![];
 
-            let dup_r = random_bls12_381_scalar(&mut rng);
+            let dup_r = Scalar::random(&mut rng);
             let dup_p_r = poly.evaluate_at(&dup_r);
 
             for _i in 0..=num_coefficients {
@@ -219,7 +226,7 @@ mod public_coefficients {
             }
 
             for _i in 0..=num_coefficients {
-                let r = random_bls12_381_scalar(&mut rng);
+                let r = Scalar::random(&mut rng);
                 let p_r = poly.evaluate_at(&r);
                 samples.push((r, p_r));
                 samples.push((dup_r, dup_p_r));
@@ -235,15 +242,15 @@ mod public_coefficients {
     fn test_public_interpolation_is_correct() {
         let polynomial = [2, 4, 9];
         let x_5 = (
-            uint_to_fr(5),
+            Scalar::from_u32(5),
             uint_to_g2(evaluate_integer_polynomial(5, &polynomial)),
         );
         let x_3 = (
-            uint_to_fr(3),
+            Scalar::from_u32(3),
             uint_to_g2(evaluate_integer_polynomial(3, &polynomial)),
         );
         let x_8 = (
-            uint_to_fr(8),
+            Scalar::from_u32(8),
             uint_to_g2(evaluate_integer_polynomial(8, &polynomial)),
         );
         let random_points = [x_5, x_3, x_8];

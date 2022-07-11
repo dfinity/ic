@@ -6,11 +6,9 @@ use crate::types::{
     SecretKey,
 };
 
-use bls12_381::{Bls12, G1Projective, G2Affine, G2Projective};
-use ic_crypto_internal_bls12381_common as bls;
-use ic_crypto_internal_bls12381_common::random_bls12_381_scalar;
+use ic_crypto_internal_bls12_381_type::{verify_bls_signature, G1Projective, G2Projective, Scalar};
+
 use ic_crypto_sha::{Context, DomainSeparationContext};
-use pairing::Engine;
 use rand::{CryptoRng, Rng};
 
 /// Domain separator for Hash-to-G1 to be used for signature generation in a
@@ -28,14 +26,11 @@ const DOMAIN_HASH_PUB_KEY_TO_G1_BLS12381_SIG_WITH_POP: &[u8; 43] =
 pub const DOMAIN_MULTI_SIG_BLS12_381_POP: &str = "ic-multi-sig-bls12381-pop";
 
 pub fn hash_message_to_g1(msg: &[u8]) -> G1Projective {
-    bls::hash_to_g1(&DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG_WITH_POP[..], msg)
+    G1Projective::hash(DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG_WITH_POP, msg)
 }
 
 pub fn hash_public_key_to_g1(public_key: &[u8]) -> G1Projective {
-    bls::hash_to_g1(
-        &DOMAIN_HASH_PUB_KEY_TO_G1_BLS12381_SIG_WITH_POP[..],
-        public_key,
-    )
+    G1Projective::hash(DOMAIN_HASH_PUB_KEY_TO_G1_BLS12381_SIG_WITH_POP, public_key)
 }
 
 // Once upon a time we had placed the `seed` values directly into the output
@@ -58,9 +53,7 @@ pub fn keypair_from_seed(seed: [u64; 4]) -> (SecretKey, PublicKey) {
 }
 
 pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKey, PublicKey) {
-    // random_bls12_381_scalar uses rejection sampling to ensure a uniform
-    // distribution.
-    let secret_key = random_bls12_381_scalar(rng);
+    let secret_key = Scalar::legacy_random_generation(rng);
     let public_key = G2Projective::generator() * secret_key;
     (secret_key, public_key)
 }
@@ -85,15 +78,14 @@ pub fn create_pop(public_key: PublicKey, secret_key: SecretKey) -> Pop {
 }
 
 pub fn combine_signatures(signatures: &[IndividualSignature]) -> CombinedSignature {
-    bls::sum_g1(signatures)
+    G1Projective::sum(signatures)
 }
 pub fn combine_public_keys(public_keys: &[PublicKey]) -> CombinedPublicKey {
-    bls::sum_g2(public_keys)
+    G2Projective::sum(public_keys)
 }
 
 pub fn verify_point(hash: G1Projective, signature: G1Projective, public_key: PublicKey) -> bool {
-    Bls12::pairing(&signature.into(), &G2Affine::generator())
-        == Bls12::pairing(&hash.into(), &public_key.into())
+    verify_bls_signature(&signature.into(), &public_key.into(), &hash.into())
 }
 pub fn verify_individual_message_signature(
     message: &[u8],

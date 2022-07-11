@@ -12,19 +12,16 @@ filegroup(
 )
 
 rust_library(
-    name = "common",
+    name = "type",
     srcs = glob(["src/**"]),
-    crate_name = "ic_crypto_internal_bls12381_common",
-    edition = "2018",
+    crate_name = "ic_crypto_internal_bls12_381_type",
+    edition = "2021",
     deps = [
-        "//rs/crypto/internal/crypto_lib/bls12_381/serde/miracl",
-        "//rs/crypto/internal/crypto_lib/types",
-        "//rs/crypto/sha",
         "@crate_index//:bls12_381",
-        "@crate_index//:hex",
-        "@crate_index//:miracl_core_bls12381",
+        "@crate_index//:pairing",
         "@crate_index//:rand_0_8_4",
         "@crate_index//:rand_chacha_0_3_1",
+        "@crate_index//:sha2",
     ] + select({
         "@rules_rust//rust/platform:wasm32-unknown-unknown": ["@wasm_crate_index//:getrandom"],
         "//conditions:default": ["@crate_index//:getrandom"],
@@ -32,12 +29,10 @@ rust_library(
 )
 
 rust_test(
-    name = "common_test",
-    crate = ":common",
-    proc_macro_deps = [
-        "@crate_index//:proptest-derive",
-    ],
+    name = "ic_crypto_internal_bls12_381_type_tests",
+    crate = ":type",
     deps = [
-        "@crate_index//:proptest",
+        "//rs/crypto/internal/crypto_lib/types",
+        "@crate_index//:hex",
     ],
 )

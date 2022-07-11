@@ -6,13 +6,11 @@ edition = "2018"
 [dependencies]
 base64 = "0.11.0"
 hex = "0.4.2"
-ic-crypto-internal-bls12381-common = { path = "../../bls12_381/common"}
+ic-crypto-internal-bls12-381-type = { path = "../../bls12_381/type"}
 ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-sha = { path= "../../../../sha"}
 ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
-pairing = "0.20"
-bls12_381 = { version = "0.5.0", default-features = false, features = ["groups", "pairings", "alloc", "experimental"] }
 rand = "0.8"
 rand_chacha = "0.3"
 serde = { version = "1.0.99", features = [ "derive" ] }
