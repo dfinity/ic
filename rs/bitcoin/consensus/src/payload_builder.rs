@@ -20,7 +20,7 @@ use ic_types::{
     registry::RegistryClientError,
     CountBytes, Height, NumBytes, SubnetId,
 };
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use thiserror::Error;
 
 const ADAPTER_REQUEST_STATUS_FAILURE: &str = "failed";
@@ -145,7 +145,7 @@ impl BitcoinPayloadBuilder {
                     let result = adapter_client.send_request(
                         request.request.clone(),
                         Options {
-                            timeout: Some(std::time::Duration::from_millis(50)),
+                            timeout: Duration::from_millis(50),
                         },
                     );
                     match result {

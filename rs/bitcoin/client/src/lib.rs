@@ -135,9 +135,7 @@ impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
                         anchor,
                     };
                     let mut tonic_request = tonic::Request::new(get_successors_request);
-                    if let Some(timeout) = opts.timeout {
-                        tonic_request.set_timeout(timeout);
-                    }
+                    tonic_request.set_timeout(opts.timeout);
 
                     client
                         .get_successors(tonic_request)
@@ -175,9 +173,7 @@ impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
                     request_timer.set_label(LABEL_REQUEST_TYPE, LABEL_SEND_TRANSACTION);
                     let send_transaction_request = BtcServiceSendTransactionRequest { transaction };
                     let mut tonic_request = tonic::Request::new(send_transaction_request);
-                    if let Some(timeout) = opts.timeout {
-                        tonic_request.set_timeout(timeout);
-                    }
+                    tonic_request.set_timeout(opts.timeout);
 
                     client
                         .send_transaction(tonic_request)
