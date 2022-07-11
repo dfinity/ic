@@ -497,6 +497,7 @@ impl<'a> QueryContext<'a> {
         let subnet_available_memory = self.subnet_available_memory.clone();
         let (output, output_execution_state, output_system_state) = self.hypervisor.execute(
             api_type,
+            time,
             canister.system_state.clone(),
             canister.memory_usage(self.own_subnet_type),
             execution_parameters.clone(),
@@ -589,6 +590,7 @@ impl<'a> QueryContext<'a> {
         let (cleanup_output, output_execution_state, output_system_state) =
             self.hypervisor.execute(
                 ApiType::Cleanup { time },
+                time,
                 canister.system_state.clone(),
                 canister_current_memory_usage,
                 execution_parameters,

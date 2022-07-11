@@ -173,6 +173,7 @@ pub fn execute_heartbeat(
     let api_type = ApiType::heartbeat(time, call_context_id);
     let (output, output_execution_state, output_system_state) = hypervisor.execute(
         api_type,
+        time,
         system_state.clone(),
         memory_usage,
         execution_parameters,

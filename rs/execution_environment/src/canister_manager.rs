@@ -788,6 +788,7 @@ impl CanisterManager {
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
             log: &self.log,
+            time,
         };
 
         let res = match context.mode {

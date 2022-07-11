@@ -118,6 +118,7 @@ pub struct RoundContext<'a> {
     pub hypervisor: &'a Hypervisor,
     pub cycles_account_manager: &'a CyclesAccountManager,
     pub log: &'a ReplicaLogger,
+    pub time: Time,
 }
 
 pub struct RoundLimits {
@@ -887,6 +888,7 @@ impl ExecutionEnvironment {
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
             log: &self.log,
+            time,
         };
 
         execute_call(
@@ -1148,6 +1150,7 @@ impl ExecutionEnvironment {
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
             log: &self.log,
+            time,
         };
         execute_response(
             canister,

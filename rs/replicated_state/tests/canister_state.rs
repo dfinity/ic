@@ -6,6 +6,7 @@ mod canister_state {
         testing::{CanisterQueuesTesting, SystemStateTesting},
         InputQueueType, StateError,
     };
+    use ic_test_utilities::mock_time;
     use ic_test_utilities::state::{
         get_running_canister, get_stopped_canister, get_stopping_canister,
     };
@@ -42,6 +43,7 @@ mod canister_state {
                     .receiver(canister_test_id(1))
                     .build()
                     .into(),
+                mock_time(),
             ),
             Ok(())
         );
@@ -89,6 +91,7 @@ mod canister_state {
                     .receiver(canister_test_id(1))
                     .build()
                     .into(),
+                mock_time(),
             ),
             Ok(())
         );
@@ -137,6 +140,7 @@ mod canister_state {
                     .receiver(canister_test_id(1))
                     .build()
                     .into(),
+                mock_time(),
             ),
             Ok(())
         );

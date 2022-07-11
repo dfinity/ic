@@ -1306,6 +1306,7 @@ fn certified_data_set() {
 
     let system_state_changes = api.into_system_state_changes();
     system_state_changes.apply_changes(
+        mock_time(),
         &mut system_state,
         &default_network_topology(),
         subnet_test_id(1),
@@ -1463,6 +1464,7 @@ fn call_perform_not_enough_cycles_resets_state() {
     assert_eq!(api.ic0_call_perform().unwrap(), 2);
     let system_state_changes = api.into_system_state_changes();
     system_state_changes.apply_changes(
+        mock_time(),
         &mut system_state,
         &default_network_topology(),
         subnet_test_id(1),
@@ -1714,6 +1716,7 @@ fn push_output_request_respects_memory_limits() {
         // Ensure that exactly one output request was pushed.
         let system_state_changes = api.into_system_state_changes();
         system_state_changes.apply_changes(
+            mock_time(),
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
@@ -1803,6 +1806,7 @@ fn push_output_request_oversized_request_memory_limits() {
     // Ensure that exactly one output request was pushed.
     let system_state_changes = api.into_system_state_changes();
     system_state_changes.apply_changes(
+        mock_time(),
         &mut system_state,
         &default_network_topology(),
         subnet_test_id(1),

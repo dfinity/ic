@@ -15,6 +15,7 @@ use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::CanisterStatus;
 
 use ic_test_utilities::{
+    mock_time,
     state::{get_running_canister, get_stopped_canister, get_stopping_canister},
     types::{
         ids::{canister_test_id, subnet_test_id},
@@ -386,20 +387,20 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
             .receiver(source)
             .build();
         source_canister
-            .push_output_request(self_request.clone().into())
+            .push_output_request(self_request.clone().into(), mock_time())
             .unwrap();
         source_canister
-            .push_output_request(self_request.into())
+            .push_output_request(self_request.into(), mock_time())
             .unwrap();
         let other_request = RequestBuilder::default()
             .sender(source)
             .receiver(dest)
             .build();
         source_canister
-            .push_output_request(other_request.clone().into())
+            .push_output_request(other_request.clone().into(), mock_time())
             .unwrap();
         source_canister
-            .push_output_request(other_request.into())
+            .push_output_request(other_request.into(), mock_time())
             .unwrap();
         test.induct_messages_on_same_subnet();
 

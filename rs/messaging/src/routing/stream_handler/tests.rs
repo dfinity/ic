@@ -19,6 +19,7 @@ use ic_replicated_state::{
     CanisterState, ReplicatedState, Stream,
 };
 use ic_test_utilities::{
+    mock_time,
     state::{new_canister_state, register_callback},
     types::ids::{user_test_id, SUBNET_12, SUBNET_23, SUBNET_27},
     types::messages::{RequestBuilder, ResponseBuilder},
@@ -2942,7 +2943,9 @@ fn make_input_queue_reservations(canister: &mut CanisterState, count: usize, rem
             msg.receiver,
             msg.sender_reply_callback,
         );
-        canister.push_output_request(msg.into()).unwrap();
+        canister
+            .push_output_request(msg.into(), mock_time())
+            .unwrap();
     }
     canister.output_into_iter().count();
 }

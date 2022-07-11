@@ -15,7 +15,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     messages::{Ingress, Request, RequestOrResponse, Response, StopCanisterContext},
     nominal_cycles::NominalCycles,
-    CanisterId, Cycles, MemoryAllocation, NumBytes, PrincipalId, QueueIndex,
+    CanisterId, Cycles, MemoryAllocation, NumBytes, PrincipalId, QueueIndex, Time,
 };
 use lazy_static::lazy_static;
 use maplit::btreeset;
@@ -359,6 +359,7 @@ impl SystemState {
     pub fn push_output_request(
         &mut self,
         msg: Arc<Request>,
+        _time: Time,
     ) -> Result<(), (StateError, Arc<Request>)> {
         assert_eq!(
             msg.sender, self.canister_id,

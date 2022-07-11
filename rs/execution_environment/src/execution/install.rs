@@ -390,6 +390,7 @@ fn install_stage_3_process_init_result(
                 fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
             system_state_changes.apply_changes(
+                round.time,
                 &mut new_canister.system_state,
                 round.network_topology,
                 round.hypervisor.subnet_id(),

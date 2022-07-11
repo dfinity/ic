@@ -97,6 +97,7 @@ pub fn execute_non_replicated_query(
     // commit modifications to the canister anyway.
     let (output, output_execution_state, output_system_state) = hypervisor.execute(
         api_type,
+        time,
         canister.system_state,
         memory_usage,
         execution_parameters,

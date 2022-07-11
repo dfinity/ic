@@ -238,6 +238,7 @@ fn process_update_result(
         WasmExecutionResult::Finished(output, system_state_changes) => {
             let heap_delta = if output.wasm_result.is_ok() {
                 system_state_changes.apply_changes(
+                    round.time,
                     &mut canister.system_state,
                     round.network_topology,
                     round.hypervisor.subnet_id(),
@@ -343,6 +344,7 @@ fn execute_query_method(
     // versions.
     let (output, _output_execution_state, _output_system_state) = round.hypervisor.execute(
         api_type,
+        time,
         canister.system_state.clone(),
         memory_usage,
         execution_parameters.clone(),

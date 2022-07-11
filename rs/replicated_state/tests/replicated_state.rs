@@ -12,6 +12,7 @@ use ic_replicated_state::{
     BitcoinStateError, CanisterState, InputQueueType, ReplicatedState, SchedulerState, StateError,
     SystemState,
 };
+use ic_test_utilities::mock_time;
 use ic_test_utilities::state::{
     arb_replicated_state_with_queues, get_running_canister, register_callback,
 };
@@ -579,6 +580,7 @@ fn validate_responses_against_callback_details() {
                 .sender_reply_callback(callback_id_1)
                 .build()
                 .into(),
+            mock_time(),
         ),
         Ok(())
     );
@@ -591,6 +593,7 @@ fn validate_responses_against_callback_details() {
                 .sender_reply_callback(callback_id_2)
                 .build()
                 .into(),
+            mock_time(),
         ),
         Ok(())
     );
