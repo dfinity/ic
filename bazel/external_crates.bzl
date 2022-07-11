@@ -590,7 +590,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.3.0",
             ),
             "rand_pcg": crate.spec(
-                version = "^0.2.1",
+                version = "^0.3.1",
             ),
             "randomkit": crate.spec(
                 version = "^0.1.1",

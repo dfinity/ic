@@ -28,8 +28,8 @@ ic-utils = { path = "../utils" }
 parking_lot = "0.11.1"
 prometheus = { version = "0.12.0", features = [ "process" ] }
 prost = "0.10.4"
-rand = "0.7.3"
-rand_chacha = "0.2.2"
+rand = "0.8"
+rand_chacha = "0.3"
 scoped_threadpool = "0.1.*"
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_bytes = "0.11"

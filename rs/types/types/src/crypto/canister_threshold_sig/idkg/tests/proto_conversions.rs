@@ -85,7 +85,7 @@ fn initial_dealings_without_empty_or_default_data() -> InitialIDkgDealings {
 }
 
 fn dummy_extended_derivation_path() -> ExtendedDerivationPath {
-    let mut rng = rand::thread_rng();
+    let rng = &mut rand::thread_rng();
     let path_len = rng.next_u32() % 10;
     let user_id = rng.next_u64();
     let mut derivation_path = vec![];

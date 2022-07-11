@@ -7,7 +7,7 @@ edition = "2018"
 hex = "0.4.2"
 lazy_static = "1.4.0"
 miracl_core = { version = "4.1.2", package = "miracl_core_bls12381" }
-rand_chacha = "0.2.2"
+rand_chacha = "0.3"
 zeroize = "1.1.1"
 ic-crypto-internal-bls12-381-type = { path ="../bls12_381/type" }
 ic-crypto-internal-bls12381-serde-miracl = { path = "../bls12_381/serde/miracl" }
@@ -16,4 +16,4 @@ ic-crypto-sha = { path = "../../../sha" }
 
 [dev-dependencies]
 proptest = "0.9.4"
-rand = "0.7.3"
+rand = "0.8"

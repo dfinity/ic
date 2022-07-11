@@ -14,7 +14,7 @@ use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
 use rand::rngs::StdRng;
-use rand_core::{RngCore, SeedableRng};
+use rand::{RngCore, SeedableRng};
 use std::boxed::Box;
 use std::convert::TryFrom;
 use std::time::SystemTime;

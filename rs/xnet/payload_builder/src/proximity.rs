@@ -72,7 +72,7 @@ impl ProximityMap {
         log: ReplicaLogger,
     ) -> ProximityMap {
         fn thread_rng_gen_range(low: u64, high: u64) -> u64 {
-            thread_rng().gen_range(low, high)
+            thread_rng().gen_range(low..high)
         }
 
         Self::with_rng(

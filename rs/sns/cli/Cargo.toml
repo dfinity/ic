@@ -29,8 +29,7 @@ ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = "0.10.4"
-rand = "0.7.3"
-rand_core = "0.5.1"
+rand = "0.8"
 regex = "1.5.6"
 serde_json = "1.0.79"
 serde = { version = "1.0", features = ["derive"] }

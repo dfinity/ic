@@ -17,7 +17,7 @@ use ic_sns_governance::pb::v1::{
 use ic_sns_governance::types::{native_action_ids, Environment, HeapGrowthPotential};
 use ledger_canister::{AccountIdentifier, Subaccount, Tokens};
 use rand::rngs::StdRng;
-use rand_core::{RngCore, SeedableRng};
+use rand::{RngCore, SeedableRng};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::Arc;

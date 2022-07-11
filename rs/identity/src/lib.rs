@@ -34,14 +34,14 @@ fn public_to_array(v: Vec<u8>) -> [u8; PublicKey::SIZE] {
 /// DER, respectively.
 pub fn generate_key() -> (String, Vec<u8>) {
     let mut csprng = OsRng {};
-    let keypair = ed25519_dalek::Keypair::generate(&mut csprng);
+    let signing_key = ed25519_consensus::SigningKey::new(&mut csprng);
 
     let secret_key: SecretKey = {
-        let sk = keypair.secret.to_bytes().to_vec();
+        let sk = signing_key.to_bytes().to_vec();
         SecretKey(secret_to_array(sk))
     };
     let public_key: PublicKey = {
-        let pk = keypair.public.to_bytes().to_vec();
+        let pk = signing_key.verification_key().to_bytes().to_vec();
         PublicKey(public_to_array(pk))
     };
 
