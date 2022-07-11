@@ -11,6 +11,7 @@ use ic_ic00_types::{
     SetControllerArgs,
 };
 use ic_sns_wasm::canister_api::CanisterApi;
+use ic_sns_wasm::canister_stable_memory::CanisterStableMemory;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
@@ -25,7 +26,7 @@ use std::convert::TryInto;
 pub const LOG_PREFIX: &str = "[SNS-WASM] ";
 
 thread_local! {
-  static SNS_WASM: RefCell<SnsWasmCanister> = RefCell::new(SnsWasmCanister::new());
+  static SNS_WASM: RefCell<SnsWasmCanister<CanisterStableMemory>> = RefCell::new(SnsWasmCanister::new());
 }
 
 // TODO possibly determine how to make a single static that is thread-safe?
@@ -147,16 +148,22 @@ fn canister_init() {
 #[candid_method(init)]
 fn canister_init_(_init_payload: SnsWasmCanisterInitPayload) {
     println!("{}canister_init_", LOG_PREFIX);
-    SNS_WASM.with(|c| c.borrow_mut().set_sns_subnets(_init_payload.sns_subnet_ids))
+    SNS_WASM.with(|c| {
+        c.borrow_mut().set_sns_subnets(_init_payload.sns_subnet_ids);
+        c.borrow().initialize_stable_memory();
+    })
 }
 
 /// Executes some logic before executing an upgrade, including serializing and writing the
-/// governance's state to stable memory so that it is preserved during the upgrade and can
+/// canister state to stable memory so that it is preserved during the upgrade and can
 /// be deserialized again in canister_post_upgrade. That is, the stable memory allows
 /// saving the state and restoring it after the upgrade.
 #[export_name = "canister_pre_upgrade"]
 fn canister_pre_upgrade() {
     println!("{}Executing pre upgrade", LOG_PREFIX);
+
+    SNS_WASM.with(|c| c.borrow().write_state_to_stable_memory());
+
     println!("{}Completed pre upgrade", LOG_PREFIX);
 }
 
@@ -166,6 +173,9 @@ fn canister_pre_upgrade() {
 fn canister_post_upgrade() {
     dfn_core::printer::hook();
     println!("{}Executing post upgrade", LOG_PREFIX);
+
+    SNS_WASM.with(|c| c.replace(SnsWasmCanister::<CanisterStableMemory>::from_stable_memory()));
+
     println!("{}Completed post upgrade", LOG_PREFIX);
 }
 

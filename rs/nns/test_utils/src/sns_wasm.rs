@@ -18,6 +18,14 @@ pub fn smallest_valid_wasm() -> SnsWasm {
     }
 }
 
+/// Get an SnsWasm to use in tests
+pub fn test_wasm1() -> SnsWasm {
+    SnsWasm {
+        wasm: vec![0, 0x61, 0x73, 0x6D, 2, 0, 0, 0],
+        canister_type: i32::from(SnsCanisterType::Ledger),
+    }
+}
+
 /// Make get_wasm request to a canister in the StateMachine
 pub fn get_wasm(
     env: &StateMachine,

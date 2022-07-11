@@ -3563,7 +3563,7 @@ name = "http_counter"
 version = "0.1.0"
 dependencies = [
  "candid",
- "ic-cdk 0.5.1",
+ "ic-cdk 0.5.2",
  "ic-cdk-macros",
  "ic-certified-map",
  "serde",
@@ -4063,7 +4063,7 @@ dependencies = [
  "candid",
  "hex",
  "ic-btc-types",
- "ic-cdk 0.5.1",
+ "ic-cdk 0.5.2",
  "ic-cdk-macros",
  "serde",
  "tokio",
@@ -4363,9 +4363,9 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "953c6f940bbf1f79460849fa61cd3ac04768f8f0deb743d185860892f65cbff2"
+checksum = "e471fa2e2464d4f9d676b81d33ae0d1cd190981166c53bbe4d536f13da281fc6"
 dependencies = [
  "candid",
  "cfg-if 1.0.0",
@@ -4379,7 +4379,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f50910f1df55124b5374847fd2b4e3515c426f6d1ce1a23503208e80832fbc2"
 dependencies = [
  "candid",
- "ic-cdk 0.5.1",
+ "ic-cdk 0.5.2",
  "proc-macro2 1.0.39",
  "quote 1.0.17",
  "serde",
@@ -4448,7 +4448,7 @@ dependencies = [
  "dfn_http_metrics",
  "ic-base-types",
  "ic-btc-library",
- "ic-cdk 0.5.1",
+ "ic-cdk 0.5.2",
  "ic-cdk-macros",
  "ic-crypto-sha",
  "ic-ledger-types",
@@ -5706,7 +5706,7 @@ dependencies = [
  "candid",
  "ciborium 0.2.0 (git+https://github.com/enarx/ciborium?rev=e719537c99b564c3674a56defe53713c702c6f46)",
  "ic-base-types",
- "ic-cdk 0.5.1",
+ "ic-cdk 0.5.2",
  "ic-cdk-macros",
  "ic-icrc1",
  "ic-ledger-core",
@@ -5736,7 +5736,7 @@ dependencies = [
  "ciborium 0.2.0 (git+https://github.com/enarx/ciborium?rev=e719537c99b564c3674a56defe53713c702c6f46)",
  "hex",
  "ic-base-types",
- "ic-cdk 0.5.1",
+ "ic-cdk 0.5.2",
  "ic-cdk-macros",
  "ic-crypto-tree-hash",
  "ic-icrc1",
@@ -5915,7 +5915,7 @@ version = "0.1.0"
 dependencies = [
  "ed25519-dalek",
  "ic-canister-client",
- "ic-cdk 0.5.1",
+ "ic-cdk 0.5.2",
  "ic-ledger-canister-blocks-synchronizer",
  "ic-ledger-core",
  "ic-types 0.8.0",
@@ -5967,7 +5967,7 @@ dependencies = [
  "candid",
  "crc32fast",
  "hex",
- "ic-cdk 0.5.1",
+ "ic-cdk 0.5.2",
  "serde",
  "serde_bytes",
  "sha2 0.9.9",
@@ -7269,7 +7269,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-canister-client",
- "ic-cdk 0.5.1",
+ "ic-cdk 0.5.2",
  "ic-constants",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-sha",
@@ -7696,6 +7696,7 @@ dependencies = [
  "dfn_core",
  "futures",
  "ic-base-types",
+ "ic-cdk 0.5.2",
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-interfaces",
@@ -10970,7 +10971,7 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "ic-base-types",
- "ic-cdk 0.5.1",
+ "ic-cdk 0.5.2",
  "ic-cdk-macros",
  "ic-ic00-types",
  "ic-types 0.8.0",

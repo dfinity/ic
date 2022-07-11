@@ -16,6 +16,38 @@ enum SnsCanisterType {
   SNS_CANISTER_TYPE_LEDGER = 3;
 }
 
+// The SNS-WASM canister state that is persisted to stable memory on pre-upgrade and read on
+// post-upgrade.
+message StableCanisterState {
+  repeated SnsWasmStableIndex wasm_indexes = 1;
+  repeated ic_base_types.pb.v1.PrincipalId sns_subnet_ids = 2;
+  repeated DeployedSns deployed_sns_list = 3;
+  UpgradePath upgrade_path = 4;
+}
+
+// Details the offset and size of a WASM binary in stable memory and the hash of this binary
+message SnsWasmStableIndex {
+  bytes hash = 1;
+  uint32 offset = 2;
+  uint32 size = 3;
+}
+
+// Specifies the upgrade path for SNS instances
+message UpgradePath {
+  // The latest SNS version. New SNS deployments will deploy the SNS canisters specified by
+  // this version.
+  SnsVersion latest_version = 1;
+
+  // Maps SnsVersions to the SnsVersion that it should be upgraded to.
+  repeated SnsUpgrade upgrade_path = 2;
+}
+
+// Maps an SnsVersion to the SnsVersion that it should be upgraded to.
+message SnsUpgrade {
+  SnsVersion current_version = 1;
+  SnsVersion next_version = 2;
+}
+
 // The representation of a WASM along with its target canister type
 message SnsWasm {
   bytes wasm = 1;

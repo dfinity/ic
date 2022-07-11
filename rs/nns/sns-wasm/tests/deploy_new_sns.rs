@@ -43,7 +43,7 @@ fn test_canisters_are_created_and_installed() {
             PrincipalId::try_from(subnet_list_record.subnets.get(0).unwrap()).unwrap(),
         );
 
-        let canister = set_up_sns_wasm_canister(
+        let mut canister = set_up_sns_wasm_canister(
             &runtime,
             SnsWasmCanisterInitPayload {
                 sns_subnet_ids: vec![system_subnet_id],
@@ -113,6 +113,9 @@ fn test_canisters_are_created_and_installed() {
             )
             .await
             .unwrap();
+
+        // Check that upgrades do not affect deployments
+        canister.upgrade_to_self_binary(Vec::new()).await.unwrap();
 
         let result = canister
             .update_(

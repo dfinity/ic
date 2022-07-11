@@ -5,12 +5,14 @@ use crate::pb::v1::{
     add_wasm_response, AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
     DeployedSns, GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetWasmRequest,
     GetWasmResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse, SnsCanisterIds,
-    SnsCanisterType, SnsVersion, SnsWasm,
+    SnsCanisterType, SnsVersion, SnsWasm, SnsWasmStableIndex, StableCanisterState,
 };
+use crate::stable_memory::SnsWasmStableMemory;
 use candid::Encode;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::CanisterId;
+use ic_cdk::api::stable::StableMemory;
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_types::{Cycles, SubnetId};
 use std::cell::RefCell;
@@ -19,16 +21,21 @@ use std::convert::TryInto;
 use std::thread::LocalKey;
 
 /// The struct that implements the public API of the canister
-#[derive(Default)]
-pub struct SnsWasmCanister {
-    /// Internal store for wasms
-    wasm_storage: SnsWasmStorage,
+#[derive(Clone, Default)]
+pub struct SnsWasmCanister<M: StableMemory + Clone + Default>
+where
+    SnsWasmCanister<M>: From<StableCanisterState>,
+{
+    /// A map from WASM hash to the index of this WASM in stable memory
+    pub wasm_indexes: BTreeMap<[u8; 32], SnsWasmStableIndex>,
     /// Allowed subnets for SNS's to be installed
-    sns_subnet_ids: Vec<SubnetId>,
+    pub sns_subnet_ids: Vec<SubnetId>,
     /// Stored deployed_sns instances
-    deployed_sns_list: Vec<DeployedSns>,
+    pub deployed_sns_list: Vec<DeployedSns>,
     /// Specifies the upgrade path for SNS instances
-    upgrade_path: UpgradePath,
+    pub upgrade_path: UpgradePath,
+    /// Provides convenient access to stable memory
+    pub stable_memory: SnsWasmStableMemory<M>,
 }
 
 /// Internal implementation to give the wasms we explicitly handle a name (instead of Vec<u8>) for
@@ -39,67 +46,84 @@ struct SnsWasms {
     ledger: Vec<u8>,
 }
 
-impl SnsWasms {
-    fn new(version: &SnsVersion, storage: &SnsWasmStorage) -> Self {
-        let root = storage
-            .get_wasm(&vec_to_hash(version.root_wasm_hash.clone()))
-            .expect("No root wasm with that hash found")
-            .clone()
-            .wasm;
-        let governance = storage
-            .get_wasm(&vec_to_hash(version.governance_wasm_hash.clone()))
-            .expect("No governance wasm found with that hash")
-            .clone()
-            .wasm;
-        let ledger = storage
-            .get_wasm(&vec_to_hash(version.ledger_wasm_hash.clone()))
-            .expect("No ledger wasm found with that hash")
-            .clone()
-            .wasm;
-
-        Self {
-            root,
-            governance,
-            ledger,
-        }
-    }
-}
-
-impl SnsWasmCanister {
+impl<M: StableMemory + Clone + Default> SnsWasmCanister<M>
+where
+    SnsWasmCanister<M>: From<StableCanisterState>,
+{
     pub fn new() -> Self {
-        SnsWasmCanister::default()
+        SnsWasmCanister::<M>::default()
     }
 
     pub fn set_sns_subnets(&mut self, subnet_ids: Vec<SubnetId>) {
         self.sns_subnet_ids = subnet_ids;
     }
 
+    /// Initialize stable memory. Should only be called on canister init.
+    pub fn initialize_stable_memory(&self) {
+        self.stable_memory
+            .init()
+            .expect("Failed to initialize stable memory")
+    }
+
     /// Returns an Option(SnsWasm) in the GetWasmResponse (a struct with wasm bytecode and the install target)
     pub fn get_wasm(&self, get_wasm_payload: GetWasmRequest) -> GetWasmResponse {
         let hash = vec_to_hash(get_wasm_payload.hash);
         GetWasmResponse {
-            wasm: self.wasm_storage.get_wasm(&hash).cloned(),
+            wasm: self.read_wasm(&hash),
         }
+    }
+
+    /// Read a WASM with the given hash from stable memory, if such a WASM exists
+    fn read_wasm(&self, hash: &[u8; 32]) -> Option<SnsWasm> {
+        self.wasm_indexes
+            .get(hash)
+            .and_then(|index| self.stable_memory.read_wasm(index.offset, index.size).ok())
     }
 
     /// Adds a WASM to the canister's storage, validating that the expected hash matches that of the
     /// provided WASM bytecode.
     pub fn add_wasm(&mut self, add_wasm_payload: AddWasmRequest) -> AddWasmResponse {
         let wasm = add_wasm_payload.wasm.expect("Wasm is required");
-        let sns_canister_type = wasm.checked_sns_canister_type();
+
+        let sns_canister_type = match wasm.checked_sns_canister_type() {
+            Ok(canister_type) => canister_type,
+            Err(error) => {
+                return AddWasmResponse {
+                    result: Some(add_wasm_response::Result::Error(AddWasmError { error })),
+                }
+            }
+        };
+
         let hash = vec_to_hash(add_wasm_payload.hash);
 
-        let result = match self.wasm_storage.add_wasm(wasm, &hash) {
-            Ok(_) => {
-                self.upgrade_path
-                    .add_wasm(sns_canister_type.expect("Invalid canister_type"), &hash);
+        if hash != wasm.sha256_hash() {
+            return AddWasmResponse {
+                result: Some(add_wasm_response::Result::Error(AddWasmError {
+                    error: format!("Invalid Sha256 given for submitted WASM bytes. Provided hash was '{}'  but calculated hash was '{}'",
+                                   hash_to_hex_string(&hash), wasm.sha256_string())
+                }))
+            };
+        }
+
+        let result = match self.stable_memory.write_wasm(wasm) {
+            Ok((offset, size)) => {
+                self.wasm_indexes.insert(
+                    hash,
+                    SnsWasmStableIndex {
+                        hash: hash.to_vec(),
+                        offset,
+                        size,
+                    },
+                );
+
+                self.upgrade_path.add_wasm(sns_canister_type, &hash);
 
                 Some(add_wasm_response::Result::Ok(AddWasmOk {
                     hash: hash.to_vec(),
                 }))
             }
-            Err(msg) => Some(add_wasm_response::Result::Error(AddWasmError {
-                error: msg,
+            Err(e) => Some(add_wasm_response::Result::Error(AddWasmError {
+                error: format!("Unable to persist WASM: {}", e),
             })),
         };
 
@@ -118,7 +142,7 @@ impl SnsWasmCanister {
 
     /// Deploys a new SNS based on the parameters of the payload
     pub async fn deploy_new_sns(
-        thread_safe_sns: &'static LocalKey<RefCell<SnsWasmCanister>>,
+        thread_safe_sns: &'static LocalKey<RefCell<SnsWasmCanister<M>>>,
         canister_api: &impl CanisterApi,
         deploy_new_sns_payload: DeployNewSnsRequest,
     ) -> DeployNewSnsResponse {
@@ -277,19 +301,52 @@ impl SnsWasmCanister {
 
     /// Get the latest version of the WASMs based on the latest SnsVersion
     fn get_latest_version_wasms(&self) -> SnsWasms {
-        SnsWasms::new(&self.upgrade_path.latest_version, &self.wasm_storage)
+        let root_hash = self.upgrade_path.latest_version.root_wasm_hash.clone();
+        let governance_hash = self
+            .upgrade_path
+            .latest_version
+            .governance_wasm_hash
+            .clone();
+        let ledger_hash = self.upgrade_path.latest_version.ledger_wasm_hash.clone();
+
+        let root = self
+            .read_wasm(&vec_to_hash(root_hash))
+            .expect("No root wasm with that hash found")
+            .wasm;
+        let governance = self
+            .read_wasm(&vec_to_hash(governance_hash))
+            .expect("No governance wasm found with that hash")
+            .wasm;
+        let ledger = self
+            .read_wasm(&vec_to_hash(ledger_hash))
+            .expect("No ledger wasm found with that hash")
+            .wasm;
+
+        SnsWasms {
+            root,
+            governance,
+            ledger,
+        }
+    }
+
+    /// Write canister state to stable memory
+    pub fn write_state_to_stable_memory(&self) {
+        self.stable_memory
+            .write_canister_state(self.clone().into())
+            .expect("Failed to write canister state from stable memory")
+    }
+
+    /// Read canister state from stable memory
+    pub fn from_stable_memory() -> Self {
+        SnsWasmStableMemory::<M>::default()
+            .read_canister_state()
+            .expect("Failed to read canister state from stable memory")
+            .into()
     }
 }
 
-/// This struct is responsible for storing and retrieving the wasms held by the canister
-#[derive(Default)]
-pub struct SnsWasmStorage {
-    /// Map of sha256 hashs of wasms to the WASM.  
-    wasm_map: BTreeMap<[u8; 32], SnsWasm>,
-}
-
 /// Converts a vector to a sha256 hash, or panics if the vector is the wrong length
-fn vec_to_hash(v: Vec<u8>) -> [u8; 32] {
+pub fn vec_to_hash(v: Vec<u8>) -> [u8; 32] {
     let boxed_slice = v.into_boxed_slice();
     let boxed_array: Box<[u8; 32]> = match boxed_slice.try_into() {
         Ok(hash) => hash,
@@ -298,46 +355,15 @@ fn vec_to_hash(v: Vec<u8>) -> [u8; 32] {
     *boxed_array
 }
 
-impl SnsWasmStorage {
-    pub fn new() -> Self {
-        SnsWasmStorage::default()
-    }
-
-    /// Adds a wasm to the storage
-    /// Validates that the expected hash matches the sha256 hash of the WASM.
-    fn add_wasm(&mut self, wasm: SnsWasm, expected_hash: &[u8; 32]) -> Result<(), String> {
-        // Validate the SnsCanisterType
-        let _ = wasm.checked_sns_canister_type()?;
-
-        if expected_hash != &wasm.sha256_hash() {
-            return Err(format!(
-                "Invalid Sha256 given for submitted WASM bytes.  Provided hash was '{}'  but \
-                calculated hash was '{}'",
-                hash_to_hex_string(expected_hash),
-                wasm.sha256_string()
-            ));
-        }
-
-        self.wasm_map.insert(expected_hash.to_owned(), wasm);
-
-        Ok(())
-    }
-
-    /// Retrieves a wasm by its hash.
-    pub fn get_wasm(&self, hash: &[u8; 32]) -> Option<&SnsWasm> {
-        self.wasm_map.get(hash)
-    }
-}
-
 /// Specifies the upgrade path for SNS instances
-#[derive(Default)]
+#[derive(Clone, Default, Debug, candid::CandidType, candid::Deserialize, PartialEq)]
 pub struct UpgradePath {
-    // The latest SNS version. New SNS deployments will deploy the SNS canisters specified by
-    // this version.
-    latest_version: SnsVersion,
+    /// The latest SNS version. New SNS deployments will deploy the SNS canisters specified by
+    /// this version.
+    pub latest_version: SnsVersion,
 
-    // Maps SnsVersions to the SnsVersion that should be upgraded to.
-    upgrade_path: HashMap<SnsVersion, SnsVersion>,
+    /// Maps SnsVersions to the SnsVersion that should be upgraded to.
+    pub upgrade_path: HashMap<SnsVersion, SnsVersion>,
 }
 
 impl UpgradePath {
@@ -362,6 +388,7 @@ impl UpgradePath {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::canister_stable_memory::TestCanisterStableMemory;
     use async_trait::async_trait;
     use candid::{Decode, Encode};
     use ic_base_types::PrincipalId;
@@ -440,17 +467,15 @@ mod test {
         }
     }
 
-    fn new_wasm_storage() -> SnsWasmStorage {
-        SnsWasmStorage::new()
-    }
-
-    fn new_wasm_canister() -> SnsWasmCanister {
-        SnsWasmCanister::new()
+    fn new_wasm_canister() -> SnsWasmCanister<TestCanisterStableMemory> {
+        let state = SnsWasmCanister::new();
+        state.initialize_stable_memory();
+        state
     }
 
     /// Add some placeholder wasms with different values so we can test
     /// that each value is installed into the correct spot
-    fn add_mock_wasms(canister: &mut SnsWasmCanister) {
+    fn add_mock_wasms(canister: &mut SnsWasmCanister<TestCanisterStableMemory>) {
         let root = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_type: i32::from(SnsCanisterType::Root),
@@ -478,56 +503,6 @@ mod test {
             wasm: Some(ledger),
             hash: ledger_hash.to_vec(),
         });
-    }
-
-    #[test]
-    fn canister_can_store_wasm() {
-        let mut storage = new_wasm_storage();
-
-        let wasm = smallest_valid_wasm();
-        let expected_hash = Sha256::hash(&wasm.wasm);
-
-        storage.add_wasm(wasm.clone(), &expected_hash).unwrap();
-
-        let stored_wasm = storage.get_wasm(&expected_hash);
-
-        assert_eq!(stored_wasm.unwrap(), &wasm);
-    }
-
-    #[test]
-    fn storage_fails_on_invalid_wasm_hash() {
-        let mut storage = new_wasm_storage();
-
-        let wasm = smallest_valid_wasm();
-        let invalid_hash = Sha256::hash("Something else".as_bytes());
-
-        let result = storage.add_wasm(wasm.clone(), &invalid_hash);
-
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            "Invalid Sha256 given for submitted WASM bytes.  Provided hash was \
-            'CC72843144841A6F8110B7EBE7A1768101E03C4C8C152865CB7207E8E4BF8745'  but calculated \
-            hash was '93A44BBB96C751218E4C00D479E4C14358122A389ACCA16205B1E4D0DC5F9476'"
-        );
-        // Assert that it is not stored
-        let retrieved_wasm = storage.get_wasm(&wasm.sha256_hash());
-        assert!(retrieved_wasm.is_none());
-    }
-
-    #[test]
-    fn retrieval_fails_on_invalid_wasm_hash() {
-        let mut storage = new_wasm_storage();
-
-        let wasm = smallest_valid_wasm();
-        let expected_hash = Sha256::hash(&wasm.wasm);
-
-        storage.add_wasm(wasm, &expected_hash).unwrap();
-
-        let bad_hash = Sha256::hash("something_else".as_bytes());
-        let stored_wasm = storage.get_wasm(&bad_hash);
-
-        assert!(stored_wasm.is_none());
     }
 
     #[test]
@@ -616,7 +591,7 @@ mod test {
             failure.result.unwrap(),
             add_wasm_response::Result::Error(AddWasmError {
                 error: format!(
-                    "Invalid Sha256 given for submitted WASM bytes.  Provided hash was \
+                    "Invalid Sha256 given for submitted WASM bytes. Provided hash was \
                 '{}'  but calculated hash was \
                 '{}'",
                     hash_to_hex_string(&bad_hash),
@@ -714,7 +689,7 @@ mod test {
     #[tokio::test]
     async fn test_deploy_new_sns_to_subnet_creates_canisters_and_installs_with_correct_params() {
         thread_local! {
-            static CANISTER_WRAPPER: RefCell<SnsWasmCanister> = RefCell::new(new_wasm_canister()) ;
+            static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
         }
 
         let test_id = subnet_test_id(1);
@@ -821,7 +796,7 @@ mod test {
         let test_id = subnet_test_id(1);
         let canister_api = new_canister_api();
         thread_local! {
-            static CANISTER_WRAPPER: RefCell<SnsWasmCanister> = RefCell::new(new_wasm_canister()) ;
+            static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
         }
 
         CANISTER_WRAPPER.with(|c| {
