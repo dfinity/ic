@@ -22,7 +22,7 @@ pub enum BitcoinAdapterClientError {
 pub type RpcResult<T> = Result<T, BitcoinAdapterClientError>;
 
 pub struct Options {
-    pub timeout: Option<Duration>,
+    pub timeout: Duration,
 }
 
 impl Default for Options {
@@ -30,7 +30,7 @@ impl Default for Options {
         Self {
             // Since we are allowed to block only for few milliseconds the consensus thread,
             // set reasonable defaults.
-            timeout: Some(Duration::from_millis(10)),
+            timeout: Duration::from_millis(10),
         }
     }
 }
