@@ -5,6 +5,7 @@
 //! peers. The component also manages re-establishment of severed connections.
 
 use crate::{
+    metrics::STATUS_SUCCESS,
     types::{
         Connecting, ConnectionRole, ConnectionState, FlowState, PeerState, QueueSize, ServerPort,
         ServerPortState, TransportImpl,
@@ -22,13 +23,15 @@ use std::{
     str::FromStr,
     time::Duration,
 };
+use strum::AsRefStr;
 use tokio::{
     net::{TcpListener, TcpSocket, TcpStream},
     task::JoinHandle,
     time::sleep,
 };
 
-#[derive(Debug)]
+#[derive(Debug, AsRefStr)]
+#[strum(serialize_all = "snake_case")]
 enum TransportTlsHandshakeError {
     DeadlineExceeded,
     Internal(String),
@@ -251,9 +254,17 @@ impl TransportImpl {
                         }
 
                         tokio_runtime.spawn(async move {
-                            let (peer_id, tls_stream) = match arc_self.tls_server_handshake(flow_tag, stream).await {
-                                Ok((peer_id, tls_stream)) => (peer_id, tls_stream),
+                            let (peer_id, tls_stream) = match arc_self.tls_server_handshake(stream).await {
+                                Ok((peer_id, tls_stream)) => {
+                                    metrics.tls_handshakes
+                                        .with_label_values(&[ConnectionRole::Server.as_ref(), STATUS_SUCCESS])
+                                        .inc();
+                                    (peer_id, tls_stream)
+                                },
                                 Err(err) => {
+                                    metrics.tls_handshakes
+                                       .with_label_values(&[ConnectionRole::Server.as_ref(), err.as_ref()])
+                                       .inc();
                                     warn!(
                                         arc_self.log,
                                         "ControlPlane::tls_server_handshake() failed: error = {:?},
@@ -328,9 +339,17 @@ impl TransportImpl {
                     .inc();
                 match Self::connect_to_server(&local_addr, &peer_addr).await {
                     Ok(stream) => {
-                        let tls_stream = match arc_self.tls_client_handshake(peer_id, flow_tag, stream).await {
-                            Ok(tls_stream) => tls_stream,
+                        let tls_stream = match arc_self.tls_client_handshake(peer_id, stream).await {
+                            Ok(tls_stream) => {
+                                metrics.tls_handshakes
+                                    .with_label_values(&[ConnectionRole::Client.as_ref(), STATUS_SUCCESS])
+                                    .inc();
+                                tls_stream
+                            }
                             Err(err) => {
+                                metrics.tls_handshakes
+                                    .with_label_values(&[ConnectionRole::Client.as_ref(), err.as_ref()])
+                                    .inc();
                                 warn!(
                                     arc_self.log,
                                     "ControlPlane::tls_client_handshake() failed: error = {:?},
@@ -519,19 +538,12 @@ impl TransportImpl {
     /// Performs the server side TLS hand shake processing
     async fn tls_server_handshake(
         &self,
-        flow_tag: FlowTag,
         stream: TcpStream,
     ) -> Result<(NodeId, TlsStream), TransportTlsHandshakeError> {
         let registry_version = *self.registry_version.read().unwrap();
         let current_allowed_clients = self.allowed_clients.read().unwrap().clone();
-        let allowed_clients =
-            AllowedClients::new_with_nodes(current_allowed_clients).map_err(|_| {
-                self.control_plane_metrics
-                    .tcp_server_handshake_failed
-                    .with_label_values(&[&flow_tag.to_string()])
-                    .inc();
-                TransportTlsHandshakeError::InvalidArgument
-            })?;
+        let allowed_clients = AllowedClients::new_with_nodes(current_allowed_clients)
+            .map_err(|_| TransportTlsHandshakeError::InvalidArgument)?;
         let (tls_stream, authenticated_peer) = match tokio::time::timeout(
             Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
             self.crypto
@@ -539,32 +551,16 @@ impl TransportImpl {
         )
         .await
         {
-            Err(_) => {
-                self.control_plane_metrics
-                    .tcp_server_handshake_failed
-                    .with_label_values(&[&flow_tag.to_string()])
-                    .inc();
-                return Err(TransportTlsHandshakeError::DeadlineExceeded);
-            }
-            Ok(Ok((tls_stream, authenticated_peer))) => (tls_stream, authenticated_peer),
-            Ok(Err(err)) => {
-                self.control_plane_metrics
-                    .tcp_server_handshake_failed
-                    .with_label_values(&[&flow_tag.to_string()])
-                    .inc();
-                return Err(TransportTlsHandshakeError::Internal(format!("{:?}", err)));
-            }
-        };
+            Err(_) => Err(TransportTlsHandshakeError::DeadlineExceeded),
+            Ok(Ok((tls_stream, authenticated_peer))) => Ok((tls_stream, authenticated_peer)),
+            Ok(Err(err)) => Err(TransportTlsHandshakeError::Internal(format!("{:?}", err))),
+        }?;
         let peer_id = match authenticated_peer {
             AuthenticatedPeer::Node(node_id) => node_id,
             AuthenticatedPeer::Cert(_) => {
                 return Err(TransportTlsHandshakeError::NotFound);
             }
         };
-        self.control_plane_metrics
-            .tcp_server_handshake_success
-            .with_label_values(&[&flow_tag.to_string()])
-            .inc();
         Ok((peer_id, tls_stream))
     }
 
@@ -572,7 +568,6 @@ impl TransportImpl {
     async fn tls_client_handshake(
         &self,
         peer_id: NodeId,
-        flow_tag: FlowTag,
         stream: TcpStream,
     ) -> Result<TlsStream, TransportTlsHandshakeError> {
         let registry_version = *self.registry_version.read().unwrap();
@@ -584,20 +579,8 @@ impl TransportImpl {
         .await
         {
             Err(_) => Err(TransportTlsHandshakeError::DeadlineExceeded),
-            Ok(Ok(tls_stream)) => {
-                self.control_plane_metrics
-                    .tcp_client_handshake_success
-                    .with_label_values(&[&flow_tag.to_string()])
-                    .inc();
-                Ok(tls_stream)
-            }
-            Ok(Err(err)) => {
-                self.control_plane_metrics
-                    .tcp_client_handshake_failed
-                    .with_label_values(&[&flow_tag.to_string()])
-                    .inc();
-                Err(TransportTlsHandshakeError::Internal(format!("{:?}", err)))
-            }
+            Ok(Ok(tls_stream)) => Ok(tls_stream),
+            Ok(Err(err)) => Err(TransportTlsHandshakeError::Internal(format!("{:?}", err))),
         }
     }
 
