@@ -4,6 +4,7 @@ Requires=libvirtd.service
 After=libvirtd.service
 Requires=generate-guestos-config.service
 After=generate-guestos-config.service
+After=guestos.service
 
 [Service]
 Type=oneshot
