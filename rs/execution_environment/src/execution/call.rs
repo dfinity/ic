@@ -214,6 +214,7 @@ fn execute_update_method(
         execution_parameters.clone(),
         FuncRef::Method(method),
         canister.execution_state.take().unwrap(),
+        &network_topology,
     );
     canister.execution_state = Some(output_execution_state);
     let original = OriginalContext {

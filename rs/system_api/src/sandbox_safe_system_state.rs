@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
@@ -222,6 +222,8 @@ pub struct SandboxSafeSystemState {
     // canister.)
     next_callback_id: Option<u64>,
     available_request_slots: BTreeMap<CanisterId, usize>,
+    ic00_available_request_slots: usize,
+    ic00_aliases: BTreeSet<CanisterId>,
 }
 
 impl SandboxSafeSystemState {
@@ -239,6 +241,8 @@ impl SandboxSafeSystemState {
         cycles_account_manager: CyclesAccountManager,
         next_callback_id: Option<u64>,
         available_request_slots: BTreeMap<CanisterId, usize>,
+        ic00_available_request_slots: usize,
+        ic00_aliases: BTreeSet<CanisterId>,
     ) -> Self {
         Self {
             canister_id,
@@ -253,10 +257,16 @@ impl SandboxSafeSystemState {
             cycles_account_manager,
             next_callback_id,
             available_request_slots,
+            ic00_available_request_slots,
+            ic00_aliases,
         }
     }
 
-    pub fn new(system_state: &SystemState, cycles_account_manager: CyclesAccountManager) -> Self {
+    pub fn new(
+        system_state: &SystemState,
+        cycles_account_manager: CyclesAccountManager,
+        network_topology: &NetworkTopology,
+    ) -> Self {
         let call_context_balances = match system_state.call_context_manager() {
             Some(call_context_manager) => call_context_manager
                 .call_contexts()
@@ -266,6 +276,26 @@ impl SandboxSafeSystemState {
             None => BTreeMap::new(),
         };
         let available_request_slots = system_state.available_output_request_slots();
+
+        // Compute the available slots for IC_00 requests as the minimum of available
+        // slots across any queue to a subnet explicitly or IC_00 itself.
+        let mut ic00_aliases: BTreeSet<CanisterId> = network_topology
+            .subnets
+            .keys()
+            .map(|id| CanisterId::new(id.get()).unwrap())
+            .collect();
+        ic00_aliases.insert(CanisterId::ic_00());
+        let ic00_available_request_slots = ic00_aliases
+            .iter()
+            .map(|id| {
+                available_request_slots
+                    .get(id)
+                    .cloned()
+                    .unwrap_or(DEFAULT_QUEUE_CAPACITY)
+            })
+            .min()
+            .unwrap_or(DEFAULT_QUEUE_CAPACITY);
+
         Self::new_internal(
             system_state.canister_id,
             *system_state.controller(),
@@ -279,6 +309,8 @@ impl SandboxSafeSystemState {
                 .call_context_manager()
                 .map(|c| c.next_callback_id()),
             available_request_slots,
+            ic00_available_request_slots,
+            ic00_aliases,
         )
     }
 
@@ -461,6 +493,16 @@ impl SandboxSafeSystemState {
         {
             return Err(msg);
         }
+
+        // If the request is targeted to IC_00 or one of the known subnets
+        // count it towards the available slots for IC_00 requests.
+        if self.ic00_aliases.contains(&msg.receiver) {
+            if self.ic00_available_request_slots == 0 {
+                return Err(msg);
+            }
+            self.ic00_available_request_slots -= 1;
+        }
+
         let initial_available_slots = self
             .available_request_slots
             .get(&msg.receiver)

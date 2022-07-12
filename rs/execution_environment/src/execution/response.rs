@@ -258,6 +258,7 @@ pub fn execute_response(
         execution_parameters.clone(),
         func_ref,
         canister.execution_state.take().unwrap(),
+        &network_topology,
     );
 
     canister.execution_state = Some(output_execution_state);
@@ -321,6 +322,7 @@ fn execute_response_cleanup(
         },
         func_ref,
         canister.execution_state.take().unwrap(),
+        current.network_topology,
     );
     canister.execution_state = Some(output_execution_state);
     process_cleanup_result(result, canister, callback_err, original, current)

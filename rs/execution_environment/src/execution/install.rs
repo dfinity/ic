@@ -182,6 +182,7 @@ pub(crate) fn execute_install(
             execution_parameters.clone(),
             FuncRef::Method(method),
             execution_state,
+            network_topology,
         );
         new_canister.execution_state = Some(output_execution_state);
 
@@ -338,6 +339,7 @@ fn install_stage_2b_continue_install_after_start(
         execution_parameters.clone(),
         FuncRef::Method(method),
         new_canister.execution_state.unwrap(),
+        network_topology,
     );
     new_canister.execution_state = Some(output_execution_state);
     match wasm_execution_result {

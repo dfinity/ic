@@ -130,6 +130,7 @@ pub(crate) fn execute_upgrade(
             execution_parameters.clone(),
             FuncRef::Method(method),
             execution_state,
+            network_topology,
         );
         new_canister.execution_state = Some(output_execution_state);
 
@@ -348,6 +349,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             execution_parameters.clone(),
             FuncRef::Method(method),
             execution_state,
+            network_topology,
         );
         new_canister.execution_state = Some(output_execution_state);
 
@@ -490,6 +492,7 @@ fn upgrade_stage_4a_call_post_upgrade(
             execution_parameters.clone(),
             FuncRef::Method(method),
             execution_state,
+            network_topology,
         );
         new_canister.execution_state = Some(output_execution_state);
         match wasm_execution_result {
