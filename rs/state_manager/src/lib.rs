@@ -98,6 +98,7 @@ pub struct StateManagerMetrics {
     min_resident_height: IntGauge,
     last_computed_manifest_height: IntGauge,
     resident_state_count: IntGauge,
+    checkpoints_on_disk_count: IntGauge,
     state_sync_metrics: StateSyncMetrics,
     state_size: IntGauge,
     checkpoint_metrics: CheckpointMetrics,
@@ -228,6 +229,11 @@ impl StateManagerMetrics {
             "Total count of states loaded to memory by the state manager.",
         );
 
+        let checkpoints_on_disk_count = metrics_registry.int_gauge(
+            "state_manager_checkpoints_on_disk_count",
+            "Number of checkpoints on disk, independent of if they are loaded or not.",
+        );
+
         let last_computed_manifest_height = metrics_registry.int_gauge(
             "state_manager_last_computed_manifest_height",
             "Height of the last checkpoint we computed manifest for.",
@@ -248,6 +254,7 @@ impl StateManagerMetrics {
             min_resident_height,
             last_computed_manifest_height,
             resident_state_count,
+            checkpoints_on_disk_count,
             state_sync_metrics: StateSyncMetrics::new(metrics_registry),
             state_size,
             checkpoint_metrics: CheckpointMetrics::new(metrics_registry),
@@ -1582,8 +1589,7 @@ impl StateManagerImpl {
     /// Returns the manifest of the latest checkpoint on disk with its
     /// checkpoint ref.
     fn latest_manifest(&self) -> Option<(Manifest, CheckpointRef)> {
-        self.state_layout
-            .checkpoint_heights()
+        self.checkpoint_heights()
             .unwrap_or_else(|err| {
                 fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
             })
@@ -1718,16 +1724,13 @@ impl StateManagerImpl {
                 metadata.certified_state_hash.clone(),
             ));
         } else {
-            let checkpoint_heights = self
-                .state_layout
-                .checkpoint_heights()
-                .unwrap_or_else(|err| {
-                    fatal!(
-                        &self.log,
-                        "Failed to retrieve checkpoint heights: {:?}",
-                        err
-                    )
-                });
+            let checkpoint_heights = self.checkpoint_heights().unwrap_or_else(|err| {
+                fatal!(
+                    &self.log,
+                    "Failed to retrieve checkpoint heights: {:?}",
+                    err
+                )
+            });
             fatal!(
                 self.log,
                 "Couldn't populate previous state hash for height {}.\nLatest state: {:?}\nLoaded states: {:?}\nHave metadata for states: {:?}\nCheckpoints: {:?}",
@@ -2037,12 +2040,9 @@ impl StateManagerImpl {
         #[cfg(debug_assertions)]
         {
             use ic_interfaces_state_manager::CERT_ANY;
-            let checkpoint_heights = self
-                .state_layout
-                .checkpoint_heights()
-                .unwrap_or_else(|err| {
-                    fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
-                });
+            let checkpoint_heights = self.checkpoint_heights().unwrap_or_else(|err| {
+                fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
+            });
             let state_heights = self.list_state_heights(CERT_ANY);
 
             debug_assert!(checkpoints_to_keep
@@ -2051,6 +2051,18 @@ impl StateManagerImpl {
 
             debug_assert!(state_heights.contains(&latest_state_height));
         }
+    }
+
+    fn checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
+        let result = self.state_layout.checkpoint_heights();
+
+        if let Ok(heights) = &result {
+            self.metrics
+                .checkpoints_on_disk_count
+                .set(heights.len() as i64);
+        }
+
+        result
     }
 }
 
@@ -2382,7 +2394,6 @@ impl StateManager for StateManagerImpl {
         let states = self.states.read();
 
         let heights: BTreeSet<_> = self
-            .state_layout
             .checkpoint_heights()
             .unwrap_or_else(|err| {
                 fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
@@ -2457,7 +2468,6 @@ impl StateManager for StateManagerImpl {
             .start_timer();
 
         let checkpoint_heights: BTreeSet<Height> = self
-            .state_layout
             .checkpoint_heights()
             .unwrap_or_else(|err| {
                 fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
@@ -2722,12 +2732,9 @@ impl StateManager for StateManagerImpl {
             .start_timer();
 
         let mut states = self.states.write();
-        let mut heights = self
-            .state_layout
-            .checkpoint_heights()
-            .unwrap_or_else(|err| {
-                fatal!(self.log, "Failed to retrieve checkpoint heights: {}", err);
-            });
+        let mut heights = self.checkpoint_heights().unwrap_or_else(|err| {
+            fatal!(self.log, "Failed to retrieve checkpoint heights: {}", err);
+        });
 
         while let Some(h) = heights.pop() {
             info!(self.log, "Removing potentially diverged checkpoint @{}", h);
