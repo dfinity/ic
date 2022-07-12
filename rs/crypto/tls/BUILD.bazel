@@ -1,0 +1,70 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+    ) + ["//%s/%s:sources" % (
+        package_name(),
+        p,
+    ) for p in subpackages(
+        include = ["**"],
+        allow_empty = True,
+    )],
+    visibility = ["//visibility:public"],
+)
+
+DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/tls",
+    "//rs/crypto/tls_interfaces",
+    "//rs/types/types",
+    "@crate_index//:openssl",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:thiserror",
+    "@crate_index//:tokio",
+    "@crate_index//:tokio-openssl",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/crypto/test_utils",
+    "//rs/protobuf",
+    "@crate_index//:maplit",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "tls",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_crypto_tls",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "tls_test",
+    aliases = ALIASES,
+    crate = ":tls",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "tls_integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":tls"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
