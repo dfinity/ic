@@ -9,7 +9,6 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 
-pub mod cli;
 mod common;
 mod keygen;
 pub mod prng;
