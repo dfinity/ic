@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 
@@ -19,6 +20,8 @@ FLAGS = gflags.FLAGS
 gflags.DEFINE_boolean("interactive", True, "Confirm some steps before continuing the script")
 
 TMPDIR = "/tmp"
+DFX_VERSION = "0.11.0-beta.1"
+SNS_BRANCH = "origin/sns-inf"
 
 
 class SnsExperiment(base_experiment.BaseExperiment):
@@ -30,8 +33,20 @@ class SnsExperiment(base_experiment.BaseExperiment):
 
     def ensure_install_dfx(self):
         subprocess.check_output(
-            'DFX_VERSION=0.9.2 sh -ci "$(curl -fsSL https://smartcontracts.org/install.sh)"', shell=True
+            f'DFX_VERSION={DFX_VERSION} sh -ci "$(curl -fsSL https://smartcontracts.org/install.sh)"', shell=True
         )
+
+    def get_idl2json(self):
+        self.idl2json_dir = os.path.join(TMPDIR, "idl2json")
+        if not os.path.exists(self.idl2json_dir):
+            subprocess.check_output(
+                ["git", "clone", "https://github.com/dfinity/idl2json.git", self.idl2json_dir],
+                cwd=TMPDIR,
+            )
+            subprocess.check_output(
+                shlex.split("cargo build --release"),
+                cwd=self.idl2json_dir,
+            )
 
     def ensure_checkout_nns_dapp(self):
         self.nns_dapp_dir = os.path.join(TMPDIR, "nns-dapp")
@@ -41,11 +56,26 @@ class SnsExperiment(base_experiment.BaseExperiment):
                 ["git", "clone", "https://github.com/dfinity/nns-dapp/", self.nns_dapp_dir],
                 cwd=TMPDIR,
             )
+        subprocess.check_output(
+            ["git", "reset", "--hard", SNS_BRANCH],
+            cwd=self.nns_dapp_dir,
+        )
 
     def deploy_sns(self):
         # XXX git clean -fdx here
         subprocess.run(["rm", "canister_ids.json"], cwd=self.nns_dapp_dir)
-        subprocess.check_output(["./deploy.sh", "--sns", FLAGS.testnet], cwd=self.nns_dapp_dir)
+        deploy_env = os.environ.copy()
+        deploy_env["PATH"] = str(
+            ":".join(
+                [
+                    os.path.abspath(self.artifacts_path),
+                    os.path.join(os.path.abspath(self.idl2json_dir), "target/release/"),
+                    deploy_env["PATH"],
+                ]
+            )
+        )
+        print(deploy_env["PATH"])
+        subprocess.check_output(["./deploy.sh", "--sns", FLAGS.testnet], cwd=self.nns_dapp_dir, env=deploy_env)
 
     def generate_dfx_json(self, testnet, nns_url):
         dfx_json_file = os.path.join(self.nns_dapp_dir, "dfx.json")
@@ -130,6 +160,7 @@ if __name__ == "__main__":
     )
     print(f"Result of ic-admin call to update subnet: {res}")
 
+    exp.get_idl2json()
     exp.ensure_checkout_nns_dapp()
     exp.ensure_install_dfx()
     exp.generate_dfx_json(FLAGS.testnet, nns_url)
@@ -137,4 +168,5 @@ if __name__ == "__main__":
     exp.deploy_sns()
     exp.check_root_canister(nns_url)  # Doesn't work yet ..
     assert exp.check_canisters_installed(nns_url, exp.get_canister_ids()["sns_root"], "get_sns_canisters_summary")
+    assert exp.check_canisters_installed(nns_url, exp.get_canister_ids()["sns_governance"], "get_root_canister_status")
     print(f"Done, check if canisters are installed at: {nns_url}")
