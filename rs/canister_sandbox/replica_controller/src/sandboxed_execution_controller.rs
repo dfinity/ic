@@ -10,9 +10,7 @@ use ic_embedders::wasm_executor::{
     get_wasm_reserved_pages, PausedWasmExecution, WasmExecutionResult, WasmExecutor,
 };
 use ic_embedders::{CompilationCache, CompilationResult, WasmExecutionInput};
-use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, InstanceStats, SubnetAvailableMemory, WasmExecutionOutput,
-};
+use ic_interfaces::execution_environment::{HypervisorResult, InstanceStats, WasmExecutionOutput};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
@@ -21,7 +19,7 @@ use ic_replicated_state::canister_state::execution_state::{
 };
 use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
 use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
-use ic_types::{CanisterId, NumInstructions};
+use ic_types::{CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntGauge};
 use std::collections::{HashMap, VecDeque};
@@ -344,7 +342,6 @@ impl PausedWasmExecution for PausedSandboxExecution {
     fn resume(
         self: Box<Self>,
         execution_state: ExecutionState,
-        subnet_available_memory: SubnetAvailableMemory,
     ) -> (ExecutionState, WasmExecutionResult) {
         // Create channel through which we will receive the execution
         // output from closure (running by IPC thread at end of
@@ -380,7 +377,6 @@ impl PausedWasmExecution for PausedSandboxExecution {
             self.next_stable_memory_id,
             self.initial_num_instructions_left,
             self.api_type_label,
-            subnet_available_memory,
             self.sandbox_process,
         )
     }
@@ -457,6 +453,8 @@ impl WasmExecutor for SandboxedExecutionController {
                         WasmExecutionOutput {
                             wasm_result: Err(err),
                             num_instructions_left: NumInstructions::from(0),
+                            allocated_bytes: NumBytes::from(0),
+                            allocated_message_bytes: NumBytes::from(0),
                             instance_stats: InstanceStats {
                                 accessed_pages: 0,
                                 dirty_pages: 0,
@@ -516,7 +514,7 @@ impl WasmExecutor for SandboxedExecutionController {
                     globals: execution_state.exported_globals.clone(),
                     canister_current_memory_usage,
                     execution_parameters,
-                    subnet_available_memory: subnet_available_memory.clone(),
+                    subnet_available_memory,
                     next_wasm_memory_id,
                     next_stable_memory_id,
                     sandox_safe_system_state: sandbox_safe_system_state,
@@ -548,7 +546,6 @@ impl WasmExecutor for SandboxedExecutionController {
             next_stable_memory_id,
             initial_num_instructions_left,
             api_type_label,
-            subnet_available_memory,
             sandbox_process,
         );
         (compilation_result, execution_state, execution_result)
@@ -821,7 +818,6 @@ impl SandboxedExecutionController {
         next_stable_memory_id: MemoryId,
         initial_num_instructions_left: NumInstructions,
         api_type_label: &'static str,
-        subnet_available_memory: SubnetAvailableMemory,
         sandbox_process: Arc<SandboxProcess>,
     ) -> (ExecutionState, WasmExecutionResult) {
         let mut exec_output = match result {
@@ -841,7 +837,6 @@ impl SandboxedExecutionController {
         let system_state_changes = self.update_execution_state(
             &mut exec_output,
             &mut execution_state,
-            subnet_available_memory,
             next_wasm_memory_id,
             next_stable_memory_id,
             canister_id,
@@ -870,7 +865,6 @@ impl SandboxedExecutionController {
         &self,
         exec_output: &mut SandboxExecOutput,
         execution_state: &mut ExecutionState,
-        subnet_available_memory: SubnetAvailableMemory,
         next_wasm_memory_id: MemoryId,
         next_stable_memory_id: MemoryId,
         canister_id: CanisterId,
@@ -886,19 +880,6 @@ impl SandboxedExecutionController {
                 SystemStateChanges::default()
             }
             Some(state_modifications) => {
-                // First try to update the subnet available memory. If that
-                // fails, then replace the Wasm result with an OOM error.
-                let (added_total_bytes, added_message_bytes) =
-                    state_modifications.allocated_bytes(execution_state);
-                if subnet_available_memory
-                    .try_decrement(added_total_bytes, added_message_bytes)
-                    .is_err()
-                {
-                    exec_output.wasm.wasm_result = Err(HypervisorError::OutOfMemory);
-                    // Return early without applying other changes because we
-                    // changed the result to an OOM error.
-                    return SystemStateChanges::default();
-                }
                 // TODO: If a canister has broken out of wasm then it might have allocated more
                 // wasm or stable memory then allowed. We should add an additional check here
                 // that thet canister is still within it's allowed memory usage.

@@ -56,7 +56,6 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
             NumBytes::from(0),
             ComputeAllocation::default(),
             request.clone(),
-            NumBytes::from(0),
         ),
         Err(request)
     );
@@ -99,7 +98,6 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
             NumBytes::from(0),
             ComputeAllocation::default(),
             request.clone(),
-            NumBytes::from(0),
         ),
         Err(request)
     );
@@ -128,7 +126,6 @@ fn push_output_request_succeeds_with_enough_cycles() {
             RequestBuilder::default()
                 .sender(canister_test_id(0))
                 .build(),
-            NumBytes::from(0),
         ),
         Ok(())
     );
@@ -171,12 +168,7 @@ fn correct_charging_source_canister_for_a_request() {
 
     // Enqueue the Request.
     sandbox_safe_system_state
-        .push_output_request(
-            NumBytes::from(0),
-            ComputeAllocation::default(),
-            request,
-            NumBytes::from(0),
-        )
+        .push_output_request(NumBytes::from(0), ComputeAllocation::default(), request)
         .unwrap();
 
     // Assume the destination canister got the message and prepared a response

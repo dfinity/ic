@@ -7,7 +7,7 @@ pub mod system_api_empty;
 
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, ExecutionParameters,
+    AvailableMemory, ExecutionComplexity, ExecutionParameters,
     HypervisorError::{self, *},
     HypervisorResult, OutOfInstructionsHandler, PerformanceCounterType, SubnetAvailableMemory,
     SystemApi,
@@ -15,9 +15,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    memory_required_to_push_request, page_map::PAGE_SIZE, Memory, NumWasmPages, PageIndex,
-};
+use ic_replicated_state::{memory_required_to_push_request, Memory, NumWasmPages, PageIndex};
 use ic_sys::PageBytes;
 use ic_types::{
     ingress::WasmResult,
@@ -460,13 +458,14 @@ impl std::fmt::Display for ApiType {
 struct MemoryUsage {
     /// Upper limit on how much the memory the canister could use.
     limit: NumBytes,
+
     /// The current amount of memory that the canister is using.
     current_usage: NumBytes,
+
     // This is the amount of memory that the subnet has available. Any
     // expansions in the canister's memory need to be deducted from here.
     subnet_available_memory: SubnetAvailableMemory,
 
-    stable_memory_delta: usize,
     /// Total memory allocated during this message execution. Note that
     /// `total_allocated_memory` should always be `>= allocated_message_memory`.
     total_allocated_memory: NumBytes,
@@ -483,7 +482,7 @@ impl MemoryUsage {
         canister_id: CanisterId,
         limit: NumBytes,
         current_usage: NumBytes,
-        subnet_available_memory: SubnetAvailableMemory,
+        subnet_available_memory: AvailableMemory,
     ) -> Self {
         // A canister's current usage should never exceed its limit. This is
         // most probably a bug. Panicking here due to this inconsistency has the
@@ -501,8 +500,7 @@ impl MemoryUsage {
         Self {
             limit,
             current_usage,
-            subnet_available_memory,
-            stable_memory_delta: 0,
+            subnet_available_memory: subnet_available_memory.into(),
             total_allocated_memory: NumBytes::from(0),
             allocated_message_memory: NumBytes::from(0),
             log,
@@ -637,7 +635,7 @@ impl SystemApiImpl {
         sandbox_safe_system_state: SandboxSafeSystemState,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
-        subnet_available_memory: SubnetAvailableMemory,
+        subnet_available_memory: AvailableMemory,
         stable_memory: Memory,
         out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
         log: ReplicaLogger,
@@ -749,15 +747,13 @@ impl SystemApiImpl {
         self.memory_usage.current_usage
     }
 
-    /// Note that this function is made public only for the tests
-    #[doc(hidden)]
-    pub fn get_allocated_memory(&self) -> NumBytes {
+    /// Bytes allocated in the Wasm/stable memory and messages.
+    pub fn get_allocated_bytes(&self) -> NumBytes {
         self.memory_usage.total_allocated_memory
     }
 
-    /// Note that this function is made public only for the tests
-    #[doc(hidden)]
-    pub fn get_allocated_message_memory(&self) -> NumBytes {
+    /// Bytes allocated in messages.
+    pub fn get_allocated_message_bytes(&self) -> NumBytes {
         self.memory_usage.allocated_message_memory
     }
 
@@ -1044,7 +1040,6 @@ impl SystemApiImpl {
             self.memory_usage.current_usage,
             self.execution_parameters.compute_allocation,
             req,
-            reservation_bytes,
         ) {
             Ok(()) => Ok(0),
             Err(request) => {
@@ -2060,13 +2055,9 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => self
-                .stable_memory
-                .stable_write(offset, src, size, heap)
-                .map(|_| {
-                    self.memory_usage.stable_memory_delta +=
-                        (size as usize / PAGE_SIZE) + std::cmp::min(1, size as usize % PAGE_SIZE);
-                }),
+            | ApiType::InspectMessage { .. } => {
+                self.stable_memory.stable_write(offset, src, size, heap)
+            }
         };
         trace_syscall!(
             self,
@@ -2182,13 +2173,9 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => self
-                .stable_memory
-                .stable64_write(offset, src, size, heap)
-                .map(|_| {
-                    self.memory_usage.stable_memory_delta +=
-                        (size as usize / PAGE_SIZE) + std::cmp::min(1, size as usize % PAGE_SIZE);
-                }),
+            | ApiType::InspectMessage { .. } => {
+                self.stable_memory.stable64_write(offset, src, size, heap)
+            }
         };
         trace_syscall!(
             self,

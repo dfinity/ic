@@ -54,7 +54,6 @@ pub struct SystemStateChanges {
     call_context_balance_taken: BTreeMap<CallContextId, Cycles>,
     request_slots_used: BTreeMap<CanisterId, usize>,
     requests: Vec<Request>,
-    allocated_request_bytes: NumBytes,
 }
 
 impl Default for SystemStateChanges {
@@ -67,7 +66,6 @@ impl Default for SystemStateChanges {
             call_context_balance_taken: BTreeMap::new(),
             request_slots_used: BTreeMap::new(),
             requests: vec![],
-            allocated_request_bytes: NumBytes::from(0),
         }
     }
 }
@@ -194,10 +192,6 @@ impl SystemStateChanges {
             assert!(certified_data.len() <= CERTIFIED_DATA_MAX_LENGTH as usize);
             system_state.certified_data = certified_data.clone();
         }
-    }
-
-    pub fn allocated_request_bytes(&self) -> NumBytes {
-        self.allocated_request_bytes
     }
 }
 
@@ -444,7 +438,6 @@ impl SandboxSafeSystemState {
         canister_current_memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,
         msg: Request,
-        msg_bytes: NumBytes,
     ) -> Result<(), Request> {
         let mut new_balance = self.cycles_balance();
         if self
@@ -475,7 +468,6 @@ impl SandboxSafeSystemState {
             return Err(msg);
         }
         self.system_state_changes.requests.push(msg);
-        self.system_state_changes.allocated_request_bytes += msg_bytes;
         *used_slots += 1;
         self.update_balance_change_consuming(new_balance);
         Ok(())

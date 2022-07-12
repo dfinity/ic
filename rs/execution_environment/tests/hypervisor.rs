@@ -1645,7 +1645,7 @@ fn subnet_available_memory_is_updated() {
     let wat = r#"
         (module
             (func (export "canister_update test")
-                (drop (memory.grow (i32.const 1)))
+                (drop (memory.grow (i32.const 10)))
             )
             (memory 1 20)
         )"#;
@@ -1654,7 +1654,187 @@ fn subnet_available_memory_is_updated() {
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - WASM_PAGE_SIZE as i64,
+        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_total_memory()
+    );
+    assert_eq!(
+        initial_subnet_available_memory.get_message_memory(),
+        test.subnet_available_memory().get_message_memory()
+    )
+}
+
+#[test]
+fn subnet_available_memory_is_updated_in_heartbeat() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_heartbeat")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 1 20)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let initial_subnet_available_memory = test.subnet_available_memory();
+    let result = test.heartbeat(canister_id);
+    assert_eq!(result, Ok(()));
+    assert_eq!(
+        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_total_memory()
+    );
+    assert_eq!(
+        initial_subnet_available_memory.get_message_memory(),
+        test.subnet_available_memory().get_message_memory()
+    )
+}
+
+#[test]
+fn subnet_available_memory_is_not_updated_in_query() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_query test")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 1 20)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let initial_subnet_available_memory = test.subnet_available_memory();
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+    assert_eq!(
+        initial_subnet_available_memory.get_total_memory(),
+        test.subnet_available_memory().get_total_memory()
+    );
+    assert_eq!(
+        initial_subnet_available_memory.get_message_memory(),
+        test.subnet_available_memory().get_message_memory()
+    )
+}
+
+#[test]
+fn subnet_available_memory_is_updated_by_canister_init() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_init")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 1 20)
+        )"#;
+    let initial_subnet_available_memory = test.subnet_available_memory();
+    test.canister_from_wat(wat).unwrap();
+    assert_eq!(
+        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_total_memory()
+    );
+    assert_eq!(
+        initial_subnet_available_memory.get_message_memory(),
+        test.subnet_available_memory().get_message_memory()
+    )
+}
+
+#[test]
+fn subnet_available_memory_is_updated_by_canister_start() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func $start
+                (drop (memory.grow (i32.const 10)))
+            )
+            (start $start)
+            (memory 1 20)
+        )"#;
+    let initial_subnet_available_memory = test.subnet_available_memory();
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    assert_eq!(
+        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_total_memory()
+    );
+    assert_eq!(
+        initial_subnet_available_memory.get_message_memory(),
+        test.subnet_available_memory().get_message_memory()
+    );
+    let result = test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap());
+    assert_eq!(Ok(()), result);
+    assert_eq!(
+        initial_subnet_available_memory.get_total_memory() - 20 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_total_memory()
+    );
+    assert_eq!(
+        initial_subnet_available_memory.get_message_memory(),
+        test.subnet_available_memory().get_message_memory()
+    );
+}
+
+#[test]
+fn subnet_available_memory_is_updated_by_canister_pre_upgrade() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "stable_grow"
+                (func $stable_grow (param i32) (result i32))
+            )
+            (func (export "canister_pre_upgrade")
+                (drop (call $stable_grow (i32.const 10)))
+            )
+            (memory 1 20)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let initial_subnet_available_memory = test.subnet_available_memory();
+    let result = test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap());
+    assert_eq!(Ok(()), result);
+    assert_eq!(
+        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_total_memory()
+    );
+    assert_eq!(
+        initial_subnet_available_memory.get_message_memory(),
+        test.subnet_available_memory().get_message_memory()
+    )
+}
+
+// TODO(RUN-266): Enable the test after the bug is fixed.
+#[test]
+#[ignore]
+fn subnet_available_memory_is_not_updated_by_canister_pre_upgrade_wasm_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_pre_upgrade")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 1 20)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let initial_subnet_available_memory = test.subnet_available_memory();
+    let result = test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap());
+    assert_eq!(Ok(()), result);
+    assert_eq!(
+        initial_subnet_available_memory.get_total_memory(),
+        test.subnet_available_memory().get_total_memory()
+    );
+    assert_eq!(
+        initial_subnet_available_memory.get_message_memory(),
+        test.subnet_available_memory().get_message_memory()
+    )
+}
+
+#[test]
+fn subnet_available_memory_is_updated_by_canister_post_upgrade() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_post_upgrade")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 1 20)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let initial_subnet_available_memory = test.subnet_available_memory();
+    let result = test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap());
+    assert_eq!(Ok(()), result);
+    assert_eq!(
+        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
         test.subnet_available_memory().get_total_memory()
     );
     assert_eq!(

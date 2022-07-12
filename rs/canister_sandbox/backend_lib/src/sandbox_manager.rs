@@ -129,6 +129,8 @@ impl Execution {
             WasmExecutionOutput {
                 wasm_result,
                 num_instructions_left,
+                allocated_bytes,
+                allocated_message_bytes,
                 instance_stats,
             },
             deltas,
@@ -189,6 +191,8 @@ impl Execution {
                 }
                 let wasm_output = WasmExecutionOutput {
                     wasm_result,
+                    allocated_bytes,
+                    allocated_message_bytes,
                     num_instructions_left,
                     instance_stats,
                 };
@@ -208,6 +212,8 @@ impl Execution {
                 let wasm_output = WasmExecutionOutput {
                     wasm_result: Err(err),
                     num_instructions_left,
+                    allocated_bytes,
+                    allocated_message_bytes,
                     instance_stats,
                 };
 

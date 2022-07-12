@@ -237,6 +237,13 @@ fn process_update_result(
         }
         WasmExecutionResult::Finished(output, system_state_changes) => {
             let heap_delta = if output.wasm_result.is_ok() {
+                // TODO(RUN-265): Replace `unwrap` with a proper execution error
+                // here because subnet available memory may have changed since
+                // the start of execution.
+                round
+                    .subnet_available_memory
+                    .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
+                    .unwrap();
                 system_state_changes.apply_changes(
                     round.time,
                     &mut canister.system_state,
@@ -302,9 +309,7 @@ impl PausedExecution for PausedCallExecution {
         round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
         let execution_state = canister.execution_state.take().unwrap();
-        let (execution_state, result) = self
-            .paused_wasm_execution
-            .resume(execution_state, round.subnet_available_memory.clone());
+        let (execution_state, result) = self.paused_wasm_execution.resume(execution_state);
         canister.execution_state = Some(execution_state);
         process_update_result(canister, result, self.original, round, round_limits)
     }
