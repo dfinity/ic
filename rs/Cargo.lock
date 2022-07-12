@@ -6656,6 +6656,7 @@ dependencies = [
  "fs_extra",
  "ic-config",
  "ic-crypto",
+ "ic-http-utils",
  "ic-ic00-types",
  "ic-interfaces",
  "ic-logger",
@@ -6681,6 +6682,7 @@ dependencies = [
  "slog",
  "tempfile",
  "thiserror",
+ "tokio",
  "url",
 ]
 
@@ -7781,6 +7783,7 @@ dependencies = [
  "serde_json",
  "slog",
  "tempfile",
+ "tokio",
  "url",
 ]
 

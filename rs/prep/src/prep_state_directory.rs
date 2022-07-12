@@ -173,7 +173,9 @@ mod tests {
             None,
             /* ssh_readonly_access_to_unassigned_nodes */ vec![],
         );
-        let _init_ic = ic_config.initialize()?;
+        let rt = tokio::runtime::Runtime::new()?;
+        let _init_ic = rt.block_on(async { ic_config.initialize().await })?;
+
         let prep_state_dir = IcPrepStateDir::new(tmp.path());
         Ok((tmp, prep_state_dir))
     }

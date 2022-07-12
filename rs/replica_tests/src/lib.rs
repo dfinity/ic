@@ -338,7 +338,9 @@ where
 
         let metrics_registry = MetricsRegistry::new();
 
-        let init_ic = ic_config.initialize().expect("can't fail");
+        let init_ic = rt
+            .block_on(async { ic_config.initialize().await })
+            .expect("can't fail");
 
         let init_subnet = init_ic.initialized_topology.values().next().unwrap();
         let init_node = init_subnet.initialized_nodes.values().next().unwrap();

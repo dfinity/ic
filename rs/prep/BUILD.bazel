@@ -10,6 +10,7 @@ filegroup(
 DEPENDENCIES = [
     "//rs/config",
     "//rs/crypto",
+    "//rs/http_utils",
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/protobuf",
@@ -38,6 +39,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:tempfile",
+    "@crate_index//:tokio",
     "@crate_index//:thiserror",
     "@crate_index//:url",
 ]

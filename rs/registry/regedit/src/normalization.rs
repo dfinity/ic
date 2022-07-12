@@ -185,7 +185,7 @@ mod tests {
 
     #[tokio::test]
     async fn normalization() {
-        let (_guard, ic_prep_dir) = run_ic_prep();
+        let (_guard, ic_prep_dir) = run_ic_prep().await;
         let src_spec = SourceSpec::LocalStore(ic_prep_dir.registry_local_store_path());
 
         let cl = source::get_changelog(src_spec).unwrap();

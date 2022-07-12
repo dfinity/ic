@@ -154,7 +154,8 @@ fn main() -> Result<()> {
             None,
             /* ssh_readonly_access_to_unassigned_nodes */ vec![],
         );
-        ic_config.initialize()?;
+        let rt = tokio::runtime::Runtime::new()?;
+        rt.block_on(async { ic_config.initialize().await })?;
     }
 
     let (mut base_cmd, use_cargo) = match config.replica_path {
