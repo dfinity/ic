@@ -138,6 +138,8 @@ e2e-workload-test:
       artifacts: false
     - job: boundary-os-diskimg-dev
       artifacts: false
+    - job: boundary-os-diskimg-snp-dev
+      artifacts: false
     - artifacts-upload-to-s3
   artifacts:
     when: always
