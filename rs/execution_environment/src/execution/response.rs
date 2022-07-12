@@ -324,6 +324,7 @@ pub fn execute_response(
             execution_parameters.clone(),
             func_ref,
             canister.execution_state.take().unwrap(),
+            &network_topology,
         );
         let canister_current_memory_usage = canister.memory_usage(own_subnet_type);
         canister.execution_state = Some(output_execution_state);
@@ -400,6 +401,7 @@ fn execute_response_cleanup(
         execution_parameters.clone(),
         func_ref,
         canister.execution_state.take().unwrap(),
+        network_topology,
     );
     canister.execution_state = Some(output_execution_state);
 
