@@ -1,11 +1,11 @@
 use ic_http_utils::file_downloader::FileDownloadError;
+use ic_image_upgrader::error::UpgradeError;
 use ic_types::replica_version::ReplicaVersionParseError;
 use ic_types::{registry::RegistryClientError, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::error::Error;
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
-use tokio::process::Command;
 
 pub type OrchestratorResult<T> = Result<T, OrchestratorError>;
 
@@ -61,14 +61,6 @@ impl OrchestratorError {
     pub(crate) fn invalid_configuration_error(msg: impl ToString) -> Self {
         OrchestratorError::InvalidConfigurationError(msg.to_string())
     }
-
-    pub(crate) fn reboot_time_error(msg: impl ToString) -> Self {
-        OrchestratorError::RebootTimeError(msg.to_string())
-    }
-
-    pub(crate) fn file_command_error(e: io::Error, cmd: &Command) -> Self {
-        OrchestratorError::IoError(format!("Failed to executing command: {:?}", cmd), e)
-    }
 }
 
 impl fmt::Display for OrchestratorError {
@@ -123,6 +115,28 @@ impl fmt::Display for OrchestratorError {
 impl From<FileDownloadError> for OrchestratorError {
     fn from(e: FileDownloadError) -> Self {
         OrchestratorError::FileDownloadError(e)
+    }
+}
+
+impl From<UpgradeError> for OrchestratorError {
+    fn from(e: UpgradeError) -> Self {
+        match e {
+            UpgradeError::IoError(s, err) => OrchestratorError::IoError(s, err),
+            UpgradeError::FileDownloadError(e) => OrchestratorError::FileDownloadError(e),
+            UpgradeError::GenericError(s) => OrchestratorError::UpgradeError(s),
+            UpgradeError::RebootTimeError(s) => OrchestratorError::RebootTimeError(s),
+        }
+    }
+}
+
+impl From<OrchestratorError> for UpgradeError {
+    fn from(e: OrchestratorError) -> UpgradeError {
+        match e {
+            OrchestratorError::IoError(s, err) => UpgradeError::IoError(s, err),
+            OrchestratorError::FileDownloadError(e) => UpgradeError::FileDownloadError(e),
+            OrchestratorError::RebootTimeError(s) => UpgradeError::RebootTimeError(s),
+            err => UpgradeError::GenericError(err.to_string()),
+        }
     }
 }
 

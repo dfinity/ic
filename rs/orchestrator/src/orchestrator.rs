@@ -1,7 +1,6 @@
 use crate::args::OrchestratorArgs;
 use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::firewall::Firewall;
-use crate::image_upgrader::ImageUpgrader;
 use crate::metrics::OrchestratorMetrics;
 use crate::registration::NodeRegistration;
 use crate::registry_helper::RegistryHelper;
@@ -12,6 +11,7 @@ use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_crypto::utils::get_node_keys_or_generate_if_missing;
 use ic_crypto::{CryptoComponent, CryptoComponentForNonReplicaProcess};
 use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_image_upgrader::ImageUpgrader;
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
