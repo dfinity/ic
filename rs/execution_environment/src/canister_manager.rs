@@ -17,7 +17,6 @@ use ic_ic00_types::{
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, ExecutionParameters, HypervisorError, IngressHistoryWriter,
-    SubnetAvailableMemory,
 };
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -601,7 +600,6 @@ impl CanisterManager {
         context: InstallCodeContext,
         state: &mut ReplicatedState,
         execution_parameters: ExecutionParameters,
-        subnet_available_memory: SubnetAvailableMemory,
         round_limits: &mut RoundLimits,
     ) -> (
         NumInstructions,
@@ -633,7 +631,6 @@ impl CanisterManager {
             memory_taken,
             &network_topology,
             execution_parameters,
-            subnet_available_memory,
             round_limits,
         );
         let (instructions_left, result, canister) = match dts_res.response {
@@ -683,7 +680,6 @@ impl CanisterManager {
         memory_taken: NumBytes,
         network_topology: &NetworkTopology,
         mut execution_parameters: ExecutionParameters,
-        subnet_available_memory: SubnetAvailableMemory,
         round_limits: &mut RoundLimits,
     ) -> DtsInstallCodeResult {
         // TODO(RUN-221): Validate the compute and memory allocation after the
@@ -783,7 +779,6 @@ impl CanisterManager {
         let instruction_limit = execution_parameters.total_instruction_limit;
 
         let round = RoundContext {
-            subnet_available_memory,
             network_topology,
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,

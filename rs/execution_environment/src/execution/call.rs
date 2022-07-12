@@ -15,9 +15,7 @@ use ic_embedders::wasm_executor::{PausedWasmExecution, WasmExecutionResult};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::messages::CanisterInputMessage;
 use ic_interfaces::{
-    execution_environment::{
-        AvailableMemory, ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
-    },
+    execution_environment::{ExecutionMode, ExecutionParameters, HypervisorError},
     messages::RequestOrIngress,
 };
 use ic_logger::{error, info, ReplicaLogger};
@@ -31,7 +29,6 @@ use ic_types::{
 
 use ic_system_api::ApiType;
 use ic_types::methods::{FuncRef, WasmMethod};
-use std::convert::Into;
 
 fn early_error_to_result(
     user_error: UserError,
@@ -105,7 +102,7 @@ pub fn execute_call(
     instruction_limit: NumInstructions,
     time: Time,
     config: &ExecutionConfig,
-    mut round: RoundContext,
+    round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
     let subnet_type = round.hypervisor.subnet_type();
@@ -139,9 +136,6 @@ pub fn execute_call(
         );
         result
     } else if canister.exports_query_method(req.method_name().to_string()) {
-        // Letting the canister grow arbitrarily when executing the
-        // query is fine as we do not persist state modifications.
-        round.subnet_available_memory = subnet_memory_capacity(config);
         // DTS is not supported in query calls.
         execution_parameters.total_instruction_limit = execution_parameters.slice_instruction_limit;
         execute_query_method(
@@ -199,7 +193,6 @@ fn execute_update_method(
         canister.system_state.clone(),
         memory_usage,
         execution_parameters.clone(),
-        round.subnet_available_memory.clone(),
         FuncRef::Method(method),
         canister.execution_state.take().unwrap(),
         round_limits,
@@ -220,7 +213,7 @@ fn process_update_result(
     result: WasmExecutionResult,
     original: OriginalContext,
     round: RoundContext,
-    _round_limits: &mut RoundLimits,
+    round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -240,7 +233,7 @@ fn process_update_result(
                 // TODO(RUN-265): Replace `unwrap` with a proper execution error
                 // here because subnet available memory may have changed since
                 // the start of execution.
-                round
+                round_limits
                     .subnet_available_memory
                     .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
                     .unwrap();
@@ -353,7 +346,6 @@ fn execute_query_method(
         canister.system_state.clone(),
         memory_usage,
         execution_parameters.clone(),
-        round.subnet_available_memory,
         FuncRef::Method(method),
         canister.execution_state.clone().unwrap(),
         round.network_topology,
@@ -378,15 +370,6 @@ fn execute_query_method(
         response,
         heap_delta: NumBytes::from(0),
     }
-}
-
-/// Returns the subnet's configured memory capacity (ignoring current usage).
-pub(crate) fn subnet_memory_capacity(config: &ExecutionConfig) -> SubnetAvailableMemory {
-    AvailableMemory::new(
-        config.subnet_memory_capacity.get() as i64,
-        config.subnet_message_memory_capacity.get() as i64,
-    )
-    .into()
 }
 
 fn log_and_transform_to_user_error(

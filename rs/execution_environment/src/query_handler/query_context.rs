@@ -113,7 +113,6 @@ pub(super) struct QueryContext<'a> {
     // one outstanding response.
     outstanding_response: Option<Response>,
     query_allocations_used: Arc<RwLock<QueryAllocationsUsed>>,
-    subnet_available_memory: SubnetAvailableMemory,
     max_canister_memory_size: NumBytes,
     max_instructions_per_message: NumInstructions,
     round_limits: RoundLimits,
@@ -133,8 +132,9 @@ impl<'a> QueryContext<'a> {
         max_instructions_per_message: NumInstructions,
     ) -> Self {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
-        // TODO(RUN-263): Initialize round limits here.
-        let round_limits = RoundLimits {};
+        let round_limits = RoundLimits {
+            subnet_available_memory,
+        };
         Self {
             log,
             hypervisor,
@@ -146,7 +146,6 @@ impl<'a> QueryContext<'a> {
             data_certificate,
             query_allocations_used,
             network_topology,
-            subnet_available_memory,
             max_canister_memory_size,
             max_instructions_per_message,
             round_limits,
@@ -394,7 +393,6 @@ impl<'a> QueryContext<'a> {
                 .into(),
         );
         let execution_parameters = self.execution_parameters(&canister, instruction_limit);
-        let subnet_available_memory = self.subnet_available_memory.clone();
 
         let (canister, instructions_left, result) = execute_non_replicated_query(
             query_kind,
@@ -404,7 +402,6 @@ impl<'a> QueryContext<'a> {
             Some(self.data_certificate.clone()),
             self.state.time(),
             execution_parameters,
-            subnet_available_memory,
             &self.network_topology,
             self.hypervisor,
             &mut self.round_limits,
@@ -494,14 +491,12 @@ impl<'a> QueryContext<'a> {
                 .into(),
         );
         let execution_parameters = self.execution_parameters(&canister, instruction_limit);
-        let subnet_available_memory = self.subnet_available_memory.clone();
         let (output, output_execution_state, output_system_state) = self.hypervisor.execute(
             api_type,
             time,
             canister.system_state.clone(),
             canister.memory_usage(self.own_subnet_type),
             execution_parameters.clone(),
-            subnet_available_memory.clone(),
             func_ref,
             canister.execution_state.take().unwrap(),
             &self.network_topology,
@@ -537,7 +532,6 @@ impl<'a> QueryContext<'a> {
                             slice_instruction_limit: output.num_instructions_left,
                             ..execution_parameters
                         },
-                        subnet_available_memory,
                     ),
                 }
             }
@@ -577,7 +571,6 @@ impl<'a> QueryContext<'a> {
         callback_err: HypervisorError,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
-        subnet_available_memory: SubnetAvailableMemory,
     ) -> (NumInstructions, Result<Option<WasmResult>, HypervisorError>) {
         let func_ref = match call_origin {
             CallOrigin::Ingress(_, _)
@@ -594,7 +587,6 @@ impl<'a> QueryContext<'a> {
                 canister.system_state.clone(),
                 canister_current_memory_usage,
                 execution_parameters,
-                subnet_available_memory,
                 func_ref,
                 canister.execution_state.take().unwrap(),
                 &self.network_topology,

@@ -54,8 +54,9 @@ pub fn bench_execute_query(c: &mut Criterion) {
              ..
          }| {
             execution_parameters.execution_mode = ExecutionMode::NonReplicated;
-            // TODO(RUN-263): Initialize round limits here.
-            let mut round_limits = RoundLimits {};
+            let mut round_limits = RoundLimits {
+                subnet_available_memory,
+            };
             let (_, instructions_left, result) = execute_non_replicated_query(
                 NonReplicatedQueryKind::Pure { caller: sender },
                 "test",
@@ -64,7 +65,6 @@ pub fn bench_execute_query(c: &mut Criterion) {
                 Some(vec![0; 256]),
                 time,
                 execution_parameters,
-                subnet_available_memory,
                 &network_topology,
                 ee_test.hypervisor_deprecated(),
                 &mut round_limits,

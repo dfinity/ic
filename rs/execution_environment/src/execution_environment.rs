@@ -113,7 +113,6 @@ pub struct ExecuteMessageResult {
 /// Contains round-specific context necessary for resuming a paused execution.
 #[derive(Clone)]
 pub struct RoundContext<'a> {
-    pub subnet_available_memory: SubnetAvailableMemory,
     pub network_topology: &'a NetworkTopology,
     pub hypervisor: &'a Hypervisor,
     pub cycles_account_manager: &'a CyclesAccountManager,
@@ -121,8 +120,41 @@ pub struct RoundContext<'a> {
     pub time: Time,
 }
 
+/// Contains limits (or budget) for various resources that affect duration of
+/// a round such as
+/// - executed instructions,
+/// - produced heap delta,
+/// - allocated bytes,
+/// - etc.
+///
+/// This struct is passed by a mutable reference throughout the entire
+/// execution layer:
+/// - the scheduler initializes the limits at the start of each round.
+/// - high-level execution functions pass the reference through.
+/// - low-level execution functions decrease the limits based on the data returned
+///   by the Wasm executor.
+///
+/// A recommended pattern for adding a new limit:
+/// - the limit is represented as a signed integer to avoid losing information when
+///   a Wasm execution overshoots the limit.
+/// - the round stops when the limit reaches zero.
+/// - the scheduler (and any other high-level caller) can compute consumption of
+///   some function `foo()` as follows:
+///   ```text
+///   let limit_before = round_limits.$limit;
+///   foo(..., &mut round_limits);
+///   let consumption = limit_before - round_limits.$limit;
+///   ```
+///
+/// Note that other entry-points of the execution layer such as the query handler,
+/// inspect message, benchmarks, tests also have to initialize the round limits.
+/// In such cases the "round" should be considered as a trivial round consisting
+/// of a single message.
 pub struct RoundLimits {
-    // TODO(RUN-263): Move round instruction limit and subnet available memory here.
+    /// Keeps track of the available storage memory. It decreases if
+    /// - Wasm execution grows the Wasm/stable memory.
+    /// - Wasm execution pushes a new request to the output queue.
+    pub subnet_available_memory: SubnetAvailableMemory,
 }
 
 /// Represent a paused execution that can be resumed or aborted.
@@ -270,7 +302,6 @@ impl ExecutionEnvironment {
         instructions_limit: NumInstructions,
         rng: &mut dyn RngCore,
         ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
-        subnet_available_memory: SubnetAvailableMemory,
         registry_settings: &RegistryExecutionSettings,
         round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, NumInstructions) {
@@ -347,13 +378,8 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::InstallCode) => {
-                let (res, instructions_left) = self.execute_install_code(
-                    &msg,
-                    &mut state,
-                    instructions_limit,
-                    subnet_available_memory,
-                    round_limits,
-                );
+                let (res, instructions_left) =
+                    self.execute_install_code(&msg, &mut state, instructions_limit, round_limits);
                 (Some((res, msg.take_cycles())), instructions_left)
             }
 
@@ -863,7 +889,6 @@ impl ExecutionEnvironment {
         msg: CanisterInputMessage,
         time: Time,
         network_topology: Arc<NetworkTopology>,
-        subnet_available_memory: SubnetAvailableMemory,
         round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
         let req = match msg {
@@ -874,7 +899,6 @@ impl ExecutionEnvironment {
                     instructions_limit,
                     time,
                     network_topology,
-                    subnet_available_memory,
                     round_limits,
                 );
             }
@@ -883,7 +907,6 @@ impl ExecutionEnvironment {
         };
 
         let round = RoundContext {
-            subnet_available_memory,
             network_topology: &*network_topology,
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
@@ -909,7 +932,6 @@ impl ExecutionEnvironment {
         instructions_limit: NumInstructions,
         network_topology: Arc<NetworkTopology>,
         time: Time,
-        subnet_available_memory: SubnetAvailableMemory,
         round_limits: &mut RoundLimits,
     ) -> (
         CanisterState,
@@ -922,7 +944,6 @@ impl ExecutionEnvironment {
             canister,
             network_topology,
             execution_parameters,
-            subnet_available_memory,
             self.own_subnet_type,
             time,
             &self.hypervisor,
@@ -1139,13 +1160,11 @@ impl ExecutionEnvironment {
         instruction_limit: NumInstructions,
         time: Time,
         network_topology: Arc<NetworkTopology>,
-        subnet_available_memory: SubnetAvailableMemory,
         round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
         let execution_parameters =
             self.execution_parameters(&canister, instruction_limit, ExecutionMode::Replicated);
         let round = RoundContext {
-            subnet_available_memory,
             network_topology: &*network_topology,
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
@@ -1275,14 +1294,15 @@ impl ExecutionEnvironment {
     ) -> Result<WasmResult, UserError> {
         let canister_id = anonymous_query.receiver;
         let canister = state.get_active_canister(&canister_id)?;
-        let subnet_available_memory = subnet_memory_capacity(&self.config);
         let execution_parameters = self.execution_parameters(
             &canister,
             max_instructions_per_message,
             ExecutionMode::NonReplicated,
         );
-        // TODO(RUN-263): Initialize round limits here.
-        let mut round_limits = RoundLimits {};
+        let subnet_available_memory = subnet_memory_capacity(&self.config);
+        let mut round_limits = RoundLimits {
+            subnet_available_memory,
+        };
         let result = execute_non_replicated_query(
             NonReplicatedQueryKind::Pure {
                 caller: IC_00.get(),
@@ -1293,7 +1313,6 @@ impl ExecutionEnvironment {
             None,
             state.time(),
             execution_parameters,
-            subnet_available_memory,
             &state.metadata.network_topology,
             &self.hypervisor,
             &mut round_limits,
@@ -1602,7 +1621,6 @@ impl ExecutionEnvironment {
         msg: &RequestOrIngress,
         state: &mut ReplicatedState,
         instructions_limit: NumInstructions,
-        subnet_available_memory: SubnetAvailableMemory,
         round_limits: &mut RoundLimits,
     ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let payload = msg.method_payload();
@@ -1658,7 +1676,6 @@ impl ExecutionEnvironment {
                         memory_taken,
                         &network_topology,
                         execution_parameters,
-                        subnet_available_memory,
                         round_limits,
                     );
                     let (instructions_left, result, canister) = match dts_res.response {
@@ -1761,7 +1778,6 @@ pub fn execute_canister(
     instructions_limit: NumInstructions,
     network_topology: Arc<NetworkTopology>,
     time: Time,
-    subnet_available_memory: SubnetAvailableMemory,
     round_limits: &mut RoundLimits,
 ) -> ExecuteCanisterResult {
     if !canister.is_active() {
@@ -1782,7 +1798,6 @@ pub fn execute_canister(
                         instructions_limit,
                         network_topology,
                         time,
-                        subnet_available_memory,
                         round_limits,
                     );
                 let heap_delta = result.unwrap_or_else(|_| NumBytes::from(0));
@@ -1805,7 +1820,6 @@ pub fn execute_canister(
                 message,
                 time,
                 network_topology,
-                subnet_available_memory,
                 round_limits,
             );
             let (canister, num_instructions_left, heap_delta, ingress_status) =

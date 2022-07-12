@@ -9,7 +9,7 @@ use crate::execution::common::{validate_canister, validate_method};
 use crate::execution_environment::RoundLimits;
 use crate::{Hypervisor, NonReplicatedQueryKind};
 use ic_error_types::UserError;
-use ic_interfaces::execution_environment::{ExecutionParameters, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::ExecutionParameters;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology};
 use ic_system_api::ApiType;
 use ic_types::ingress::WasmResult;
@@ -26,7 +26,6 @@ pub fn execute_non_replicated_query(
     data_certificate: Option<Vec<u8>>,
     time: Time,
     execution_parameters: ExecutionParameters,
-    subnet_available_memory: SubnetAvailableMemory,
     network_topology: &NetworkTopology,
     hypervisor: &Hypervisor,
     round_limits: &mut RoundLimits,
@@ -101,7 +100,6 @@ pub fn execute_non_replicated_query(
         canister.system_state,
         memory_usage,
         execution_parameters,
-        subnet_available_memory,
         FuncRef::Method(method),
         canister.execution_state.clone().unwrap(),
         network_topology,

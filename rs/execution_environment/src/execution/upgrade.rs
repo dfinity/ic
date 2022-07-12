@@ -125,7 +125,6 @@ pub(crate) fn execute_upgrade(
             new_canister.system_state.clone(),
             memory_usage,
             execution_parameters.clone(),
-            round.subnet_available_memory.clone(),
             FuncRef::Method(method),
             execution_state,
             round_limits,
@@ -191,7 +190,7 @@ fn upgrade_stage_1_process_pre_upgrade_result(
             // TODO(RUN-265): Replace `unwrap` with a proper execution error
             // here because subnet available memory may have changed since
             // the start of execution.
-            round
+            round_limits
                 .subnet_available_memory
                 .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
                 .unwrap();
@@ -348,7 +347,6 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             SystemState::new_for_start(canister_id),
             memory_usage,
             execution_parameters.clone(),
-            round.subnet_available_memory.clone(),
             FuncRef::Method(method),
             execution_state,
             round_limits,
@@ -413,7 +411,7 @@ fn upgrade_stage_3b_process_start_result(
             // TODO(RUN-265): Replace `unwrap` with a proper execution error
             // here because subnet available memory may have changed since
             // the start of execution.
-            round
+            round_limits
                 .subnet_available_memory
                 .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
                 .unwrap();
@@ -495,7 +493,6 @@ fn upgrade_stage_4a_call_post_upgrade(
             new_canister.system_state.clone(),
             memory_usage,
             execution_parameters.clone(),
-            round.subnet_available_memory.clone(),
             FuncRef::Method(method),
             execution_state,
             round_limits,
@@ -539,9 +536,8 @@ fn upgrade_stage_4b_process_post_upgrade_result(
     execution_parameters: ExecutionParameters,
     mut total_heap_delta: NumBytes,
     round: RoundContext,
-    _round_limits: &mut RoundLimits,
+    round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
-    // TODO(RUN-263): Update round limits here.
     let canister_id = new_canister.canister_id();
     let instructions_left = output.num_instructions_left;
     match output.wasm_result {
@@ -552,7 +548,7 @@ fn upgrade_stage_4b_process_post_upgrade_result(
             // TODO(RUN-265): Replace `unwrap` with a proper execution error
             // here because subnet available memory may have changed since
             // the start of execution.
-            round
+            round_limits
                 .subnet_available_memory
                 .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
                 .unwrap();

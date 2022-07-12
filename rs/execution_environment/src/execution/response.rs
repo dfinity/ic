@@ -257,7 +257,6 @@ pub fn execute_response(
         canister.system_state.clone(),
         canister.memory_usage(round.hypervisor.subnet_type()),
         execution_parameters.clone(),
-        round.subnet_available_memory.clone(),
         func_ref,
         canister.execution_state.take().unwrap(),
         round_limits,
@@ -314,7 +313,6 @@ fn execute_response_cleanup(
             subnet_type: round.hypervisor.subnet_type(),
             execution_mode: ExecutionMode::Replicated,
         },
-        round.subnet_available_memory.clone(),
         func_ref,
         canister.execution_state.take().unwrap(),
         round_limits,
@@ -359,7 +357,7 @@ fn process_response_result(
                     // TODO(RUN-265): Replace `unwrap` with a proper execution error
                     // here because subnet available memory may have changed since
                     // the start of execution.
-                    round
+                    round_limits
                         .subnet_available_memory
                         .try_decrement(
                             response_output.allocated_bytes,
@@ -445,7 +443,7 @@ fn process_cleanup_result(
     callback_err: HypervisorError,
     original: OriginalContext,
     round: RoundContext,
-    _round_limits: &mut RoundLimits,
+    round_limits: &mut RoundLimits,
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(paused_wasm_execution) => {
@@ -467,7 +465,7 @@ fn process_cleanup_result(
                     // TODO(RUN-265): Replace `unwrap` with a proper execution error
                     // here because subnet available memory may have changed since
                     // the start of execution.
-                    round
+                    round_limits
                         .subnet_available_memory
                         .try_decrement(
                             cleanup_output.allocated_bytes,

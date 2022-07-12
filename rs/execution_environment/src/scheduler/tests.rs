@@ -8,6 +8,7 @@ use candid::Encode;
 use ic_btc_types::Network;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
 use ic_ic00_types::{BitcoinGetBalanceArgs, CanisterIdRecord, EmptyBlob, Method};
+use ic_interfaces::execution_environment::AvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
