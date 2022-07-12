@@ -16,14 +16,11 @@ Success::
 
 end::catalog[] */
 
-use std::io::Read;
 use std::net::{IpAddr, SocketAddr};
 
 use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession, ADMIN,
-};
+use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer};
 use crate::driver::universal_vm::UniversalVms;
 use crate::nns::NnsExt;
 use crate::util::{self, *};
@@ -31,13 +28,13 @@ use crate::{
     driver::ic::{InternetComputer, Subnet},
     driver::universal_vm::UniversalVm,
 };
+use bitcoincore_rpc::{Auth, Client, RpcApi};
 use candid::Decode;
 use ic_btc_types::Network;
 use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_universal_canister::{management, wasm};
 use slog::info;
-use ssh2::Session;
 use std::{fs::File, io::Write};
 
 const UNIVERSAL_VM_NAME: &str = "btc-node";
@@ -102,32 +99,6 @@ docker run -v bitcoind-data:/bitcoin/.bitcoin --name=bitcoind-node -d \
         .expect("failed to setup IC under test");
 }
 
-fn exec_command_in_docker_container(session: &Session, command: &str) -> String {
-    let docker_command = String::from("docker exec bitcoind-node ") + command;
-    let mut channel = session.channel_session().unwrap();
-    channel.exec(&docker_command).unwrap();
-    let mut stdout = String::new();
-    channel.read_to_string(&mut stdout).unwrap();
-    let mut stderr = String::new();
-    match channel.exit_status() {
-        // Exit code == 0, command should have worked.
-        Ok(0) => (),
-        // Exit code != 0, some error has happened. Stop the test execution and
-        // get the error from stderr to log it.
-        Ok(_) => {
-            channel.stderr().read_to_string(&mut stderr).unwrap();
-            panic!("Could not execute ssh command: {}", stderr);
-        }
-        Err(err) => {
-            panic!("Could not get the exit code of ssh command: {}", err);
-        }
-    }
-    channel.wait_close().unwrap();
-    // Ensure no leading/trailing whitespaces that might affect parsing of output
-    // or can create errors if the output is used as input to api calls.
-    String::from(stdout.trim())
-}
-
 pub fn get_balance(env: TestEnv) {
     let logger = env.logger();
     info!(&logger, "Checking readiness of all nodes...");
@@ -138,28 +109,31 @@ pub fn get_balance(env: TestEnv) {
     }
 
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    let sess = deployed_universal_vm.block_on_ssh_session(ADMIN).unwrap();
+
+    let btc_rpc = Client::new(
+        &format!(
+            "http://[{}]:8332",
+            deployed_universal_vm.get_vm().unwrap().ipv6
+        ),
+        Auth::UserPass(
+            "btc-dev-preview".to_string(),
+            "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=".to_string(),
+        ),
+    )
+    .unwrap();
 
     // Create a wallet.
-    exec_command_in_docker_container(
-        &sess,
-        "bitcoin-cli -conf=/bitcoin/.bitcoin/bitcoin.conf --rpcport=8332 createwallet mywallet",
-    );
+    let _ = btc_rpc
+        .create_wallet("mywallet", None, None, None, None)
+        .unwrap();
 
     // Generate an address.
-    let btc_address = exec_command_in_docker_container(
-        &sess,
-        "bitcoin-cli -conf=/bitcoin/.bitcoin/bitcoin.conf --rpcport=8332 getnewaddress",
-    );
+    let btc_address = btc_rpc.get_new_address(None, None).unwrap();
+    info!(&logger, "Created temporary btc address: {}", btc_address);
 
     // Mint some blocks for the address we generated.
-    exec_command_in_docker_container(
-        &sess,
-        &format!(
-            "bitcoin-cli -conf=/bitcoin/.bitcoin/bitcoin.conf --rpcport=8332 generatetoaddress 101 {}",
-            btc_address
-        ),
-    );
+    let block = btc_rpc.generate_to_address(101, &btc_address).unwrap();
+    info!(&logger, "Generated {} btc blocks.", block.len());
 
     // We have minted 101 blocks and each one gives 50 bitcoin to the target address,
     // so in total the balance of the address without setting `any min_confirmations`
@@ -188,7 +162,10 @@ pub fn get_balance(env: TestEnv) {
             let mut iterations = 0;
             loop {
                 let res = canister
-                    .update(wasm().call(management::bitcoin_get_balance(btc_address.clone(), None)))
+                    .update(wasm().call(management::bitcoin_get_balance(
+                        btc_address.to_string(),
+                        None,
+                    )))
                     .await
                     .map(|res| Decode!(res.as_slice(), u64))
                     .unwrap()

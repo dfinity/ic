@@ -10,6 +10,7 @@ assert-json-diff = "2.0.1"
 assert_matches = "1.3.0"
 async-recursion = "0.3.2"
 base64 = "0.11"
+bitcoincore-rpc = "0.15.0"
 candid = "0.7.4"
 proxy_canister = { path = "../rust_canisters/proxy_canister" }
 canister-test = { path = "../rust_canisters/canister_test" }
