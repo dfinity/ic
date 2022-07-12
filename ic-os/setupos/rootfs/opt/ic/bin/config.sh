@@ -12,6 +12,11 @@ CONFIG_CLONE="/config/tmp/config.ini"
 SSH_AUTHORIZED_KEYS="/config/ssh_authorized_keys"
 SSH_AUTHORIZED_KEYS_CLONE="/config/tmp/ssh_authorized_keys"
 
+# Define empty variables so they are not unset
+ipv6_prefix=""
+ipv6_subnet=""
+ipv6_gateway=""
+
 function create_config_tmp() {
     if [ ! -w "${CONFIG_DIR}" ]; then
         log_and_reboot_on_error "1" "Config partition is not writable."
@@ -55,14 +60,11 @@ function clone_config() {
 }
 
 function normalize_config() {
-    sed -i '/^#.*$/d' "${CONFIG_CLONE}"
+    CONFIG_VAR=$(cat "${CONFIG_CLONE}" | tr '\r' '\n')
+    echo "${CONFIG_VAR}" >"${CONFIG_CLONE}"
+
+    sed -i 's/#.*$//g' "${CONFIG_CLONE}"
     log_and_reboot_on_error "${?}" "Unable to remove comments from 'config.ini'."
-
-    sed -i 's/\r$//g' "${CONFIG_CLONE}"
-    log_and_reboot_on_error "${?}" "Unable to convert end-of-line character from macOS to Unix in 'config.ini'."
-
-    sed -i 's/^M$//g' "${CONFIG_CLONE}"
-    log_and_reboot_on_error "${?}" "Unable to convert end-of-line character from Windows to Unix in 'config.ini'."
 
     sed -i 's/"//g' "${CONFIG_CLONE}"
     log_and_reboot_on_error "${?}" "Unable to replace double-quote characters in 'config.ini'."
@@ -73,11 +75,11 @@ function normalize_config() {
     sed -i 's/.*/\L&/' "${CONFIG_CLONE}"
     log_and_reboot_on_error "${?}" "Unable to convert upper- to lower-case in 'config.ini'."
 
-    sed -i 's/ipv6_\+/\n&/g' "${CONFIG_CLONE}"
-    log_and_reboot_on_error "${?}" "Unable to insert new-line in-front of each variable in 'config.ini'."
-
     sed -i '/^$/d' "${CONFIG_CLONE}"
     log_and_reboot_on_error "${?}" "Unable to remove empty lines in 'config.ini'."
+
+    echo -e '\n' >>"${CONFIG_CLONE}"
+    log_and_reboot_on_error "${?}" "Unable to inject extra new-line at the end of 'config.ini'."
 }
 
 function read_variables() {
