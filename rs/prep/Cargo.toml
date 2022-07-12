@@ -12,6 +12,7 @@ fs_extra = "1.2.0"
 ic-crypto = { path = "../crypto" }
 ic-config = { path = "../config" }
 ic-ic00-types = { path = "../types/ic00_types" }
+ic-http-utils = { path = "../http_utils" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-protobuf = { path = "../protobuf" }
@@ -38,6 +39,7 @@ slog = { version = "2.5.2", features = [
 ] }
 tempfile = "3.1.0"
 thiserror = "1.0"
+tokio = "1.15.0"
 url = "2.1.1"
 
 [dev-dependencies]

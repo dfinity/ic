@@ -202,7 +202,8 @@ fn main() -> Result<()> {
         None => ic_config0,
     };
 
-    ic_config.initialize()?;
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(async { ic_config.initialize().await })?;
     Ok(())
 }
 

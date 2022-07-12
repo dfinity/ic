@@ -24,7 +24,7 @@ const SUBNET_ID: u64 = 0;
 
 #[tokio::test]
 async fn adding_deleting_values_shows_up_in_diff() {
-    let (_guard, ic_prep_dir) = run_ic_prep();
+    let (_guard, ic_prep_dir) = run_ic_prep().await;
     let registry_spec = local_store_latest_snapshot(ic_prep_dir.registry_local_store_path());
     let projection = universal_projection();
     let cmd = Command::Snapshot {
@@ -122,7 +122,7 @@ pub fn filter_special_keys(keys: Vec<String>) -> Vec<String> {
         .collect()
 }
 
-pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
+pub async fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
     let mut subnet_nodes: BTreeMap<NodeIndex, NodeConfiguration> = BTreeMap::new();
     subnet_nodes.insert(
         NODE_INDEX,
@@ -182,7 +182,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
         None,
         /* ssh_readonly_access_to_unassigned_nodes */ vec![],
     );
-    ic_config.initialize().unwrap();
+    ic_config.initialize().await.unwrap();
     let path: PathBuf = temp_dir.path().into();
     (temp_dir, IcPrepStateDir::new(&path))
 }

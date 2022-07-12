@@ -149,7 +149,10 @@ pub fn init_ic(
         ic.ssh_readonly_access_to_unassigned_nodes.clone(),
     );
 
-    Ok(ic_config.initialize().expect("can't fail"))
+    let rt = tokio::runtime::Runtime::new().expect("Could not create runtime");
+    Ok(rt
+        .block_on(async { ic_config.initialize().await })
+        .expect("can't fail"))
 }
 
 use crate::driver::farm::Farm;
