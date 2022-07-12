@@ -581,11 +581,15 @@ pub mod manage_neuron {
         #[prost(uint64, tag="1")]
         pub dissolve_timestamp_seconds: u64,
     }
-    /// Join the Internet Computer's community fund with this neuron's
-    /// entire stake. Caution: this operation is not reversible.
+    /// Join the Internet Computer's community fund with this neuron's present and future maturity.
     #[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable))]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct JoinCommunityFund {
+    }
+    /// Leave the Internet Computer's community fund.
+    #[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable))]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct LeaveCommunityFund {
     }
     /// Commands that only configure a given neuron, but do not interact
     /// with the outside world. They all require the caller to be the
@@ -593,7 +597,7 @@ pub mod manage_neuron {
     #[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable))]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Configure {
-        #[prost(oneof="configure::Operation", tags="1, 2, 3, 4, 5, 6, 7")]
+        #[prost(oneof="configure::Operation", tags="1, 2, 3, 4, 5, 6, 7, 8")]
         pub operation: ::core::option::Option<configure::Operation>,
     }
     /// Nested message and enum types in `Configure`.
@@ -615,6 +619,8 @@ pub mod manage_neuron {
             SetDissolveTimestamp(super::SetDissolveTimestamp),
             #[prost(message, tag="7")]
             JoinCommunityFund(super::JoinCommunityFund),
+            #[prost(message, tag="8")]
+            LeaveCommunityFund(super::LeaveCommunityFund),
         }
     }
     /// Disburse this neuron's stake: transfer the staked ICP to the
@@ -994,6 +1000,8 @@ pub mod governance_error {
         /// The neuron attempted to join the community fund while already
         /// a member.
         AlreadyJoinedCommunityFund = 17,
+        /// The neuron attempted to leave the community fund but is not a member.
+        NotInTheCommunityFund = 18,
     }
 }
 #[derive(candid::CandidType, candid::Deserialize)] #[cfg_attr(feature = "test", derive(comparable::Comparable), self_describing)]

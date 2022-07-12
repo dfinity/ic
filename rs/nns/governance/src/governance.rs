@@ -768,6 +768,17 @@ impl Neuron {
         }
     }
 
+    /// Leave the Internet Computer's community fund. If this neuron is not a
+    /// member of the community fund, an error will be returned.
+    fn leave_community_fund(&mut self) -> Result<(), GovernanceError> {
+        if self.joined_community_fund_timestamp_seconds.unwrap_or(0) != 0 {
+            self.joined_community_fund_timestamp_seconds = None;
+            Ok(())
+        } else {
+            Err(GovernanceError::new(ErrorType::NotInTheCommunityFund))
+        }
+    }
+
     /// If this neuron is not dissolving, start dissolving it.
     ///
     /// If the neuron is dissolving or dissolved, an error is returned.
@@ -967,6 +978,9 @@ impl Neuron {
             }
             manage_neuron::configure::Operation::JoinCommunityFund(_) => {
                 self.join_community_fund(now_seconds)
+            }
+            manage_neuron::configure::Operation::LeaveCommunityFund(_) => {
+                self.leave_community_fund()
             }
         }
     }

@@ -49,6 +49,7 @@ use ic_nns_governance::{
         manage_neuron::Follow,
         manage_neuron::IncreaseDissolveDelay,
         manage_neuron::JoinCommunityFund,
+        manage_neuron::LeaveCommunityFund,
         manage_neuron::Merge,
         manage_neuron::NeuronIdOrSubaccount,
         manage_neuron::SetDissolveTimestamp,
@@ -9070,6 +9071,52 @@ fn test_join_community_fund() {
             result.err().unwrap().error_type()
         );
     }
+    // Principal B leaves the community fund for Neuron 3
+    {
+        let result = gov
+            .manage_neuron(
+                &principal(principal_b),
+                &ManageNeuron {
+                    id: None,
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                        id: 3,
+                    })),
+                    command: Some(manage_neuron::Command::Configure(
+                        manage_neuron::Configure {
+                            operation: Some(Operation::LeaveCommunityFund(LeaveCommunityFund {})),
+                        },
+                    )),
+                },
+            )
+            .now_or_never()
+            .unwrap();
+        assert!(result.is_ok());
+    }
+    // Principal B tries to leave the community fund again for neuron 3, should fail
+    // since it already left.
+    {
+        let result = gov
+            .manage_neuron(
+                &principal(principal_b),
+                &ManageNeuron {
+                    id: None,
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                        id: 3,
+                    })),
+                    command: Some(manage_neuron::Command::Configure(
+                        manage_neuron::Configure {
+                            operation: Some(Operation::LeaveCommunityFund(LeaveCommunityFund {})),
+                        },
+                    )),
+                },
+            )
+            .now_or_never()
+            .unwrap();
+        assert_eq!(
+            ErrorType::NotInTheCommunityFund,
+            result.err().unwrap().error_type()
+        );
+    }
     // Run periodic tasks to populate metrics. Need to call it twice
     // as the first call will just distribute rewards.
     gov.run_periodic_tasks().now_or_never();
@@ -9078,7 +9125,7 @@ fn test_join_community_fund() {
     assert_eq!(200, actual_metrics.total_supply_icp);
     assert_eq!(130 * 100_000_000, actual_metrics.total_staked_e8s);
     assert_eq!(
-        110 * 100_000_000,
+        10 * 100_000_000,
         actual_metrics.community_fund_total_staked_e8s
     );
     // Neuron 2 is not in the fund.
