@@ -70,8 +70,7 @@ const ARG_MSG_COUNT: &str = "count";
 
 const REG_V1: RegistryVersion = RegistryVersion::new(1);
 const SUBNET_ID: u8 = 100;
-const FLOW_TAG_1: u32 = 1234;
-const FLOW_TAG_2: u32 = 5678;
+const FLOW_TAG: u32 = 1234;
 
 const TEST_MESSAGE_LEN: usize = 1_000_000;
 
@@ -175,7 +174,7 @@ impl TestClient {
 
     // Waits for the flows/connections to be up
     async fn wait_for_flow_up(&self) -> Result<(), TestClientErrorCode> {
-        let expected_flows = 4;
+        let expected_flows = 2;
         for _ in 0..10 {
             let num_flows = self.active_flows.lock().unwrap().len();
             if num_flows == expected_flows {
@@ -443,9 +442,9 @@ struct ConfigAndRecords {
 fn generate_config_and_registry(node_id: &NodeId) -> ConfigAndRecords {
     // Tuples: (NodeId, IP, server port 1, server port 2)
     let node_info = vec![
-        (to_node_id(1), "127.0.0.1".to_string(), 4100, 4101),
-        (to_node_id(2), "127.0.0.1".to_string(), 4102, 4103),
-        (to_node_id(3), "127.0.0.1".to_string(), 4104, 4105),
+        (to_node_id(1), "127.0.0.1".to_string(), 4100),
+        (to_node_id(2), "127.0.0.1".to_string(), 4102),
+        (to_node_id(3), "127.0.0.1".to_string(), 4104),
     ];
 
     let mut config = None;
@@ -454,35 +453,20 @@ fn generate_config_and_registry(node_id: &NodeId) -> ConfigAndRecords {
         if *node_id == n.0 {
             config = Some(TransportConfig {
                 node_ip: n.1.clone(),
-                p2p_flows: vec![
-                    TransportFlowConfig {
-                        flow_tag: FLOW_TAG_1,
-                        server_port: n.2,
-                        queue_size: 1024,
-                    },
-                    TransportFlowConfig {
-                        flow_tag: FLOW_TAG_2,
-                        server_port: n.3,
-                        queue_size: 1024,
-                    },
-                ],
+                p2p_flows: vec![TransportFlowConfig {
+                    flow_tag: FLOW_TAG,
+                    server_port: n.2,
+                    queue_size: 1024,
+                }],
             });
         }
 
         let mut node_record: NodeRecord = Default::default();
         node_record.p2p_flow_endpoints.push(FlowEndpoint {
-            flow_tag: FLOW_TAG_1,
+            flow_tag: FLOW_TAG,
             endpoint: Some(ConnectionEndpoint {
                 ip_addr: n.1.clone(),
                 port: n.2 as u32,
-                protocol: Protocol::P2p1Tls13 as i32,
-            }),
-        });
-        node_record.p2p_flow_endpoints.push(FlowEndpoint {
-            flow_tag: FLOW_TAG_2,
-            endpoint: Some(ConnectionEndpoint {
-                ip_addr: n.1.clone(),
-                port: n.3 as u32,
                 protocol: Protocol::P2p1Tls13 as i32,
             }),
         });
@@ -529,11 +513,7 @@ async fn do_work_source(
 
     for i in 1..=message_count {
         test_client
-            .send_receive_compare(i, FlowTag::from(FLOW_TAG_1))
-            .map_err(|e| println!("send_receive_compare(): failed with error: {:?}", e))
-            .unwrap();
-        test_client
-            .send_receive_compare(i, FlowTag::from(FLOW_TAG_2))
+            .send_receive_compare(i, FlowTag::from(FLOW_TAG))
             .map_err(|e| println!("send_receive_compare(): failed with error: {:?}", e))
             .unwrap();
     }
