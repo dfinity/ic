@@ -159,11 +159,9 @@ impl ops::Div<i64> for AvailableMemory {
 
 /// This struct is used to manage the current amount of memory available on the
 /// subnet.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct SubnetAvailableMemory {
     /// TODO(EXC-677): Make this just a `AvailableMemory`.
-    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
     available_memory: Arc<RwLock<AvailableMemory>>,
 }
 
@@ -935,6 +933,8 @@ pub trait Scheduler: Send {
 pub struct WasmExecutionOutput {
     pub wasm_result: Result<Option<WasmResult>, HypervisorError>,
     pub num_instructions_left: NumInstructions,
+    pub allocated_bytes: NumBytes,
+    pub allocated_message_bytes: NumBytes,
     pub instance_stats: InstanceStats,
 }
 

@@ -777,6 +777,8 @@ impl TestWasmExecutorCore {
             let output = WasmExecutionOutput {
                 wasm_result: Err(HypervisorError::InstructionLimitExceeded),
                 num_instructions_left: NumInstructions::from(0),
+                allocated_bytes: NumBytes::from(0),
+                allocated_message_bytes: NumBytes::from(0),
                 instance_stats: InstanceStats {
                     accessed_pages: 0,
                     dirty_pages: 0,
@@ -808,6 +810,8 @@ impl TestWasmExecutorCore {
         };
         let output = WasmExecutionOutput {
             wasm_result: Ok(None),
+            allocated_bytes: NumBytes::from(0),
+            allocated_message_bytes: NumBytes::from(0),
             num_instructions_left: instructions_left,
             instance_stats,
         };
@@ -909,12 +913,7 @@ impl TestWasmExecutorCore {
             method_payload: encode_message_id_as_payload(call_message_id),
         };
         system_state
-            .push_output_request(
-                canister_current_memory_usage,
-                compute_allocation,
-                request,
-                NumBytes::from(0),
-            )
+            .push_output_request(canister_current_memory_usage, compute_allocation, request)
             .map_err(|req| format!("Failed pushing request {:?} to output queue.", req))?;
         self.messages.insert(call_message_id, call.other_side);
         self.messages.insert(response_message_id, call.on_response);

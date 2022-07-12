@@ -437,6 +437,10 @@ impl<S: SystemApi> WasmtimeInstance<S> {
         self.store.data_mut()
     }
 
+    pub fn store_data(&self) -> &StoreData<S> {
+        self.store.data()
+    }
+
     fn invoke_export(&mut self, export: &str, args: &[Val]) -> HypervisorResult<()> {
         self.instance
             .get_export(&mut self.store, export)

@@ -17,8 +17,8 @@ use crate::{
 use crate::{CompilationCache, CompilationResult, SerializedModule};
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorError, HypervisorResult, InstanceStats,
-    OutOfInstructionsHandler, SubnetAvailableMemory, SystemApi, WasmExecutionOutput,
+    AvailableMemory, ExecutionParameters, HypervisorError, HypervisorResult, InstanceStats,
+    OutOfInstructionsHandler, SystemApi, WasmExecutionOutput,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -119,7 +119,6 @@ pub trait PausedWasmExecution: std::fmt::Debug {
     fn resume(
         self: Box<Self>,
         execution_state: ExecutionState,
-        subnet_available_memory: SubnetAvailableMemory,
     ) -> (ExecutionState, WasmExecutionResult);
 
     /// Aborts the paused execution.
@@ -188,6 +187,8 @@ impl WasmExecutor for WasmExecutorImpl {
                         WasmExecutionOutput {
                             wasm_result: Err(err),
                             num_instructions_left: NumInstructions::from(0),
+                            allocated_bytes: NumBytes::from(0),
+                            allocated_message_bytes: NumBytes::from(0),
                             instance_stats: InstanceStats {
                                 accessed_pages: 0,
                                 dirty_pages: 0,
@@ -351,7 +352,7 @@ impl WasmExecutorImpl {
                     let cache = self
                         .wasm_embedder
                         .deserialize_module(&serialized_module.bytes)
-                        .map(|module| EmbedderCache::new(module))?;
+                        .map(EmbedderCache::new)?;
                     *guard = Some(cache.clone());
                     Ok(CacheLookup {
                         cache,
@@ -500,7 +501,7 @@ pub fn process(
     api_type: ApiType,
     canister_current_memory_usage: NumBytes,
     execution_parameters: ExecutionParameters,
-    subnet_available_memory: SubnetAvailableMemory,
+    subnet_available_memory: AvailableMemory,
     sandbox_safe_system_state: SandboxSafeSystemState,
     embedder_cache: &EmbedderCache,
     embedder: &WasmtimeEmbedder,
@@ -544,6 +545,8 @@ pub fn process(
                 WasmExecutionOutput {
                     wasm_result: Err(err),
                     num_instructions_left: NumInstructions::from(0),
+                    allocated_bytes: NumBytes::from(0),
+                    allocated_message_bytes: NumBytes::from(0),
                     instance_stats: InstanceStats {
                         accessed_pages: 0,
                         dirty_pages: 0,
@@ -574,6 +577,12 @@ pub fn process(
     if wasm_heap_size_after > wasm_heap_limit {
         wasm_result = Err(HypervisorError::WasmReservedPages);
     }
+
+    let allocated_bytes = instance.store_data().system_api.get_allocated_bytes();
+    let allocated_message_bytes = instance
+        .store_data()
+        .system_api
+        .get_allocated_message_bytes();
 
     let wasm_state_changes = match run_result {
         Ok(run_result) => {
@@ -610,6 +619,8 @@ pub fn process(
         WasmExecutionOutput {
             wasm_result,
             num_instructions_left,
+            allocated_bytes,
+            allocated_message_bytes,
             instance_stats,
         },
         wasm_state_changes,

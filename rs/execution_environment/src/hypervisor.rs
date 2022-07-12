@@ -278,7 +278,7 @@ impl Hypervisor {
                 sandbox_safe_system_state: static_system_state,
                 canister_current_memory_usage,
                 execution_parameters,
-                subnet_available_memory,
+                subnet_available_memory: subnet_available_memory.get(),
                 func_ref,
                 execution_state,
                 compilation_cache: Arc::clone(&self.compilation_cache),
@@ -296,6 +296,12 @@ impl Hypervisor {
                 unreachable!("DTS is not enabled yet.");
             }
         };
+        // The unwrap is guaranteed to succeed because without DTS the subnet
+        // available memory did not change since the start of execution and the
+        // Wasm executor must have done all checks.
+        subnet_available_memory
+            .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
+            .unwrap();
         system_state_changes.apply_changes(
             &mut system_state,
             network_topology,
@@ -330,7 +336,7 @@ impl Hypervisor {
                 sandbox_safe_system_state: static_system_state,
                 canister_current_memory_usage,
                 execution_parameters,
-                subnet_available_memory,
+                subnet_available_memory: subnet_available_memory.get(),
                 func_ref,
                 execution_state,
                 compilation_cache: Arc::clone(&self.compilation_cache),

@@ -100,7 +100,7 @@ impl WasmtimeInstanceBuilder {
                 subnet_type: self.subnet_type,
                 execution_mode: ExecutionMode::Replicated,
             },
-            AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into(),
+            AvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
             Memory::default(),
             Arc::new(ic_system_api::DefaultOutOfInstructionsHandler {}),
             log,

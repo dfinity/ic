@@ -111,7 +111,7 @@ pub fn get_system_api(
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
-        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into(),
+        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
         Memory::default(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),

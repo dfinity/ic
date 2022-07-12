@@ -188,6 +188,13 @@ fn upgrade_stage_1_process_pre_upgrade_result(
             if opt_result.is_some() {
                 fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
+            // TODO(RUN-265): Replace `unwrap` with a proper execution error
+            // here because subnet available memory may have changed since
+            // the start of execution.
+            round
+                .subnet_available_memory
+                .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
+                .unwrap();
             system_state_changes.apply_changes(
                 &mut new_canister.system_state,
                 round.network_topology,
@@ -402,6 +409,13 @@ fn upgrade_stage_3b_process_start_result(
             if opt_result.is_some() {
                 fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
+            // TODO(RUN-265): Replace `unwrap` with a proper execution error
+            // here because subnet available memory may have changed since
+            // the start of execution.
+            round
+                .subnet_available_memory
+                .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
+                .unwrap();
             total_heap_delta +=
                 NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
             upgrade_stage_4a_call_post_upgrade(
@@ -534,6 +548,13 @@ fn upgrade_stage_4b_process_post_upgrade_result(
             if opt_result.is_some() {
                 fatal!(round.log, "[EXC-BUG] System methods cannot use msg_reply.");
             }
+            // TODO(RUN-265): Replace `unwrap` with a proper execution error
+            // here because subnet available memory may have changed since
+            // the start of execution.
+            round
+                .subnet_available_memory
+                .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
+                .unwrap();
             system_state_changes.apply_changes(
                 &mut new_canister.system_state,
                 round.network_topology,
@@ -642,9 +663,8 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
     ) -> DtsInstallCodeResult {
         let mut new_canister = self.new_canister;
         let execution_state = new_canister.execution_state.take().unwrap();
-        let (execution_state, wasm_execution_result) = self
-            .paused_wasm_execution
-            .resume(execution_state, round.subnet_available_memory.clone());
+        let (execution_state, wasm_execution_result) =
+            self.paused_wasm_execution.resume(execution_state);
         new_canister.execution_state = Some(execution_state);
         match wasm_execution_result {
             WasmExecutionResult::Finished(output, system_state_changes) => {
@@ -704,9 +724,8 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
     ) -> DtsInstallCodeResult {
         let mut new_canister = self.new_canister;
         let execution_state = new_canister.execution_state.take().unwrap();
-        let (execution_state, wasm_execution_result) = self
-            .paused_wasm_execution
-            .resume(execution_state, round.subnet_available_memory.clone());
+        let (execution_state, wasm_execution_result) =
+            self.paused_wasm_execution.resume(execution_state);
         new_canister.execution_state = Some(execution_state);
         match wasm_execution_result {
             WasmExecutionResult::Finished(output, _system_state_changes) => {
@@ -762,9 +781,8 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
     ) -> DtsInstallCodeResult {
         let mut new_canister = self.new_canister;
         let execution_state = new_canister.execution_state.take().unwrap();
-        let (execution_state, wasm_execution_result) = self
-            .paused_wasm_execution
-            .resume(execution_state, round.subnet_available_memory.clone());
+        let (execution_state, wasm_execution_result) =
+            self.paused_wasm_execution.resume(execution_state);
         new_canister.execution_state = Some(execution_state);
         match wasm_execution_result {
             WasmExecutionResult::Finished(output, system_state_changes) => {

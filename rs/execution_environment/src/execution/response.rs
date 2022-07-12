@@ -50,9 +50,7 @@ impl PausedExecution for PausedResponseExecution {
         round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
         let execution_state = canister.execution_state.take().unwrap();
-        let (execution_state, result) = self
-            .paused_wasm_execution
-            .resume(execution_state, round.subnet_available_memory.clone());
+        let (execution_state, result) = self.paused_wasm_execution.resume(execution_state);
         canister.execution_state = Some(execution_state);
         process_response_result(result, canister, self.original, round, round_limits)
     }
@@ -80,9 +78,7 @@ impl PausedExecution for PausedCleanupExecution {
         round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
         let execution_state = canister.execution_state.take().unwrap();
-        let (execution_state, result) = self
-            .paused_wasm_execution
-            .resume(execution_state, round.subnet_available_memory.clone());
+        let (execution_state, result) = self.paused_wasm_execution.resume(execution_state);
         canister.execution_state = Some(execution_state);
         process_cleanup_result(
             result,
@@ -360,6 +356,16 @@ fn process_response_result(
         WasmExecutionResult::Finished(response_output, system_state_changes) => {
             let (num_instructions_left, heap_delta, result) = match response_output.wasm_result {
                 Ok(_) => {
+                    // TODO(RUN-265): Replace `unwrap` with a proper execution error
+                    // here because subnet available memory may have changed since
+                    // the start of execution.
+                    round
+                        .subnet_available_memory
+                        .try_decrement(
+                            response_output.allocated_bytes,
+                            response_output.allocated_message_bytes,
+                        )
+                        .unwrap();
                     // Executing the reply/reject closure succeeded.
                     system_state_changes.apply_changes(
                         &mut canister.system_state,
@@ -457,6 +463,16 @@ fn process_cleanup_result(
         WasmExecutionResult::Finished(cleanup_output, system_state_changes) => {
             let (num_instructions_left, heap_delta, result) = match cleanup_output.wasm_result {
                 Ok(_) => {
+                    // TODO(RUN-265): Replace `unwrap` with a proper execution error
+                    // here because subnet available memory may have changed since
+                    // the start of execution.
+                    round
+                        .subnet_available_memory
+                        .try_decrement(
+                            cleanup_output.allocated_bytes,
+                            cleanup_output.allocated_message_bytes,
+                        )
+                        .unwrap();
                     // Executing the cleanup callback has succeeded.
                     system_state_changes.apply_changes(
                         &mut canister.system_state,

@@ -1,9 +1,7 @@
 use ic_config::embedders::Config;
 use ic_embedders::wasm_utils::compile;
 use ic_embedders::WasmtimeEmbedder;
-use ic_interfaces::execution_environment::{
-    AvailableMemory, ExecutionMode, ExecutionParameters, SubnetAvailableMemory,
-};
+use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, ExecutionParameters};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, NumWasmPages};
@@ -30,8 +28,8 @@ use std::sync::Arc;
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into();
+    static ref MAX_SUBNET_AVAILABLE_MEMORY: AvailableMemory =
+        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2);
 }
 
 fn test_api_for_update(
@@ -69,7 +67,7 @@ fn test_api_for_update(
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
         },
-        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
+        *MAX_SUBNET_AVAILABLE_MEMORY,
         Memory::default(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         log,

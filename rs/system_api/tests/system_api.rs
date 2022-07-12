@@ -2,7 +2,7 @@ use ic_base_types::NumSeconds;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     AvailableMemory, CanisterOutOfCyclesError, HypervisorError, HypervisorResult,
-    PerformanceCounterType, SubnetAvailableMemory, SystemApi, TrapCode,
+    PerformanceCounterType, SystemApi, TrapCode,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
@@ -1478,8 +1478,7 @@ fn call_perform_not_enough_cycles_resets_state() {
 fn stable_grow_updates_subnet_available_memory() {
     let wasm_page_size = 64 << 10;
     let subnet_available_memory_bytes = 2 * wasm_page_size;
-    let subnet_available_memory: SubnetAvailableMemory =
-        AvailableMemory::new(subnet_available_memory_bytes, 0).into();
+    let subnet_available_memory = AvailableMemory::new(subnet_available_memory_bytes, 0);
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let sandbox_safe_system_state =
@@ -1489,17 +1488,17 @@ fn stable_grow_updates_subnet_available_memory() {
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
-        subnet_available_memory.clone(),
+        subnet_available_memory,
         Memory::default(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );
 
     assert_eq!(api.ic0_stable_grow(1).unwrap(), 0);
-    assert_eq!(subnet_available_memory.get_total_memory(), wasm_page_size);
+    assert_eq!(api.get_allocated_bytes().get(), wasm_page_size as u64);
 
     assert_eq!(api.ic0_stable_grow(10).unwrap(), -1);
-    assert_eq!(subnet_available_memory.get_total_memory(), wasm_page_size);
+    assert_eq!(api.get_allocated_bytes().get(), wasm_page_size as u64);
 }
 
 #[test]
@@ -1507,8 +1506,7 @@ fn stable_grow_returns_allocated_memory_on_error() {
     // Subnet with stable memory size above what can be represented on 32 bits.
     let wasm_page_size = 64 << 10;
     let subnet_available_memory_bytes = 2 * wasm_page_size;
-    let subnet_available_memory: SubnetAvailableMemory =
-        AvailableMemory::new(subnet_available_memory_bytes, 0).into();
+    let subnet_available_memory = AvailableMemory::new(subnet_available_memory_bytes, 0);
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let sandbox_safe_system_state =
@@ -1518,7 +1516,7 @@ fn stable_grow_returns_allocated_memory_on_error() {
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
-        subnet_available_memory.clone(),
+        subnet_available_memory,
         Memory::new(PageMap::default(), NumWasmPages::new(1 << 32)),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
@@ -1547,8 +1545,7 @@ fn stable_grow_returns_allocated_memory_on_error() {
 fn update_available_memory_updates_subnet_available_memory() {
     let wasm_page_size = 64 << 10;
     let subnet_available_memory_bytes = 2 * wasm_page_size;
-    let subnet_available_memory: SubnetAvailableMemory =
-        AvailableMemory::new(subnet_available_memory_bytes, 0).into();
+    let subnet_available_memory = AvailableMemory::new(subnet_available_memory_bytes, 0);
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let sandbox_safe_system_state =
@@ -1558,27 +1555,24 @@ fn update_available_memory_updates_subnet_available_memory() {
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
-        subnet_available_memory.clone(),
+        subnet_available_memory,
         Memory::default(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );
 
     api.update_available_memory(0, 1).unwrap();
-    assert_eq!(subnet_available_memory.get_total_memory(), wasm_page_size);
+    assert_eq!(api.get_allocated_bytes().get() as i64, wasm_page_size);
+    assert_eq!(api.get_allocated_message_bytes().get() as i64, 0);
 
     api.update_available_memory(0, 10).unwrap_err();
-    assert_eq!(subnet_available_memory.get_total_memory(), wasm_page_size);
-
-    assert_eq!(api.get_allocated_memory().get() as i64, wasm_page_size);
-
-    assert_eq!(api.get_allocated_message_memory().get() as i64, 0);
+    assert_eq!(api.get_allocated_bytes().get() as i64, wasm_page_size);
+    assert_eq!(api.get_allocated_message_bytes().get() as i64, 0);
 }
 
 #[test]
 fn take_execution_result_properly_frees_memory() {
-    let subnet_available_memory: SubnetAvailableMemory =
-        AvailableMemory::new(1 << 30, 1 << 30).into();
+    let subnet_available_memory = AvailableMemory::new(1 << 30, 1 << 30);
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut sandbox_safe_system_state =
@@ -1615,25 +1609,24 @@ fn take_execution_result_properly_frees_memory() {
 
     assert_eq!(0, api.push_output_request(req).unwrap());
 
-    assert!(api.get_allocated_memory().get() > 0);
-    assert!(api.get_allocated_message_memory().get() > 0);
+    assert!(api.get_allocated_bytes().get() > 0);
+    assert!(api.get_allocated_message_bytes().get() > 0);
     assert_eq!(
         api.take_execution_result(Some(&HypervisorError::OutOfMemory))
             .unwrap_err(),
         HypervisorError::OutOfMemory
     );
-    assert_eq!(api.get_allocated_memory().get(), 0);
-    assert_eq!(api.get_allocated_message_memory().get(), 0);
+    assert_eq!(api.get_allocated_bytes().get(), 0);
+    assert_eq!(api.get_allocated_message_bytes().get(), 0);
 }
 
 #[test]
 fn push_output_request_respects_memory_limits() {
     let run_test = |subnet_available_memory_bytes, subnet_available_message_memory_bytes| {
-        let subnet_available_memory: SubnetAvailableMemory = AvailableMemory::new(
+        let subnet_available_memory = AvailableMemory::new(
             subnet_available_memory_bytes,
             subnet_available_message_memory_bytes,
-        )
-        .into();
+        );
         let mut system_state = SystemStateBuilder::default().build();
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
         let mut sandbox_safe_system_state =
@@ -1655,7 +1648,7 @@ fn push_output_request_respects_memory_limits() {
             sandbox_safe_system_state,
             CANISTER_CURRENT_MEMORY_USAGE,
             execution_parameters(),
-            subnet_available_memory.clone(),
+            subnet_available_memory,
             Memory::default(),
             Arc::new(DefaultOutOfInstructionsHandler {}),
             no_op_logger(),
@@ -1672,12 +1665,12 @@ fn push_output_request_respects_memory_limits() {
 
         // `MAX_RESPONSE_COUNT_BYTES` are consumed.
         assert_eq!(
-            subnet_available_memory_bytes - MAX_RESPONSE_COUNT_BYTES as i64,
-            subnet_available_memory.get_total_memory()
+            api.get_allocated_bytes().get(),
+            MAX_RESPONSE_COUNT_BYTES as u64
         );
         assert_eq!(
-            subnet_available_message_memory_bytes - MAX_RESPONSE_COUNT_BYTES as i64,
-            subnet_available_memory.get_message_memory()
+            api.get_allocated_message_bytes().get(),
+            MAX_RESPONSE_COUNT_BYTES as u64
         );
         assert_eq!(
             CANISTER_CURRENT_MEMORY_USAGE + NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
@@ -1691,24 +1684,16 @@ fn push_output_request_respects_memory_limits() {
         );
         // Without altering memory usage.
         assert_eq!(
-            subnet_available_memory_bytes - MAX_RESPONSE_COUNT_BYTES as i64,
-            subnet_available_memory.get_total_memory()
+            api.get_allocated_bytes().get(),
+            MAX_RESPONSE_COUNT_BYTES as u64
         );
         assert_eq!(
-            subnet_available_message_memory_bytes - MAX_RESPONSE_COUNT_BYTES as i64,
-            subnet_available_memory.get_message_memory()
+            api.get_allocated_message_bytes().get(),
+            MAX_RESPONSE_COUNT_BYTES as u64
         );
         assert_eq!(
             CANISTER_CURRENT_MEMORY_USAGE + NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
             api.get_current_memory_usage()
-        );
-        assert_eq!(
-            NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
-            api.get_allocated_memory()
-        );
-        assert_eq!(
-            NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
-            api.get_allocated_message_memory()
         );
 
         // Ensure that exactly one output request was pushed.
@@ -1729,8 +1714,7 @@ fn push_output_request_respects_memory_limits() {
 #[test]
 fn push_output_request_oversized_request_memory_limits() {
     let subnet_available_memory_bytes = 3 * MAX_RESPONSE_COUNT_BYTES as i64;
-    let subnet_available_memory: SubnetAvailableMemory =
-        AvailableMemory::new(subnet_available_memory_bytes, 1 << 30).into();
+    let subnet_available_memory = AvailableMemory::new(subnet_available_memory_bytes, 1 << 30);
     let mut system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut sandbox_safe_system_state =
@@ -1752,7 +1736,7 @@ fn push_output_request_oversized_request_memory_limits() {
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
-        subnet_available_memory.clone(),
+        subnet_available_memory,
         Memory::default(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
@@ -1770,15 +1754,10 @@ fn push_output_request_oversized_request_memory_limits() {
         RejectCode::SysTransient as i32,
         api.push_output_request(req).unwrap()
     );
+
     // Memory usage unchanged.
-    assert_eq!(
-        3 * MAX_RESPONSE_COUNT_BYTES as i64,
-        subnet_available_memory.get_total_memory()
-    );
-    assert_eq!(
-        CANISTER_CURRENT_MEMORY_USAGE,
-        api.get_current_memory_usage()
-    );
+    assert_eq!(0, api.get_allocated_bytes().get());
+    assert_eq!(0, api.get_allocated_message_bytes().get());
 
     // Slightly smaller, still oversized request.
     let req = RequestBuilder::default()
@@ -1790,10 +1769,12 @@ fn push_output_request_oversized_request_memory_limits() {
 
     // Pushing succeeds.
     assert_eq!(0, api.push_output_request(req).unwrap());
+
     // `req_size_bytes` are consumed.
+    assert_eq!(req_size_bytes as u64, api.get_allocated_bytes().get());
     assert_eq!(
-        (3 * MAX_RESPONSE_COUNT_BYTES - req_size_bytes) as i64,
-        subnet_available_memory.get_total_memory()
+        req_size_bytes as u64,
+        api.get_allocated_message_bytes().get()
     );
     assert_eq!(
         CANISTER_CURRENT_MEMORY_USAGE + NumBytes::from(req_size_bytes as u64),
