@@ -39,7 +39,7 @@ use ic_config::{
     transport::{TransportConfig, TransportFlowConfig},
 };
 use ic_interfaces_transport::{
-    FlowId, FlowTag, SendError, Transport, TransportErrorCode, TransportEvent, TransportPayload,
+    FlowTag, SendError, Transport, TransportErrorCode, TransportEvent, TransportPayload,
     TransportStateChange,
 };
 use ic_logger::{info, warn, LoggerImpl, ReplicaLogger};
@@ -58,7 +58,7 @@ use utils::{create_crypto, to_node_id};
 
 // From the on_message() handler
 struct TestMessage {
-    flow_id: FlowId,
+    peer_id: NodeId,
     payload: TransportPayload,
 }
 
@@ -98,7 +98,7 @@ struct TestClient {
     prev_node_record: NodeRecord,
     next_node_record: NodeRecord,
     receiver: MpscReceiver,
-    active_flows: Arc<Mutex<HashSet<FlowId>>>,
+    active_flows: Arc<Mutex<HashSet<NodeId>>>,
     registry_version: RegistryVersion,
     log: ReplicaLogger,
     active: Arc<AtomicBool>,
@@ -218,31 +218,23 @@ impl TestClient {
                 };
             }
 
-            if msg.flow_id.peer_id != self.prev {
-                warn!(self.log, "relay(): unexpected flow id: {:?}", msg.flow_id);
+            if msg.peer_id != self.prev {
                 return Err(TransportErrorCode::FlowNotFound);
             }
 
-            let flow_id = msg.flow_id;
             let msg_len = msg.payload.0.len();
             self.transport
-                .send(&self.next, flow_id.flow_tag, msg.payload)
+                .send(&self.next, FlowTag::from(FLOW_TAG), msg.payload)
                 .map_err(|e| {
                     warn!(
                         self.log,
-                        "relay(): Failed to send(): peer = {:?}, flow = {:?}, err = {:?}",
-                        self.next,
-                        flow_id,
-                        e
+                        "relay(): Failed to send(): peer = {:?},  err = {:?}", self.next, e
                     );
                     e
                 })?;
             info!(
                 self.log,
-                "relay(): relayed from {:?} -> peer {:?}, msg_len = {}",
-                flow_id,
-                self.next,
-                msg_len
+                "relay(): relayed from peer {:?}, msg_len = {}", self.next, msg_len
             );
         }
     }
@@ -253,26 +245,26 @@ impl TestClient {
         count: usize,
         flow_tag: FlowTag,
     ) -> Result<(), TestClientErrorCode> {
-        let send_flow = FlowId::new(self.next, flow_tag);
-        let receive_flow = FlowId::new(self.prev, flow_tag);
+        let send_peer_id = self.next;
+        let receive_peer_id = self.prev;
         let send_msg = TestClient::build_message();
         let send_copy = send_msg.clone();
         self.transport
-            .send(&send_flow.peer_id, send_flow.flow_tag, send_msg)
+            .send(&send_peer_id, flow_tag, send_msg)
             .map_err(|e| {
                 warn!(
                     self.log,
-                    "send_receive_compare(): failed to send(): flow = {:?} err = {:?}",
-                    send_flow,
+                    "send_receive_compare(): failed to send(): peer_id = {:?} err = {:?}",
+                    send_peer_id,
                     e
                 );
                 TestClientErrorCode::TransportError(e)
             })?;
         info!(
             self.log,
-            "send_receive_compare([{}]): sent message: flow = {:?}, msg_len = {}",
+            "send_receive_compare([{}]): sent message: peer_id = {:?}, msg_len = {}",
             count,
-            send_flow,
+            send_peer_id,
             send_copy.0.len(),
         );
 
@@ -282,13 +274,13 @@ impl TestClient {
         };
         info!(
             self.log,
-            "send_receive_compare([{}]): received response: flow = {:?}, msg_len = {}",
+            "send_receive_compare([{}]): received response: peer_id = {:?}, msg_len = {}",
             count,
-            rcv_msg.flow_id,
+            rcv_msg.peer_id,
             rcv_msg.payload.0.len()
         );
 
-        if !self.compare(receive_flow, send_copy, rcv_msg) {
+        if !self.compare(receive_peer_id, send_copy, rcv_msg) {
             return Err(TestClientErrorCode::MessageMismatch);
         }
         Ok(())
@@ -325,8 +317,8 @@ impl TestClient {
     }
 
     // Compares the two messages(hdr and payload parts)
-    fn compare(&self, flow_id: FlowId, payload: TransportPayload, rcv_msg: TestMessage) -> bool {
-        if rcv_msg.flow_id != flow_id {
+    fn compare(&self, peer_id: NodeId, payload: TransportPayload, rcv_msg: TestMessage) -> bool {
+        if rcv_msg.peer_id != peer_id {
             warn!(self.log, "compare(): FlowTag mismatch");
             return false;
         }
@@ -350,19 +342,19 @@ impl TestClient {
 #[derive(Clone)]
 struct TestClientEventHandler {
     sender: MpscSender,
-    active_flows: Arc<Mutex<HashSet<FlowId>>>,
+    active_flows: Arc<Mutex<HashSet<NodeId>>>,
 }
 
 impl TestClientEventHandler {
     fn on_message(
         sender: MpscSender,
-        flow_id: FlowId,
+        peer_id: NodeId,
         message: TransportPayload,
     ) -> Option<TransportPayload> {
         tokio::task::block_in_place(move || {
             sender
                 .send(TestMessage {
-                    flow_id,
+                    peer_id,
                     payload: message,
                 })
                 .expect("on_message(): failed to send")
@@ -370,13 +362,13 @@ impl TestClientEventHandler {
         None
     }
 
-    fn on_state_change(active_flows: Arc<Mutex<HashSet<FlowId>>>, change: TransportStateChange) {
+    fn on_state_change(active_flows: Arc<Mutex<HashSet<NodeId>>>, change: TransportStateChange) {
         match change {
-            TransportStateChange::PeerFlowUp(flow) => {
-                active_flows.lock().unwrap().insert(flow);
+            TransportStateChange::PeerFlowUp(peer_id) => {
+                active_flows.lock().unwrap().insert(peer_id);
             }
-            TransportStateChange::PeerFlowDown(flow) => {
-                active_flows.lock().unwrap().remove(&flow);
+            TransportStateChange::PeerFlowDown(peer_id) => {
+                active_flows.lock().unwrap().remove(&peer_id);
             }
         }
     }
@@ -398,7 +390,7 @@ impl Service<TransportEvent> for TestClientEventHandler {
         Box::pin(async move {
             match event {
                 TransportEvent::Message(msg) => {
-                    Self::on_message(sender, msg.flow_id, msg.payload);
+                    Self::on_message(sender, msg.peer_id, msg.payload);
                 }
                 TransportEvent::StateChange(state_change) => {
                     Self::on_state_change(active_flows, state_change)

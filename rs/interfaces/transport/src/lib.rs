@@ -97,28 +97,18 @@ pub enum TransportEvent {
 
 #[derive(Debug)]
 pub struct TransportMessage {
-    pub flow_id: FlowId,
-    pub payload: TransportPayload,
-}
-
-/// FlowId is the unique key for the flows being managed
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct FlowId {
-    /// Peer Id
     pub peer_id: NodeId,
-
-    /// Per-peer flow tag
-    pub flow_tag: FlowTag,
+    pub payload: TransportPayload,
 }
 
 /// State changes that can happen in the transport layer.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TransportStateChange {
     /// Peer flow was established
-    PeerFlowUp(FlowId),
+    PeerFlowUp(NodeId),
 
     /// Peer flow went down
-    PeerFlowDown(FlowId),
+    PeerFlowDown(NodeId),
 }
 
 /// Error codes returned by transport manager functions.
@@ -306,10 +296,4 @@ pub enum TransportErrorCode {
 
     /// Timeout expired
     TimeoutExpired,
-}
-
-impl FlowId {
-    pub fn new(peer_id: NodeId, flow_tag: FlowTag) -> Self {
-        Self { peer_id, flow_tag }
-    }
 }

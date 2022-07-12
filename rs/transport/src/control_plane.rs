@@ -14,7 +14,7 @@ use crate::{
 };
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
-use ic_interfaces_transport::{FlowId, FlowTag, TransportErrorCode, TransportEventHandler};
+use ic_interfaces_transport::{FlowTag, TransportErrorCode, TransportEventHandler};
 use ic_logger::{error, info, warn};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use std::{
@@ -119,12 +119,9 @@ impl TransportImpl {
                     .get(&flow_tag)
                     .map_or("Unknown Peer IP".to_string(), |x| x.to_string());
                 let flow_label = get_flow_label(&peer_ip, peer_id);
-                let flow_id = FlowId {
-                    peer_id: *peer_id,
-                    flow_tag,
-                };
                 let flow_state = FlowState::new(
-                    flow_id,
+                    *peer_id,
+                    flow_tag,
                     flow_config.flow_tag.to_string(),
                     flow_label.clone(),
                     ConnectionState::Listening,
@@ -184,12 +181,9 @@ impl TransportImpl {
                 peer_addr: SocketAddr::new(peer_ip, server_port),
                 connecting_task,
             };
-            let flow_id = FlowId {
-                peer_id: *peer_id,
-                flow_tag,
-            };
             let flow_state = FlowState::new(
-                flow_id,
+                *peer_id,
+                flow_tag,
                 flow_endpoint.flow_tag.to_string(),
                 flow_label.clone(),
                 ConnectionState::Connecting(connecting_state),
@@ -440,26 +434,30 @@ impl TransportImpl {
     }
 
     /// Retries to establish a connection
-    pub(crate) fn retry_connection(&self, flow_id: &FlowId) -> Result<(), TransportErrorCode> {
+    pub(crate) fn retry_connection(
+        &self,
+        peer_id: NodeId,
+        flow_tag: FlowTag,
+    ) -> Result<(), TransportErrorCode> {
         warn!(
             self.log,
             "ControlPlane::retry_connection(): node_id = {:?}, flow_tag = {:?}, peer_id = {:?}",
             self.node_id,
-            flow_id.flow_tag,
-            flow_id.peer_id
+            flow_tag,
+            peer_id
         );
         self.control_plane_metrics
             .retry_connection
-            .with_label_values(&[&flow_id.peer_id.to_string(), &flow_id.flow_tag.to_string()])
+            .with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()])
             .inc();
 
         let mut peer_map = self.peer_map.write().unwrap();
         let peer_state = peer_map
-            .get_mut(&flow_id.peer_id)
+            .get_mut(&peer_id)
             .ok_or(TransportErrorCode::PeerNotFound)?;
         let flow_state = peer_state
             .flow_map
-            .get_mut(&flow_id.flow_tag)
+            .get_mut(&flow_tag)
             .ok_or(TransportErrorCode::FlowNotFound)?;
 
         let sa = match &flow_state.connection_state {
@@ -470,7 +468,7 @@ impl TransportImpl {
             }
         };
 
-        if Self::connection_role(&self.node_id, &flow_id.peer_id) == ConnectionRole::Server {
+        if Self::connection_role(&self.node_id, &peer_id) == ConnectionRole::Server {
             // We are the server, wait for the peer to connect
             flow_state.update(ConnectionState::Listening);
             warn!(
@@ -478,21 +476,16 @@ impl TransportImpl {
                 "ControlPlane::process_disconnect(): waiting for peer to reconnect: \
                  node_id = {:?}, flow_tag = {:?}, peer_id = {:?}",
                 self.node_id,
-                flow_id.flow_tag,
-                flow_id.peer_id
+                flow_tag,
+                peer_id
             );
         } else {
             // reconnect if we have a listener
-            if self
-                .accept_ports
-                .read()
-                .unwrap()
-                .contains_key(&flow_id.flow_tag)
-            {
+            if self.accept_ports.read().unwrap().contains_key(&flow_tag) {
                 let socket_addr = sa.peer_addr;
                 let connecting_task = self.spawn_connect_task(
-                    flow_id.flow_tag,
-                    flow_id.peer_id,
+                    flow_tag,
+                    peer_id,
                     socket_addr.ip(),
                     ServerPort::from(socket_addr.port()),
                 );
@@ -508,8 +501,8 @@ impl TransportImpl {
                     flow_tag = {:?}, peer = {:?}/{:?}, peer_port = {:?}",
                     self.node_id,
                     self.node_ip,
-                    flow_id.flow_tag,
-                    flow_id.peer_id,
+                    flow_tag,
+                    peer_id,
                     socket_addr.ip(),
                     socket_addr.port(),
                 );

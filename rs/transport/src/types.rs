@@ -4,7 +4,7 @@ use crate::metrics::{ControlPlaneMetrics, DataPlaneMetrics, SendQueueMetrics};
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_interfaces_transport::{FlowId, FlowTag, TransportEventHandler, TransportPayload};
+use ic_interfaces_transport::{FlowTag, TransportEventHandler, TransportPayload};
 use ic_logger::ReplicaLogger;
 use phantom_newtype::{AmountOf, Id};
 
@@ -147,8 +147,10 @@ pub(crate) struct PeerState {
 
 /// Per-flow state, specific to a transport-client and a peer.
 pub(crate) struct FlowState {
-    /// Flow identifier
-    pub flow_id: FlowId,
+    /// Peer id
+    pub peer_id: NodeId,
+    /// Flow tag
+    pub flow_tag: FlowTag,
     /// Flow tag as a metrics label
     pub flow_tag_label: String,
     /// Flow label, used for metrics
@@ -163,7 +165,8 @@ pub(crate) struct FlowState {
 
 impl FlowState {
     pub(crate) fn new(
-        flow_id: FlowId,
+        peer_id: NodeId,
+        flow_tag: FlowTag,
         flow_tag_label: String,
         flow_label: String,
         connection_state: ConnectionState,
@@ -171,7 +174,8 @@ impl FlowState {
         control_plane_metrics: ControlPlaneMetrics,
     ) -> Self {
         let ret = Self {
-            flow_id,
+            peer_id,
+            flow_tag,
             flow_tag_label,
             flow_label,
             connection_state,
