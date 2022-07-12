@@ -1,4 +1,4 @@
-use crate::state_test_helpers::{query, update};
+use crate::state_test_helpers::{query, try_call_with_cycles_via_universal_canister, update};
 use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::CanisterId;
@@ -12,10 +12,7 @@ use ic_state_machine_tests::StateMachine;
 
 /// Get an SnsWasm with the smallest valid WASM
 pub fn smallest_valid_wasm() -> SnsWasm {
-    SnsWasm {
-        wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
-        canister_type: i32::from(SnsCanisterType::Governance),
-    }
+    test_wasm(SnsCanisterType::Governance)
 }
 
 /// Get an SnsWasm to use in tests
@@ -23,6 +20,13 @@ pub fn test_wasm1() -> SnsWasm {
     SnsWasm {
         wasm: vec![0, 0x61, 0x73, 0x6D, 2, 0, 0, 0],
         canister_type: i32::from(SnsCanisterType::Ledger),
+    }
+}
+/// Get a valid tiny WASM for use in tests of a particular SnsCanisterType
+fn test_wasm(canister_type: SnsCanisterType) -> SnsWasm {
+    SnsWasm {
+        wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+        canister_type: canister_type.into(),
     }
 }
 
@@ -72,17 +76,21 @@ pub fn add_wasm(
 /// Make deploy_new_sns request to a canister in the StateMachine
 pub fn deploy_new_sns(
     env: &StateMachine,
+    wallet_canister: CanisterId,
     sns_wasm_canister_id: CanisterId,
     sns_init_payload: SnsInitPayload,
+    cycles: u128,
 ) -> DeployNewSnsResponse {
-    let response = update(
+    let response = try_call_with_cycles_via_universal_canister(
         env,
+        wallet_canister,
         sns_wasm_canister_id,
         "deploy_new_sns",
         Encode!(&DeployNewSnsRequest {
             sns_init_payload: Some(sns_init_payload)
         })
         .unwrap(),
+        cycles,
     )
     .unwrap();
 
@@ -120,6 +128,36 @@ pub fn get_next_sns_version(
     .unwrap();
 
     Decode!(&response_bytes, GetNextSnsVersionResponse).unwrap()
+}
+
+/// Adds non-functional wasms to the SNS-WASM canister (to avoid expensive init process in certain tests)
+pub fn add_dummy_wasms_to_sns_wasms(machine: &StateMachine, sns_wasm_canister_id: CanisterId) {
+    let root_wasm = test_wasm(SnsCanisterType::Root);
+    let root_hash = root_wasm.sha256_hash();
+    add_wasm(machine, sns_wasm_canister_id, root_wasm, &root_hash);
+
+    let gov_wasm = test_wasm(SnsCanisterType::Governance);
+    let gov_hash = gov_wasm.sha256_hash();
+    add_wasm(machine, sns_wasm_canister_id, gov_wasm, &gov_hash);
+
+    let ledger_wasm = test_wasm(SnsCanisterType::Ledger);
+    let ledger_hash = ledger_wasm.sha256_hash();
+    add_wasm(machine, sns_wasm_canister_id, ledger_wasm, &ledger_hash);
+}
+
+/// Adds real SNS wasms to the SNS-WASM canister for more robust tests
+pub fn add_real_wasms_to_sns_wasms(machine: &StateMachine, sns_wasm_canister_id: CanisterId) {
+    let root_wasm = build_root_sns_wasm();
+    let root_hash = root_wasm.sha256_hash();
+    add_wasm(machine, sns_wasm_canister_id, root_wasm, &root_hash);
+
+    let gov_wasm = build_governance_sns_wasm();
+    let gov_hash = gov_wasm.sha256_hash();
+    add_wasm(machine, sns_wasm_canister_id, gov_wasm, &gov_hash);
+
+    let ledger_wasm = build_ledger_sns_wasm();
+    let ledger_hash = ledger_wasm.sha256_hash();
+    add_wasm(machine, sns_wasm_canister_id, ledger_wasm, &ledger_hash);
 }
 
 /// Builds the SnsWasm for the root canister.

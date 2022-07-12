@@ -1,11 +1,16 @@
 use candid::{Decode, Encode};
-use canister_test::{Canister, Project, Runtime};
+use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_core::bytes;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto_sha::Sha256;
 use ic_ic00_types::CanisterStatusType::Running;
 use ic_interfaces::registry::RegistryClient;
-use ic_nns_test_utils::itest_helpers::{local_test_on_nns_subnet, set_up_sns_wasm_canister};
+use ic_nns_test_utils::itest_helpers::{
+    local_test_on_nns_subnet, set_up_sns_wasm_canister, set_up_universal_canister,
+    try_call_with_cycles_via_universal_canister,
+};
+use ic_nns_test_utils::sns_wasm;
+use ic_nns_test_utils::state_test_helpers::{self, create_canister};
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -13,9 +18,12 @@ use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse}
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
-    SnsWasm,
+    SnsWasm, SnsWasmError,
 };
+use ic_state_machine_tests::StateMachine;
 use ic_test_utilities::types::ids::canister_test_id;
+use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
+use ic_types::Cycles;
 use registry_canister::mutations::common::decode_registry_value;
 use std::convert::TryFrom;
 
@@ -43,11 +51,13 @@ fn test_canisters_are_created_and_installed() {
             PrincipalId::try_from(subnet_list_record.subnets.get(0).unwrap()).unwrap(),
         );
 
-        let mut canister = set_up_sns_wasm_canister(
+        let canister = set_up_sns_wasm_canister(
             &runtime,
             SnsWasmCanisterInitPayload {
                 sns_subnet_ids: vec![system_subnet_id],
             },
+            // Set cycles to 0 so that if the request does not contain enough cycles, the creation fails
+            Some(0),
         )
         .await;
 
@@ -114,27 +124,28 @@ fn test_canisters_are_created_and_installed() {
             .await
             .unwrap();
 
-        // Check that upgrades do not affect deployments
-        canister.upgrade_to_self_binary(Vec::new()).await.unwrap();
+        let wallet_with_unlimited_cycles = set_up_universal_canister(&runtime).await;
 
-        let result = canister
-            .update_(
-                "deploy_new_sns",
-                bytes,
-                Encode!(&DeployNewSnsRequest {
-                    sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing())
-                })
-                .unwrap(),
-            )
-            .await
-            .unwrap();
+        let result = try_call_with_cycles_via_universal_canister(
+            &wallet_with_unlimited_cycles,
+            &canister,
+            "deploy_new_sns",
+            Encode!(&DeployNewSnsRequest {
+                sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing())
+            })
+            .unwrap(),
+            50_000_000_000_000,
+        )
+        .await
+        .unwrap();
 
         let response = Decode!(&result, DeployNewSnsResponse).unwrap();
 
-        let root_canister_id = canister_test_id(1);
-        let governance_canister_id = canister_test_id(2);
-        let ledger_canister_id = canister_test_id(3);
-        let swap_canister_id = canister_test_id(4);
+        // Canisters 0,1 are sns-wasms and universal canister
+        let root_canister_id = canister_test_id(2);
+        let governance_canister_id = canister_test_id(3);
+        let ledger_canister_id = canister_test_id(4);
+        let swap_canister_id = canister_test_id(5);
 
         assert_eq!(
             response,
@@ -145,7 +156,8 @@ fn test_canisters_are_created_and_installed() {
                     root: Some(root_canister_id.get()),
                     ledger: Some(ledger_canister_id.get()),
                     swap: Some(swap_canister_id.get())
-                })
+                }),
+                error: None
             }
         );
 
@@ -213,6 +225,160 @@ fn test_canisters_are_created_and_installed() {
             ledger_hash
         );
 
+        // TODO - how do we check canister cycles balance in tests...???
+
         Ok(())
     });
+}
+
+/// There are not many tests we can deterministically create at this level
+/// to simulate failure without creating more sophisticated test harnesses that let us
+/// simulate failures executing basic IC00 operations
+#[test]
+fn test_deploy_cleanup_on_wasm_install_failure() {
+    // We don't want the underlying warnings of the StateMachine
+    state_test_helpers::reduce_state_machine_logging_unless_env_set();
+    let machine = StateMachine::new();
+    let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
+        "nns/sns-wasm",
+        "sns-wasm-canister",
+        &[], // features
+    );
+
+    let subnet_ids = machine.get_subnet_ids();
+
+    let sns_wasm_canister_id = create_canister(
+        &machine,
+        wasm,
+        Some(
+            Encode!(&SnsWasmCanisterInitPayload {
+                sns_subnet_ids: vec![subnet_ids[0]]
+            })
+            .unwrap(),
+        ),
+        None,
+    );
+
+    // Enough cycles one SNS deploy
+    let wallet_canister = state_test_helpers::set_up_universal_canister(
+        &machine,
+        Some(Cycles::new(50_000_000_000_000)),
+    );
+
+    sns_wasm::add_real_wasms_to_sns_wasms(&machine, sns_wasm_canister_id);
+    // we add a wasm that will fail with the given payload on installation
+    let bad_wasm = SnsWasm {
+        wasm: Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes(),
+        canister_type: SnsCanisterType::Governance.into(),
+    };
+    let bad_wasm_hash = bad_wasm.sha256_hash();
+    sns_wasm::add_wasm(&machine, sns_wasm_canister_id, bad_wasm, &bad_wasm_hash);
+
+    let response = sns_wasm::deploy_new_sns(
+        &machine,
+        wallet_canister,
+        sns_wasm_canister_id,
+        SnsInitPayload::with_valid_values_for_testing(),
+        50_000_000_000_000,
+    );
+
+    assert_eq!(
+        response,
+        DeployNewSnsResponse {
+            subnet_id: None,
+            canisters: None,
+            // Because of the invalid WASM above (i.e. universal canister) which does not understand
+            // the governance init payload, this fails.
+            error: Some(SnsWasmError {
+                message: "Error installing Governance WASM: Failed to install WASM on canister r7inp-6aaaa-aaaaa-aaabq-cai: \
+                error code 5: Canister r7inp-6aaaa-aaaaa-aaabq-cai trapped explicitly: \
+                unknown op 68"
+                    .to_string()
+            })
+        }
+    );
+
+    // 2_000_000_000 cycles are burned creating the canisters before the failure
+    assert_eq!(machine.cycle_balance(wallet_canister), 48_000_000_000_000);
+
+    // No canisters should exist above 1 (sns-wasm, wallet) because we deleted those canisters
+    assert!(!machine.canister_exists(canister_test_id(2)));
+    assert!(!machine.canister_exists(canister_test_id(3)));
+    assert!(!machine.canister_exists(canister_test_id(4)));
+    assert!(!machine.canister_exists(canister_test_id(5)));
+}
+
+#[test]
+fn test_deploy_adds_cycles_to_target_canisters() {
+    // We don't want the underlying warnings of the StateMachine
+    state_test_helpers::reduce_state_machine_logging_unless_env_set();
+    let machine = StateMachine::new();
+    let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
+        "nns/sns-wasm",
+        "sns-wasm-canister",
+        &[], // features
+    );
+
+    let subnet_ids = machine.get_subnet_ids();
+
+    let sns_wasm_canister_id = create_canister(
+        &machine,
+        wasm,
+        Some(
+            Encode!(&SnsWasmCanisterInitPayload {
+                sns_subnet_ids: vec![subnet_ids[0]]
+            })
+            .unwrap(),
+        ),
+        None,
+    );
+
+    // Enough cycles one SNS deploy
+    let wallet_canister = state_test_helpers::set_up_universal_canister(
+        &machine,
+        Some(Cycles::new(50_000_000_000_000)),
+    );
+
+    sns_wasm::add_dummy_wasms_to_sns_wasms(&machine, sns_wasm_canister_id);
+    // we add a wasm that will fail with the given payload on installation
+
+    let response = sns_wasm::deploy_new_sns(
+        &machine,
+        wallet_canister,
+        sns_wasm_canister_id,
+        SnsInitPayload::with_valid_values_for_testing(),
+        50_000_000_000_000,
+    );
+
+    let root = canister_test_id(2);
+    let governance = canister_test_id(3);
+    let ledger = canister_test_id(4);
+    let swap = canister_test_id(5);
+    assert_eq!(
+        response,
+        DeployNewSnsResponse {
+            subnet_id: Some(subnet_ids[0].get()),
+            canisters: Some(SnsCanisterIds {
+                root: Some(root.get()),
+                ledger: Some(ledger.get()),
+                governance: Some(governance.get()),
+                swap: Some(swap.get())
+            }),
+            error: None
+        }
+    );
+
+    // All cycles should have been used and none refunded.
+    assert_eq!(machine.cycle_balance(wallet_canister), 0);
+
+    // Canisters 0,1 are sns-wasms and universal canister.
+    let root = canister_test_id(2);
+    let governance = canister_test_id(3);
+    let ledger = canister_test_id(4);
+    let swap = canister_test_id(5);
+
+    for canister_id in &[root, governance, ledger, swap] {
+        assert!(machine.canister_exists(*canister_id));
+        assert_eq!(machine.cycle_balance(*canister_id), 12_500_000_000_000)
+    }
 }

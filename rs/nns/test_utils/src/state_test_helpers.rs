@@ -3,8 +3,20 @@ use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::{CanisterInstallMode, CanisterSettingsArgs};
 use ic_state_machine_tests::StateMachine;
+use ic_test_utilities::universal_canister::{
+    call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
+};
 use ic_types::ingress::WasmResult;
 use ic_types::Cycles;
+use std::env;
+
+/// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
+pub fn reduce_state_machine_logging_unless_env_set() {
+    match env::var("RUST_LOG") {
+        Ok(_) => {}
+        Err(_) => env::set_var("RUST_LOG", "ERROR"),
+    }
+}
 
 /// Creates a canister with a wasm, paylaod, and optionally settings on a StateMachine
 pub fn create_canister(
@@ -16,7 +28,7 @@ pub fn create_canister(
     machine
         .install_canister(
             wasm.bytes(),
-            initial_payload.unwrap_or_else(|| Encode!().unwrap()),
+            initial_payload.unwrap_or_default(),
             canister_settings,
         )
         .unwrap()
@@ -100,4 +112,84 @@ pub fn query_with_sender(
     sender: PrincipalId,
 ) -> Result<Vec<u8>, String> {
     query_impl(machine, canister, method_name, payload, Some(sender))
+}
+
+/// Compiles the universal canister, builds it's initial payload and installs it with cycles
+pub fn set_up_universal_canister(machine: &StateMachine, cycles: Option<Cycles>) -> CanisterId {
+    let canister_id = match cycles {
+        None => machine.create_canister(None),
+        Some(cycles) => machine.create_canister_with_cycles(cycles, None),
+    };
+    machine
+        .install_wasm_in_mode(
+            canister_id,
+            CanisterInstallMode::Install,
+            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes(),
+            vec![],
+        )
+        .unwrap();
+
+    canister_id
+}
+
+pub async fn try_call_via_universal_canister(
+    machine: &StateMachine,
+    sender: CanisterId,
+    receiver: CanisterId,
+    method: &str,
+    payload: Vec<u8>,
+) -> Result<Vec<u8>, String> {
+    let universal_canister_payload = universal_canister_argument_builder()
+        .call_simple(
+            receiver,
+            method,
+            call_args()
+                .other_side(payload)
+                .on_reply(
+                    universal_canister_argument_builder()
+                        .message_payload()
+                        .reply_data_append()
+                        .reply(),
+                )
+                .on_reject(
+                    universal_canister_argument_builder()
+                        .reject_message()
+                        .reject(),
+                ),
+        )
+        .build();
+
+    update(machine, sender, "update", universal_canister_payload)
+}
+
+pub fn try_call_with_cycles_via_universal_canister(
+    machine: &StateMachine,
+    sender: CanisterId,
+    receiver: CanisterId,
+    method: &str,
+    payload: Vec<u8>,
+    cycles: u128,
+) -> Result<Vec<u8>, String> {
+    let universal_canister_payload = universal_canister_argument_builder()
+        .call_with_cycles(
+            receiver,
+            method,
+            call_args()
+                .other_side(payload)
+                .on_reply(
+                    universal_canister_argument_builder()
+                        .message_payload()
+                        .reply_data_append()
+                        .reply(),
+                )
+                .on_reject(
+                    universal_canister_argument_builder()
+                        .reject_message()
+                        .reject(),
+                ),
+            ((cycles >> 64) as u64, cycles as u64),
+        )
+        .build();
+
+    update(machine, sender, "update", universal_canister_payload)
 }

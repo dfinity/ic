@@ -53,6 +53,14 @@ pub struct SnsWasm {
     #[prost(enumeration="SnsCanisterType", tag="2")]
     pub canister_type: i32,
 }
+/// The error response returned in response objects on failed or partially failed operations
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SnsWasmError {
+    /// The message returned by the canister on errors
+    #[prost(string, tag="1")]
+    pub message: ::prost::alloc::string::String,
+}
 /// The payload for the add_wasm endpoint, which takes an SnsWasm along with the hash of the wasm bytes
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -71,27 +79,15 @@ pub struct AddWasmResponse {
 }
 /// Nested message and enum types in `AddWasmResponse`.
 pub mod add_wasm_response {
-    /// The error provides a reason the wasm could not be added.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct AddWasmError {
-        #[prost(string, tag="1")]
-        pub error: ::prost::alloc::string::String,
-    }
-    /// The Ok response provides the hash of the added WASM.
-    #[derive(candid::CandidType, candid::Deserialize)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
-    pub struct AddWasmOk {
-        #[prost(bytes="vec", tag="1")]
-        pub hash: ::prost::alloc::vec::Vec<u8>,
-    }
     #[derive(candid::CandidType, candid::Deserialize)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Result {
-        #[prost(message, tag="1")]
-        Error(AddWasmError),
+        /// The hash of the wasm that was added
+        #[prost(bytes, tag="1")]
+        Hash(::prost::alloc::vec::Vec<u8>),
+        /// Error when request fails
         #[prost(message, tag="2")]
-        Ok(AddWasmOk),
+        Error(super::SnsWasmError),
     }
 }
 /// The argument for get_wasm, which consists of the WASM hash to be retrieved.
@@ -120,12 +116,15 @@ pub struct DeployNewSnsRequest {
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeployNewSnsResponse {
-    /// The subnet the SNS was deployed to
+    /// The subnet the SNS was deployed to.
     #[prost(message, optional, tag="1")]
     pub subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
-    /// CanisterIds of canisters created by deploy_new_sns
+    /// CanisterIds of canisters created by deploy_new_sns.
     #[prost(message, optional, tag="2")]
     pub canisters: ::core::option::Option<SnsCanisterIds>,
+    /// Error when the request fails.
+    #[prost(message, optional, tag="3")]
+    pub error: ::core::option::Option<SnsWasmError>,
 }
 /// The CanisterIds of the SNS canisters that are created
 #[derive(candid::CandidType, candid::Deserialize)]
@@ -153,7 +152,7 @@ pub struct ListDeployedSnsesRequest {
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListDeployedSnsesResponse {
-    /// the deployed instances
+    /// The deployed instances
     #[prost(message, repeated, tag="1")]
     pub instances: ::prost::alloc::vec::Vec<DeployedSns>,
 }

@@ -634,12 +634,16 @@ pub async fn install_sns_wasm_canister(
     .await;
 }
 
-/// Creates and installs the sns_wasm canister.
+/// Creates and installs the sns_wasm canister.  
+///
+/// Use None for `cycles` to get max_cycles of normal NNS canisters when not testing cycle-dependent
+/// code (such as ensuring cycles are received and passed to created SNS canisters)
 pub async fn set_up_sns_wasm_canister(
     runtime: &'_ Runtime,
     init_payload: SnsWasmCanisterInitPayload,
+    cycles: Option<u128>, // None -> max_cycles
 ) -> Canister<'_> {
-    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
+    let mut canister = runtime.create_canister(cycles).await.unwrap();
     install_sns_wasm_canister(&mut canister, init_payload).await;
     canister
 }
@@ -1002,6 +1006,38 @@ pub async fn try_call_via_universal_canister(
                         .reject_message()
                         .reject(),
                 ),
+        )
+        .build();
+    sender
+        .update_("update", bytes, universal_canister_payload)
+        .await
+}
+
+pub async fn try_call_with_cycles_via_universal_canister(
+    sender: &Canister<'_>,
+    receiver: &Canister<'_>,
+    method: &str,
+    payload: Vec<u8>,
+    cycles: u128,
+) -> Result<Vec<u8>, String> {
+    let universal_canister_payload = universal_canister_argument_builder()
+        .call_with_cycles(
+            receiver.canister_id(),
+            method,
+            call_args()
+                .other_side(payload)
+                .on_reply(
+                    universal_canister_argument_builder()
+                        .message_payload()
+                        .reply_data_append()
+                        .reply(),
+                )
+                .on_reject(
+                    universal_canister_argument_builder()
+                        .reject_message()
+                        .reject(),
+                ),
+            ((cycles >> 64) as u64, cycles as u64),
         )
         .build();
     sender
