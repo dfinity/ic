@@ -1,5 +1,5 @@
 use ic_interfaces_transport::{
-    FlowId, FlowTag, Transport, TransportErrorCode, TransportEvent, TransportEventHandler,
+    FlowTag, Transport, TransportErrorCode, TransportEvent, TransportEventHandler,
     TransportMessage, TransportPayload,
 };
 use ic_logger::{info, ReplicaLogger};
@@ -143,10 +143,7 @@ impl ThreadPort {
 
         event_handler
             .call(TransportEvent::Message(TransportMessage {
-                flow_id: FlowId {
-                    peer_id: src_node_id,
-                    flow_tag: FlowTag::from(0),
-                },
+                peer_id: src_node_id,
                 payload: message,
             }))
             .await

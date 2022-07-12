@@ -28,7 +28,7 @@ use crate::{
 use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::{TlsReadHalf, TlsStream, TlsWriteHalf};
 use ic_interfaces_transport::{
-    FlowId, FlowTag, TransportErrorCode, TransportEvent, TransportEventHandler, TransportMessage,
+    FlowTag, TransportErrorCode, TransportEvent, TransportEventHandler, TransportMessage,
     TransportPayload, TransportStateChange,
 };
 use ic_logger::warn;
@@ -127,7 +127,8 @@ impl TransportImpl {
     /// Per-flow send task. Reads the requests from the send queue and writes to
     /// the socket.
     async fn flow_write_task(
-        flow_id: FlowId,
+        peer_id: NodeId,
+        flow_tag: FlowTag,
         flow_label: String,
         mut send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
         mut writer: Box<TlsWriteHalf>,
@@ -136,7 +137,7 @@ impl TransportImpl {
         state: Weak<TransportImpl>,
     ) {
         let _updater = MetricsUpdater::new(metrics.clone(), true);
-        let flow_tag = flow_id.flow_tag.to_string();
+        let flow_tag_str = flow_tag.to_string();
         loop {
             let loop_start_time = Instant::now();
             // If the TransportImpl has been deleted, abort.
@@ -159,7 +160,7 @@ impl TransportImpl {
                 state
                     .data_plane_metrics
                     .heart_beats_sent
-                    .with_label_values(&[&flow_label, &flow_tag])
+                    .with_label_values(&[&flow_label, &flow_tag_str])
                     .inc();
             } else {
                 for mut msg in dequeued {
@@ -174,7 +175,7 @@ impl TransportImpl {
             state
                 .data_plane_metrics
                 .write_task_overhead_time_msec
-                .with_label_values(&[&flow_label, &flow_tag])
+                .with_label_values(&[&flow_label, &flow_tag_str])
                 .observe(loop_start_time.elapsed().as_millis() as f64);
 
             // Send the payload
@@ -182,37 +183,38 @@ impl TransportImpl {
             if let Err(e) = writer.write_all(&to_send).await {
                 warn!(
                     state.log,
-                    "DataPlane::flow_write_task(): failed to write payload: flow: {:?}, {:?}",
-                    flow_id,
+                    "DataPlane::flow_write_task(): failed to write payload: peer_id: {:?}, flow_tag: {:?}, {:?}",
+                    peer_id,
+                    flow_tag,
                     e,
                 );
-                state.on_disconnect(flow_id, event_handler).await;
+                state.on_disconnect(peer_id, flow_tag, event_handler).await;
                 return;
             }
             // Flush the write
             if let Err(e) = writer.flush().await {
                 warn!(
                     state.log,
-                    "DataPlane::flow_write_task(): failed to flush: flow: {:?}, {:?}", flow_id, e,
+                    "DataPlane::flow_write_task(): failed to flush: peer_id: {:?}, flow_tag: {:?}, {:?}", peer_id, flow_tag, e,
                 );
-                state.on_disconnect(flow_id, event_handler).await;
+                state.on_disconnect(peer_id, flow_tag, event_handler).await;
                 return;
             }
 
             state
                 .data_plane_metrics
                 .socket_write_time_msec
-                .with_label_values(&[&flow_label, &flow_tag])
+                .with_label_values(&[&flow_label, &flow_tag_str])
                 .observe(start_time.elapsed().as_millis() as f64);
             state
                 .data_plane_metrics
                 .socket_write_bytes
-                .with_label_values(&[&flow_label, &flow_tag])
+                .with_label_values(&[&flow_label, &flow_tag_str])
                 .inc_by(to_send.len() as u64);
             state
                 .data_plane_metrics
                 .socket_write_size
-                .with_label_values(&[&flow_label, &flow_tag])
+                .with_label_values(&[&flow_label, &flow_tag_str])
                 .observe(to_send.len() as f64);
         }
     }
@@ -220,7 +222,8 @@ impl TransportImpl {
     /// Per-flow receive task. Reads the messages from the socket and passes to
     /// the client.
     async fn flow_read_task(
-        flow_id: FlowId,
+        peer_id: NodeId,
+        flow_tag: FlowTag,
         flow_label: String,
         mut event_handler: TransportEventHandler,
         mut reader: Box<TlsReadHalf>,
@@ -229,7 +232,7 @@ impl TransportImpl {
     ) {
         let heartbeat_timeout = Duration::from_millis(TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS);
         let _updater = MetricsUpdater::new(metrics.clone(), false);
-        let flow_tag = flow_id.flow_tag.to_string();
+        let flow_tag_str = flow_tag.to_string();
         loop {
             // If the TransportImpl has been deleted, abort.
             let state = match state.upgrade() {
@@ -242,18 +245,19 @@ impl TransportImpl {
             if ret.is_err() {
                 warn!(
                     state.log,
-                    "DataPlane::flow_read_task(): failed to receive message: flow: {:?}, {:?}",
-                    flow_id,
+                    "DataPlane::flow_read_task(): failed to receive message: peer_id: {:?}, flow_tag: {:?}, {:?}",
+                    peer_id,
+                    flow_tag,
                     ret.as_ref().err(),
                 );
 
                 if let Err(ReadError::SocketReadTimeOut) = ret {
                     metrics
                         .socket_heart_beat_timeouts
-                        .with_label_values(&[&flow_label, &flow_tag])
+                        .with_label_values(&[&flow_label, &flow_tag_str])
                         .inc();
                 }
-                state.on_disconnect(flow_id, event_handler).await;
+                state.on_disconnect(peer_id, flow_tag, event_handler).await;
                 return;
             }
 
@@ -263,7 +267,7 @@ impl TransportImpl {
                 // It's an empty heartbeat message -- do nothing
                 metrics
                     .heart_beats_received
-                    .with_label_values(&[&flow_label, &flow_tag])
+                    .with_label_values(&[&flow_label, &flow_tag_str])
                     .inc();
                 continue;
             }
@@ -272,7 +276,7 @@ impl TransportImpl {
             if header.flags & TRANSPORT_FLAGS_SENDER_ERROR != 0 {
                 metrics
                     .send_errors_received
-                    .with_label_values(&[&flow_label, &flow_tag])
+                    .with_label_values(&[&flow_label, &flow_tag_str])
                     .inc();
             }
 
@@ -282,18 +286,18 @@ impl TransportImpl {
             let payload = payload.unwrap();
             metrics
                 .socket_read_bytes
-                .with_label_values(&[&flow_label, &flow_tag])
+                .with_label_values(&[&flow_label, &flow_tag_str])
                 .inc_by(payload.0.len() as u64);
             let start_time = Instant::now();
             let _ = event_handler
                 .call(TransportEvent::Message(TransportMessage {
-                    flow_id,
+                    peer_id,
                     payload,
                 }))
                 .await;
             metrics
                 .client_send_time_msec
-                .with_label_values(&[&flow_label, &flow_tag])
+                .with_label_values(&[&flow_label, &flow_tag_str])
                 .observe(start_time.elapsed().as_millis() as f64);
         }
     }
@@ -355,20 +359,22 @@ impl TransportImpl {
     }
 
     /// Handle peer disconnect.
-    async fn on_disconnect(&self, flow_id: FlowId, mut event_handler: TransportEventHandler) {
-        if let Err(e) = self.retry_connection(&flow_id) {
+    async fn on_disconnect(
+        &self,
+        peer_id: NodeId,
+        flow_tag: FlowTag,
+        mut event_handler: TransportEventHandler,
+    ) {
+        if let Err(e) = self.retry_connection(peer_id, flow_tag) {
             warn!(
                 self.log,
-                "DataPlane::on_disconnect(): retry_connection error {:?}: flow: {:?}", flow_id, e
+                "DataPlane::on_disconnect(): retry_connection error {:?}: peer_id: {:?}, flow_tag: {:?}", peer_id, flow_tag, e
             );
             return;
         }
         let _ = event_handler
             .call(TransportEvent::StateChange(
-                TransportStateChange::PeerFlowDown(FlowId {
-                    peer_id: flow_id.peer_id,
-                    flow_tag: flow_id.flow_tag,
-                }),
+                TransportStateChange::PeerFlowDown(peer_id),
             ))
             .await;
     }
@@ -376,7 +382,8 @@ impl TransportImpl {
     /// Handle connection setup. Starts flow read and write tasks.
     fn on_connect_setup(
         &self,
-        flow_id: FlowId,
+        peer_id: NodeId,
+        flow_tag: FlowTag,
         role: ConnectionRole,
         peer_addr: SocketAddr,
         tls_stream: TlsStream,
@@ -384,11 +391,11 @@ impl TransportImpl {
     ) -> Result<(), TransportErrorCode> {
         let (tls_reader, tls_writer) = tls_stream.split();
         let mut peer_map = self.peer_map.write().unwrap();
-        let peer_state = match peer_map.get_mut(&flow_id.peer_id) {
+        let peer_state = match peer_map.get_mut(&peer_id) {
             Some(peer_state) => peer_state,
             None => return Err(TransportErrorCode::TransportClientNotFound),
         };
-        let flow_state = match peer_state.flow_map.get_mut(&flow_id.flow_tag) {
+        let flow_state = match peer_state.flow_map.get_mut(&flow_tag) {
             Some(flow_state) => flow_state,
             None => return Err(TransportErrorCode::FlowNotFound),
         };
@@ -399,7 +406,8 @@ impl TransportImpl {
         }
 
         // Spawn write task
-        let flow_id_cl = flow_state.flow_id;
+        let peer_id_cl = flow_state.peer_id;
+        let flow_tag_cl = flow_state.flow_tag;
         let flow_label_cl = flow_state.flow_label.clone();
         let send_queue_reader = flow_state.send_queue.get_reader();
         let metrics_cl = self.data_plane_metrics.clone();
@@ -407,7 +415,8 @@ impl TransportImpl {
         let event_handler_cl = event_handler.clone();
         let write_task = self.tokio_runtime.spawn(async move {
             Self::flow_write_task(
-                flow_id_cl,
+                peer_id_cl,
+                flow_tag_cl,
                 flow_label_cl,
                 send_queue_reader,
                 Box::new(tls_writer),
@@ -418,14 +427,16 @@ impl TransportImpl {
             .await;
         });
 
-        let flow_id_cl = flow_id;
+        let peer_id_cl = flow_state.peer_id;
+        let flow_tag_cl = flow_state.flow_tag;
         let flow_label_cl = flow_state.flow_label.clone();
         let event_handler_cl = event_handler;
         let metrics_cl = self.data_plane_metrics.clone();
         let weak_self = self.weak_self.read().unwrap().clone();
         let read_task = self.tokio_runtime.spawn(async move {
             Self::flow_read_task(
-                flow_id_cl,
+                peer_id_cl,
+                flow_tag_cl,
                 flow_label_cl,
                 event_handler_cl,
                 Box::new(tls_reader),
@@ -463,32 +474,35 @@ impl TransportImpl {
             .ok_or(TransportErrorCode::TransportClientNotFound)?
             .clone();
 
-        let flow_id = FlowId { peer_id, flow_tag };
-        self.on_connect_setup(flow_id, role, peer_addr, tls_stream, event_handler.clone())
-            .map_err(|e| {
-                warn!(
-                    every_n_seconds => 30,
-                    self.log,
-                    "ControlPlane::handshake_result(): failed to add flow: \
-                     node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, role = {:?}, \
-                     error = {:?}",
-                    self.node_id,
-                    local_addr,
-                    flow_id.flow_tag,
-                    flow_id.peer_id,
-                    peer_addr,
-                    role,
-                    e
-                );
+        self.on_connect_setup(
+            peer_id,
+            flow_tag,
+            role,
+            peer_addr,
+            tls_stream,
+            event_handler.clone(),
+        )
+        .map_err(|e| {
+            warn!(
+                every_n_seconds => 30,
+                self.log,
+                "ControlPlane::handshake_result(): failed to add flow: \
+                 node = {:?}/{:?}, flow_tag = {:?}, peer = {:?}/{:?}, role = {:?}, \
+                 error = {:?}",
+                self.node_id,
+                local_addr,
+                flow_tag,
+                peer_id,
+                peer_addr,
+                role,
                 e
-            })?;
+            );
+            e
+        })?;
         let _ = event_handler
             // Notify the client that peer flow is up.
             .call(TransportEvent::StateChange(
-                TransportStateChange::PeerFlowUp(FlowId {
-                    peer_id: flow_id.peer_id,
-                    flow_tag: flow_id.flow_tag,
-                }),
+                TransportStateChange::PeerFlowUp(peer_id),
             ))
             .await;
         Ok(())

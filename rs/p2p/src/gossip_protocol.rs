@@ -440,11 +440,11 @@ impl Gossip for GossipImpl {
             "Transport state change: {:?}", transport_state_change
         );
         match transport_state_change {
-            TransportStateChange::PeerFlowDown(info) => {
-                self.download_manager.peer_connection_down(info.peer_id)
+            TransportStateChange::PeerFlowDown(peer_id) => {
+                self.download_manager.peer_connection_down(peer_id)
             }
-            TransportStateChange::PeerFlowUp(info) => {
-                self.download_manager.peer_connection_up(info.peer_id)
+            TransportStateChange::PeerFlowUp(peer_id) => {
+                self.download_manager.peer_connection_up(peer_id)
             }
         }
     }

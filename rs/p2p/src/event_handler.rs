@@ -349,7 +349,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
         let c_gossip = self.gossip.read().as_ref().unwrap().clone();
         match event {
             TransportEvent::Message(raw) => {
-                let TransportMessage { payload, flow_id } = raw;
+                let TransportMessage { payload, peer_id } = raw;
                 let gossip_message =
                     match <pb::GossipMessage as ProtoProxy<GossipMessage>>::proxy_decode(&payload.0)
                     {
@@ -368,7 +368,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                         };
                         let advert = self.advert.clone();
                         Box::pin(async move {
-                            advert.execute(flow_id.peer_id, msg, consume_fn).await;
+                            advert.execute(peer_id, msg, consume_fn).await;
                             Ok(Ok(()))
                         })
                     }
@@ -378,7 +378,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                         };
                         let request = self.request.clone();
                         Box::pin(async move {
-                            request.execute(flow_id.peer_id, msg, consume_fn).await;
+                            request.execute(peer_id, msg, consume_fn).await;
                             Ok(Ok(()))
                         })
                     }
@@ -388,7 +388,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                         };
                         let chunk = self.chunk.clone();
                         Box::pin(async move {
-                            chunk.execute(flow_id.peer_id, msg, consume_fn).await;
+                            chunk.execute(peer_id, msg, consume_fn).await;
                             Ok(Ok(()))
                         })
                     }
@@ -398,9 +398,7 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
                         };
                         let retransmission = self.retransmission.clone();
                         Box::pin(async move {
-                            retransmission
-                                .execute(flow_id.peer_id, msg, consume_fn)
-                                .await;
+                            retransmission.execute(peer_id, msg, consume_fn).await;
                             Ok(Ok(()))
                         })
                     }
@@ -553,7 +551,7 @@ pub mod tests {
         gossip_protocol::{GossipAdvertSendRequest, GossipRetransmissionRequest},
     };
     use ic_interfaces::ingress_pool::IngressPoolThrottler;
-    use ic_interfaces_transport::{FlowId, FlowTag, TransportPayload, TransportStateChange};
+    use ic_interfaces_transport::{TransportPayload, TransportStateChange};
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{p2p::p2p_test_setup_logger, types::ids::node_test_id};
     use ic_types::artifact::AdvertClass;
@@ -659,8 +657,7 @@ pub mod tests {
             let peer_id = match transport_state_change {
                 TransportStateChange::PeerFlowUp(x) => x,
                 TransportStateChange::PeerFlowDown(x) => x,
-            }
-            .peer_id;
+            };
             TestGossip::increment_or_set(&self.num_changes, peer_id);
         }
 
@@ -707,10 +704,7 @@ pub mod tests {
             let message = TransportPayload(pb::GossipMessage::proxy_encode(message).unwrap());
             let _ = handler
                 .call(TransportEvent::Message(TransportMessage {
-                    flow_id: FlowId {
-                        peer_id,
-                        flow_tag: FlowTag::from(0),
-                    },
+                    peer_id,
                     payload: message,
                 }))
                 .await;
