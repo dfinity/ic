@@ -7,7 +7,8 @@ use ic_interfaces::execution_environment::{
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    testing::CanisterQueuesTesting, CallOrigin, Memory, NumWasmPages, PageMap, SystemState,
+    testing::CanisterQueuesTesting, CallOrigin, Memory, NetworkTopology, NumWasmPages, PageMap,
+    SystemState,
 };
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
@@ -1482,8 +1483,11 @@ fn stable_grow_updates_subnet_available_memory() {
         AvailableMemory::new(subnet_available_memory_bytes, 0).into();
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let sandbox_safe_system_state =
-        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+        &system_state,
+        cycles_account_manager,
+        &NetworkTopology::default(),
+    );
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::build_update_api(),
         sandbox_safe_system_state,
@@ -1513,8 +1517,11 @@ fn stable_grow_returns_allocated_memory_on_error() {
         AvailableMemory::new(subnet_available_memory_bytes, 0).into();
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let sandbox_safe_system_state =
-        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+        &system_state,
+        cycles_account_manager,
+        &NetworkTopology::default(),
+    );
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::build_update_api(),
         sandbox_safe_system_state,
@@ -1555,8 +1562,11 @@ fn update_available_memory_updates_subnet_available_memory() {
         AvailableMemory::new(subnet_available_memory_bytes, 0).into();
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let sandbox_safe_system_state =
-        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+        &system_state,
+        cycles_account_manager,
+        &NetworkTopology::default(),
+    );
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::build_update_api(),
         sandbox_safe_system_state,
@@ -1587,8 +1597,11 @@ fn take_execution_result_properly_frees_memory() {
         AvailableMemory::new(1 << 30, 1 << 30).into();
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let mut sandbox_safe_system_state =
-        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+        &system_state,
+        cycles_account_manager,
+        &NetworkTopology::default(),
+    );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
         .register_callback(Callback::new(
@@ -1644,8 +1657,11 @@ fn push_output_request_respects_memory_limits() {
         .into();
         let mut system_state = SystemStateBuilder::default().build();
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-        let mut sandbox_safe_system_state =
-            SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+        let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+            &system_state,
+            cycles_account_manager,
+            &NetworkTopology::default(),
+        );
         let own_canister_id = system_state.canister_id;
         let callback_id = sandbox_safe_system_state
             .register_callback(Callback::new(
@@ -1743,8 +1759,11 @@ fn push_output_request_oversized_request_memory_limits() {
         AvailableMemory::new(subnet_available_memory_bytes, 1 << 30).into();
     let mut system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let mut sandbox_safe_system_state =
-        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+        &system_state,
+        cycles_account_manager,
+        &NetworkTopology::default(),
+    );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
         .register_callback(Callback::new(
