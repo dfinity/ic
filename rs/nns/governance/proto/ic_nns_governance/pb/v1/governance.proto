@@ -693,9 +693,10 @@ message ManageNeuron {
     option (ic_base_types.pb.v1.tui_signed_message) = true;
     uint64 dissolve_timestamp_seconds = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
   }
-  // Join the Internet Computer's community fund with this neuron's
-  // entire stake. Caution: this operation is not reversible.
+  // Join the Internet Computer's community fund with this neuron's present and future maturity.
   message JoinCommunityFund {}
+  // Leave the Internet Computer's community fund.
+  message LeaveCommunityFund {}
   // Commands that only configure a given neuron, but do not interact
   // with the outside world. They all require the caller to be the
   // controller of the neuron.
@@ -708,6 +709,7 @@ message ManageNeuron {
       RemoveHotKey remove_hot_key = 5;
       SetDissolveTimestamp set_dissolve_timestamp = 6;
       JoinCommunityFund join_community_fund = 7;
+      LeaveCommunityFund leave_community_fund = 8;
     }
   }
   // Disburse this neuron's stake: transfer the staked ICP to the
@@ -975,6 +977,8 @@ message GovernanceError {
      // The neuron attempted to join the community fund while already
      // a member.
      ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND = 17;
+     // The neuron attempted to leave the community fund but is not a member.
+     ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND = 18;
   }
 
   ErrorType error_type = 1;
@@ -1497,4 +1501,3 @@ message MostRecentMonthlyNodeProviderRewards {
   uint64 timestamp = 1;
   repeated RewardNodeProvider rewards = 2;
 }
-

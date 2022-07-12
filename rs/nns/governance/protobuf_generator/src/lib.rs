@@ -123,6 +123,14 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         .join(" "),
     );
     config.type_attribute(
+        "ic_nns_governance.pb.v1.ManageNeuron.LeaveCommunityFund",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
         "ic_nns_governance.pb.v1.ManageNeuron.SetDissolveTimestamp",
         [
             "#[derive(candid::CandidType, candid::Deserialize)]",

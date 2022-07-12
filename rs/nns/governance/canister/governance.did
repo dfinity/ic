@@ -235,6 +235,7 @@ type Operation = variant {
   StartDissolving : record {};
   IncreaseDissolveDelay : IncreaseDissolveDelay;
   JoinCommunityFund : record {};
+  LeaveCommunityFund : record {};
   SetDissolveTimestamp : SetDissolveTimestamp;
 };
 type Proposal = record {
