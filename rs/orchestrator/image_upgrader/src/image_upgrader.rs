@@ -15,7 +15,9 @@ use tokio::process::Command;
 use tokio::sync::RwLock;
 use tokio::time::error::Elapsed;
 
-use crate::error::{OrchestratorError, OrchestratorResult};
+use crate::error::{UpgradeError, UpgradeResult};
+
+pub mod error;
 
 const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 
@@ -45,13 +47,13 @@ const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 ///     fn get_release_package_url_and_hash(
 ///         &self,
 ///         version: &Version,
-///     ) -> OrchestratorResult<(String, Option<String>)> {
+///     ) -> UpgradeResult<(String, Option<String>)> {
 ///         // Collect and return release package information, i.e. from registry.
 ///         ...
 ///     }
 ///
 ///     // Called periodically by `upgrade_loop()`
-///     async fn check_for_upgrade(&mut self) -> OrchestratorResult<Value> {
+///     async fn check_for_upgrade(&mut self) -> UpgradeResult<Value> {
 ///         // Optional
 ///         // if latest_version != current_version {
 ///         //     self.prepare_upgrade(latest_version).await?;
@@ -110,7 +112,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     fn get_release_package_url_and_hash(
         &self,
         version: &V,
-    ) -> OrchestratorResult<(String, Option<String>)>;
+    ) -> UpgradeResult<(String, Option<String>)>;
 
     /// Calls a corresponding script to "confirm" that the base OS could boot
     /// successfully. With a confirmation the image will be reverted on the next
@@ -129,14 +131,14 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     ///
     /// Releases are downloaded using [`FileDownloader::download_file()`] which
     /// returns immediately if the file with matching hash already exists.
-    async fn download_release_package(&self, version: &V) -> OrchestratorResult<()> {
+    async fn download_release_package(&self, version: &V) -> UpgradeResult<()> {
         let (release_package_url, hash) = self.get_release_package_url_and_hash(version)?;
         let start_time = std::time::Instant::now();
         let file_downloader = FileDownloader::new(Some(self.log().clone()));
         file_downloader
             .download_file(&release_package_url, self.image_path(), hash)
             .await
-            .map_err(OrchestratorError::from)?;
+            .map_err(UpgradeError::from)?;
         info!(
             self.log(),
             "Image downloading request for version {:?} processed in {:?}",
@@ -151,7 +153,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     /// This function is automatically called by `execute_upgrade()` unless `version`
     /// has already been prepared. Thus it may be called manually in advance, to minimize
     /// downtime of upgrades scheduled at a specific time.
-    async fn prepare_upgrade(&mut self, version: &V) -> OrchestratorResult<()> {
+    async fn prepare_upgrade(&mut self, version: &V) -> UpgradeResult<()> {
         // Return immediately if 'version' is already prepared for an upgrade.
         if self.get_prepared_version() == Some(version) {
             return Ok(());
@@ -172,13 +174,13 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
             .arg(self.image_path())
             .output()
             .await
-            .map_err(|e| OrchestratorError::file_command_error(e, &c))?;
+            .map_err(|e| UpgradeError::file_command_error(e, &c))?;
         if out.status.success() {
             self.set_prepared_version(Some(version.clone()));
             Ok(())
         } else {
             warn!(self.log(), "upgrade-install has failed");
-            Err(OrchestratorError::UpgradeError(
+            Err(UpgradeError::GenericError(
                 "upgrade-install failed".to_string(),
             ))
         }
@@ -186,7 +188,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
 
     /// Executes the node upgrade by unpacking the downloaded image (if it didn't happen yet)
     /// and rebooting the node.
-    async fn execute_upgrade<T>(&mut self, version: &V) -> OrchestratorResult<T> {
+    async fn execute_upgrade<T>(&mut self, version: &V) -> UpgradeResult<T> {
         match self.get_prepared_version() {
             Some(v) if v == version => {
                 info!(
@@ -208,7 +210,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
 
         // We could successfuly unpack the file above, so we do not need the image anymore.
         std::fs::remove_file(self.image_path())
-            .map_err(|e| OrchestratorError::IoError("Couldn't delete the image".to_string(), e))?;
+            .map_err(|e| UpgradeError::IoError("Couldn't delete the image".to_string(), e))?;
 
         info!(self.log(), "Attempting to reboot");
         let mut script = self.binary_dir().clone();
@@ -218,11 +220,11 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
             .arg("upgrade-commit")
             .output()
             .await
-            .map_err(|e| OrchestratorError::file_command_error(e, &c))?;
+            .map_err(|e| UpgradeError::file_command_error(e, &c))?;
 
         if !out.status.success() {
             warn!(self.log(), "upgrade-commit has failed");
-            Err(OrchestratorError::UpgradeError(
+            Err(UpgradeError::GenericError(
                 "upgrade-commit failed".to_string(),
             ))
         } else {
@@ -232,40 +234,40 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     }
 
     /// Return the path of the reboot time file in the data directory.
-    fn get_reboot_time_file_path(&self) -> OrchestratorResult<PathBuf> {
+    fn get_reboot_time_file_path(&self) -> UpgradeResult<PathBuf> {
         match self.data_dir() {
             Some(dir) => Ok(dir.join(REBOOT_TIME_FILENAME)),
-            None => Err(OrchestratorError::reboot_time_error(
+            None => Err(UpgradeError::reboot_time_error(
                 "`orchestrator_data_directory` is not provided",
             )),
         }
     }
 
     /// Write the current time to the reboot time file.
-    fn persist_time_of_triggering_reboot(&self) -> OrchestratorResult<()> {
+    fn persist_time_of_triggering_reboot(&self) -> UpgradeResult<()> {
         let path = self.get_reboot_time_file_path()?;
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .map_err(OrchestratorError::reboot_time_error)?;
-        let mut file = std::fs::File::create(path).map_err(OrchestratorError::reboot_time_error)?;
+            .map_err(UpgradeError::reboot_time_error)?;
+        let mut file = std::fs::File::create(path).map_err(UpgradeError::reboot_time_error)?;
         file.write_all(now.as_secs().to_string().as_bytes())
-            .map_err(OrchestratorError::reboot_time_error)?;
+            .map_err(UpgradeError::reboot_time_error)?;
         Ok(())
     }
 
     /// Parse the latest reboot time and subtract it from the current time.
-    fn get_time_since_last_reboot_trigger(&self) -> OrchestratorResult<Duration> {
+    fn get_time_since_last_reboot_trigger(&self) -> UpgradeResult<Duration> {
         let path = self.get_reboot_time_file_path()?;
 
-        let content = std::fs::read(path).map_err(OrchestratorError::reboot_time_error)?;
-        let text = std::str::from_utf8(&content).map_err(OrchestratorError::reboot_time_error)?;
+        let content = std::fs::read(path).map_err(UpgradeError::reboot_time_error)?;
+        let text = std::str::from_utf8(&content).map_err(UpgradeError::reboot_time_error)?;
         let then = Duration::new(
-            u64::from_str(text).map_err(OrchestratorError::reboot_time_error)?,
+            u64::from_str(text).map_err(UpgradeError::reboot_time_error)?,
             0,
         );
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .map_err(OrchestratorError::reboot_time_error)?;
+            .map_err(UpgradeError::reboot_time_error)?;
         let elapsed_time = now - then;
         Ok(elapsed_time)
     }
@@ -274,7 +276,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     /// * Check if an image upgrade is scheduled.
     /// * Optionally prepare the upgrade in advance using `prepare_upgrade`.
     /// * Once it is time to upgrade, execute it using `execute_upgrade`
-    async fn check_for_upgrade(&mut self) -> OrchestratorResult<R>;
+    async fn check_for_upgrade(&mut self) -> UpgradeResult<R>;
 
     /// Calls `check_for_upgrade()` once every `interval`, timing out after `timeout`.
     /// Awaiting this function blocks until `exit_signal` is set to `true`.
@@ -287,7 +289,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
         timeout: Duration,
         handler: F,
     ) where
-        F: Fn(Result<OrchestratorResult<R>, Elapsed>) -> Fut + Send + Sync,
+        F: Fn(Result<UpgradeResult<R>, Elapsed>) -> Fut + Send + Sync,
         Fut: Future<Output = ()> + Send,
     {
         while !*exit_signal.read().await {

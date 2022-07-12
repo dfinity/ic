@@ -1,0 +1,15 @@
+[package]
+name = "ic-image-upgrader"
+version = "0.8.0"
+edition = "2018"
+
+[dependencies]
+async-trait = "0.1.41"
+ic-http-utils = { path = "../../http_utils" }
+ic-logger = { path = "../../monitoring/logger" }
+slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+tokio = { version = "1.15.0", features = ["full"] }
+
+[lib]
+name = "ic_image_upgrader"
+path = "src/image_upgrader.rs"

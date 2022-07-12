@@ -1,11 +1,12 @@
 use crate::catch_up_package_provider::CatchUpPackageProvider;
 use crate::error::{OrchestratorError, OrchestratorResult};
-use crate::image_upgrader::ImageUpgrader;
 use crate::metrics::OrchestratorMetrics;
 use crate::registry_helper::RegistryHelper;
 use crate::replica_process::ReplicaProcess;
 use async_trait::async_trait;
 use ic_http_utils::file_downloader::FileDownloader;
+use ic_image_upgrader::error::{UpgradeError, UpgradeResult};
+use ic_image_upgrader::ImageUpgrader;
 use ic_interfaces::registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_registry_client_helpers::node::NodeRegistry;
@@ -168,7 +169,10 @@ impl Upgrade {
             // Only downloads the new image if it doesn't already exists locally, i.e. it
             // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
             // below.
-            return self.execute_upgrade(&new_replica_version).await;
+            return self
+                .execute_upgrade(&new_replica_version)
+                .await
+                .map_err(OrchestratorError::from);
         }
 
         // If we arrive here, we are on the newest replica version.
@@ -277,7 +281,9 @@ impl Upgrade {
                     self.replica_version,
                     replica_version
                 );
-                self.execute_upgrade(&replica_version).await
+                self.execute_upgrade(&replica_version)
+                    .await
+                    .map_err(OrchestratorError::from)
             }
             _ => Err(OrchestratorError::UpgradeError(
                 "No replica version for unassigned nodes found".to_string(),
@@ -381,10 +387,11 @@ impl ImageUpgrader<ReplicaVersion, Option<SubnetId>> for Upgrade {
     fn get_release_package_url_and_hash(
         &self,
         version: &ReplicaVersion,
-    ) -> OrchestratorResult<(String, Option<String>)> {
+    ) -> UpgradeResult<(String, Option<String>)> {
         let record = self
             .registry
-            .get_replica_version_record(version.clone(), self.registry.get_latest_version())?;
+            .get_replica_version_record(version.clone(), self.registry.get_latest_version())
+            .map_err(UpgradeError::from)?;
         Ok((
             record.release_package_url,
             Some(record.release_package_sha256_hex),
@@ -395,8 +402,8 @@ impl ImageUpgrader<ReplicaVersion, Option<SubnetId>> for Upgrade {
         &self.logger
     }
 
-    async fn check_for_upgrade(&mut self) -> OrchestratorResult<Option<SubnetId>> {
-        self.check().await
+    async fn check_for_upgrade(&mut self) -> UpgradeResult<Option<SubnetId>> {
+        self.check().await.map_err(UpgradeError::from)
     }
 }
 

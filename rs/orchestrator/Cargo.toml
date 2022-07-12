@@ -20,6 +20,7 @@ ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 ic-crypto-sha = { path = "../crypto/sha" }
 ic-http-utils = { path = "../http_utils" }
+ic-image-upgrader = { path = "./image_upgrader" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
