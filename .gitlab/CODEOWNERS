@@ -125,6 +125,7 @@
 /rs/nns/                                @dfinity-lab/teams/nns-team @granstrom1
 /rs/orchestrator/                       @dfinity-lab/teams/orchestrator-owners
 /rs/p2p/                                @dfinity-lab/teams/networking-team
+/rs/prep/                               @dfinity-lab/teams/ic-testing-verification
 /rs/protobuf/def/bitcoin/               @dfinity-lab/teams/execution-team
 /rs/protobuf/def/canister_http/         @dfinity-lab/teams/consensus-owners
 /rs/protobuf/def/crypto/                @dfinity-lab/teams/crypto-owners
