@@ -24,6 +24,8 @@ prod-generic-test:
       artifacts: false
     - job: boundary-os-diskimg-dev
       artifacts: false
+    - job: boundary-os-diskimg-snp-dev
+      artifacts: false
     - artifacts-upload-to-s3
   resource_group: $CDPRNET
   artifacts:

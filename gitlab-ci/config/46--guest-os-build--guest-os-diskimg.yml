@@ -88,3 +88,15 @@ boundary-os-diskimg-dev:
   variables:
       BUILD_EXTRA_ARGS: "-p root"
       BUILD_EXTRA_SUFFIX: "-dev"
+
+# Build snp image.
+#
+# This is the same as the prod image with the following differences:
+# - it has password "root" set for root to allow console login
+# - Boundary-os binary is built as an SNP enabled image
+boundary-os-diskimg-snp-dev:
+  extends:
+    - boundary-os-diskimg
+  variables:
+    BUILD_EXTRA_ARGS: "-p root -s"
+    BUILD_EXTRA_SUFFIX: "-snp-dev"
