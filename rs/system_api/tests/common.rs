@@ -104,8 +104,11 @@ pub fn get_system_api(
     system_state: &SystemState,
     cycles_account_manager: CyclesAccountManager,
 ) -> SystemApiImpl {
-    let sandbox_safe_system_state =
-        SandboxSafeSystemState::new(system_state, cycles_account_manager);
+    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+        system_state,
+        cycles_account_manager,
+        &NetworkTopology::default(),
+    );
     SystemApiImpl::new(
         api_type,
         sandbox_safe_system_state,

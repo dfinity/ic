@@ -151,7 +151,7 @@ mod tests {
         ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     };
     use mockall::*;
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::convert::TryFrom;
     use std::sync::{Arc, Condvar, Mutex};
     use wabt::wat2wasm;
@@ -168,6 +168,8 @@ mod tests {
     }
 
     fn sandbox_safe_system_state() -> SandboxSafeSystemState {
+        let mut ic00_aliases = BTreeSet::new();
+        ic00_aliases.insert(canister_test_id(0));
         SandboxSafeSystemState::new_internal(
             canister_test_id(0),
             user_test_id(0).get(),
@@ -184,6 +186,8 @@ mod tests {
             ),
             Some(0),
             BTreeMap::new(),
+            0,
+            ic00_aliases,
         )
     }
 

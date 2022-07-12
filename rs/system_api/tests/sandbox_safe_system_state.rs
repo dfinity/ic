@@ -3,7 +3,7 @@ use ic_interfaces::execution_environment::SystemApi;
 use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::SystemState;
+use ic_replicated_state::{NetworkTopology, SystemState};
 use ic_system_api::sandbox_safe_system_state::SandboxSafeSystemState;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -48,8 +48,11 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         NumSeconds::from(100_000),
     );
 
-    let mut sandbox_safe_system_state =
-        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+        &system_state,
+        cycles_account_manager,
+        &NetworkTopology::default(),
+    );
 
     assert_eq!(
         sandbox_safe_system_state.push_output_request(
@@ -90,8 +93,11 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         NumSeconds::from(100_000),
     );
 
-    let mut sandbox_safe_system_state =
-        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+        &system_state,
+        cycles_account_manager,
+        &NetworkTopology::default(),
+    );
 
     assert_eq!(
         sandbox_safe_system_state.push_output_request(
@@ -116,8 +122,11 @@ fn push_output_request_succeeds_with_enough_cycles() {
         NumSeconds::from(100_000),
     );
 
-    let mut sandbox_safe_system_state =
-        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+        &system_state,
+        cycles_account_manager,
+        &NetworkTopology::default(),
+    );
 
     assert_eq!(
         sandbox_safe_system_state.push_output_request(
@@ -147,8 +156,11 @@ fn correct_charging_source_canister_for_a_request() {
 
     let initial_cycles_balance = system_state.balance();
 
-    let mut sandbox_safe_system_state =
-        SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+        &system_state,
+        cycles_account_manager,
+        &NetworkTopology::default(),
+    );
 
     let request = RequestBuilder::default()
         .sender(canister_test_id(0))

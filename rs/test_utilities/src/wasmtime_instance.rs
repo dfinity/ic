@@ -4,7 +4,7 @@ use ic_embedders::{wasm_utils::compile, wasmtime_embedder::WasmtimeInstance, Was
 use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, ExecutionParameters};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Global, Memory, PageMap};
+use ic_replicated_state::{Global, Memory, NetworkTopology, PageMap};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ModificationTracking, SystemApiImpl,
 };
@@ -26,6 +26,7 @@ pub struct WasmtimeInstanceBuilder {
     api_type: ic_system_api::ApiType,
     num_instructions: NumInstructions,
     subnet_type: SubnetType,
+    network_topology: NetworkTopology,
 }
 
 impl Default for WasmtimeInstanceBuilder {
@@ -36,6 +37,7 @@ impl Default for WasmtimeInstanceBuilder {
             api_type: ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
             num_instructions: DEFAULT_NUM_INSTRUCTIONS,
             subnet_type: SubnetType::Application,
+            network_topology: NetworkTopology::default(),
         }
     }
 }
@@ -86,8 +88,11 @@ impl WasmtimeInstanceBuilder {
 
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
         let system_state = SystemStateBuilder::default().build();
-        let sandbox_safe_system_state =
-            SandboxSafeSystemState::new(&system_state, cycles_account_manager);
+        let sandbox_safe_system_state = SandboxSafeSystemState::new(
+            &system_state,
+            cycles_account_manager,
+            &self.network_topology,
+        );
         let api = ic_system_api::SystemApiImpl::new(
             self.api_type,
             sandbox_safe_system_state,

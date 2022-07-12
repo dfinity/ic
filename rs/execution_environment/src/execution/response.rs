@@ -260,6 +260,7 @@ pub fn execute_response(
         func_ref,
         canister.execution_state.take().unwrap(),
         round_limits,
+        round.network_topology,
     );
 
     canister.execution_state = Some(output_execution_state);
@@ -316,6 +317,7 @@ fn execute_response_cleanup(
         func_ref,
         canister.execution_state.take().unwrap(),
         round_limits,
+        round.network_topology,
     );
     canister.execution_state = Some(output_execution_state);
     process_cleanup_result(

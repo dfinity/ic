@@ -269,8 +269,11 @@ impl Hypervisor {
         round_limits: &mut RoundLimits,
     ) -> (WasmExecutionOutput, ExecutionState, SystemState) {
         let api_type_str = api_type.as_str();
-        let static_system_state =
-            SandboxSafeSystemState::new(&system_state, *self.cycles_account_manager);
+        let static_system_state = SandboxSafeSystemState::new(
+            &system_state,
+            *self.cycles_account_manager,
+            network_topology,
+        );
 
         let (compilation_result, execution_state, execution_result) =
             Arc::clone(&self.wasm_executor).execute(WasmExecutionInput {
@@ -326,10 +329,14 @@ impl Hypervisor {
         func_ref: FuncRef,
         execution_state: ExecutionState,
         round_limits: &mut RoundLimits,
+        network_topology: &NetworkTopology,
     ) -> (ExecutionState, WasmExecutionResult) {
         let api_type_str = api_type.as_str();
-        let static_system_state =
-            SandboxSafeSystemState::new(&system_state, *self.cycles_account_manager);
+        let static_system_state = SandboxSafeSystemState::new(
+            &system_state,
+            *self.cycles_account_manager,
+            network_topology,
+        );
 
         let (compilation_result, execution_state, execution_result) =
             Arc::clone(&self.wasm_executor).execute(WasmExecutionInput {

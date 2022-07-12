@@ -4,7 +4,7 @@ use ic_embedders::WasmtimeEmbedder;
 use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, ExecutionParameters};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Memory, NumWasmPages};
+use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::DefaultOutOfInstructionsHandler;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
@@ -45,7 +45,11 @@ fn test_api_for_update(
             .with_subnet_type(subnet_type)
             .build(),
     );
-    let static_system_state = SandboxSafeSystemState::new(&system_state, *cycles_account_manager);
+    let static_system_state = SandboxSafeSystemState::new(
+        &system_state,
+        *cycles_account_manager,
+        &NetworkTopology::default(),
+    );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
 

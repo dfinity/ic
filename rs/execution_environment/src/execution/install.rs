@@ -178,6 +178,7 @@ pub(crate) fn execute_install(
             FuncRef::Method(method),
             execution_state,
             round_limits,
+            round.network_topology,
         );
         new_canister.execution_state = Some(output_execution_state);
 
@@ -338,6 +339,7 @@ fn install_stage_2b_continue_install_after_start(
         FuncRef::Method(method),
         new_canister.execution_state.unwrap(),
         round_limits,
+        round.network_topology,
     );
     new_canister.execution_state = Some(output_execution_state);
     match wasm_execution_result {
