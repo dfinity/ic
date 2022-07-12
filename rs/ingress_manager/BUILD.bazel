@@ -1,0 +1,38 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob(
+        ["**"],
+        exclude = ["target/**"],
+    ),
+)
+
+rust_library(
+    name = "ingress_manager",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_ingress_manager",
+    edition = "2018",
+    deps = [
+        "//rs/constants",
+        "//rs/crypto",
+        "//rs/cycles_account_manager",
+        "//rs/interfaces",
+        "//rs/interfaces/state_manager",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/registry/helpers",
+        "//rs/registry/keys",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/types/types",
+        "//rs/validator",
+        "@crate_index//:bincode",
+        "@crate_index//:prometheus",
+        "@crate_index//:slog",
+    ],
+)
+
+# TODO(IC-1207): migrate tests and benches when unblocked dependencies.
