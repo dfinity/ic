@@ -19,7 +19,7 @@ use ic_ic00_types::{
     CreateCanisterArgs, EmptyBlob, InstallCodeArgs, Method, Payload, UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
-    AvailableMemory, ExecutionMode, ExecutionParameters, HypervisorError, SubnetAvailableMemory,
+    AvailableMemory, ExecutionMode, ExecutionParameters, HypervisorError,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -77,8 +77,8 @@ const MINIMAL_WASM: [u8; 8] = [
 ];
 
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2).into();
+    static ref MAX_SUBNET_AVAILABLE_MEMORY: AvailableMemory =
+        AvailableMemory::new(i64::MAX / 2, i64::MAX / 2);
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
     static ref EXECUTION_PARAMETERS: ExecutionParameters = ExecutionParameters {
@@ -263,8 +263,9 @@ fn install_code(
         context,
         state,
         EXECUTION_PARAMETERS.clone(),
-        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-        &mut RoundLimits {},
+        &mut RoundLimits {
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+        },
     )
 }
 
@@ -286,8 +287,9 @@ fn install_code_with_instruction_limit(
             slice_instruction_limit: instruction_limit,
             ..EXECUTION_PARAMETERS.clone()
         },
-        MAX_SUBNET_AVAILABLE_MEMORY.clone(),
-        &mut RoundLimits {},
+        &mut RoundLimits {
+            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY).into(),
+        },
     )
 }
 

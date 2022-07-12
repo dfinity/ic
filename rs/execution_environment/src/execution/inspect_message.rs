@@ -14,6 +14,7 @@ use ic_types::{NumInstructions, Time};
 ///
 /// This method is called pre-consensus to let the canister decide if it
 /// wants to accept the message or not.
+#[allow(clippy::too_many_arguments)]
 pub fn execute_inspect_message(
     time: Time,
     canister: CanisterState,
@@ -56,15 +57,15 @@ pub fn execute_inspect_message(
         ingress.arg().to_vec(),
         time,
     );
-    // TODO(RUN-263): Initialize round limits here.
-    let mut round_limits = RoundLimits {};
+    let mut round_limits = RoundLimits {
+        subnet_available_memory,
+    };
     let (output, _output_execution_state, _system_state_accessor) = hypervisor.execute(
         system_api,
         time,
         system_state,
         memory_usage,
         execution_parameters,
-        subnet_available_memory,
         FuncRef::Method(method),
         execution_state,
         network_topology,

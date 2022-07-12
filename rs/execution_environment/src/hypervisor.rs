@@ -7,7 +7,7 @@ use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
 use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
 use ic_embedders::{CompilationCache, CompilationResult};
 use ic_interfaces::execution_environment::{
-    ExecutionParameters, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
+    ExecutionParameters, HypervisorResult, WasmExecutionOutput,
 };
 use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
@@ -263,11 +263,10 @@ impl Hypervisor {
         mut system_state: SystemState,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
-        subnet_available_memory: SubnetAvailableMemory,
         func_ref: FuncRef,
         execution_state: ExecutionState,
         network_topology: &NetworkTopology,
-        _round_limits: &mut RoundLimits,
+        round_limits: &mut RoundLimits,
     ) -> (WasmExecutionOutput, ExecutionState, SystemState) {
         let api_type_str = api_type.as_str();
         let static_system_state =
@@ -279,7 +278,7 @@ impl Hypervisor {
                 sandbox_safe_system_state: static_system_state,
                 canister_current_memory_usage,
                 execution_parameters,
-                subnet_available_memory: subnet_available_memory.get(),
+                subnet_available_memory: round_limits.subnet_available_memory.get(),
                 func_ref,
                 execution_state,
                 compilation_cache: Arc::clone(&self.compilation_cache),
@@ -300,7 +299,8 @@ impl Hypervisor {
         // The unwrap is guaranteed to succeed because without DTS the subnet
         // available memory did not change since the start of execution and the
         // Wasm executor must have done all checks.
-        subnet_available_memory
+        round_limits
+            .subnet_available_memory
             .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
             .unwrap();
         system_state_changes.apply_changes(
@@ -323,10 +323,9 @@ impl Hypervisor {
         system_state: SystemState,
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
-        subnet_available_memory: SubnetAvailableMemory,
         func_ref: FuncRef,
         execution_state: ExecutionState,
-        _round_limits: &mut RoundLimits,
+        round_limits: &mut RoundLimits,
     ) -> (ExecutionState, WasmExecutionResult) {
         let api_type_str = api_type.as_str();
         let static_system_state =
@@ -338,7 +337,7 @@ impl Hypervisor {
                 sandbox_safe_system_state: static_system_state,
                 canister_current_memory_usage,
                 execution_parameters,
-                subnet_available_memory: subnet_available_memory.get(),
+                subnet_available_memory: round_limits.subnet_available_memory.get(),
                 func_ref,
                 execution_state,
                 compilation_cache: Arc::clone(&self.compilation_cache),

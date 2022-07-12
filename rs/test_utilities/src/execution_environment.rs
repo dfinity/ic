@@ -536,16 +536,18 @@ impl ExecutionTest {
         let mut state = self.state.take().unwrap();
         let canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
-        // TODO(RUN-263): Initialize round limits here.
-        let mut round_limits = RoundLimits {};
+        let mut round_limits = RoundLimits {
+            subnet_available_memory: self.subnet_available_memory.get().into(),
+        };
         let (canister, num_instructions_left, result) = self.exec_env.execute_canister_heartbeat(
             canister,
             self.instruction_limit,
             network_topology,
             self.time,
-            self.subnet_available_memory.clone(),
             &mut round_limits,
         );
+        self.subnet_available_memory
+            .set(round_limits.subnet_available_memory.get());
         state.put_canister_state(canister);
         if let Ok(heap_delta) = result {
             state.metadata.heap_delta_estimate += heap_delta;
@@ -586,17 +588,19 @@ impl ExecutionTest {
         let mut state = self.state.take().unwrap();
         let canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
-        // TODO(RUN-263): Initialize round limits here.
-        let mut round_limits = RoundLimits {};
+        let mut round_limits = RoundLimits {
+            subnet_available_memory: self.subnet_available_memory.get().into(),
+        };
         let result = self.exec_env.execute_canister_response(
             canister,
             Arc::new(response),
             self.instruction_limit,
             mock_time(),
             network_topology,
-            self.subnet_available_memory.clone(),
             &mut round_limits,
         );
+        self.subnet_available_memory
+            .set(round_limits.subnet_available_memory.get());
 
         state.metadata.heap_delta_estimate += result.heap_delta;
         self.update_execution_stats(
@@ -665,18 +669,20 @@ impl ExecutionTest {
             }
         };
         let maybe_canister_id = get_canister_id_if_install_code(message.clone());
-        // TODO(RUN-263): Initialize round limits here.
-        let mut round_limits = RoundLimits {};
+        let mut round_limits = RoundLimits {
+            subnet_available_memory: self.subnet_available_memory.get().into(),
+        };
         let (new_state, instructions_left) = self.exec_env.execute_subnet_message(
             message,
             state,
             self.install_code_instruction_limit,
             &mut mock_random_number_generator(),
             &self.ecdsa_subnet_public_keys,
-            self.subnet_available_memory.clone(),
             &self.registry_settings,
             &mut round_limits,
         );
+        self.subnet_available_memory
+            .set(round_limits.subnet_available_memory.get());
         self.state = Some(new_state);
         if let Some(canister_id) = maybe_canister_id {
             self.update_execution_stats(
@@ -709,8 +715,9 @@ impl ExecutionTest {
         let mut state = self.state.take().unwrap();
         let mut canisters = state.take_canister_states();
         let canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
-        // TODO(RUN-263): Initialize round limits here.
-        let mut round_limits = RoundLimits {};
+        let mut round_limits = RoundLimits {
+            subnet_available_memory: self.subnet_available_memory.get().into(),
+        };
         for canister_id in canister_ids {
             let network_topology = Arc::new(state.metadata.network_topology.clone());
             let mut canister = canisters.remove(&canister_id).unwrap();
@@ -722,7 +729,6 @@ impl ExecutionTest {
                     message,
                     self.time,
                     Arc::clone(&network_topology),
-                    self.subnet_available_memory.clone(),
                     &mut round_limits,
                 );
                 let (new_canister, num_instructions_left, heap_delta, ingress) =
@@ -742,6 +748,8 @@ impl ExecutionTest {
             }
             canisters.insert(canister_id, canister);
         }
+        self.subnet_available_memory
+            .set(round_limits.subnet_available_memory.get());
         state.put_canister_states(canisters);
         self.state = Some(state);
         executed_any
@@ -753,19 +761,21 @@ impl ExecutionTest {
         let mut canisters = state.take_canister_states();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut canister = canisters.remove(&canister_id).unwrap();
-        // TODO(RUN-263): Initialize round limits here.
-        let mut round_limits = RoundLimits {};
         if canister.has_input() {
             let message = canister.pop_input().unwrap();
+            let mut round_limits = RoundLimits {
+                subnet_available_memory: self.subnet_available_memory.get().into(),
+            };
             let result = self.exec_env.execute_canister_message(
                 canister,
                 self.instruction_limit,
                 message,
                 self.time,
                 Arc::clone(&network_topology),
-                self.subnet_available_memory.clone(),
                 &mut round_limits,
             );
+            self.subnet_available_memory
+                .set(round_limits.subnet_available_memory.get());
             let (new_canister, num_instructions_left, heap_delta, ingress) = process_result(result);
             state.metadata.heap_delta_estimate += heap_delta;
             self.update_execution_stats(canister_id, self.instruction_limit, num_instructions_left);

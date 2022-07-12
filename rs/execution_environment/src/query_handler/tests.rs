@@ -131,8 +131,13 @@ fn universal_canister(
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
         },
-        AvailableMemory::new(MEMORY_CAPACITY.get() as i64, MEMORY_CAPACITY.get() as i64).into(),
-        &mut RoundLimits {},
+        &mut RoundLimits {
+            subnet_available_memory: AvailableMemory::new(
+                MEMORY_CAPACITY.get() as i64,
+                MEMORY_CAPACITY.get() as i64,
+            )
+            .into(),
+        },
     );
     assert!(res.1.is_ok());
     state.put_canister_state(res.2.unwrap());

@@ -372,15 +372,15 @@ pub fn bench_execute_update(c: &mut Criterion) {
              subnet_available_memory,
              ..
          }| {
-            // TODO(RUN-263): Initialize round limits here.
-            let mut round_limits = RoundLimits {};
+            let mut round_limits = RoundLimits {
+                subnet_available_memory,
+            };
             let res = ee_test.execution_environment().execute_canister_message(
                 canister_state,
                 execution_parameters.total_instruction_limit,
                 ingress,
                 time,
                 network_topology,
-                subnet_available_memory,
                 &mut round_limits,
             );
             let instructions = res.num_instructions_left;

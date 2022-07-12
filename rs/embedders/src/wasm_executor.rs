@@ -578,11 +578,8 @@ pub fn process(
         wasm_result = Err(HypervisorError::WasmReservedPages);
     }
 
-    let allocated_bytes = instance.store_data().system_api.get_allocated_bytes();
-    let allocated_message_bytes = instance
-        .store_data()
-        .system_api
-        .get_allocated_message_bytes();
+    let mut allocated_bytes = NumBytes::from(0);
+    let mut allocated_message_bytes = NumBytes::from(0);
 
     let wasm_state_changes = match run_result {
         Ok(run_result) => {
@@ -602,6 +599,11 @@ pub fn process(
                             .stable_memory_dirty_pages(),
                     );
                     stable_memory.size = run_result.stable_memory_size;
+                    allocated_bytes = instance.store_data().system_api.get_allocated_bytes();
+                    allocated_message_bytes = instance
+                        .store_data()
+                        .system_api
+                        .get_allocated_message_bytes();
 
                     Some(WasmStateChanges::new(
                         wasm_memory_delta,

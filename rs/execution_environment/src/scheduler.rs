@@ -15,11 +15,9 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method as Ic00Method, Payload as _,
 };
-use ic_interfaces::execution_environment::{
-    AvailableMemory, ExecutionRoundType, RegistryExecutionSettings,
-};
+use ic_interfaces::execution_environment::{ExecutionRoundType, RegistryExecutionSettings};
 use ic_interfaces::{
-    execution_environment::{IngressHistoryWriter, Scheduler, SubnetAvailableMemory},
+    execution_environment::{IngressHistoryWriter, Scheduler},
     messages::CanisterInputMessage,
 };
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
@@ -319,6 +317,7 @@ impl SchedulerImpl {
         ordered_canister_ids: &[CanisterId],
         current_round: ExecutionRound,
         measurement_scope: &MeasurementScope<'a>,
+        round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, BTreeSet<CanisterId>) {
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, measurement_scope);
@@ -358,8 +357,9 @@ impl SchedulerImpl {
             let mut loop_config = self.config.clone();
             loop_config.max_instructions_per_round -= total_instructions_consumed;
 
-            // Record subnet available memory before taking out the canisters.
-            let subnet_available_memory = self.exec_env.subnet_available_memory(&state);
+            // Update subnet available memory before taking out the canisters.
+            round_limits.subnet_available_memory =
+                self.exec_env.subnet_available_memory(&state).into();
             let canisters = state.take_canister_states();
             // Obtain the active canisters and update the collection of heap delta rate-limited canisters.
             let (active_canister_ids, rate_limited_canister_ids) = filter_canisters(
@@ -397,9 +397,9 @@ impl SchedulerImpl {
                 loop_config.clone(),
                 current_round,
                 state.time(),
-                subnet_available_memory / self.config.scheduler_cores as i64,
                 Arc::new(state.metadata.network_topology.clone()),
                 &measurement_scope,
+                round_limits,
             );
 
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
@@ -514,9 +514,9 @@ impl SchedulerImpl {
         current_config: SchedulerConfig,
         round_id: ExecutionRound,
         time: Time,
-        subnet_available_memory: AvailableMemory,
         network_topology: Arc<NetworkTopology>,
         measurement_scope: &MeasurementScope,
+        round_limits: &mut RoundLimits,
     ) -> (
         Vec<CanisterState>,
         Vec<(MessageId, IngressStatus)>,
@@ -546,6 +546,12 @@ impl SchedulerImpl {
             .map(|_| Default::default())
             .collect();
 
+        // Distribute subnet available memory equaly between the threads.
+        let round_limits_per_thread = RoundLimits {
+            subnet_available_memory: (round_limits.subnet_available_memory.get()
+                / self.config.scheduler_cores as i64)
+                .into(),
+        };
         // Run canisters in parallel. The results will be stored in `results_by_thread`.
         thread_pool.scoped(|scope| {
             // Zip together the input and the output of each thread.
@@ -562,8 +568,12 @@ impl SchedulerImpl {
                 let logger = new_logger!(self.log; messaging.round => round_id.get());
                 let canister_execution_limits = canister_execution_limits.clone();
                 let rate_limiting_of_heap_delta = self.rate_limiting_of_heap_delta;
-                // TODO(RUN-263): Initialize per-thread round limits from the global round limits.
-                let mut round_limits = RoundLimits {};
+                let round_limits = RoundLimits {
+                    subnet_available_memory: round_limits_per_thread
+                        .subnet_available_memory
+                        .get()
+                        .into(),
+                };
                 scope.execute(move || {
                     *result = execute_canisters_on_thread(
                         canisters,
@@ -572,11 +582,10 @@ impl SchedulerImpl {
                         metrics,
                         round_id,
                         time,
-                        subnet_available_memory.into(),
                         network_topology,
                         logger,
                         rate_limiting_of_heap_delta,
-                        &mut round_limits,
+                        round_limits,
                     );
                 });
             }
@@ -867,12 +876,8 @@ impl Scheduler for SchedulerImpl {
     ) -> ReplicatedState {
         let measurement_scope = MeasurementScope::root(&self.metrics.round);
 
-        // TODO(RUN-263): Initialize round limits.
-        let mut round_limits = RoundLimits {};
-
         let mut cycles_in_sum = Cycles::zero();
         let round_log;
-        let subnet_available_memory: SubnetAvailableMemory;
         let mut csprng;
         {
             let _timer = self.metrics.round_preparation_duration.start_timer();
@@ -926,13 +931,15 @@ impl Scheduler for SchedulerImpl {
                 &ExecutionThread(self.config.scheduler_cores as u32),
             );
 
-            subnet_available_memory = self.exec_env.subnet_available_memory(&state).into();
-
             for canister in state.canisters_iter_mut() {
                 cycles_in_sum += canister.system_state.balance();
                 cycles_in_sum += canister.system_state.queues().input_queue_cycles();
             }
         }
+
+        let mut round_limits = RoundLimits {
+            subnet_available_memory: self.exec_env.subnet_available_memory(&state).into(),
+        };
 
         // Invoke the heartbeat of the bitcoin canister.
         {
@@ -965,7 +972,6 @@ impl Scheduler for SchedulerImpl {
                     self.config.max_instructions_per_message,
                     &mut csprng,
                     &ecdsa_subnet_public_keys,
-                    subnet_available_memory.clone(),
                     registry_settings,
                     &mut round_limits,
                 );
@@ -1009,7 +1015,6 @@ impl Scheduler for SchedulerImpl {
                     instructions_limit_per_message,
                     &mut csprng,
                     &ecdsa_subnet_public_keys,
-                    subnet_available_memory.clone(),
                     registry_settings,
                     &mut round_limits,
                 );
@@ -1075,6 +1080,7 @@ impl Scheduler for SchedulerImpl {
             &ordered_canister_ids,
             current_round,
             &measurement_scope,
+            &mut round_limits,
         );
 
         let mut final_state;
@@ -1232,11 +1238,10 @@ fn execute_canisters_on_thread(
     metrics: Arc<SchedulerMetrics>,
     round_id: ExecutionRound,
     time: Time,
-    subnet_available_memory: SubnetAvailableMemory,
     network_topology: Arc<NetworkTopology>,
     logger: ReplicaLogger,
     rate_limiting_of_heap_delta: FlagStatus,
-    round_limits: &mut RoundLimits,
+    mut round_limits: RoundLimits,
 ) -> ExecutionThreadResult {
     // Since this function runs on a helper thread, we cannot use a nested scope
     // here. Instead, we propagate metrics to the outer scope manually via
@@ -1293,8 +1298,7 @@ fn execute_canisters_on_thread(
                 canister_execution_limits.instruction_limit_per_message,
                 Arc::clone(&network_topology),
                 time,
-                subnet_available_memory.clone(),
-                round_limits,
+                &mut round_limits,
             );
             ingress_results.extend(ingress_status);
 
