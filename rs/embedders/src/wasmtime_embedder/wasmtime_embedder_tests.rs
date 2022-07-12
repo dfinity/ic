@@ -7,7 +7,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{AvailableMemory, ExecutionMode, ExecutionParameters};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Memory, SystemState};
+use ic_replicated_state::{Memory, NetworkTopology, SystemState};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
     SystemApiImpl,
@@ -33,8 +33,11 @@ fn test_wasmtime_system_api() {
     let engine = Engine::new(&config).expect("Failed to initialize Wasmtime engine");
     let canister_id = canister_test_id(53);
     let system_state = SystemState::new_for_start(canister_id);
-    let sandbox_safe_system_state =
-        SandboxSafeSystemState::new(&system_state, CyclesAccountManagerBuilder::new().build());
+    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+        &system_state,
+        CyclesAccountManagerBuilder::new().build(),
+        &NetworkTopology::default(),
+    );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
     let system_api = SystemApiImpl::new(
