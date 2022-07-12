@@ -443,41 +443,31 @@ fn setup_artifact_manager(
     }
 
     {
-        if registry_client
-            .get_features(subnet_id, registry_client.get_latest_version())
-            .ok()
-            .flatten()
-            .map(|features| features.http_requests)
-            == Some(true)
-        {
-            info!(replica_logger, "Canister Http Request feature enabled");
-            let (canister_http_client, actor) = processors::CanisterHttpProcessor::build(
-                move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
-                || {
-                    (
-                        canister_http::CanisterHttpPoolManagerImpl::new(
-                            Arc::clone(&state_manager) as Arc<_>,
-                            Arc::new(Mutex::new(canister_http_adapter_client)),
-                            Arc::clone(&consensus_crypto),
-                            ReplicaConfig { subnet_id, node_id },
-                            replica_logger.clone(),
-                        ),
-                        canister_http::CanisterHttpGossipImpl::new(
-                            Arc::clone(&artifact_pools.consensus_pool_cache),
-                            Arc::clone(&state_manager) as Arc<_>,
-                        ),
-                    )
-                },
-                Arc::clone(&time_source) as Arc<_>,
-                Arc::clone(&artifact_pools.consensus_pool_cache),
-                Arc::clone(&artifact_pools.canister_http_pool),
-                replica_logger.clone(),
-                metrics_registry,
-            );
-            artifact_manager_maker.add_client(canister_http_client, actor);
-        } else {
-            info!(replica_logger, "Canister HTTP Request feature disabled")
-        }
+        let (canister_http_client, actor) = processors::CanisterHttpProcessor::build(
+            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
+            || {
+                (
+                    canister_http::CanisterHttpPoolManagerImpl::new(
+                        Arc::clone(&state_manager) as Arc<_>,
+                        Arc::new(Mutex::new(canister_http_adapter_client)),
+                        Arc::clone(&consensus_crypto),
+                        ReplicaConfig { subnet_id, node_id },
+                        Arc::clone(&registry_client),
+                        replica_logger.clone(),
+                    ),
+                    canister_http::CanisterHttpGossipImpl::new(
+                        Arc::clone(&artifact_pools.consensus_pool_cache),
+                        Arc::clone(&state_manager) as Arc<_>,
+                    ),
+                )
+            },
+            Arc::clone(&time_source) as Arc<_>,
+            Arc::clone(&artifact_pools.consensus_pool_cache),
+            Arc::clone(&artifact_pools.canister_http_pool),
+            replica_logger.clone(),
+            metrics_registry,
+        );
+        artifact_manager_maker.add_client(canister_http_client, actor);
     }
 
     Ok(artifact_manager_maker.finish())

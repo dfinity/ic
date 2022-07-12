@@ -4,10 +4,13 @@
 //! and eventually make it into consensus.
 use crate::consensus::utils::registry_version_at_height;
 use crate::consensus::ConsensusCrypto;
-use ic_interfaces::{canister_http::*, consensus_pool::ConsensusPoolCache};
+use ic_interfaces::{
+    canister_http::*, consensus_pool::ConsensusPoolCache, registry::RegistryClient,
+};
 use ic_interfaces_canister_http_adapter_client::*;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::*;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     canister_http::*, consensus::HasHeight, crypto::Signed, messages::CallbackId,
@@ -25,6 +28,7 @@ use std::time::Duration;
 /// - Sign response shares once a request is made
 /// - Validate shares in the unvalidated pool that were received from gossip
 pub struct CanisterHttpPoolManagerImpl {
+    registry_client: Arc<dyn RegistryClient>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     http_adapter_shim: Arc<Mutex<CanisterHttpAdapterClient>>,
     crypto: Arc<dyn ConsensusCrypto>,
@@ -40,6 +44,7 @@ impl CanisterHttpPoolManagerImpl {
         http_adapter_shim: Arc<Mutex<CanisterHttpAdapterClient>>,
         crypto: Arc<dyn ConsensusCrypto>,
         replica_config: ReplicaConfig,
+        registry_client: Arc<dyn RegistryClient>,
         log: ReplicaLogger,
     ) -> Self {
         Self {
@@ -47,6 +52,7 @@ impl CanisterHttpPoolManagerImpl {
             http_adapter_shim,
             crypto,
             replica_config,
+            registry_client,
             log,
             requested_id_cache: BTreeSet::new(),
         }
@@ -245,10 +251,8 @@ impl CanisterHttpPoolManagerImpl {
             })
             .collect()
     }
-}
 
-impl CanisterHttpPoolManager for CanisterHttpPoolManagerImpl {
-    fn on_state_change(
+    fn generate_change_set(
         &mut self,
         consensus_cache: &dyn ConsensusPoolCache,
         canister_http_pool: &dyn CanisterHttpPool,
@@ -267,6 +271,30 @@ impl CanisterHttpPoolManager for CanisterHttpPoolManagerImpl {
         change_set.extend(self.validate_shares(consensus_cache, canister_http_pool));
 
         change_set
+    }
+}
+
+impl CanisterHttpPoolManager for CanisterHttpPoolManagerImpl {
+    fn on_state_change(
+        &mut self,
+        consensus_cache: &dyn ConsensusPoolCache,
+        canister_http_pool: &dyn CanisterHttpPool,
+    ) -> CanisterHttpChangeSet {
+        if self
+            .registry_client
+            .get_features(
+                self.replica_config.subnet_id,
+                self.registry_client.get_latest_version(),
+            )
+            .ok()
+            .flatten()
+            .map(|features| features.http_requests)
+            == Some(true)
+        {
+            self.generate_change_set(consensus_cache, canister_http_pool)
+        } else {
+            vec![]
+        }
     }
 }
 
@@ -313,7 +341,6 @@ pub mod test {
             SubnetType::System,
             PathBuf::from("/tmp"),
         );
-        // let mut metadata = SystemMetadata::new(subnet_test_id(0), SubnetType::System);
         replicated_state
             .metadata
             .subnet_call_context_manager
@@ -339,6 +366,7 @@ pub mod test {
                     replica_config,
                     crypto,
                     state_manager,
+                    registry,
                     ..
                 } = dependencies(pool_config.clone(), 4);
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
@@ -402,6 +430,7 @@ pub mod test {
                     shim,
                     crypto,
                     replica_config,
+                    Arc::clone(&registry) as Arc<_>,
                     log,
                 );
 
@@ -409,7 +438,7 @@ pub mod test {
                 // able to call on_state_change again without send being called.
                 // We haven't sent an expectation on send, so this will fail if
                 // send is, in fact called.
-                pool_manager.on_state_change(pool.as_cache(), &canister_http_pool);
+                pool_manager.generate_change_set(pool.as_cache(), &canister_http_pool);
             })
         });
     }
@@ -423,6 +452,7 @@ pub mod test {
                     replica_config,
                     crypto,
                     state_manager,
+                    registry,
                     ..
                 } = dependencies(pool_config.clone(), 4);
 
@@ -460,9 +490,11 @@ pub mod test {
                     shim,
                     crypto,
                     replica_config,
+                    Arc::clone(&registry) as Arc<_>,
                     log,
                 );
-                let change_set = pool_manager.on_state_change(pool.as_cache(), &canister_http_pool);
+                let change_set =
+                    pool_manager.generate_change_set(pool.as_cache(), &canister_http_pool);
                 assert_eq!(change_set.len(), 2);
             });
         });
@@ -477,6 +509,7 @@ pub mod test {
                     replica_config,
                     crypto,
                     state_manager,
+                    registry,
                     ..
                 } = dependencies(pool_config.clone(), 4);
                 let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
@@ -527,10 +560,12 @@ pub mod test {
                     shim,
                     crypto.clone(),
                     replica_config.clone(),
+                    Arc::clone(&registry) as Arc<_>,
                     log,
                 );
                 let mut canister_http_pool = CanisterHttpPoolImpl::new(MetricsRegistry::new());
-                let change_set = pool_manager.on_state_change(pool.as_cache(), &canister_http_pool);
+                let change_set =
+                    pool_manager.generate_change_set(pool.as_cache(), &canister_http_pool);
                 assert_eq!(change_set.len(), 0);
 
                 let response_metadata = CanisterHttpResponseMetadata {
@@ -559,8 +594,8 @@ pub mod test {
                 )]);
 
                 // Now that there are shares in the pool, we should be able to
-                // call on_state_change again without send being called.
-                pool_manager.on_state_change(pool.as_cache(), &canister_http_pool);
+                // call generate_change_set again without send being called.
+                pool_manager.generate_change_set(pool.as_cache(), &canister_http_pool);
             });
         });
     }
