@@ -5817,6 +5817,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ic-validator",
  "prometheus 0.12.0",
+ "proptest 1.0.0",
  "rand 0.8.5",
  "slog",
  "tokio",

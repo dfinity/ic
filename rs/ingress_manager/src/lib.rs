@@ -5,6 +5,9 @@
 mod ingress_handler;
 mod ingress_selector;
 
+#[cfg(test)]
+mod proptests;
+
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
