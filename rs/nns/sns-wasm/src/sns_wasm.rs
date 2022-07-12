@@ -1,11 +1,10 @@
 use crate::canister_api::CanisterApi;
 use crate::pb::hash_to_hex_string;
-use crate::pb::v1::add_wasm_response::{AddWasmError, AddWasmOk};
 use crate::pb::v1::{
     add_wasm_response, AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
     DeployedSns, GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetWasmRequest,
     GetWasmResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse, SnsCanisterIds,
-    SnsCanisterType, SnsVersion, SnsWasm, SnsWasmStableIndex, StableCanisterState,
+    SnsCanisterType, SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
 };
 use crate::stable_memory::SnsWasmStableMemory;
 use candid::Encode;
@@ -18,6 +17,7 @@ use ic_types::{Cycles, SubnetId};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryInto;
+use std::iter::zip;
 use std::thread::LocalKey;
 
 /// The struct that implements the public API of the canister
@@ -37,6 +37,11 @@ where
     /// Provides convenient access to stable memory
     pub stable_memory: SnsWasmStableMemory<M>,
 }
+const ONE_TRILLION: u64 = 1_000_000_000_000;
+const ONE_BILLION: u64 = 1_000_000_000;
+
+const SNS_CREATION_FEE: u64 = 50 * ONE_TRILLION;
+const INIITIAL_CANISTER_CREATION_CYCLES: u64 = 500 * ONE_BILLION;
 
 /// Internal implementation to give the wasms we explicitly handle a name (instead of Vec<u8>) for
 /// safer handling in our internal logic.  This is not intended to be persisted outside of method logic
@@ -44,6 +49,115 @@ struct SnsWasms {
     root: Vec<u8>,
     governance: Vec<u8>,
     ledger: Vec<u8>,
+}
+
+/// Helper function to create a DeployError::Validation(ValidationDeployError {})
+/// Directly returns the error (unlike other two helpers)
+fn validation_deploy_error(message: String) -> DeployError {
+    DeployError::Validation(ValidationDeployError { message })
+}
+
+/// Helper function to create a DeployError::Reversible(ReversibleDeployError {})
+/// Returns a function that takes an error message and returns the DeployError
+fn reversible_deploy_error(
+    canisters_to_delete: &SnsCanisterIds,
+    subnet: SubnetId,
+) -> impl Fn(String) -> DeployError + '_ {
+    move |message| {
+        DeployError::Reversible(RerversibleDeployError {
+            message,
+            canisters_to_delete: Some(canisters_to_delete.clone()),
+            subnet: Some(subnet),
+        })
+    }
+}
+
+/// Helper function to create a DeployError::Irreversible(IrreversibleDeployError {})
+/// Returns a function that takes the error message and returns the DeployError
+fn irreversible_depoy_error(
+    canisters_created: &SnsCanisterIds,
+    subnet: SubnetId,
+) -> impl Fn(String) -> DeployError + '_ {
+    move |message| {
+        DeployError::Irreversible(IrreversibleDeployError {
+            message,
+            canisters_created: canisters_created.clone(),
+            subnet,
+        })
+    }
+}
+
+/// Concatenates error messages from a vector of Result<(), String>, if one or more errors is found
+fn join_errors_or_ok(results: Vec<Result<(), String>>) -> Result<(), String> {
+    if results.iter().any(|r| r.is_err()) {
+        Err(results
+            .into_iter()
+            .flat_map(|result| match result {
+                Ok(_) => None,
+                Err(e) => Some(e),
+            })
+            .collect::<Vec<_>>()
+            .join("\n"))
+    } else {
+        Ok(())
+    }
+}
+
+enum DeployError {
+    Validation(ValidationDeployError),
+    Reversible(RerversibleDeployError),
+    Irreversible(IrreversibleDeployError),
+}
+
+/// Error in preconditions
+struct ValidationDeployError {
+    /// The error message to be returned externally
+    message: String,
+}
+
+/// Struct representing an error that can be cleaned up
+#[derive(Clone)]
+struct RerversibleDeployError {
+    /// The error message to be returned externally
+    message: String,
+    /// Canisters created that need to be cleaned up
+    canisters_to_delete: Option<SnsCanisterIds>,
+    /// Subnet where canister_to_delete live (which is returned when cleanup fails)
+    subnet: Option<SubnetId>,
+}
+
+/// Struct representing an error that cannot be recovered from (internally)
+struct IrreversibleDeployError {
+    /// The error message to be returned externally
+    message: String,
+    /// Canisters created that cannot be cleaned up (when failing set_controllers step)
+    canisters_created: SnsCanisterIds,
+    /// Subnet where canisters_created that cannot be cleaned up are deployed to
+    subnet: SubnetId,
+}
+
+impl From<DeployError> for DeployNewSnsResponse {
+    fn from(error: DeployError) -> Self {
+        match error {
+            DeployError::Validation(validation_error) => DeployNewSnsResponse {
+                subnet_id: None,
+                canisters: None,
+                error: Some(SnsWasmError {
+                    message: validation_error.message,
+                }),
+            },
+            DeployError::Irreversible(irreversible) => DeployNewSnsResponse {
+                canisters: Some(irreversible.canisters_created),
+                subnet_id: Some(irreversible.subnet.get()),
+                error: Some(SnsWasmError {
+                    message: irreversible.message,
+                }),
+            },
+            DeployError::Reversible(_) => {
+                panic!("Do not try to use into() for DeployError::Reversible as this should be cleaned up")
+            }
+        }
+    }
 }
 
 impl<M: StableMemory + Clone + Default> SnsWasmCanister<M>
@@ -67,7 +181,7 @@ where
 
     /// Returns an Option(SnsWasm) in the GetWasmResponse (a struct with wasm bytecode and the install target)
     pub fn get_wasm(&self, get_wasm_payload: GetWasmRequest) -> GetWasmResponse {
-        let hash = vec_to_hash(get_wasm_payload.hash);
+        let hash = vec_to_hash(get_wasm_payload.hash).unwrap();
         GetWasmResponse {
             wasm: self.read_wasm(&hash),
         }
@@ -87,19 +201,20 @@ where
 
         let sns_canister_type = match wasm.checked_sns_canister_type() {
             Ok(canister_type) => canister_type,
-            Err(error) => {
+            Err(message) => {
                 return AddWasmResponse {
-                    result: Some(add_wasm_response::Result::Error(AddWasmError { error })),
+                    result: Some(add_wasm_response::Result::Error(SnsWasmError { message })),
                 }
             }
         };
 
-        let hash = vec_to_hash(add_wasm_payload.hash);
+        let hash = vec_to_hash(add_wasm_payload.hash)
+            .expect("Hash provided was not 32 bytes (i.e. [u8;32])");
 
         if hash != wasm.sha256_hash() {
             return AddWasmResponse {
-                result: Some(add_wasm_response::Result::Error(AddWasmError {
-                    error: format!("Invalid Sha256 given for submitted WASM bytes. Provided hash was '{}'  but calculated hash was '{}'",
+                result: Some(add_wasm_response::Result::Error(SnsWasmError {
+                    message: format!("Invalid Sha256 given for submitted WASM bytes. Provided hash was '{}'  but calculated hash was '{}'",
                                    hash_to_hex_string(&hash), wasm.sha256_string())
                 }))
             };
@@ -118,12 +233,10 @@ where
 
                 self.upgrade_path.add_wasm(sns_canister_type, &hash);
 
-                Some(add_wasm_response::Result::Ok(AddWasmOk {
-                    hash: hash.to_vec(),
-                }))
+                Some(add_wasm_response::Result::Hash(hash.to_vec()))
             }
-            Err(e) => Some(add_wasm_response::Result::Error(AddWasmError {
-                error: format!("Unable to persist WASM: {}", e),
+            Err(e) => Some(add_wasm_response::Result::Error(SnsWasmError {
+                message: format!("Unable to persist WASM: {}", e),
             })),
         };
 
@@ -141,33 +254,105 @@ where
     }
 
     /// Deploys a new SNS based on the parameters of the payload
+    ///
+    /// Main actions that this performs:
+    ///   1. Creates the canisters.
+    ///   2. Installs SNS root, SNS governance, and SNS ledger WASMs onto the created canisters.
+    ///   3. Fund canisters with cycles
+    ///   4. Sets the canisters' controllers:
+    ///     a. Root is controlled only by Governance.
+    ///     b. Governance is controlled only by Root.
+    ///     c. Ledger is controlled only by Root.
+    ///
+    /// Step 2 requires installation parameters which come from the SnsInitPayload object
+    /// included in DeployNewSnsRequest. This adds the created canister IDs to the payloads
+    /// so that the SNS canisters know each other's Canister IDs at installation time, which is a
+    /// requirement of the SNS deployment.
+    ///
+    /// In case any operations fail, we try our best to back out of previous changes,
+    /// but that is not always possible. Further recovery by the caller may be required in case of failure.
     pub async fn deploy_new_sns(
         thread_safe_sns: &'static LocalKey<RefCell<SnsWasmCanister<M>>>,
         canister_api: &impl CanisterApi,
         deploy_new_sns_payload: DeployNewSnsRequest,
     ) -> DeployNewSnsResponse {
-        let subnet_id =
-            thread_safe_sns.with(|sns_canister| sns_canister.borrow().get_available_sns_subnet());
+        match Self::do_deploy_new_sns(thread_safe_sns, canister_api, deploy_new_sns_payload).await {
+            Ok((subnet_id, canisters)) => DeployNewSnsResponse {
+                subnet_id: Some(subnet_id.get()),
+                canisters: Some(canisters),
+                error: None,
+            },
+            Err(DeployError::Reversible(reversible)) => {
+                // Attempt to clean up after normal failures
+                Self::try_cleanup_reversible_deploy_error(canister_api, reversible.clone()).await
+            }
+            // The rest are conversions as no additional processing is needed
+            Err(e) => e.into(),
+        }
+    }
 
-        // TODO(NNS1-1437) Refund cycles if this step fails
-        // TODO(NNS1-1437) Delete these canisters if any step fails
-        let canisters = Self::create_sns_canisters(canister_api, subnet_id).await;
-
-        let initial_payloads = deploy_new_sns_payload
+    async fn do_deploy_new_sns(
+        thread_safe_sns: &'static LocalKey<RefCell<SnsWasmCanister<M>>>,
+        canister_api: &impl CanisterApi,
+        deploy_new_sns_request: DeployNewSnsRequest,
+    ) -> Result<(SubnetId, SnsCanisterIds), DeployError> {
+        let sns_init_payload = deploy_new_sns_request
             .sns_init_payload
-            .unwrap()
-            .build_canister_payloads(&canisters.clone().try_into().unwrap())
-            .unwrap();
+            // Validate presence
+            .ok_or_else(|| "sns_init_payload is a required field".to_string())
+            // Validate contents
+            .and_then(|init_payload| init_payload.validate().map_err(|e| e.to_string()))
+            .map_err(validation_deploy_error)?;
 
-        let latest_wasms =
-            thread_safe_sns.with(|sns_wasms| sns_wasms.borrow().get_latest_version_wasms());
+        let subnet_id = thread_safe_sns
+            .with(|sns_canister| sns_canister.borrow().get_available_sns_subnet())
+            .map_err(validation_deploy_error)?;
 
-        // TODO(NNS1-1437) Refund cycles if this step fails
-        Self::install_wasms(canister_api, &canisters, latest_wasms, initial_payloads).await;
+        // Ensure we have WASMs available to install before proceeding (avoid unnecessary cleanup)
+        let latest_wasms = thread_safe_sns
+            .with(|sns_wasms| sns_wasms.borrow().get_latest_version_wasms())
+            .map_err(validation_deploy_error)?;
 
-        // TODO(NNS1-1437) Refund cycles if this step fails
-        Self::set_controllers(canister_api, &canisters).await;
+        // If the fee is not present, we fail.
+        canister_api
+            .message_has_enough_cycles(SNS_CREATION_FEE)
+            .map_err(validation_deploy_error)?;
 
+        // After this step, we need to delete the canisters if things fail
+        let canisters =
+            Self::create_sns_canisters(canister_api, subnet_id, INIITIAL_CANISTER_CREATION_CYCLES)
+                .await?;
+        // This step should never fail unless the step before it fails which would return
+        // an error.
+        let sns_init_canister_ids = canisters.clone().try_into().expect(
+            "This should never happen. Failed to convert SnsCanisterIds into correct type.",
+        );
+
+        // If that works, build the payloads
+        let initial_payloads = sns_init_payload
+            .build_canister_payloads(&sns_init_canister_ids)
+            // NOTE: This error path is not under test, because validate(), called above, should
+            // ensure this can never be triggered where validate() would succeed.
+            .map_err(|e| {
+                reversible_deploy_error(&canisters, subnet_id)(format!(
+                    "build_canister_payloads failed: {}",
+                    e
+                ))
+            })?;
+
+        // Install the wasms for the canisters.
+        Self::install_wasms(canister_api, &canisters, latest_wasms, initial_payloads)
+            .await
+            .map_err(reversible_deploy_error(&canisters, subnet_id))?;
+
+        // At this point, we cannot delete all the canisters necessarily, so we will have to fail
+        // and allow some other mechanism to retry setting the correct ownership.
+        Self::add_controllers(canister_api, &canisters)
+            .await
+            .map_err(reversible_deploy_error(&canisters, subnet_id))?;
+
+        // We record here because the remaining failures cannot be reversed, so it will be a deployed
+        // SNS, but that needs cleanup or extra cycles
         thread_safe_sns.with(|sns_canister| {
             sns_canister
                 .borrow_mut()
@@ -177,38 +362,129 @@ where
                 })
         });
 
-        DeployNewSnsResponse {
-            subnet_id: Some(subnet_id.get()),
-            canisters: Some(canisters),
-        }
+        // We combine the errors of the last two steps because at this point they should both be done
+        // even if one fails, since we can no longer back out
+        join_errors_or_ok(vec![
+            // Accept all remaining cycles and fund the canisters
+            Self::fund_canisters(canister_api, &canisters).await,
+            // Remove self as the controller
+            Self::remove_self_as_controller(canister_api, &canisters).await,
+        ])
+        .map_err(irreversible_depoy_error(&canisters, subnet_id))?;
+
+        Ok((subnet_id, canisters))
+    }
+
+    /// Accept remaining cycles in the request, subtract the cycles we've already used, and distribute
+    /// the remainder among the canisters
+    async fn fund_canisters(
+        canister_api: &impl CanisterApi,
+        canisters: &SnsCanisterIds,
+    ) -> Result<(), String> {
+        // Accept the remaining cycles in the request we need to fund the canisters
+        let remaining_unaccepted_cycles = canister_api.accept_message_cycles(None).unwrap();
+        let quarter_unused = remaining_unaccepted_cycles / 4;
+
+        let results =
+            futures::future::join_all(canisters.clone().into_named_tuples().into_iter().map(
+                |(label, canister_id)| async move {
+                    canister_api
+                        .send_cycles_to_canister(canister_id, quarter_unused)
+                        .await
+                        .map_err(|e| format!("Could not fund {} canister: {}", label, e))
+                },
+            ))
+            .await;
+
+        join_errors_or_ok(results)
     }
 
     /// Sets the controllers of the SNS canisters so that Root controls Governance + Ledger, and
     /// Governance controls Root
-    async fn set_controllers(canister_api: &impl CanisterApi, canisters: &SnsCanisterIds) {
-        // Set Root as controller of Ledger and Governance.
-        canister_api
-            .set_controller(
-                CanisterId::new(canisters.governance.unwrap()).unwrap(),
-                canisters.root.unwrap(),
-            )
-            .await
-            .expect("Unable to set Root as Governance canister controller.");
-        canister_api
-            .set_controller(
-                CanisterId::new(canisters.ledger.unwrap()).unwrap(),
-                canisters.root.unwrap(),
-            )
-            .await
-            .expect("Unable to set Root as Ledger canister controller.");
-        // Set Governance as controller of Root.
-        canister_api
-            .set_controller(
-                CanisterId::new(canisters.root.unwrap()).unwrap(),
-                canisters.governance.unwrap(),
-            )
-            .await
-            .expect("Unable to set Governance as Root canister controller.");
+    async fn add_controllers(
+        canister_api: &impl CanisterApi,
+        canisters: &SnsCanisterIds,
+    ) -> Result<(), String> {
+        let this_canister_id = canister_api.local_canister_id().get();
+
+        let set_controllers_results = vec![
+            // Set Root as controller of Governance.
+            canister_api
+                .set_controllers(
+                    CanisterId::new(canisters.governance.unwrap()).unwrap(),
+                    vec![this_canister_id, canisters.root.unwrap()],
+                )
+                .await
+                .map_err(|e| {
+                    format!(
+                        "Unable to set Root as Governance canister controller: {}",
+                        e
+                    )
+                }),
+            // Set root as controller of Ledger.
+            canister_api
+                .set_controllers(
+                    CanisterId::new(canisters.ledger.unwrap()).unwrap(),
+                    vec![this_canister_id, canisters.root.unwrap()],
+                )
+                .await
+                .map_err(|e| format!("Unable to set Root as Ledger canister controller: {}", e)),
+            // Set Governance as controller of Root.
+            canister_api
+                .set_controllers(
+                    CanisterId::new(canisters.root.unwrap()).unwrap(),
+                    vec![this_canister_id, canisters.governance.unwrap()],
+                )
+                .await
+                .map_err(|e| {
+                    format!(
+                        "Unable to set Governance as Root canister controller: {}",
+                        e
+                    )
+                }),
+        ];
+
+        join_errors_or_ok(set_controllers_results)
+    }
+
+    /// Remove the SNS wasm canister as the controller of the canisters
+    async fn remove_self_as_controller(
+        canister_api: &impl CanisterApi,
+        canisters: &SnsCanisterIds,
+    ) -> Result<(), String> {
+        let set_controllers_results = vec![
+            // Removing self, leaving root.
+            canister_api
+                .set_controllers(
+                    CanisterId::new(canisters.governance.unwrap()).unwrap(),
+                    vec![canisters.root.unwrap()],
+                )
+                .await
+                .map_err(|e| {
+                    format!(
+                        "Unable to remove SNS-WASM as Governance's controller: {}",
+                        e
+                    )
+                }),
+            // Removing self, leaving root.
+            canister_api
+                .set_controllers(
+                    CanisterId::new(canisters.ledger.unwrap()).unwrap(),
+                    vec![canisters.root.unwrap()],
+                )
+                .await
+                .map_err(|e| format!("Unable to remove SNS-WASM as Ledger's controller: {}", e)),
+            // Removing self, leaving governance.
+            canister_api
+                .set_controllers(
+                    CanisterId::new(canisters.root.unwrap()).unwrap(),
+                    vec![canisters.governance.unwrap()],
+                )
+                .await
+                .map_err(|e| format!("Unable to remove SNS-WASM as Root's controller: {}", e)),
+        ];
+
+        join_errors_or_ok(set_controllers_results)
     }
 
     /// Install the SNS Wasms onto the canisters with the specified payloads
@@ -217,73 +493,175 @@ where
         canisters: &SnsCanisterIds,
         latest_wasms: SnsWasms,
         init_payloads: SnsCanisterInitPayloads,
-    ) {
-        let mut results = futures::future::join_all(vec![
-            canister_api.install_wasm(
-                CanisterId::new(canisters.root.unwrap()).unwrap(),
-                latest_wasms.root,
-                Encode!(&init_payloads.root).unwrap(),
-            ),
-            canister_api.install_wasm(
-                CanisterId::new(canisters.governance.unwrap()).unwrap(),
-                latest_wasms.governance,
-                Encode!(&init_payloads.governance).unwrap(),
-            ),
-            canister_api.install_wasm(
-                CanisterId::new(canisters.ledger.unwrap()).unwrap(),
-                latest_wasms.ledger,
-                Encode!(&init_payloads.ledger).unwrap(),
-            ),
-        ])
-        .await;
+    ) -> Result<(), String> {
+        let results = zip(
+            vec!["Root", "Governance", "Ledger"],
+            futures::future::join_all(vec![
+                canister_api.install_wasm(
+                    CanisterId::new(canisters.root.unwrap()).unwrap(),
+                    latest_wasms.root,
+                    Encode!(&init_payloads.root).unwrap(),
+                ),
+                canister_api.install_wasm(
+                    CanisterId::new(canisters.governance.unwrap()).unwrap(),
+                    latest_wasms.governance,
+                    Encode!(&init_payloads.governance).unwrap(),
+                ),
+                canister_api.install_wasm(
+                    CanisterId::new(canisters.ledger.unwrap()).unwrap(),
+                    latest_wasms.ledger,
+                    Encode!(&init_payloads.ledger).unwrap(),
+                ),
+            ])
+            .await,
+        )
+        .into_iter()
+        .map(|(label, result)| {
+            result.map_err(|e| format!("Error installing {} WASM: {}", label, e))
+        })
+        .collect();
 
-        results.remove(0).expect("Could not install Root WASM");
-        results
-            .remove(0)
-            .expect("Could not install Governance WASM");
-        results.remove(0).expect("Could not install Ledger WASM");
+        join_errors_or_ok(results)
     }
 
-    /// Create the Canisters for the SNS to be deployed
+    /// Creates the Canisters for the SNS to be deployed, or returns a ReversibleDeployError
     async fn create_sns_canisters(
         canister_api: &impl CanisterApi,
         subnet_id: SubnetId,
-    ) -> SnsCanisterIds {
-        // TODO(NNS1-1437) How many cycles should each canister be allocated
+        initial_cycles_per_canister: u64,
+    ) -> Result<SnsCanisterIds, DeployError> {
+        // Accept enough cycles to simply create the canisters.
+        canister_api
+            .accept_message_cycles(Some(initial_cycles_per_canister.saturating_mul(4)))
+            .map_err(|e| {
+                DeployError::Reversible(RerversibleDeployError {
+                    message: format!(
+                        "Could not accept cycles from request needed to create canisters: {}",
+                        e
+                    ),
+                    canisters_to_delete: None,
+                    subnet: None,
+                })
+            })?;
+
         let this_canister_id = canister_api.local_canister_id().get();
-        let root = canister_api
-            .create_canister(subnet_id, this_canister_id, Cycles::new(1_000_000_000))
-            .await
-            .unwrap();
+        let new_canister = || {
+            canister_api.create_canister(
+                subnet_id,
+                this_canister_id,
+                Cycles::new(initial_cycles_per_canister.into()),
+            )
+        };
 
-        let governance = canister_api
-            .create_canister(subnet_id, this_canister_id, Cycles::new(1_000_000_000))
-            .await
-            .unwrap();
+        // Create these in order instead of join_all to get deterministic ordering for tests
+        let canisters_attempted = vec![
+            new_canister().await,
+            new_canister().await,
+            new_canister().await,
+            new_canister().await,
+        ];
+        let canisters_attempted_count = canisters_attempted.len();
 
-        let ledger = canister_api
-            .create_canister(subnet_id, this_canister_id, Cycles::new(1_000_000_000))
-            .await
-            .unwrap();
+        let mut canisters_created = canisters_attempted
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
 
-        let swap = canister_api
-            .create_canister(subnet_id, this_canister_id, Cycles::new(1_000_000_000))
-            .await
-            .unwrap();
+        let canisters_created_count = canisters_created.len();
 
-        SnsCanisterIds {
-            governance: Some(governance.get()),
-            root: Some(root.get()),
-            ledger: Some(ledger.get()),
-            // TODO - do we always deploy with SWAP?
-            swap: Some(swap.get()),
+        if canisters_created_count < canisters_attempted_count {
+            let next = |c: &mut Vec<CanisterId>| {
+                if !c.is_empty() {
+                    Some(c.remove(0).get())
+                } else {
+                    None
+                }
+            };
+            let canisters_to_delete = SnsCanisterIds {
+                root: next(&mut canisters_created),
+                governance: next(&mut canisters_created),
+                ledger: next(&mut canisters_created),
+                swap: next(&mut canisters_created),
+            };
+            return Err(DeployError::Reversible(RerversibleDeployError {
+                message: format!(
+                    "Could not create needed canisters.  Only created {} but 4 needed.",
+                    canisters_created_count
+                ),
+                canisters_to_delete: Some(canisters_to_delete),
+                subnet: None,
+            }));
+        }
+
+        Ok(SnsCanisterIds {
+            root: Some(canisters_created.remove(0).get()),
+            governance: Some(canisters_created.remove(0).get()),
+            ledger: Some(canisters_created.remove(0).get()),
+            swap: Some(canisters_created.remove(0).get()),
+        })
+    }
+
+    // Attempt to clean up canisters that were created.
+    async fn try_cleanup_reversible_deploy_error(
+        canister_api: &impl CanisterApi,
+        deploy_error: RerversibleDeployError,
+    ) -> DeployNewSnsResponse {
+        let success_response = DeployNewSnsResponse {
+            subnet_id: None,
+            canisters: None,
+            error: Some(SnsWasmError {
+                message: deploy_error.message.clone(),
+            }),
+        };
+        let named_canister_tuples = match deploy_error.canisters_to_delete.clone() {
+            None => return success_response,
+            Some(canisters) => canisters.into_named_tuples(),
+        };
+
+        let results = futures::future::join_all(
+            named_canister_tuples
+                .into_iter()
+                .map(|(label, canister_id)| async move {
+                    (label, canister_api.delete_canister(canister_id).await)
+                })
+                .collect::<Vec<_>>(),
+        )
+        .await;
+
+        // Map labels together with Option(Result)
+        let results = results
+            .into_iter()
+            .map(|(name, result)| {
+                result.map_err(|e| format!("Could not delete {} canister: {}", name, e))
+            })
+            .collect::<Vec<_>>();
+
+        match join_errors_or_ok(results) {
+            Ok(_) => success_response,
+            Err(message) => {
+                let message = format!(
+                    "Failure deploying, and could not finish cleanup.  Some canisters \
+                                may not have been deleted. Deployment failure was caused by: '{}' \
+                                \n Cleanup failure was caused by: '{}'",
+                    deploy_error.message, message
+                );
+                DeployNewSnsResponse {
+                    subnet_id: deploy_error.subnet.map(|s| s.get()),
+                    canisters: deploy_error.canisters_to_delete,
+                    error: Some(SnsWasmError { message }),
+                }
+            }
         }
     }
 
     /// Get an available subnet to create canisters on
-    pub fn get_available_sns_subnet(&self) -> SubnetId {
+    fn get_available_sns_subnet(&self) -> Result<SubnetId, String> {
         // TODO We need a way to find "available" subnets based on SNS deployments (limiting numbers per Subnet)
-        self.sns_subnet_ids[0]
+        if !self.sns_subnet_ids.is_empty() {
+            Ok(self.sns_subnet_ids[0])
+        } else {
+            Err("No SNS Subnet is available".to_string())
+        }
     }
 
     /// Given the SnsVersion of an SNS instance, returns the SnsVersion that this SNS instance
@@ -300,33 +678,38 @@ where
     }
 
     /// Get the latest version of the WASMs based on the latest SnsVersion
-    fn get_latest_version_wasms(&self) -> SnsWasms {
-        let root_hash = self.upgrade_path.latest_version.root_wasm_hash.clone();
-        let governance_hash = self
-            .upgrade_path
-            .latest_version
-            .governance_wasm_hash
-            .clone();
-        let ledger_hash = self.upgrade_path.latest_version.ledger_wasm_hash.clone();
+    fn get_latest_version_wasms(&self) -> Result<SnsWasms, String> {
+        let version = &self.upgrade_path.latest_version;
 
         let root = self
-            .read_wasm(&vec_to_hash(root_hash))
-            .expect("No root wasm with that hash found")
-            .wasm;
-        let governance = self
-            .read_wasm(&vec_to_hash(governance_hash))
-            .expect("No governance wasm found with that hash")
-            .wasm;
-        let ledger = self
-            .read_wasm(&vec_to_hash(ledger_hash))
-            .expect("No ledger wasm found with that hash")
+            .read_wasm(
+                &vec_to_hash(version.root_wasm_hash.clone())
+                    .map_err(|_| "No root wasm set for this version.".to_string())?,
+            )
+            .ok_or_else(|| "Root wasm for this version not found in storage.".to_string())?
             .wasm;
 
-        SnsWasms {
+        let governance = self
+            .read_wasm(
+                &vec_to_hash(version.governance_wasm_hash.clone())
+                    .map_err(|_| "No governance wasm set for this version.".to_string())?,
+            )
+            .ok_or_else(|| "Governance wasm for this version not found in storage.".to_string())?
+            .wasm;
+
+        let ledger = self
+            .read_wasm(
+                &vec_to_hash(version.ledger_wasm_hash.clone())
+                    .map_err(|_| "No ledger wasm set for this version.".to_string())?,
+            )
+            .ok_or_else(|| "Ledger wasm for this version not found in storage.".to_string())?
+            .wasm;
+
+        Ok(SnsWasms {
             root,
             governance,
             ledger,
-        }
+        })
     }
 
     /// Write canister state to stable memory
@@ -345,14 +728,21 @@ where
     }
 }
 
-/// Converts a vector to a sha256 hash, or panics if the vector is the wrong length
-pub fn vec_to_hash(v: Vec<u8>) -> [u8; 32] {
+/// Converts a vector of u8s to array of length 32 (the size of our sha256 hash)
+/// or returns an error if wrong length is given
+pub fn vec_to_hash(v: Vec<u8>) -> Result<[u8; 32], String> {
     let boxed_slice = v.into_boxed_slice();
     let boxed_array: Box<[u8; 32]> = match boxed_slice.try_into() {
         Ok(hash) => hash,
-        Err(o) => panic!("Expected a hash of length {} but it was {}", 32, o.len()),
+        Err(original) => {
+            return Err(format!(
+                "Expected a hash of length {} but it was {}",
+                32,
+                original.len()
+            ))
+        }
     };
-    *boxed_array
+    Ok(*boxed_array)
 }
 
 /// Specifies the upgrade path for SNS instances
@@ -396,14 +786,30 @@ mod test {
     use ic_sns_init::pb::v1::SnsInitPayload;
     use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
     use ledger_canister::LedgerCanisterInitPayload;
+    use pretty_assertions::{assert_eq, assert_ne};
     use std::sync::{Arc, Mutex};
+    use std::vec;
+
+    const CANISTER_CREATION_CYCLES: u64 = INIITIAL_CANISTER_CREATION_CYCLES * 4;
 
     struct TestCanisterApi {
         canisters_created: Arc<Mutex<u64>>,
         // keep track of calls to our mocked methods
         #[allow(clippy::type_complexity)]
         pub install_wasm_calls: Arc<Mutex<Vec<(CanisterId, Vec<u8>, Vec<u8>)>>>,
-        pub set_controller_calls: Arc<Mutex<Vec<(CanisterId, PrincipalId)>>>,
+        #[allow(clippy::type_complexity)]
+        pub set_controllers_calls: Arc<Mutex<Vec<(CanisterId, Vec<PrincipalId>)>>>,
+        pub cycles_accepted: Arc<Mutex<Vec<u64>>>,
+        #[allow(clippy::type_complexity)]
+        pub cycles_sent: Arc<Mutex<Vec<(CanisterId, u64)>>>,
+        pub canisters_deleted: Arc<Mutex<Vec<CanisterId>>>,
+        // How many cycles does the pretend request contain?
+        pub cycles_found_in_request: Arc<Mutex<u64>>,
+        // Errors that can be thrown at some nth function call
+        pub errors_on_create_canister: Arc<Mutex<Vec<Option<String>>>>,
+        pub errors_on_set_controller: Arc<Mutex<Vec<Option<String>>>>,
+        pub errors_on_delete_canister: Arc<Mutex<Vec<Option<String>>>>,
+        pub errors_on_install_wasms: Arc<Mutex<Vec<Option<String>>>>,
     }
 
     #[async_trait]
@@ -418,10 +824,30 @@ mod test {
             _controller_id: PrincipalId,
             _cycles: Cycles,
         ) -> Result<CanisterId, String> {
+            let mut errors = self.errors_on_create_canister.lock().unwrap();
+            if errors.len() > 0 {
+                if let Some(message) = errors.remove(0) {
+                    return Err(message);
+                }
+            }
+
             let mut data = self.canisters_created.lock().unwrap();
             *data += 1;
             let canister_id = canister_test_id(*data);
             Ok(canister_id)
+        }
+
+        async fn delete_canister(&self, canister: CanisterId) -> Result<(), String> {
+            self.canisters_deleted.lock().unwrap().push(canister);
+
+            let mut errors = self.errors_on_delete_canister.lock().unwrap();
+            if errors.len() > 0 {
+                if let Some(message) = errors.remove(0) {
+                    return Err(message);
+                }
+            }
+
+            Ok(())
         }
 
         async fn install_wasm(
@@ -435,19 +861,67 @@ mod test {
                 .unwrap()
                 .push((target_canister, wasm, init_payload));
 
+            let mut errors = self.errors_on_install_wasms.lock().unwrap();
+            if errors.len() > 0 {
+                if let Some(message) = errors.remove(0) {
+                    return Err(message);
+                }
+            }
+
             Ok(())
         }
 
-        async fn set_controller(
+        async fn set_controllers(
             &self,
             canister: CanisterId,
-            controller: PrincipalId,
+            controllers: Vec<PrincipalId>,
         ) -> Result<(), String> {
-            self.set_controller_calls
+            self.set_controllers_calls
                 .lock()
                 .unwrap()
-                .push((canister, controller));
+                .push((canister, controllers));
+
+            let mut errors = self.errors_on_set_controller.lock().unwrap();
+            if errors.len() > 0 {
+                if let Some(message) = errors.remove(0) {
+                    return Err(message);
+                }
+            }
+
             Ok(())
+        }
+
+        fn message_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
+            let amount = *self.cycles_found_in_request.lock().unwrap();
+            if amount < required_cycles {
+                return Err(format!(
+                    "Not enough cycles in request.  Required: {}. Found: {}",
+                    required_cycles, amount
+                ));
+            }
+            Ok(amount)
+        }
+
+        async fn send_cycles_to_canister(
+            &self,
+            target_canister: CanisterId,
+            cycles: u64,
+        ) -> Result<(), String> {
+            self.cycles_sent
+                .lock()
+                .unwrap()
+                .push((target_canister, cycles));
+            Ok(())
+        }
+
+        fn accept_message_cycles(&self, cycles: Option<u64>) -> Result<u64, String> {
+            let cycles = cycles.unwrap_or_else(|| *self.cycles_found_in_request.lock().unwrap());
+            self.message_has_enough_cycles(cycles)?;
+            self.cycles_accepted.lock().unwrap().push(cycles);
+
+            *self.cycles_found_in_request.lock().unwrap() -= cycles;
+
+            Ok(cycles)
         }
     }
 
@@ -455,7 +929,15 @@ mod test {
         TestCanisterApi {
             canisters_created: Arc::new(Mutex::new(0)),
             install_wasm_calls: Arc::new(Mutex::new(vec![])),
-            set_controller_calls: Arc::new(Mutex::new(vec![])),
+            set_controllers_calls: Arc::new(Mutex::new(vec![])),
+            cycles_accepted: Arc::new(Mutex::new(vec![])),
+            cycles_sent: Arc::new(Mutex::new(vec![])),
+            canisters_deleted: Arc::new(Mutex::new(vec![])),
+            cycles_found_in_request: Arc::new(Mutex::new(SNS_CREATION_FEE)),
+            errors_on_create_canister: Arc::new(Mutex::new(vec![])),
+            errors_on_set_controller: Arc::new(Mutex::new(vec![])),
+            errors_on_delete_canister: Arc::new(Mutex::new(vec![])),
+            errors_on_install_wasms: Arc::new(Mutex::new(vec![])),
         }
     }
 
@@ -545,10 +1027,12 @@ mod test {
         });
 
         assert_eq!(
-            response.result.unwrap(),
-            add_wasm_response::Result::Error(add_wasm_response::AddWasmError {
-                error: "SnsWasm::canister_type cannot be 'Unspecified' (0).".to_string()
-            })
+            response,
+            AddWasmResponse {
+                result: Some(add_wasm_response::Result::Error(SnsWasmError {
+                    message: "SnsWasm::canister_type cannot be 'Unspecified' (0).".to_string()
+                }))
+            }
         )
     }
 
@@ -566,13 +1050,13 @@ mod test {
         });
 
         assert_eq!(
-            response.result.unwrap(),
-            add_wasm_response::Result::Error(add_wasm_response::AddWasmError {
-                error:
-                    "Invalid value for SnsWasm::canister_type.  See documentation for valid values"
-                        .to_string()
-            })
-        )
+            response,
+            AddWasmResponse {
+                result: Some(add_wasm_response::Result::Error(
+                    SnsWasmError {
+                        message: "Invalid value for SnsWasm::canister_type.  See documentation for valid values"
+                            .to_string()}))
+            } );
     }
 
     #[test]
@@ -589,8 +1073,8 @@ mod test {
         });
         assert_eq!(
             failure.result.unwrap(),
-            add_wasm_response::Result::Error(AddWasmError {
-                error: format!(
+            add_wasm_response::Result::Error(SnsWasmError {
+                message: format!(
                     "Invalid Sha256 given for submitted WASM bytes. Provided hash was \
                 '{}'  but calculated hash was \
                 '{}'",
@@ -607,10 +1091,10 @@ mod test {
         });
 
         assert_eq!(
-            success.result.unwrap(),
-            add_wasm_response::Result::Ok(AddWasmOk {
-                hash: valid_hash.to_vec()
-            })
+            success,
+            AddWasmResponse {
+                result: Some(add_wasm_response::Result::Hash(valid_hash.to_vec()))
+            }
         );
     }
 
@@ -687,6 +1171,428 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_missing_init_payload() {
+        let canister_api = new_canister_api();
+
+        test_deploy_new_sns_request(
+            None,
+            canister_api,
+            Some(subnet_test_id(1)),
+            true,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            DeployNewSnsResponse {
+                canisters: None,
+                subnet_id: None,
+                error: Some(SnsWasmError {
+                    message: "sns_init_payload is a required field".to_string(),
+                }),
+            },
+        )
+        .await;
+    }
+    #[tokio::test]
+    async fn test_invalid_init_payload() {
+        let canister_api = new_canister_api();
+        let mut payload = SnsInitPayload::with_valid_values_for_testing();
+        payload.token_symbol = None;
+
+        test_deploy_new_sns_request(
+            Some(payload),
+            canister_api,
+            Some(subnet_test_id(1)),
+            true,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            DeployNewSnsResponse {
+                canisters: None,
+                subnet_id: None,
+                error: Some(SnsWasmError {
+                    message: "Error: token-symbol must be specified".to_string(),
+                }),
+            },
+        )
+        .await;
+    }
+    #[tokio::test]
+    async fn test_missing_available_subnet() {
+        let canister_api = new_canister_api();
+
+        test_deploy_new_sns_request(
+            Some(SnsInitPayload::with_valid_values_for_testing()),
+            canister_api,
+            None,
+            true,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            DeployNewSnsResponse {
+                canisters: None,
+                subnet_id: None,
+                error: Some(SnsWasmError {
+                    message: "No SNS Subnet is available".to_string(),
+                }),
+            },
+        )
+        .await;
+    }
+    #[tokio::test]
+    async fn test_wasms_not_available() {
+        let canister_api = new_canister_api();
+
+        test_deploy_new_sns_request(
+            Some(SnsInitPayload::with_valid_values_for_testing()),
+            canister_api,
+            Some(subnet_test_id(1)),
+            false,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            DeployNewSnsResponse {
+                canisters: None,
+                subnet_id: None,
+                error: Some(SnsWasmError {
+                    message: "No root wasm set for this version.".to_string(),
+                }),
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_insufficient_cycles_in_request() {
+        let mut canister_api = new_canister_api();
+        canister_api.cycles_found_in_request = Arc::new(Mutex::new(100000));
+
+        test_deploy_new_sns_request(
+            Some(SnsInitPayload::with_valid_values_for_testing()),
+            canister_api,
+            Some(subnet_test_id(1)),
+            true,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            DeployNewSnsResponse {
+                subnet_id: None,
+                canisters: None,
+                error: Some(SnsWasmError {
+                    message: format!(
+                        "Not enough cycles in request.  Required: {}. Found: {}",
+                        SNS_CREATION_FEE, 100000
+                    ),
+                }),
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_failure_if_canisters_cannot_be_created() {
+        let canister_api = new_canister_api();
+        canister_api
+            .errors_on_create_canister
+            .lock()
+            .unwrap()
+            .push(Some("Canister Creation Failed from our test".to_string()));
+
+        let root_id = canister_test_id(1);
+        let governance_id = canister_test_id(2);
+        let ledger_id = canister_test_id(3);
+
+        test_deploy_new_sns_request(
+            Some(SnsInitPayload::with_valid_values_for_testing()),
+            canister_api,
+            Some(subnet_test_id(1)),
+            true,
+            vec![CANISTER_CREATION_CYCLES],
+            vec![],
+            vec![root_id, governance_id, ledger_id],
+            vec![],
+            DeployNewSnsResponse {
+                canisters: None,
+                subnet_id: None,
+                error: Some(SnsWasmError {
+                    message: "Could not create needed canisters.  Only created 3 but 4 needed."
+                        .to_string(),
+                }),
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn fail_install_wasms() {
+        let canister_api = new_canister_api();
+        // don't throw an error until 3rd call to API
+        canister_api
+            .errors_on_install_wasms
+            .lock()
+            .unwrap()
+            .push(None);
+        canister_api
+            .errors_on_install_wasms
+            .lock()
+            .unwrap()
+            .push(None);
+        canister_api
+            .errors_on_install_wasms
+            .lock()
+            .unwrap()
+            .push(Some("Test Failure".to_string()));
+
+        let root_id = canister_test_id(1);
+        let governance_id = canister_test_id(2);
+        let ledger_id = canister_test_id(3);
+        let swap_id = canister_test_id(4);
+
+        test_deploy_new_sns_request(
+            Some(SnsInitPayload::with_valid_values_for_testing()),
+            canister_api,
+            Some(subnet_test_id(1)),
+            true,
+            vec![CANISTER_CREATION_CYCLES],
+            vec![],
+            vec![root_id, governance_id, ledger_id, swap_id],
+            vec![],
+            DeployNewSnsResponse {
+                subnet_id: None,
+                canisters: None,
+                error: Some(SnsWasmError {
+                    message: "Error installing Ledger WASM: Test Failure".to_string(),
+                }),
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn fail_add_controllers() {
+        let canister_api = new_canister_api();
+        canister_api
+            .errors_on_set_controller
+            .lock()
+            .unwrap()
+            .push(None);
+        canister_api
+            .errors_on_set_controller
+            .lock()
+            .unwrap()
+            .push(Some("Set controller fail".to_string()));
+
+        let this_id = canister_test_id(0);
+
+        let root_id = canister_test_id(1);
+        let governance_id = canister_test_id(2);
+        let ledger_id = canister_test_id(3);
+        let swap_id = canister_test_id(4);
+
+        test_deploy_new_sns_request(
+            Some(SnsInitPayload::with_valid_values_for_testing()),
+            canister_api,
+            Some(subnet_test_id(1)),
+            true,
+            vec![CANISTER_CREATION_CYCLES],
+            vec![],
+            vec![root_id, governance_id, ledger_id, swap_id],
+            vec![
+                (governance_id, vec![this_id.get(), root_id.get()]),
+                (ledger_id, vec![this_id.get(), root_id.get()]),
+                (root_id, vec![this_id.get(), governance_id.get()]),
+            ],
+            DeployNewSnsResponse {
+                subnet_id: None,
+                canisters: None,
+                error: Some(SnsWasmError {
+                    message:
+                        "Unable to set Root as Ledger canister controller: Set controller fail"
+                            .to_string(),
+                }),
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn fail_remove_self_as_controllers() {
+        let canister_api = new_canister_api();
+        let mut errors = vec![
+            None,
+            None,
+            None,
+            None,
+            Some("Set controller fail".to_string()),
+        ];
+        canister_api
+            .errors_on_set_controller
+            .lock()
+            .unwrap()
+            .append(&mut errors);
+
+        let this_id = canister_test_id(0);
+
+        let root_id = canister_test_id(1);
+        let governance_id = canister_test_id(2);
+        let ledger_id = canister_test_id(3);
+        let swap_id = canister_test_id(4);
+
+        let sent_cycles = (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES) / 4;
+
+        test_deploy_new_sns_request(
+            Some(SnsInitPayload::with_valid_values_for_testing()),
+            canister_api,
+            Some(subnet_test_id(1)),
+            true,
+            vec![
+                CANISTER_CREATION_CYCLES,
+                SNS_CREATION_FEE - CANISTER_CREATION_CYCLES,
+            ],
+            vec![
+                (root_id, sent_cycles),
+                (governance_id, sent_cycles),
+                (ledger_id, sent_cycles),
+                (swap_id, sent_cycles),
+            ],
+            vec![],
+            vec![
+                (governance_id, vec![this_id.get(), root_id.get()]),
+                (ledger_id, vec![this_id.get(), root_id.get()]),
+                (root_id, vec![this_id.get(), governance_id.get()]),
+                (governance_id, vec![root_id.get()]),
+                (ledger_id, vec![root_id.get()]),
+                (root_id, vec![governance_id.get()]),
+            ],
+            DeployNewSnsResponse {
+                subnet_id: Some(subnet_test_id(1).get()),
+                canisters: Some(SnsCanisterIds {
+                    root: Some(root_id.get()),
+                    ledger: Some(ledger_id.get()),
+                    governance: Some(governance_id.get()),
+                    swap: Some(swap_id.get()),
+                }),
+
+                error: Some(SnsWasmError {
+                    message:
+                        "Unable to remove SNS-WASM as Ledger's controller: Set controller fail"
+                            .to_string(),
+                }),
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn fail_cleanup() {
+        let canister_api = new_canister_api();
+        canister_api
+            .errors_on_install_wasms
+            .lock()
+            .unwrap()
+            .push(None);
+
+        canister_api
+            .errors_on_install_wasms
+            .lock()
+            .unwrap()
+            .push(Some("Install WASM fail".to_string()));
+
+        canister_api
+            .errors_on_delete_canister
+            .lock()
+            .unwrap()
+            .push(Some("Test Failure 1".to_string()));
+
+        canister_api
+            .errors_on_delete_canister
+            .lock()
+            .unwrap()
+            .push(Some("Test Failure 2".to_string()));
+
+        let root_id = canister_test_id(1);
+        let governance_id = canister_test_id(2);
+        let ledger_id = canister_test_id(3);
+        let swap_id = canister_test_id(4);
+
+        test_deploy_new_sns_request(
+            Some(SnsInitPayload::with_valid_values_for_testing()),
+            canister_api,
+            Some(subnet_test_id(1)),
+            true,
+            vec![CANISTER_CREATION_CYCLES],
+            vec![],
+            vec![root_id, governance_id, ledger_id, swap_id],
+            vec![],
+            DeployNewSnsResponse {
+                subnet_id: Some(subnet_test_id(1).get()),
+                canisters: Some(SnsCanisterIds {
+                    root: Some(root_id.get()),
+                    ledger: Some(ledger_id.get()),
+                    governance: Some(governance_id.get()),
+                    swap: Some(swap_id.get()),
+                }),
+                error: Some(SnsWasmError {
+                    message: "Failure deploying, and could not finish cleanup.  Some canisters may not have been deleted. Deployment failure was caused by: 'Error installing Governance WASM: Install WASM fail' \n Cleanup failure was caused by: 'Could not delete Root canister: Test Failure 1\nCould not delete Governance canister: Test Failure 2'".to_string()
+                }),
+            },
+        )
+        .await;
+    }
+
+    async fn test_deploy_new_sns_request(
+        sns_init_payload: Option<SnsInitPayload>,
+        canister_api: TestCanisterApi,
+        available_subnet: Option<SubnetId>,
+        wasm_available: bool,
+        expected_accepted_cycles: Vec<u64>,
+        expected_sent_cycles: Vec<(CanisterId, u64)>,
+        expected_canisters_destroyed: Vec<CanisterId>,
+        expected_set_controllers_calls: Vec<(CanisterId, Vec<PrincipalId>)>,
+        expected_response: DeployNewSnsResponse,
+    ) {
+        thread_local! {
+            static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
+        }
+
+        CANISTER_WRAPPER.with(|c| {
+            if available_subnet.is_some() {
+                c.borrow_mut()
+                    .set_sns_subnets(vec![available_subnet.unwrap()]);
+            }
+            if wasm_available {
+                add_mock_wasms(&mut c.borrow_mut());
+            }
+        });
+
+        let response = SnsWasmCanister::deploy_new_sns(
+            &CANISTER_WRAPPER,
+            &canister_api,
+            DeployNewSnsRequest { sns_init_payload },
+        )
+        .await;
+
+        assert_eq!(response, expected_response);
+
+        // Assert that we accepted the cycles
+        let cycles_accepted = &*canister_api.cycles_accepted.lock().unwrap();
+        assert_eq!(&expected_accepted_cycles, cycles_accepted);
+
+        let cycles_sent = &*canister_api.cycles_sent.lock().unwrap();
+        assert_eq!(&expected_sent_cycles, cycles_sent);
+
+        let canisters_destroyed = &*canister_api.canisters_deleted.lock().unwrap();
+        assert_eq!(&expected_canisters_destroyed, canisters_destroyed);
+
+        let set_controllers_calls = &*canister_api.set_controllers_calls.lock().unwrap();
+        assert_eq!(&expected_set_controllers_calls, set_controllers_calls);
+    }
+
+    #[tokio::test]
     async fn test_deploy_new_sns_to_subnet_creates_canisters_and_installs_with_correct_params() {
         thread_local! {
             static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
@@ -699,7 +1605,8 @@ mod test {
         });
 
         let init_payload = SnsInitPayload::with_valid_values_for_testing();
-        let canister_api = new_canister_api();
+        let mut canister_api = new_canister_api();
+        canister_api.cycles_found_in_request = Arc::new(Mutex::new(SNS_CREATION_FEE + 100));
 
         let response = SnsWasmCanister::deploy_new_sns(
             &CANISTER_WRAPPER,
@@ -724,7 +1631,8 @@ mod test {
                     governance: Some(governance_id.get()),
                     ledger: Some(ledger_id.get()),
                     swap: Some(swap_id.get())
-                })
+                }),
+                error: None
             }
         );
 
@@ -742,6 +1650,29 @@ mod test {
                 .unwrap(),
             )
             .unwrap();
+
+        // Assert that we accepted the cycles
+        let cycles_accepted = &*canister_api.cycles_accepted.lock().unwrap();
+        assert_eq!(
+            &vec![
+                CANISTER_CREATION_CYCLES,
+                SNS_CREATION_FEE + 100 - CANISTER_CREATION_CYCLES
+            ],
+            cycles_accepted
+        );
+
+        // We subtract our initial creation fee sent, then send the remainder here
+        let fourth_remaining = (SNS_CREATION_FEE + 100 - CANISTER_CREATION_CYCLES) / 4;
+        let cycles_sent = &*canister_api.cycles_sent.lock().unwrap();
+        assert_eq!(
+            &vec![
+                (root_id, fourth_remaining),
+                (governance_id, fourth_remaining),
+                (ledger_id, fourth_remaining),
+                (swap_id, fourth_remaining)
+            ],
+            cycles_sent
+        );
 
         // Now we assert that the expected canisters got the expected wasms with expected init params
         let SnsCanisterInitPayloads {
@@ -789,12 +1720,29 @@ mod test {
                 ledger
             )
         );
+
+        let set_controllers_calls = &*canister_api.set_controllers_calls.lock().unwrap();
+
+        let this_id = canister_test_id(0);
+        assert_eq!(
+            &vec![
+                (governance_id, vec![this_id.get(), root_id.get()]),
+                (ledger_id, vec![this_id.get(), root_id.get()]),
+                (root_id, vec![this_id.get(), governance_id.get()]),
+                (governance_id, vec![root_id.get()]),
+                (ledger_id, vec![root_id.get()]),
+                (root_id, vec![governance_id.get()]),
+            ],
+            set_controllers_calls
+        );
     }
 
     #[tokio::test]
     async fn test_deploy_new_sns_records_root_canisters() {
         let test_id = subnet_test_id(1);
-        let canister_api = new_canister_api();
+        let mut canister_api = new_canister_api();
+        canister_api.cycles_found_in_request = Arc::new(Mutex::new(SNS_CREATION_FEE));
+
         thread_local! {
             static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
         }
@@ -817,18 +1765,18 @@ mod test {
         .root
         .unwrap();
 
-        let root_canister_2 = SnsWasmCanister::deploy_new_sns(
+        // Add more cycles so our second call works
+        canister_api.cycles_found_in_request = Arc::new(Mutex::new(SNS_CREATION_FEE));
+        let response = SnsWasmCanister::deploy_new_sns(
             &CANISTER_WRAPPER,
             &canister_api,
             DeployNewSnsRequest {
                 sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing()),
             },
         )
-        .await
-        .canisters
-        .unwrap()
-        .root
-        .unwrap();
+        .await;
+        println!("{:?}", response);
+        let root_canister_2 = response.canisters.unwrap().root.unwrap();
 
         assert_ne!(root_canister_1, root_canister_2);
 

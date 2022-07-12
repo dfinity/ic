@@ -682,6 +682,7 @@ impl StateMachine {
         self.create_canister_with_cycles(Cycles::new(0), settings)
     }
 
+    /// Creates a new canister with a cycles balance and returns the canister principal.
     pub fn create_canister_with_cycles(
         &self,
         cycles: Cycles,
@@ -761,6 +762,15 @@ impl StateMachine {
         payload: Vec<u8>,
     ) -> Result<(), UserError> {
         self.install_wasm_in_mode(canister_id, CanisterInstallMode::Upgrade, wasm, payload)
+    }
+
+    /// Returns true if the canister with the specified id exists.
+    pub fn canister_exists(&self, canister: CanisterId) -> bool {
+        self.state_manager
+            .get_latest_state()
+            .take()
+            .canister_states
+            .contains_key(&canister)
     }
 
     /// Queries the canister with the specified ID using the anonymous principal.
@@ -984,6 +994,7 @@ impl StateMachine {
         assert_eq!(next_version, self.registry_client.get_latest_version());
     }
 
+    /// Return the subnet_ids from the internal RegistryClient
     pub fn get_subnet_ids(&self) -> Vec<SubnetId> {
         self.registry_client
             .get_subnet_ids(self.registry_client.get_latest_version())

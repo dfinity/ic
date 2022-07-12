@@ -4,7 +4,6 @@ use ic_nns_test_utils::sns_wasm;
 use ic_nns_test_utils::sns_wasm::{smallest_valid_wasm, test_wasm1};
 use ic_nns_test_utils::state_test_helpers::create_canister;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
-use ic_sns_wasm::pb::v1::add_wasm_response::AddWasmOk;
 use ic_sns_wasm::pb::v1::{add_wasm_response, AddWasmResponse, SnsVersion};
 use ic_state_machine_tests::StateMachine;
 
@@ -44,9 +43,7 @@ fn test_sns_wasm_upgrade() {
     assert_eq!(
         add_wasm_response,
         AddWasmResponse {
-            result: Some(add_wasm_response::Result::Ok(AddWasmOk {
-                hash: expected_hash.to_vec()
-            }))
+            result: Some(add_wasm_response::Result::Hash(expected_hash.to_vec()))
         }
     );
 
@@ -78,9 +75,7 @@ fn test_sns_wasm_upgrade() {
     assert_eq!(
         add_wasm_response,
         AddWasmResponse {
-            result: Some(add_wasm_response::Result::Ok(AddWasmOk {
-                hash: expected_hash2.to_vec()
-            }))
+            result: Some(add_wasm_response::Result::Hash(expected_hash2.to_vec()))
         }
     );
 

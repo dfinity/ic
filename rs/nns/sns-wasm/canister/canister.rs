@@ -1,14 +1,15 @@
 use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
+use dfn_core::api::Funds;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use dfn_core::{over, over_async, over_init};
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_ic00_types::CanisterInstallMode::Install;
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, InstallCodeArgs, Method,
-    SetControllerArgs,
+    CanisterIdRecord, CanisterSettingsArgs, CanisterStatusResultV2, CanisterStatusType,
+    CreateCanisterArgs, InstallCodeArgs, Method, UpdateSettingsArgs,
 };
 use ic_sns_wasm::canister_api::CanisterApi;
 use ic_sns_wasm::canister_stable_memory::CanisterStableMemory;
@@ -65,19 +66,32 @@ impl CanisterApi for CanisterApiImpl {
         )
         .await;
 
-        match result {
-            Ok(canister_id) => Ok(canister_id.get_canister_id()),
-            Err((code, msg)) => {
-                let err = format!(
-                    "Creating canister in subnet {} failed with code {}: {}",
-                    target_subnet,
-                    code.unwrap_or_default(),
-                    msg
-                );
-                println!("{}{}", LOG_PREFIX, err);
-                Err(err)
-            }
-        }
+        result
+            .map_err(handle_call_error(format!(
+                "Creating canister in subnet {} failed",
+                target_subnet
+            )))
+            .map(|record| record.get_canister_id())
+    }
+
+    /// See CanisterApi::delete_canister
+    async fn delete_canister(&self, canister: CanisterId) -> Result<(), String> {
+        // Try to stop the canister first
+        self.stop_canister(canister).await?;
+
+        // TODO(NNS1-1524) We need to collect the cycles from the canister before we delete it
+        let response: Result<(), (Option<i32>, String)> = dfn_core::call(
+            CanisterId::ic_00(),
+            "delete_canister",
+            dfn_candid::candid_one,
+            CanisterIdRecord::from(canister),
+        )
+        .await;
+
+        response.map_err(handle_call_error(format!(
+            "Failed to delete canister {}",
+            canister
+        )))
     }
 
     /// See CanisterApi::install_wasm
@@ -103,38 +117,148 @@ impl CanisterApi for CanisterApiImpl {
             (install_args,),
         )
         .await;
-        install_res.map_err(|(code, msg)| {
-            format!(
-                "{}{}",
-                code.map(|c| format!("error code {}: ", c))
-                    .unwrap_or_default(),
-                msg
-            )
-        })
+        install_res.map_err(handle_call_error(format!(
+            "Failed to install WASM on canister {}",
+            target_canister
+        )))
     }
 
     /// See CanisterApi::set_controller
-    async fn set_controller(
+    async fn set_controllers(
         &self,
         canister: CanisterId,
-        controller: PrincipalId,
+        controllers: Vec<PrincipalId>,
     ) -> Result<(), String> {
-        let set_controller_args = SetControllerArgs::new(canister, controller);
-        let set_result: Result<(), (Option<i32>, String)> = dfn_core::call(
+        let args = UpdateSettingsArgs {
+            canister_id: canister.get(),
+            settings: CanisterSettingsArgs {
+                controllers: Some(controllers),
+                // Leave everything else alone.
+                controller: None,
+                compute_allocation: None,
+                memory_allocation: None,
+                freezing_threshold: None,
+            },
+        };
+
+        let result: Result<(), (Option<i32>, String)> =
+            dfn_core::call(CanisterId::ic_00(), "update_settings", candid_one, args).await;
+
+        result.map_err(handle_call_error(format!(
+            "Failed to update controllers for canister {}",
+            canister
+        )))
+    }
+
+    fn message_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
+        let available = dfn_core::api::msg_cycles_available();
+
+        if available < required_cycles {
+            return Err(format!(
+                "Message execution requires at least {} cycles, but only {} cycles were sent.",
+                required_cycles, available,
+            ));
+        }
+        Ok(available)
+    }
+
+    fn accept_message_cycles(&self, cycles: Option<u64>) -> Result<u64, String> {
+        let cycles = cycles.unwrap_or_else(|| dfn_core::api::msg_cycles_available());
+        self.message_has_enough_cycles(cycles)?;
+
+        let accepted = dfn_core::api::msg_cycles_accept(cycles);
+        Ok(accepted)
+    }
+
+    async fn send_cycles_to_canister(&self, target: CanisterId, cycles: u64) -> Result<(), String> {
+        let response: Result<(), (Option<i32>, String)> = dfn_core::api::call_with_funds(
             CanisterId::ic_00(),
-            "set_controller",
-            dfn_candid::candid_multi_arity,
-            (set_controller_args,),
+            "deposit_cycles",
+            dfn_candid::candid_one,
+            CanisterIdRecord::from(target),
+            Funds::new(cycles),
         )
         .await;
-        set_result.map_err(|(code, msg)| {
+
+        response.map_err(handle_call_error(format!(
+            "Failed to send cycles to canister {}",
+            target
+        )))
+    }
+}
+
+/// This handles the errors returned from dfn_core::call (and related methods)
+fn handle_call_error(prefix: String) -> impl FnOnce((Option<i32>, String)) -> String {
+    move |(code, msg)| {
+        let err = format!(
+            "{}: {}{}",
+            prefix,
+            code.map(|c| format!("error code {}: ", c))
+                .unwrap_or_default(),
+            msg
+        );
+        println!("{}{}", LOG_PREFIX, err);
+        err
+    }
+}
+
+impl CanisterApiImpl {
+    async fn stop_canister(&self, canister: CanisterId) -> Result<(), String> {
+        dfn_core::call(
+            CanisterId::ic_00(),
+            "stop_canister",
+            dfn_candid::candid_one,
+            CanisterIdRecord::from(canister),
+        )
+        .await
+        .map_err(|(code, msg)| {
             format!(
                 "{}{}",
-                code.map(|c| format!("error code {}: ", c))
+                code.map(|c| format!("Unable to stop target canister: error code {}: ", c))
                     .unwrap_or_default(),
                 msg
             )
-        })
+        })?;
+
+        let mut count = 0;
+        // Wait until canister is in the stopped state.
+        loop {
+            let status: CanisterStatusResultV2 = dfn_core::call(
+                CanisterId::ic_00(),
+                "canister_status",
+                candid_one,
+                CanisterIdRecord::from(canister),
+            )
+            .await
+            .map_err(|(code, msg)| {
+                format!(
+                    "{}{}",
+                    code.map(|c| format!(
+                        "Unable to get target canister status: error code {}: ",
+                        c
+                    ))
+                    .unwrap_or_default(),
+                    msg
+                )
+            })?;
+
+            if status.status() == CanisterStatusType::Stopped {
+                return Ok(());
+            }
+
+            count += 1;
+            if count > 100 {
+                return Err(format!(
+                    "Canister {} never stopped.  Waited 100 iterations",
+                    canister
+                ));
+            }
+
+            println!(
+                "{}Still waiting for canister {} to stop. status: {:?}",
+                LOG_PREFIX, canister, status
+            );
+        }
     }
 }
 

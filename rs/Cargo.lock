@@ -1064,7 +1064,7 @@ dependencies = [
  "chrono",
  "glob 0.3.0",
  "lazy_static",
- "pretty_assertions 1.0.0",
+ "pretty_assertions 1.2.1",
  "rustc_version 0.4.0",
  "serde_json",
  "xz2",
@@ -1518,7 +1518,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a3ff1cddbb9275cfbc5e2bf3f1d254c42b09227aeb27ba65a35a53816b0429d"
 dependencies = [
  "comparable_derive",
- "pretty_assertions 1.0.0",
+ "pretty_assertions 1.2.1",
  "serde",
 ]
 
@@ -4376,12 +4376,12 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk"
-version = "0.3.1"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59ff298314d235dd2c150f74157df5bbcdbd48604b895425840c2fe9225c9a3a"
+checksum = "606276ed1ce363eb9ccaf492e36fb40425417dcd4598f261d47e0ed6a1309faa"
 dependencies = [
  "candid",
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "serde",
 ]
 
@@ -6158,7 +6158,7 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "ic-base-types",
- "ic-cdk 0.3.1",
+ "ic-cdk 0.3.3",
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-nervous-system-common",
@@ -6241,7 +6241,7 @@ dependencies = [
  "ledger-canister",
  "maplit",
  "on_wire",
- "pretty_assertions 1.0.0",
+ "pretty_assertions 1.2.1",
  "proptest 1.0.0",
  "prost 0.10.4",
  "rand 0.7.3",
@@ -7512,7 +7512,7 @@ dependencies = [
  "maplit",
  "num",
  "on_wire",
- "pretty_assertions 1.0.0",
+ "pretty_assertions 1.2.1",
  "proptest 1.0.0",
  "prost 0.10.4",
  "prost-build 0.10.4",
@@ -7676,7 +7676,7 @@ dependencies = [
  "ledger-canister",
  "maplit",
  "on_wire",
- "pretty_assertions 1.0.0",
+ "pretty_assertions 1.2.1",
  "proptest 1.0.0",
  "prost 0.9.0",
  "prost-build 0.9.0",
@@ -7751,6 +7751,7 @@ dependencies = [
  "ic-types 0.8.0",
  "ledger-canister",
  "maplit",
+ "pretty_assertions 1.2.1",
  "prost 0.10.4",
  "registry-canister",
  "serde",
@@ -9880,9 +9881,9 @@ dependencies = [
 
 [[package]]
 name = "num-traits"
-version = "0.2.14"
+version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a64b1ec5cda2586e284722486d802acf1f7dbdc623e2bfc57e65ca1cd099290"
+checksum = "578ede34cf02f8924ab9447f50c28075b4d3e5b269972345e7e0372b38c6cdcd"
 dependencies = [
  "autocfg 1.1.0",
  "libm",
@@ -10723,9 +10724,9 @@ dependencies = [
 
 [[package]]
 name = "pretty_assertions"
-version = "1.0.0"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec0cfe1b2403f172ba0f234e500906ee0a3e493fb81092dac23ebefe129301cc"
+checksum = "c89f989ac94207d048d92db058e4f6ec7342b0971fc58d1271ca148b799b3563"
 dependencies = [
  "ansi_term 0.12.1",
  "ctor",

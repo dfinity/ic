@@ -48,3 +48,4 @@ ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ledger-canister = { path = "../../rosetta-api/ledger_canister" }
+pretty_assertions = "1.2.1"

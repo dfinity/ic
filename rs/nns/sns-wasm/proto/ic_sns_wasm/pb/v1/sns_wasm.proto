@@ -54,6 +54,12 @@ message SnsWasm {
   SnsCanisterType canister_type = 2;
 }
 
+// The error response returned in response objects on failed or partially failed operations
+message SnsWasmError {
+  // The message returned by the canister on errors
+  string message = 1;
+}
+
 // The payload for the add_wasm endpoint, which takes an SnsWasm along with the hash of the wasm bytes
 message AddWasmRequest {
   SnsWasm wasm = 1;
@@ -62,17 +68,11 @@ message AddWasmRequest {
 
 // The response from add_wasm, which is either Ok or Error.
 message AddWasmResponse {
-  // The error provides a reason the wasm could not be added.
-  message AddWasmError {
-    string error = 1;
-  }
-  // The Ok response provides the hash of the added WASM.
-  message AddWasmOk {
-    bytes hash = 1;
-  }
   oneof result {
-    AddWasmError error = 1;
-    AddWasmOk ok = 2;
+    // The hash of the wasm that was added
+    bytes hash = 1;
+    // Error when request fails
+    SnsWasmError error = 2;
   }
 }
 
@@ -94,10 +94,12 @@ message DeployNewSnsRequest {
 
 // The response to creating a new SNS.
 message DeployNewSnsResponse {
-  // The subnet the SNS was deployed to
+  // The subnet the SNS was deployed to.
   ic_base_types.pb.v1.PrincipalId subnet_id = 1;
-  // CanisterIds of canisters created by deploy_new_sns
+  // CanisterIds of canisters created by deploy_new_sns.
   SnsCanisterIds canisters = 2;
+  // Error when the request fails.
+  SnsWasmError error = 3;
 }
 
 // The CanisterIds of the SNS canisters that are created
@@ -117,7 +119,7 @@ message ListDeployedSnsesRequest {}
 
 // Response to list_deployed_snses
 message ListDeployedSnsesResponse {
-  // the deployed instances
+  // The deployed instances
   repeated DeployedSns instances = 1;
 }
 

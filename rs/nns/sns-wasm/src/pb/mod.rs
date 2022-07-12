@@ -5,6 +5,7 @@ use crate::pb::v1::{
 };
 use crate::sns_wasm::{vec_to_hash, SnsWasmCanister, UpgradePath};
 use crate::stable_memory::SnsWasmStableMemory;
+use ic_base_types::CanisterId;
 use ic_cdk::api::stable::StableMemory;
 use ic_crypto_sha::Sha256;
 use std::collections::BTreeMap;
@@ -71,6 +72,25 @@ impl From<SnsVersion> for GetNextSnsVersionResponse {
     }
 }
 
+impl SnsCanisterIds {
+    /// Get Root CanisterId
+    pub fn root(&self) -> CanisterId {
+        CanisterId::new(self.root.unwrap()).unwrap()
+    }
+    /// Get Governance CanisterId
+    pub fn governance(&self) -> CanisterId {
+        CanisterId::new(self.governance.unwrap()).unwrap()
+    }
+    /// Get Ledger CanisterId
+    pub fn ledger(&self) -> CanisterId {
+        CanisterId::new(self.ledger.unwrap()).unwrap()
+    }
+    /// Get Swap CanisterId
+    pub fn swap(&self) -> CanisterId {
+        CanisterId::new(self.swap.unwrap()).unwrap()
+    }
+}
+
 impl TryFrom<SnsCanisterIds> for ic_sns_init::SnsCanisterIds {
     type Error = String;
 
@@ -91,7 +111,7 @@ impl<M: StableMemory + Clone + Default> From<StableCanisterState> for SnsWasmCan
         let wasm_indexes: BTreeMap<[u8; 32], SnsWasmStableIndex> = stable_canister_state
             .wasm_indexes
             .into_iter()
-            .map(|index| (vec_to_hash(index.hash.clone()), index))
+            .map(|index| (vec_to_hash(index.hash.clone()).unwrap(), index))
             .collect();
 
         let stable_upgrade_path = stable_canister_state.upgrade_path.unwrap_or_default();
@@ -167,5 +187,23 @@ impl From<StableUpgradePath> for UpgradePath {
             latest_version: stable_upgrade_path.latest_version.unwrap_or_default(),
             upgrade_path: upgrade_path_hashmap,
         }
+    }
+}
+
+impl SnsCanisterIds {
+    /// Get a set of "Name, CanisterId" tuples, useful for repetitive operations that need
+    /// per-canister error messages.  Does not return canisters without a principal.
+    pub fn into_named_tuples(self) -> Vec<(String, CanisterId)> {
+        vec![
+            ("Root".to_string(), self.root),
+            ("Governance".to_string(), self.governance),
+            ("Ledger".to_string(), self.ledger),
+            ("Swap".to_string(), self.swap),
+        ]
+        .into_iter()
+        .flat_map(|(label, principal_id)| {
+            principal_id.map(|principal_id| (label, CanisterId::new(principal_id).unwrap()))
+        })
+        .collect()
     }
 }

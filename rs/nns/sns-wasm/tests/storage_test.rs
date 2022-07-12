@@ -1,15 +1,15 @@
 use candid::Encode;
 use canister_test::Project;
-use ic_nns_test_utils::sns_wasm;
 use ic_nns_test_utils::sns_wasm::smallest_valid_wasm;
 use ic_nns_test_utils::state_test_helpers::create_canister;
+use ic_nns_test_utils::{sns_wasm, state_test_helpers};
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
-use ic_sns_wasm::pb::v1::add_wasm_response::AddWasmOk;
 use ic_sns_wasm::pb::v1::{add_wasm_response, AddWasmResponse, SnsVersion};
 use ic_state_machine_tests::StateMachine;
 
 #[test]
 fn test_basic_storage() {
+    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachine::new();
     let wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
         "nns/sns-wasm",
@@ -41,9 +41,7 @@ fn test_basic_storage() {
     assert_eq!(
         add_wasm_response,
         AddWasmResponse {
-            result: Some(add_wasm_response::Result::Ok(AddWasmOk {
-                hash: expected_hash.to_vec()
-            }))
+            result: Some(add_wasm_response::Result::Hash(expected_hash.to_vec()))
         }
     );
 
