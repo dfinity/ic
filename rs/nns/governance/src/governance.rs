@@ -1528,6 +1528,11 @@ impl Topic {
     /// neuron holders.
     fn reward_weight(&self) -> f64 {
         match self {
+            // Default following is not enabled for proposals on the
+            // governance topic. Thus, we provide significantly higher
+            // voting rewards for neuron holders who actively vote on
+            // these.
+            Topic::Governance => 20.0,
             // There are several (typically over 100) exchange rate
             // proposals per day.
             Topic::ExchangeRate => 0.01,
