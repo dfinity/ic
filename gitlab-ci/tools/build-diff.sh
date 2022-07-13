@@ -148,12 +148,12 @@ if ! diff -u $SHA256SUMS0 $SHA256SUMS1; then
             "https://download.dfinity.systems/ic/$PATH1/$ARTIFACT" \
             -o "$PATH1/update-img.tar.gz"
 
-        cd "$PATH0"
+        pushd "$PATH0"
         tar -xzf "$ARTIFACT"
-        cd ..
-        cd "$PATH1"
+        popd
+        pushd "$PATH1"
         tar -xzf "$ARTIFACT"
-        cd ..
+        popd
 
         # we give diffoscope 20min to find the diff
         TRIGGER_ALERT=false
