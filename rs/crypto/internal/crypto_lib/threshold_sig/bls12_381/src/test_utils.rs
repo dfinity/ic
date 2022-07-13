@@ -1,18 +1,17 @@
 //! Utilities for testing BLS12-381 threshold signing and key generation.
 use crate::ni_dkg::groth20_bls12_381::types::BTENode;
-use ic_types::{NumberOfNodes, Randomness};
+use ic_crypto_internal_seed::Seed;
+use ic_types::NumberOfNodes;
 use rand::seq::IteratorRandom;
-use rand::SeedableRng;
-use rand_chacha::ChaChaRng;
 
 #[cfg(test)]
 mod tests;
 
 /// Select `n` entries from a `list` in a randomized way, as determined by
 /// `seed`.
-pub fn select_n<T: Clone>(seed: Randomness, n: NumberOfNodes, list: &[T]) -> Vec<Option<T>> {
+pub fn select_n<T: Clone>(seed: Seed, n: NumberOfNodes, list: &[T]) -> Vec<Option<T>> {
     assert!(n.get() as usize <= list.len());
-    let mut rng = ChaChaRng::from_seed(seed.get());
+    let mut rng = seed.into_rng();
     let mut ans: Vec<Option<T>> = vec![None; list.len()];
     for (index, element) in list
         .iter()

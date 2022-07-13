@@ -3,6 +3,7 @@ use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto::{derive_tecdsa_public_key, get_tecdsa_master_public_key};
 use ic_crypto_internal_threshold_sig_ecdsa::{
     test_utils::corrupt_dealing_for_all_recipients, EccScalar, IDkgDealingInternal, MEGaCiphertext,
+    Seed,
 };
 use ic_crypto_test_utils_canister_threshold_sigs::{
     batch_sign_signed_dealings, batch_signature_from_signers, build_params_from_previous,
@@ -1824,10 +1825,11 @@ fn corrupt_signed_dealing_for_all_receivers(signed_dealing: &mut BatchSignedIDkg
             IDkgDealingInternal::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)
                 .expect("failed to deserialize internal dealing");
 
-        let randomness = ic_types::Randomness::from(thread_rng().gen::<[u8; 32]>());
-
-        let corrupted_dealing = corrupt_dealing_for_all_recipients(&internal_dealing, randomness)
-            .expect("Failed to corrupt dealing");
+        let corrupted_dealing = corrupt_dealing_for_all_recipients(
+            &internal_dealing,
+            Seed::from_rng(&mut thread_rng()),
+        )
+        .expect("Failed to corrupt dealing");
 
         corrupted_dealing
             .serialize()

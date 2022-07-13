@@ -10,12 +10,12 @@ use super::super::types::{
 use crate::crypto::hash_message_to_g1;
 use crate::types::PublicKey;
 use ic_crypto_internal_bls12_381_type::{G2Projective, Scalar};
+use ic_crypto_internal_seed::Seed;
 use ic_types::crypto::error::InvalidArgumentError;
-use ic_types::{NodeIndex, NumberOfNodes, Randomness};
+use ic_types::{NodeIndex, NumberOfNodes};
 use proptest::prelude::*;
 use proptest::std_facade::HashSet;
 use rand::seq::IteratorRandom;
-use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::ops::{AddAssign, SubAssign};
@@ -23,8 +23,9 @@ use std::ops::{AddAssign, SubAssign};
 pub mod util {
     use super::{
         crypto, select_n, IndividualSignature, InvalidArgumentError, NodeIndex, NumberOfNodes,
-        Polynomial, PublicCoefficients, Randomness, Scalar, SecretKey,
+        Polynomial, PublicCoefficients, Scalar, SecretKey,
     };
+    use ic_crypto_internal_seed::Seed;
 
     // A public key as computed by the holder of the private key is the same as the
     // public key as computed from the public public_coefficients.
@@ -85,7 +86,7 @@ pub mod util {
         public_coefficients: &PublicCoefficients,
         secret_keys: &[SecretKey],
         threshold: NumberOfNodes,
-        seed: Randomness,
+        seed: Seed,
         message: &[u8],
     ) {
         let signatures: Vec<IndividualSignature> = secret_keys
@@ -169,7 +170,7 @@ pub mod util {
         public_coefficients: &PublicCoefficients,
         secret_keys: &[SecretKey],
         threshold: NumberOfNodes,
-        seed: Randomness,
+        seed: Seed,
         message: &[u8],
     ) {
         test_individual_public_key_matches(public_coefficients, secret_keys);
@@ -178,7 +179,7 @@ pub mod util {
 
     // TODO(DFN-1412): Test scenarios where only some keys are generated
     pub fn keygen(
-        seed: Randomness,
+        seed: Seed,
         threshold: NumberOfNodes,
         number_of_shares: NumberOfNodes,
     ) -> Result<(PublicCoefficients, Vec<SecretKey>), InvalidArgumentError> {
@@ -194,7 +195,7 @@ pub mod util {
     pub fn assert_keygen_composes(
         generations: &[(PublicCoefficients, Vec<SecretKey>)],
         threshold: NumberOfNodes,
-        seed: Randomness,
+        seed: Seed,
         message: &[u8],
     ) {
         // Sum public_coefficients and secret keys.  We treat the vector of secret keys
@@ -264,7 +265,7 @@ fn test_distinct_messages_yield_distinct_hashes() {
 fn omnipotent_dealer() {
     let threshold = NumberOfNodes::from(3);
     let num_shares = NumberOfNodes::from(6);
-    let seed = Randomness::from([1u8; 32]);
+    let seed = Seed::from_bytes(&[1u8; 32]);
     let message = b"foo";
 
     let (public_coefficients, shares) =
@@ -303,8 +304,8 @@ proptest! {
         fn single_keygen_is_valid(keygen_seed: [u8;32], test_seed: [u8;32], threshold in 0_u32..5, redundancy in (0_u32..10), message: Vec<u8>) {
             let threshold = NumberOfNodes::from(threshold);
             let num_shares = threshold + NumberOfNodes::from(redundancy);
-            let (public_coefficients, secret_keys) = util::keygen(Randomness::from(keygen_seed), threshold, num_shares).expect("Failed to generate keys");
-            util::test_valid_public_coefficients(&public_coefficients, &secret_keys, threshold, Randomness::from(test_seed), &message);
+            let (public_coefficients, secret_keys) = util::keygen(Seed::from_bytes(&keygen_seed), threshold, num_shares).expect("Failed to generate keys");
+            util::test_valid_public_coefficients(&public_coefficients, &secret_keys, threshold, Seed::from_bytes(&test_seed), &message);
         }
 
 
@@ -312,8 +313,8 @@ proptest! {
         fn proptest_keygen_composes(keygen_seeds in proptest::collection::vec(any::<[u8;32]>(), 1..10), test_seed: [u8;32], threshold in 0_u32..10, redundancy in (0_u32..10), message: Vec<u8>) {
             let threshold = NumberOfNodes::from(threshold);
             let num_shares = threshold + NumberOfNodes::from(redundancy);
-            let generations = keygen_seeds.into_iter().map(|seed| util::keygen(Randomness::from(seed), threshold, num_shares).expect("Could not generate keys")).collect::<Vec<_>>();
-            util::assert_keygen_composes(&generations, threshold, Randomness::from(test_seed), &message)
+            let generations = keygen_seeds.into_iter().map(|seed| util::keygen(Seed::from_bytes(&seed), threshold, num_shares).expect("Could not generate keys")).collect::<Vec<_>>();
+            util::assert_keygen_composes(&generations, threshold, Seed::from_bytes(&test_seed), &message)
         }
 
         #[test]
@@ -337,7 +338,7 @@ proptest! {
             seed: [u8; 32],
         ) {
             let all_nodes = vec![true;(eligible+ineligible) as usize];
-            let eligible_nodes: Vec<bool> = select_n(Randomness::new(seed), NumberOfNodes::from(eligible), &all_nodes).iter().map(|entry| entry.is_some()).collect();
+            let eligible_nodes: Vec<bool> = select_n(Seed::from_bytes(&seed), NumberOfNodes::from(eligible), &all_nodes).iter().map(|entry| entry.is_some()).collect();
             assert_eq!(crypto::verify_keygen_args(NumberOfNodes::from(threshold), &eligible_nodes).is_ok(), eligible >= threshold);
         }
 
@@ -366,7 +367,7 @@ proptest! {
             };
 
             let (public_coefficients, _secret_keys) = crypto::keygen_with_secret(
-                            Randomness::from(rng.gen::<[u8; 32]>()),
+                            Seed::from_rng(&mut rng),
                             NumberOfNodes::from(threshold),
                             &eligibility,
                             &secret_key,
@@ -396,7 +397,7 @@ mod resharing_util {
     /// * `new_eligibility` indicates which of the new receivers should receive
     ///   keys.
     pub fn multiple_keygen(
-        rng: &mut ChaChaRng,
+        mut rng: &mut ChaChaRng,
         original_receiver_shares: &[Option<SecretKey>],
         new_threshold: NumberOfNodes,
         new_eligibility: &[bool],
@@ -406,7 +407,7 @@ mod resharing_util {
             .map(|key_maybe| {
                 key_maybe.map(|secret_key| {
                     crypto::keygen_with_secret(
-                        Randomness::from(rng.gen::<[u8; 32]>()),
+                        Seed::from_rng(&mut rng),
                         new_threshold,
                         new_eligibility,
                         &secret_key,
@@ -507,7 +508,7 @@ fn simplified_resharing_should_preserve_the_threshold_key() {
     let new_eligibility = vec![true, false, true, false, true, true, true];
     let mut rng = ChaChaRng::from_seed([9u8; 32]);
     let (original_public_coefficients, original_receiver_shares) = crypto::keygen(
-        Randomness::from(rng.gen::<[u8; 32]>()),
+        Seed::from_rng(&mut rng),
         NumberOfNodes::from(original_threshold),
         &original_eligibility,
     )
@@ -558,7 +559,7 @@ fn resharing_with_encryption_should_preserve_the_threshold_key() {
     let new_eligibility = vec![true, false, true, false, true, true, true];
     let mut rng = ChaChaRng::from_seed([9u8; 32]);
     let (original_public_coefficients, original_receiver_shares) = crypto::keygen(
-        Randomness::from(rng.gen::<[u8; 32]>()),
+        Seed::from_rng(&mut rng),
         NumberOfNodes::from(original_threshold),
         &original_eligibility,
     )

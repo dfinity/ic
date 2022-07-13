@@ -1,6 +1,6 @@
 //! Test that the test utils work correctly
 use super::*;
-use ic_types::{NodeIndex, NumberOfNodes, Randomness};
+use ic_types::{NodeIndex, NumberOfNodes};
 use proptest::prelude::*;
 use std::fmt::Debug;
 
@@ -8,7 +8,7 @@ use std::fmt::Debug;
 /// * The length of the returned options should be the same as the length of the
 ///   available items.
 /// * The number of selected options should be as requested.
-fn test_select_n<T: Clone + PartialEq + Debug>(seed: Randomness, size: NumberOfNodes, items: &[T]) {
+fn test_select_n<T: Clone + PartialEq + Debug>(seed: Seed, size: NumberOfNodes, items: &[T]) {
     let selection = select_n(seed, size, items);
     let num_elements = selection.len();
     let num_selected_elements = selection.iter().filter_map(|x| x.as_ref()).count();
@@ -44,6 +44,6 @@ proptest! {
 
         #[test]
         fn proptest_select_n(seed: [u8;32], size in 0_u32..10, items in proptest::collection::vec(any::<NodeIndex>(), 10..20)) {
-            test_select_n(Randomness::from(seed), NumberOfNodes::from(size), &items);
+            test_select_n(Seed::from_bytes(&seed), NumberOfNodes::from(size), &items);
         }
 }

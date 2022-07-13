@@ -501,12 +501,11 @@ impl ProtocolRound {
         assert!(number_of_dealers <= shares.len());
         assert!(number_of_dealings_corrupted <= number_of_dealers);
 
-        let rng = &mut seed.into_rng();
+        let mut rng = &mut seed.into_rng();
 
         let mut dealings = BTreeMap::new();
 
         for (dealer_index, share) in shares.iter().enumerate() {
-            let dealing_randomness = Randomness::from(rng.gen::<[u8; 32]>());
             let dealer_index = dealer_index as u32;
 
             let dealing = create_dealing(
@@ -516,7 +515,7 @@ impl ProtocolRound {
                 setup.threshold,
                 &setup.pk,
                 share,
-                dealing_randomness,
+                Seed::from_rng(&mut rng),
             )
             .expect("failed to create dealing");
 
@@ -557,10 +556,9 @@ impl ProtocolRound {
             let corrupted_recip =
                 (0..setup.receivers as NodeIndex).choose_multiple(rng, number_of_corruptions);
 
-            let randomness = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
-
             let bad_dealing =
-                test_utils::corrupt_dealing(dealing, &corrupted_recip, randomness).unwrap();
+                test_utils::corrupt_dealing(dealing, &corrupted_recip, Seed::from_rng(&mut rng))
+                    .unwrap();
 
             // Privately invalid iff we were corrupted
             for (private_key, public_key, recipient_index) in setup.receiver_info() {

@@ -4450,6 +4450,7 @@ dependencies = [
 name = "ic-certified-vars-test-utils"
 version = "0.1.0"
 dependencies = [
+ "ic-crypto-internal-seed",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
  "ic-crypto-tree-hash",
@@ -4605,6 +4606,7 @@ dependencies = [
  "ic-crypto-internal-fs-ni-dkg",
  "ic-crypto-internal-logmon",
  "ic-crypto-internal-multi-sig-bls12381",
+ "ic-crypto-internal-seed",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-threshold-sig-ecdsa",
@@ -5034,6 +5036,7 @@ dependencies = [
  "ic-crypto-internal-bls12381-serde-miracl",
  "ic-crypto-internal-csp-test-utils",
  "ic-crypto-internal-fs-ni-dkg",
+ "ic-crypto-internal-seed",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-threshold-sig-bls12381-der",
  "ic-crypto-internal-types",
@@ -7819,6 +7822,7 @@ version = "0.8.0"
 dependencies = [
  "candid",
  "ic-config",
+ "ic-crypto-internal-seed",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
  "ic-crypto-sha",

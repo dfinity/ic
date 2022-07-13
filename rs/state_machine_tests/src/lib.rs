@@ -1,4 +1,5 @@
 use ic_config::subnet_config::{SubnetConfig, SubnetConfigs};
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::{
     combine_signatures, combined_public_key, keygen, sign_message,
 };
@@ -318,7 +319,7 @@ impl StateMachine {
         ];
 
         let (public_coefficients, secret_key_bytes) =
-            keygen(Randomness::from(seed), NumberOfNodes::new(1), &[true; 1]).unwrap();
+            keygen(Seed::from_bytes(&seed), NumberOfNodes::new(1), &[true; 1]).unwrap();
         let public_key = ThresholdSigPublicKey::from(CspThresholdSigPublicKey::from(
             combined_public_key(&public_coefficients).unwrap(),
         ));

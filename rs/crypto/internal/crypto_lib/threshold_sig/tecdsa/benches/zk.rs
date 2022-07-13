@@ -7,7 +7,7 @@ fn zk_proofs(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
     let ad = rng.gen::<[u8; 32]>();
 
-    let seed = Seed::from_bytes(&rng.gen::<[u8; 32]>());
+    let seed = Seed::from_rng(&mut rng);
 
     let secret = EccScalar::random(curve, &mut rng).unwrap();
     let masking = EccScalar::random(curve, &mut rng).unwrap();

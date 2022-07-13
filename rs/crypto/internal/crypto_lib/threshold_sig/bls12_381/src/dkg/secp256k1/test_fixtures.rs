@@ -12,10 +12,11 @@ use dkg_lib::{
     compute_private_key, create_ephemeral, create_resharing_dealing, create_resharing_transcript,
     create_response, verify_resharing_dealing, verify_response,
 };
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_test_utils::dkg::random_dkg_id;
 use ic_types::NumberOfNodes;
-use ic_types::{IDkgId, NodeIndex, Randomness};
+use ic_types::{IDkgId, NodeIndex};
 use rand::seq::IteratorRandom;
 use rand::Rng;
 use rand_chacha::ChaChaRng;
@@ -57,7 +58,7 @@ impl StateWithThresholdKey {
             PublicCoefficientsBytes,
             Vec<Option<ThresholdSecretKeyBytes>>,
         ) = {
-            let seed = Randomness::from(rng.gen::<[u8; 32]>());
+            let seed = Seed::from_rng(rng);
             keygen(seed, threshold, &eligibility).expect("Initial keygen failed")
         };
         StateWithThresholdKey {
@@ -211,7 +212,7 @@ impl StateWithResharedDealings {
             .iter()
             .filter_map(|dealer_index| {
                 dealer_ephemeral_keys[*dealer_index as usize].map(|dealer_ephemeral_key_set| {
-                    let seed = Randomness::from(rng.gen::<[u8; 32]>());
+                    let seed = Seed::from_rng(&mut rng);
                     let dkg_id = dkg_id;
                     let reshared_secret_key = initial_state.secret_keys[*dealer_index as usize]
                         .expect(
@@ -300,7 +301,7 @@ impl StateWithResponses {
             .zip(&receiver_ephemeral_keys)
             .map(|(receiver_index, key_maybe)| {
                 key_maybe.map(|key_set| {
-                    let seed = Randomness::from(rng.gen::<[u8; 32]>());
+                    let seed = Seed::from_rng(rng);
                     create_response(
                         seed,
                         &key_set.secret_key_bytes,

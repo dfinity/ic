@@ -2,7 +2,7 @@
 
 use ic_crypto::utils::TempCryptoComponent;
 use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
-use ic_crypto_internal_threshold_sig_ecdsa::IDkgDealingInternal;
+use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, Seed};
 use ic_interfaces::crypto::{BasicSigner, IDkgProtocol};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
@@ -657,9 +657,8 @@ pub fn corrupt_idkg_dealing<R: CryptoRng + RngCore>(
     let receiver = receivers[rng.gen_range(0..receivers.len())];
     let node_index = transcript_params.receivers().position(*receiver).unwrap();
 
-    let randomness = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
-
-    let corrupted_dealing = corrupt_dealing(&internal_dealing, &[node_index], randomness)
+    let seed = Seed::from_rng(rng);
+    let corrupted_dealing = corrupt_dealing(&internal_dealing, &[node_index], seed)
         .map_err(|e| CorruptIDkgDealingError::FailedToCorruptDealing(format!("{:?}", e)))?;
     let internal_dealing_raw = corrupted_dealing
         .serialize()

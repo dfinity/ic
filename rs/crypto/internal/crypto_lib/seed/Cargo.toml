@@ -9,5 +9,5 @@ ic-types = { path = "../../../../types/types" }
 hex = "0.4"
 rand = "0.8"
 rand_chacha = "0.3"
-serde = "1.0.130"
+serde = { version = "1.0.130", features = ["derive"] }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }

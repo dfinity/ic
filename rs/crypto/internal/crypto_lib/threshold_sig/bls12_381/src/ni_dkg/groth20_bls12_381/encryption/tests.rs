@@ -38,14 +38,14 @@ fn constants_should_be_compatible() {
 #[test]
 fn keygen_should_work() {
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 8u8, 1u8, 2u8];
-    create_forward_secure_key_pair(Randomness::from([85u8; 32]), KEY_GEN_ASSOCIATED_DATA);
+    create_forward_secure_key_pair(Seed::from_bytes(&[85u8; 32]), KEY_GEN_ASSOCIATED_DATA);
 }
 
 #[test]
 fn epoch_of_a_new_key_should_be_zero() {
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 3u8, 0u8, 6u8];
     let key_set =
-        create_forward_secure_key_pair(Randomness::from([12u8; 32]), KEY_GEN_ASSOCIATED_DATA);
+        create_forward_secure_key_pair(Seed::from_bytes(&[12u8; 32]), KEY_GEN_ASSOCIATED_DATA);
     let epoch = epoch_from_miracl_secret_key(&trusted_secret_key_into_miracl(&key_set.secret_key));
     assert_eq!(epoch.get(), 0);
 }
@@ -54,14 +54,14 @@ fn epoch_of_a_new_key_should_be_zero() {
 fn single_stepping_a_key_should_increment_current_epoch() {
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[0u8, 5u8, 0u8, 5u8];
     let FsEncryptionKeySetWithPop { secret_key, .. } =
-        create_forward_secure_key_pair(Randomness::from([89u8; 32]), KEY_GEN_ASSOCIATED_DATA);
+        create_forward_secure_key_pair(Seed::from_bytes(&[89u8; 32]), KEY_GEN_ASSOCIATED_DATA);
     let mut secret_key = trusted_secret_key_into_miracl(&secret_key);
     for epoch in 4..8 {
         let secret_key_epoch = Epoch::from(epoch);
         update_key_inplace_to_epoch(
             &mut secret_key,
             secret_key_epoch,
-            Randomness::from([9u8; 32]),
+            Seed::from_bytes(&[9u8; 32]),
         );
         let key_epoch = epoch_from_miracl_secret_key(&secret_key).get();
         assert_eq!(
@@ -76,7 +76,7 @@ fn single_stepping_a_key_should_increment_current_epoch() {
 fn correct_keys_should_verify() {
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[11u8, 2u8, 19u8, 31u8];
     let key_set =
-        create_forward_secure_key_pair(Randomness::from([31u8; 32]), KEY_GEN_ASSOCIATED_DATA);
+        create_forward_secure_key_pair(Seed::from_bytes(&[31u8; 32]), KEY_GEN_ASSOCIATED_DATA);
     let verification =
         verify_forward_secure_key(&key_set.public_key, &key_set.pop, KEY_GEN_ASSOCIATED_DATA);
     assert_eq!(verification, Ok(()));
@@ -85,8 +85,8 @@ fn correct_keys_should_verify() {
 #[test]
 fn wrong_pop_should_not_verify() {
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[1u8, 9u8, 0u8, 3u8];
-    let seed = Randomness::from([62u8; 32]);
-    let different_seed = Randomness::from([9u8; 32]);
+    let seed = Seed::from_bytes(&[62u8; 32]);
+    let different_seed = Seed::from_bytes(&[9u8; 32]);
     let FsEncryptionKeySetWithPop { public_key, .. } =
         create_forward_secure_key_pair(seed, KEY_GEN_ASSOCIATED_DATA);
     let FsEncryptionKeySetWithPop { pop, .. } =
@@ -99,7 +99,7 @@ fn wrong_pop_should_not_verify() {
 fn generate_threshold_keys(
     num_receivers: usize,
     threshold: NumberOfNodes,
-    seed: Randomness,
+    seed: Seed,
 ) -> (
     internal_types::PublicCoefficientsBytes,
     Vec<clib::ThresholdSecretKeyBytes>,
@@ -151,20 +151,20 @@ fn encryption_should_work() {
     let (public_coefficients, threshold_keys) = generate_threshold_keys(
         NUM_RECEIVERS as usize,
         threshold,
-        Randomness::from([99u8; 32]),
+        Seed::from_bytes(&[99u8; 32]),
     );
 
     let forward_secure_keys: Vec<FsEncryptionKeySetWithPop> = (0..NUM_RECEIVERS)
         .map(|receiver_index| {
             create_forward_secure_key_pair(
-                Randomness::from([receiver_index | 0x10; 32]),
+                Seed::from_bytes(&[receiver_index | 0x10; 32]),
                 &[receiver_index],
             )
         })
         .collect();
 
     encrypt_and_prove(
-        Randomness::from([0x69; 32]),
+        Seed::from_bytes(&[0x69; 32]),
         &fs_key_message_pairs(&threshold_keys, &forward_secure_keys),
         Epoch::from(4),
         &public_coefficients,
@@ -190,13 +190,13 @@ fn encrypted_messages_should_decrypt() {
     let (public_coefficients, threshold_keys) = generate_threshold_keys(
         NUM_RECEIVERS as usize,
         threshold,
-        Randomness::from([99u8; 32]),
+        Seed::from_bytes(&[99u8; 32]),
     );
 
     let forward_secure_keys: Vec<FsEncryptionKeySetWithPop> = (0..NUM_RECEIVERS)
         .map(|receiver_index| {
             create_forward_secure_key_pair(
-                Randomness::from([receiver_index | 0x10; 32]),
+                Seed::from_bytes(&[receiver_index | 0x10; 32]),
                 &[receiver_index],
             )
         })
@@ -205,7 +205,7 @@ fn encrypted_messages_should_decrypt() {
     let key_message_pairs = fs_key_message_pairs(&threshold_keys, &forward_secure_keys);
 
     let epoch = Epoch::from(5); // Small epoch as forward-stepping is slow
-    let seed = Randomness::from([0x69; 32]);
+    let seed = Seed::from_bytes(&[0x69; 32]);
     let (ciphertext, ..) = encrypt_and_prove(
         seed,
         &key_message_pairs,
@@ -254,12 +254,12 @@ fn decryption_should_fail_below_epoch() {
     let (public_coefficients, threshold_keys) = generate_threshold_keys(
         NUM_RECEIVERS as usize,
         threshold,
-        Randomness::from([99u8; 32]),
+        Seed::from_bytes(&[99u8; 32]),
     );
     let forward_secure_keys: Vec<FsEncryptionKeySetWithPop> = (0..NUM_RECEIVERS)
         .map(|receiver_index| {
             create_forward_secure_key_pair(
-                Randomness::from([receiver_index | 0x10; 32]),
+                Seed::from_bytes(&[receiver_index | 0x10; 32]),
                 &[receiver_index],
             )
         })
@@ -275,7 +275,7 @@ fn decryption_should_fail_below_epoch() {
         .iter()
         .map(|epoch| {
             encrypt_and_prove(
-                Randomness::from(rng.gen::<[u8; 32]>()),
+                Seed::from_rng(&mut rng),
                 &key_message_pairs,
                 *epoch,
                 &public_coefficients,
@@ -293,11 +293,7 @@ fn decryption_should_fail_below_epoch() {
     #[allow(clippy::iter_next_loop)] // We test just one of the receivers
     for ((mut secret_key, message), node_index) in secret_keys.zip(messages).zip(0..).next() {
         // Delete keys below epoch
-        update_key_inplace_to_epoch(
-            &mut secret_key,
-            secret_key_epoch,
-            Randomness::from(rng.gen::<[u8; 32]>()),
-        );
+        update_key_inplace_to_epoch(&mut secret_key, secret_key_epoch, Seed::from_rng(&mut rng));
 
         // Decrypts should succeed only for ciphertexts with higher epochs
         for (ciphertext_epoch, ciphertext) in encryption_epochs
@@ -344,13 +340,13 @@ fn zk_proofs_should_verify() {
     let (public_coefficients, threshold_keys) = generate_threshold_keys(
         NUM_RECEIVERS as usize,
         threshold,
-        Randomness::from([99u8; 32]),
+        Seed::from_bytes(&[99u8; 32]),
     );
 
     let forward_secure_keys: Vec<FsEncryptionKeySetWithPop> = (0..NUM_RECEIVERS)
         .map(|receiver_index| {
             create_forward_secure_key_pair(
-                Randomness::from([receiver_index | 0x10; 32]),
+                Seed::from_bytes(&[receiver_index | 0x10; 32]),
                 &[receiver_index],
             )
         })
@@ -359,7 +355,7 @@ fn zk_proofs_should_verify() {
     let key_message_pairs = fs_key_message_pairs(&threshold_keys, &forward_secure_keys);
 
     let epoch = Epoch::from(5); // Small epoch as forward-stepping is slow
-    let seed = Randomness::from([0x69; 32]);
+    let seed = Seed::from_bytes(&[0x69; 32]);
     let (ciphertext, chunking_proof, sharing_proof) = encrypt_and_prove(
         seed,
         &key_message_pairs,
@@ -397,13 +393,13 @@ fn zk_proofs_should_not_verify_with_wrong_epoch() {
     let (public_coefficients, threshold_keys) = generate_threshold_keys(
         NUM_RECEIVERS as usize,
         threshold,
-        Randomness::from([99u8; 32]),
+        Seed::from_bytes(&[99u8; 32]),
     );
 
     let forward_secure_keys: Vec<FsEncryptionKeySetWithPop> = (0..NUM_RECEIVERS)
         .map(|receiver_index| {
             create_forward_secure_key_pair(
-                Randomness::from([receiver_index | 0x10; 32]),
+                Seed::from_bytes(&[receiver_index | 0x10; 32]),
                 &[receiver_index],
             )
         })
@@ -412,7 +408,7 @@ fn zk_proofs_should_not_verify_with_wrong_epoch() {
     let key_message_pairs = fs_key_message_pairs(&threshold_keys, &forward_secure_keys);
 
     let epoch = Epoch::from(5); // Small epoch as forward-stepping is slow
-    let seed = Randomness::from([0x69; 32]);
+    let seed = Seed::from_bytes(&[0x69; 32]);
     let (ciphertext, chunking_proof, sharing_proof) = encrypt_and_prove(
         seed,
         &key_message_pairs,

@@ -13,8 +13,8 @@ ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
-rand = "0.8"
-rand_chacha = "0.3"
+rand = "0.8.5"
+rand_chacha = "0.3.1"
 serde = { version = "1.0.99", features = [ "derive" ] }
 simple_asn1 = "0.6.1"
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }

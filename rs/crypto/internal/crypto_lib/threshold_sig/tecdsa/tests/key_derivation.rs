@@ -53,7 +53,7 @@ fn verify_bip32_extended_key_derivation() -> Result<(), ThresholdEcdsaError> {
     let master_key = setup.public_key(&DerivationPath::new(vec![]))?;
     assert_eq!(
         hex::encode(master_key.public_key),
-        "02aab10ba2f09b79f712726f9fa697811facd778dac10b543c42cc7e7c78e9db21"
+        "02bef39a470a0fe179cd18509a791e9c5312c07d1346a223a93f723fd90c9690f2"
     );
     assert_eq!(
         hex::encode(master_key.chain_key),
@@ -66,31 +66,31 @@ fn verify_bip32_extended_key_derivation() -> Result<(), ThresholdEcdsaError> {
     let key = setup.public_key(&DerivationPath::new(vec![index1.clone()]))?;
     assert_eq!(
         hex::encode(key.public_key),
-        "03effbb1f5199bd6372a5f297e1787b1749297f97e0614eabdb6b668e57771dc8d"
+        "026b299d834bbb242a961192ba5a1d5663b5fa8d76d88aff93fd2a6044a524ce70"
     );
     assert_eq!(
         hex::encode(key.chain_key),
-        "9b51621c5a011a5b2857df82c75071ae446b091b7cfeba00fa646591ba2045a1"
+        "5b37a4f4f656bbe83497232deab1be3a468535ca55c296f123ee8339d56100f5"
     );
 
     let key = setup.public_key(&DerivationPath::new(vec![index2.clone()]))?;
     assert_eq!(
         hex::encode(key.public_key),
-        "03a7827a3b1449e3f0f8114ce6d92f9a9da0aede44a911c44aa15d2633895a6005"
+        "03bbe7150acce76b3d155a840a5096e334cddc6a129bd3d481a200518efa066098"
     );
     assert_eq!(
         hex::encode(key.chain_key),
-        "380827cbbcc3cb9b1e810bbc9ed5497141bd61fc199fe92a10cd832bf66601f0"
+        "68db4ee9e71a592c463e70202b4d49f4408530a7e783c43625360956e6180052"
     );
 
     let key = setup.public_key(&DerivationPath::new(vec![index1, index2]))?;
     assert_eq!(
         hex::encode(key.public_key),
-        "021714eb5c8c8a0b010f494243b1e5272d67d79fa9cd12de301aad847bba8aa7f3"
+        "02acd25bb5fbd517e5141aa5bc9b58554a96b9e9436bb285abb2090598cdcf850e"
     );
     assert_eq!(
         hex::encode(key.chain_key),
-        "006cc2146eedc68e85947dccd9d0b3aa7a794f9dd928bb9415fc0aa96ed9a45d"
+        "8e808ba4caebadca661fd647fcc8ab5e80a1b538b7ffee7bccf3f3a01a35d19e"
     );
 
     Ok(())

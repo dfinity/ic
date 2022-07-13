@@ -6,9 +6,10 @@ use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
 use crate::Csp;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::test_utils::select_n;
 use ic_types::crypto::{AlgorithmId, KeyId};
-use ic_types::{NodeIndex, NumberOfNodes, Randomness};
+use ic_types::{NodeIndex, NumberOfNodes};
 use proptest::prelude::*;
 use rand::{CryptoRng, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
@@ -43,10 +44,12 @@ pub mod util {
     >(
         public_coefficients: &CspPublicCoefficients,
         signers: &[(&Csp<R, S, C>, KeyId)],
-        seed: Randomness,
+        seed: Seed,
         message: &[u8],
     ) {
-        let mut rng = ChaChaRng::from_seed(seed.get());
+        let signature_selection_seed =
+            seed.derive("test_threshold_signatures::signature_selection");
+        let mut rng = seed.into_rng();
         let verifier = {
             let key_store = TempSecretKeyStore::new();
             let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
@@ -162,7 +165,7 @@ pub mod util {
         }
 
         // Combine a random subset of signatures:
-        let signature_selection = select_n(seed, threshold, &signatures);
+        let signature_selection = select_n(signature_selection_seed, threshold, &signatures);
         let signature = verifier
             .threshold_combine_signatures(
                 AlgorithmId::ThresBls12_381,
@@ -240,8 +243,8 @@ pub mod util {
     ///   * If the threshold is higher than the number of signers, keygen fails.
     /// * Correct keygen arguments yield keys that behave correctly with regards
     ///   to signing and verification.
-    pub fn test_threshold_scheme_with_basic_keygen(seed: Randomness, message: &[u8]) {
-        let mut rng = ChaChaRng::from_seed(seed.get());
+    pub fn test_threshold_scheme_with_basic_keygen(seed: Seed, message: &[u8]) {
+        let mut rng = seed.into_rng();
         let threshold = NumberOfNodes::from(rng.gen_range(0..10));
         let number_of_signers = NumberOfNodes::from(rng.gen_range(0..10));
 
@@ -270,7 +273,7 @@ pub mod util {
                 test_threshold_signatures(
                     &public_coefficients,
                     &signers,
-                    Randomness::from(rng.gen::<[u8; 32]>()),
+                    Seed::from_rng(&mut rng),
                     message,
                 );
             }
@@ -288,6 +291,6 @@ proptest! {
 
     #[test]
     fn test_threshold_scheme_with_basic_keygen(seed: [u8;32], message in proptest::collection::vec(any::<u8>(), 0..100)) {
-        util::test_threshold_scheme_with_basic_keygen(Randomness::from(seed), &message);
+        util::test_threshold_scheme_with_basic_keygen(Seed::from_bytes(&seed), &message);
     }
 }

@@ -11,8 +11,9 @@ use crate::{
     crypto::{keygen, keygen_with_secret},
 };
 use ic_crypto_internal_bls12381_serde_miracl::FrBytes;
+use ic_crypto_internal_seed::Seed;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
-use ic_types::{NodeIndex, NumberOfNodes, Randomness};
+use ic_types::{NodeIndex, NumberOfNodes};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -60,8 +61,8 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 ///   `receiver_keys`.
 /// * If the key generation produces public coefficients that are malformed.
 pub fn create_dealing(
-    keygen_seed: Randomness,
-    encryption_seed: Randomness,
+    keygen_seed: Seed,
+    encryption_seed: Seed,
     threshold: NumberOfNodes,
     receiver_keys: &BTreeMap<NodeIndex, FsEncryptionPublicKey>,
     epoch: Epoch,

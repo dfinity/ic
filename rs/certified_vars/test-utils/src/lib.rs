@@ -1,3 +1,4 @@
+use ic_crypto_internal_seed::Seed;
 use rand::{thread_rng, Rng};
 use serde::Serialize;
 
@@ -17,7 +18,7 @@ use ic_types::{
     consensus::certification::CertificationContent,
     crypto::{threshold_sig::ThresholdSigPublicKey, CryptoHash},
     crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
-    CanisterId, CryptoHashOfPartialState, NumberOfNodes, Randomness, SubnetId,
+    CanisterId, CryptoHashOfPartialState, NumberOfNodes, SubnetId,
 };
 
 const REPLICA_TIME: u64 = 1234567;
@@ -107,7 +108,7 @@ impl CertificateBuilder {
         thread_rng().fill(&mut seed);
 
         let (public_coefficients, secret_key_bytes) =
-            keygen(Randomness::from(seed), NumberOfNodes::new(1), &[true; 1]).unwrap();
+            keygen(Seed::from_bytes(&seed), NumberOfNodes::new(1), &[true; 1]).unwrap();
         let public_key = ThresholdSigPublicKey::from(CspThresholdSigPublicKey::from(
             combined_public_key(&public_coefficients).unwrap(),
         ));

@@ -21,7 +21,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError,
 };
 use ic_types::crypto::{AlgorithmId, KeyId};
-use ic_types::{NodeIndex, NumberOfNodes, Randomness};
+use ic_types::{NodeIndex, NumberOfNodes};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
@@ -41,10 +41,9 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         debug!(self.logger; crypto.method_name => "idkg_create_dealing");
         let start_time = self.metrics.now();
 
-        let seed = Randomness::from(self.rng_write_lock().gen::<[u8; 32]>());
-
         let tecdsa_shares = self.get_secret_shares(transcript_operation)?;
 
+        let seed = Seed::from_rng(&mut *self.rng_write_lock());
         let result = tecdsa_create_dealing(
             algorithm_id,
             context_data,
@@ -140,14 +139,14 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
                     Ok(BTreeMap::new())
                 }
                 Err(IDkgComputeSecretSharesInternalError::ComplaintShouldBeIssued) => {
-                    let randomness = Randomness::from(self.csprng.write().gen::<[u8; 32]>());
+                    let seed = Seed::from_rng(&mut *self.rng_write_lock());
                     let complaints = generate_complaints(
                         dealings,
                         context_data,
                         receiver_index,
                         &private_key,
                         &public_key,
-                        Seed::from_randomness(&randomness),
+                        seed,
                     )?;
                     Ok(complaints)
                 }
@@ -251,7 +250,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> IDk
         debug!(self.logger; crypto.method_name => "idkg_gen_mega_key_pair");
         let start_time = self.metrics.now();
 
-        let seed = Randomness::from(self.rng_write_lock().gen::<[u8; 32]>());
+        let seed = Seed::from_rng(&mut *self.rng_write_lock());
 
         let (public_key, private_key) = match algorithm_id {
             AlgorithmId::ThresholdEcdsaSecp256k1 => gen_keypair(EccCurveType::K256, seed)

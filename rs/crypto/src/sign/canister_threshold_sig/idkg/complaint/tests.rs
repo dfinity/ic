@@ -6,6 +6,7 @@ use crate::sign::tests::{
     mega_encryption_pk_record_with, registry_returning, registry_returning_none, registry_with,
     REG_V1,
 };
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, IDkgDealingInternal, MEGaPublicKey};
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
@@ -16,8 +17,8 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 };
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, KeyPurpose};
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
-use ic_types::{registry::RegistryClientError, Height, Randomness, RegistryVersion};
-use rand::{thread_rng, Rng};
+use ic_types::{registry::RegistryClientError, Height, RegistryVersion};
+use rand::thread_rng;
 use std::collections::BTreeSet;
 
 #[test]
@@ -579,7 +580,7 @@ fn generate_mega_public_key() -> MEGaPublicKey {
     let rng = &mut thread_rng();
     let (mega_pk, _mega_sk) = ic_crypto_internal_threshold_sig_ecdsa::gen_keypair(
         EccCurveType::K256,
-        Randomness::new(rng.gen()),
+        Seed::from_rng(rng),
     )
     .expect("failed to generate keypair");
     mega_pk

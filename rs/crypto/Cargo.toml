@@ -18,6 +18,7 @@ ic-crypto-internal-csp = { path = "internal/crypto_service_provider" }
 ic-crypto-internal-fs-ni-dkg = { path = "internal/crypto_lib/fs_ni_dkg" }
 ic-crypto-internal-logmon = { path = "internal/logmon" }
 ic-crypto-internal-multi-sig-bls12381 = { path = "internal/crypto_lib/multi_sig/bls12_381" }
+ic-crypto-internal-seed = { path = "internal/crypto_lib/seed" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "internal/crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-internal-threshold-sig-ecdsa = { path = "internal/crypto_lib/threshold_sig/tecdsa" }
 ic-crypto-internal-basic-sig-iccsa = { path = "internal/crypto_lib/basic_sig/iccsa" }

@@ -8,7 +8,8 @@ use crate::dkg::secp256k1::types::{
     EphemeralPopBytes, EphemeralPublicKeyBytes, EphemeralSecretKeyBytes,
 };
 use crate::test_utils::select_n;
-use ic_types::{NodeIndex, NumberOfNodes, Randomness};
+use ic_crypto_internal_seed::Seed;
+use ic_types::{NodeIndex, NumberOfNodes};
 use ic_types_test_utils::arbitrary as arbitrary_types;
 use proptest::prelude::*;
 use rand::seq::IteratorRandom;
@@ -51,7 +52,7 @@ fn test_honest_dealing_gets_no_complaints(
         })
         .collect();
     let receiver_keys = {
-        let seed = Randomness::from(rng.gen::<[u8; 32]>());
+        let seed = Seed::from_rng(&mut rng);
         let number_of_keys = threshold + redundancy;
         select_n(seed, number_of_keys, &all_receiver_keys)
     };
@@ -69,7 +70,7 @@ fn test_honest_dealing_gets_no_complaints(
     let mut dealer_rng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
     let mut complainer_rng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
     let dealing = create_dealing(
-        Randomness::from(dealer_rng.gen::<[u8; 32]>()),
+        Seed::from_rng(&mut dealer_rng),
         EphemeralSecretKeyBytes::from(&dealer_secret_key),
         dkg_id,
         threshold,
@@ -124,7 +125,7 @@ fn test_incorrect_share_gets_verified_complaint(
         })
         .collect();
     let receiver_keys = {
-        let seed = Randomness::from(rng.gen::<[u8; 32]>());
+        let seed = Seed::from_rng(&mut rng);
         let number_of_keys = threshold + redundancy;
         select_n(seed, number_of_keys, &all_receiver_keys)
     };
@@ -143,7 +144,7 @@ fn test_incorrect_share_gets_verified_complaint(
     let mut complainer_rng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
     let dealing = {
         let mut dealing1 = create_dealing(
-            Randomness::from(dealer_rng.gen::<[u8; 32]>()),
+            Seed::from_rng(&mut dealer_rng),
             EphemeralSecretKeyBytes::from(&dealer_secret_key),
             dkg_id,
             threshold,
@@ -151,7 +152,7 @@ fn test_incorrect_share_gets_verified_complaint(
         )
         .expect("Error in test setup: dealing failed");
         let dealing2 = create_dealing(
-            Randomness::from(dealer_rng.gen::<[u8; 32]>()),
+            Seed::from_rng(&mut dealer_rng),
             EphemeralSecretKeyBytes::from(&dealer_secret_key),
             dkg_id,
             threshold,

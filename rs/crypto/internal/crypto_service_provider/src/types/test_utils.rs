@@ -4,6 +4,7 @@ use ic_crypto_internal_basic_sig_ecdsa_secp256r1::types as ecdsa_secp256r1_types
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_sig_types;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_test_vectors::unhex::{
     hex_to_32_bytes, hex_to_48_bytes, hex_to_64_bytes, hex_to_96_bytes,
 };
@@ -300,7 +301,7 @@ pub fn arbitrary_threshold_bls12381_individual_signature() -> ThresBls12_381_Sig
 /// This function is only used for tests
 #[allow(unused)]
 pub fn arbitrary_mega_k256_encryption_key_set() -> CspSecretKey {
-    let seed = ic_types::Randomness::from(rand::thread_rng().gen::<[u8; 32]>());
+    let seed = Seed::from_rng(&mut rand::thread_rng());
 
     let (public_key, private_key) =
         gen_keypair(EccCurveType::K256, seed).expect("failed to generate MEGa key pair");

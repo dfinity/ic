@@ -8,10 +8,10 @@ use crate::threshold::tests::util::test_threshold_signatures;
 use crate::types as csp_types;
 use crate::Csp;
 use fixtures::*;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg as internal_types;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_types::crypto::KeyId;
-use ic_types::Randomness;
 use proptest::prelude::*;
 use rand::Rng;
 use rand::SeedableRng;
@@ -104,7 +104,7 @@ fn threshold_signatures_should_work(
             })
             .collect()
     };
-    let seed = Randomness::from(rng.gen::<[u8; 32]>());
+    let seed = Seed::from_rng(rng);
     let message = b"Tinker tailor soldier spy";
     test_threshold_signatures(&public_coefficients, &signatories[..], seed, &message[..]);
 }

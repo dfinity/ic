@@ -8,11 +8,11 @@ use crate::*;
 pub fn corrupt_dealing(
     dealing: &IDkgDealingInternal,
     corruption_targets: &[NodeIndex],
-    randomness: ic_types::Randomness,
+    seed: Seed,
 ) -> ThresholdEcdsaResult<IDkgDealingInternal> {
     let curve_type = dealing.commitment.curve_type();
 
-    let mut rng = Seed::from_randomness(&randomness).into_rng();
+    let mut rng = seed.into_rng();
     let randomizer = EccScalar::random(curve_type, &mut rng)?;
 
     let ciphertext = match &dealing.ciphertext {
@@ -63,8 +63,8 @@ pub fn corrupt_dealing(
 /// production code.
 pub fn corrupt_dealing_for_all_recipients(
     dealing: &IDkgDealingInternal,
-    randomness: ic_types::Randomness,
+    seed: Seed,
 ) -> ThresholdEcdsaResult<IDkgDealingInternal> {
     let all_recipients = (0..dealing.ciphertext.recipients() as NodeIndex).collect::<Vec<_>>();
-    corrupt_dealing(dealing, &all_recipients, randomness)
+    corrupt_dealing(dealing, &all_recipients, seed)
 }

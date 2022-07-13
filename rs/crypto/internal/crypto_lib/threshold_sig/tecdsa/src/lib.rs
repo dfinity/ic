@@ -274,11 +274,9 @@ pub use sign::{ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal
 /// Create MEGa encryption keypair
 pub fn gen_keypair(
     curve_type: EccCurveType,
-    seed: Randomness,
+    seed: Seed,
 ) -> Result<(MEGaPublicKey, MEGaPrivateKey), ThresholdEcdsaError> {
-    use rand::SeedableRng;
-
-    let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed.get());
+    let mut rng = seed.into_rng();
     let private_key = MEGaPrivateKey::generate(curve_type, &mut rng)?;
 
     let public_key = private_key.public_key()?;
@@ -315,14 +313,12 @@ pub fn create_dealing(
     threshold: NumberOfNodes,
     recipients: &[MEGaPublicKey],
     shares: &SecretShares,
-    randomness: Randomness,
+    seed: Seed,
 ) -> Result<IDkgDealingInternal, IdkgCreateDealingInternalError> {
     let curve = match algorithm_id {
         AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
         _ => Err(IdkgCreateDealingInternalError::UnsupportedAlgorithm),
     }?;
-
-    let seed = Seed::from_randomness(&randomness);
 
     IDkgDealingInternal::new(
         shares,
