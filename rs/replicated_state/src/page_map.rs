@@ -110,6 +110,10 @@ impl PageDelta {
     /// the maximum gap size to re-write, in order to keep write
     /// amplification (ratio of writes to dirty pages) below the
     /// target.
+    /// Note that the file system internally would also group
+    /// neighbouring write calls as long as there is no fsync between
+    /// them. As such, the main benefit comes from rewriting small
+    /// gaps, as opposed to the vectored writes.
     fn write_amplification_to_gap(
         &self,
         maximum_gap: u64,

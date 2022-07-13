@@ -1590,9 +1590,6 @@ impl StateManagerImpl {
     /// checkpoint ref.
     fn latest_manifest(&self) -> Option<(Manifest, CheckpointRef)> {
         self.checkpoint_heights()
-            .unwrap_or_else(|err| {
-                fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
-            })
             .iter()
             .rev()
             .find_map(|checkpointed_height| {
@@ -1724,13 +1721,7 @@ impl StateManagerImpl {
                 metadata.certified_state_hash.clone(),
             ));
         } else {
-            let checkpoint_heights = self.checkpoint_heights().unwrap_or_else(|err| {
-                fatal!(
-                    &self.log,
-                    "Failed to retrieve checkpoint heights: {:?}",
-                    err
-                )
-            });
+            let checkpoint_heights = self.checkpoint_heights();
             fatal!(
                 self.log,
                 "Couldn't populate previous state hash for height {}.\nLatest state: {:?}\nLoaded states: {:?}\nHave metadata for states: {:?}\nCheckpoints: {:?}",
@@ -2040,9 +2031,7 @@ impl StateManagerImpl {
         #[cfg(debug_assertions)]
         {
             use ic_interfaces_state_manager::CERT_ANY;
-            let checkpoint_heights = self.checkpoint_heights().unwrap_or_else(|err| {
-                fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
-            });
+            let checkpoint_heights = self.checkpoint_heights();
             let state_heights = self.list_state_heights(CERT_ANY);
 
             debug_assert!(checkpoints_to_keep
@@ -2053,14 +2042,17 @@ impl StateManagerImpl {
         }
     }
 
-    fn checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
-        let result = self.state_layout.checkpoint_heights();
+    fn checkpoint_heights(&self) -> Vec<Height> {
+        let result = self
+            .state_layout
+            .checkpoint_heights()
+            .unwrap_or_else(|err| {
+                fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
+            });
 
-        if let Ok(heights) = &result {
-            self.metrics
-                .checkpoints_on_disk_count
-                .set(heights.len() as i64);
-        }
+        self.metrics
+            .checkpoints_on_disk_count
+            .set(result.len() as i64);
 
         result
     }
@@ -2395,9 +2387,6 @@ impl StateManager for StateManagerImpl {
 
         let heights: BTreeSet<_> = self
             .checkpoint_heights()
-            .unwrap_or_else(|err| {
-                fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
-            })
             .into_iter()
             .chain(states.snapshots.iter().map(|snapshot| snapshot.height))
             .filter(|h| {
@@ -2467,13 +2456,7 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["remove_states_below"])
             .start_timer();
 
-        let checkpoint_heights: BTreeSet<Height> = self
-            .checkpoint_heights()
-            .unwrap_or_else(|err| {
-                fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
-            })
-            .drain(..)
-            .collect();
+        let checkpoint_heights: BTreeSet<Height> = self.checkpoint_heights().drain(..).collect();
 
         // The latest state must be kept.
         let latest_state_height = self.latest_state_height();
@@ -2732,9 +2715,7 @@ impl StateManager for StateManagerImpl {
             .start_timer();
 
         let mut states = self.states.write();
-        let mut heights = self.checkpoint_heights().unwrap_or_else(|err| {
-            fatal!(self.log, "Failed to retrieve checkpoint heights: {}", err);
-        });
+        let mut heights = self.checkpoint_heights();
 
         while let Some(h) = heights.pop() {
             info!(self.log, "Removing potentially diverged checkpoint @{}", h);
