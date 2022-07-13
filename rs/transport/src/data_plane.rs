@@ -34,8 +34,8 @@ use ic_interfaces_transport::{
 use ic_logger::warn;
 use std::convert::TryInto;
 use std::net::SocketAddr;
-use std::sync::Weak;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant};
 use tower::Service;
 
@@ -126,180 +126,184 @@ impl TransportImpl {
 
     /// Per-flow send task. Reads the requests from the send queue and writes to
     /// the socket.
-    async fn flow_write_task(
+    fn flow_write_task(
+        &self,
         peer_id: NodeId,
         flow_tag: FlowTag,
         flow_label: String,
         mut send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
         mut writer: Box<TlsWriteHalf>,
-        metrics: DataPlaneMetrics,
         event_handler: TransportEventHandler,
-        state: Weak<TransportImpl>,
-    ) {
-        let _updater = MetricsUpdater::new(metrics.clone(), true);
+    ) -> JoinHandle<()> {
+        let _updater = MetricsUpdater::new(self.data_plane_metrics.clone(), true);
         let flow_tag_str = flow_tag.to_string();
-        loop {
-            let loop_start_time = Instant::now();
-            // If the TransportImpl has been deleted, abort.
-            let state = match state.upgrade() {
-                Some(transport) => transport,
-                _ => return,
-            };
-            // Wait for the send requests
-            let dequeued = send_queue_reader
-                .dequeue(
-                    DEQUEUE_BYTES,
-                    Duration::from_millis(TRANSPORT_HEARTBEAT_SEND_INTERVAL_MS),
-                )
-                .await;
+        let weak_self = self.weak_self.read().unwrap().clone();
+        self.rt_handle.spawn(async move  {
+            loop {
+                let loop_start_time = Instant::now();
+                // If the TransportImpl has been deleted, abort.
+                let arc_self = match weak_self.upgrade() {
+                    Some(arc_self) => arc_self,
+                    _ => return,
+                };
+                // Wait for the send requests
+                let dequeued = send_queue_reader
+                    .dequeue(
+                        DEQUEUE_BYTES,
+                        Duration::from_millis(TRANSPORT_HEARTBEAT_SEND_INTERVAL_MS),
+                    )
+                    .await;
 
-            let mut to_send = Vec::<u8>::new();
-            if dequeued.is_empty() {
-                // There is nothing to send, so issue a heartbeat message
-                to_send.append(&mut Self::pack_header(None, false, true));
-                state
-                    .data_plane_metrics
-                    .heart_beats_sent
-                    .with_label_values(&[&flow_label, &flow_tag_str])
-                    .inc();
-            } else {
-                for mut msg in dequeued {
-                    to_send.append(&mut Self::pack_header(
-                        Some(&msg.payload),
-                        msg.sender_error,
-                        false,
-                    ));
-                    to_send.append(&mut msg.payload.0);
+                let mut to_send = Vec::<u8>::new();
+                if dequeued.is_empty() {
+                    // There is nothing to send, so issue a heartbeat message
+                    to_send.append(&mut Self::pack_header(None, false, true));
+                    arc_self
+                        .data_plane_metrics
+                        .heart_beats_sent
+                        .with_label_values(&[&flow_label, &flow_tag_str])
+                        .inc();
+                } else {
+                    for mut msg in dequeued {
+                        to_send.append(&mut Self::pack_header(
+                            Some(&msg.payload),
+                            msg.sender_error,
+                            false,
+                        ));
+                        to_send.append(&mut msg.payload.0);
+                    }
                 }
-            }
-            state
-                .data_plane_metrics
-                .write_task_overhead_time_msec
-                .with_label_values(&[&flow_label, &flow_tag_str])
-                .observe(loop_start_time.elapsed().as_millis() as f64);
+                arc_self
+                    .data_plane_metrics
+                    .write_task_overhead_time_msec
+                    .with_label_values(&[&flow_label, &flow_tag_str])
+                    .observe(loop_start_time.elapsed().as_millis() as f64);
 
-            // Send the payload
-            let start_time = Instant::now();
-            if let Err(e) = writer.write_all(&to_send).await {
-                warn!(
-                    state.log,
-                    "DataPlane::flow_write_task(): failed to write payload: peer_id: {:?}, flow_tag: {:?}, {:?}",
-                    peer_id,
-                    flow_tag,
-                    e,
-                );
-                state.on_disconnect(peer_id, flow_tag, event_handler).await;
-                return;
-            }
-            // Flush the write
-            if let Err(e) = writer.flush().await {
-                warn!(
-                    state.log,
-                    "DataPlane::flow_write_task(): failed to flush: peer_id: {:?}, flow_tag: {:?}, {:?}", peer_id, flow_tag, e,
-                );
-                state.on_disconnect(peer_id, flow_tag, event_handler).await;
-                return;
-            }
+                // Send the payload
+                let start_time = Instant::now();
+                if let Err(e) = writer.write_all(&to_send).await {
+                    warn!(
+                        arc_self.log,
+                        "DataPlane::flow_write_task(): failed to write payload: peer_id: {:?}, flow_tag: {:?}, {:?}",
+                        peer_id,
+                        flow_tag,
+                        e,
+                    );
+                    arc_self.on_disconnect(peer_id, flow_tag, event_handler).await;
+                    return;
+                }
+                // Flush the write
+                if let Err(e) = writer.flush().await {
+                    warn!(
+                        arc_self.log,
+                        "DataPlane::flow_write_task(): failed to flush: peer_id: {:?}, flow_tag: {:?}, {:?}", peer_id, flow_tag, e,
+                    );
+                    arc_self.on_disconnect(peer_id, flow_tag, event_handler).await;
+                    return;
+                }
 
-            state
-                .data_plane_metrics
-                .socket_write_time_msec
-                .with_label_values(&[&flow_label, &flow_tag_str])
-                .observe(start_time.elapsed().as_millis() as f64);
-            state
-                .data_plane_metrics
-                .socket_write_bytes
-                .with_label_values(&[&flow_label, &flow_tag_str])
-                .inc_by(to_send.len() as u64);
-            state
-                .data_plane_metrics
-                .socket_write_size
-                .with_label_values(&[&flow_label, &flow_tag_str])
-                .observe(to_send.len() as f64);
-        }
+                arc_self
+                    .data_plane_metrics
+                    .socket_write_time_msec
+                    .with_label_values(&[&flow_label, &flow_tag_str])
+                    .observe(start_time.elapsed().as_millis() as f64);
+                arc_self
+                    .data_plane_metrics
+                    .socket_write_bytes
+                    .with_label_values(&[&flow_label, &flow_tag_str])
+                    .inc_by(to_send.len() as u64);
+                arc_self
+                    .data_plane_metrics
+                    .socket_write_size
+                    .with_label_values(&[&flow_label, &flow_tag_str])
+                    .observe(to_send.len() as f64);
+            }
+        })
     }
 
     /// Per-flow receive task. Reads the messages from the socket and passes to
     /// the client.
-    async fn flow_read_task(
+    fn flow_read_task(
+        &self,
         peer_id: NodeId,
         flow_tag: FlowTag,
         flow_label: String,
         mut event_handler: TransportEventHandler,
         mut reader: Box<TlsReadHalf>,
-        metrics: DataPlaneMetrics,
-        state: Weak<TransportImpl>,
-    ) {
+    ) -> JoinHandle<()> {
         let heartbeat_timeout = Duration::from_millis(TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS);
-        let _updater = MetricsUpdater::new(metrics.clone(), false);
+        let _updater = MetricsUpdater::new(self.data_plane_metrics.clone(), false);
         let flow_tag_str = flow_tag.to_string();
-        loop {
-            // If the TransportImpl has been deleted, abort.
-            let state = match state.upgrade() {
-                Some(transport) => transport,
-                _ => return,
-            };
+        let weak_self = self.weak_self.read().unwrap().clone();
+        self.rt_handle.spawn(async move {
+            loop {
+                // If the TransportImpl has been deleted, abort.
+                let arc_self = match weak_self.upgrade() {
+                    Some(arc_self) => arc_self,
+                    _ => return,
+                };
 
-            // Read the next message from the socket
-            let ret = Self::read_one_message(&mut reader, heartbeat_timeout).await;
-            if ret.is_err() {
-                warn!(
-                    state.log,
-                    "DataPlane::flow_read_task(): failed to receive message: peer_id: {:?}, flow_tag: {:?}, {:?}",
-                    peer_id,
-                    flow_tag,
-                    ret.as_ref().err(),
-                );
+                // Read the next message from the socket
+                let ret = Self::read_one_message(&mut reader, heartbeat_timeout).await;
+                if ret.is_err() {
+                    warn!(
+                        arc_self.log,
+                        "DataPlane::flow_read_task(): failed to receive message: peer_id: {:?}, flow_tag: {:?}, {:?}",
+                        peer_id,
+                        flow_tag,
+                        ret.as_ref().err(),
+                    );
 
-                if let Err(ReadError::SocketReadTimeOut) = ret {
-                    metrics
-                        .socket_heart_beat_timeouts
+                    if let Err(ReadError::SocketReadTimeOut) = ret {
+                        arc_self.data_plane_metrics
+                            .socket_heart_beat_timeouts
+                            .with_label_values(&[&flow_label, &flow_tag_str])
+                            .inc();
+                    }
+                    arc_self.on_disconnect(peer_id, flow_tag, event_handler).await;
+                    return;
+                }
+
+                // Process the received message
+                let (header, payload) = ret.unwrap();
+                if header.flags & TRANSPORT_FLAGS_IS_HEARTBEAT != 0 {
+                    // It's an empty heartbeat message -- do nothing
+                    arc_self.data_plane_metrics
+                        .heart_beats_received
+                        .with_label_values(&[&flow_label, &flow_tag_str])
+                        .inc();
+                    continue;
+                }
+
+                // Pass up sender indicated error
+                if header.flags & TRANSPORT_FLAGS_SENDER_ERROR != 0 {
+                    arc_self.data_plane_metrics
+                        .send_errors_received
                         .with_label_values(&[&flow_label, &flow_tag_str])
                         .inc();
                 }
-                state.on_disconnect(peer_id, flow_tag, event_handler).await;
-                return;
-            }
 
-            // Process the received message
-            let (header, payload) = ret.unwrap();
-            if header.flags & TRANSPORT_FLAGS_IS_HEARTBEAT != 0 {
-                // It's an empty heartbeat message -- do nothing
-                metrics
-                    .heart_beats_received
+                // Pass up the received message
+                // Errors out for unsolicited messages, decoding errors and p2p
+                // shutdowns.
+                let payload = payload.unwrap();
+                arc_self.data_plane_metrics
+                    .socket_read_bytes
                     .with_label_values(&[&flow_label, &flow_tag_str])
-                    .inc();
-                continue;
-            }
-
-            // Pass up sender indicated error
-            if header.flags & TRANSPORT_FLAGS_SENDER_ERROR != 0 {
-                metrics
-                    .send_errors_received
+                    .inc_by(payload.0.len() as u64);
+                let start_time = Instant::now();
+                let _ = event_handler
+                    .call(TransportEvent::Message(TransportMessage {
+                        peer_id,
+                        payload,
+                    }))
+                    .await;
+                arc_self.data_plane_metrics
+                    .client_send_time_msec
                     .with_label_values(&[&flow_label, &flow_tag_str])
-                    .inc();
+                    .observe(start_time.elapsed().as_millis() as f64);
             }
-
-            // Pass up the received message
-            // Errors out for unsolicited messages, decoding errors and p2p
-            // shutdowns.
-            let payload = payload.unwrap();
-            metrics
-                .socket_read_bytes
-                .with_label_values(&[&flow_label, &flow_tag_str])
-                .inc_by(payload.0.len() as u64);
-            let start_time = Instant::now();
-            let _ = event_handler
-                .call(TransportEvent::Message(TransportMessage {
-                    peer_id,
-                    payload,
-                }))
-                .await;
-            metrics
-                .client_send_time_msec
-                .with_label_values(&[&flow_label, &flow_tag_str])
-                .observe(start_time.elapsed().as_millis() as f64);
-        }
+        })
     }
 
     /// Reads and returns the next <message hdr, message payload> from the
@@ -406,45 +410,25 @@ impl TransportImpl {
         }
 
         // Spawn write task
-        let peer_id_cl = flow_state.peer_id;
-        let flow_tag_cl = flow_state.flow_tag;
-        let flow_label_cl = flow_state.flow_label.clone();
         let send_queue_reader = flow_state.send_queue.get_reader();
-        let metrics_cl = self.data_plane_metrics.clone();
-        let weak_self = self.weak_self.read().unwrap().clone();
         let event_handler_cl = event_handler.clone();
-        let write_task = self.tokio_runtime.spawn(async move {
-            Self::flow_write_task(
-                peer_id_cl,
-                flow_tag_cl,
-                flow_label_cl,
-                send_queue_reader,
-                Box::new(tls_writer),
-                metrics_cl,
-                event_handler_cl,
-                weak_self,
-            )
-            .await;
-        });
+        let write_task = self.flow_write_task(
+            flow_state.peer_id,
+            flow_state.flow_tag,
+            flow_state.flow_label.clone(),
+            send_queue_reader,
+            Box::new(tls_writer),
+            event_handler_cl,
+        );
 
-        let peer_id_cl = flow_state.peer_id;
-        let flow_tag_cl = flow_state.flow_tag;
-        let flow_label_cl = flow_state.flow_label.clone();
         let event_handler_cl = event_handler;
-        let metrics_cl = self.data_plane_metrics.clone();
-        let weak_self = self.weak_self.read().unwrap().clone();
-        let read_task = self.tokio_runtime.spawn(async move {
-            Self::flow_read_task(
-                peer_id_cl,
-                flow_tag_cl,
-                flow_label_cl,
-                event_handler_cl,
-                Box::new(tls_reader),
-                metrics_cl,
-                weak_self,
-            )
-            .await;
-        });
+        let read_task = self.flow_read_task(
+            flow_state.peer_id,
+            flow_state.flow_tag,
+            flow_state.flow_label.clone(),
+            event_handler_cl,
+            Box::new(tls_reader),
+        );
 
         let connected_state = Connected {
             peer_addr,
