@@ -9,9 +9,8 @@ use crate::dkg::secp256k1::types::{
     CLibComplaintBytes, CLibDealingBytes, CLibResponseBytes, EphemeralPublicKey,
     EphemeralPublicKeyBytes, EphemeralSecretKey, EphemeralSecretKeyBytes,
 };
-use ic_types::{IDkgId, NodeIndex, Randomness};
-use rand::SeedableRng;
-use rand_chacha::ChaChaRng;
+use ic_crypto_internal_seed::Seed;
+use ic_types::{IDkgId, NodeIndex};
 use std::collections::btree_map::BTreeMap;
 use std::convert::TryFrom;
 
@@ -38,7 +37,7 @@ pub mod tests;
 /// * one of the keys is malformed.  It is the caller's responsibility to verify
 ///   that the data is well formed before calling this method.
 pub fn create_response(
-    seed: Randomness,
+    seed: Seed,
     receiver_secret_key_bytes: &EphemeralSecretKeyBytes,
     dkg_id: IDkgId,
     verified_dealings: &BTreeMap<EphemeralPublicKeyBytes, CLibDealingBytes>,
@@ -47,7 +46,7 @@ pub fn create_response(
     let receiver_secret_key = EphemeralSecretKey::try_from(receiver_secret_key_bytes)
         .map_err(DkgCreateResponseError::MalformedSecretKeyError)?;
     let receiver_public_key = EphemeralPublicKey::from(&receiver_secret_key);
-    let mut rng = ChaChaRng::from_seed(seed.get());
+    let mut rng = seed.into_rng();
 
     let complaints: Result<
         BTreeMap<EphemeralPublicKeyBytes, Option<CLibComplaintBytes>>,

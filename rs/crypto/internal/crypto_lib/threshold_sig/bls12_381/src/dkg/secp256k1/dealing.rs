@@ -19,11 +19,12 @@ use crate::{
         SecretKeyBytes as ThresholdSecretKeyBytes,
     },
 };
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::{
     crypto::{AlgorithmId, CryptoError},
-    IDkgId, NodeIndex, NumberOfNodes, Randomness,
+    IDkgId, NodeIndex, NumberOfNodes,
 };
 use std::convert::{TryFrom, TryInto};
 
@@ -64,7 +65,7 @@ mod tests;
 /// encrypted threshold secret keys.  Each encrypted secret key can be decrypted
 /// by the corresponding receiver.
 pub fn create_dealing(
-    seed: Randomness,
+    seed: Seed,
     dealer_secret_key_bytes: EphemeralSecretKeyBytes,
     dkg_id: IDkgId,
     threshold: NumberOfNodes,
@@ -131,7 +132,7 @@ pub fn create_dealing(
 /// by the corresponding receiver.
 #[allow(unused)]
 pub fn create_resharing_dealing(
-    seed: Randomness,
+    seed: Seed,
     dealer_ephemeral_secret_key_bytes: EphemeralSecretKeyBytes,
     dkg_id: IDkgId,
     threshold: NumberOfNodes,

@@ -8,14 +8,15 @@ use crate::vault::test_utils::ni_dkg::fixtures::{
     random_algorithm_id, MockDkgConfig, MockNetwork, MockNode, StateWithConfig, StateWithDealings,
     StateWithTranscript, StateWithVerifiedDealings,
 };
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateReshareDealingError;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg as internal_types;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspFsEncryptionPublicKey;
 use ic_types::crypto::{AlgorithmId, KeyId};
-use ic_types::{NodeIndex, NumberOfNodes, Randomness};
+use ic_types::{NodeIndex, NumberOfNodes};
 use rand::prelude::IteratorRandom;
-use rand::{Rng, SeedableRng};
+use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -94,7 +95,7 @@ fn threshold_signatures_should_work(
             })
             .collect()
     };
-    let seed = Randomness::from(rng.gen::<[u8; 32]>());
+    let seed = Seed::from_rng(rng);
     let message = b"Tinker tailor soldier spy";
     test_utils::threshold_sig::test_threshold_signatures(
         &public_coefficients,

@@ -3,26 +3,23 @@ use crate::dkg::secp256k1::ephemeral_key::tests::create_ephemeral_public_key;
 use crate::dkg::secp256k1::types::EphemeralSecretKeyBytes;
 use crate::test_utils::select_n;
 use crate::types::PublicKey;
-use ic_types::Randomness;
 use ic_types_test_utils::arbitrary as arbitrary_types;
 use proptest::prelude::*;
 use rand::seq::IteratorRandom;
-use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::convert::{TryFrom, TryInto};
 
 /// Happy path MUST succeed
 fn test_honest_dealing_verifies(
-    seed: Randomness,
+    seed: Seed,
     dealer_secret_key: EphemeralSecretKey,
     dkg_id: IDkgId,
     threshold: NumberOfNodes,
     receiver_keys: &[Option<(EphemeralPublicKeyBytes, EphemeralPopBytes)>],
 ) {
-    let mut rng = ChaChaRng::from_seed(seed.get());
     let dealing = create_dealing(
-        Randomness::from(rng.gen::<[u8; 32]>()),
+        seed,
         dealer_secret_key.into(),
         dkg_id,
         threshold,
@@ -34,13 +31,13 @@ fn test_honest_dealing_verifies(
 
 /// If a receiver public key is malformed, dealing MUST fail.
 fn test_dealing_should_fail_with_malformed_public_key(
-    seed: Randomness,
+    seed: Seed,
     dealer_secret_key: EphemeralSecretKey,
     dkg_id: IDkgId,
     threshold: NumberOfNodes,
     receiver_keys: &[Option<(EphemeralPublicKeyBytes, EphemeralPopBytes)>],
 ) {
-    let mut rng = ChaChaRng::from_seed(seed.get());
+    let mut rng = seed.into_rng();
     let malformed_receiver_keys = {
         let mut ans = receiver_keys.to_vec();
         let receiver_index: usize = ans
@@ -64,7 +61,7 @@ fn test_dealing_should_fail_with_malformed_public_key(
         "Test error; the receiver keys should have been corrupted"
     );
     let dealing = create_dealing(
-        Randomness::from(rng.gen::<[u8; 32]>()),
+        Seed::from_rng(&mut rng),
         dealer_secret_key.into(),
         dkg_id,
         threshold,
@@ -107,7 +104,7 @@ pub fn test_malformed_dealing_fails_verification(
 /// Values used in tests
 #[derive(Debug)]
 pub struct DealingFixture {
-    seed: Randomness,
+    seed: Seed,
     dealer_secret_key: EphemeralSecretKey,
     dkg_id: IDkgId,
     threshold: NumberOfNodes,
@@ -130,11 +127,11 @@ prop_compose! {
             create_ephemeral_public_key(&mut rng, dkg_id, secret_key_bytes, sender.as_bytes()).expect("Failed to generate test receiver public keys")
         }).collect();
         let receiver_keys = {
-            let seed = Randomness::from(rng.gen::<[u8;32]>());
+            let seed = Seed::from_rng(&mut rng);
             let number_of_keys = NumberOfNodes::from(threshold + redundancy);
             select_n(seed, number_of_keys, &all_receiver_keys)
         };
-        DealingFixture {seed: Randomness::from(rng.gen::<[u8;32]>()), dealer_secret_key, dkg_id, threshold: NumberOfNodes::from(threshold), receiver_keys}
+        DealingFixture {seed: Seed::from_rng(&mut rng), dealer_secret_key, dkg_id, threshold: NumberOfNodes::from(threshold), receiver_keys}
     }
 }
 
@@ -216,17 +213,17 @@ proptest! {
             create_ephemeral_public_key(&mut rng, dkg_id, secret_key_bytes, sender.as_bytes()).expect("Failed to generate test receiver public keys")
         }).collect();
         let receiver_keys_used_by_dealer = {
-            let seed = Randomness::from(rng.gen::<[u8;32]>());
+            let seed = Seed::from_rng(&mut rng);
             let number_of_keys = NumberOfNodes::from(threshold + dealer_redundancy);
             select_n(seed, number_of_keys, &all_receiver_keys)
         };
         let receiver_keys_used_by_verifier = {
-            let seed = Randomness::from(rng.gen::<[u8;32]>());
+            let seed = Seed::from_rng(&mut rng);
             let number_of_keys = NumberOfNodes::from(threshold + verifier_redundancy);
             select_n(seed, number_of_keys, &all_receiver_keys)
         };
         prop_assume!(receiver_keys_used_by_dealer != receiver_keys_used_by_verifier);
-        let dealing = create_dealing(Randomness::from(rng.gen::<[u8; 32]>()), EphemeralSecretKeyBytes::from(&dealer_secret_key), dkg_id, NumberOfNodes::from(threshold), &receiver_keys_used_by_dealer).expect("CLibDealing failed");
+        let dealing = create_dealing(Seed::from_rng(&mut rng), EphemeralSecretKeyBytes::from(&dealer_secret_key), dkg_id, NumberOfNodes::from(threshold), &receiver_keys_used_by_dealer).expect("CLibDealing failed");
         assert!(verify_dealing(NumberOfNodes::from(threshold), &receiver_keys_used_by_verifier, dealing).is_err(), "Verification should fail if there are too many share slots");
     }
 }

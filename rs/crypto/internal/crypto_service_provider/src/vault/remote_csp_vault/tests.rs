@@ -153,7 +153,7 @@ mod multi_sig {
 
 mod threshold_sig {
     use super::*;
-    use ic_types::Randomness;
+    use ic_crypto_internal_seed::Seed;
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaChaRng;
 
@@ -162,7 +162,7 @@ mod threshold_sig {
         let mut rng = ChaChaRng::from_seed(seed);
         let message = rng.gen::<[u8; 32]>();
         test_utils::threshold_sig::test_threshold_scheme_with_basic_keygen(
-            Randomness::from(rng.gen::<[u8; 32]>()),
+            Seed::from_rng(&mut rng),
             new_csp_vault_for_test(tokio_rt.handle()),
             &message,
         );

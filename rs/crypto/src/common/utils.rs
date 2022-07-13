@@ -27,7 +27,6 @@ use crate::keygen::{
     ensure_node_signing_key_material_is_set_up_correctly,
     ensure_tls_key_material_is_set_up_correctly,
 };
-pub use crate::sign::utils::combined_threshold_signature_and_public_key;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 pub use temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 #[cfg(test)]

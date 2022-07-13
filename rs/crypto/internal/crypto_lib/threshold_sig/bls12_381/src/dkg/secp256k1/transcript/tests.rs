@@ -7,17 +7,16 @@ use dkg::response::tests::{
     arbitrary_response_fixture, EphemeralKeySet, ResponseFixture, ResponseFixtureConfig,
 };
 use dkg::types::{CLibDealingBytes, CLibResponseBytes};
-use ic_types::Randomness;
+use ic_crypto_internal_seed::Seed;
 use proptest::collection::vec as prop_vec;
 use proptest::prelude::*;
 use rand::Rng;
-use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::convert::TryInto;
 
 #[derive(Debug)]
 pub struct TranscriptFixture {
-    pub seed: Randomness,
+    pub seed: Seed,
     pub dkg_id: IDkgId,
     pub threshold: NumberOfNodes,
     pub verified_dealings: BTreeMap<EphemeralPublicKeyBytes, CLibDealingBytes>,
@@ -38,7 +37,7 @@ impl TranscriptFixture {
             .map(|((receiver_index, key_set), eligible_receiver)| {
                 if *eligible_receiver {
                     let response: CLibResponseBytes = {
-                        let seed = Randomness::from(rng.gen::<[u8; 32]>());
+                        let seed = Seed::from_rng(rng);
                         let receiver_secret_key_bytes = &key_set.secret_key_bytes;
                         dkg::response::create_response(
                             seed,
@@ -133,7 +132,7 @@ prop_compose! {
         response_fixture in arbitrary_response_fixture(config),
         message in prop_vec(any::<u8>(), 0..99),
     ) -> TranscriptFixture {
-        let mut rng = ChaChaRng::from_seed(response_fixture.seed.get());
+        let mut rng = response_fixture.seed.derive("arbitrary_transcript_fixture::into_rng").into_rng();
         let verified_dealings: BTreeMap<EphemeralPublicKeyBytes, CLibDealingBytes> = (&response_fixture.dealer_key_sets).iter().map(|key_set| key_set.public_key_bytes).zip(response_fixture.honest_dealings.iter().cloned()).collect();
         let responses = TranscriptFixture::responses(&response_fixture, &mut rng);
         let verified_responses = TranscriptFixture::skip_verifying_responses(&response_fixture, &responses[..]);
@@ -219,7 +218,7 @@ proptest! {
         prop_assume!(fixture.num_dealings() > fixture.threshold);
 
         // Remove responses until there are too few responses left
-        let mut rng = ChaChaRng::from_seed(fixture.seed.get());
+        let mut rng = fixture.seed.derive("should_error_without_sufficient_valid_responses").into_rng();
         let num_verified_responses =  fixture.verified_responses.len();
         while fixture.num_verified_responses() + NumberOfNodes::from(2) > fixture.threshold * 2 {
             fixture.verified_responses[rng.gen_range(0..num_verified_responses)] = None;

@@ -5,24 +5,27 @@ use super::super::test_utils::select_n;
 use super::super::types::{
     CombinedSignatureBytes, IndividualSignature, IndividualSignatureBytes, SecretKeyBytes,
 };
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
-use ic_types::{NumberOfNodes, Randomness};
+use ic_types::NumberOfNodes;
 use proptest::prelude::*;
+use rand::Rng;
 
 mod util {
     use super::super::super::api as tsig;
     use super::super::super::types::SecretKeyBytes;
+    use ic_crypto_internal_seed::Seed;
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
     use ic_types::crypto::CryptoResult;
-    use ic_types::{NumberOfNodes, Randomness};
+    use ic_types::NumberOfNodes;
 
     /// Shim for tests that use the old API that generated keys for all
     /// participants. The new API generates only select keys.
     ///
     /// TODO(DFN-1412): Test scenarios where only some keys are generated
     pub fn keygen(
-        seed: Randomness,
+        seed: Seed,
         threshold: NumberOfNodes,
         group_size: NumberOfNodes,
     ) -> CryptoResult<(PublicCoefficientsBytes, Vec<SecretKeyBytes>)> {
@@ -39,7 +42,7 @@ mod util {
 
 /// Individual signatures should be verifiable
 fn test_individual_signature_verifies(
-    seed: Randomness,
+    seed: Seed,
     group_size: NumberOfNodes,
     threshold: NumberOfNodes,
     message: &[u8],
@@ -55,18 +58,19 @@ fn test_individual_signature_verifies(
 }
 
 fn test_combined_signature_verifies(
-    seed: Randomness,
+    seed: Seed,
     group_size: NumberOfNodes,
     threshold: NumberOfNodes,
     message: &[u8],
 ) {
+    let mut rng = seed.into_rng();
     let (public_coefficients, secret_keys) =
-        util::keygen(seed, threshold, group_size).expect("Failed to deal");
+        util::keygen(Seed::from_rng(&mut rng), threshold, group_size).expect("Failed to deal");
     let signatures: Vec<IndividualSignatureBytes> = secret_keys
         .iter()
         .map(|secret_key| tsig::sign_message(message, secret_key).expect("Failed to sign"))
         .collect();
-    let signatures = select_n(seed, threshold, &signatures);
+    let signatures = select_n(Seed::from_rng(&mut rng), threshold, &signatures);
     let signature =
         tsig::combine_signatures(&signatures, threshold).expect("Failed to combine signatures");
     let public_key =
@@ -80,15 +84,19 @@ fn test_combined_signature_verifies(
 /// Assertion:  Computing with the external interface is equivalent to working
 /// with the core library.
 fn test_threshold_sig_api_and_core_match(
-    seed: Randomness,
+    seed: Seed,
     group_size: NumberOfNodes,
     threshold: NumberOfNodes,
     message: &[u8],
 ) {
+    let mut rng = seed.into_rng();
+    let seed_bytes = rng.gen::<[u8; 32]>();
     let (core_public_coefficients, core_secret_keys) =
-        crypto::tests::util::keygen(seed, threshold, group_size).expect("Core failed to deal");
+        crypto::tests::util::keygen(Seed::from_bytes(&seed_bytes), threshold, group_size)
+            .expect("Core failed to deal");
     let (tsig_public_coefficients, tsig_secret_keys) =
-        util::keygen(seed, threshold, group_size).expect("Threshold sig failed to deal");
+        util::keygen(Seed::from_bytes(&seed_bytes), threshold, group_size)
+            .expect("Threshold sig failed to deal");
     assert_eq!(
         PublicCoefficientsBytes::from(&core_public_coefficients),
         tsig_public_coefficients
@@ -119,8 +127,10 @@ fn test_threshold_sig_api_and_core_match(
         tsig_signatures
     );
 
-    let core_signature_selection = select_n(seed, threshold, &core_signatures);
-    let tsig_signature_selection = select_n(seed, threshold, &tsig_signatures);
+    let core_signature_selection =
+        select_n(Seed::from_bytes(&seed_bytes), threshold, &core_signatures);
+    let tsig_signature_selection =
+        select_n(Seed::from_bytes(&seed_bytes), threshold, &tsig_signatures);
     assert_eq!(
         core_signature_selection
             .iter()
@@ -215,15 +225,15 @@ proptest! {
 
         #[test]
         fn individual_signature_verifies(seed: [u8;32], threshold in 0_u32..20, redundancy in 0_u32..20, message: Vec<u8>) {
-            test_individual_signature_verifies(Randomness::from(seed), NumberOfNodes::from(threshold + redundancy), NumberOfNodes::from(threshold), &message);
+            test_individual_signature_verifies(Seed::from_bytes(&seed), NumberOfNodes::from(threshold + redundancy), NumberOfNodes::from(threshold), &message);
         }
         #[test]
         fn combined_signature_verifies(seed: [u8;32], threshold in 0_u32..20, redundancy in 0_u32..20, message: Vec<u8>) {
-            test_combined_signature_verifies(Randomness::from(seed), NumberOfNodes::from(threshold + redundancy), NumberOfNodes::from(threshold), &message);
+            test_combined_signature_verifies(Seed::from_bytes(&seed), NumberOfNodes::from(threshold + redundancy), NumberOfNodes::from(threshold), &message);
         }
         #[test]
         fn threshold_sig_api_and_core_match(seed: [u8;32], threshold in 0_u32..10, redundancy in 0_u32..10, message: Vec<u8>) {
-            test_threshold_sig_api_and_core_match(Randomness::from(seed), NumberOfNodes::from(threshold + redundancy), NumberOfNodes::from(threshold), &message);
+            test_threshold_sig_api_and_core_match(Seed::from_bytes(&seed), NumberOfNodes::from(threshold + redundancy), NumberOfNodes::from(threshold), &message);
         }
 }
 

@@ -13,6 +13,7 @@ use ic_crypto_internal_csp::secret_key_store::volatile_store::VolatileSecretKeyS
 use ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake,
@@ -50,9 +51,8 @@ use ic_types::crypto::{
     BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoResult,
     IndividualMultiSigOf, KeyPurpose, ThresholdSigShareOf, UserPublicKey,
 };
-use ic_types::{NodeId, Randomness, RegistryVersion, SubnetId};
+use ic_types::{NodeId, RegistryVersion, SubnetId};
 use rand::rngs::OsRng;
-use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Deref;
@@ -656,12 +656,12 @@ impl NodeKeysToGenerate {
 
 impl TempCryptoComponentGeneric<Csp<ChaChaRng, ProtoSecretKeyStore, VolatileSecretKeyStore>> {
     pub fn new_from_seed(
-        seed: Randomness,
+        seed: Seed,
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
     ) -> Self {
         let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
-        let csprng = ChaChaRng::from_seed(seed.get());
+        let csprng = seed.into_rng();
         let crypto_component = CryptoComponentFatClient::new_with_rng_and_fake_node_id(
             csprng,
             &config,

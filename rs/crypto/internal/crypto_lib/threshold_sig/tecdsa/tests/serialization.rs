@@ -22,7 +22,7 @@ fn verify_data(tag: String, expected: &str, serialized: &[u8]) {
         which will update this file with the produced values.
          */
         assert_eq!(hex_encoding, expected, "{}", tag);
-        //println!("perl -pi -e s/{}/{}/g tests/serialization.rs", expected, hex_encoding);
+        // println!("perl -pi -e s/{}/{}/g tests/serialization.rs", expected, hex_encoding);
     }
 }
 
@@ -91,70 +91,70 @@ fn verify_protocol_output_remains_unchanged_over_time() -> Result<(), ThresholdE
     check_dealings(
         "key",
         &setup.key,
-        "b9ab2030782684e7",
-        "e37b4bacfd8af891",
+        "807f3b29bcc421d0",
+        "623080845e685b35",
         &[
-            (0, "0b2434d04f35e1dd"),
-            (1, "e4c44d0ceca518ad"),
-            (2, "9e267bb3507ff691"),
-            (3, "32404e779a80670c"),
-            (4, "5d39cb3b19ee2768"),
+            (0, "e7b8624cab606930"),
+            (1, "cddb63df18157ad5"),
+            (2, "0ac600f863097584"),
+            (3, "4dac6c3962e19dce"),
+            (4, "cedbbc9aaaf2d96d"),
         ],
     )?;
 
     check_dealings(
         "key*lambda",
         &setup.key_times_lambda,
-        "091a06f5e7fa5414",
-        "ce06f103be27782d",
+        "bd4aef1e3a7e276c",
+        "4b7f2a867ae0bcc9",
         &[
-            (0, "6cc1169eacc5e420"),
-            (1, "53b50ba130414b61"),
-            (2, "80f74d3ae8d92133"),
-            (3, "3da495ebe276ff67"),
-            (4, "cc480265f7015049"),
+            (0, "22ac5e63a4173871"),
+            (1, "18886ac194f10ad5"),
+            (2, "d94fdc34c13dd05d"),
+            (3, "08358b27f6b1a468"),
+            (4, "7a98c577d0d60157"),
         ],
     )?;
 
     check_dealings(
         "lambda",
         &setup.lambda,
-        "88ef25657907b5a2",
-        "4e036dd84e25c40a",
+        "aba9665ec91be63f",
+        "f1ad398f50c227bb",
         &[
-            (0, "10c13cdb7ce57d7c"),
-            (1, "ca5387d1b04e3fd2"),
-            (2, "2c8d2d1cd7d5dab5"),
-            (3, "ca129691c3797ca7"),
-            (4, "1e24da7f014f04c8"),
+            (0, "50263c87c5e40a97"),
+            (1, "b373947bc56351f1"),
+            (2, "89a5675e9da945c1"),
+            (3, "f29909f897055378"),
+            (4, "54dc1c1d08b43c1c"),
         ],
     )?;
 
     check_dealings(
         "kappa",
         &setup.kappa,
-        "3e106b6d4b8ed5dc",
-        "f7e36bc23c68bc20",
+        "edb74de7f815bac2",
+        "bc499e84a8fcc8f7",
         &[
-            (0, "b371a8a8b8d7315e"),
-            (1, "5bdc929b7bc7cbab"),
-            (2, "c9f6771a920b4294"),
-            (3, "2e06ad931f8c504c"),
-            (4, "a84f75bb59bfdc7e"),
+            (0, "d995b6d7b09b03e5"),
+            (1, "93a704077bfdcee3"),
+            (2, "8142af1b57f13b37"),
+            (3, "d334beb1a1c7eecd"),
+            (4, "83ac317a94224d0b"),
         ],
     )?;
 
     check_dealings(
         "kappa*lambda",
         &setup.kappa_times_lambda,
-        "56813b7a7babce23",
-        "d6393464137c2baa",
+        "2e1b78f8e8eeed00",
+        "9857c340a75e717a",
         &[
-            (0, "b1dd7cbda826d07a"),
-            (1, "641e292ee50c7bf5"),
-            (2, "8edb0295e7af18ff"),
-            (3, "5cab21eb8c9a4f7e"),
-            (4, "63ab56050518a532"),
+            (0, "a7ea009231aae6d7"),
+            (1, "d915e472ed668d5e"),
+            (2, "f40eba254efcd63d"),
+            (3, "2198c38ec025e544"),
+            (4, "4d3a0efca97fbab1"),
         ],
     )?;
 
@@ -171,11 +171,11 @@ fn verify_protocol_output_remains_unchanged_over_time() -> Result<(), ThresholdE
     check_shares(
         &shares,
         &[
-            (0, "33bc4bc53944c06e"),
-            (1, "784ff29e3103b0f4"),
-            (2, "138c17db77b465a3"),
-            (3, "18fdf2802f5a1709"),
-            (4, "04d9548619a0a334"),
+            (0, "a5828d246e927eae"),
+            (1, "b5add43f02086e16"),
+            (2, "743a39c677fc02d3"),
+            (3, "d4d7a73a628c8391"),
+            (4, "4dfe21a4e768bda5"),
         ],
     )?;
 
@@ -183,7 +183,7 @@ fn verify_protocol_output_remains_unchanged_over_time() -> Result<(), ThresholdE
 
     verify_data(
         "signature".to_string(),
-        "b44808970ea7d426",
+        "ebe9b02e33da8224",
         &sig.serialize(),
     );
 

@@ -10,13 +10,12 @@ use crate::types::PublicKey;
 use ic_crypto_internal_bls12_381_type::{
     verify_bls_signature, G1Projective, G2Affine, G2Projective, Scalar,
 };
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::{
     crypto::{AlgorithmId, CryptoError, CryptoResult},
-    NodeIndex, NumberOfNodes, Randomness,
+    NodeIndex, NumberOfNodes,
 };
-use rand::SeedableRng;
-use rand_chacha::ChaChaRng;
 use std::convert::TryFrom;
 use std::ops::AddAssign;
 
@@ -78,12 +77,12 @@ pub fn x_for_index(index: NodeIndex) -> Scalar {
 ///   - The number of eligible receivers is below the threshold; under these
 ///     circumstances the receivers could never generate a valid threshold key.
 pub fn keygen(
-    seed: Randomness,
+    seed: Seed,
     threshold: NumberOfNodes,
     share_indices: &[bool],
 ) -> Result<(PublicCoefficients, Vec<Option<SecretKey>>), InvalidArgumentError> {
     verify_keygen_args(threshold, share_indices)?;
-    let mut rng = ChaChaRng::from_seed(seed.get());
+    let mut rng = seed.into_rng();
     let polynomial = Polynomial::random(threshold.get() as usize, &mut rng);
     Ok(keygen_from_polynomial(polynomial, share_indices))
 }
@@ -113,7 +112,7 @@ pub fn keygen(
 /// * The `threshold` is `0`.
 #[allow(unused)]
 pub fn keygen_with_secret(
-    seed: Randomness,
+    seed: Seed,
     threshold: NumberOfNodes,
     share_indices: &[bool],
     secret: &SecretKey,
@@ -129,7 +128,7 @@ pub fn keygen_with_secret(
         });
     }
 
-    let mut rng = ChaChaRng::from_seed(seed.get());
+    let mut rng = seed.into_rng();
     let polynomial = {
         let mut polynomial = Polynomial::random(threshold.get() as usize, &mut rng);
         polynomial.coefficients[0] = *secret;

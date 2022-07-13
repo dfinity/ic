@@ -3,34 +3,35 @@ use std::convert::TryFrom;
 
 #[test]
 fn mega_key_generation() -> ThresholdEcdsaResult<()> {
-    let randomness = ic_types::Randomness::from([0x42; 32]);
+    let mut seed = Seed::from_bytes(&[0x42; 32]);
 
-    let (pk_k256, sk_k256) = gen_keypair(EccCurveType::K256, randomness)?;
+    let (pk_k256, sk_k256) = gen_keypair(EccCurveType::K256, seed)?;
 
     assert_eq!(pk_k256.curve_type(), EccCurveType::K256);
     assert_eq!(sk_k256.curve_type(), EccCurveType::K256);
 
     assert_eq!(
         hex::encode(sk_k256.serialize()),
-        "a4ddf31f7f32ba696f14ce50ecf3f21e3e100e83bdf47966e7b07468e9500b6e"
+        "078af152fb1edc2488a6d414ac13e76de66904648c585dc5f5032b3c022716cd"
     );
     assert_eq!(
         hex::encode(pk_k256.serialize()),
-        "034f6340cfdd930a6f54e730188e3071d150877fa664945fb6f120c18b56ce1c09"
+        "027e4c1145be85c1d62c24be6ff81f837a1c63d4051071233569b55fb410da4ebd"
     );
 
-    let (pk_p256, sk_p256) = gen_keypair(EccCurveType::P256, randomness)?;
+    seed = Seed::from_bytes(&[0x42; 32]);
+    let (pk_p256, sk_p256) = gen_keypair(EccCurveType::P256, seed)?;
 
     assert_eq!(pk_p256.curve_type(), EccCurveType::P256);
     assert_eq!(sk_p256.curve_type(), EccCurveType::P256);
 
     assert_eq!(
         hex::encode(sk_p256.serialize()),
-        "a4ddf31f7f32ba696f14ce50ecf3f21e3e100e83bdf47966e7b07468e9500b6e"
+        "078af152fb1edc2488a6d414ac13e76de66904648c585dc5f5032b3c022716cd"
     );
     assert_eq!(
         hex::encode(pk_p256.serialize()),
-        "0300f4b1cc1352d482d56da7e6604d7bfc7a83f591761843456726b93d9d5e1b35"
+        "03343ae689bf56d0bb443694eacdf83435380f564d1a63c9689f3f5f606c480c01"
     );
 
     Ok(())

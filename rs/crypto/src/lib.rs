@@ -18,10 +18,9 @@ mod tls;
 pub use common::utils;
 pub use ic_crypto_hash::crypto_hash;
 pub use sign::utils::{
-    combined_threshold_signature_and_public_key, ecdsa_p256_signature_from_der_bytes,
-    ed25519_public_key_to_der, rsa_signature_from_bytes, threshold_sig_public_key_from_der,
-    threshold_sig_public_key_to_der, user_public_key_from_bytes, verify_combined_threshold_sig,
-    KeyBytesContentType,
+    ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der, rsa_signature_from_bytes,
+    threshold_sig_public_key_from_der, threshold_sig_public_key_to_der, user_public_key_from_bytes,
+    verify_combined_threshold_sig, KeyBytesContentType,
 };
 pub use sign::{derive_tecdsa_public_key, get_tecdsa_master_public_key};
 

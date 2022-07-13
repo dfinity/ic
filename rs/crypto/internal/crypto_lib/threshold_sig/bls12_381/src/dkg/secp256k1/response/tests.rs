@@ -7,15 +7,12 @@ use crate::dkg::secp256k1::types::{
     EphemeralPopBytes, EphemeralPublicKeyBytes, EphemeralSecretKeyBytes,
 };
 use crate::test_utils::select_n;
-use ic_types::{NodeIndex, NumberOfNodes, Randomness};
+use ic_crypto_internal_seed::Seed;
+use ic_types::{NodeIndex, NumberOfNodes};
 use ic_types_test_utils::arbitrary as arbitrary_types;
 use proptest::prelude::*;
 
-use rand::SeedableRng;
-use rand_chacha::ChaChaRng;
-
 use proptest::collection::vec as prop_vec;
-use rand::Rng;
 use std::collections::btree_map::BTreeMap;
 
 /// Represents the node name of type Vec<u8> used in the spec
@@ -46,7 +43,7 @@ pub struct EphemeralKeySet {
 #[derive(Debug)]
 pub struct ResponseFixture {
     pub dkg_id: IDkgId,
-    pub seed: Randomness,
+    pub seed: Seed,
     pub dealer_key_sets: Vec<EphemeralKeySet>,
     pub receiver_key_sets: Vec<EphemeralKeySet>,
     pub eligible_receivers: Vec<bool>,
@@ -88,7 +85,7 @@ pub fn arbitrary_response_fixture(config: ResponseFixtureConfig) -> BoxedStrateg
             let num_dealers = num_dealers as usize;
 
             (
-                Just(Randomness::new(seed)),
+                Just(seed),
                 Just(dkg_id),
                 Just(threshold),
                 Just(redundancy),
@@ -108,7 +105,7 @@ pub fn arbitrary_response_fixture(config: ResponseFixtureConfig) -> BoxedStrateg
         .prop_map(
             |(seed, dkg_id, threshold, redundancy, dealers, receivers)| {
                 ResponseFixture::new(
-                    seed,
+                    Seed::from_bytes(&seed),
                     dkg_id,
                     NumberOfNodes::from(threshold),
                     NumberOfNodes::from(redundancy),
@@ -122,14 +119,14 @@ pub fn arbitrary_response_fixture(config: ResponseFixtureConfig) -> BoxedStrateg
 
 impl ResponseFixture {
     pub fn new(
-        seed: Randomness,
+        seed: Seed,
         dkg_id: IDkgId,
         threshold: NumberOfNodes,
         redundancy: NumberOfNodes,
         dealers: Vec<(NodeName, EphemeralSecretKeyBytes)>,
         receivers: Vec<(NodeName, EphemeralSecretKeyBytes)>,
     ) -> ResponseFixture {
-        let mut rng = ChaChaRng::from_seed(seed.get());
+        let mut rng = seed.into_rng();
         let dealer_key_sets: Vec<EphemeralKeySet> = dealers
             .into_iter()
             .map(|(owner, secret_key_bytes)| {
@@ -159,7 +156,7 @@ impl ResponseFixture {
             })
             .collect();
         let some_receiver_public_keys: Vec<Option<(EphemeralPublicKeyBytes, EphemeralPopBytes)>> = {
-            let seed = Randomness::from(rng.gen::<[u8; 32]>());
+            let seed = Seed::from_rng(&mut rng);
             let number_of_keys = threshold + redundancy;
             let all_public_keys: Vec<(EphemeralPublicKeyBytes, EphemeralPopBytes)> =
                 receiver_key_sets
@@ -176,7 +173,7 @@ impl ResponseFixture {
             .iter()
             .map(|dealer_key_set| {
                 create_dealing(
-                    Randomness::from(rng.gen::<[u8; 32]>()),
+                    Seed::from_rng(&mut rng),
                     dealer_key_set.secret_key_bytes,
                     dkg_id,
                     threshold,
@@ -187,7 +184,7 @@ impl ResponseFixture {
             .collect();
         ResponseFixture {
             dkg_id,
-            seed: Randomness::from(rng.gen::<[u8; 32]>()),
+            seed: Seed::from_rng(&mut rng),
             dealer_key_sets,
             receiver_key_sets,
             eligible_receivers,
@@ -204,12 +201,13 @@ impl ResponseFixture {
     }
 }
 
-fn test_honest_responses_to_honest_dealings_should_verify(fixture: ResponseFixture) {
-    let mut rng = ChaChaRng::from_seed(fixture.seed.get());
+fn test_honest_responses_to_honest_dealings_should_verify(mut fixture: ResponseFixture) {
+    let mut rng = fixture.seed.into_rng();
+    fixture.seed = Seed::from_rng(&mut rng);
     for receiver_index in 0..fixture.receiver_key_sets.len() {
         if fixture.eligible_receivers[receiver_index] {
             let response: CLibResponseBytes = {
-                let seed = Randomness::from(rng.gen::<[u8; 32]>());
+                let seed = Seed::from_rng(&mut rng);
                 let receiver_secret_key_bytes =
                     &fixture.receiver_key_sets[receiver_index].secret_key_bytes;
                 create_response(

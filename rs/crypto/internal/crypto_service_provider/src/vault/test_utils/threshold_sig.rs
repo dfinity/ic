@@ -3,10 +3,11 @@ use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
 use crate::vault::api::CspVault;
 use crate::Csp;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::test_utils::select_n;
 use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::conversions::try_number_of_nodes_from_csp_pub_coeffs;
 use ic_types::crypto::{AlgorithmId, KeyId};
-use ic_types::{NodeIndex, NumberOfNodes, Randomness};
+use ic_types::{NodeIndex, NumberOfNodes};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::sync::Arc;
@@ -32,10 +33,10 @@ use strum::IntoEnumIterator;
 pub fn test_threshold_signatures(
     public_coefficients: &CspPublicCoefficients,
     signers: &[(Arc<dyn CspVault>, KeyId)],
-    seed: Randomness,
+    seed: Seed,
     message: &[u8],
 ) {
-    let mut rng = ChaChaRng::from_seed(seed.get());
+    let mut rng = seed.into_rng();
     let threshold = try_number_of_nodes_from_csp_pub_coeffs(public_coefficients)
         .expect("Intolerable number of nodes");
     let incorrect_message = [&b"pound of flesh"[..], message].concat();
@@ -149,7 +150,7 @@ pub fn test_threshold_signatures(
     }
 
     // Combine a random subset of signatures:
-    let signature_selection = select_n(seed, threshold, &signatures);
+    let signature_selection = select_n(Seed::from_rng(&mut rng), threshold, &signatures);
     let signature = verifier
         .threshold_combine_signatures(
             AlgorithmId::ThresBls12_381,
@@ -227,11 +228,11 @@ pub fn test_threshold_signatures(
 /// * Correct keygen arguments yield keys that behave correctly with regards to
 ///   signing and verification.
 pub fn test_threshold_scheme_with_basic_keygen(
-    seed: Randomness,
+    seed: Seed,
     csp_vault: Arc<dyn CspVault>,
     message: &[u8],
 ) {
-    let mut rng = ChaChaRng::from_seed(seed.get());
+    let mut rng = seed.into_rng();
     let threshold = NumberOfNodes::from(rng.gen_range(0..10));
     let number_of_signers = NumberOfNodes::from(rng.gen_range(0..10));
     println!(
@@ -257,7 +258,7 @@ pub fn test_threshold_scheme_with_basic_keygen(
             test_threshold_signatures(
                 &public_coefficients,
                 &signers,
-                Randomness::from(rng.gen::<[u8; 32]>()),
+                Seed::from_rng(&mut rng),
                 message,
             );
         }

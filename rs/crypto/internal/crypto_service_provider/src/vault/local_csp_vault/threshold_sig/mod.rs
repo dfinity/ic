@@ -6,10 +6,10 @@ use crate::vault::api::CspThresholdSignatureKeygenError;
 use crate::vault::api::ThresholdSignatureCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::MetricsDomain;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381 as bls12381_clib;
 use ic_types::crypto::CryptoError;
 use ic_types::crypto::{AlgorithmId, KeyId};
-use ic_types::Randomness;
 use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
 
@@ -68,7 +68,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore>
     ) -> Result<(CspPublicCoefficients, Vec<Option<KeyId>>), CspThresholdSignatureKeygenError> {
         match algorithm_id {
             AlgorithmId::ThresBls12_381 => {
-                let seed = Randomness::from(self.rng_write_lock().gen::<[u8; 32]>());
+                let seed = Seed::from_rng(&mut *self.rng_write_lock());
                 let (public_coefficients, secret_keys) =
                     bls12381_clib::api::keygen(seed, threshold, signatory_eligibilty)?;
                 let key_ids: Vec<Option<KeyId>> = secret_keys

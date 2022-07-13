@@ -44,12 +44,13 @@ use super::types::{
 use crate::api::threshold_sign_error::ClibThresholdSignError;
 use crate::types::public_coefficients::conversions::pub_key_bytes_from_pub_coeff_bytes;
 use crate::types::PublicKey;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381_der as der;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_types::{
     crypto::{AlgorithmId, CryptoError, CryptoResult},
-    NodeIndex, NumberOfNodes, Randomness,
+    NodeIndex, NumberOfNodes,
 };
 use std::convert::{TryFrom, TryInto};
 
@@ -81,7 +82,7 @@ pub mod threshold_sign_error;
 ///   error.
 #[allow(unused)]
 pub fn keygen(
-    seed: Randomness,
+    seed: Seed,
     threshold: NumberOfNodes,
     signatory_eligibilty: &[bool],
 ) -> CryptoResult<(PublicCoefficientsBytes, Vec<Option<SecretKeyBytes>>)> {
@@ -301,7 +302,7 @@ pub fn public_key_from_der(bytes: &[u8]) -> CryptoResult<PublicKeyBytes> {
 /// * If any one of key generation, signing, signature combination, or
 /// public key combination fails.
 pub fn combined_signature_and_public_key(
-    seed: Randomness,
+    seed: Seed,
     group_size: usize,
     threshold: NumberOfNodes,
     message: &[u8],

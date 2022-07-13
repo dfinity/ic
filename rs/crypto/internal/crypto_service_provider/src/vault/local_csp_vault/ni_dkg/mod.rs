@@ -7,6 +7,7 @@ use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::vault::api::NiDkgCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::MetricsDomain;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381 as ni_dkg_clib;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::{
@@ -22,7 +23,6 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_internal_types::NodeIndex;
 use ic_logger::debug;
 use ic_types::crypto::{AlgorithmId, KeyId};
-use ic_types::Randomness;
 use ic_types::{NodeId, NumberOfNodes};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
@@ -42,7 +42,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
         debug!(self.logger; crypto.method_name => "gen_forward_secure_key_pair");
 
         // Get state
-        let seed = Randomness::from(self.rng_write_lock().gen::<[u8; 32]>());
+        let seed = Seed::from_rng(&mut *self.rng_write_lock());
         // Specialise
         let result = match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
@@ -109,7 +109,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
 
                 // Update secret key to new epoch (deserialize key first)
                 let mut secret_key = trusted_secret_key_into_miracl(&key_set.secret_key);
-                let seed = Randomness::from(self.rng_write_lock().gen::<[u8; 32]>());
+                let seed = Seed::from_rng(&mut *self.rng_write_lock());
                 ni_dkg_clib::update_key_inplace_to_epoch(&mut secret_key, epoch, seed);
 
                 // Replace secret key in key set (serialize key first)
@@ -196,11 +196,11 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore> NiD
                 // * we should not hold the write lock for the whole duration of create_dealing.
                 let (keygen_seed, encryption_seed) = {
                     let mut rng = self.rng_write_lock();
-                    (rng.gen::<[u8; 32]>(), rng.gen::<[u8; 32]>())
+                    (Seed::from_rng(&mut *rng), Seed::from_rng(&mut *rng))
                 };
                 let dealing = ni_dkg_clib::create_dealing(
-                    Randomness::from(keygen_seed),
-                    Randomness::from(encryption_seed),
+                    keygen_seed,
+                    encryption_seed,
                     threshold,
                     &receiver_keys,
                     epoch,
