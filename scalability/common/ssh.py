@@ -125,5 +125,12 @@ def run_all_ssh_in_parallel(
                     colored(machine, "blue"), colored("fail", "red"), command, machine
                 )
             )
+            # The timeout does not actually mean that the process itself is terminated,
+            # we just stop waiting. In order to terminate the subprocess, we explictly
+            # need to do so and wait again.
+            print("{}: Terminating {} ".format(colored(machine, "blue"), command))
+            p.terminate()
+            print("{}: Waiting for termination {} ".format(colored(machine, "blue"), command))
+            p.wait()
 
     return rcs

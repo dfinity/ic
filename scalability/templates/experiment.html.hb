@@ -104,14 +104,14 @@
     For the time period of the experiment and the given testnets, those should be the relevant Grafana Dashboards:
 
     <ul>
-      <li><a href="https://grafana.dfinity.systems/d/GWlsOrn7z/execution-metrics-2-0?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">Execution Metrics 2.0</a>
-      <li><a href="https://grafana.dfinity.systems/d/yHCK_IFMz/resources?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">Message Routing</a>
-      <li><a href="https://grafana.dfinity.systems/d/rnF_68BGk/http-handler?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">HTTP handler</a>
-      <li><a href="https://grafana.dfinity.systems/d/q9w4oZWGz/ic-progress-clock?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">IC Progress Clock</a>
-      <li><a href="https://grafana.dfinity.systems/d/IYNTCMIGk/state-sync?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">State Sync</a>
-      <li><a href="https://grafana.dfinity.systems/d/u016YUeGz/workload-generator-metrics?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}&var-ic_workload_generator={{experiment.wg_testnet}}">Workload generator dashboard</a>
-      <li><a href="https://grafana.dfinity.systems/d/YKZloKJMz/replica-details?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">Replica Details</a>
-      <li><a href="https://grafana.dfinity.systems/d/oHBzMeMMk/xnet?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">Xnet</a>
+      <li><a href="https://grafana.testnet.dfinity.network/d/GWlsOrn7z/execution-metrics-2-0?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">Execution Metrics 2.0</a>
+      <li><a href="https://grafana.testnet.dfinity.network/d/yHCK_IFMz/resources?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">Message Routing</a>
+      <li><a href="https://grafana.testnet.dfinity.network/d/rnF_68BGk/http-handler?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">HTTP handler</a>
+      <li><a href="https://grafana.testnet.dfinity.network/d/q9w4oZWGz/ic-progress-clock?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">IC Progress Clock</a>
+      <li><a href="https://grafana.testnet.dfinity.network/d/IYNTCMIGk/state-sync?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">State Sync</a>
+      <li><a href="https://grafana.testnet.dfinity.network/d/u016YUeGz/workload-generator-metrics?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}&var-ic_workload_generator={{experiment.wg_testnet}}">Workload generator dashboard</a>
+      <li><a href="https://grafana.testnet.dfinity.network/d/YKZloKJMz/replica-details?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">Replica Details</a>
+      <li><a href="https://grafana.testnet.dfinity.network/d/oHBzMeMMk/xnet?orgId=1&from={{experiment.t_experiment_start}}000&to={{experiment.t_experiment_end}}000&&var-ic={{experiment.testnet}}">Xnet</a>
     </ul>
     {{/if}}
     
