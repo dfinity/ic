@@ -102,7 +102,6 @@ impl HypervisorMetrics {
         let CompilationResult {
             largest_function_instruction_count,
             compilation_time,
-            compilation_cost: _,
         } = compilation_result;
         self.largest_function_instruction_count
             .observe(largest_function_instruction_count.get() as f64);
@@ -169,14 +168,18 @@ impl Hypervisor {
         canister_id: CanisterId,
     ) -> HypervisorResult<(NumInstructions, ExecutionState)> {
         let canister_module = CanisterModule::new(wasm_binary);
-        let (compilation_result, execution_state) = self.wasm_executor.create_execution_state(
-            canister_module,
-            canister_root,
-            canister_id,
-        )?;
-        self.metrics
-            .observe_compilation_metrics(&compilation_result);
-        Ok((compilation_result.compilation_cost, execution_state))
+        let (execution_state, compilation_cost, compilation_result) =
+            self.wasm_executor.create_execution_state(
+                canister_module,
+                canister_root,
+                canister_id,
+                Arc::clone(&self.compilation_cache),
+            )?;
+        if let Some(compilation_result) = compilation_result {
+            self.metrics
+                .observe_compilation_metrics(&compilation_result);
+        }
+        Ok((compilation_cost, execution_state))
     }
 
     pub fn new(

@@ -26,6 +26,7 @@ use ic_canister_sandbox_common::{controller_service::ControllerService, protocol
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_utils::compile;
+use ic_embedders::wasm_utils::instrumentation::Segments;
 use ic_embedders::SerializedModule;
 use ic_embedders::{
     wasm_executor::WasmStateChanges, wasm_utils::decoding::decode_wasm, CompilationResult,
@@ -34,7 +35,7 @@ use ic_embedders::{
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorResult, WasmExecutionOutput};
 use ic_logger::ReplicaLogger;
 use ic_replicated_state::page_map::PageMapSerialization;
-use ic_replicated_state::{EmbedderCache, Memory, PageMap};
+use ic_replicated_state::{EmbedderCache, Global, Memory, PageMap};
 use ic_types::CanisterId;
 
 use crate::dts::{DeterministicTimeSlicingHandler, PausedExecution};
@@ -310,18 +311,19 @@ impl SandboxManager {
         &self,
         wasm_id: WasmId,
         serialized_module: &SerializedModuleBytes,
-    ) -> HypervisorResult<()> {
+    ) -> HypervisorResult<Arc<EmbedderCache>> {
         let mut guard = self.repr.lock().unwrap();
         assert!(
             !guard.caches.contains_key(&wasm_id),
             "Failed to open wasm session {}: id is already in use",
             wasm_id,
         );
-        let module = self.embedder.deserialize_module(serialized_module)?;
-        guard
-            .caches
-            .insert(wasm_id, Arc::new(EmbedderCache::new(module)));
-        Ok(())
+        let cache = Arc::new(EmbedderCache::new(
+            self.embedder.deserialize_module(serialized_module)?,
+        ));
+
+        guard.caches.insert(wasm_id, Arc::clone(&cache));
+        Ok(cache)
     }
 
     /// Closes previously opened wasm instance, by id.
@@ -454,24 +456,68 @@ impl SandboxManager {
         // Validate, instrument, and compile the binary.
         let (embedder_cache, compilation_result, mut serialized_module) =
             self.open_wasm(wasm_id, wasm_source)?;
+
+        let segments;
+        let segments = match self.embedder.config().feature_flags.module_sharing {
+            FlagStatus::Disabled => {
+                // With sharing disabled we can clear the data segments
+                // from the `SerializedModule` so that we don't waste
+                // time passing them back to the main replica process.
+                segments = serialized_module.take_data_segments();
+                &segments
+            }
+            FlagStatus::Enabled => &serialized_module.data_segments,
+        };
+        let (wasm_memory_modifications, exported_globals) = self
+            .create_initial_memory_and_globals(
+                &embedder_cache,
+                segments,
+                wasm_page_map,
+                next_wasm_memory_id,
+                canister_id,
+            )?;
+
+        Ok(CreateExecutionStateSuccessReply {
+            wasm_memory_modifications,
+            exported_globals,
+            compilation_result,
+            serialized_module,
+        })
+    }
+
+    pub fn create_execution_state_serialized(
+        &self,
+        wasm_id: WasmId,
+        serialized_module: Arc<SerializedModule>,
+        wasm_page_map: PageMapSerialization,
+        next_wasm_memory_id: MemoryId,
+        canister_id: CanisterId,
+    ) -> HypervisorResult<(MemoryModifications, Vec<Global>)> {
+        let embedder_cache = self.open_wasm_serialized(wasm_id, &serialized_module.bytes)?;
+        self.create_initial_memory_and_globals(
+            &embedder_cache,
+            &serialized_module.data_segments,
+            wasm_page_map,
+            next_wasm_memory_id,
+            canister_id,
+        )
+    }
+
+    fn create_initial_memory_and_globals(
+        &self,
+        embedder_cache: &EmbedderCache,
+        data_segments: &Segments,
+        wasm_page_map: PageMapSerialization,
+        next_wasm_memory_id: MemoryId,
+        canister_id: CanisterId,
+    ) -> HypervisorResult<(MemoryModifications, Vec<Global>)> {
         let embedder = Arc::clone(&self.embedder);
 
         let mut wasm_page_map = PageMap::deserialize(wasm_page_map).unwrap();
-        let segments;
-
         let (exported_globals, wasm_memory_delta, wasm_memory_size) =
             ic_embedders::wasm_executor::get_initial_globals_and_memory(
-                match self.embedder.config().feature_flags.module_sharing {
-                    FlagStatus::Disabled => {
-                        // With sharing disabled we can clear the data segments
-                        // from the `SerializedModule` so that we don't waste
-                        // time passing them back to the main replica process.
-                        segments = serialized_module.take_data_segments();
-                        &segments
-                    }
-                    FlagStatus::Enabled => &serialized_module.data_segments,
-                },
-                &embedder_cache,
+                data_segments,
+                embedder_cache,
                 &embedder,
                 &mut wasm_page_map,
                 canister_id,
@@ -488,12 +534,7 @@ impl SandboxManager {
         // Save the memory for future message executions.
         self.add_memory(next_wasm_memory_id, wasm_memory);
 
-        Ok(CreateExecutionStateSuccessReply {
-            wasm_memory_modifications,
-            exported_globals,
-            compilation_result,
-            serialized_module,
-        })
+        Ok((wasm_memory_modifications, exported_globals))
     }
 }
 

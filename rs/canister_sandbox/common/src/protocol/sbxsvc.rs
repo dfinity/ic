@@ -262,6 +262,32 @@ pub struct CreateExecutionStateSuccessReply {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CreateExecutionStateReply(pub HypervisorResult<CreateExecutionStateSuccessReply>);
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CreateExecutionStateSerializedRequest {
+    pub wasm_id: WasmId,
+    /// The serialization of a previously compiled `wasmtime::Module`.
+    /// This types in just an `Arc` reference to a vector of bytes and the only
+    /// reason it is `Arc` is so that we can cheaply create the
+    /// `CreateExecutionStateSerializedRequest` before sending it to the sandbox.
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+    pub serialized_module: Arc<SerializedModule>,
+    pub wasm_page_map: PageMapSerialization,
+    pub next_wasm_memory_id: MemoryId,
+    pub canister_id: CanisterId,
+}
+
+impl EnumerateInnerFileDescriptors for CreateExecutionStateSerializedRequest {
+    fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
+        self.wasm_page_map.enumerate_fds(fds);
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CreateExecutionStateSerializedReply(
+    pub HypervisorResult<(MemoryModifications, Vec<Global>)>,
+);
+
 /// All possible requests to a sandboxed process.
 #[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Clone)]
@@ -276,6 +302,7 @@ pub enum Request {
     ResumeExecution(ResumeExecutionRequest),
     AbortExecution(AbortExecutionRequest),
     CreateExecutionState(CreateExecutionStateRequest),
+    CreateExecutionStateSerialized(CreateExecutionStateSerializedRequest),
 }
 
 impl EnumerateInnerFileDescriptors for Request {
@@ -283,6 +310,7 @@ impl EnumerateInnerFileDescriptors for Request {
         match self {
             Request::OpenMemory(request) => request.enumerate_fds(fds),
             Request::CreateExecutionState(request) => request.enumerate_fds(fds),
+            Request::CreateExecutionStateSerialized(request) => request.enumerate_fds(fds),
             Request::Terminate(_)
             | Request::OpenWasm(_)
             | Request::OpenWasmSerialized(_)
@@ -309,6 +337,7 @@ pub enum Reply {
     ResumeExecution(ResumeExecutionReply),
     AbortExecution(AbortExecutionReply),
     CreateExecutionState(CreateExecutionStateReply),
+    CreateExecutionStateSerialized(CreateExecutionStateSerializedReply),
 }
 
 impl EnumerateInnerFileDescriptors for Reply {

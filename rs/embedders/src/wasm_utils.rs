@@ -52,7 +52,6 @@ pub fn compile(
     let module = embedder.compile(&instrumentation_output.binary)?;
     let largest_function_instruction_count =
         wasm_validation_details.largest_function_instruction_count;
-    let compilation_cost = instrumentation_output.compilation_cost;
     let serialized_module = SerializedModule::new(
         embedder.config().feature_flags.module_sharing,
         &module,
@@ -63,7 +62,6 @@ pub fn compile(
         EmbedderCache::new(module),
         CompilationResult {
             largest_function_instruction_count,
-            compilation_cost,
             compilation_time: timer.elapsed(),
         },
         serialized_module,

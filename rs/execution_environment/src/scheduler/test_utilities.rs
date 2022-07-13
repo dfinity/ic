@@ -15,7 +15,7 @@ use ic_config::{
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     wasm_executor::{WasmExecutionResult, WasmExecutor},
-    CompilationResult, WasmExecutionInput,
+    CompilationCache, CompilationResult, WasmExecutionInput,
 };
 use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, Method, Payload};
 use ic_interfaces::execution_environment::{
@@ -189,7 +189,7 @@ impl SchedulerTest {
             wasm_executor
                 .create_execution_state(CanisterModule::new(wasm_source), canister_id)
                 .unwrap()
-                .1,
+                .0,
         );
         canister_state
             .system_state
@@ -717,7 +717,8 @@ impl WasmExecutor for TestWasmExecutor {
         canister_module: CanisterModule,
         _canister_root: PathBuf,
         canister_id: CanisterId,
-    ) -> HypervisorResult<(CompilationResult, ExecutionState)> {
+        _compilation_cache: Arc<CompilationCache>,
+    ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
         let mut guard = self.core.lock().unwrap();
         guard.create_execution_state(canister_module, canister_id)
     }
@@ -828,7 +829,7 @@ impl TestWasmExecutorCore {
         &mut self,
         canister_module: CanisterModule,
         _canister_id: CanisterId,
-    ) -> HypervisorResult<(CompilationResult, ExecutionState)> {
+    ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
         let mut exported_functions = vec![
             WasmMethod::Update("update".into()),
             WasmMethod::System(SystemMethod::CanisterPreUpgrade),
@@ -851,7 +852,11 @@ impl TestWasmExecutorCore {
             WasmMetadata::default(),
         );
         let compilation_result = CompilationResult::empty_for_testing();
-        Ok((compilation_result, execution_state))
+        Ok((
+            execution_state,
+            NumInstructions::from(0),
+            Some(compilation_result),
+        ))
     }
 
     fn perform_calls(
