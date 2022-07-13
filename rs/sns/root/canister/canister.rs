@@ -6,22 +6,24 @@ use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::{over, over_async, over_init};
 use ic_base_types::PrincipalId;
 
-use ic_nervous_system_common::{
-    get_canister_status,
-    stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
+use ic_nervous_system_common::stable_mem_utils::{
+    BufferedStableMemReader, BufferedStableMemWriter,
 };
 use ic_nervous_system_root::{ChangeCanisterProposal, LOG_PREFIX};
 use ic_sns_root::{
-    pb::v1::{RegisterDappCanisterRequest, RegisterDappCanisterResponse, SnsRootCanister},
-    CanisterCallError, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
-    ManagementCanisterClient,
+    pb::v1::{
+        CanisterCallError, RegisterDappCanisterRequest, RegisterDappCanisterResponse,
+        SetDappControllersRequest, SetDappControllersResponse, SnsRootCanister,
+    },
+    CanisterIdRecord, CanisterStatusResultV2, EmptyBlob, GetSnsCanistersSummaryRequest,
+    GetSnsCanistersSummaryResponse, ManagementCanisterClient, UpdateSettingsArgs,
 };
 
 use prost::Message;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2};
+use ic_ic00_types::IC_00;
 
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
@@ -41,7 +43,16 @@ impl ManagementCanisterClient for RealManagementCanisterClient {
         &mut self,
         canister_id_record: &CanisterIdRecord,
     ) -> Result<CanisterStatusResultV2, CanisterCallError> {
-        get_canister_status(canister_id_record.get_canister_id().into())
+        dfn_core::api::call(IC_00, "canister_status", candid_one, canister_id_record)
+            .await
+            .map_err(CanisterCallError::from)
+    }
+
+    async fn update_settings(
+        &mut self,
+        request: &UpdateSettingsArgs,
+    ) -> Result<EmptyBlob, CanisterCallError> {
+        dfn_core::api::call(IC_00, "update_settings", candid_one, request)
             .await
             .map_err(CanisterCallError::from)
     }
@@ -50,8 +61,6 @@ impl ManagementCanisterClient for RealManagementCanisterClient {
 thread_local! {
     static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
 }
-
-fn main() {}
 
 #[export_name = "canister_init"]
 fn canister_init() {
@@ -111,7 +120,14 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 #[export_name = "canister_update canister_status"]
 fn canister_status() {
     println!("{}canister_status", LOG_PREFIX);
-    over_async(candid, ic_nervous_system_root::canister_status)
+    over_async(candid_one, canister_status_);
+}
+
+#[candid_method(update, rename = "canister_status")]
+async fn canister_status_(
+    id: ic_nervous_system_root::CanisterIdRecord,
+) -> ic_nervous_system_root::CanisterStatusResult {
+    ic_nervous_system_root::canister_status(id).await
 }
 
 /// Return the canister status of all SNS canisters that this root canister
@@ -189,9 +205,38 @@ async fn register_dapp_canister_(
     .await
 }
 
+/// Sets the controllers of registered dapp canisters.
+///
+/// Dapp canisters can be registered via the register_dapp_canister method.
+///
+/// Caller must be the swap canister. Otherwise, the request will be
+/// rejected.
+///
+/// Registered dapp canisters must not have disappeared prior to this being
+/// called. Otherwise, request will be rejected. Some precautions are taken
+/// to avoid a partially completed operation, but this cannot be guaranteed.
+#[export_name = "canister_update set_dapp_controllers"]
+fn set_dapp_controllers() {
+    println!("{}set_dapp_controllers", LOG_PREFIX);
+    over_async(candid_one, set_dapp_controllers_);
+}
+
+#[candid_method(update, rename = "set_dapp_controllers")]
+async fn set_dapp_controllers_(request: SetDappControllersRequest) -> SetDappControllersResponse {
+    SnsRootCanister::set_dapp_controllers(
+        &STATE,
+        &mut RealManagementCanisterClient::new(),
+        dfn_core::api::id(),
+        dfn_core::api::caller(),
+        &request,
+    )
+    .await
+}
+
 fn assert_state_is_valid(state: &SnsRootCanister) {
     assert!(state.governance_canister_id.is_some());
     assert!(state.ledger_canister_id.is_some());
+    assert!(state.swap_canister_id.is_some());
 }
 
 fn assert_change_canister_proposal_is_valid(proposal: &ChangeCanisterProposal) {
@@ -213,10 +258,60 @@ fn assert_eq_governance_canister_id(id: PrincipalId) {
     });
 }
 
+/// This makes this Candid service self-describing, so that for example Candid
+/// UI, but also other tools, can seamlessly integrate with it.
+/// The concrete interface (__get_candid_interface_tmp_hack) is provisional, but
+/// works.
+///
+/// We include the .did file as committed, which means it is included verbatim in
+/// the .wasm; using `candid::export_service` here would involve unnecessary
+/// runtime computation.
+#[export_name = "canister_query __get_candid_interface_tmp_hack"]
+fn expose_candid() {
+    over(candid, |_: ()| include_str!("root.did").to_string())
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+fn main() {}
+
+/// When run on native, this prints the candid service definition of this
+/// canister, from the methods annotated with `candid_method` above.
+///
+/// Note that `cargo test` calls `main`, and `export_service` (which defines
+/// `__export_service` in the current scope) needs to be called exactly once. So
+/// in addition to `not(target_arch = "wasm32")` we have a `not(test)` guard here
+/// to avoid calling `export_service`, which we need to call in the test below.
+#[cfg(not(any(target_arch = "wasm32", test)))]
+fn main() {
+    // The line below generates did types and service definition from the
+    // methods annotated with `candid_method` above. The definition is then
+    // obtained with `__export_service()`.
+    candid::export_service!();
+    std::print!("{}", __export_service());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ic_nervous_system_common::MethodAuthzChange;
+
+    /// A test that fails if the API was updated but the candid definition was not.
+    #[test]
+    fn check_candid_interface_definition_file() {
+        let root_did = String::from_utf8(std::fs::read("canister/root.did").unwrap()).unwrap();
+
+        // See comments in main above
+        candid::export_service!();
+        let expected = __export_service();
+
+        if root_did != expected {
+            panic!(
+                "Generated candid definition does not match canister/root.did. \
+                 Run `cargo run --bin sns-root-canister > canister/root.did` in \
+                 rs/sns/root to update canister/root.did."
+            )
+        }
+    }
 
     #[test]
     #[should_panic]

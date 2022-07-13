@@ -17,8 +17,15 @@ message SnsRootCanister {
   // update method calls (and possibly other things).
   ic_base_types.pb.v1.PrincipalId governance_canister_id = 1;
 
+  // Required.
+  //
   // The SNS Ledger canister ID
   ic_base_types.pb.v1.PrincipalId ledger_canister_id = 2;
+
+  // Required.
+  //
+  // The swap canister ID.
+  ic_base_types.pb.v1.PrincipalId swap_canister_id = 4;
 
   // Dapp canister IDs.
   repeated ic_base_types.pb.v1.PrincipalId dapp_canister_ids = 3;
@@ -29,4 +36,21 @@ message RegisterDappCanisterRequest {
 }
 
 message RegisterDappCanisterResponse {
+}
+
+message SetDappControllersRequest {
+  repeated ic_base_types.pb.v1.PrincipalId controller_principal_ids = 1;
+}
+
+message SetDappControllersResponse {
+  message FailedUpdate {
+    ic_base_types.pb.v1.PrincipalId dapp_canister_id = 1;
+    CanisterCallError err = 2;
+  }
+  repeated FailedUpdate failed_updates = 1;
+}
+
+message CanisterCallError {
+  optional int32 code = 1;
+  string description = 2;
 }

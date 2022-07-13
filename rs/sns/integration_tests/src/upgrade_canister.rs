@@ -14,6 +14,7 @@ use ic_sns_test_utils::itest_helpers::{
     install_governance_canister, install_ledger_canister, install_root_canister,
     local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
 };
+use ic_types::PrincipalId;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use ledger_canister::Tokens;
@@ -808,6 +809,8 @@ fn test_install_canisters_in_any_order() {
         sns_init_payload.governance.root_canister_id = Some(root_canister_id.into());
         sns_init_payload.root.governance_canister_id = Some(governance_canister_id.into());
         sns_init_payload.root.ledger_canister_id = Some(ledger_canister_id.into());
+        // TODO(NNS1-1526): Install swap canister.
+        sns_init_payload.root.swap_canister_id = Some(PrincipalId::new_user_test_id(999_999));
 
         // Use canister tags to generate all the permutations needed to test random order installs
         let canister_tags = vec!["governance", "ledger", "root"];

@@ -384,7 +384,7 @@ where
     }
 }
 
-pub async fn canister_status((canister_id_record,): (CanisterIdRecord,)) -> CanisterStatusResult {
+pub async fn canister_status(canister_id_record: CanisterIdRecord) -> CanisterStatusResult {
     call(
         IC_00,
         "canister_status",

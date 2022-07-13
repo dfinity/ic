@@ -7627,6 +7627,7 @@ dependencies = [
  "ic-nervous-system-root",
  "ic-sns-root-protobuf-generator",
  "ic-test-utilities-compare-dirs",
+ "num-traits",
  "prost 0.10.4",
  "serde",
  "tempfile",
