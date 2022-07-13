@@ -556,7 +556,8 @@ impl WasmExecutor for SandboxedExecutionController {
         canister_module: CanisterModule,
         canister_root: PathBuf,
         canister_id: CanisterId,
-    ) -> HypervisorResult<(CompilationResult, ExecutionState)> {
+        compilation_cache: Arc<CompilationCache>,
+    ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
         let sandbox_process = self.get_sandbox_process(canister_id);
         let wasm_binary = WasmBinary::new(canister_module);
 
@@ -564,22 +565,62 @@ impl WasmExecutor for SandboxedExecutionController {
         let wasm_id = WasmId::new();
         let wasm_page_map = PageMap::default();
         let next_wasm_memory_id = MemoryId::new();
-        sandbox_process.history.record(format!(
-            "CreateExecutionState(wasm_id={}, next_wasm_memory_id={})",
-            wasm_id, next_wasm_memory_id
-        ));
-        let reply = sandbox_process
-            .sandbox_service
-            .create_execution_state(protocol::sbxsvc::CreateExecutionStateRequest {
-                wasm_id,
-                wasm_binary: wasm_binary.binary.as_slice().to_vec(),
-                wasm_page_map: wasm_page_map.serialize(),
-                next_wasm_memory_id,
-                canister_id,
-            })
-            .sync()
-            .unwrap()
-            .0?;
+
+        let (memory_modifications, exported_globals, serialized_module, compilation_result) =
+            match compilation_cache.get(&wasm_binary.binary) {
+                None => {
+                    sandbox_process.history.record(format!(
+                        "CreateExecutionState(wasm_id={}, next_wasm_memory_id={})",
+                        wasm_id, next_wasm_memory_id
+                    ));
+                    let reply = sandbox_process
+                        .sandbox_service
+                        .create_execution_state(protocol::sbxsvc::CreateExecutionStateRequest {
+                            wasm_id,
+                            wasm_binary: wasm_binary.binary.as_slice().to_vec(),
+                            wasm_page_map: wasm_page_map.serialize(),
+                            next_wasm_memory_id,
+                            canister_id,
+                        })
+                        .sync()
+                        .unwrap()
+                        .0?;
+                    let serialized_module = Arc::new(reply.serialized_module);
+                    compilation_cache.insert(&wasm_binary.binary, Arc::clone(&serialized_module));
+                    (
+                        reply.wasm_memory_modifications,
+                        reply.exported_globals,
+                        serialized_module,
+                        Some(reply.compilation_result),
+                    )
+                }
+                Some(serialized_module) => {
+                    sandbox_process.history.record(format!(
+                        "CreateExecutionStateSerialized(wasm_id={}, next_wasm_memory_id={})",
+                        wasm_id, next_wasm_memory_id
+                    ));
+                    let (memory_modifications, exported_globals) = sandbox_process
+                        .sandbox_service
+                        .create_execution_state_serialized(
+                            protocol::sbxsvc::CreateExecutionStateSerializedRequest {
+                                wasm_id,
+                                serialized_module: Arc::clone(&serialized_module),
+                                wasm_page_map: wasm_page_map.serialize(),
+                                next_wasm_memory_id,
+                                canister_id,
+                            },
+                        )
+                        .sync()
+                        .unwrap()
+                        .0?;
+                    (
+                        memory_modifications,
+                        exported_globals,
+                        serialized_module,
+                        None,
+                    )
+                }
+            };
 
         cache_opened_wasm(
             &mut *wasm_binary.embedder_cache.lock().unwrap(),
@@ -588,10 +629,10 @@ impl WasmExecutor for SandboxedExecutionController {
         );
 
         // Step 5. Create the execution state.
-        let mut wasm_memory = Memory::new(wasm_page_map, reply.wasm_memory_modifications.size);
+        let mut wasm_memory = Memory::new(wasm_page_map, memory_modifications.size);
         wasm_memory
             .page_map
-            .deserialize_delta(reply.wasm_memory_modifications.page_delta);
+            .deserialize_delta(memory_modifications.page_delta);
         wasm_memory.sandbox_memory =
             SandboxMemory::synced(wrap_remote_memory(&sandbox_process, next_wasm_memory_id));
         if let Err(err) = wasm_memory.verify_size() {
@@ -611,13 +652,17 @@ impl WasmExecutor for SandboxedExecutionController {
         let execution_state = ExecutionState::new(
             canister_root,
             wasm_binary,
-            ExportedFunctions::new(reply.serialized_module.exported_functions.clone()),
+            ExportedFunctions::new(serialized_module.exported_functions.clone()),
             wasm_memory,
             stable_memory,
-            reply.exported_globals,
-            reply.serialized_module.wasm_metadata.clone(),
+            exported_globals,
+            serialized_module.wasm_metadata.clone(),
         );
-        Ok((reply.compilation_result, execution_state))
+        Ok((
+            execution_state,
+            serialized_module.compilation_cost,
+            compilation_result,
+        ))
     }
 }
 
@@ -1129,7 +1174,7 @@ mod tests {
     use std::fs::{self, File};
 
     use super::*;
-    use ic_config::logger::Config as LoggerConfig;
+    use ic_config::{flag_status::FlagStatus, logger::Config as LoggerConfig};
     use ic_logger::{new_replica_logger, replica_logger::no_op_logger};
     use ic_test_utilities::types::ids::canister_test_id;
     use libc::kill;
@@ -1184,7 +1229,12 @@ mod tests {
         let canister_module = CanisterModule::new(wabt::wat2wasm(wat).unwrap());
         let canister_id = canister_test_id(0);
         controller
-            .create_execution_state(canister_module, PathBuf::new(), canister_id)
+            .create_execution_state(
+                canister_module,
+                PathBuf::new(),
+                canister_id,
+                Arc::new(CompilationCache::new(FlagStatus::Disabled)),
+            )
             .unwrap();
         let sandbox_pid = match controller
             .backends

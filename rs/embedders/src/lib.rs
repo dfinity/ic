@@ -59,8 +59,6 @@ pub trait ICMemoryCreator {
 pub struct CompilationResult {
     /// The number of instructions in the canister's largest function.
     pub largest_function_instruction_count: NumInstructions,
-    /// Compiling the canister is equivalent to executing this many instructions.
-    pub compilation_cost: NumInstructions,
     /// Time to compile canister (including instrumentation and validation).
     pub compilation_time: Duration,
 }
@@ -69,7 +67,6 @@ impl CompilationResult {
     pub fn empty_for_testing() -> Self {
         Self {
             largest_function_instruction_count: NumInstructions::new(0),
-            compilation_cost: NumInstructions::new(0),
             compilation_time: Duration::from_millis(1),
         }
     }

@@ -363,17 +363,6 @@ impl PageMap {
         })
     }
 
-    /// Returns a serialization-friendly representation of the page allocator.
-    pub fn serialize_allocator(&self) -> PageAllocatorSerialization {
-        self.page_allocator.serialize()
-    }
-
-    /// Creates and sets the page allocator from the given
-    /// serialization-friendly representation.
-    pub fn deserialize_allocator(&mut self, page_allocator: PageAllocatorSerialization) {
-        self.page_allocator = PageAllocator::deserialize(page_allocator);
-    }
-
     /// Returns a serialization-friendly representation of the page delta.
     pub fn serialize_delta(&self, pages: &[PageIndex]) -> PageDeltaSerialization {
         self.page_allocator.serialize_page_delta(

@@ -54,7 +54,8 @@ pub trait WasmExecutor: Send + Sync {
         canister_module: CanisterModule,
         canister_root: PathBuf,
         canister_id: CanisterId,
-    ) -> HypervisorResult<(CompilationResult, ExecutionState)>;
+        compilation_cache: Arc<CompilationCache>,
+    ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)>;
 }
 
 struct WasmExecutorMetrics {
@@ -246,21 +247,19 @@ impl WasmExecutor for WasmExecutorImpl {
         canister_module: CanisterModule,
         canister_root: PathBuf,
         canister_id: CanisterId,
-    ) -> HypervisorResult<(CompilationResult, ExecutionState)> {
+        compilation_cache: Arc<CompilationCache>,
+    ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
         // Compile Wasm binary and cache it.
         let wasm_binary = WasmBinary::new(canister_module);
-        let (embedder_cache, serialized_module, compilation_result) = match self
-            .get_embedder_cache(
-                &wasm_binary,
-                Arc::new(CompilationCache::new(FlagStatus::Disabled)),
-            )? {
-            CacheLookup {
-                cache,
-                serialized_module: Some(serialized_module),
-                compilation_result: Some(compilation_result),
-            } => (cache, serialized_module, compilation_result),
-            _ => panic!("Newly created WasmBinary must be compiled"),
-        };
+        let (embedder_cache, serialized_module, compilation_result) =
+            match self.get_embedder_cache(&wasm_binary, compilation_cache)? {
+                CacheLookup {
+                    cache,
+                    serialized_module: Some(serialized_module),
+                    compilation_result,
+                } => (cache, serialized_module, compilation_result),
+                _ => panic!("Newly created WasmBinary must be compiled or deserialized."),
+            };
         let exported_functions = serialized_module.exported_functions.clone();
         let wasm_metadata = serialized_module.wasm_metadata.clone();
         let mut wasm_page_map = PageMap::default();
@@ -284,7 +283,11 @@ impl WasmExecutor for WasmExecutorImpl {
             globals,
             wasm_metadata,
         );
-        Ok((compilation_result, execution_state))
+        Ok((
+            execution_state,
+            serialized_module.compilation_cost,
+            compilation_result,
+        ))
     }
 }
 

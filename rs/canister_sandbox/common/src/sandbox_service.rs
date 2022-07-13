@@ -45,6 +45,13 @@ pub trait SandboxService: Send + Sync {
         &self,
         req: CreateExecutionStateRequest,
     ) -> Call<CreateExecutionStateReply>;
+
+    /// Perform deserialization of a serialized module needed to create the
+    /// starting execution state.
+    fn create_execution_state_serialized(
+        &self,
+        req: CreateExecutionStateSerializedRequest,
+    ) -> Call<CreateExecutionStateSerializedReply>;
 }
 
 impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
@@ -72,6 +79,10 @@ impl<Svc: SandboxService + Send + Sync> DemuxServer<Request, Reply> for Svc {
             Request::CreateExecutionState(req) => Call::new_wrap(
                 self.create_execution_state(req),
                 Reply::CreateExecutionState,
+            ),
+            Request::CreateExecutionStateSerialized(req) => Call::new_wrap(
+                self.create_execution_state_serialized(req),
+                Reply::CreateExecutionStateSerialized,
             ),
         }
     }

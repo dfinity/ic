@@ -3,7 +3,7 @@ use std::{collections::BTreeSet, convert::TryFrom, sync::Arc};
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_replicated_state::canister_state::execution_state::WasmMetadata;
-use ic_types::methods::WasmMethod;
+use ic_types::{methods::WasmMethod, NumInstructions};
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
 use wasmtime::Module;
@@ -67,6 +67,8 @@ pub struct SerializedModule {
     pub data_segments: Segments,
     /// The contents of the metadata custom section.
     pub wasm_metadata: WasmMetadata,
+    /// Compiling the canister is equivalent to executing this many instructions.
+    pub compilation_cost: NumInstructions,
 }
 
 impl SerializedModule {
@@ -86,6 +88,7 @@ impl SerializedModule {
             exported_functions: instrumentation_output.exported_functions,
             data_segments: instrumentation_output.data,
             wasm_metadata: validation_details.wasm_metadata,
+            compilation_cost: instrumentation_output.compilation_cost,
         })
     }
 

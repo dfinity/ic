@@ -46,7 +46,8 @@ impl SandboxService for SandboxServer {
     ) -> rpc::Call<OpenWasmSerializedReply> {
         let result = self
             .manager
-            .open_wasm_serialized(req.wasm_id, &req.serialized_module);
+            .open_wasm_serialized(req.wasm_id, &req.serialized_module)
+            .map(|_| ());
         rpc::Call::new_resolved(Ok(OpenWasmSerializedReply(result)))
     }
 
@@ -112,6 +113,20 @@ impl SandboxService for SandboxServer {
             req.canister_id,
         );
         rpc::Call::new_resolved(Ok(CreateExecutionStateReply(result)))
+    }
+
+    fn create_execution_state_serialized(
+        &self,
+        req: CreateExecutionStateSerializedRequest,
+    ) -> rpc::Call<CreateExecutionStateSerializedReply> {
+        let result = self.manager.create_execution_state_serialized(
+            req.wasm_id,
+            req.serialized_module,
+            req.wasm_page_map,
+            req.next_wasm_memory_id,
+            req.canister_id,
+        );
+        rpc::Call::new_resolved(Ok(CreateExecutionStateSerializedReply(result)))
     }
 }
 

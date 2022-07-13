@@ -77,8 +77,6 @@ fn compilation_metrics_are_recorded_during_update() {
     assert_eq!(compilation_time_metric.count, 2);
 }
 
-/// TODO(RUN-250): Share serialized module from installation.
-#[ignore]
 #[test]
 fn compilation_shared_from_install_to_update() {
     let mut test = ExecutionTestBuilder::new().build();
@@ -151,7 +149,7 @@ fn compilation_shared_from_update_to_update() {
         .clear_compilation_cache_for_testing();
 
     // Now an update on one canister will require compilation, but not on the
-    // second. So we get 3 compilations in total (1 for each install and 1 for
+    // second. So we get 2 compilations in total (1 for first install and 1 for
     // one of the updates).
     test.ingress(canister_id1, "go", vec![]).unwrap();
     test.ingress(canister_id2, "go", vec![]).unwrap();
@@ -161,7 +159,65 @@ fn compilation_shared_from_update_to_update() {
     )
     .unwrap();
     match EmbeddersConfig::default().feature_flags.module_sharing {
-        FlagStatus::Enabled => assert_eq!(compilation_time_metric.count, 3),
+        FlagStatus::Enabled => assert_eq!(compilation_time_metric.count, 2),
         FlagStatus::Disabled => assert_eq!(compilation_time_metric.count, 4),
+    }
+}
+
+#[test]
+fn compilation_shared_from_install_to_install() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r"(module)";
+
+    // Install two canisters with the same wat.
+    let _canister_id1 = test.canister_from_wat(wat).unwrap();
+    let _canister_id2 = test.canister_from_wat(wat).unwrap();
+
+    // Compilation will have been shared so we should have only compiled once.
+    let compilation_time_metric = fetch_histogram_stats(
+        test.metrics_registry(),
+        "hypervisor_wasm_compile_time_seconds",
+    )
+    .unwrap();
+    match EmbeddersConfig::default().feature_flags.module_sharing {
+        FlagStatus::Enabled => assert_eq!(compilation_time_metric.count, 1),
+        FlagStatus::Disabled => assert_eq!(compilation_time_metric.count, 2),
+    }
+}
+
+#[test]
+fn compilation_shared_from_update_to_install() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func $go (call $msg_reply))
+            (export "canister_update go" (func $go))
+        )"#;
+
+    let canister_id1 = test.canister_from_wat(wat).unwrap();
+
+    // Clear caches so that we are forced to recompile.
+    test.canister_state_mut(canister_id1)
+        .execution_state
+        .as_mut()
+        .unwrap()
+        .wasm_binary
+        .clear_compilation_cache();
+    test.execution_environment()
+        .clear_compilation_cache_for_testing();
+
+    // Now an update on one canister will require compilation, but a new install
+    // with the same wasm won't require a compilation.
+    test.ingress(canister_id1, "go", vec![]).unwrap();
+    let _canister_id2 = test.canister_from_wat(wat).unwrap();
+    let compilation_time_metric = fetch_histogram_stats(
+        test.metrics_registry(),
+        "hypervisor_wasm_compile_time_seconds",
+    )
+    .unwrap();
+    match EmbeddersConfig::default().feature_flags.module_sharing {
+        FlagStatus::Enabled => assert_eq!(compilation_time_metric.count, 2),
+        FlagStatus::Disabled => assert_eq!(compilation_time_metric.count, 3),
     }
 }
