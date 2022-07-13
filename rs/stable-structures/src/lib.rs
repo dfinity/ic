@@ -2,6 +2,7 @@ pub mod btreemap;
 pub mod cell;
 #[cfg(target_arch = "wasm32")]
 mod ic0_memory; // Memory API for canisters.
+pub mod log;
 pub mod storable;
 mod types;
 pub mod vec_mem;
@@ -55,30 +56,59 @@ fn write_u32<M: Memory>(m: &M, addr: Address, val: u32) {
     write(m, addr.get(), &val.to_le_bytes());
 }
 
-// A helper function for writing into memory.
-fn write<M: Memory>(memory: &M, offset: u64, bytes: &[u8]) {
+// Writes a single 64-bit integer encoded as little-endian.
+fn write_u64<M: Memory>(m: &M, addr: Address, val: u64) {
+    write(m, addr.get(), &val.to_le_bytes());
+}
+
+#[derive(Debug)]
+struct GrowFailed {
+    current_size: u64,
+    delta: u64,
+}
+
+/// Writes the bytes at the specified offset, growing the memory size if needed.
+fn safe_write<M: Memory>(memory: &M, offset: u64, bytes: &[u8]) -> Result<(), GrowFailed> {
     let last_byte = offset
         .checked_add(bytes.len() as u64)
         .expect("Address space overflow");
+
     let size_pages = memory.size();
     let size_bytes = size_pages
         .checked_mul(WASM_PAGE_SIZE)
         .expect("Address space overflow");
+
     if size_bytes < last_byte {
         let diff_bytes = last_byte - size_bytes;
         let diff_pages = diff_bytes
             .checked_add(WASM_PAGE_SIZE - 1)
             .expect("Address space overflow")
             / WASM_PAGE_SIZE;
-        assert!(
-            memory.grow(diff_pages) != -1,
-            "Failed to grow memory from {} pages to {} pages (delta = {} pages).",
-            size_pages,
-            size_pages + diff_pages,
-            diff_pages
-        );
+        if memory.grow(diff_pages) == -1 {
+            return Err(GrowFailed {
+                current_size: size_pages,
+                delta: diff_pages,
+            });
+        }
     }
     memory.write(offset, bytes);
+    Ok(())
+}
+
+/// Like [safe_write], but panics if the memory.grow fails.
+fn write<M: Memory>(memory: &M, offset: u64, bytes: &[u8]) {
+    if let Err(GrowFailed {
+        current_size,
+        delta,
+    }) = safe_write(memory, offset, bytes)
+    {
+        panic!(
+            "Failed to grow memory from {} pages to {} pages (delta = {} pages).",
+            current_size,
+            current_size + delta,
+            delta
+        );
+    }
 }
 
 // Reads a struct from memory.
