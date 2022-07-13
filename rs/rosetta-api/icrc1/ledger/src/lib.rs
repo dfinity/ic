@@ -88,7 +88,7 @@ impl From<Value> for StoredValue {
 pub struct InitArgs {
     pub minting_account: Account,
     pub initial_balances: Vec<(Account, u64)>,
-    pub transfer_fee: Tokens,
+    pub transfer_fee: u64,
     pub token_name: String,
     pub token_symbol: String,
     pub metadata: Vec<(String, Value)>,
@@ -130,7 +130,7 @@ impl Ledger {
             transactions_by_hash: BTreeMap::new(),
             transactions_by_height: VecDeque::new(),
             minting_account,
-            transfer_fee,
+            transfer_fee: Tokens::from_e8s(transfer_fee),
             token_symbol,
             token_name,
             metadata: metadata

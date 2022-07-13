@@ -7,10 +7,7 @@ use ic_icrc1::{
 };
 use ic_icrc1_ledger::InitArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_core::{
-    block::{BlockHeight, BlockType, HashOf},
-    Tokens,
-};
+use ic_ledger_core::block::{BlockHeight, BlockType, HashOf};
 use ic_state_machine_tests::{CanisterId, StateMachine};
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
@@ -48,7 +45,7 @@ fn install_ledger(env: &StateMachine, initial_balances: Vec<(Account, u64)>) -> 
     let args = InitArgs {
         minting_account: MINTER.clone(),
         initial_balances,
-        transfer_fee: Tokens::from_e8s(FEE),
+        transfer_fee: FEE,
         token_name: TOKEN_NAME.to_string(),
         token_symbol: TOKEN_SYMBOL.to_string(),
         metadata: vec![
