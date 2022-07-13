@@ -452,6 +452,7 @@ def main(
             f"--trace_id={ROOT_PIPELINE_ID}",
             f"--parent_id={JOB_ID}",
             f"--job_name={CI_JOB_NAME}",
+            f"--ci_pipeline_source={CI_PIPELINE_SOURCE}",
             "--type=system-tests",
         ]
         honeycomb_returncode = run_command(command=honeycomb_cmd)

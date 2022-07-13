@@ -9,12 +9,13 @@ import libhoney
 
 
 class Context:
-    def __init__(self, trace_id, job_url, suite_name, service_name, job_name):
+    def __init__(self, trace_id, job_url, suite_name, service_name, job_name, ci_pipeline_source):
         self.trace_id = trace_id
         self.job_url = job_url
         self.suite_name = suite_name
         self.service_name = service_name
         self.job_name = job_name
+        self.ci_pipeline_source = ci_pipeline_source
 
 
 def create_and_export_spans(node, parent_id, ctx, depth):
@@ -46,6 +47,7 @@ def push_span(node, parent_id, ctx, depth):
     ev.add_field("execution_message", execution_message)
     ev.add_field("result_depth", depth)
     ev.add_field("ci_job_name", ctx.job_name)
+    ev.add_field("ci_pipeline_source", ctx.ci_pipeline_source)
     ev.send()
     return span_id
 
@@ -65,6 +67,9 @@ def main():
     )
     parser.add_argument("--type", type=str, help="Type of a test suite that spans correspond to.")
     parser.add_argument("--job_name", type=str, help="Name of the Gitlab CI job.")
+    parser.add_argument(
+        "--ci_pipeline_source", type=str, help="How the pipeline was triggered. Can be push, web, schedule, api, etc."
+    )
     args = parser.parse_args()
 
     api_token = os.getenv("HONEYCOMB_API_TOKEN")
@@ -73,7 +78,7 @@ def main():
 
     libhoney.init(writekey=api_token, dataset="gitlab-ci-dfinity", debug=False)
     root = input.read_test_results(args.test_results)
-    ctx = Context(args.trace_id, args.job_url, root.name, args.type, args.job_name)
+    ctx = Context(args.trace_id, args.job_url, root.name, args.type, args.job_name, args.ci_pipeline_source)
     create_and_export_spans(root, args.parent_id, ctx, 0)
     libhoney.close()
 
