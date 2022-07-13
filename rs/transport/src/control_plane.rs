@@ -207,9 +207,8 @@ impl TransportImpl {
     /// Starts the async task to accept the incoming TcpStreams in server mode.
     fn spawn_accept_task(&self, flow_tag: FlowTag, tcp_listener: TcpListener) -> JoinHandle<()> {
         let weak_self = self.weak_self.read().unwrap().clone();
-        let tokio_runtime = self.tokio_runtime.clone();
-        let metrics = self.control_plane_metrics.clone();
-        self.tokio_runtime.spawn(async move {
+        let rt_handle = self.rt_handle.clone();
+        self.rt_handle.spawn(async move {
             loop {
                 // If the TransportImpl has been deleted, abort.
                 let arc_self = match weak_self.upgrade() {
@@ -218,8 +217,7 @@ impl TransportImpl {
                 };
                 match tcp_listener.accept().await {
                     Ok((stream, _)) => {
-                        let metrics = metrics.clone();
-                        metrics
+                        arc_self.control_plane_metrics
                             .tcp_accepts
                             .with_label_values(&[&flow_tag.to_string()])
                             .inc();
@@ -247,17 +245,19 @@ impl TransportImpl {
                             return;
                         }
 
-                        tokio_runtime.spawn(async move {
+                        rt_handle.spawn(async move {
                             let (peer_id, tls_stream) = match arc_self.tls_server_handshake(stream).await {
                                 Ok((peer_id, tls_stream)) => {
-                                    metrics.tls_handshakes
+                                    arc_self.control_plane_metrics
+                                        .tls_handshakes
                                         .with_label_values(&[ConnectionRole::Server.as_ref(), STATUS_SUCCESS])
                                         .inc();
                                     (peer_id, tls_stream)
                                 },
                                 Err(err) => {
-                                    metrics.tls_handshakes
-                                       .with_label_values(&[ConnectionRole::Server.as_ref(), err.as_ref()])
+                                    arc_self.control_plane_metrics
+                                        .tls_handshakes
+                                        .with_label_values(&[ConnectionRole::Server.as_ref(), err.as_ref()])
                                        .inc();
                                     warn!(
                                         arc_self.log,
@@ -279,7 +279,7 @@ impl TransportImpl {
                                 tls_stream,
                             )
                             .await {
-                                 metrics
+                                arc_self.control_plane_metrics
                                     .tcp_accept_conn_success
                                     .with_label_values(&[&flow_tag.to_string()])
                                         .inc()
@@ -287,7 +287,7 @@ impl TransportImpl {
                             });
                         },
                     Err(err) => {
-                        metrics
+                        arc_self.control_plane_metrics
                             .tcp_accept_conn_err
                             .with_label_values(&[&flow_tag.to_string()])
                             .inc();
@@ -309,8 +309,7 @@ impl TransportImpl {
     ) -> JoinHandle<()> {
         let node_ip = self.node_ip;
         let weak_self = self.weak_self.read().unwrap().clone();
-        let metrics = self.control_plane_metrics.clone();
-        self.tokio_runtime.spawn(async move {
+        self.rt_handle.spawn(async move {
             let local_addr = SocketAddr::new(node_ip, 0);
             let peer_addr = SocketAddr::new(peer_ip, server_port.get());
 
@@ -327,7 +326,7 @@ impl TransportImpl {
                 // We currently retry forever, which is fine as we have per-connection
                 // async task. This loop will terminate when the peer is removed from
                 // valid set.
-                metrics
+                arc_self.control_plane_metrics
                     .tcp_connects
                     .with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()])
                     .inc();
@@ -335,13 +334,15 @@ impl TransportImpl {
                     Ok(stream) => {
                         let tls_stream = match arc_self.tls_client_handshake(peer_id, stream).await {
                             Ok(tls_stream) => {
-                                metrics.tls_handshakes
+                                arc_self.control_plane_metrics
+                                .tls_handshakes
                                     .with_label_values(&[ConnectionRole::Client.as_ref(), STATUS_SUCCESS])
                                     .inc();
                                 tls_stream
                             }
                             Err(err) => {
-                                metrics.tls_handshakes
+                                arc_self.control_plane_metrics
+                                    .tls_handshakes
                                     .with_label_values(&[ConnectionRole::Client.as_ref(), err.as_ref()])
                                     .inc();
                                 warn!(
@@ -366,7 +367,7 @@ impl TransportImpl {
                         .await
                         {
                             Ok(()) => {
-                                metrics
+                                arc_self.control_plane_metrics
                                     .tcp_conn_to_server_success
                                     .with_label_values(&[
                                         &peer_id.to_string(),
@@ -386,7 +387,7 @@ impl TransportImpl {
                                 return;
                             }
                             Err(e) => {
-                                metrics
+                                arc_self.control_plane_metrics
                                     .tcp_conn_to_server_err
                                     .with_label_values(&[
                                         &peer_id.to_string(),
@@ -411,7 +412,7 @@ impl TransportImpl {
                         }
                     }
                     Err(e) => {
-                        metrics
+                        arc_self.control_plane_metrics
                             .tcp_conn_to_server_err
                             .with_label_values(&[&peer_id.to_string(), &flow_tag.to_string()])
                             .inc();
@@ -604,7 +605,7 @@ impl TransportImpl {
     /// Initilizes a client
     pub(crate) fn init_client(&self, event_handler: TransportEventHandler) {
         // Creating the listeners requres that we are within a tokio runtime context.
-        let _rt_enter_guard = self.tokio_runtime.enter();
+        let _rt_enter_guard = self.rt_handle.enter();
         // Bind to the server ports.
         let mut listeners = Vec::new();
         for flow_config in &self.config.p2p_flows {

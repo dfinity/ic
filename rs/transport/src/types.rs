@@ -109,7 +109,7 @@ pub(crate) struct TransportImpl {
     pub send_queue_metrics: SendQueueMetrics,
 
     /// The tokio runtime
-    pub tokio_runtime: Handle,
+    pub rt_handle: Handle,
     /// Logger
     pub log: ReplicaLogger,
     /// Guarded self weak-reference

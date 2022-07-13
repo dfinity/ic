@@ -92,7 +92,7 @@ impl TransportImpl {
         registry_version: RegistryVersion,
         metrics_registry: MetricsRegistry,
         crypto: Arc<dyn TlsHandshake + Send + Sync>,
-        tokio_runtime: Handle,
+        rt_handle: Handle,
         log: ReplicaLogger,
     ) -> Arc<Self> {
         let node_ip = IpAddr::from_str(&config.node_ip)
@@ -104,7 +104,7 @@ impl TransportImpl {
             allowed_clients: Arc::new(RwLock::new(BTreeSet::<NodeId>::new())),
             crypto,
             registry_version: Arc::new(RwLock::new(registry_version)),
-            tokio_runtime,
+            rt_handle,
             data_plane_metrics: DataPlaneMetrics::new(metrics_registry.clone()),
             control_plane_metrics: ControlPlaneMetrics::new(metrics_registry.clone()),
             send_queue_metrics: SendQueueMetrics::new(metrics_registry),
@@ -127,7 +127,7 @@ pub fn create_transport(
     registry_version: RegistryVersion,
     metrics_registry: MetricsRegistry,
     crypto: Arc<dyn TlsHandshake + Send + Sync>,
-    tokio_runtime: Handle,
+    rt_handle: Handle,
     log: ReplicaLogger,
 ) -> Arc<dyn Transport> {
     TransportImpl::new(
@@ -136,7 +136,7 @@ pub fn create_transport(
         registry_version,
         metrics_registry,
         crypto,
-        tokio_runtime,
+        rt_handle,
         log,
     )
 }
