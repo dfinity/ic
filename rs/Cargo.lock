@@ -5459,6 +5459,7 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "assert_matches",
+ "criterion",
  "ic-config",
  "ic-cycles-account-manager",
  "ic-interfaces",
