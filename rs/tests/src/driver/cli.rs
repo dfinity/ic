@@ -153,7 +153,7 @@ should use as target hosts. (e.g. "host1.target.com:443,host2.target.com:443")"#
 
     #[clap(
         long = "pot-timeout",
-        default_value = "600s",
+        default_value = "900s",
         parse(try_from_str = parse_duration),
         help = r#"Amount of time to wait before releasing resources allocated for a pot."#
         )]
