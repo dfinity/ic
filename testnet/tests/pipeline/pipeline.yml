@@ -462,56 +462,45 @@ system-tests-hourly:
   script:
     - *run-farm-based-test
 
-system-tests-pre-master:
+# The 'pre-master' tests are also run hourly
+hourly-system-tests-pre-master:
   extends:
     - .system-tests
-    - .with-monitoring
   variables:
     SUITE_NAME: "pre_master"
     cd_target_env: "HOURLY"
   script:
     - *run-farm-based-test
 
-system-tests-boundary-nodes-pre-master:
+# The 'pre-master' tests are also run hourly
+hourly-system-tests-boundary-nodes-pre-master:
   extends:
     - .system-tests
-    - .with-monitoring
   variables:
     SUITE_NAME: "boundary_nodes_pre_master"
     cd_target_env: "HOURLY"
   script:
     - *run-farm-based-test
 
-system-tests-tecdsa-pre-master:
+# The 'pre-master' tests are also run hourly
+hourly-system-tests-tecdsa-pre-master:
   extends:
     - .system-tests
-    - .with-monitoring
   variables:
     SUITE_NAME: "tecdsa_pre_master"
     cd_target_env: "HOURLY"
   script:
     - *run-farm-based-test   
 
-system-tests-subnet-recover-pre-master:
+# The 'pre-master' tests are also run hourly
+hourly-system-tests-subnet-recover-pre-master:
   extends:
     - .system-tests
-    - .with-monitoring
   variables:
     SUITE_NAME: "subnet_recovery"
     cd_target_env: "HOURLY"
   script:
     - *run-farm-based-test   
-
-
-system-tests-nightly:
-  extends:
-    - .system-tests
-    - .with-monitoring
-  variables:
-    SUITE_NAME: "nightly"
-    cd_target_env: "NIGHTLY"
-  script:
-    - *run-farm-based-test
 
 rosetta-hourly:
   extends:
@@ -565,6 +554,16 @@ wasm-generator-slo:
     SYSTEM_TESTS_TIMEOUT: "7200"  # 2 h
     cd_target_env: "SLO"
   timeout: 3 hours
+
+system-tests-nightly:
+  extends:
+    - .system-tests
+    - .with-monitoring
+  variables:
+    SUITE_NAME: "nightly"
+    cd_target_env: "NIGHTLY"
+  script:
+    - *run-farm-based-test
 
 # Stress tests: Run given job sequence every N minutes so we can easily collect failure data
 icos-deploy-stress:
