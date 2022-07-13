@@ -137,6 +137,7 @@ async fn main() {
             Arg::new("canister")
                 .long("canister")
                 .takes_value(true)
+                .allow_invalid_utf8(true)
                 .conflicts_with("canister-id")
                 .help("Path to the canister code. Needs to match selected --method."),
         )
