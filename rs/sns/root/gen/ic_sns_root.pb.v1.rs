@@ -13,9 +13,16 @@ pub struct SnsRootCanister {
     /// update method calls (and possibly other things).
     #[prost(message, optional, tag="1")]
     pub governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Required.
+    ///
     /// The SNS Ledger canister ID
     #[prost(message, optional, tag="2")]
     pub ledger_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Required.
+    ///
+    /// The swap canister ID.
+    #[prost(message, optional, tag="4")]
+    pub swap_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
     /// Dapp canister IDs.
     #[prost(message, repeated, tag="3")]
     pub dapp_canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
@@ -29,4 +36,35 @@ pub struct RegisterDappCanisterRequest {
 #[derive(candid::CandidType, candid::Deserialize)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegisterDappCanisterResponse {
+}
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SetDappControllersRequest {
+    #[prost(message, repeated, tag="1")]
+    pub controller_principal_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SetDappControllersResponse {
+    #[prost(message, repeated, tag="1")]
+    pub failed_updates: ::prost::alloc::vec::Vec<set_dapp_controllers_response::FailedUpdate>,
+}
+/// Nested message and enum types in `SetDappControllersResponse`.
+pub mod set_dapp_controllers_response {
+    #[derive(candid::CandidType, candid::Deserialize)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct FailedUpdate {
+        #[prost(message, optional, tag="1")]
+        pub dapp_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+        #[prost(message, optional, tag="2")]
+        pub err: ::core::option::Option<super::CanisterCallError>,
+    }
+}
+#[derive(candid::CandidType, candid::Deserialize)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterCallError {
+    #[prost(int32, optional, tag="1")]
+    pub code: ::core::option::Option<i32>,
+    #[prost(string, tag="2")]
+    pub description: ::prost::alloc::string::String,
 }

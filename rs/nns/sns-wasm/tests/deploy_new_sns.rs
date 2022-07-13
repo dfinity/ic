@@ -3,7 +3,6 @@ use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_core::bytes;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto_sha::Sha256;
-use ic_ic00_types::CanisterStatusType::Running;
 use ic_interfaces::registry::RegistryClient;
 use ic_nns_test_utils::itest_helpers::{
     local_test_on_nns_subnet, set_up_sns_wasm_canister, set_up_universal_canister,
@@ -14,7 +13,9 @@ use ic_nns_test_utils::state_test_helpers::{self, create_canister};
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_sns_init::pb::v1::SnsInitPayload;
-use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
+use ic_sns_root::{
+    CanisterStatusType::Running, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+};
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,

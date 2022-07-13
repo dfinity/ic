@@ -206,9 +206,15 @@ impl SnsCanisters<'_> {
             .await
             .expect("Couldn't create Ledger canister");
 
+        let swap = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Couldn't create Ledger canister");
+
         let root_canister_id = root.canister_id();
         let governance_canister_id = governance.canister_id();
         let ledger_canister_id = ledger.canister_id();
+        let swap_canister_id = swap.canister_id();
 
         // Governance canister_init args.
         init_payloads.governance.ledger_canister_id = Some(ledger_canister_id.into());
@@ -235,9 +241,11 @@ impl SnsCanisters<'_> {
         if init_payloads.root.governance_canister_id.is_none() {
             init_payloads.root.governance_canister_id = Some(governance_canister_id.into());
         }
-
         if init_payloads.root.ledger_canister_id.is_none() {
             init_payloads.root.ledger_canister_id = Some(ledger_canister_id.into());
+        }
+        if init_payloads.root.swap_canister_id.is_none() {
+            init_payloads.root.swap_canister_id = Some(swap_canister_id.into());
         }
 
         // Set initial neurons

@@ -1,3 +1,11 @@
+type CanisterCallError = record { code : opt int32; description : text };
+type CanisterIdRecord = record { canister_id : principal };
+type CanisterStatusResult = record {
+  controller : principal;
+  status : CanisterStatusType;
+  memory_size : nat;
+  module_hash : opt vec nat8;
+};
 type CanisterStatusResultV2 = record {
   controller : principal;
   status : CanisterStatusType_1;
@@ -6,10 +14,15 @@ type CanisterStatusResultV2 = record {
   memory_size : nat;
   cycles : nat;
   settings : DefiniteCanisterSettingsArgs;
-  module_hash : opt vec nat8;
   idle_cycles_burned_per_day : nat;
+  module_hash : opt vec nat8;
 };
+type CanisterStatusType = variant { stopped; stopping; running };
 type CanisterStatusType_1 = variant { stopped; stopping; running };
+type CanisterSummary = record {
+  status : opt CanisterStatusResultV2;
+  canister_id : opt principal;
+};
 type DefiniteCanisterSettingsArgs = record {
   controller : principal;
   freezing_threshold : nat;
@@ -17,9 +30,33 @@ type DefiniteCanisterSettingsArgs = record {
   memory_allocation : nat;
   compute_allocation : nat;
 };
-
-service : {
-    get_sns_canisters_summary : (vec principal) -> (
-        vec record { text; principal; CanisterStatusResultV2 },
+type FailedUpdate = record {
+  err : opt CanisterCallError;
+  dapp_canister_id : opt principal;
+};
+type GetSnsCanistersSummaryResponse = record {
+  ledger_canister_summary : opt CanisterSummary;
+  governance_canister_summary : opt CanisterSummary;
+  root_canister_summary : opt CanisterSummary;
+  dapp_canister_summaries : vec CanisterSummary;
+};
+type RegisterDappCanisterRequest = record { canister_id : opt principal };
+type SetDappControllersRequest = record {
+  controller_principal_ids : vec principal;
+};
+type SetDappControllersResponse = record { failed_updates : vec FailedUpdate };
+type SnsRootCanister = record {
+  dapp_canister_ids : vec principal;
+  governance_canister_id : opt principal;
+  swap_canister_id : opt principal;
+  ledger_canister_id : opt principal;
+};
+service : (SnsRootCanister) -> {
+  canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
+  get_build_metadata : () -> (text) query;
+  get_sns_canisters_summary : (record {}) -> (GetSnsCanistersSummaryResponse);
+  register_dapp_canister : (RegisterDappCanisterRequest) -> (record {});
+  set_dapp_controllers : (SetDappControllersRequest) -> (
+      SetDappControllersResponse,
     );
 }
