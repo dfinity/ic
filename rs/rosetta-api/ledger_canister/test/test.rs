@@ -144,6 +144,13 @@ async fn get_blocks_candid(archive: &Canister<'_>, range: std::ops::Range<u64>) 
         .expect("get_blocks call trapped")
 }
 
+async fn query_blocks(ledger: &Canister<'_>, start: u64, length: usize) -> QueryBlocksResponse {
+    ledger
+        .query_("query_blocks", candid_one, GetBlocksArgs { start, length })
+        .await
+        .expect("failed to query blocks")
+}
+
 async fn fetch_candid_interface(canister: &Canister<'_>) -> Result<String, String> {
     canister
         .query_("__get_candid_interface_tmp_hack", candid_one, ())
@@ -521,33 +528,69 @@ fn query_blocks_certificate() {
         };
         println!("[test] ledger canister id: {}", ledger.canister_id());
 
-        let result: QueryBlocksResponse = ledger
-            .query_(
-                "query_blocks",
-                candid_one,
-                GetBlocksArgs {
-                    start: 0,
-                    length: 1,
-                },
-            )
-            .await
-            .expect("failed to query blocks");
+        let result = query_blocks(&ledger, 0, 1).await;
         assert!(result.certificate.is_some());
 
-        let result: QueryBlocksResponse = ledger
-            .query_(
-                "query_blocks",
-                candid_one,
-                GetBlocksArgs {
-                    start: 0,
-                    length: 100,
-                },
-            )
-            .await
-            .expect("failed to query blocks");
+        let result = query_blocks(&ledger, 0, 100).await;
         assert!(result.certificate.is_some());
         Ok(())
     })
+}
+
+#[test]
+fn archived_blocks_ranges() {
+    local_test_e(|r| async move {
+        let proj = Project::new(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+
+        let accounts = make_accounts(4, 3);
+
+        let blocks_per_archive_node = 10;
+
+        let max_message_size_bytes = 192;
+        let node_max_memory_size_bytes =
+            example_block().encode().size_bytes() * blocks_per_archive_node;
+
+        let archive_options = ArchiveOptions {
+            trigger_threshold: 12,
+            num_blocks_to_archive: 10,
+            node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
+            max_message_size_bytes: Some(max_message_size_bytes),
+            controller_id: CanisterId::from_u64(876).into(),
+            cycles_for_archive_creation: Some(0),
+        };
+
+        let minting_account = create_sender(0);
+
+        let ledger: canister_test::Canister = {
+            let payload = LedgerCanisterInitPayload::builder()
+                .minting_account(
+                    CanisterId::try_from(minting_account.get_principal_id())
+                        .unwrap()
+                        .into(),
+                )
+                .initial_values(accounts)
+                .archive_options(archive_options)
+                .max_message_size_bytes(max_message_size_bytes)
+                .build()
+                .unwrap();
+            let mut install = proj.cargo_bin("ledger-canister", &[]).install(&r);
+            install.memory_allocation = Some(128 * 1024 * 1024);
+            install.bytes(CandidOne(payload).into_bytes()?).await?
+        };
+
+        // make a transfer to trigger archiving
+        simple_send(&ledger, &create_sender(12345), &minting_account, 100, 0).await?;
+
+        for start in 0..10 {
+            for length in 1..=10 - start {
+                let response = query_blocks(&ledger, start, length as usize).await;
+                assert_eq!(response.archived_blocks.len(), 1);
+                assert_eq!(response.archived_blocks[0].start, start);
+                assert_eq!(response.archived_blocks[0].length, length);
+            }
+        }
+        Ok(())
+    });
 }
 
 #[test]

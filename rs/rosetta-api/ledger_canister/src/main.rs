@@ -776,14 +776,13 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
         })
         .collect();
 
-    let archived_blocks_range = requested_range.start..effective_local_range.start;
     let archive = ledger.blockchain.archive.read().unwrap();
 
     let archived_blocks = archive
         .iter()
         .flat_map(|archive| archive.index().into_iter())
         .filter_map(|((from, to), canister_id)| {
-            let slice = range_utils::intersect(&(from..to + 1), &archived_blocks_range);
+            let slice = range_utils::intersect(&(from..to + 1), &requested_range);
             (!slice.is_empty()).then(|| ArchivedBlocksRange {
                 start: slice.start,
                 length: range_utils::range_len(&slice) as u64,
