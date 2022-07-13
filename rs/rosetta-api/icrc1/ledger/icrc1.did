@@ -151,7 +151,25 @@ type ApprovalDetails = record {
     expires_at_time : Timestamp;
 };
 
-service : {
+// The initialization parameters of the Ledger
+type InitArgs = record {
+    minting_account : Account;
+    transfer_fee : Tokens;
+    token_symbol : text;
+    token_name : text;
+    metadata : vec record { text; Value };
+    initial_balances : vec record { Account; Tokens };
+    archive_options : record {
+        num_blocks_to_archive : nat64;
+        trigger_threshold : nat64;
+        max_message_size_bytes : opt nat64;
+        cycles_for_archive_creation : opt nat64;
+        node_max_memory_size_bytes : opt nat64;
+        controller_id : principal;
+    };
+};
+
+service : (InitArgs) -> {
     icrc1_name : () -> (text) query;
     icrc1_symbol : () -> (text) query;
     icrc1_decimals : () -> (nat32) query;
