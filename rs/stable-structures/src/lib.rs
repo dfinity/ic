@@ -14,6 +14,12 @@ pub use storable::Storable;
 use types::Address;
 pub use vec_mem::VectorMemory;
 
+#[cfg(target_arch = "wasm32")]
+pub type DefaultMemoryImpl = Ic0StableMemory;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub type DefaultMemoryImpl = VectorMemory;
+
 const WASM_PAGE_SIZE: u64 = 65536;
 
 pub trait Memory {

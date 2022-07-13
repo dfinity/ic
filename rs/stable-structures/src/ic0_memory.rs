@@ -8,7 +8,7 @@ extern "C" {
     pub fn stable64_write(offset: u64, src: u64, size: u64);
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Ic0StableMemory;
 
 impl Memory for Ic0StableMemory {
