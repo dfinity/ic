@@ -170,7 +170,7 @@ pub fn config(test_env: TestEnv) {
 struct Endpoints {
     nns_endpoint: IcEndpoint,
     app_endpoint_1: IcEndpoint,
-    app_endpoint_2: IcEndpoint,
+    app_endpoint_2: Option<IcEndpoint>,
 }
 
 fn get_endpoints(handle: &IcHandle) -> Endpoints {
@@ -180,12 +180,13 @@ fn get_endpoints(handle: &IcHandle) -> Endpoints {
             subnet_endpoints.entry(subnet.id).or_insert(endpoint);
         }
     }
+    let n = subnet_endpoints.len();
 
     let mut ordered = subnet_endpoints.into_iter();
     let mut nns_endpoint = None;
     let mut app_endpoint_1 = None;
     let mut app_endpoint_2 = None;
-    for _ in 0..3 {
+    for _ in 0..n {
         let endpoint = ordered.next().unwrap().1.clone();
         if endpoint.is_root_subnet {
             assert_eq!(
@@ -209,7 +210,7 @@ fn get_endpoints(handle: &IcHandle) -> Endpoints {
     Endpoints {
         nns_endpoint: nns_endpoint.unwrap(),
         app_endpoint_1: app_endpoint_1.unwrap(),
-        app_endpoint_2: app_endpoint_2.unwrap(),
+        app_endpoint_2,
     }
 }
 
@@ -491,7 +492,7 @@ pub fn test_threshold_ecdsa_signature_from_other_subnet(
         )
         .await;
 
-        let endpoint = endpoints.app_endpoint_2;
+        let endpoint = endpoints.app_endpoint_2.unwrap();
         endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
@@ -536,7 +537,7 @@ pub fn test_threshold_ecdsa_signature_fails_without_cycles(
         .await;
 
         // Cycles are only required for application subnets.
-        let endpoint = endpoints.app_endpoint_2;
+        let endpoint = endpoints.app_endpoint_2.unwrap();
         endpoint.assert_ready(ctx).await;
         let agent = assert_create_agent(endpoint.url.as_str()).await;
         let uni_can = UniversalCanister::new(&agent).await;
