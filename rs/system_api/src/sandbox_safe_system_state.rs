@@ -144,15 +144,11 @@ impl SystemStateChanges {
                         own_subnet_id,
                     )
                     .map(|id| CanisterId::new(id.get()).unwrap())
-                    .map_err(|err| {
-                        println!("resolve error: {:?}", err);
-                        err
-                    })
-                    .unwrap_or({
+                    .unwrap_or_else(|err|{
                         info!(
                             logger,
-                            "Under construction request: Couldn't find the right subnet. Send it to the management canister which will cause the request to be rejected during routing: sender id {}, receiver id {}, method_name {}.",
-                            msg.sender, msg.receiver, msg.method_name
+                            "Under construction request: Couldn't find the right subnet. Send it to the management canister which will cause the request to be rejected during routing: sender id {}, receiver id {}, method_name {}, resolve error: {:?}.",
+                            msg.sender, msg.receiver, msg.method_name, err
                         );
                         IC_00
                     });
