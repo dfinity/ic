@@ -17,7 +17,7 @@
 # IC-OS project
 /ic-os/                   @dfinity-lab/teams/node-team
 /ic-os/boundary-guestos/  @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
-/ic-os/guestos/tests/e2e-benchmarking-suite.py   @dfinity-lab/teams/node-team @dfinity-lab/teams/networking-team
+/ic-os/guestos/tests/e2e-benchmarking-suite.py   @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/networking-team
 
 # idx responsible for GitLab CI configs
 # and the pre-commit config.
@@ -28,9 +28,9 @@
 /gitlab-ci/src/dependencies/ @dfinity-lab/teams/prodsec
 /gitlab-ci/src/gen_gitlab_cargo_pipeline/farm_rate_limit.py @dfinity-lab/teams/idx @dfinity-lab/teams/ic-testing-verification
 
-/gitlab-ci/config/47--guest-os-test--e2e-scalability.yml                @dfinity-lab/teams/networking-team @dfinity-lab/teams/node-team
-/gitlab-ci/config/00--benchmark-test-child-pipeline.yml                 @dfinity-lab/teams/networking-team @dfinity-lab/teams/node-team
-/gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml      @dfinity-lab/teams/networking-team @dfinity-lab/teams/node-team
+/gitlab-ci/config/47--guest-os-test--e2e-scalability.yml                @dfinity-lab/teams/networking-team @dfinity-lab/teams/runtime-owners
+/gitlab-ci/config/00--benchmark-test-child-pipeline.yml                 @dfinity-lab/teams/networking-team @dfinity-lab/teams/runtime-owners
+/gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml      @dfinity-lab/teams/networking-team @dfinity-lab/teams/runtime-owners
 /rs/gitlab-ci-config.yml @dfinity-lab/teams/idx
 
 # Release management
@@ -203,12 +203,12 @@
 /rs/types/wasm_types/                   @dfinity-lab/teams/runtime-owners
 /rs/universal_canister/                 @dfinity-lab/teams/execution-owners @dfinity-lab/teams/ic-testing-verification
 /rs/validator/                          @dfinity-lab/teams/execution-owners
-/rs/workload_generator/                 @dfinity-lab/teams/node-team
+/rs/workload_generator/                 @dfinity-lab/teams/runtime-owners
 /rs/xnet/                               @dfinity-lab/teams/message-routing-owners
 
 # Scalability suite is currently owned by both node-team and networking team
 # Most individual benchmarks are owned by individual teams
-/scalability/                           @dfinity-lab/teams/node-team @dfinity-lab/teams/networking-team
+/scalability/                           @dfinity-lab/teams/runtime-owners @dfinity-lab/teams/networking-team
 /scalability/experiments/max_capacity_large_memory.py               @dfinity-lab/teams/runtime-owners
 /scalability/experiments/run_large_memory_experiment.py             @dfinity-lab/teams/runtime-owners
 /scalability/experiments/run_gossip_experiment.py                   @dfinity-lab/teams/networking-team

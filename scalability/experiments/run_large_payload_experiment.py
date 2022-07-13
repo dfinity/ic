@@ -47,11 +47,14 @@ class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
         print(f"🚀  running with {iterations}kb sized response messages")
         results = []
         rps_max = 0
-        for iteration in iterations:
+        for idx, iteration in enumerate(iterations):
             summary = self.run_experiment(
                 # for labels of iteration headings
                 {"response_payload_size": iteration, "load_total": iteration}
             )
+            if summary.total_number <= 0:
+                print(f"No workload generator results in iteration {idx} with payload size {iteration}, aborting")
+                break
             print(f"{iteration} -> {summary.percentiles[95]} -> {summary.t_median[0]}")
             results.append(summary.t_median[0])
 
@@ -60,7 +63,7 @@ class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
                 workload_experiment.STOP_T_MEDIAN,
                 summary.failure_rate,
                 workload_experiment.STOP_FAILURE_RATE,
-                iteration,
+                idx,
                 len(iterations),
             )
 
@@ -86,7 +89,7 @@ class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
                     "is_update": True,
                 },
                 iterations,
-                "response payload size [kb]",
+                "response payload size [bytes]",
                 rtype="update" if self.use_updates else "query",
                 state="running" if run else "done",
             )
