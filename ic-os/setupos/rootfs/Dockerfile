@@ -3,9 +3,6 @@
 # Build steps:
 # - `docker build --pull -t dfinity/setupos-main -f Dockerfile .`
 #
-# First build stage:
-# - Download 3rd party tools
-#
 
 # The base images are defined in docker-base. Update the references there when
 # a new base image has been built. Note that this argument MUST be given by the
