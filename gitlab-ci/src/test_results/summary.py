@@ -16,7 +16,7 @@ NODE_LOGS = "/app/kibana#/discover?_g=(time:(from:now-1y,to:now))&_a=(columns:!(
 KIBANA_BASE_URL = "https://kibana.testnet.dfinity.systems"
 
 
-def summarize(root, working_dir, pot_setup_file, verbose, message):
+def summarize(root, working_dir, pot_setup_file, verbose):
     """Print an execution summary for a given test results tree."""
     print_statistics(root)
     pots = root.children
@@ -34,14 +34,6 @@ def summarize(root, working_dir, pot_setup_file, verbose, message):
             print(f"Couldn't establish `group_name` of the pot {p.name}.")
         if verbose or pot_result == "Failed":
             pot_summary(p, group_name)
-            if message:
-                import notify_slack
-
-                for channel in p.alert_channels:
-                    notify_slack.send_message(
-                        message=message.format(p.name),
-                        channel=channel,
-                    )
 
 
 def pot_summary(p, group_name):
@@ -114,15 +106,10 @@ def main():
         action="store_true",
         help="If true, list all pots contained in a test suite, instead of only failing ones.",
     )
-    parser.add_argument(
-        "--slack_message",
-        type=str,
-        help="If set, message to push to a slack channel, in form of a notification, for failed pots.",
-    )
     args = parser.parse_args()
 
     results = input.read_test_results(args.test_results)
-    summarize(results, args.working_dir, args.pot_setup_file, args.verbose, args.slack_message)
+    summarize(results, args.working_dir, args.pot_setup_file, args.verbose)
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ import expected_results
 
 SUITE_EXECUTION_CONTRACT_FILE = "suite_execution_contract.json"
 SUITE_RESULT_FILE = "test-results.json"
+SLACK_FAILURE_ALERTS_FILE = "slack_alerts.json"
 
 # Set path to the current script path and make it agnostic to the invocation dir.
 current_path = Path(os.path.dirname(os.path.abspath(__file__)))
@@ -43,6 +44,7 @@ class TestRunSystemTests(unittest.TestCase):
         self.script_path = os.path.join(root_ic_dir, "rs/tests/run-system-tests.py")
         self.suite_contract_wildcard = f"{self.env['TMPDIR']}/**/system_env/{SUITE_EXECUTION_CONTRACT_FILE}"
         self.suite_result_wildcard = f"{self.env['TMPDIR']}/**/{SUITE_RESULT_FILE}"
+        self.suite_slack_alerts_wildcard = f"{self.env['TMPDIR']}/**/{SLACK_FAILURE_ALERTS_FILE}"
 
     # Executed for each test.
     def tearDown(self) -> None:
@@ -85,6 +87,7 @@ class TestRunSystemTests(unittest.TestCase):
             additional_args=["--keep_artifacts", "--keep_tmp_dirs"],
             expected_suite_contract=expected_results.suite_contract_to_succeed,
             expected_suite_result=expected_results.suite_result_to_succeed,
+            expected_slack_alerts={},
             expected_exit_code=0,
         )
 
@@ -94,6 +97,17 @@ class TestRunSystemTests(unittest.TestCase):
             additional_args=["--keep_artifacts", "--keep_tmp_dirs"],
             expected_suite_contract=expected_results.suite_contract_to_fail,
             expected_suite_result=expected_results.suite_result_to_fail,
+            expected_slack_alerts={},
+            expected_exit_code=1,
+        )
+
+    def test__suite_with_some_tests_failing_and_alerts(self):
+        self._run_suite_to_completion(
+            suite_name="suite_to_fail_with_alerts",
+            additional_args=["--keep_artifacts", "--keep_tmp_dirs"],
+            expected_suite_contract=expected_results.suite_contract_to_fail_with_alerts,
+            expected_suite_result=expected_results.suite_result_to_fail_with_alerts,
+            expected_slack_alerts=expected_results.suite_to_fail_with_alerts_notifications,
             expected_exit_code=1,
         )
 
@@ -103,6 +117,7 @@ class TestRunSystemTests(unittest.TestCase):
             additional_args=["--keep_artifacts", "--keep_tmp_dirs"],
             expected_suite_contract=expected_results.suite_contract_to_timeout,
             expected_suite_result=expected_results.suite_result_to_timeout,
+            expected_slack_alerts={},
             expected_exit_code=124,
         )
 
@@ -112,6 +127,7 @@ class TestRunSystemTests(unittest.TestCase):
             additional_args=["--keep_artifacts", "--keep_tmp_dirs"],
             expected_suite_contract=expected_results.suite_contract_to_fail_in_pot_setup,
             expected_suite_result=expected_results.suite_result_to_fail_in_pot_setup,
+            expected_slack_alerts={},
             expected_exit_code=1,
         )
 
@@ -123,6 +139,7 @@ class TestRunSystemTests(unittest.TestCase):
             additional_args=[f"--include-pattern={include_pattern}", "--keep_artifacts", "--keep_tmp_dirs"],
             expected_suite_contract=expected_results.suite_contract_include_pattern_case_1,
             expected_suite_result=expected_results.suite_result_include_pattern_case_1,
+            expected_slack_alerts={},
             expected_exit_code=0,
         )
 
@@ -136,6 +153,7 @@ class TestRunSystemTests(unittest.TestCase):
             additional_args=[f"--include-pattern={include_pattern}", "--keep_artifacts", "--keep_tmp_dirs"],
             expected_suite_contract=expected_results.suite_contract_include_pattern_case_2,
             expected_suite_result=expected_results.suite_result_include_pattern_case_2,
+            expected_slack_alerts={},
             expected_exit_code=0,
         )
 
@@ -153,6 +171,7 @@ class TestRunSystemTests(unittest.TestCase):
         expected_exit_code: int,
         expected_suite_contract: Dict,
         expected_suite_result: Dict,
+        expected_slack_alerts: Dict,
     ):
         cmd = [f"{self.script_path}", f"--suite={suite_name}"]
         if additional_args is not None:
@@ -166,6 +185,9 @@ class TestRunSystemTests(unittest.TestCase):
         # Assert correct test-result.json content.
         actual_suite_result = self._find_parse_json_by_name(self.suite_result_wildcard)
         self.assertDictEqual(expected_suite_result, actual_suite_result)  # type: ignore
+        # Assert correct slack_alerts.json content.
+        actual_suite_slack_alerts = self._find_parse_json_by_name(self.suite_slack_alerts_wildcard)
+        self.assertDictEqual(expected_slack_alerts, actual_suite_slack_alerts)  # type: ignore
 
 
 if __name__ == "__main__":

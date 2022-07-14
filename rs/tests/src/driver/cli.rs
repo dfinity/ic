@@ -29,6 +29,17 @@ pub struct ProcessTestsArgs {
         help = "Path to a working directory of the test driver."
     )]
     working_dir: PathBuf,
+    // These fields below are needed for creating slack alerts.
+    #[clap(long = "ci-job-url")]
+    ci_job_url: String,
+    #[clap(long = "ci-project-url")]
+    ci_project_url: String,
+    #[clap(long = "ci-commit-sha")]
+    ci_commit_sha: String,
+    #[clap(long = "ci-commit-short-sha")]
+    ci_commit_short_sha: String,
+    #[clap(long = "ic-version-id")]
+    ic_version_id: String,
 }
 
 #[derive(clap::Args, Debug)]
@@ -170,6 +181,11 @@ impl ProcessTestsArgs {
     pub fn validate(self) -> Result<ValidatedCliProcessTestsArgs> {
         Ok(ValidatedCliProcessTestsArgs {
             working_dir: self.working_dir,
+            ci_commit_sha: self.ci_commit_sha,
+            ci_commit_short_sha: self.ci_commit_short_sha,
+            ci_job_url: self.ci_job_url,
+            ci_project_url: self.ci_project_url,
+            ic_version_id: self.ic_version_id,
         })
     }
 }
@@ -252,6 +268,11 @@ fn parse_pattern(p: Option<String>) -> Result<Option<Regex>, regex::Error> {
 #[derive(Clone, Debug)]
 pub struct ValidatedCliProcessTestsArgs {
     pub working_dir: PathBuf,
+    pub ci_job_url: String,
+    pub ci_project_url: String,
+    pub ci_commit_sha: String,
+    pub ci_commit_short_sha: String,
+    pub ic_version_id: String,
 }
 
 #[derive(Clone, Debug)]

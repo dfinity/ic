@@ -17,6 +17,7 @@ Typical example usage:
 """
 import getpass
 import gzip
+import json
 import logging
 import os
 import shutil
@@ -49,6 +50,7 @@ RUN_TESTS_SUBCOMMAND = "run-tests"
 PROCESS_TEST_RESULTS_SUBCOMMAND = "process-test-results"
 TEST_RESULT_FILE = "test-results.json"
 POT_SETUP_FILE = "pot_setup.json"
+SLACK_FAILURE_ALERTS_FILE = "slack_alerts.json"
 SHELL_WRAPPER_DEFAULT = "/usr/bin/time"
 
 
@@ -79,19 +81,15 @@ def try_kill_pgid(pgid: int) -> None:
         pass
 
 
-def notify_slack(slack_message: str, ci_project_dir: str) -> int:
+def notify_slack(slack_message: str, ci_project_dir: str, channel: str) -> int:
     notify_slack_command = [
         "python3",
         f"{ci_project_dir}/gitlab-ci/src/notify_slack/notify_slack.py",
         slack_message,
-        f"--channel={SLACK_CHANNEL_NOTIFY}",
+        f"--channel={channel}",
     ]
     returncode = run_command(command=notify_slack_command)
     return returncode
-
-
-def process_test_results_cmd(run_test_driver_cmd: List[str], working_dir: str) -> List[str]:
-    return run_test_driver_cmd + [PROCESS_TEST_RESULTS_SUBCOMMAND] + [f"--working-dir={working_dir}"]
 
 
 def _test_driver_local_run_cmd() -> List[str]:
@@ -207,6 +205,19 @@ def build_test_driver(shell_wrapper: str) -> int:
     logging.info("Building prod-test-driver binary...")
     status_code = run_command(command=test_driver_build_cmd)
     return status_code
+
+
+def send_all_slack_alerts(slack_alerts_file_path: str, ci_project_dir: str) -> None:
+    with open(slack_alerts_file_path, "r") as f:
+        alerts = json.load(f)
+    for id, alert in alerts.items():
+        returncode = notify_slack(
+            slack_message=alert["message"], ci_project_dir=ci_project_dir, channel=alert["channel"]
+        )
+        if returncode != 0:
+            logging.error(
+                f"Failed to send slack alert with id={id} to channel={alert['channel']}, exit code={returncode}."
+            )
 
 
 def main(
@@ -429,13 +440,24 @@ def main(
                 f"IC_VERSION_ID: `{IC_VERSION_ID}`.",  # noqa
             ]
         )
-        returncode = notify_slack(slack_message, CI_PROJECT_DIR)
+        returncode = notify_slack(slack_message, CI_PROJECT_DIR, SLACK_CHANNEL_NOTIFY)
         if returncode == 0:
             logging.info("Successfully sent timeout slack notification.")
         else:
             logging.error(f"Failed to send slack timeout notification, exit code={returncode}.")
     # Process all test result files produced by the test-driver execution and infer overall suite execution success/failure.
-    process_results_cmd = process_test_results_cmd(run_test_driver_cmd=RUN_CMD, working_dir=working_dir)
+    process_results_cmd = (
+        RUN_CMD
+        + [PROCESS_TEST_RESULTS_SUBCOMMAND]
+        + [
+            f"--working-dir={working_dir}",
+            f"--ci-job-url={CI_JOB_URL}",
+            f"--ci-project-url={CI_PROJECT_URL}",
+            f"--ci-commit-sha={CI_COMMIT_SHA}",
+            f"--ci-commit-short-sha={CI_COMMIT_SHORT_SHA}",
+            f"--ic-version-id={IC_VERSION_ID}",
+        ]
+    )
     test_suite_returncode = run_command(command=process_results_cmd)
     # 0 - successful suite execution.
     # 1 - suite failed, case with some failed or interrupted tests.
@@ -462,14 +484,8 @@ def main(
             logging.error(f"{RED}Failed to push results to honeycomb.{NC}")
 
     if is_slack_test_failure_notify:
-        msg = "\n".join(
-            [
-                f"Pot `{{}}` *failed*. <{CI_JOB_URL}|log>.",  # noqa
-                f"Commit: <{CI_PROJECT_URL}/-/commit/{CI_COMMIT_SHA}|{CI_COMMIT_SHORT_SHA}>.",
-                f"IC_VERSION_ID: `{IC_VERSION_ID}`.",  # noqa
-            ]
-        )
-        SUMMARY_ARGS.append(f"--slack_message={msg}")
+        filepath = os.path.join(working_dir, SLACK_FAILURE_ALERTS_FILE)
+        send_all_slack_alerts(filepath, CI_PROJECT_DIR)
 
     logging.debug(f"SUMMARY_ARGS={SUMMARY_ARGS}")
 
