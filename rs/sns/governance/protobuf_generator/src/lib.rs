@@ -645,6 +645,22 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "ic_sns_governance.pb.v1.ListNervousSystemFunctionsResponse",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.Subaccount",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.Account",
+        [
+            "#[derive(candid::CandidType, candid::Deserialize)]",
+            "#[cfg_attr(feature = \"test\", derive(comparable::Comparable))]",
+        ]
+        .join(" "),
+    );
 
     std::fs::create_dir_all(out).expect("failed to create output directory");
     config.out_dir(out);

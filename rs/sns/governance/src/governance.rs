@@ -8,6 +8,7 @@ use std::ops::Bound::{Excluded, Unbounded};
 use std::str::FromStr;
 use std::string::ToString;
 
+use crate::account_from_proto;
 use crate::canister_control::{
     get_canister_id, perform_execute_generic_nervous_system_function_call,
     upgrade_canister_directly,
@@ -33,8 +34,9 @@ use crate::pb::v1::{
     UpgradeSnsControlledCanister, Vote,
 };
 use ic_base_types::PrincipalId;
+use ic_icrc1::{Account, Subaccount};
+use ic_ledger_core::Tokens;
 use lazy_static::lazy_static;
-use ledger_canister::{AccountIdentifier, Subaccount, Tokens};
 use maplit::hashset;
 use num::{bigint::BigInt, rational::Ratio, Zero};
 use strum::IntoEnumIterator;
@@ -42,6 +44,7 @@ use strum::IntoEnumIterator;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
+use crate::ledger::Ledger;
 use crate::neuron::{NeuronState, RemovePermissionsStatus, MAX_LIST_NEURONS_RESULTS};
 use crate::pb::v1::{
     manage_neuron::{AddNeuronPermissions, RemoveNeuronPermissions},
@@ -57,11 +60,7 @@ use crate::proposal::{
 use crate::types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock};
 use candid::Encode;
 use dfn_core::api::{id, spawn, CanisterId};
-use ic_nervous_system_common::{
-    i2r,
-    ledger::{self, Ledger},
-    NervousSystemError,
-};
+use ic_nervous_system_common::{i2r, ledger, NervousSystemError};
 use ic_nervous_system_root::ChangeCanisterProposal;
 
 lazy_static! {
@@ -465,14 +464,20 @@ pub struct Governance {
 /// Returns the ledger account identifier of the minting account on the ledger canister
 /// (currently an account controlled by the governance canister).
 /// TODO - if we later allow to set the minting account more flexibly, this method should be renamed
-pub fn governance_minting_account() -> AccountIdentifier {
-    AccountIdentifier::new(id().get(), None)
+pub fn governance_minting_account() -> Account {
+    Account {
+        of: id().get(),
+        subaccount: None,
+    }
 }
 
 /// Returns the ledger account identifier of a given neuron, where the neuron is specified by
 /// its subaccount.
-pub fn neuron_account_id(subaccount: Subaccount) -> AccountIdentifier {
-    AccountIdentifier::new(id().get(), Some(subaccount))
+pub fn neuron_account_id(subaccount: Subaccount) -> Account {
+    Account {
+        of: id().get(),
+        subaccount: Some(subaccount),
+    }
 }
 
 impl Governance {
@@ -575,7 +580,7 @@ impl Governance {
         controller: &PrincipalId,
         memo: u64,
     ) -> Result<NeuronId, GovernanceError> {
-        let subaccount = ledger::compute_neuron_staking_subaccount(*controller, memo);
+        let subaccount = ledger::compute_neuron_staking_subaccount_bytes(*controller, memo);
         let nid = NeuronId::from(subaccount);
         // Don't allow IDs that are already in use.
         if self.proto.neurons.contains_key(&nid.to_string()) {
@@ -603,7 +608,7 @@ impl Governance {
     }
 
     /// Converts bytes to a subaccount
-    fn bytes_to_subaccount(bytes: &[u8]) -> Result<ledger_canister::Subaccount, GovernanceError> {
+    fn bytes_to_subaccount(bytes: &[u8]) -> Result<ic_icrc1::Subaccount, GovernanceError> {
         bytes.try_into().map_err(|_| {
             GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Invalid subaccount")
         })
@@ -885,9 +890,12 @@ impl Governance {
         let from_subaccount = neuron.subaccount()?;
 
         // If no account was provided, transfer to the caller's (default) account.
-        let to_account: AccountIdentifier = match disburse.to_account.as_ref() {
-            None => AccountIdentifier::new(*caller, None),
-            Some(ai_pb) => AccountIdentifier::try_from(ai_pb).map_err(|e| {
+        let to_account: Account = match disburse.to_account.as_ref() {
+            None => Account {
+                of: *caller,
+                subaccount: None,
+            },
+            Some(ai_pb) => account_from_proto(ai_pb.clone()).map_err(|e| {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
                     format!("The recipient's subaccount is invalid due to: {}", e),
@@ -1246,19 +1254,20 @@ impl Governance {
         neuron.check_authorized(caller, NeuronPermissionType::DisburseMaturity)?;
 
         // If no account was provided, transfer to the caller's account.
-        let to_account: AccountIdentifier = match disburse_maturity.to_account.as_ref() {
-            None => AccountIdentifier::new(*caller, None),
-            Some(account_identifier) => {
-                AccountIdentifier::try_from(account_identifier).map_err(|e| {
-                    GovernanceError::new_with_message(
-                        ErrorType::InvalidCommand,
-                        format!(
-                            "The given account to disburse the maturity to is invalid due to: {}",
-                            e
-                        ),
-                    )
-                })?
-            }
+        let to_account: Account = match disburse_maturity.to_account.as_ref() {
+            None => Account {
+                of: *caller,
+                subaccount: None,
+            },
+            Some(account) => account_from_proto(account.clone()).map_err(|e| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidCommand,
+                    format!(
+                        "The given account to disburse the maturity to is invalid due to: {}",
+                        e
+                    ),
+                )
+            })?,
         };
 
         if disburse_maturity.percentage_to_disburse > 100
@@ -2564,7 +2573,9 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         let controller = memo_and_controller.controller.unwrap_or(*caller);
         let memo = memo_and_controller.memo;
-        let nid = NeuronId::from(ledger::compute_neuron_staking_subaccount(controller, memo));
+        let nid = NeuronId::from(ledger::compute_neuron_staking_subaccount_bytes(
+            controller, memo,
+        ));
         match self.get_neuron_result(&nid) {
             Ok(neuron) => {
                 let nid = neuron.id.as_ref().expect("Neuron must have an id").clone();
@@ -2586,7 +2597,7 @@ impl Governance {
         let account = neuron_account_id(subaccount);
 
         // Get the balance of the neuron from the ledger canister.
-        let balance = self.ledger.account_balance(account).await?;
+        let balance = self.ledger.account_balance(account.clone()).await?;
         let min_stake = self
             .nervous_system_parameters()
             .neuron_minimum_stake_e8s
@@ -3532,7 +3543,9 @@ fn get_neuron_id_from_memo_and_controller(
 ) -> NeuronId {
     let controller = memo_and_controller.controller.unwrap_or(*caller);
     let memo = memo_and_controller.memo;
-    NeuronId::from(ledger::compute_neuron_staking_subaccount(controller, memo))
+    NeuronId::from(ledger::compute_neuron_staking_subaccount_bytes(
+        controller, memo,
+    ))
 }
 
 #[cfg(test)]
@@ -3542,7 +3555,8 @@ mod tests {
         pb::v1::{
             manage_neuron_response,
             nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-            Motion, NeuronPermissionType, ProposalData, ProposalId, Tally, WaitForQuietState,
+            Account as AccountProto, Motion, NeuronPermissionType, ProposalData, ProposalId, Tally,
+            WaitForQuietState,
         },
         types::test_helpers::NativeEnvironment,
     };
@@ -3563,7 +3577,7 @@ mod tests {
             _amount_e8s: u64,
             _fee_e8s: u64,
             _from_subaccount: Option<Subaccount>,
-            _to: AccountIdentifier,
+            _to: Account,
             _memo: u64,
         ) -> Result<u64, NervousSystemError> {
             unimplemented!();
@@ -3573,10 +3587,7 @@ mod tests {
             unimplemented!()
         }
 
-        async fn account_balance(
-            &self,
-            _account: AccountIdentifier,
-        ) -> Result<Tokens, NervousSystemError> {
+        async fn account_balance(&self, _account: Account) -> Result<Tokens, NervousSystemError> {
             unimplemented!()
         }
     }
@@ -3639,7 +3650,7 @@ mod tests {
                 _amount_e8s: u64,
                 _fee_e8s: u64,
                 _from_subaccount: Option<Subaccount>,
-                _to: AccountIdentifier,
+                _to: Account,
                 _memo: u64,
             ) -> Result<u64, NervousSystemError> {
                 self.transfer_funds_arrived.notify_one();
@@ -3653,7 +3664,7 @@ mod tests {
 
             async fn account_balance(
                 &self,
-                _account: AccountIdentifier,
+                _account: Account,
             ) -> Result<Tokens, NervousSystemError> {
                 Ok(Tokens::new(1, 0).unwrap())
             }
@@ -3714,9 +3725,10 @@ mod tests {
                     subaccount: user.subaccount.to_vec(),
                     command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
                         amount: None,
-                        to_account: Some(
-                            AccountIdentifier::new(user.sender.get_principal_id(), None).into(),
-                        ),
+                        to_account: Some(AccountProto {
+                            of: Some(user.sender.get_principal_id()),
+                            subaccount: None,
+                        }),
                     })),
                 };
                 let disburse_future = {

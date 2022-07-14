@@ -8,6 +8,7 @@
 
 use dfn_core::println;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_icrc1::Subaccount;
 use ic_nervous_system_common::stable_mem_utils::BufferedStableMemWriter;
 use ic_sns_governance::governance::HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES;
 use ic_sns_governance::pb::v1::governance::NeuronInFlightCommand;
@@ -26,7 +27,6 @@ use ic_sns_governance::proposal::{
     PROPOSAL_URL_CHAR_MAX,
 };
 use ic_sns_governance::types::native_action_ids;
-use ledger_canister::Subaccount;
 use pretty_bytes::converter;
 use prost::Message;
 use rand::rngs::StdRng;

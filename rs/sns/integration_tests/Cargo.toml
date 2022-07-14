@@ -23,9 +23,10 @@ dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-ic00-types = { path = "../../types/ic00_types" }
+ic-icrc1 = { path = "../../rosetta-api/icrc1" }
+ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-nervous-system-common= { path = "../../nervous_system/common/" }
 ic-sns-governance = { path = "../governance" }
-ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 maplit = "1.0.2"
 pretty-bytes = "0.2.2"
 prost = "0.10.0"

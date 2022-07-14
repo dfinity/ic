@@ -960,7 +960,7 @@ message ManageNeuron {
     Amount amount = 1;
 
     // The ledger account to which the disbursed tokens are transferred.
-    ic_ledger.pb.v1.AccountIdentifier to_account = 2;
+    Account to_account = 2;
   }
 
   // The operation that splits a neuron (called 'parent neuron'), or rather a neuron's stake,
@@ -1001,7 +1001,7 @@ message ManageNeuron {
     uint32 percentage_to_disburse = 1;
 
     // The (optional) principal to which to transfer the stake.
-    ic_ledger.pb.v1.AccountIdentifier to_account = 2;
+    Account to_account = 2;
   }
 
   // The operation that adds a new follow relation to a neuron, specifying
@@ -1319,4 +1319,22 @@ message SetMode {
 }
 
 message SetModeResponse {
+}
+
+// A Ledger subaccount.
+message Subaccount {
+  option (ic_base_types.pb.v1.tui_signed_message) = true;
+  bytes subaccount = 1 [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+}
+
+// A Ledger account identified by the owner of the account `of` and
+// the `subaccount`. If the `subaccount` is not specified then the default
+// one is used.
+message Account {
+  // The owner of the account.
+  ic_base_types.pb.v1.PrincipalId of = 1;
+
+  // The subaccount of the account. If not set then the default
+  // subaccount (all bytes set to 0) is used.
+  optional Subaccount subaccount = 2;
 }

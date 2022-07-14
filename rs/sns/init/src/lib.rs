@@ -8,6 +8,10 @@ use crate::pb::v1::{
 };
 use anyhow::anyhow;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_icrc1::Account;
+use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
+use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_core::Tokens;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
@@ -16,10 +20,10 @@ use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_governance::pb::v1::{
     Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
 };
+use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::pb::v1::Init;
 use lazy_static::lazy_static;
-use ledger_canister::{AccountIdentifier, ArchiveOptions, LedgerCanisterInitPayload, Tokens};
 use maplit::{btreemap, hashmap, hashset};
 use std::collections::HashSet;
 use std::collections::{BTreeMap, HashMap};
@@ -66,7 +70,7 @@ pub struct SnsCanisterIds {
 #[derive(Debug, Clone)]
 pub struct SnsCanisterInitPayloads {
     pub governance: Governance,
-    pub ledger: LedgerCanisterInitPayload,
+    pub ledger: LedgerInitArgs,
     pub root: SnsRootCanister,
     pub swap: Init,
 }
@@ -168,41 +172,52 @@ impl SnsInitPayload {
     fn ledger_init_args(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> anyhow::Result<LedgerCanisterInitPayload> {
+    ) -> anyhow::Result<LedgerInitArgs> {
         let root_canister_id = CanisterId::new(sns_canister_ids.root).unwrap();
         let token_symbol = self
             .token_symbol
             .as_ref()
-            .expect("Expected token_symbol to be set");
+            .expect("Expected token_symbol to be set")
+            .clone();
         let token_name = self
             .token_name
             .as_ref()
-            .expect("Expected token_name to be set");
+            .expect("Expected token_name to be set")
+            .clone();
 
-        let mut payload = LedgerCanisterInitPayload::builder()
-            .minting_account(sns_canister_ids.governance.into())
-            .token_symbol_and_name(token_symbol, token_name)
-            .archive_options(ArchiveOptions {
+        let minting_account = Account {
+            of: sns_canister_ids.governance,
+            subaccount: None,
+        };
+        let initial_balances = self
+            .get_all_ledger_accounts(sns_canister_ids)?
+            .into_iter()
+            .map(|(a, t)| (a, t.get_e8s()))
+            .collect();
+        let transfer_fee = self
+            .transaction_fee_e8s
+            .unwrap_or(DEFAULT_TRANSFER_FEE.get_e8s());
+
+        let payload = LedgerInitArgs {
+            minting_account,
+            initial_balances,
+            transfer_fee,
+            token_name,
+            token_symbol,
+            metadata: vec![],
+            archive_options: ArchiveOptions {
                 trigger_threshold: 2000,
                 num_blocks_to_archive: 1000,
                 // 1 GB, which gives us 3 GB space when upgrading
                 node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
                 // 128kb
                 max_message_size_bytes: Some(128 * 1024),
-                controller_id: root_canister_id.into(),
+                controller_id: root_canister_id.get(),
                 // TODO: allow users to set this value
                 // 10 Trillion cycles
                 cycles_for_archive_creation: Some(10_000_000_000_000),
-            })
-            .build()
-            .unwrap();
-
-        payload.transfer_fee = self.transaction_fee_e8s.map(Tokens::from_e8s);
-        payload.initial_values = self.get_all_ledger_accounts(sns_canister_ids)?;
-
-        let governance_canister_id = CanisterId::new(sns_canister_ids.governance).unwrap();
-        let ledger_canister_id = CanisterId::new(sns_canister_ids.ledger).unwrap();
-        payload.send_whitelist = hashset! { governance_canister_id, ledger_canister_id };
+            },
+        };
 
         Ok(payload)
     }
@@ -246,7 +261,7 @@ impl SnsInitPayload {
     fn get_all_ledger_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> anyhow::Result<HashMap<AccountIdentifier, Tokens>> {
+    ) -> anyhow::Result<HashMap<Account, Tokens>> {
         match &self.initial_token_distribution {
             None => Ok(hashmap! {}),
             Some(FractionalDeveloperVotingPower(f)) => {
@@ -505,9 +520,8 @@ mod test {
     };
     use ic_base_types::ic_types::Principal;
     use ic_base_types::{CanisterId, PrincipalId};
+    use ic_icrc1::Account;
     use ic_sns_governance::governance::ValidGovernanceProto;
-    use ledger_canister::{AccountIdentifier, Tokens};
-    use maplit::hashset;
 
     fn create_valid_initial_token_distribution() -> InitialTokenDistribution {
         FractionalDeveloperVotingPower(FractionalDVP {
@@ -641,19 +655,14 @@ mod test {
             sns_canisters_init_payloads
                 .ledger
                 .archive_options
-                .unwrap()
                 .controller_id,
             sns_canister_ids.root
         );
         assert_eq!(
             sns_canisters_init_payloads.ledger.minting_account,
-            AccountIdentifier::new(sns_canister_ids.governance, None)
-        );
-        assert_eq!(
-            sns_canisters_init_payloads.ledger.send_whitelist,
-            hashset! {
-                CanisterId::new(sns_canister_ids.governance).unwrap(),
-                CanisterId::new(sns_canister_ids.ledger).unwrap()
+            Account {
+                of: sns_canister_ids.governance,
+                subaccount: None
             }
         );
 
@@ -780,12 +789,15 @@ mod test {
         let ledger = canister_payloads.ledger;
 
         // Assert that the Ledger canister would accept this init payload
-        assert_eq!(ledger.token_symbol, Some(token_symbol));
-        assert_eq!(ledger.token_name, Some(token_name));
+        assert_eq!(ledger.token_symbol, token_symbol);
+        assert_eq!(ledger.token_name, token_name);
         assert_eq!(
             ledger.minting_account,
-            AccountIdentifier::new(sns_canister_ids.governance, None)
+            Account {
+                of: sns_canister_ids.governance,
+                subaccount: None
+            }
         );
-        assert_eq!(ledger.transfer_fee, Some(Tokens::from_e8s(transaction_fee)));
+        assert_eq!(ledger.transfer_fee, transaction_fee);
     }
 }

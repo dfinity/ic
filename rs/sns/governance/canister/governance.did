@@ -1,4 +1,4 @@
-type AccountIdentifier = record { hash : vec nat8 };
+type Account = record { of : opt principal; subaccount : opt Subaccount };
 type Action = variant {
   ManageNervousSystemParameters : NervousSystemParameters;
   AddGenericNervousSystemFunction : NervousSystemFunction;
@@ -85,12 +85,9 @@ type DefiniteCanisterSettingsArgs = record {
   memory_allocation : nat;
   compute_allocation : nat;
 };
-type Disburse = record {
-  to_account : opt AccountIdentifier;
-  amount : opt Amount;
-};
+type Disburse = record { to_account : opt Account; amount : opt Amount };
 type DisburseMaturity = record {
-  to_account : opt AccountIdentifier;
+  to_account : opt Account;
   percentage_to_disburse : nat32;
 };
 type DisburseMaturityResponse = record {
@@ -275,6 +272,7 @@ type SetDissolveTimestamp = record { dissolve_timestamp_seconds : nat64 };
 type SetMode = record { mode : int32 };
 type Split = record { memo : nat64; amount_e8s : nat64 };
 type SplitResponse = record { created_neuron_id : opt NeuronId };
+type Subaccount = record { subaccount : vec nat8 };
 type Tally = record {
   no : nat64;
   yes : nat64;

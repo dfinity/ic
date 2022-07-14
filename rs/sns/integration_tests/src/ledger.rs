@@ -1,23 +1,24 @@
 use dfn_candid::candid_one;
-use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_crypto_sha::Sha256;
+use ic_icrc1::endpoints::TransferArg;
+use ic_icrc1::Account;
+use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
+use ic_ledger_core::Tokens;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
 
 use ic_sns_governance::pb::v1::manage_neuron::claim_or_refresh::{By, MemoAndController};
 use ic_sns_governance::pb::v1::manage_neuron::{ClaimOrRefresh, Command, Disburse};
 use ic_sns_governance::pb::v1::{
-    ManageNeuron, ManageNeuronResponse, NervousSystemParameters, NeuronPermissionList,
-    NeuronPermissionType,
+    Account as AccountProto, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
+    NeuronPermissionList, NeuronPermissionType,
 };
+use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
+use ic_sns_test_utils::icrc1;
 use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,
-};
-use ledger_canister::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
-    DEFAULT_TRANSFER_FEE,
 };
 
 // This tests the whole neuron lifecycle in integration with the ledger. Namely
@@ -45,53 +46,45 @@ fn test_stake_and_disburse_neuron_with_notification() {
 
             let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
 
-            let user_balance: Tokens = sns_canisters
-                .ledger
-                .query_(
-                    "account_balance_pb",
-                    protobuf,
-                    AccountBalanceArgs {
-                        account: user.get_principal_id().into(),
-                    },
-                )
-                .await
-                .map(tokens_from_proto)?;
+            let user_balance = icrc1::balance_of(
+                &sns_canisters.ledger,
+                Account {
+                    of: user.get_principal_id(),
+                    subaccount: None,
+                },
+            )
+            .await
+            .map(Tokens::from_e8s)?;
             assert_eq!(alloc, user_balance);
 
             // Stake a neuron by transferring to a subaccount of the neurons
             // canister and claiming the neuron on the governance canister..
             let nonce = 12345u64;
-            let to_subaccount = Subaccount({
+            let to_subaccount = {
                 let mut state = Sha256::new();
                 state.write(&[0x0c]);
                 state.write(b"neuron-stake");
                 state.write(user.get_principal_id().as_slice());
                 state.write(&nonce.to_be_bytes());
                 state.finish()
-            });
+            };
 
             // Stake the neuron.
-            let stake = Tokens::from_tokens(100).unwrap();
-            let _block_height: u64 = sns_canisters
-                .ledger
-                .update_from_sender(
-                    "send_pb",
-                    protobuf,
-                    SendArgs {
-                        memo: Memo(nonce),
-                        amount: stake,
-                        fee: DEFAULT_TRANSFER_FEE,
-                        from_subaccount: None,
-                        to: AccountIdentifier::new(
-                            PrincipalId::from(sns_canisters.governance.canister_id()),
-                            Some(to_subaccount),
-                        ),
-                        created_at_time: None,
-                    },
-                    &user,
-                )
-                .await
-                .expect("Couldn't send funds.");
+            let stake = 100 * TOKEN_SUBDIVIDABLE_BY;
+            let _block_height = icrc1::transfer(
+                &sns_canisters.ledger,
+                &user,
+                TransferArg {
+                    amount: stake,
+                    fee: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
+                    from_subaccount: None,
+                    to_principal: PrincipalId::from(sns_canisters.governance.canister_id()),
+                    to_subaccount: Some(to_subaccount),
+                    created_at_time: None,
+                },
+            )
+            .await
+            .expect("Couldn't send funds.");
 
             // Claim the neuron on the governance canister.
             let manage_neuron_response: ManageNeuronResponse = sns_canisters
@@ -122,22 +115,18 @@ fn test_stake_and_disburse_neuron_with_notification() {
             };
 
             // The balance now should have been deducted the stake.
-            let user_balance: Tokens = sns_canisters
-                .ledger
-                .query_(
-                    "account_balance_pb",
-                    protobuf,
-                    AccountBalanceArgs {
-                        account: user.get_principal_id().into(),
-                    },
-                )
-                .await
-                .map(tokens_from_proto)?;
+            let user_balance = icrc1::balance_of(
+                &sns_canisters.ledger,
+                Account {
+                    of: user.get_principal_id(),
+                    subaccount: None,
+                },
+            )
+            .await
+            .map(Tokens::from_e8s)?;
             // The balance should now be: initial allocation - stake - fee
             assert_eq!(
-                Tokens::from_e8s(
-                    user_balance.get_e8s() + stake.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()
-                ),
+                Tokens::from_e8s(user_balance.get_e8s() + stake + DEFAULT_TRANSFER_FEE.get_e8s()),
                 alloc
             );
 
@@ -155,9 +144,10 @@ fn test_stake_and_disburse_neuron_with_notification() {
                         subaccount: subaccount.to_vec(),
                         command: Some(Command::Disburse(Disburse {
                             amount: None,
-                            to_account: Some(
-                                AccountIdentifier::new(user.get_principal_id(), None).into(),
-                            ),
+                            to_account: Some(AccountProto {
+                                of: Some(user.get_principal_id()),
+                                subaccount: None,
+                            }),
                         })),
                     },
                     &user,
@@ -170,18 +160,15 @@ fn test_stake_and_disburse_neuron_with_notification() {
             //
             // Use an "update" instead of a query to make sure that the transfer
             // was executed first.
-            let user_balance: Tokens = sns_canisters
-                .ledger
-                .update_from_sender(
-                    "account_balance_pb",
-                    protobuf,
-                    AccountBalanceArgs {
-                        account: user.get_principal_id().into(),
-                    },
-                    &user,
-                )
-                .await
-                .map(tokens_from_proto)?;
+            let user_balance: Tokens = icrc1::balance_of(
+                &sns_canisters.ledger,
+                Account {
+                    of: user.get_principal_id(),
+                    subaccount: None,
+                },
+            )
+            .await
+            .map(Tokens::from_e8s)?;
 
             // The balance should now be: initial allocation - fee * 2 (one fee for the
             // stake and one for the disburse).

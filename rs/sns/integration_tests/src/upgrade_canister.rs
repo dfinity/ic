@@ -2,6 +2,7 @@ use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
 use ic_ic00_types::CanisterInstallMode;
+use ic_ledger_core::Tokens;
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
 use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, CanisterStatusType};
 use ic_sns_governance::pb::v1::{
@@ -17,7 +18,6 @@ use ic_sns_test_utils::itest_helpers::{
 use ic_types::PrincipalId;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use ledger_canister::Tokens;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, Duration};
 
@@ -76,12 +76,7 @@ fn test_upgrade_canister_proposal_is_successful() {
 
             // Assert that original_ledger_wasm_hash differs from the hash of
             // the wasm that we're about to install.
-            let new_ledger_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-                "rosetta-api/ledger_canister",
-                "ledger-canister",
-                &[], // features
-            )
-            .bytes();
+            let new_ledger_wasm = EMPTY_WASM.to_vec();
             let new_ledger_wasm_hash = &ic_crypto_sha::Sha256::hash(&new_ledger_wasm);
             assert_ne!(new_ledger_wasm_hash[..], original_ledger_wasm_hash[..]);
 
@@ -217,12 +212,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
 
             // Assert that original_ledger_wasm_hash differs from the hash of
             // the wasm that we're about to (attempt to) install.
-            let new_ledger_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-                "rosetta-api/ledger_canister",
-                "ledger-canister",
-                &[], // features
-            )
-            .bytes();
+            let new_ledger_wasm = EMPTY_WASM.to_vec();
 
             let new_ledger_wasm_hash = &ic_crypto_sha::Sha256::hash(&new_ledger_wasm);
             assert_ne!(new_ledger_wasm_hash[..], original_ledger_wasm_hash[..]);

@@ -1,13 +1,14 @@
 pub mod canister_control;
 pub mod governance;
 pub mod init;
+pub mod ledger;
 pub mod neuron;
 pub mod pb;
 pub mod proposal;
 mod reward;
 pub mod types;
 
-use std::fmt::Debug;
+use std::{convert::TryInto, fmt::Debug};
 
 trait Len {
     fn len(&self) -> usize;
@@ -121,6 +122,21 @@ fn field_err(field_name: &str, field_value: impl Debug, defect: &str) -> Result<
         "The value in field {} is {}: {:?}",
         field_name, defect, field_value
     ))
+}
+
+pub fn account_from_proto(account: crate::pb::v1::Account) -> Result<ic_icrc1::Account, String> {
+    let of = *validate_required_field("of", &account.of)?;
+    let subaccount: Option<ic_icrc1::Subaccount> = match account.subaccount {
+        Some(s) => match s.subaccount.as_slice().try_into() {
+            Ok(s) => Ok(Some(s)),
+            Err(_) => Err(format!(
+                "Invalid Subaccount length. Expected 32, found {}",
+                s.subaccount.len()
+            )),
+        },
+        None => Ok(None),
+    }?;
+    Ok(ic_icrc1::Account { of, subaccount })
 }
 
 #[cfg(test)]

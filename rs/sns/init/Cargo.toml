@@ -12,13 +12,16 @@ candid = "0.7.4"
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = { path = "../../crypto/sha" }
+ic-icrc1 = { path = "../../rosetta-api/icrc1" }
+ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
+ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
+ic-ledger-canister-core = { path = "../../rosetta-api/ledger_canister_core" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-root = { path = "../root" }
 ic-sns-swap = { path = "../swap" }
-ledger-canister = { path = "../../rosetta-api/ledger_canister" }
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 num = "0.4.0"

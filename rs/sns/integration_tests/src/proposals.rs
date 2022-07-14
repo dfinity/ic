@@ -1,4 +1,6 @@
 use canister_test::Canister;
+use ic_icrc1::Account;
+use ic_ledger_core::Tokens;
 use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -28,7 +30,6 @@ use ic_sns_test_utils::itest_helpers::{
     local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
 };
 use ic_sns_test_utils::now_seconds;
-use ledger_canister::{AccountIdentifier, Tokens};
 use on_wire::bytes;
 
 const MOTION_PROPOSAL_ACTION_TYPE: u64 = 1;
@@ -826,7 +827,10 @@ fn test_ballots_set_for_multiple_neurons() {
 
         let account_identifiers = users
             .iter()
-            .map(|user| AccountIdentifier::from(user.sender.get_principal_id()))
+            .map(|user| Account {
+                of: user.sender.get_principal_id(),
+                subaccount: None,
+            })
             .collect();
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()

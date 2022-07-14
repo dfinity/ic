@@ -186,8 +186,8 @@ pub fn build_governance_sns_wasm() -> SnsWasm {
 /// Builds the SnsWasm for the ledger canister.
 pub fn build_ledger_sns_wasm() -> SnsWasm {
     let ledger_wasm = Project::cargo_bin_maybe_use_path_relative_to_rs(
-        "rosetta-api/ledger_canister",
-        "ledger-canister",
+        "rosetta-api/icrc1/ledger",
+        "ic-icrc1-ledger",
         &[],
     );
     SnsWasm {

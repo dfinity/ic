@@ -17,14 +17,16 @@ use crate::{
 use async_trait::async_trait;
 
 use ic_base_types::CanisterId;
+use ic_ledger_core::{tokens::Tokens, tokens::TOKEN_SUBDIVIDABLE_BY};
 use ic_nervous_system_common::NervousSystemError;
-use ledger_canister::{DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY};
 
 use std::{
     collections::{BTreeMap, HashSet},
     convert::TryFrom,
     fmt,
 };
+
+pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
 
 pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
 pub const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;

@@ -13,6 +13,7 @@ use async_trait::async_trait;
 use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
+use ic_sns_governance::ledger::LedgerCanister;
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
 use std::boxed::Box;
@@ -31,7 +32,7 @@ use dfn_core::{
 
 use ic_base_types::CanisterId;
 use ic_ic00_types::CanisterStatusResultV2;
-use ic_nervous_system_common::{get_canister_status, ledger::LedgerCanister};
+use ic_nervous_system_common::get_canister_status;
 use ic_sns_governance::{
     governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
     pb::v1::{

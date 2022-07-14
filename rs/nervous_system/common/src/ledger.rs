@@ -126,35 +126,44 @@ impl Ledger for LedgerCanister {
     }
 }
 
-/// Computes the subaccount to which neuron staking transfers are made. This
+/// Computes the bytes of the subaccount to which neuron staking transfers are made. This
 /// function must be kept in sync with the Nervous System UI equivalent.
-pub fn compute_neuron_staking_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
+pub fn compute_neuron_staking_subaccount_bytes(controller: PrincipalId, nonce: u64) -> [u8; 32] {
     // The equivalent function in the NNS UI is
     // https://github.com/dfinity/dfinity_wallet/blob/351e07d3e6d007b090117161a94ce8ec9d5a6b49/js-agent/src/canisters/createNeuron.ts#L63
     const DOMAIN: &[u8] = b"neuron-stake";
     const DOMAIN_LENGTH: [u8; 1] = [0x0c];
 
-    Subaccount({
-        let mut hasher = Sha256::new();
-        hasher.write(&DOMAIN_LENGTH);
-        hasher.write(DOMAIN);
-        hasher.write(controller.as_slice());
-        hasher.write(&nonce.to_be_bytes());
-        hasher.finish()
-    })
+    let mut hasher = Sha256::new();
+    hasher.write(&DOMAIN_LENGTH);
+    hasher.write(DOMAIN);
+    hasher.write(controller.as_slice());
+    hasher.write(&nonce.to_be_bytes());
+    hasher.finish()
+}
+
+/// Computes the subaccount to which neuron staking transfers are made. This
+/// function must be kept in sync with the Nervous System UI equivalent.
+pub fn compute_neuron_staking_subaccount(controller: PrincipalId, nonce: u64) -> Subaccount {
+    // The equivalent function in the NNS UI is
+    // https://github.com/dfinity/dfinity_wallet/blob/351e07d3e6d007b090117161a94ce8ec9d5a6b49/js-agent/src/canisters/createNeuron.ts#L63
+    Subaccount(compute_neuron_staking_subaccount_bytes(controller, nonce))
+}
+
+/// Computes the subaccount to which locked token distributions are initialized to.
+pub fn compute_distribution_subaccount_bytes(principal_id: PrincipalId, nonce: u64) -> [u8; 32] {
+    const DOMAIN: &[u8] = b"token-distribution";
+    const DOMAIN_LENGTH: [u8; 1] = [0x12];
+
+    let mut hasher = Sha256::new();
+    hasher.write(&DOMAIN_LENGTH);
+    hasher.write(DOMAIN);
+    hasher.write(principal_id.as_slice());
+    hasher.write(&nonce.to_be_bytes());
+    hasher.finish()
 }
 
 /// Computes the subaccount to which locked token distributions are initialized to.
 pub fn compute_distribution_subaccount(principal_id: PrincipalId, nonce: u64) -> Subaccount {
-    const DOMAIN: &[u8] = b"token-distribution";
-    const DOMAIN_LENGTH: [u8; 1] = [0x12];
-
-    Subaccount({
-        let mut hasher = Sha256::new();
-        hasher.write(&DOMAIN_LENGTH);
-        hasher.write(DOMAIN);
-        hasher.write(principal_id.as_slice());
-        hasher.write(&nonce.to_be_bytes());
-        hasher.finish()
-    })
+    Subaccount(compute_distribution_subaccount_bytes(principal_id, nonce))
 }
