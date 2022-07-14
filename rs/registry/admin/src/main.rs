@@ -30,7 +30,7 @@ use ic_nervous_system_root::{
     AddCanisterProposal, CanisterAction, CanisterStatusResult, ChangeCanisterProposal,
     StopOrStartCanisterProposal,
 };
-use ic_nns_common::types::{NeuronId, ProposalId};
+use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
     add_or_remove_node_provider::Change, manage_neuron::Command, proposal::Action,
@@ -334,6 +334,8 @@ enum SubCommand {
     GetUnassignedNodes,
     /// Get the monthly Node Provider rewards
     GetMonthlyNodeProviderRewards,
+    /// Propose Xdr/Icp conversion rate.
+    ProposeXdrIcpConversionRate(ProposeXdrIcpConversionRateCmd),
     /// Propose to start a canister managed by the governance.
     ProposeToStartCanister(StartCanisterCmd),
     /// Propose to stop a canister managed by the governance.
@@ -647,6 +649,38 @@ impl ProposalTitleAndPayload<UpdateUnassignedNodesConfigPayload>
         UpdateUnassignedNodesConfigPayload {
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             replica_version: self.replica_version_id.clone(),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal for Xdr/Icp conversion rate.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeXdrIcpConversionRateCmd {
+    #[clap(long)]
+    pub xdr_permyriad_per_icp: u64,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<UpdateIcpXdrConversionRatePayload> for ProposeXdrIcpConversionRateCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Updating Xdr/Icp conversion rate to {}",
+                self.xdr_permyriad_per_icp
+            ),
+        }
+    }
+
+    async fn payload(&self, _: Url) -> UpdateIcpXdrConversionRatePayload {
+        UpdateIcpXdrConversionRatePayload {
+            data_source: "IC admin".to_string(),
+            timestamp_seconds: SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            xdr_permyriad_per_icp: self.xdr_permyriad_per_icp,
         }
     }
 }
@@ -3100,6 +3134,15 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::UninstallCode,
+                opts.nns_url,
+                sender,
+            )
+            .await;
+        }
+        SubCommand::ProposeXdrIcpConversionRate(cmd) => {
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::IcpXdrConversionRate,
                 opts.nns_url,
                 sender,
             )

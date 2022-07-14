@@ -85,7 +85,7 @@ impl Display for ProposalId {
 }
 
 /// The payload of a proposal to update the ICP/XDR conversion rate in the CMC.
-#[derive(CandidType, Default, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Default, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpdateIcpXdrConversionRatePayload {
     pub data_source: String,
     pub timestamp_seconds: u64,
