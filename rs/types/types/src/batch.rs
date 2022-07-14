@@ -113,7 +113,10 @@ impl BatchPayload {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.ingress.is_empty() && self.xnet.stream_slices.is_empty()
+        self.ingress.is_empty()
+            && self.xnet.stream_slices.is_empty()
+            && self.self_validating.is_empty()
+            && self.canister_http.is_empty()
     }
 }
 #[cfg(test)]
