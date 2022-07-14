@@ -1,4 +1,4 @@
-load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "summary_sha256sum", "tar_extract", "vfat_image")
+load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "summary_sha256sum", "tar_extract", "upgrade_image", "vfat_image")
 
 docker_tar(
     name = "bootloader-tree.tar",
@@ -41,7 +41,7 @@ vfat_image(
     src = ":bootloader-tree.tar",
     extra_files = {
         ":grub.cfg": "/boot/grub/grub.cfg:0644",
-        ":grubenv": "/boot/grub/grub:0644",
+        ":grubenv": "/boot/grub/grubenv:0644",
     },
     partition_size = "100M",
     subdir = "boot/grub",
@@ -169,4 +169,11 @@ disk_image(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
+)
+
+upgrade_image(
+    name = "upgrade.tar.gz",
+    boot_partition = ":partition-boot.tar",
+    root_partition = ":partition-root.tar",
+    version_file = ":version.txt",
 )
