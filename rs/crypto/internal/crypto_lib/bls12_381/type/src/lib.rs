@@ -8,6 +8,7 @@
 use bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
 use pairing::group::{ff::Field, Group};
 use rand::{CryptoRng, RngCore};
+use zeroize::Zeroize;
 
 macro_rules! ctoption_ok_or {
     ($val:expr, $err:expr) => {
@@ -34,7 +35,7 @@ pub enum PairingInvalidScalar {
 }
 
 /// An integer of the order of the groups G1/G2/Gt
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
 pub struct Scalar {
     value: bls12_381::Scalar,
 }
@@ -156,7 +157,7 @@ impl Scalar {
 
     /// Return true iff this value is zero
     pub fn is_zero(&self) -> bool {
-        self.value.is_zero()
+        bool::from(self.value.is_zero())
     }
 
     /// Return the additive inverse of this scalar
@@ -303,7 +304,7 @@ declare_mul_scalar_ops_for!(Scalar);
 macro_rules! define_affine_and_projective_types {
     ( $affine:ident, $projective:ident, $size:expr ) => {
         /// An element of the group in affine form
-        #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
         pub struct $affine {
             value: bls12_381::$affine
         }
@@ -397,7 +398,7 @@ macro_rules! define_affine_and_projective_types {
         }
 
         /// An element of the group in projective form
-        #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
         pub struct $projective {
             value: bls12_381::$projective
         }
